@@ -6,7 +6,8 @@
 #include <unordered_set>
 
 
-VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 	VkDebugUtilsMessageTypeFlagsEXT messageType,
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData) {
@@ -129,12 +130,12 @@ namespace core {
 		using enum vk::DebugUtilsMessageTypeFlagBitsEXT;
 		if (!debug) return;
 
-		dldi = vk::DispatchLoaderDynamic(*instance, vkGetInstanceProcAddr);
+		dldi = vk::detail::DispatchLoaderDynamic(*instance, vkGetInstanceProcAddr);
 
 		vk::DebugUtilsMessengerCreateInfoEXT createInfo{};
 		createInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
 		createInfo.messageType = eGeneral | eValidation | ePerformance;
-		createInfo.pfnUserCallback = debugCallback;
+		createInfo.pfnUserCallback = reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(debugCallback);
 
 		try {
 			debugMessenger = instance->createDebugUtilsMessengerEXT(createInfo, nullptr, dldi);

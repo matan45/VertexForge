@@ -56,7 +56,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.3.290.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -68,7 +68,7 @@
     </Link>
     <Lib>
       <AdditionalDependencies>shaderc_sharedd.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -76,7 +76,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.3.290.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -92,7 +92,7 @@
     </Link>
     <Lib>
       <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
