@@ -2,6 +2,7 @@
 #include "print/EditorLogger.hpp"
 #include "../controllers/files/FileUtils.hpp"
 #include "config/Config.hpp"
+#include "resource/EndianUtils.hpp"
 
 #include <iostream>
 #define TINYEXR_USE_MINIZ 0
@@ -300,23 +301,14 @@ namespace types
 			return;
 		}
 
-		// Write the header file type
-		uint8_t headerFileType = static_cast<uint8_t>(textureData.headerFileType);
-		outFile.write(std::bit_cast<const char*>(&headerFileType), sizeof(headerFileType));
-
-		// Serialize the mesh data (this is just an example, adapt to your format)
-		uint32_t majorVersion = std::bit_cast<uint32_t>(Version::major);
-		uint32_t minorVersion = std::bit_cast<uint32_t>(Version::minor);
-		uint32_t patchVersion = std::bit_cast<uint32_t>(Version::patch);
-		outFile.write(std::bit_cast<const char*>(&majorVersion), sizeof(majorVersion));
-		outFile.write(std::bit_cast<const char*>(&minorVersion), sizeof(minorVersion));
-		outFile.write(std::bit_cast<const char*>(&patchVersion), sizeof(patchVersion));
-
-		// Write width and height
-		outFile.write(std::bit_cast<const char*>(&textureData.width), sizeof(textureData.width));
-		outFile.write(std::bit_cast<const char*>(&textureData.height), sizeof(textureData.height));
-		outFile.write(std::bit_cast<const char*>(&textureData.numbersOfChannels),
-			sizeof(textureData.numbersOfChannels));
+		// Write header, version, and dimensions (endian-safe)
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(textureData.headerFileType));
+		resource::endian::writeLE<uint32_t>(outFile, Version::major);
+		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
+		resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+		resource::endian::writeLE<uint32_t>(outFile, textureData.width);
+		resource::endian::writeLE<uint32_t>(outFile, textureData.height);
+		resource::endian::writeLE<uint32_t>(outFile, textureData.numbersOfChannels);
 
 		TGAWriter::writeTGA(outFile, textureData.textureData);
 
@@ -337,19 +329,14 @@ namespace types
 			return;
 		}
 
-		uint8_t headerFileType = static_cast<uint8_t>(hdrData.headerFileType);
-		outFile.write(reinterpret_cast<const char*>(&headerFileType), sizeof(headerFileType));
-
-		uint32_t majorVersion = std::bit_cast<uint32_t>(Version::major);
-		uint32_t minorVersion = std::bit_cast<uint32_t>(Version::minor);
-		uint32_t patchVersion = std::bit_cast<uint32_t>(Version::patch);
-		outFile.write(std::bit_cast<const char*>(&majorVersion), sizeof(majorVersion));
-		outFile.write(std::bit_cast<const char*>(&minorVersion), sizeof(minorVersion));
-		outFile.write(std::bit_cast<const char*>(&patchVersion), sizeof(patchVersion));
-
-		outFile.write(std::bit_cast<const char*>(&hdrData.width), sizeof(hdrData.width));
-		outFile.write(std::bit_cast<const char*>(&hdrData.height), sizeof(hdrData.height));
-		outFile.write(std::bit_cast<const char*>(&hdrData.numbersOfChannels), sizeof(hdrData.numbersOfChannels));
+		// Write HDR header, version, and dimensions (endian-safe)
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(hdrData.headerFileType));
+		resource::endian::writeLE<uint32_t>(outFile, Version::major);
+		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
+		resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+		resource::endian::writeLE<uint32_t>(outFile, hdrData.width);
+		resource::endian::writeLE<uint32_t>(outFile, hdrData.height);
+		resource::endian::writeLE<uint32_t>(outFile, hdrData.numbersOfChannels);
 
 		HDRWriter::writeHDR(outFile, hdrData.width, hdrData.height, hdrData.numbersOfChannels, hdrData.textureData);
 
