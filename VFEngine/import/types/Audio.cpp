@@ -18,15 +18,36 @@
 namespace types {
 	void Audio::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location) const
 	{
-		std::string type = files::FileUtils::getAudioFileType(file.path.data());
-		if (type == "OGG") {
+		// File type detection is now handled by the pipeline, so we need to determine type from file extension
+		std::string extension = files::FileUtils::getFileExtension(file.path.data());
+		
+		if (extension == ".ogg") {
 			loadOggFile(file.path, fileName, location);
 		}
-		else if (type == "WAV") {
+		else if (extension == ".wav") {
 			loadWavFile(file.path, fileName, location);
 		}
-		else if (type == "MP3") {
+		else if (extension == ".mp3") {
 			loadMp3File(file.path, fileName, location);
+		}
+		else {
+			vfLogError("Unsupported audio file extension: {}", extension);
+		}
+	}
+
+	void Audio::loadFromFileWithType(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location, std::string_view fileType) const
+	{
+		if (fileType == "OGG") {
+			loadOggFile(file.path, fileName, location);
+		}
+		else if (fileType == "WAV") {
+			loadWavFile(file.path, fileName, location);
+		}
+		else if (fileType == "MP3") {
+			loadMp3File(file.path, fileName, location);
+		}
+		else {
+			vfLogError("Unsupported audio file type: {}", fileType);
 		}
 	}
 

@@ -107,6 +107,11 @@
     <ClInclude Include="types\Audio.hpp" />
     <ClInclude Include="types\Mesh.hpp" />
     <ClInclude Include="types\Texture.hpp" />
+    <ClInclude Include="pipeline\Pipeline.hpp" />
+    <ClInclude Include="pipeline\stages\FileValidationStage.hpp" />
+    <ClInclude Include="pipeline\stages\HeaderReadingStage.hpp" />
+    <ClInclude Include="pipeline\stages\FileTypeDetectionStage.hpp" />
+    <ClInclude Include="pipeline\stages\FileProcessingStage.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Import.cpp" />
@@ -114,6 +119,11 @@
     <ClCompile Include="types\Audio.cpp" />
     <ClCompile Include="types\Mesh.cpp" />
     <ClCompile Include="types\Texture.cpp" />
+    <ClCompile Include="pipeline\Pipeline.cpp" />
+    <ClCompile Include="pipeline\stages\FileValidationStage.cpp" />
+    <ClCompile Include="pipeline\stages\HeaderReadingStage.cpp" />
+    <ClCompile Include="pipeline\stages\FileTypeDetectionStage.cpp" />
+    <ClCompile Include="pipeline\stages\FileProcessingStage.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

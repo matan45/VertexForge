@@ -12,6 +12,10 @@ namespace types
                              std::string_view location);
         void loadHDRFile(const importConfig::ImportFiles& file, std::string_view fileName,
                          std::string_view location) const;
+        void loadTextureFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
+                             std::string_view location, std::string_view fileType);
+        void loadHDRFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
+                         std::string_view location, std::string_view fileType) const;
 
     private:
         void saveToFileTexture(std::string_view fileName, std::string_view location,

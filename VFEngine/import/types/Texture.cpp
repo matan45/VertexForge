@@ -67,8 +67,10 @@ namespace types
 	{
 		resource::HDRData hdrData;
 		hdrData.headerFileType = resource::FileType::HDR;
-		std::string type = files::FileUtils::getImageFileType(file.path.data());
-		if (type == "HDR")
+		
+		// File type detection is now handled by the pipeline, determine from extension
+		std::string extension = files::FileUtils::getFileExtension(file.path.data());
+		if (extension == ".hdr")
 		{
 			if (file.config.isImageFlipVertically)
 			{
@@ -99,7 +101,7 @@ namespace types
 
 			stbi_image_free(imageData);
 		}
-		else if (type == "EXR")
+		else if (extension == ".exr")
 		{
 			EXRVersion exrVersion;
 
@@ -163,6 +165,124 @@ namespace types
 			FreeEXRHeader(&exrHeader);
 
 			saveToFileHDR(fileName, location, hdrData);
+		}
+		else {
+			vfLogError("Unsupported HDR file extension: {}", extension);
+		}
+	}
+
+	void Texture::loadTextureFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
+		std::string_view location, std::string_view fileType)
+	{
+		// This method can use the detected file type directly instead of checking extensions
+		loadTextureFile(file, fileName, location); // For now, delegate to existing method
+	}
+
+	void Texture::loadHDRFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
+		std::string_view location, std::string_view fileType) const
+	{
+		resource::HDRData hdrData;
+		hdrData.headerFileType = resource::FileType::HDR;
+		
+		if (fileType == "HDR")
+		{
+			if (file.config.isImageFlipVertically)
+			{
+				stbi_set_flip_vertically_on_load(true);
+			}
+			// Load image using stb_image
+			int width;
+			int height;
+			int channels;
+			float* imageData = stbi_loadf(file.path.data(), &width, &height, &channels, 0);
+			if (!imageData)
+			{
+				vfLogError("Failed to load texture: {}", file.path.data());
+				return;
+			}
+
+			if (file.config.isImageFlipVertically)
+			{
+				stbi_set_flip_vertically_on_load(false);
+			}
+
+			hdrData.width = static_cast<uint32_t>(width);
+			hdrData.height = static_cast<uint32_t>(height);
+			hdrData.numbersOfChannels = channels;
+			hdrData.textureData = std::vector<float>(imageData, imageData + (width * height * channels));
+
+			saveToFileHDR(fileName, location, hdrData);
+
+			stbi_image_free(imageData);
+		}
+		else if (fileType == "EXR")
+		{
+			// EXR processing code (same as before)
+			EXRVersion exrVersion;
+
+			int ret = ParseEXRVersionFromFile(&exrVersion, file.path.data());
+			if (ret != TINYEXR_SUCCESS)
+			{
+				vfLogError("Invalid EXR file: {}", file.path.data());
+				return;
+			}
+
+			EXRHeader exrHeader;
+			InitEXRHeader(&exrHeader);
+
+			const char* exrError = nullptr;
+			ret = ParseEXRHeaderFromFile(&exrHeader, &exrVersion, file.path.data(), &exrError);
+			if (ret != TINYEXR_SUCCESS)
+			{
+				vfLogError("Parse EXR err: {}", exrError);
+				FreeEXRErrorMessage(exrError);
+				return;
+			}
+
+			EXRImage exrImage;
+			InitEXRImage(&exrImage);
+
+			ret = LoadEXRImageFromFile(&exrImage, &exrHeader, file.path.data(), &exrError);
+			if (ret != TINYEXR_SUCCESS)
+			{
+				vfLogError("Load EXR err: {}", exrError);
+				FreeEXRHeader(&exrHeader);
+				FreeEXRErrorMessage(exrError);
+				return;
+			}
+
+			float* out;
+			int width;
+			int height;
+
+			int result = LoadEXR(&out, &width, &height, file.path.data(), &exrError);
+			if (result != TINYEXR_SUCCESS)
+			{
+				vfLogError("Failed to load EXR image: {}", exrError);
+				FreeEXRErrorMessage(exrError);
+				return;
+			}
+
+			if (file.config.isImageFlipVertically)
+			{
+				flipImageVertically(out, width, height);
+			}
+
+			int channels = exrImage.num_channels < 4 ? exrImage.num_channels : 4;
+
+			hdrData.width = static_cast<uint32_t>(width);
+			hdrData.height = static_cast<uint32_t>(height);
+			hdrData.numbersOfChannels = static_cast<uint32_t>(channels);
+			hdrData.textureData = convertFromEXRToHDR(out, width, height);
+
+			free(out);
+			FreeEXRImage(&exrImage);
+			FreeEXRHeader(&exrHeader);
+
+			saveToFileHDR(fileName, location, hdrData);
+		}
+		else {
+			vfLogError("Unsupported HDR file type: {}", fileType);
 		}
 	}
 
