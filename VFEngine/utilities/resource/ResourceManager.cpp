@@ -3,6 +3,8 @@
 #include "AudioResource.hpp"
 #include "MeshResource.hpp"
 #include <bit>
+#include <algorithm>
+#include <cctype>
 
 
 namespace resource
@@ -40,32 +42,51 @@ namespace resource
 
     FileType ResourceManager::readHeaderFile(const fs::path& filePath)
     {
-        if (filePath.extension() == ".glsl")
+        // Validate file path
+        if (filePath.empty())
+        {
+            vfLogError("Empty file path provided");
+            return FileType::UNKNOWN;
+        }
+        
+        // Check if file exists
+        std::error_code ec;
+        if (!fs::exists(filePath, ec) || ec)
+        {
+            vfLogError("File does not exist: {}", filePath.string());
+            return FileType::UNKNOWN;
+        }
+        
+        // Handle text-based formats by extension
+        auto extension = filePath.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+        
+        if (extension == ".glsl")
         {
             return FileType::SHADER;
         }
-        if (filePath.extension() == ".tga")
-        {
-            return FileType::UNKNOWN;
-        }
-
+        
+        // For binary formats, read the header
         std::ifstream file(filePath, std::ios::binary);
         if (!file.is_open())
         {
+            vfLogError("Failed to open file: {}", filePath.string());
             return FileType::UNKNOWN;
         }
 
         uint8_t typeByte = 0;
         file.read(reinterpret_cast<char*>(&typeByte), sizeof(typeByte));
 
-        if (!file)
+        if (!file || file.gcount() != sizeof(typeByte))
         {
-            vfLogError("Error: Failed to read headerFileType from file: {}", filePath.string());
+            vfLogError("Failed to read header from file: {}", filePath.string());
             return FileType::UNKNOWN;
         }
         
+        // Validate the type byte is within valid range
         if (typeByte >= static_cast<uint8_t>(FileType::UNKNOWN))
         {
+            vfLogError("Invalid file type header {} in file: {}", typeByte, filePath.string());
             return FileType::UNKNOWN;
         }
 
@@ -135,8 +156,14 @@ namespace resource
     {
         std::scoped_lock lock(cacheMutex);
         unloadUnusedResources();
+        
+        // Clear all caches
         textureCache.clear();
+        hdrCache.clear();
         audioCache.clear();
         meshCache.clear();
+        shaderCache.clear();
+        
+        vfLogInfo("All resource caches cleared");
     }
 }

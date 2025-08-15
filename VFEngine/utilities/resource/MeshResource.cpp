@@ -43,13 +43,20 @@ namespace resource {
 		for (uint32_t i = 0; i < numberOfMeshes; i++)
 		{
 			MeshData meshData;
-			size_t vertexCount = 0;
-			inFile.read(std::bit_cast<char*>(&vertexCount), sizeof(size_t));
-			meshData.vertices.reserve(vertexCount); // Resize the vector to hold all vertices
+			uint32_t vertexCount = 0;
+			inFile.read(std::bit_cast<char*>(&vertexCount), sizeof(uint32_t));
+			
+			// Validate vertex count to prevent excessive memory allocation
+			if (vertexCount > 10000000) { // 10M vertices seems reasonable limit
+				vfLogError("Vertex count {} exceeds maximum limit", vertexCount);
+				return {};
+			}
+			
+			meshData.vertices.resize(vertexCount); // ✅ FIXED: Use resize() not reserve()
 			
 			size_t verticesProcessed = 0;
 			while (verticesProcessed < vertexCount) {
-				size_t chunkToRead = std::min(chunkSize, vertexCount - verticesProcessed);
+				size_t chunkToRead = std::min(chunkSize / sizeof(resource::Vertex), vertexCount - verticesProcessed);
 				inFile.read(std::bit_cast<char*>(meshData.vertices.data() + verticesProcessed),
 					chunkToRead * sizeof(resource::Vertex));
 				verticesProcessed += chunkToRead;
@@ -61,13 +68,20 @@ namespace resource {
 				}
 			}
 			// Read indices
-			size_t indexCount = 0;
-			inFile.read(std::bit_cast<char*>(&indexCount), sizeof(size_t));
-			meshData.indices.reserve(indexCount);  // Resize the vector to hold all indices
+			uint32_t indexCount = 0;
+			inFile.read(std::bit_cast<char*>(&indexCount), sizeof(uint32_t));
+			
+			// Validate index count to prevent excessive memory allocation
+			if (indexCount > 30000000) { // 30M indices seems reasonable limit
+				vfLogError("Index count {} exceeds maximum limit", indexCount);
+				return {};
+			}
+			
+			meshData.indices.resize(indexCount); // ✅ FIXED: Use resize() not reserve()
 			// Read the index data in chunks
 			size_t indicesProcessed = 0;
 			while (indicesProcessed < indexCount) {
-				size_t chunkToRead = std::min(chunkSize, indexCount - indicesProcessed);
+				size_t chunkToRead = std::min(chunkSize / sizeof(uint32_t), static_cast<size_t>(indexCount) - indicesProcessed);
 				inFile.read(std::bit_cast<char*>(meshData.indices.data() + indicesProcessed),
 					chunkToRead * sizeof(uint32_t));
 				indicesProcessed += chunkToRead;
@@ -77,7 +91,15 @@ namespace resource {
 					return {};
 				}
 			}
-			meshesData.meshes.emplace_back(meshData);
+			
+			// Validate that we read the expected amount of data
+			if (meshData.vertices.size() != vertexCount || meshData.indices.size() != indexCount) {
+				vfLogError("Mesh data size mismatch: expected {} vertices and {} indices, got {} and {}",
+					vertexCount, indexCount, meshData.vertices.size(), meshData.indices.size());
+				return {};
+			}
+			
+			meshesData.meshes.emplace_back(std::move(meshData));
 		}
 
 		return meshesData;

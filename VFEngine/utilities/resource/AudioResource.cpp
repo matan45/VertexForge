@@ -10,11 +10,33 @@ namespace resource {
 	{
 		resource::AudioData audioData;
 
+		// Validate input path
+		if (path.empty()) {
+			vfLogError("Empty path provided for audio loading");
+			return {};
+		}
+
 		// Open the file in binary mode
 		std::ifstream inFile(path.data(), std::ios::binary);
 		if (!inFile) {
-			vfLogError("Failed to open file for reading: ", path);
-			return {}; // Return an empty audioData on failure
+			vfLogError("Failed to open audio file for reading: {}", path);
+			return {};
+		}
+		
+		// Check file size to prevent loading extremely large files
+		inFile.seekg(0, std::ios::end);
+		auto filePos = inFile.tellg();
+		inFile.seekg(0, std::ios::beg);
+		
+		if (filePos == std::ifstream::pos_type(-1)) {
+			vfLogError("Failed to determine file size for: {}", path);
+			return {};
+		}
+		
+		std::streamsize fileSize = static_cast<std::streamsize>(filePos);
+		if (fileSize > 500 * 1024 * 1024) { // 500MB limit
+			vfLogError("Audio file {} is too large: {} bytes", path, static_cast<long long>(fileSize));
+			return {};
 		}
 
 		// Read version
@@ -45,10 +67,30 @@ namespace resource {
 		// Read the size of the raw audio data
 		uint32_t dataSize;
 		inFile.read(std::bit_cast<char*>(&dataSize), sizeof(dataSize));
+		
+		// Validate data size
+		if (dataSize == 0) {
+			vfLogError("Audio file has zero data size: {}", path);
+			return {};
+		}
+		
+		if (dataSize > 400 * 1024 * 1024) { // 400MB limit for audio data
+			vfLogError("Audio data size {} exceeds maximum limit", dataSize);
+			return {};
+		}
+		
+		// Validate that dataSize is reasonable given sample rate and channels
+		if (audioData.sampleRate > 0 && audioData.channels > 0) {
+			size_t expectedMaxSize = audioData.sampleRate * audioData.channels * sizeof(short) * 3600; // 1 hour max
+			if (dataSize > expectedMaxSize) {
+				vfLogError("Audio data size {} seems unreasonable for given parameters", dataSize);
+				return {};
+			}
+		}
 
 		size_t bytesRemaining = dataSize;
 
-		audioData.data.reserve(dataSize);  // Reserve space for the entire buffer if needed
+		audioData.data.reserve(dataSize / sizeof(short));  // Reserve space for the entire buffer
 		size_t currentOffset = 0;
 
 		while (bytesRemaining > 0) {

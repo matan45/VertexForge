@@ -67,18 +67,31 @@ namespace resource {
 			return make_ready_future(resource);
 		}
 
-		return std::async(std::launch::async, [path, loader, &cache]() {
+		return std::async(std::launch::async, [path = std::string(path), loader, &cache]() -> std::shared_ptr<T> {
 			try {
-				auto resource = std::make_shared<T>(loader(path));
-				{
-					std::scoped_lock lock(cacheMutex);
-					cache[path.data()] = resource;
+				// Validate path before processing
+				if (path.empty()) {
+					vfLogError("Empty path provided for resource loading");
+					return nullptr;
 				}
+				
+				auto resource = std::make_shared<T>(loader(path));
+				
+				// Only cache if resource was successfully loaded
+				if (resource) {
+					std::scoped_lock lock(cacheMutex);
+					cache[path] = resource;
+				}
+				
 				return resource;
 			}
 			catch (const std::exception& e) {
-				vfLogError("Error loading resource: {} - {}", path, e.what());
-				return std::shared_ptr<T>(nullptr);
+				vfLogError("Exception loading resource '{}': {}", path, e.what());
+				return nullptr;
+			}
+			catch (...) {
+				vfLogError("Unknown exception loading resource: {}", path);
+				return nullptr;
 			}
 			});
 	}

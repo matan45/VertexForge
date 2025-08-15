@@ -10,12 +10,18 @@ namespace resource
 	{
 		resource::TextureData textureData;
 
+		// Validate input
+		if (path.empty()) {
+			vfLogError("Empty path provided for texture loading");
+			return {};
+		}
+
 		// Open the file in binary mode
 		std::ifstream inFile(path.data(), std::ios::binary);
 		if (!inFile)
 		{
-			vfLogError("Failed to open file for reading: ", path);
-			return {}; // Return an empty TextureData on failure
+			vfLogError("Failed to open texture file for reading: {}", path);
+			return {};
 		}
 
 		// Read version
@@ -42,6 +48,22 @@ namespace resource
 		inFile.read(std::bit_cast<char*>(&textureData.width), sizeof(textureData.width));
 		inFile.read(std::bit_cast<char*>(&textureData.height), sizeof(textureData.height));
 		inFile.read(std::bit_cast<char*>(&textureData.numbersOfChannels), sizeof(textureData.numbersOfChannels));
+		
+		// Validate texture dimensions
+		if (textureData.width == 0 || textureData.height == 0) {
+			vfLogError("Invalid texture dimensions: {}x{}", textureData.width, textureData.height);
+			return {};
+		}
+		
+		if (textureData.width > 16384 || textureData.height > 16384) {
+			vfLogError("Texture dimensions {}x{} exceed maximum limit (16384x16384)", textureData.width, textureData.height);
+			return {};
+		}
+		
+		if (textureData.numbersOfChannels == 0 || textureData.numbersOfChannels > 4) {
+			vfLogError("Invalid number of channels: {}", textureData.numbersOfChannels);
+			return {};
+		}
 
 		TGAReader::readTGA(inFile, textureData.width, textureData.height, textureData.textureData);
 		inFile.close();
