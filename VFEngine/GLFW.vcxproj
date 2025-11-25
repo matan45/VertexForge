@@ -21,13 +21,13 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\bin\GLFW\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\GLFW\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\GLFW\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\GLFW\</IntDir>
     <TargetName>GLFW</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\bin\GLFW\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\GLFW\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\GLFW\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\GLFW\</IntDir>
     <TargetName>GLFW</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -85,47 +85,6 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClInclude Include="..\dependencies\glfw\include\GLFW\glfw3.h" />
-    <ClInclude Include="..\dependencies\glfw\include\GLFW\glfw3native.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\dependencies\glfw\src\cocoa_time.c" />
-    <ClCompile Include="..\dependencies\glfw\src\context.c" />
-    <ClCompile Include="..\dependencies\glfw\src\egl_context.c" />
-    <ClCompile Include="..\dependencies\glfw\src\glx_context.c" />
-    <ClCompile Include="..\dependencies\glfw\src\init.c" />
-    <ClCompile Include="..\dependencies\glfw\src\input.c" />
-    <ClCompile Include="..\dependencies\glfw\src\linux_joystick.c" />
-    <ClCompile Include="..\dependencies\glfw\src\monitor.c" />
-    <ClCompile Include="..\dependencies\glfw\src\null_init.c" />
-    <ClCompile Include="..\dependencies\glfw\src\null_joystick.c" />
-    <ClCompile Include="..\dependencies\glfw\src\null_monitor.c" />
-    <ClCompile Include="..\dependencies\glfw\src\null_window.c" />
-    <ClCompile Include="..\dependencies\glfw\src\osmesa_context.c" />
-    <ClCompile Include="..\dependencies\glfw\src\platform.c" />
-    <ClCompile Include="..\dependencies\glfw\src\posix_module.c" />
-    <ClCompile Include="..\dependencies\glfw\src\posix_poll.c" />
-    <ClCompile Include="..\dependencies\glfw\src\posix_thread.c" />
-    <ClCompile Include="..\dependencies\glfw\src\posix_time.c" />
-    <ClCompile Include="..\dependencies\glfw\src\vulkan.c" />
-    <ClCompile Include="..\dependencies\glfw\src\wgl_context.c" />
-    <ClCompile Include="..\dependencies\glfw\src\win32_init.c" />
-    <ClCompile Include="..\dependencies\glfw\src\win32_joystick.c" />
-    <ClCompile Include="..\dependencies\glfw\src\win32_module.c" />
-    <ClCompile Include="..\dependencies\glfw\src\win32_monitor.c" />
-    <ClCompile Include="..\dependencies\glfw\src\win32_thread.c" />
-    <ClCompile Include="..\dependencies\glfw\src\win32_time.c" />
-    <ClCompile Include="..\dependencies\glfw\src\win32_window.c" />
-    <ClCompile Include="..\dependencies\glfw\src\window.c" />
-    <ClCompile Include="..\dependencies\glfw\src\wl_init.c" />
-    <ClCompile Include="..\dependencies\glfw\src\wl_monitor.c" />
-    <ClCompile Include="..\dependencies\glfw\src\wl_window.c" />
-    <ClCompile Include="..\dependencies\glfw\src\x11_init.c" />
-    <ClCompile Include="..\dependencies\glfw\src\x11_monitor.c" />
-    <ClCompile Include="..\dependencies\glfw\src\x11_window.c" />
-    <ClCompile Include="..\dependencies\glfw\src\xkb_unicode.c" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

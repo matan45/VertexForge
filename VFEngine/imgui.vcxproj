@@ -21,13 +21,13 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\bin\imgui\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\imgui\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\imgui\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\imgui\</IntDir>
     <TargetName>imgui</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\bin\imgui\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\imgui\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\imgui\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\imgui\</IntDir>
     <TargetName>imgui</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -56,7 +56,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.3.290.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -68,7 +68,7 @@
     </Link>
     <Lib>
       <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.328.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -76,7 +76,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.3.290.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -92,11 +92,10 @@
     </Link>
     <Lib>
       <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.328.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\dependencies\ImGuiColorTextEdit\TextEditor.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\GraphEditor.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\ImCurveEdit.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\ImGradient.h" />
@@ -119,7 +118,6 @@
     <ClInclude Include="..\dependencies\imgui\imstb_truetype.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\dependencies\ImGuiColorTextEdit\TextEditor.cpp" />
     <ClCompile Include="..\dependencies\ImGuizmo\GraphEditor.cpp" />
     <ClCompile Include="..\dependencies\ImGuizmo\ImCurveEdit.cpp" />
     <ClCompile Include="..\dependencies\ImGuizmo\ImGradient.cpp" />

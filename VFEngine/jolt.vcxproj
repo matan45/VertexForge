@@ -21,13 +21,13 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\bin\jolt\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\jolt\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\jolt\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\jolt\</IntDir>
     <TargetName>jolt</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\bin\jolt\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\jolt\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\jolt\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\jolt\</IntDir>
     <TargetName>jolt</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -96,6 +96,7 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\ARMNeon.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Array.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Atomics.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\BinaryHeap.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\ByteBuffer.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Color.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Core.h" />
@@ -105,6 +106,7 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Factory.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\FixedSizeFreeList.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\HashCombine.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\HashTable.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\InsertionSort.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\IssueReporting.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\JobSystem.h" />
@@ -124,6 +126,7 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Result.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\STLAlignedAllocator.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\STLAllocator.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\STLLocalAllocator.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\STLTempAllocator.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\ScopeExit.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Semaphore.h" />
@@ -132,6 +135,7 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\StreamOut.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\StreamUtils.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\StreamWrapper.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\StridedPtr.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\StringTools.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\TempAllocator.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\TickCounter.h" />
@@ -154,15 +158,14 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\OrientedBox.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\Plane.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\RayAABox.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\RayAABox8.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\RayCapsule.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\RayCylinder.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\RaySphere.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\RayTriangle.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\RayTriangle8.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\Sphere.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Geometry\Triangle.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Jolt.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\BVec16.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\DMat44.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\DVec3.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\Double3.h" />
@@ -183,10 +186,8 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\Swizzle.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\Trigonometry.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\UVec4.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\UVec8.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\Vec3.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\Vec4.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\Vec8.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Math\Vector.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\ObjectStream\GetPrimitiveTypeOfType.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\ObjectStream\ObjectStream.h" />
@@ -222,6 +223,7 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Body\MotionType.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Character\Character.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Character\CharacterBase.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Character\CharacterID.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Character\CharacterVirtual.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\AABoxCast.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\ActiveEdgeMode.h" />
@@ -244,6 +246,8 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\CollideConvexVsTriangles.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\CollidePointResult.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\CollideShape.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\CollideShapeVsShapePerLeaf.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\CollideSoftBodyVertexIterator.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\CollideSoftBodyVerticesVsTriangles.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\CollideSphereVsTriangles.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\CollisionCollector.h" />
@@ -272,6 +276,7 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\ConvexShape.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\CylinderShape.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\DecoratedShape.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\EmptyShape.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\GetTrianglesContext.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\HeightFieldShape.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\MeshShape.h" />
@@ -292,6 +297,8 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\TriangleShape.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\ShapeCast.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\ShapeFilter.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\SimShapeFilter.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\SimShapeFilterWrapper.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\SortReverseAndStore.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\TransformedShape.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Constraints\CalculateSolverSteps.h" />
@@ -370,15 +377,9 @@
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Skeleton\Skeleton.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Skeleton\SkeletonMapper.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Skeleton\SkeletonPose.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleGrouper\TriangleGrouper.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleGrouper\TriangleGrouperClosestCentroid.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleGrouper\TriangleGrouperMorton.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitter.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterBinning.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterFixedLeafSize.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterLongestAxis.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterMean.h" />
-    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterMorton.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\AABBTree\AABBTreeBuilder.cpp" />
@@ -410,7 +411,6 @@
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\ObjectStream\SerializableObject.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\ObjectStream\TypeDeclarations.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Body\Body.cpp" />
-    <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Body\BodyAccess.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Body\BodyCreationSettings.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Body\BodyInterface.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Body\BodyManager.cpp" />
@@ -444,6 +444,7 @@
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\ConvexShape.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\CylinderShape.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\DecoratedShape.cpp" />
+    <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\EmptyShape.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\HeightFieldShape.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\MeshShape.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\Collision\Shape\MutableCompoundShape.cpp" />
@@ -481,7 +482,6 @@
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\DeterminismLog.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\IslandBuilder.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\LargeIslandSplitter.cpp" />
-    <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\PhysicsLock.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\PhysicsScene.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\PhysicsSystem.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Physics\PhysicsUpdateContext.cpp" />
@@ -512,14 +512,9 @@
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Skeleton\Skeleton.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Skeleton\SkeletonMapper.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\Skeleton\SkeletonPose.cpp" />
-    <ClCompile Include="..\dependencies\JoltPhysics\Jolt\TriangleGrouper\TriangleGrouperClosestCentroid.cpp" />
-    <ClCompile Include="..\dependencies\JoltPhysics\Jolt\TriangleGrouper\TriangleGrouperMorton.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitter.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterBinning.cpp" />
-    <ClCompile Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterFixedLeafSize.cpp" />
-    <ClCompile Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterLongestAxis.cpp" />
     <ClCompile Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterMean.cpp" />
-    <ClCompile Include="..\dependencies\JoltPhysics\Jolt\TriangleSplitter\TriangleSplitterMorton.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

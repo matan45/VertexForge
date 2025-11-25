@@ -21,13 +21,13 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\..\bin\Core\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\</IntDir>
+    <OutDir>$(ProjectDir)..\..\bin\Core\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
     <TargetName>Core</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\..\bin\Core\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\</IntDir>
+    <OutDir>$(ProjectDir)..\..\bin\Core\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
     <TargetName>Core</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -56,7 +56,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\..\dependencies\imgui;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;C:\VulkanSDK\1.3.290.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\..\dependencies\imgui;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -72,7 +72,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\..\dependencies\imgui;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;C:\VulkanSDK\1.3.290.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\..\dependencies\imgui;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
