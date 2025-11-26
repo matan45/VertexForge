@@ -21,13 +21,13 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\..\bin\Graphics\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\</IntDir>
+    <OutDir>$(ProjectDir)..\..\bin\Graphics\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
     <TargetName>Graphics</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\..\bin\Graphics\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\</IntDir>
+    <OutDir>$(ProjectDir)..\..\bin\Graphics\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
     <TargetName>Graphics</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -56,9 +56,10 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -67,8 +68,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>shaderc_sharedd.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.328.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -76,12 +77,13 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -92,7 +94,7 @@
     </Link>
     <Lib>
       <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.321.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.328.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>

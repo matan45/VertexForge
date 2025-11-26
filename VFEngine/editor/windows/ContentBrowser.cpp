@@ -303,21 +303,7 @@ namespace windows
 					{
 						std::string shaderCode((std::istreambuf_iterator<char>(shaderFile)),
 							std::istreambuf_iterator<char>());
-						editor.SetText(shaderCode);
-						editor.SetLanguageDefinition(TextEditor::LanguageDefinition::GLSL());
 						isShaderLoaded = true;
-					}
-				}
-
-				editor.Render("Shader Editor");
-
-				if (ImGui::Button("Save", ImVec2(120, 0)))
-				{
-					std::ofstream shaderFile(selectedFile.string());
-					if (shaderFile)
-					{
-						shaderFile << editor.GetText();
-						shaderFile.close();
 					}
 				}
 			}

@@ -6,6 +6,7 @@
 
 #include "spdlog/spdlog.h"
 #include "spdlog/fmt/bundled/core.h"  // fmt library used by spdlog
+#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>  // Vulkan header (for vk::ArrayWrapper1D)
 
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
@@ -26,7 +27,7 @@ struct fmt::formatter<vk::ArrayWrapper1D<char, 256>> {
 
 	// Format the object
 	template <typename FormatContext>
-	auto format(const vk::ArrayWrapper1D<char, 256>& obj, FormatContext& ctx) -> decltype(ctx.out()) {
+	auto format(const vk::ArrayWrapper1D<char, 256>& obj, FormatContext& ctx) const -> decltype(ctx.out()) {
 		// Get a pointer to the underlying char array
 		const char* charArray = obj.data();
 

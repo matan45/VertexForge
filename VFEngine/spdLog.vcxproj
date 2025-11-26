@@ -21,13 +21,13 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\bin\spdLog\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\spdLog\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\spdLog\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\spdLog\</IntDir>
     <TargetName>spdLog</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\bin\spdLog\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\spdLog\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\spdLog\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\spdLog\</IntDir>
     <TargetName>spdLog</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -59,6 +59,7 @@
       <AdditionalIncludeDirectories>..\dependencies\spdlog\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -78,6 +79,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -126,13 +128,13 @@
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\details\windows_include.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bin_to_hex.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\args.h" />
+    <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\base.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\chrono.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\color.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\compile.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\core.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\format-inl.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\format.h" />
-    <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\locale.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\os.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\ostream.h" />
     <ClInclude Include="..\dependencies\spdlog\include\spdlog\fmt\bundled\printf.h" />
