@@ -24,7 +24,7 @@ namespace windows
     {
     private:
         std::vector<Asset> assets;
-        fs::path currentPath = "d:\\matan"; //todo get this path from the project file
+        fs::path currentPath = "D:\\matan"; //todo get this path from the project file
         std::string searchQuery;
 
         std::string newFolderName;
