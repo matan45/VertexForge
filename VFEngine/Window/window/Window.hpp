@@ -1,5 +1,6 @@
 #pragma once
 #define GLFW_INCLUDE_VULKAN
+#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 #include "GLFW/glfw3.h"
 #include <string_view>

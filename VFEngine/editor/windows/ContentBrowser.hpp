@@ -2,7 +2,6 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "imgui.h"
 #include "Import.hpp"
-#include "TextEditor.h"
 #include "EditorTextureController.hpp"
 
 #include <string>
@@ -25,13 +24,12 @@ namespace windows
     {
     private:
         std::vector<Asset> assets;
-        fs::path currentPath = "c:\\matan"; //todo get this path from the project file
+        fs::path currentPath = "d:\\matan"; //todo get this path from the project file
         std::string searchQuery;
 
         std::string newFolderName;
         bool showCreateFolderModal = false;
 
-        TextEditor editor;
         bool isShaderLoaded = false;
 
         fs::path selectedFile;

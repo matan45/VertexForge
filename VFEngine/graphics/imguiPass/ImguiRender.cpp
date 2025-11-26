@@ -31,6 +31,7 @@ namespace imguiPass {
 		// Setup Platform/Renderer back ends
 		ImGui_ImplGlfw_InitForVulkan(window->getWindowPtr(), true);
 		ImGui_ImplVulkan_InitInfo initInfo{};
+		initInfo.ApiVersion = VK_API_VERSION_1_3;
 		initInfo.Instance = device.getInstance();
 		initInfo.PhysicalDevice = device.getPhysicalDevice();
 		initInfo.Device = device.getLogicalDevice();
@@ -40,9 +41,9 @@ namespace imguiPass {
 		initInfo.DescriptorPool = imGuiDescriptorPool;
 		initInfo.MinImageCount = swapChain.getImageCount();
 		initInfo.ImageCount = swapChain.getImageCount();
-		initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 		initInfo.Allocator = VK_NULL_HANDLE;
-		initInfo.RenderPass = imGuiRenderPass;
+		initInfo.PipelineInfoMain.RenderPass = imGuiRenderPass;
+		initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 		ImGui_ImplVulkan_Init(&initInfo);
 
 		ImGuiIO& io = ImGui::GetIO();
@@ -62,8 +63,7 @@ namespace imguiPass {
 		// Load Font Awesome font (ensure the path points to the Font Awesome .ttf file)
 		io.Fonts->AddFontFromFileTTF("../../resources/editor/fa-solid-900.ttf", 16.0f, &config, icons_ranges);
 
-		// Create font texture
-		ImGui_ImplVulkan_CreateFontsTexture();
+		// Font texture is created automatically by the backend in newer ImGui versions
 
 		theme();
 	}

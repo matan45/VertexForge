@@ -1,3 +1,4 @@
+#pragma once
 
 #include <vector>
 #include <array>
@@ -19,7 +20,7 @@ namespace core {
 		vk::UniqueDevice logicalDevice{ nullptr };
 
 		vk::DebugUtilsMessengerEXT debugMessenger{ nullptr };
-		vk::DispatchLoaderDynamic dldi;
+		vk::detail::DispatchLoaderDynamic dldi;
 
 		vk::SurfaceKHR surface{ nullptr };
 		vk::Queue presentQueue{ nullptr };

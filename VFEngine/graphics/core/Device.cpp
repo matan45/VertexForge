@@ -5,6 +5,8 @@
 
 #include <unordered_set>
 
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 	VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -51,6 +53,8 @@ namespace core {
 
 	void Device::createInstance()
 	{
+		// Initialize the default dispatcher with vkGetInstanceProcAddr before any Vulkan calls
+		VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
 		vk::ApplicationInfo appInfo{
 		   "Vulkan App",
@@ -74,6 +78,8 @@ namespace core {
 
 		try {
 			instance = vk::createInstanceUnique(createInfo);
+			// Initialize dispatcher with instance for instance-level functions
+			VULKAN_HPP_DEFAULT_DISPATCHER.init(*instance);
 		}
 		catch (const vk::SystemError& err) {
 			loggerError("Failed to create Vulkan instance: {}", err.what());
@@ -129,12 +135,12 @@ namespace core {
 		using enum vk::DebugUtilsMessageTypeFlagBitsEXT;
 		if (!debug) return;
 
-		dldi = vk::DispatchLoaderDynamic(*instance, vkGetInstanceProcAddr);
+		dldi = vk::detail::DispatchLoaderDynamic(*instance, vkGetInstanceProcAddr);
 
 		vk::DebugUtilsMessengerCreateInfoEXT createInfo{};
 		createInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
 		createInfo.messageType = eGeneral | eValidation | ePerformance;
-		createInfo.pfnUserCallback = debugCallback;
+		createInfo.pfnUserCallback = reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(debugCallback);
 
 		try {
 			debugMessenger = instance->createDebugUtilsMessengerEXT(createInfo, nullptr, dldi);
@@ -191,13 +197,13 @@ namespace core {
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
-		if (debug) {
-			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-			createInfo.ppEnabledLayerNames = validationLayers.data();
-		}
+		// Note: Device-level validation layers are deprecated in modern Vulkan.
+		// Validation layers are now set only at the instance level.
 
 		try {
 			logicalDevice = physicalDevice.createDeviceUnique(createInfo);
+			// Initialize dispatcher with device for device-level functions
+			VULKAN_HPP_DEFAULT_DISPATCHER.init(*logicalDevice);
 			graphicsAndComputeQueue = logicalDevice.get().getQueue(queueFamilyIndices.graphicsAndComputeFamily.value(), 0);
 			presentQueue = logicalDevice.get().getQueue(queueFamilyIndices.presentFamily.value(), 0);
 		}

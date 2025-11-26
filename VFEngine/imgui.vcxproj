@@ -59,6 +59,7 @@
       <AdditionalIncludeDirectories>..\dependencies\imgui;..\dependencies\imgui\backends;..\dependencies\ImGuizmo;..\dependencies\imgui-node-editor;..\dependencies\glfw\include;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -82,6 +83,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
@@ -102,12 +104,6 @@
     <ClInclude Include="..\dependencies\ImGuizmo\ImGuizmo.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\ImSequencer.h" />
     <ClInclude Include="..\dependencies\ImGuizmo\ImZoomSlider.h" />
-    <ClInclude Include="..\dependencies\imgui-node-editor\crude_json.h" />
-    <ClInclude Include="..\dependencies\imgui-node-editor\imgui_bezier_math.h" />
-    <ClInclude Include="..\dependencies\imgui-node-editor\imgui_canvas.h" />
-    <ClInclude Include="..\dependencies\imgui-node-editor\imgui_extra_math.h" />
-    <ClInclude Include="..\dependencies\imgui-node-editor\imgui_node_editor.h" />
-    <ClInclude Include="..\dependencies\imgui-node-editor\imgui_node_editor_internal.h" />
     <ClInclude Include="..\dependencies\imgui\backends\imgui_impl_glfw.h" />
     <ClInclude Include="..\dependencies\imgui\backends\imgui_impl_vulkan.h" />
     <ClInclude Include="..\dependencies\imgui\imconfig.h" />
@@ -123,10 +119,6 @@
     <ClCompile Include="..\dependencies\ImGuizmo\ImGradient.cpp" />
     <ClCompile Include="..\dependencies\ImGuizmo\ImGuizmo.cpp" />
     <ClCompile Include="..\dependencies\ImGuizmo\ImSequencer.cpp" />
-    <ClCompile Include="..\dependencies\imgui-node-editor\crude_json.cpp" />
-    <ClCompile Include="..\dependencies\imgui-node-editor\imgui_canvas.cpp" />
-    <ClCompile Include="..\dependencies\imgui-node-editor\imgui_node_editor.cpp" />
-    <ClCompile Include="..\dependencies\imgui-node-editor\imgui_node_editor_api.cpp" />
     <ClCompile Include="..\dependencies\imgui\backends\imgui_impl_glfw.cpp" />
     <ClCompile Include="..\dependencies\imgui\backends\imgui_impl_vulkan.cpp" />
     <ClCompile Include="..\dependencies\imgui\imgui.cpp" />
