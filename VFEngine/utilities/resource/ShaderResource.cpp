@@ -26,9 +26,20 @@ namespace resource {
 					shaderStream.str("");
 					shaderStream.clear();
 				}
+				
+				// Validate line length to prevent buffer overflow
+				if (line.length() <= TYPE.length()) {
+					vfLogError("Malformed shader type directive in file: {}", filePath);
+					return std::vector<ShaderModel>();
+				}
 
-				// Extract shader type from the line
+				// Extract shader type from the line and trim whitespace
 				std::string shaderType = line.substr(TYPE.length());
+				
+				// Trim leading/trailing whitespace
+				shaderType.erase(0, shaderType.find_first_not_of(" \t\r\n"));
+				shaderType.erase(shaderType.find_last_not_of(" \t\r\n") + 1);
+				
 				currentType = getShaderType(shaderType);
 
 				if (currentType == ShaderType::UNKNOWN) {
@@ -44,6 +55,12 @@ namespace resource {
 		// Add the last shader block if exists
 		if (currentType != ShaderType::UNKNOWN && !shaderStream.str().empty()) {
 			shaderModels.emplace_back(currentType, shaderStream.str());
+		}
+		
+		// Validate that we found at least one valid shader
+		if (shaderModels.empty()) {
+			vfLogError("No valid shaders found in file: {}", filePath);
+			return std::vector<ShaderModel>();
 		}
 
 		return shaderModels;

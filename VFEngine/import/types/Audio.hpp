@@ -8,6 +8,7 @@ namespace types {
 	{
 	public:
 		void loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location) const;
+		void loadFromFileWithType(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location, std::string_view fileType) const;
 
 	private:
 		void loadOggFile(std::string_view path, std::string_view fileName, std::string_view location) const;

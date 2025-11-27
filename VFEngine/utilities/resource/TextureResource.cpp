@@ -1,5 +1,6 @@
 #include "TextureResource.hpp"
 #include "../print/EditorLogger.hpp"
+#include "EndianUtils.hpp"
 
 #include <fstream>
 #include <bit>  // For std::bit_cast
@@ -10,26 +11,28 @@ namespace resource
 	{
 		resource::TextureData textureData;
 
+		// Validate input
+		if (path.empty()) {
+			vfLogError("Empty path provided for texture loading");
+			return {};
+		}
+
 		// Open the file in binary mode
 		std::ifstream inFile(path.data(), std::ios::binary);
 		if (!inFile)
 		{
-			vfLogError("Failed to open file for reading: ", path);
-			return {}; // Return an empty TextureData on failure
+			vfLogError("Failed to open texture file for reading: {}", path);
+			return {};
 		}
 
-		// Read version
-		// Read the header file type
-		uint8_t headerFileType;
-		inFile.read(std::bit_cast<char*>(&headerFileType), sizeof(headerFileType));
+		// Read header file type (single byte, endian-safe)
+		uint8_t headerFileType = endian::readLE<uint8_t>(inFile);
 		textureData.headerFileType = static_cast<resource::FileType>(headerFileType);
 
-		// Read version
-		// Read the version information
-		uint32_t majorVersion, minorVersion, patchVersion;
-		inFile.read(std::bit_cast<char*>(&majorVersion), sizeof(majorVersion));
-		inFile.read(std::bit_cast<char*>(&minorVersion), sizeof(minorVersion));
-		inFile.read(std::bit_cast<char*>(&patchVersion), sizeof(patchVersion));
+		// Read version information (endian-safe)
+		uint32_t majorVersion = endian::readLE<uint32_t>(inFile);
+		uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
+		uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
 
 		// Validate the version
 		if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
@@ -38,10 +41,26 @@ namespace resource
 			return {}; // Return an empty HDRData on version mismatch
 		}
 
-		// Read width and height
-		inFile.read(std::bit_cast<char*>(&textureData.width), sizeof(textureData.width));
-		inFile.read(std::bit_cast<char*>(&textureData.height), sizeof(textureData.height));
-		inFile.read(std::bit_cast<char*>(&textureData.numbersOfChannels), sizeof(textureData.numbersOfChannels));
+		// Read texture dimensions (endian-safe)
+		textureData.width = endian::readLE<uint32_t>(inFile);
+		textureData.height = endian::readLE<uint32_t>(inFile);
+		textureData.numbersOfChannels = endian::readLE<uint32_t>(inFile);
+		
+		// Validate texture dimensions
+		if (textureData.width == 0 || textureData.height == 0) {
+			vfLogError("Invalid texture dimensions: {}x{}", textureData.width, textureData.height);
+			return {};
+		}
+		
+		if (textureData.width > 16384 || textureData.height > 16384) {
+			vfLogError("Texture dimensions {}x{} exceed maximum limit (16384x16384)", textureData.width, textureData.height);
+			return {};
+		}
+		
+		if (textureData.numbersOfChannels == 0 || textureData.numbersOfChannels > 4) {
+			vfLogError("Invalid number of channels: {}", textureData.numbersOfChannels);
+			return {};
+		}
 
 		TGAReader::readTGA(inFile, textureData.width, textureData.height, textureData.textureData);
 		inFile.close();
@@ -60,16 +79,14 @@ namespace resource
 			return {};
 		}
 
-		// Read the header file type
-		uint8_t headerFileType;
-		inFile.read(std::bit_cast<char*>(&headerFileType), sizeof(headerFileType));
+		// Read the header file type (endian-safe)
+		uint8_t headerFileType = endian::readLE<uint8_t>(inFile);
 		hdrData.headerFileType = static_cast<resource::FileType>(headerFileType);
 
-		// Read version
-		uint32_t majorVersion, minorVersion, patchVersion;
-		inFile.read(std::bit_cast<char*>(&majorVersion), sizeof(majorVersion));
-		inFile.read(std::bit_cast<char*>(&minorVersion), sizeof(minorVersion));
-		inFile.read(std::bit_cast<char*>(&patchVersion), sizeof(patchVersion));
+		// Read version (endian-safe)
+		uint32_t majorVersion = endian::readLE<uint32_t>(inFile);
+		uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
+		uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
 
 		// Validate the version
 		if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
@@ -78,9 +95,10 @@ namespace resource
 			return {};
 		}
 
-		inFile.read(std::bit_cast<char*>(&hdrData.width), sizeof(hdrData.width));
-		inFile.read(std::bit_cast<char*>(&hdrData.height), sizeof(hdrData.height));
-		inFile.read(std::bit_cast<char*>(&hdrData.numbersOfChannels), sizeof(hdrData.numbersOfChannels));
+		// Read HDR dimensions (endian-safe)
+		hdrData.width = endian::readLE<uint32_t>(inFile);
+		hdrData.height = endian::readLE<uint32_t>(inFile);
+		hdrData.numbersOfChannels = endian::readLE<uint32_t>(inFile);
 
 		HDRReader::readHDR(inFile, hdrData.width, hdrData.height, hdrData.textureData);
 

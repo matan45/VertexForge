@@ -1,5 +1,6 @@
 #include "Mesh.hpp"
 #include "print/EditorLogger.hpp"
+#include "resource/EndianUtils.hpp"
 
 #include <vector>
 #include <fstream>
@@ -36,36 +37,40 @@ namespace types {
 			return;
 		}
 
-		// Write the header file type
-		uint8_t headerFileType = static_cast<uint8_t>(meshesData.headerFileType);
-		outFile.write(reinterpret_cast<const char*>(&headerFileType), sizeof(headerFileType));
-		
-		// Serialize the mesh data (this is just an example, adapt to your format)
-		uint32_t majorVersion = std::bit_cast<uint32_t>(Version::major);
-		uint32_t minorVersion = std::bit_cast<uint32_t>(Version::minor);
-		uint32_t patchVersion = std::bit_cast<uint32_t>(Version::patch);
-		outFile.write(std::bit_cast<const char*>(&majorVersion), sizeof(majorVersion));
-		outFile.write(std::bit_cast<const char*>(&minorVersion), sizeof(minorVersion));
-		outFile.write(std::bit_cast<const char*>(&patchVersion), sizeof(patchVersion));
-
-		// Write the number of meshes
-		outFile.write(std::bit_cast<const char*>(&meshesData.numberOfMeshes), sizeof(meshesData.numberOfMeshes));
+		// Write header, version, and mesh count (endian-safe)
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(meshesData.headerFileType));
+		resource::endian::writeLE<uint32_t>(outFile, Version::major);
+		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
+		resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+		resource::endian::writeLE<uint32_t>(outFile, meshesData.numberOfMeshes);
 
 		// Iterate through each mesh and write its data
 		for (const auto& meshData : meshesData.meshes) {
-			// Write the number of vertices
+			// Write vertex count (endian-safe)
 			uint32_t vertexCount = static_cast<uint32_t>(meshData.vertices.size());
-			outFile.write(std::bit_cast<const char*>(&vertexCount), sizeof(vertexCount));
+			resource::endian::writeLE<uint32_t>(outFile, vertexCount);
 
-			// Write the vertex data (position, normal, and texCoords)
-			outFile.write(std::bit_cast<const char*>(meshData.vertices.data()), vertexCount * sizeof(resource::Vertex));
+			// Write vertex data (endian-safe, component by component)
+			for (const auto& vertex : meshData.vertices) {
+				// Write position (3 floats)
+				resource::endian::writeLE<float>(outFile, vertex.position.x);
+				resource::endian::writeLE<float>(outFile, vertex.position.y);
+				resource::endian::writeLE<float>(outFile, vertex.position.z);
+				
+				// Write normal (3 floats)
+				resource::endian::writeLE<float>(outFile, vertex.normal.x);
+				resource::endian::writeLE<float>(outFile, vertex.normal.y);
+				resource::endian::writeLE<float>(outFile, vertex.normal.z);
+				
+				// Write texture coordinates (2 floats)
+				resource::endian::writeLE<float>(outFile, vertex.texCoords.x);
+				resource::endian::writeLE<float>(outFile, vertex.texCoords.y);
+			}
 
-			// Write the number of indices
+			// Write index count and data (endian-safe)
 			uint32_t indexCount = static_cast<uint32_t>(meshData.indices.size());
-			outFile.write(std::bit_cast<const char*>(&indexCount), sizeof(indexCount));
-
-			// Write the index data
-			outFile.write(std::bit_cast<const char*>(meshData.indices.data()), indexCount * sizeof(uint32_t));
+			resource::endian::writeLE<uint32_t>(outFile, indexCount);
+			resource::endian::writeVectorLE<uint32_t>(outFile, meshData.indices);
 		}
 
 		outFile.close();

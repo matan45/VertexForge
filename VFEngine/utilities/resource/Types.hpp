@@ -33,21 +33,21 @@ namespace resource
 
     struct TextureData
     {
-        FileType headerFileType;
-        Version version;
-        uint32_t width;
-        uint32_t height;
-        uint32_t numbersOfChannels;
+        FileType headerFileType = FileType::TEXTURE;
+        Version version{}; // Default initialize
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint32_t numbersOfChannels = 0;
         std::vector<unsigned char> textureData;
     };
 
     struct HDRData
     {
-        FileType headerFileType;
-        Version version;
-        uint32_t width;
-        uint32_t height;
-        uint32_t numbersOfChannels;
+        FileType headerFileType = FileType::HDR;
+        Version version{}; // Default initialize
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint32_t numbersOfChannels = 0;
         std::vector<float> textureData;
     };
 
@@ -66,9 +66,9 @@ namespace resource
 
     struct MeshesData
     {
-        FileType headerFileType;
-        Version version;
-        uint32_t numberOfMeshes;
+        FileType headerFileType = FileType::MESH;
+        Version version{}; // Default initialize
+        uint32_t numberOfMeshes = 0;
         std::vector<MeshData> meshes;
     };
 
@@ -97,23 +97,23 @@ namespace resource
 
     struct AnimationData
     {
-        FileType headerFileType;
-        Version version;
-        float duration;
-        float ticksPerSecond;
-        uint32_t numBones;
+        FileType headerFileType = FileType::ANIMATION;
+        Version version{}; // Default initialize
+        float duration = 0.0f;
+        float ticksPerSecond = 0.0f;
+        uint32_t numBones = 0;
         std::vector<BoneAnimation> boneAnimations;
         std::vector<Bone> bones;
     };
 
     struct AudioData
     {
-        FileType headerFileType;
-        Version version;
-        uint32_t totalDurationInSeconds;
-        uint32_t channels;
-        uint32_t sampleRate;
-        uint32_t frames;
+        FileType headerFileType = FileType::AUDIO;
+        Version version{}; // Default initialize
+        uint32_t totalDurationInSeconds = 0;
+        uint32_t channels = 0;
+        uint32_t sampleRate = 0;
+        uint32_t frames = 0;
         std::vector<short> data;
     };
 }

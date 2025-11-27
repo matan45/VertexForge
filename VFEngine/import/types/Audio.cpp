@@ -1,6 +1,7 @@
 #include "Audio.hpp"
 #include "print/EditorLogger.hpp"
 #include "../controllers/files/FileUtils.hpp"
+#include "resource/EndianUtils.hpp"
 
 #include <vector>
 #include <fstream>
@@ -18,15 +19,36 @@
 namespace types {
 	void Audio::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location) const
 	{
-		std::string type = files::FileUtils::getAudioFileType(file.path.data());
-		if (type == "OGG") {
+		// File type detection is now handled by the pipeline, so we need to determine type from file extension
+		std::string extension = files::FileUtils::getFileExtension(file.path.data());
+		
+		if (extension == ".ogg") {
 			loadOggFile(file.path, fileName, location);
 		}
-		else if (type == "WAV") {
+		else if (extension == ".wav") {
 			loadWavFile(file.path, fileName, location);
 		}
-		else if (type == "MP3") {
+		else if (extension == ".mp3") {
 			loadMp3File(file.path, fileName, location);
+		}
+		else {
+			vfLogError("Unsupported audio file extension: {}", extension);
+		}
+	}
+
+	void Audio::loadFromFileWithType(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location, std::string_view fileType) const
+	{
+		if (fileType == "OGG") {
+			loadOggFile(file.path, fileName, location);
+		}
+		else if (fileType == "WAV") {
+			loadWavFile(file.path, fileName, location);
+		}
+		else if (fileType == "MP3") {
+			loadMp3File(file.path, fileName, location);
+		}
+		else {
+			vfLogError("Unsupported audio file type: {}", fileType);
 		}
 	}
 
@@ -132,28 +154,22 @@ namespace types {
 		}
 
 		// Write version
-		// Write the header file type
-		uint8_t headerFileType = static_cast<uint8_t>(audioData.headerFileType);
-		outFile.write(std::bit_cast<const char*>(&headerFileType), sizeof(headerFileType));
-		
-		// Serialize the mesh data (this is just an example, adapt to your format)
-		uint32_t majorVersion = std::bit_cast<uint32_t>(Version::major);
-		uint32_t minorVersion = std::bit_cast<uint32_t>(Version::minor);
-		uint32_t patchVersion = std::bit_cast<uint32_t>(Version::patch);
-		outFile.write(std::bit_cast<const char*>(&majorVersion), sizeof(majorVersion));
-		outFile.write(std::bit_cast<const char*>(&minorVersion), sizeof(minorVersion));
-		outFile.write(std::bit_cast<const char*>(&patchVersion), sizeof(patchVersion));
+		// Write header and version (endian-safe)
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.headerFileType));
+		resource::endian::writeLE<uint32_t>(outFile, Version::major);
+		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
+		resource::endian::writeLE<uint32_t>(outFile, Version::patch);
 
-		// Write sample rate, channels, frames, and total duration
-		outFile.write(std::bit_cast<const char*>(&audioData.sampleRate), sizeof(audioData.sampleRate));
-		outFile.write(std::bit_cast<const char*>(&audioData.channels), sizeof(audioData.channels));
-		outFile.write(std::bit_cast<const char*>(&audioData.frames), sizeof(audioData.frames));
-		outFile.write(std::bit_cast<const char*>(&audioData.totalDurationInSeconds), sizeof(audioData.totalDurationInSeconds));
+		// Write audio metadata (endian-safe)
+		resource::endian::writeLE<uint32_t>(outFile, audioData.sampleRate);
+		resource::endian::writeLE<uint32_t>(outFile, audioData.channels);
+		resource::endian::writeLE<uint32_t>(outFile, audioData.frames);
+		resource::endian::writeLE<uint32_t>(outFile, audioData.totalDurationInSeconds);
 
-		// Write audio data size and the raw audio data
-		auto dataSize = static_cast<uint32_t>(audioData.data.size());
-		outFile.write(std::bit_cast<const char*>(&dataSize), sizeof(dataSize));
-		outFile.write(std::bit_cast<const char*>(audioData.data.data()), dataSize);
+		// Write audio data size and the raw audio data (endian-safe)
+		auto dataSize = static_cast<uint32_t>(audioData.data.size() * sizeof(short));
+		resource::endian::writeLE<uint32_t>(outFile, dataSize);
+		resource::endian::writeVectorLE<short>(outFile, audioData.data);
 
 		outFile.close();
 	}

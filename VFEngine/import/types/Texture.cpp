@@ -2,6 +2,7 @@
 #include "print/EditorLogger.hpp"
 #include "../controllers/files/FileUtils.hpp"
 #include "config/Config.hpp"
+#include "resource/EndianUtils.hpp"
 
 #include <iostream>
 #define TINYEXR_USE_MINIZ 0
@@ -68,8 +69,10 @@ namespace types
 	{
 		resource::HDRData hdrData;
 		hdrData.headerFileType = resource::FileType::HDR;
-		std::string type = files::FileUtils::getImageFileType(file.path.data());
-		if (type == "HDR")
+		
+		// File type detection is now handled by the pipeline, determine from extension
+		std::string extension = files::FileUtils::getFileExtension(file.path.data());
+		if (extension == ".hdr")
 		{
 			if (file.config.isImageFlipVertically)
 			{
@@ -100,7 +103,7 @@ namespace types
 
 			stbi_image_free(imageData);
 		}
-		else if (type == "EXR")
+		else if (extension == ".exr")
 		{
 			EXRVersion exrVersion;
 
@@ -165,6 +168,124 @@ namespace types
 
 			saveToFileHDR(fileName, location, hdrData);
 		}
+		else {
+			vfLogError("Unsupported HDR file extension: {}", extension);
+		}
+	}
+
+	void Texture::loadTextureFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
+		std::string_view location, std::string_view fileType)
+	{
+		// This method can use the detected file type directly instead of checking extensions
+		loadTextureFile(file, fileName, location); // For now, delegate to existing method
+	}
+
+	void Texture::loadHDRFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
+		std::string_view location, std::string_view fileType) const
+	{
+		resource::HDRData hdrData;
+		hdrData.headerFileType = resource::FileType::HDR;
+		
+		if (fileType == "HDR")
+		{
+			if (file.config.isImageFlipVertically)
+			{
+				stbi_set_flip_vertically_on_load(true);
+			}
+			// Load image using stb_image
+			int width;
+			int height;
+			int channels;
+			float* imageData = stbi_loadf(file.path.data(), &width, &height, &channels, 0);
+			if (!imageData)
+			{
+				vfLogError("Failed to load texture: {}", file.path.data());
+				return;
+			}
+
+			if (file.config.isImageFlipVertically)
+			{
+				stbi_set_flip_vertically_on_load(false);
+			}
+
+			hdrData.width = static_cast<uint32_t>(width);
+			hdrData.height = static_cast<uint32_t>(height);
+			hdrData.numbersOfChannels = channels;
+			hdrData.textureData = std::vector<float>(imageData, imageData + (width * height * channels));
+
+			saveToFileHDR(fileName, location, hdrData);
+
+			stbi_image_free(imageData);
+		}
+		else if (fileType == "EXR")
+		{
+			// EXR processing code (same as before)
+			EXRVersion exrVersion;
+
+			int ret = ParseEXRVersionFromFile(&exrVersion, file.path.data());
+			if (ret != TINYEXR_SUCCESS)
+			{
+				vfLogError("Invalid EXR file: {}", file.path.data());
+				return;
+			}
+
+			EXRHeader exrHeader;
+			InitEXRHeader(&exrHeader);
+
+			const char* exrError = nullptr;
+			ret = ParseEXRHeaderFromFile(&exrHeader, &exrVersion, file.path.data(), &exrError);
+			if (ret != TINYEXR_SUCCESS)
+			{
+				vfLogError("Parse EXR err: {}", exrError);
+				FreeEXRErrorMessage(exrError);
+				return;
+			}
+
+			EXRImage exrImage;
+			InitEXRImage(&exrImage);
+
+			ret = LoadEXRImageFromFile(&exrImage, &exrHeader, file.path.data(), &exrError);
+			if (ret != TINYEXR_SUCCESS)
+			{
+				vfLogError("Load EXR err: {}", exrError);
+				FreeEXRHeader(&exrHeader);
+				FreeEXRErrorMessage(exrError);
+				return;
+			}
+
+			float* out;
+			int width;
+			int height;
+
+			int result = LoadEXR(&out, &width, &height, file.path.data(), &exrError);
+			if (result != TINYEXR_SUCCESS)
+			{
+				vfLogError("Failed to load EXR image: {}", exrError);
+				FreeEXRErrorMessage(exrError);
+				return;
+			}
+
+			if (file.config.isImageFlipVertically)
+			{
+				flipImageVertically(out, width, height);
+			}
+
+			int channels = exrImage.num_channels < 4 ? exrImage.num_channels : 4;
+
+			hdrData.width = static_cast<uint32_t>(width);
+			hdrData.height = static_cast<uint32_t>(height);
+			hdrData.numbersOfChannels = static_cast<uint32_t>(channels);
+			hdrData.textureData = convertFromEXRToHDR(out, width, height);
+
+			free(out);
+			FreeEXRImage(&exrImage);
+			FreeEXRHeader(&exrHeader);
+
+			saveToFileHDR(fileName, location, hdrData);
+		}
+		else {
+			vfLogError("Unsupported HDR file type: {}", fileType);
+		}
 	}
 
 	void Texture::saveToFileTexture(std::string_view fileName, std::string_view location,
@@ -181,23 +302,14 @@ namespace types
 			return;
 		}
 
-		// Write the header file type
-		uint8_t headerFileType = static_cast<uint8_t>(textureData.headerFileType);
-		outFile.write(std::bit_cast<const char*>(&headerFileType), sizeof(headerFileType));
-
-		// Serialize the mesh data (this is just an example, adapt to your format)
-		uint32_t majorVersion = std::bit_cast<uint32_t>(Version::major);
-		uint32_t minorVersion = std::bit_cast<uint32_t>(Version::minor);
-		uint32_t patchVersion = std::bit_cast<uint32_t>(Version::patch);
-		outFile.write(std::bit_cast<const char*>(&majorVersion), sizeof(majorVersion));
-		outFile.write(std::bit_cast<const char*>(&minorVersion), sizeof(minorVersion));
-		outFile.write(std::bit_cast<const char*>(&patchVersion), sizeof(patchVersion));
-
-		// Write width and height
-		outFile.write(std::bit_cast<const char*>(&textureData.width), sizeof(textureData.width));
-		outFile.write(std::bit_cast<const char*>(&textureData.height), sizeof(textureData.height));
-		outFile.write(std::bit_cast<const char*>(&textureData.numbersOfChannels),
-			sizeof(textureData.numbersOfChannels));
+		// Write header, version, and dimensions (endian-safe)
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(textureData.headerFileType));
+		resource::endian::writeLE<uint32_t>(outFile, Version::major);
+		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
+		resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+		resource::endian::writeLE<uint32_t>(outFile, textureData.width);
+		resource::endian::writeLE<uint32_t>(outFile, textureData.height);
+		resource::endian::writeLE<uint32_t>(outFile, textureData.numbersOfChannels);
 
 		TGAWriter::writeTGA(outFile, textureData.textureData);
 
@@ -218,19 +330,14 @@ namespace types
 			return;
 		}
 
-		uint8_t headerFileType = static_cast<uint8_t>(hdrData.headerFileType);
-		outFile.write(reinterpret_cast<const char*>(&headerFileType), sizeof(headerFileType));
-
-		uint32_t majorVersion = std::bit_cast<uint32_t>(Version::major);
-		uint32_t minorVersion = std::bit_cast<uint32_t>(Version::minor);
-		uint32_t patchVersion = std::bit_cast<uint32_t>(Version::patch);
-		outFile.write(std::bit_cast<const char*>(&majorVersion), sizeof(majorVersion));
-		outFile.write(std::bit_cast<const char*>(&minorVersion), sizeof(minorVersion));
-		outFile.write(std::bit_cast<const char*>(&patchVersion), sizeof(patchVersion));
-
-		outFile.write(std::bit_cast<const char*>(&hdrData.width), sizeof(hdrData.width));
-		outFile.write(std::bit_cast<const char*>(&hdrData.height), sizeof(hdrData.height));
-		outFile.write(std::bit_cast<const char*>(&hdrData.numbersOfChannels), sizeof(hdrData.numbersOfChannels));
+		// Write HDR header, version, and dimensions (endian-safe)
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(hdrData.headerFileType));
+		resource::endian::writeLE<uint32_t>(outFile, Version::major);
+		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
+		resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+		resource::endian::writeLE<uint32_t>(outFile, hdrData.width);
+		resource::endian::writeLE<uint32_t>(outFile, hdrData.height);
+		resource::endian::writeLE<uint32_t>(outFile, hdrData.numbersOfChannels);
 
 		HDRWriter::writeHDR(outFile, hdrData.width, hdrData.height, hdrData.numbersOfChannels, hdrData.textureData);
 

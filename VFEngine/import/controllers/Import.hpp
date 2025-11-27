@@ -1,11 +1,9 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <memory>
 #include "config/Config.hpp"
-#include "../types/Audio.hpp"
-#include "../types/Texture.hpp"
-#include "../types/Mesh.hpp"
-
+#include "../pipeline/Pipeline.hpp"
 
 namespace controllers
 {
@@ -13,19 +11,15 @@ namespace controllers
     {
     private:
         inline static std::string location;
-        inline static types::Audio audio;
-        inline static types::Mesh mesh;
-        inline static types::Texture texture;
+        inline static std::unique_ptr<pipeline::ImportPipeline> importPipeline;
 
     public:
         static void importFiles(const std::vector<importConfig::ImportFiles>& paths);
         static void setLocation(std::string_view newLocation);
+        static void initialize();
 
     private:
-        static void processPath(const importConfig::ImportFiles& file);
-        static void processTexture(const importConfig::ImportFiles& file, std::string_view fileName);
-        static void processHDR(const importConfig::ImportFiles& file, std::string_view fileName);
-        static void processModel(const importConfig::ImportFiles& file, std::string_view fileName);
-        static void processAudio(const importConfig::ImportFiles& file, std::string_view fileName);
+        static void setupPipeline();
+        static void waitForCompletion(std::vector<std::future<std::optional<pipeline::ImportContext>>>&& futures);
     };
 }

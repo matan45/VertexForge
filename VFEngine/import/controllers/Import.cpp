@@ -1,23 +1,27 @@
 #include "Import.hpp"
-#include <filesystem>
 #include <future>
-
-#include "files/FileUtils.hpp"
+#include <algorithm>
+#include "../pipeline/stages/FileValidationStage.hpp"
+#include "../pipeline/stages/HeaderReadingStage.hpp"
+#include "../pipeline/stages/FileTypeDetectionStage.hpp"
+#include "../pipeline/stages/FileProcessingStage.hpp"
 #include "print/EditorLogger.hpp"
-
 
 namespace controllers
 {
     void Import::importFiles(const std::vector<importConfig::ImportFiles>& paths)
     {
-        std::vector<std::future<void>> futures;
-        futures.reserve(paths.size());
-
-        for (const auto& path : paths)
+        if (!importPipeline)
         {
-            futures.push_back(std::async(std::launch::async, &Import::processPath, path));
+            initialize();
         }
+
+        vfLogInfo("Starting import of {} files", paths.size());
         
+        auto futures = importPipeline->processFiles(paths, location);
+        waitForCompletion(std::move(futures));
+        
+        vfLogInfo("Import process completed");
     }
 
     void Import::setLocation(std::string_view newLocation)
@@ -25,56 +29,52 @@ namespace controllers
         location = newLocation;
     }
 
-    void Import::processPath(const importConfig::ImportFiles& file)
+    void Import::initialize()
     {
-        // Get the file name
-        std::string fileName = files::FileUtils::getFileName(file.path.data());
-        vfLogInfo("Import File name: {}", fileName);
-
-        // Use if-else to handle different file types
-        if (files::FileUtils::isTextureFile(file.path.data()))
-        {
-            // Handle texture files
-            processTexture(file, fileName);
-        }
-        else if (files::FileUtils::isHDRFile(file.path.data()))
-        {
-            // Handle hdr files
-            processHDR(file, fileName);
-        }
-        else if (files::FileUtils::isMeshFile(file.path.data()))
-        {
-            // Handle model and animations files
-            processModel(file, fileName);
-        }
-        else if (files::FileUtils::isAudioFile(file.path.data()))
-        {
-            // Handle model files
-            processAudio(file, fileName);
-        }
-        else
-        {
-            vfLogError("Unknown file extension: {}", files::FileUtils::getFileExtension(file.path.data()));
-        }
+        setupPipeline();
     }
 
-    void Import::processTexture(const importConfig::ImportFiles& file, std::string_view fileName)
+    void Import::setupPipeline()
     {
-        texture.loadTextureFile(file, fileName, location);
+        importPipeline = std::make_unique<pipeline::ImportPipeline>();
+        
+        // Add pipeline stages in order
+        importPipeline->addStage(std::make_unique<pipeline::stages::FileValidationStage>());
+        importPipeline->addStage(std::make_unique<pipeline::stages::HeaderReadingStage>());
+        importPipeline->addStage(std::make_unique<pipeline::stages::FileTypeDetectionStage>());
+        importPipeline->addStage(std::make_unique<pipeline::stages::FileProcessingStage>());
+        
+        vfLogInfo("Import pipeline initialized with {} stages", 4);
     }
 
-    void Import::processModel(const importConfig::ImportFiles& file, std::string_view fileName)
+    void Import::waitForCompletion(std::vector<std::future<std::optional<pipeline::ImportContext>>>&& futures)
     {
-        mesh.loadFromFile(file, fileName, location);
-    }
-
-    void Import::processAudio(const importConfig::ImportFiles& file, std::string_view fileName)
-    {
-        audio.loadFromFile(file, fileName, location);
-    }
-
-    void Import::processHDR(const importConfig::ImportFiles& file, std::string_view fileName)
-    {
-        texture.loadHDRFile(file, fileName, location);
+        size_t successCount = 0;
+        size_t failureCount = 0;
+        
+        for (auto& future : futures)
+        {
+            try
+            {
+                auto result = future.get();
+                if (result.has_value())
+                {
+                    successCount++;
+                    vfLogInfo("Successfully processed: {}", result->file.path);
+                }
+                else
+                {
+                    failureCount++;
+                    vfLogError("Failed to process file");
+                }
+            }
+            catch (const std::exception& e)
+            {
+                failureCount++;
+                vfLogError("Exception during file processing: {}", e.what());
+            }
+        }
+        
+        vfLogInfo("Import completed: {} successful, {} failed", successCount, failureCount);
     }
 }

@@ -31,6 +31,7 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+VFEngine/.claude/
 
 runPremake.bat
 
