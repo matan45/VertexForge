@@ -51,8 +51,8 @@ namespace render
 
     struct UniformBufferObject
     {
-        alignas(16) glm::mat4 view;
         alignas(16) glm::mat4 projection;
+        alignas(16) glm::mat4 view;
     };
 
 
@@ -66,13 +66,14 @@ namespace render
 
     struct CameraViewMatrix
     {
+        // Vulkan cubemap face order: +X, -X, +Y, -Y, +Z, -Z
         inline static const std::array<glm::mat4, 6> captureViews = {
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec3(0, -1, 0)),
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0)),
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec3(0, 0, 1)),
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, -1, 0), glm::vec3(0, 0, -1)),
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, -1, 0)),
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec3(0, -1, 0))
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 1, 0, 0), glm::vec3(0, -1, 0)),  // +X
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0)),  // -X
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 0, 1, 0), glm::vec3(0,  0, 1)),  // +Y
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 0,-1, 0), glm::vec3(0,  0,-1)),  // -Y
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 0, 0, 1), glm::vec3(0, -1, 0)),  // +Z
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 0, 0,-1), glm::vec3(0, -1, 0))   // -Z
         };
         inline static const glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
     };
@@ -113,7 +114,7 @@ namespace render
         core::OffscreenResources& offscreenResources;
         vk::UniqueCommandPool commandPool;
         std::shared_ptr<core::Texture> hdrTexture;
-        components::CameraComponent camera;
+        components::CameraComponent* camera = nullptr;
         bool isDisplay = false;
 
         static constexpr uint32_t CUBE_MAP_SIZE = 512;
@@ -141,9 +142,9 @@ namespace render
         void remove();
         void cleanUp();
 
-        void setCamera(components::CameraComponent& _camera) {
+        void setCamera(components::CameraComponent* _camera) {
             camera = _camera;
-            isDisplay = true;
+            isDisplay = (camera != nullptr);
         }
 
         const ImageData& getBrdfLUTImage()const {

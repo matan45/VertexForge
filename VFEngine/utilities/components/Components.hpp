@@ -92,6 +92,8 @@ namespace components {
 					farPlane
 				);
 			}
+			// Flip Y for Vulkan coordinate system (GLM is designed for OpenGL)
+			projectionMatrix[1][1] *= -1;
 		}
 		// Update the view matrix based on the camera's position, rotation, and direction
 		void updateViewMatrix(const glm::vec3& position, const glm::vec3& rotation) {

@@ -31,9 +31,15 @@ namespace render
 
 	void IBL::recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
 	{
-		if (isDisplay)
+		if (isDisplay && camera)
 		{
-			updateUniformBuffer(camera.viewMatrix, camera.projectionMatrix, skybox.uniformBufferMemory);
+			// Debug: Log view matrix values to verify camera is updating
+			static int frameCount = 0;
+			if (frameCount++ % 60 == 0) { // Log every 60 frames
+				loggerInfo("IBL Camera viewMatrix[0][0]={}, [1][1]={}, [2][2]={}",
+					camera->viewMatrix[0][0], camera->viewMatrix[1][1], camera->viewMatrix[2][2]);
+			}
+			updateUniformBuffer(camera->viewMatrix, camera->projectionMatrix, skybox.uniformBufferMemory);
 			vk::RenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.renderPass = skybox.renderPass;
 			renderPassInfo.framebuffer = skybox.framebuffers[imageIndex];
@@ -766,8 +772,8 @@ namespace render
 		rasterizer.rasterizerDiscardEnable = VK_FALSE;
 		rasterizer.polygonMode = vk::PolygonMode::eFill;
 		rasterizer.lineWidth = 1.0f;
-		rasterizer.cullMode = vk::CullModeFlagBits::eBack;
-		rasterizer.frontFace = vk::FrontFace::eClockwise;
+		rasterizer.cullMode = vk::CullModeFlagBits::eNone;  // No culling for skybox
+		rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
 		rasterizer.depthBiasEnable = VK_FALSE;
 
 		vk::PipelineMultisampleStateCreateInfo multisampling;

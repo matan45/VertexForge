@@ -6,6 +6,7 @@
 #include "time/Timer.hpp"
 #include "../controllers/imguiHandler/ImguiWindowHandler.hpp"
 #include "resource/ResourceManager.hpp"
+#include "scene/LevelHandler.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
@@ -39,6 +40,8 @@ namespace core {
 				renderController->reSize();
 				mainWindow->resetResizeFlag();
 			}
+
+			scene::LevelHandler::update();
 
 			newFrame();
 			editorDraw();

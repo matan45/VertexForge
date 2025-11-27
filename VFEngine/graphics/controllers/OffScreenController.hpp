@@ -29,7 +29,7 @@ namespace controllers
         void init();
         void cleanUp() const;
 
-        void iblAdd(std::string_view iblPath, components::CameraComponent& camera);
+        void iblAdd(std::string_view iblPath, components::CameraComponent* camera);
         void iblRemove();
 
         void* render();

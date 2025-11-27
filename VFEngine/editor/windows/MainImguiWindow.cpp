@@ -232,10 +232,10 @@ namespace windows
 
 			if (ImGui::Button("Apply", ImVec2(120, 0)))
 			{
-				if (auto firstCamera = getFirstCameraComponent(); firstCamera.has_value()) {
-					offscreen.iblAdd(filePath, firstCamera.value());
+				if (auto* firstCamera = getFirstCameraComponent(); firstCamera != nullptr) {
+					offscreen.iblAdd(filePath, firstCamera);
 				}
-				
+
 			}
 			ImGui::SameLine();
 			ImGui::SetCursorPosX(
@@ -258,14 +258,15 @@ namespace windows
 		ImGui::End();
 	}
 
-	std::optional<components::CameraComponent> MainImguiWindow::getFirstCameraComponent() const
+	components::CameraComponent* MainImguiWindow::getFirstCameraComponent() const
 	{
 		auto& registry = scene::EntityRegistry::getRegistry();
-		auto view = registry.view<components::CameraComponent>();
+		// Must have both CameraComponent and TransformComponent for camera updates to work
+		auto view = registry.view<components::CameraComponent, components::TransformComponent>();
 		for (auto entity : view) {
-			return view.get<components::CameraComponent>(entity);
+			return &view.get<components::CameraComponent>(entity);
 		}
-		return std::nullopt;
+		return nullptr;
 	}
 
 }

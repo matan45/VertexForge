@@ -69,6 +69,10 @@ namespace windows
                     if (ImGui::MenuItem("Add Camera Component"))
                     {
                         auto entityObject = scene::Entity(selected);
+                        // Ensure entity has TransformComponent (required for camera updates)
+                        if (!entityObject.hasComponent<components::TransformComponent>()) {
+                            entityObject.addComponent<components::TransformComponent>();
+                        }
                         entityObject.addComponent<components::CameraComponent>();
                     }
                     ImGui::EndPopup();
