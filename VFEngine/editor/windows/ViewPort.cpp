@@ -4,6 +4,7 @@
 #include "scene/EntityRegistry.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cmath>
 
 namespace windows {
 
@@ -33,74 +34,38 @@ namespace windows {
 			return;
 		}
 
-		float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
-		float velocity = cameraSpeed * deltaTime;
+		float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
 
-		// Calculate forward and right vectors based on camera rotation
-		float yawRad = glm::radians(transform->rotation.y);
-		float pitchRad = glm::radians(transform->rotation.x);
-
-		// Forward vector (where the camera is looking)
-		glm::vec3 forward;
-		forward.x = cos(pitchRad) * sin(yawRad);
-		forward.y = -sin(pitchRad);
-		forward.z = cos(pitchRad) * cos(yawRad);
-		forward = glm::normalize(forward);
-
-		// Right vector (perpendicular to forward on XZ plane)
-		glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
-
-		// Up vector (world up for Q/E movement)
-		glm::vec3 up(0.0f, 1.0f, 0.0f);
-
-		// WASD movement
-		if (ImGui::IsKeyDown(ImGuiKey_W)) {
-			transform->position += forward * velocity;
-			transform->isDirty = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_S)) {
-			transform->position -= forward * velocity;
-			transform->isDirty = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_A)) {
-			transform->position -= right * velocity;
-			transform->isDirty = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_D)) {
-			transform->position += right * velocity;
-			transform->isDirty = true;
-		}
-
-		// Q/E for up/down movement
-		if (ImGui::IsKeyDown(ImGuiKey_E)) {
-			transform->position += up * velocity;
-			transform->isDirty = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_Q)) {
-			transform->position -= up * velocity;
-			transform->isDirty = true;
-		}
+		// Camera movement (WASD + Q/E)
+		cameraMovement(transform, dt, cameraSpeed);
 
 		// Mouse look (right mouse button held)
 		if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+			ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 			ImVec2 mousePos = ImGui::GetMousePos();
 
-			if (!rightMousePressed) {
-				// First frame of right click - store initial position
-				rightMousePressed = true;
+			if (isFirst) {
+				// First frame - just capture position, don't rotate
 				lastMouseX = mousePos.x;
 				lastMouseY = mousePos.y;
+				isFirst = false;
 			}
 			else {
-				// Calculate mouse delta
-				float deltaX = mousePos.x - lastMouseX;
-				float deltaY = mousePos.y - lastMouseY;
+				// Calculate delta and apply rotation
+				float xOffset = mousePos.x - lastMouseX;
+				float yOffset = mousePos.y - lastMouseY;
 
-				// Update rotation (yaw and pitch)
-				transform->rotation.y += deltaX * mouseSensitivity;
-				transform->rotation.x += deltaY * mouseSensitivity;
+				// Mouse X movement -> Yaw (rotation.y) - negated for natural feel
+				// Mouse Y movement -> Pitch (rotation.x)
+				transform->rotation.y -= xOffset * mouseSensitivity;
+				transform->rotation.x -= yOffset * mouseSensitivity;
 
-				// Clamp pitch to avoid gimbal lock
+				// Reset yaw if exceeds 360 degrees
+				if (transform->rotation.y >= 360.0f || transform->rotation.y <= -360.0f) {
+					transform->rotation.y = 0.0f;
+				}
+
+				// Clamp pitch to avoid flipping
 				transform->rotation.x = glm::clamp(transform->rotation.x, -89.0f, 89.0f);
 
 				transform->isDirty = true;
@@ -110,7 +75,42 @@ namespace windows {
 			}
 		}
 		else {
-			rightMousePressed = false;
+			// Reset when mouse button is released
+			isFirst = true;
+		}
+	}
+
+	void ViewPort::cameraMovement(components::TransformComponent* transform, float dt, float speed)
+	{
+		float yawRad = transform->rotation.y / 180.0f * glm::pi<float>();
+
+		if (ImGui::IsKeyDown(ImGuiKey_W)) {
+			transform->position.x += std::sin(yawRad) * speed * dt;
+			transform->position.z -= std::cos(yawRad) * speed * dt;
+			transform->isDirty = true;
+		}
+		else if (ImGui::IsKeyDown(ImGuiKey_A)) {
+			transform->position.x -= std::cos(yawRad) * speed * dt;
+			transform->position.z -= std::sin(yawRad) * speed * dt;
+			transform->isDirty = true;
+		}
+		else if (ImGui::IsKeyDown(ImGuiKey_D)) {
+			transform->position.x += std::cos(yawRad) * speed * dt;
+			transform->position.z += std::sin(yawRad) * speed * dt;
+			transform->isDirty = true;
+		}
+		else if (ImGui::IsKeyDown(ImGuiKey_S)) {
+			transform->position.x -= std::sin(yawRad) * speed * dt;
+			transform->position.z += std::cos(yawRad) * speed * dt;
+			transform->isDirty = true;
+		}
+		else if (ImGui::IsKeyDown(ImGuiKey_E)) {
+			transform->position.y += -1.0f * speed * dt;
+			transform->isDirty = true;
+		}
+		else if (ImGui::IsKeyDown(ImGuiKey_Q)) {
+			transform->position.y += 1.0f * speed * dt;
+			transform->isDirty = true;
 		}
 	}
 

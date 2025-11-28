@@ -66,11 +66,19 @@ namespace components {
 		glm::mat4 projectionMatrix{1.0f};
 		glm::mat4 viewMatrix{1.0f};
 		bool isPerspective = true; // True for perspective, false for orthographic
-		float fieldOfView = 45.0f; // For perspective cameras, in degrees
+		float fieldOfView = 90.0f; // For perspective cameras, in degrees
 		float orthoSize = 10.0f; // For orthographic cameras, half the height of the view
 		float nearPlane = 0.1f;
 		float farPlane = 1000.0f;
 		float aspectRatio = 1.778f; // Typically screen width / height
+
+		// Default constructor - initializes projection matrix with default values
+		CameraComponent() {
+			updateProjectionMatrix();
+			// Initialize view matrix looking down -Z axis
+			viewMatrix = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		}
+
 		// Update the projection matrix based on the current settings
 		void updateProjectionMatrix()
 		{

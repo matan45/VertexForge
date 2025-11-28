@@ -92,14 +92,6 @@ namespace scene {
 			auto& camera = entity.getComponent<components::CameraComponent>();
 			const auto& transform = entity.getComponent<components::TransformComponent>();
 
-			// Debug: Log camera transform before update
-			static int frameCount = 0;
-			if (frameCount++ % 60 == 0) {
-				vfLogInfo("Camera Transform: pos=({},{},{}), rot=({},{},{})",
-					transform.position.x, transform.position.y, transform.position.z,
-					transform.rotation.x, transform.rotation.y, transform.rotation.z);
-			}
-
 			camera.updateViewMatrix(transform.position, transform.rotation);
 		}
 	}

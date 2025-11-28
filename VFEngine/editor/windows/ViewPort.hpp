@@ -11,7 +11,7 @@ namespace windows {
 		std::shared_ptr<scene::SceneGraphSystem> sceneGraphSystem;
 		float cameraSpeed = 5.0f;
 		float mouseSensitivity = 0.1f;
-		bool rightMousePressed = false;
+		bool isFirst = true;
 		float lastMouseX = 0.0f;
 		float lastMouseY = 0.0f;
 
@@ -23,6 +23,7 @@ namespace windows {
 
 	private:
 		void handleCameraInput();
+		void cameraMovement(components::TransformComponent* transform, float dt, float speed);
 		components::TransformComponent* getFirstCameraTransform() const;
 	};
 }
