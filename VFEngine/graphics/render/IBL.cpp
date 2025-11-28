@@ -33,12 +33,6 @@ namespace render
 	{
 		if (isDisplay && camera)
 		{
-			// Debug: Log view matrix values to verify camera is updating
-			static int frameCount = 0;
-			if (frameCount++ % 60 == 0) { // Log every 60 frames
-				loggerInfo("IBL Camera viewMatrix[0][0]={}, [1][1]={}, [2][2]={}",
-					camera->viewMatrix[0][0], camera->viewMatrix[1][1], camera->viewMatrix[2][2]);
-			}
 			updateUniformBuffer(camera->viewMatrix, camera->projectionMatrix, skybox.uniformBufferMemory);
 			vk::RenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.renderPass = skybox.renderPass;
@@ -64,7 +58,7 @@ namespace render
 			// Bind vertex buffer
 			vk::DeviceSize offsets[] = { 0 };
 			commandBuffer.bindVertexBuffers(0, skybox.vertexBuffer, offsets);
-			commandBuffer.draw(static_cast<uint32_t>(cubeVertices.size()), 1, 0, 0);
+			commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
 
 			// End render pass
 			commandBuffer.endRenderPass();
@@ -468,10 +462,6 @@ namespace render
 		core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBufferInitCubeImage);
 #pragma endregion ImageTransition
 #pragma region Draw
-
-		vk::UniqueCommandBuffer commandBufferDraw = core::Utilities::beginSingleTimeCommands(
-			device.getLogicalDevice(), commandPool.get());
-
 		vk::ClearValue clearColor{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f} };
 
 		vk::RenderPassBeginInfo renderPassBeginInfo{};
@@ -481,40 +471,46 @@ namespace render
 		renderPassBeginInfo.clearValueCount = 1;
 		renderPassBeginInfo.pClearValues = &clearColor;
 
-		commandBufferDraw.get().setScissor(0, 1, &scissor);
 		float roughness = 0;
 		for (uint32_t m = 0; m < mipLevels; m++)
 		{
 			roughness = (float)m / (float)(mipLevels - 1);
 			for (uint32_t face = 0; face < 6; face++)
 			{
-				viewport.width = static_cast<float>(CUBE_MAP_SIZE * std::pow(0.5f, m));
-				viewport.height = static_cast<float>(CUBE_MAP_SIZE * std::pow(0.5f, m));
-				commandBufferDraw.get().setViewport(0, 1, &viewport);
-
-				commandBufferDraw.get().pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0,
-					sizeof(float), &roughness);
+				// Update uniform buffer with this face's view matrix
 				updateUniformBuffer(CameraViewMatrix::captureViews[face], CameraViewMatrix::captureProjection,
 					uboUniformBufferMemory);
 
+				// Create a new command buffer for each face/mip
+				vk::UniqueCommandBuffer faceCommandBuffer = core::Utilities::beginSingleTimeCommands(
+					device.getLogicalDevice(), commandPool.get());
+
+				viewport.width = static_cast<float>(CUBE_MAP_SIZE * std::pow(0.5f, m));
+				viewport.height = static_cast<float>(CUBE_MAP_SIZE * std::pow(0.5f, m));
+				faceCommandBuffer.get().setViewport(0, 1, &viewport);
+				faceCommandBuffer.get().setScissor(0, 1, &scissor);
+
+				faceCommandBuffer.get().pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0,
+					sizeof(float), &roughness);
+
 				// Begin render pass and render to the specific cube face
-				commandBufferDraw.get().beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+				faceCommandBuffer.get().beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
 
 				// Bind pipeline, descriptor sets, and draw commands
-				commandBufferDraw.get().bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-				commandBufferDraw.get().bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
+				faceCommandBuffer.get().bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+				faceCommandBuffer.get().bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
 					descriptorSet,
 					{});
 
 				// Bind vertex buffer
 				vk::DeviceSize offsets[] = { 0 };
-				commandBufferDraw.get().bindVertexBuffers(0, cubeVertexBuffer, offsets);
-				commandBufferDraw.get().draw(static_cast<uint32_t>(cubeVertices.size()), 1, 0, 0);
+				faceCommandBuffer.get().bindVertexBuffers(0, cubeVertexBuffer, offsets);
+				faceCommandBuffer.get().draw(static_cast<uint32_t>(cubeVertices.size()), 1, 0, 0);
 
-				commandBufferDraw.get().endRenderPass();
+				faceCommandBuffer.get().endRenderPass();
 
 				// Ensure synchronization between rendering and copying by transitioning the image layout
-				core::Utilities::transitionImageLayout(commandBufferDraw.get(), imageHelper.image,
+				core::Utilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
 					vk::ImageLayout::eColorAttachmentOptimal,
 					vk::ImageLayout::eTransferSrcOptimal,
 					vk::ImageAspectFlagBits::eColor);
@@ -529,7 +525,7 @@ namespace render
 
 				copyRegion.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 				copyRegion.dstSubresource.baseArrayLayer = face;
-				copyRegion.dstSubresource.mipLevel = m; // Set mip level to 0 for each face
+				copyRegion.dstSubresource.mipLevel = m;
 				copyRegion.dstSubresource.layerCount = 1;
 				copyRegion.dstOffset = vk::Offset3D{ 0, 0, 0 };
 
@@ -538,27 +534,27 @@ namespace render
 				copyRegion.extent.depth = 1;
 
 				// Copy the image from the framebuffer to the cube map face
-				commandBufferDraw.get().copyImage(imageHelper.image, vk::ImageLayout::eTransferSrcOptimal,
+				faceCommandBuffer.get().copyImage(imageHelper.image, vk::ImageLayout::eTransferSrcOptimal,
 					prefilterImage.image,
 					vk::ImageLayout::eTransferDstOptimal, 1, &copyRegion);
 
 				// Transition the image back to color attachment layout for the next face
-				core::Utilities::transitionImageLayout(commandBufferDraw.get(), imageHelper.image,
+				core::Utilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
 					vk::ImageLayout::eTransferSrcOptimal,
 					vk::ImageLayout::eColorAttachmentOptimal,
 					vk::ImageAspectFlagBits::eColor);
+
+				// Submit and wait for this face to complete before moving to next
+				vk::Fence faceFence = device.getLogicalDevice().createFence({});
+				core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), faceCommandBuffer, faceFence);
+
+				if (vk::Result result = device.getLogicalDevice().waitForFences(faceFence, VK_TRUE, UINT64_MAX); result !=
+					vk::Result::eSuccess)
+				{
+					loggerError("Failed to wait for Fence prefilter mip {} face {}:", m, face);
+				}
+				device.getLogicalDevice().destroyFence(faceFence);
 			}
-		}
-
-		// Create a fence to wait for completion
-		vk::Fence renderFence = device.getLogicalDevice().createFence({});
-		core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBufferDraw, renderFence);
-
-		// Wait for the command buffer to finish executing
-		if (vk::Result result = device.getLogicalDevice().waitForFences(renderFence, VK_TRUE, UINT64_MAX); result !=
-			vk::Result::eSuccess)
-		{
-			loggerError("Failed to to wait for Fence IBL:");
 		}
 #pragma endregion Draw
 #pragma region EndImageTransition
@@ -575,8 +571,6 @@ namespace render
 		core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBufferEndTransition);
 #pragma endregion EndImageTransition
 #pragma region CleanUp
-		device.getLogicalDevice().destroyFence(renderFence);
-
 		device.getLogicalDevice().destroyBuffer(cubeVertexBuffer);
 		device.getLogicalDevice().freeMemory(cubeVertexBufferMemory);
 
@@ -644,9 +638,9 @@ namespace render
 		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexInputAttributes.size());
 		vertexInputInfo.pVertexAttributeDescriptions = vertexInputAttributes.data();
 
-		//DEFINE THE VERTEX BUFFER
+		//DEFINE THE VERTEX BUFFER - use skyboxVertices for rendering from inside
 		core::BufferInfoRequest vertexCubeVerticesBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-		vertexCubeVerticesBufferRequest.size = sizeof(cubeVertices[0]) * cubeVertices.size();
+		vertexCubeVerticesBufferRequest.size = sizeof(skyboxVertices[0]) * skyboxVertices.size();
 		vertexCubeVerticesBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
 		vertexCubeVerticesBufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
 			vk::MemoryPropertyFlagBits::eHostCoherent;
@@ -659,7 +653,7 @@ namespace render
 		{
 			loggerError("failed to map memory");
 		}
-		memcpy(data, cubeVertices.data(), vertexCubeVerticesBufferRequest.size);
+		memcpy(data, skyboxVertices.data(), vertexCubeVerticesBufferRequest.size);
 		device.getLogicalDevice().unmapMemory(skybox.vertexBufferMemory);
 #pragma endregion VertexBuffer
 #pragma region UniformBuffer
@@ -1155,9 +1149,6 @@ namespace render
 		core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBufferInitCubeImage);
 #pragma endregion ImageTransition
 #pragma region Draw
-		vk::UniqueCommandBuffer commandBufferDraw = core::Utilities::beginSingleTimeCommands(
-			device.getLogicalDevice(), commandPool.get());
-
 		vk::ClearValue clearColor{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f} };
 
 		vk::RenderPassBeginInfo renderPassBeginInfo{};
@@ -1167,30 +1158,35 @@ namespace render
 		renderPassBeginInfo.clearValueCount = 1;
 		renderPassBeginInfo.pClearValues = &clearColor;
 
-		//DRAW COMMAND 
+		//DRAW COMMAND - render each face separately to ensure uniform buffer is correct
 		for (uint32_t face = 0; face < 6; ++face)
 		{
+			// Update uniform buffer with this face's view matrix
 			updateUniformBuffer(CameraViewMatrix::captureViews[face], CameraViewMatrix::captureProjection,
 				uboUniformBufferMemory);
 
+			// Create a new command buffer for each face
+			vk::UniqueCommandBuffer faceCommandBuffer = core::Utilities::beginSingleTimeCommands(
+				device.getLogicalDevice(), commandPool.get());
+
 			// Begin render pass and render to the specific cube face
-			commandBufferDraw.get().beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+			faceCommandBuffer.get().beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
 
 			// Bind pipeline, descriptor sets, and draw commands
-			commandBufferDraw.get().bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-			commandBufferDraw.get().bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
+			faceCommandBuffer.get().bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+			faceCommandBuffer.get().bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
 				descriptorSet,
 				{});
 
 			// Bind vertex buffer
 			vk::DeviceSize offsets[] = { 0 };
-			commandBufferDraw.get().bindVertexBuffers(0, vertexBuffer, offsets);
-			commandBufferDraw.get().draw(static_cast<uint32_t>(cubeVertices.size()), 1, 0, 0);
+			faceCommandBuffer.get().bindVertexBuffers(0, vertexBuffer, offsets);
+			faceCommandBuffer.get().draw(static_cast<uint32_t>(cubeVertices.size()), 1, 0, 0);
 
-			commandBufferDraw.get().endRenderPass();
+			faceCommandBuffer.get().endRenderPass();
 
 			// Ensure synchronization between rendering and copying by transitioning the image layout
-			core::Utilities::transitionImageLayout(commandBufferDraw.get(), imageHelper.image,
+			core::Utilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
 				vk::ImageLayout::eColorAttachmentOptimal,
 				vk::ImageLayout::eTransferSrcOptimal,
 				vk::ImageAspectFlagBits::eColor);
@@ -1205,7 +1201,7 @@ namespace render
 
 			copyRegion.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 			copyRegion.dstSubresource.baseArrayLayer = face;
-			copyRegion.dstSubresource.mipLevel = 0; // Set mip level to 0 for each face
+			copyRegion.dstSubresource.mipLevel = 0;
 			copyRegion.dstSubresource.layerCount = 1;
 			copyRegion.dstOffset = vk::Offset3D{ 0, 0, 0 };
 
@@ -1214,26 +1210,26 @@ namespace render
 			copyRegion.extent.depth = 1;
 
 			// Copy the image from the framebuffer to the cube map face
-			commandBufferDraw.get().copyImage(imageHelper.image, vk::ImageLayout::eTransferSrcOptimal,
+			faceCommandBuffer.get().copyImage(imageHelper.image, vk::ImageLayout::eTransferSrcOptimal,
 				imageIrradianceCube.image,
 				vk::ImageLayout::eTransferDstOptimal, 1, &copyRegion);
 
 			// Transition the image back to color attachment layout for the next face
-			core::Utilities::transitionImageLayout(commandBufferDraw.get(), imageHelper.image,
+			core::Utilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
 				vk::ImageLayout::eTransferSrcOptimal,
 				vk::ImageLayout::eColorAttachmentOptimal,
 				vk::ImageAspectFlagBits::eColor);
-		}
 
-		// Create a fence to wait for completion
-		vk::Fence renderFence = device.getLogicalDevice().createFence({});
-		core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBufferDraw, renderFence);
+			// Submit and wait for this face to complete before moving to next
+			vk::Fence faceFence = device.getLogicalDevice().createFence({});
+			core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), faceCommandBuffer, faceFence);
 
-		// Wait for the command buffer to finish executing
-		if (vk::Result result = device.getLogicalDevice().waitForFences(renderFence, VK_TRUE, UINT64_MAX); result !=
-			vk::Result::eSuccess)
-		{
-			loggerError("Failed to to wait for Fence IBL:");
+			if (vk::Result result = device.getLogicalDevice().waitForFences(faceFence, VK_TRUE, UINT64_MAX); result !=
+				vk::Result::eSuccess)
+			{
+				loggerError("Failed to wait for Fence IBL face {}:", face);
+			}
+			device.getLogicalDevice().destroyFence(faceFence);
 		}
 #pragma endregion Draw
 #pragma region EndImageTransition
@@ -1250,8 +1246,6 @@ namespace render
 #pragma endregion EndImageTransition
 #pragma region CleanUp
 		//cleanUp
-		device.getLogicalDevice().destroyFence(renderFence);
-
 		device.getLogicalDevice().destroyBuffer(vertexBuffer);
 		device.getLogicalDevice().freeMemory(vertexBufferMemory);
 

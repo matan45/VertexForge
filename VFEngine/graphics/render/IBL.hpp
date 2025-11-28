@@ -13,6 +13,7 @@ namespace core
 
 namespace render
 {
+    // Cube vertices for CUBEMAP GENERATION (rendering to faces from outside/origin)
     inline static const std::vector<glm::vec3> cubeVertices = {
         {-1.0f, 1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f},
         {1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {-1.0f, 1.0f, -1.0f},
@@ -31,6 +32,33 @@ namespace render
 
         {-1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f, 1.0f}, {1.0f, -1.0f, -1.0f},
         {1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f, 1.0f}, {1.0f, -1.0f, 1.0f}
+    };
+
+    // Skybox cube vertices - wound for viewing from INSIDE the cube
+    inline static const std::vector<glm::vec3> skyboxVertices = {
+        // Front face (z = -1)
+        {-1.0f,  1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f},
+        {-1.0f,  1.0f, -1.0f}, {1.0f,  1.0f, -1.0f}, {1.0f, -1.0f, -1.0f},
+
+        // Back face (z = +1)
+        {-1.0f, -1.0f,  1.0f}, {1.0f, -1.0f,  1.0f}, {-1.0f,  1.0f,  1.0f},
+        {-1.0f,  1.0f,  1.0f}, {1.0f, -1.0f,  1.0f}, {1.0f,  1.0f,  1.0f},
+
+        // Left face (x = -1)
+        {-1.0f, -1.0f,  1.0f}, {-1.0f,  1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f},
+        {-1.0f, -1.0f,  1.0f}, {-1.0f,  1.0f,  1.0f}, {-1.0f,  1.0f, -1.0f},
+
+        // Right face (x = +1)
+        {1.0f, -1.0f, -1.0f}, {1.0f,  1.0f, -1.0f}, {1.0f, -1.0f,  1.0f},
+        {1.0f,  1.0f, -1.0f}, {1.0f,  1.0f,  1.0f}, {1.0f, -1.0f,  1.0f},
+
+        // Top face (y = +1)
+        {-1.0f,  1.0f, -1.0f}, {1.0f,  1.0f,  1.0f}, {1.0f,  1.0f, -1.0f},
+        {-1.0f,  1.0f, -1.0f}, {-1.0f,  1.0f,  1.0f}, {1.0f,  1.0f,  1.0f},
+
+        // Bottom face (y = -1)
+        {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f,  1.0f},
+        {1.0f, -1.0f, -1.0f}, {1.0f, -1.0f,  1.0f}, {-1.0f, -1.0f,  1.0f}
     };
 
     struct QuadVertex
@@ -67,6 +95,7 @@ namespace render
     struct CameraViewMatrix
     {
         // Vulkan cubemap face order: +X, -X, +Y, -Y, +Z, -Z
+        // Standard OpenGL-style capture views - coordinate conversion happens in shaders
         inline static const std::array<glm::mat4, 6> captureViews = {
             glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 1, 0, 0), glm::vec3(0, -1, 0)),  // +X
             glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0)),  // -X
