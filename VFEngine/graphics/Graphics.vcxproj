@@ -116,6 +116,11 @@
     <ClInclude Include="render\ClearColor.hpp" />
     <ClInclude Include="render\IBL.hpp" />
     <ClInclude Include="render\RenderPassHandler.hpp" />
+    <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
+    <ClInclude Include="render\ibl\IBLTypes.hpp" />
+    <ClInclude Include="render\ibl\IrradianceGenerator.hpp" />
+    <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
+    <ClInclude Include="render\ibl\SkyboxRenderer.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Graphics.cpp" />
@@ -135,6 +140,10 @@
     <ClCompile Include="render\ClearColor.cpp" />
     <ClCompile Include="render\IBL.cpp" />
     <ClCompile Include="render\RenderPassHandler.cpp" />
+    <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
+    <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
+    <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
+    <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">
