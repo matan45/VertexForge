@@ -31,12 +31,12 @@ namespace render::ibl
         // Vulkan cubemap face order: +X, -X, +Y, -Y, +Z, -Z
         // Standard OpenGL-style capture views - coordinate conversion happens in shaders
         inline static const std::array<glm::mat4, 6> captureViews = {
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 1, 0, 0), glm::vec3(0, -1, 0)),  // +X
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0)),  // -X
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 0, 1, 0), glm::vec3(0,  0, 1)),  // +Y
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 0,-1, 0), glm::vec3(0,  0,-1)),  // -Y
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 0, 0, 1), glm::vec3(0, -1, 0)),  // +Z
-            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3( 0, 0,-1), glm::vec3(0, -1, 0))   // -Z
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec3(0, -1, 0)), // +X
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0)), // -X
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec3(0, 0, 1)), // +Y
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, -1, 0), glm::vec3(0, 0, -1)), // -Y
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, -1, 0)), // +Z
+            glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec3(0, -1, 0)) // -Z
         };
         inline static const glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
     };
@@ -79,28 +79,28 @@ namespace render::ibl
     // Skybox cube vertices - wound for viewing from INSIDE the cube
     inline static const std::vector<glm::vec3> skyboxVertices = {
         // Front face (z = -1)
-        {-1.0f,  1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f},
-        {-1.0f,  1.0f, -1.0f}, {1.0f,  1.0f, -1.0f}, {1.0f, -1.0f, -1.0f},
+        {-1.0f, 1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f},
+        {-1.0f, 1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {1.0f, -1.0f, -1.0f},
 
         // Back face (z = +1)
-        {-1.0f, -1.0f,  1.0f}, {1.0f, -1.0f,  1.0f}, {-1.0f,  1.0f,  1.0f},
-        {-1.0f,  1.0f,  1.0f}, {1.0f, -1.0f,  1.0f}, {1.0f,  1.0f,  1.0f},
+        {-1.0f, -1.0f, 1.0f}, {1.0f, -1.0f, 1.0f}, {-1.0f, 1.0f, 1.0f},
+        {-1.0f, 1.0f, 1.0f}, {1.0f, -1.0f, 1.0f}, {1.0f, 1.0f, 1.0f},
 
         // Left face (x = -1)
-        {-1.0f, -1.0f,  1.0f}, {-1.0f,  1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f},
-        {-1.0f, -1.0f,  1.0f}, {-1.0f,  1.0f,  1.0f}, {-1.0f,  1.0f, -1.0f},
+        {-1.0f, -1.0f, 1.0f}, {-1.0f, 1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f},
+        {-1.0f, -1.0f, 1.0f}, {-1.0f, 1.0f, 1.0f}, {-1.0f, 1.0f, -1.0f},
 
         // Right face (x = +1)
-        {1.0f, -1.0f, -1.0f}, {1.0f,  1.0f, -1.0f}, {1.0f, -1.0f,  1.0f},
-        {1.0f,  1.0f, -1.0f}, {1.0f,  1.0f,  1.0f}, {1.0f, -1.0f,  1.0f},
+        {1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {1.0f, -1.0f, 1.0f},
+        {1.0f, 1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, -1.0f, 1.0f},
 
         // Top face (y = +1)
-        {-1.0f,  1.0f, -1.0f}, {1.0f,  1.0f,  1.0f}, {1.0f,  1.0f, -1.0f},
-        {-1.0f,  1.0f, -1.0f}, {-1.0f,  1.0f,  1.0f}, {1.0f,  1.0f,  1.0f},
+        {-1.0f, 1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, -1.0f},
+        {-1.0f, 1.0f, -1.0f}, {-1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f},
 
         // Bottom face (y = -1)
-        {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f,  1.0f},
-        {1.0f, -1.0f, -1.0f}, {1.0f, -1.0f,  1.0f}, {-1.0f, -1.0f,  1.0f}
+        {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f, 1.0f},
+        {1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, 1.0f}, {-1.0f, -1.0f, 1.0f}
     };
 
     inline static const std::vector<QuadVertex> quad = {
