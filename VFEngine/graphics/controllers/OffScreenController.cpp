@@ -27,7 +27,7 @@ namespace controllers
         offScreen->cleanUp();
     }
 
-    void OffScreenController::iblAdd(std::string_view iblPath, components::CameraComponent& camera)
+    void OffScreenController::iblAdd(std::string_view iblPath, components::CameraComponent* camera)
     {
         render::IBL* ibl = offScreen->getRenderPassHandler()->getIBL();
         ibl->init(iblPath);

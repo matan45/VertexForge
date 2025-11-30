@@ -11,6 +11,9 @@ namespace handlers
                                            controllers::CoreInterface& coreInterface) : offscreen{offscreen},
         coreInterface{coreInterface}
     {
+        // Get the Level's SceneGraphSystem so everything shares the same instance
+        auto level = scene::LevelHandler::getInstance();
+        sceneGraphSystem = level->getSceneGraphSystem();
     }
 
     void WindowImguiHandler::init() const
@@ -21,7 +24,7 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ContentBrowser>());
         controllers::imguiHandler::ImguiWindowHandler::add(
             std::make_shared<windows::SceneGraph>(sceneGraphSystem));
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ViewPort>(offscreen));
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ViewPort>(offscreen, sceneGraphSystem));
     }
 
     void WindowImguiHandler::cleanUp() const

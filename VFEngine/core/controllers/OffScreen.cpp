@@ -27,7 +27,7 @@ namespace controllers {
 		return offScreenController->render();
 	}
 
-	void OffScreen::iblAdd(std::string_view iblPath, components::CameraComponent& camera)
+	void OffScreen::iblAdd(std::string_view iblPath, components::CameraComponent* camera)
 	{
 		offScreenController->iblAdd(iblPath, camera);
 	}

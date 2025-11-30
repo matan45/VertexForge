@@ -47,6 +47,6 @@ namespace windows
 
 		void iblWindow();
 
-		std::optional<components::CameraComponent> getFirstCameraComponent() const;
+		components::CameraComponent* getFirstCameraComponent() const;
 	};
 }

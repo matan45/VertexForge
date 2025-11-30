@@ -18,7 +18,7 @@ namespace controllers {
 		void cleanUp();
 
 		void* render();
-		void iblAdd(std::string_view iblPath, components::CameraComponent& camera);
+		void iblAdd(std::string_view iblPath, components::CameraComponent* camera);
 		void iblRemove();
 	};
 }

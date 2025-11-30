@@ -8,32 +8,34 @@ layout(binding = 0) uniform UniformBufferObject
     mat4 view;
 }ubo;
 
-layout (location = 0) out vec3 WorldPos;
+layout (location = 0) out vec3 localPos;
 
 void main()
 {
-    WorldPos = position;
+    localPos = position;
 
-	mat4 rotView = mat4(mat3(ubo.view));
-	vec4 clipPos = ubo.projection * rotView * vec4(WorldPos, 1.0);
+    // Remove translation from view matrix, keep only rotation
+    mat4 rotView = mat4(mat3(ubo.view));
+    vec4 clipPos = ubo.projection * rotView * vec4(position, 1.0);
 
-	gl_Position = clipPos.xyww;
+    // Set z = w so depth is always at far plane
+    gl_Position = clipPos.xyww;
 }
 
 #type FRAGMENT
 #version 460 core
 layout (location = 0) out vec4 FragColor;
-layout (location = 0) in vec3 WorldPos;
+layout (location = 0) in vec3 localPos;
 
 layout(binding = 1) uniform samplerCube environmentMap;
 
-
 void main()
-{		
-    vec3 envColor = texture(environmentMap, WorldPos).rgb;
-    
-    //gamma correct
-    envColor = pow(envColor, vec3(1.0/2.2)); 
-    
-    FragColor = vec4(envColor,1.0);
+{
+    // Use vertex position directly as cubemap sampling direction
+    vec3 dir = normalize(localPos);
+
+    vec3 envColor = texture(environmentMap, dir).rgb;
+    envColor = pow(envColor, vec3(1.0/2.2));
+    FragColor = vec4(envColor, 1.0);
+
 }
