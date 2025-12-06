@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include "components/Components.hpp"
 
 
@@ -20,7 +21,7 @@ namespace controllers
     private:
         core::SwapChain& swapChain;
         core::Device& device;
-        imguiPass::OffScreenViewPort* offScreen;
+        std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
 
     public:
         explicit OffScreenController();

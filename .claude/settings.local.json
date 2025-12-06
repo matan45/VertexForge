@@ -4,7 +4,10 @@
       "Bash(git checkout:*)",
       "Bash(dir /s /b \"D:\\VertexForge\\VFEngine\")",
       "Bash(find:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "mcp__mcp-atlassian__confluence_search",
+      "mcp__mcp-atlassian__jira_get_all_projects",
+      "mcp__mcp-atlassian__confluence_get_page"
     ],
     "deny": [],
     "ask": []

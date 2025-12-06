@@ -5,7 +5,6 @@
 
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
-#include "../core/CommandPool.hpp"
 #include "../window/Window.hpp"
 #include "../core/Utilities.hpp"
 #include "print/Logger.hpp"

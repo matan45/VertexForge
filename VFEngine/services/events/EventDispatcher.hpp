@@ -1,0 +1,159 @@
+#pragma once
+#include "EventTypes.hpp"
+#include <any>
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <typeindex>
+#include <unordered_map>
+#include <vector>
+#include <future>
+#include <queue>
+
+namespace events {
+
+    class EventDispatcher {
+    public:
+        static EventDispatcher& instance();
+
+        // Prevent copying
+        EventDispatcher(const EventDispatcher&) = delete;
+        EventDispatcher& operator=(const EventDispatcher&) = delete;
+
+        // Command execution - synchronous with result
+        template<typename TCommand>
+        typename TCommand::ResultType execute(const TCommand& command);
+
+        // Query execution - always returns result
+        template<typename TQuery>
+        typename TQuery::ResultType query(const TQuery& queryObj);
+
+        // Async command execution - returns future
+        template<typename TCommand>
+        std::future<typename TCommand::ResultType> executeAsync(const TCommand& command);
+
+        // Notification publishing - fire and forget (synchronous broadcast)
+        template<typename TNotification>
+        void publish(const TNotification& notification);
+
+        // Command handler registration
+        template<typename TCommand>
+        void registerCommandHandler(std::function<typename TCommand::ResultType(const TCommand&)> handler);
+
+        // Query handler registration
+        template<typename TQuery>
+        void registerQueryHandler(std::function<typename TQuery::ResultType(const TQuery&)> handler);
+
+        // Notification subscription - returns token for unsubscribing
+        template<typename TNotification>
+        SubscriptionToken subscribe(std::function<void(const TNotification&)> handler);
+
+        // Unsubscribe from notifications
+        void unsubscribe(SubscriptionToken token);
+
+        // Clear all handlers (useful for testing or shutdown)
+        void clear();
+
+    private:
+        EventDispatcher() = default;
+        ~EventDispatcher() = default;
+
+        // Type-erased handler storage
+        std::unordered_map<std::type_index, std::any> commandHandlers;
+        std::unordered_map<std::type_index, std::any> queryHandlers;
+
+        struct SubscriberEntry {
+            SubscriptionToken token;
+            std::any handler;
+        };
+        std::unordered_map<std::type_index, std::vector<SubscriberEntry>> notificationSubscribers;
+
+        std::atomic<uint64_t> nextToken{ 1 };
+        mutable std::shared_mutex mutex;
+    };
+
+    // Template implementations
+
+    template<typename TCommand>
+    typename TCommand::ResultType EventDispatcher::execute(const TCommand& command) {
+        std::shared_lock lock(mutex);
+
+        auto it = commandHandlers.find(std::type_index(typeid(TCommand)));
+        if (it == commandHandlers.end()) {
+            throw std::runtime_error(std::string("No handler registered for command: ") + std::string(command.getName()));
+        }
+
+        using HandlerType = std::function<typename TCommand::ResultType(const TCommand&)>;
+        const auto& handler = std::any_cast<const HandlerType&>(it->second);
+        return handler(command);
+    }
+
+    template<typename TQuery>
+    typename TQuery::ResultType EventDispatcher::query(const TQuery& queryObj) {
+        std::shared_lock lock(mutex);
+
+        auto it = queryHandlers.find(std::type_index(typeid(TQuery)));
+        if (it == queryHandlers.end()) {
+            throw std::runtime_error(std::string("No handler registered for query: ") + std::string(queryObj.getName()));
+        }
+
+        using HandlerType = std::function<typename TQuery::ResultType(const TQuery&)>;
+        const auto& handler = std::any_cast<const HandlerType&>(it->second);
+        return handler(queryObj);
+    }
+
+    template<typename TCommand>
+    std::future<typename TCommand::ResultType> EventDispatcher::executeAsync(const TCommand& command) {
+        return std::async(std::launch::async, [this, command]() {
+            return this->execute(command);
+        });
+    }
+
+    template<typename TNotification>
+    void EventDispatcher::publish(const TNotification& notification) {
+        std::shared_lock lock(mutex);
+
+        auto it = notificationSubscribers.find(std::type_index(typeid(TNotification)));
+        if (it == notificationSubscribers.end()) {
+            return; // No subscribers, that's fine
+        }
+
+        using HandlerType = std::function<void(const TNotification&)>;
+        for (const auto& entry : it->second) {
+            try {
+                const auto& handler = std::any_cast<const HandlerType&>(entry.handler);
+                handler(notification);
+            }
+            catch (const std::exception&) {
+                // Log error but continue notifying other subscribers
+            }
+        }
+    }
+
+    template<typename TCommand>
+    void EventDispatcher::registerCommandHandler(std::function<typename TCommand::ResultType(const TCommand&)> handler) {
+        std::unique_lock lock(mutex);
+        commandHandlers[std::type_index(typeid(TCommand))] = std::move(handler);
+    }
+
+    template<typename TQuery>
+    void EventDispatcher::registerQueryHandler(std::function<typename TQuery::ResultType(const TQuery&)> handler) {
+        std::unique_lock lock(mutex);
+        queryHandlers[std::type_index(typeid(TQuery))] = std::move(handler);
+    }
+
+    template<typename TNotification>
+    SubscriptionToken EventDispatcher::subscribe(std::function<void(const TNotification&)> handler) {
+        std::unique_lock lock(mutex);
+
+        SubscriptionToken token{ nextToken++ };
+
+        auto& subscribers = notificationSubscribers[std::type_index(typeid(TNotification))];
+        subscribers.push_back({ token, std::move(handler) });
+
+        return token;
+    }
+
+}

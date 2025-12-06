@@ -13,22 +13,18 @@
 namespace imguiPass {
 	OffScreenViewPort::OffScreenViewPort(core::Device& device, core::SwapChain& swapChain) :device{ device }
 		, swapChain{ swapChain }
+		, commandPool{ std::make_unique<core::CommandPool>(device, swapChain) }
 	{
-		commandPool = new core::CommandPool(device, swapChain);
 	}
 
-	OffScreenViewPort::~OffScreenViewPort()
-	{
-		delete commandPool;
-		delete renderPassHandler;  // Properly clean up the render pass handler
-	}
+	OffScreenViewPort::~OffScreenViewPort() = default;
 
 	void OffScreenViewPort::init()
 	{
 		createSampler();
 		createOffscreenResources();
 
-		renderPassHandler = new render::RenderPassHandler(device, swapChain, offscreenResources);
+		renderPassHandler = std::make_unique<render::RenderPassHandler>(device, swapChain, offscreenResources);
 		renderPassHandler->init();
 	}
 

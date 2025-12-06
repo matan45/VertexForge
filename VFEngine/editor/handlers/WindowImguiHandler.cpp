@@ -1,30 +1,21 @@
 #include "WindowImguiHandler.hpp"
 #include "../windows/ConsoleLog.hpp"
-#include "../windows/MainImguiWindow.hpp"
-#include "../windows/ContentBrowser.hpp"
-#include "../windows/ViewPort.hpp"
-
 
 namespace handlers
 {
-    WindowImguiHandler::WindowImguiHandler(controllers::OffScreen& offscreen,
-                                           controllers::CoreInterface& coreInterface) : offscreen{offscreen},
-        coreInterface{coreInterface}
+    void WindowImguiHandler::init()
     {
-        // Get the Level's SceneGraphSystem so everything shares the same instance
-        auto level = scene::LevelHandler::getInstance();
-        sceneGraphSystem = level->getSceneGraphSystem();
-    }
+        // Create windows - all use EventDispatcher for cross-layer communication
+        mainImguiWindow = std::make_shared<windows::MainImguiWindow>();
+        contentBrowserWindow = std::make_shared<windows::ContentBrowser>();
+        sceneGraphWindow = std::make_shared<windows::SceneGraph>();
+        viewPortWindow = std::make_shared<windows::ViewPort>();
 
-    void WindowImguiHandler::init() const
-    {
-        controllers::imguiHandler::ImguiWindowHandler::add(
-            std::make_shared<windows::MainImguiWindow>(coreInterface, offscreen, sceneGraphSystem));
+        controllers::imguiHandler::ImguiWindowHandler::add(mainImguiWindow);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ConsoleLog>());
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ContentBrowser>());
-        controllers::imguiHandler::ImguiWindowHandler::add(
-            std::make_shared<windows::SceneGraph>(sceneGraphSystem));
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ViewPort>(offscreen, sceneGraphSystem));
+        controllers::imguiHandler::ImguiWindowHandler::add(contentBrowserWindow);
+        controllers::imguiHandler::ImguiWindowHandler::add(sceneGraphWindow);
+        controllers::imguiHandler::ImguiWindowHandler::add(viewPortWindow);
     }
 
     void WindowImguiHandler::cleanUp() const

@@ -1,10 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "nfd/FileDialog.hpp"
-#include "CoreInterface.hpp"
-#include "OffScreen.hpp"
-#include "EditorTextureController.hpp"
-#include "scene/SceneGraphSystem.hpp"
+#include "data/DTOs.hpp"
 
 #include <filesystem>
 
@@ -15,25 +12,22 @@ namespace windows
 	class MainImguiWindow : public controllers::imguiHandler::ImguiWindow
 	{
 	private:
-		controllers::CoreInterface& coreInterface;
-		controllers::OffScreen& offscreen;
 		int windowFlags;
-		//import settings
+
+		// Import settings
 		nfd::FileDialog fileDialog;
 		std::vector<std::string> files;
 		std::vector<bool> isFlip;
 		bool openModal = false;
 
-		//ibl window
+		// IBL window
 		fs::path selectedIBLFile;
 		bool showIBLWindow = false;
-		bool deletePreview = false;
-		dto::EditorTexture* iblPreview{ nullptr };
-		std::shared_ptr<scene::SceneGraphSystem> sceneGraphSystem;
+		services::EditorTextureHandle iblPreviewHandle;
 
 	public:
-		explicit MainImguiWindow(controllers::CoreInterface& coreInterface, controllers::OffScreen& offscreen, std::shared_ptr<scene::SceneGraphSystem> sceneGraphSystem);
-		~MainImguiWindow() override;
+		MainImguiWindow();
+		~MainImguiWindow() override = default;
 
 		void draw() override;
 
@@ -46,7 +40,5 @@ namespace windows
 		void handleAddMenu();
 
 		void iblWindow();
-
-		components::CameraComponent* getFirstCameraComponent() const;
 	};
 }

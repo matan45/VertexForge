@@ -1,16 +1,20 @@
 #include "CoreInterface.hpp"
 #include "../core/MainLoop.hpp"
+#include "../../Window/controllers/InputController.hpp"
 
 namespace controllers {
 
-	CoreInterface::CoreInterface() : mainLoop{ new core::MainLoop() }
+	CoreInterface::CoreInterface()
+		: mainLoop{ std::make_unique<core::MainLoop>() }
 	{
-
 	}
 
 	void CoreInterface::init()
 	{
 		mainLoop->init();
+
+		// Create input controller after window is initialized
+		inputController = std::make_unique<window::InputController>(getWindow());
 	}
 
 	void CoreInterface::run() const
@@ -28,11 +32,11 @@ namespace controllers {
 		mainLoop->close();
 	}
 
-	CoreInterface::~CoreInterface()
+	CoreInterface::~CoreInterface() = default;
+
+	window::Window* CoreInterface::getWindow() const
 	{
-		delete mainLoop;
+		return mainLoop->getWindow();
 	}
-
-
 
 };

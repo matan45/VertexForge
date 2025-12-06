@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include "components/Components.hpp"
 
 namespace controllers {
@@ -8,7 +9,7 @@ namespace controllers {
 	class OffScreen
 	{
 	private:
-		controllers::OffScreenController* offScreenController;
+		std::unique_ptr<controllers::OffScreenController> offScreenController;
 
 	public:
 		explicit OffScreen();

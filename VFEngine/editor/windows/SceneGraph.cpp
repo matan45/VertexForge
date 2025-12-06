@@ -1,55 +1,61 @@
 #include "SceneGraph.hpp"
-#include "components/Components.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/SceneEvents.hpp"
 #include <imgui.h>
 
 namespace windows
 {
-    SceneGraph::SceneGraph(std::shared_ptr<scene::SceneGraphSystem> sceneGraphSystem):
-    sceneGraphSystem{sceneGraphSystem}
-    {
-    }
-
     void SceneGraph::draw()
     {
-        //add some styling here
+        auto& dispatcher = events::EventDispatcher::instance();
+
         if (ImGui::Begin("SceneGraph"))
         {
-            // Start with the root entity (this assumes you have a SceneGraph object with a root)
-            if (scene::EntityRegistry::getRegistry().valid(sceneGraphSystem->GetRoot().getHandle()))
+            // Query root entity through event system
+            events::scene::GetSceneHierarchyQuery hierarchyQuery;
+            auto hierarchy = dispatcher.query(hierarchyQuery);
+
+            if (!hierarchy.entities.empty())
             {
-                drawEntityNode(sceneGraphSystem->GetRoot());
+                // Root is first entity
+                auto rootHandle = hierarchy.entities[0].handle;
+                drawEntityNode(rootHandle);
             }
 
             // Right-click context menu for adding/removing entities
             if (ImGui::BeginPopupContextWindow())
             {
-                // Menu item to add a new entity
                 if (ImGui::MenuItem("Add New Entity"))
                 {
-                    scene::Entity newEntity("New Entity");
+                    // Get root for default parent
+                    events::scene::GetSceneHierarchyQuery rootQuery;
+                    auto rootHierarchy = dispatcher.query(rootQuery);
+                    services::EntityHandle parentHandle = selectedHandle.isValid()
+                                                              ? selectedHandle
+                                                              : (rootHierarchy.entities.empty()
+                                                                     ? services::EntityHandle::invalid()
+                                                                     : rootHierarchy.entities[0].handle);
 
-                    // Add as a child to the selected entity if there is one, else add to root
-                    if (selected != entt::null)
-                    {
-                        scene::Entity parent(selected);
-                        sceneGraphSystem->addChild(parent, newEntity);
-                    }
-                    else
-                    {
-                        scene::Entity root = sceneGraphSystem->GetRoot();
-                        sceneGraphSystem->addChild(root, newEntity);
-                    }
+                    events::scene::CreateEntityCommand cmd;
+                    cmd.name = "New Entity";
+                    cmd.parent = parentHandle.isValid() ? std::optional{parentHandle} : std::nullopt;
+                    dispatcher.execute(cmd);
                 }
 
                 // Prevent deleting the root entity
-                if (selected != entt::null && selected != sceneGraphSystem->GetRoot().getHandle())
+                if (selectedHandle.isValid())
                 {
-                    if (ImGui::MenuItem("Remove Selected Entity"))
+                    events::scene::GetSceneHierarchyQuery rootCheckQuery;
+                    auto rootCheckHierarchy = dispatcher.query(rootCheckQuery);
+                    bool isRoot = !rootCheckHierarchy.entities.empty() &&
+                        rootCheckHierarchy.entities[0].handle.id == selectedHandle.id;
+
+                    if (!isRoot && ImGui::MenuItem("Remove Selected Entity"))
                     {
-                        // Remove the selected entity from the scene graph
-                        scene::Entity selectedToRemove(selected);
-                        sceneGraphSystem->removeEntity(selectedToRemove);
-                        selected = entt::null; // Clear the selection after removal
+                        events::scene::DeleteEntityCommand cmd;
+                        cmd.entity = selectedHandle;
+                        dispatcher.execute(cmd);
+                        selectedHandle = services::EntityHandle::invalid();
                     }
                 }
 
@@ -61,19 +67,23 @@ namespace windows
         // Show the selected entity's components in the "Details" window
         if (ImGui::Begin("Details"))
         {
-            if (selected != entt::null)
+            if (selectedHandle.isValid())
             {
-                drawDetails(selected);
+                drawDetails(selectedHandle);
+
                 if (ImGui::BeginPopupContextWindow())
                 {
                     if (ImGui::MenuItem("Add Camera Component"))
                     {
-                        auto entityObject = scene::Entity(selected);
-                        // Ensure entity has TransformComponent (required for camera updates)
-                        if (!entityObject.hasComponent<components::TransformComponent>()) {
-                            entityObject.addComponent<components::TransformComponent>();
-                        }
-                        entityObject.addComponent<components::CameraComponent>();
+                        events::scene::AddCameraComponentCommand cmd;
+                        cmd.entity = selectedHandle;
+                        dispatcher.execute(cmd);
+                    }
+                    if (ImGui::MenuItem("Remove Camera Component"))
+                    {
+                        events::scene::RemoveCameraComponentCommand cmd;
+                        cmd.entity = selectedHandle;
+                        dispatcher.execute(cmd);
                     }
                     ImGui::EndPopup();
                 }
@@ -82,44 +92,43 @@ namespace windows
         ImGui::End();
     }
 
-    void SceneGraph::drawEntityNode(scene::Entity entity)
+    void SceneGraph::drawEntityNode(services::EntityHandle handle)
     {
-        ImGui::PushID(static_cast<int>(entity.getHandle()));
+        auto& dispatcher = events::EventDispatcher::instance();
 
-        std::string entityName = entity.getName(); // Get entity name
+        ImGui::PushID(static_cast<int>(handle.id));
 
-        ImGuiTreeNodeFlags flags = (selected == entity.getHandle()) ? ImGuiTreeNodeFlags_Selected : 0;
+        // Query entity data
+        events::scene::GetEntityQuery entityQuery;
+        entityQuery.entity = handle;
+        auto entityDataOpt = dispatcher.query(entityQuery);
+
+        std::string entityName = entityDataOpt.has_value() ? entityDataOpt->name : "Unknown";
+
+        ImGuiTreeNodeFlags flags = (selectedHandle.id == handle.id) ? ImGuiTreeNodeFlags_Selected : 0;
         flags |= ImGuiTreeNodeFlags_OpenOnArrow;
 
-
-        bool nodeOpen = ImGui::TreeNodeEx((void*)(uint64_t)entity.getHandle(), flags, "%s", entityName.c_str());
+        bool nodeOpen = ImGui::TreeNodeEx((void*)handle.id, flags, "%s", entityName.c_str());
 
         // Select the entity when clicked
         if (ImGui::IsItemClicked())
         {
-            selected = entity.getHandle();
+            selectedHandle = handle;
+
+            // Publish selection through command
+            events::scene::SelectEntityCommand cmd;
+            cmd.entity = handle;
+            dispatcher.execute(cmd);
         }
-
-        // Drag source: Start dragging the entity
-        if (ImGui::BeginDragDropSource())
-        {
-            ImGui::SetDragDropPayload("DND_ENTITY", &entity, sizeof(scene::Entity)); // Tag it with "DND_ENTITY"
-            ImGui::Text("Move %s", entityName.c_str()); // Show name of entity being dragged
-            ImGui::EndDragDropSource();
-        }
-
-        // Drag target: Drop onto this entity (to make it a parent)
-        drawDragDropTarget(entity);
-
 
         // If the entity has children, recursively draw them
         if (nodeOpen)
         {
-            if (entity.hasComponent<components::ChildrenComponent>())
+            if (entityDataOpt.has_value())
             {
-                for (auto child : entity.getChildren())
+                for (const auto& child : entityDataOpt->children)
                 {
-                    drawEntityNode(child); // Recursively draw child nodes
+                    drawEntityNode(child);
                 }
             }
             ImGui::TreePop();
@@ -127,129 +136,98 @@ namespace windows
         ImGui::PopID();
     }
 
-    void SceneGraph::drawDragDropTarget(scene::Entity entity) const
+    void SceneGraph::drawDetails(services::EntityHandle handle)
     {
-        //root node should not move and the root name need to be quince
-        if (ImGui::BeginDragDropTarget())
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Query entity data
+        events::scene::GetEntityQuery entityQuery;
+        entityQuery.entity = handle;
+        auto entityDataOpt = dispatcher.query(entityQuery);
+
+        if (!entityDataOpt.has_value())
         {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_ENTITY"))
-            {
-                // Retrieve the dropped entity handle
-                scene::Entity droppedEntity = *(scene::Entity*)payload->Data;
-
-                // Set the parent-child relationship
-                if (droppedEntity.getHandle() != entity.getHandle())
-                {
-                    sceneGraphSystem->moveEntity(droppedEntity, entity);
-                }
-            }
-            ImGui::EndDragDropTarget();
-        }
-    }
-
-    void SceneGraph::drawDetails(entt::entity entity) const
-    {
-        auto entityObject = scene::Entity(entity);
-
-        //maybe need pushID here
-        // Display the name component first if it exists
-        if (entityObject.hasComponent<components::NameComponent>())
-        {
-            auto const& nameComponent = entityObject.getComponent<components::NameComponent>();
-            char buffer[256];
-            strcpy(buffer, nameComponent.name.c_str());
-            if (ImGui::InputText("Name", buffer, sizeof(buffer)))
-            {
-                entityObject.setName(buffer); // Update the name
-            }
+            return;
         }
 
-        ImGui::Separator(); // Separate components
+        // Display name
+        char buffer[256];
+        std::strncpy(buffer, entityDataOpt->name.c_str(), sizeof(buffer));
+        buffer[sizeof(buffer) - 1] = '\0';
+        if (ImGui::InputText("Name", buffer, sizeof(buffer)))
+        {
+            events::scene::SetEntityNameCommand cmd;
+            cmd.entity = handle;
+            cmd.newName = buffer;
+            dispatcher.execute(cmd);
+        }
 
-        // Dynamically iterate over all attached components
-        drawDynamicComponent(entityObject);
-    }
+        ImGui::Separator();
 
-    void SceneGraph::drawDynamicComponent(scene::Entity entity) const
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        // Handle known component types
-        if (registry.all_of<components::TransformComponent>(entity.getHandle()))
+        // Transform component
+        events::scene::GetTransformQuery transformQuery;
+        transformQuery.entity = handle;
+        auto transformOpt = dispatcher.query(transformQuery);
+
+        if (transformOpt.has_value())
         {
             if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                auto& transform = registry.get<components::TransformComponent>(entity.getHandle());
-                ImGui::DragFloat3("Position", &transform.position.x, 0.1f);
-                ImGui::DragFloat3("Rotation", &transform.rotation.x, 0.1f);
-                ImGui::DragFloat3("Scale", &transform.scale.x, 0.1f);
-                transform.isDirty = true;
+                services::TransformData transform = *transformOpt;
+                bool changed = false;
+
+                changed |= ImGui::DragFloat3("Position", &transform.position.x, 0.1f);
+                changed |= ImGui::DragFloat3("Rotation", &transform.rotation.x, 0.1f);
+                changed |= ImGui::DragFloat3("Scale", &transform.scale.x, 0.1f);
+
+                if (changed)
+                {
+                    events::scene::SetTransformCommand cmd;
+                    cmd.entity = handle;
+                    cmd.transform = transform;
+                    dispatcher.execute(cmd);
+                }
             }
         }
-        // Handle Camera component
-        if (registry.all_of<components::CameraComponent>(entity.getHandle()))
+
+        // Camera component
+        events::scene::HasCameraComponentQuery hasCameraQuery;
+        hasCameraQuery.entity = handle;
+        bool hasCamera = dispatcher.query(hasCameraQuery);
+
+        if (hasCamera)
         {
-            if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
+            events::scene::GetCameraDataQuery cameraQuery;
+            cameraQuery.entity = handle;
+            auto cameraOpt = dispatcher.query(cameraQuery);
+
+            if (cameraOpt.has_value())
             {
-                auto& camera = registry.get<components::CameraComponent>(entity.getHandle());
-
-                // Toggle between Perspective and Orthographic
-                bool isPerspective = camera.isPerspective;
-                if (ImGui::Checkbox("Perspective", &isPerspective))
+                if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
                 {
-                    camera.isPerspective = isPerspective;
-                    camera.updateProjectionMatrix();
-                }
+                    services::CameraData camera = *cameraOpt;
+                    bool changed = false;
 
-                // Perspective settings
-                if (camera.isPerspective)
-                {
-                    if (ImGui::DragFloat("Field of View", &camera.fieldOfView, 0.1f, 1.0f, 179.0f))
+                    changed |= ImGui::DragFloat("Field of View", &camera.fieldOfView, 1.0f, 1.0, 180.0f);
+                    changed |= ImGui::DragFloat("Near Plane", &camera.nearPlane,  0.01f, 0.01f, camera.farPlane - 0.1f);
+                    changed |= ImGui::DragFloat("Far Plane", &camera.farPlane, 0.1f, camera.nearPlane + 0.1f, 10000.0f);
+                    changed |= ImGui::DragFloat("Aspect Ratio", &camera.aspectRatio, 0.01f, 0.1f, 10.0f);
+                    changed |= ImGui::Checkbox("Perspective", &camera.isPerspective);
+
+                    if (!camera.isPerspective)
                     {
-                        camera.updateProjectionMatrix();
+                        changed |= ImGui::DragFloat("Orthographic Size", &camera.orthoSize, 0.1f, 0.1f, 1000.0f);
                     }
-                }
-                // Orthographic settings
-                else
-                {
-                    if (ImGui::DragFloat("Orthographic Size", &camera.orthoSize, 0.1f, 0.1f, 1000.0f))
+
+                    if (changed)
                     {
-                        camera.updateProjectionMatrix();
+                        events::scene::SetCameraDataCommand cmd;
+                        cmd.entity = handle;
+                        cmd.cameraData = camera;
+                        dispatcher.execute(cmd);
                     }
-                }
-
-                // Near and Far Plane settings
-                if (ImGui::DragFloat("Near Plane", &camera.nearPlane, 0.01f, 0.01f, camera.farPlane - 0.1f))
-                {
-                    camera.updateProjectionMatrix();
-                }
-                if (ImGui::DragFloat("Far Plane", &camera.farPlane, 0.1f, camera.nearPlane + 0.1f, 10000.0f))
-                {
-                    camera.updateProjectionMatrix();
-                }
-
-                // Aspect Ratio
-                if (ImGui::DragFloat("Aspect Ratio", &camera.aspectRatio, 0.01f, 0.1f, 10.0f))
-                {
-                    camera.updateProjectionMatrix();
-                }
-
-                // Remove Camera component button
-                if (ImGui::Button("Remove##Camera"))
-                {
-                    entity.removeComponent<components::CameraComponent>();
                 }
             }
         }
-
-        // Handle Ibl component
-		if (registry.all_of<components::IBLComponent>(entity.getHandle()))
-		{
-			if (ImGui::CollapsingHeader("IBL", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				auto const& ibl = registry.get<components::IBLComponent>(entity.getHandle());
-                ImGui::BulletText("IBL image Path");
-                ImGui::Text(ibl.fileName.c_str());
-			}
-		}
     }
 }

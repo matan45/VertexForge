@@ -7,16 +7,12 @@
 namespace render {
 	RenderPassHandler::RenderPassHandler(core::Device& device, core::SwapChain& swapChain, core::OffscreenResources& offscreenResources) : device{ device },
 		swapChain{ swapChain }, offscreenResources{ offscreenResources }
+		, clearColor{ std::make_unique<ClearColor>(device, swapChain, offscreenResources) }
+		, iblRenderer{ std::make_unique<IBL>(device, swapChain, offscreenResources) }
 	{
-		clearColor = new ClearColor(device, swapChain, offscreenResources);
-		iblRenderer = new IBL(device, swapChain, offscreenResources);
 	}
 
-	RenderPassHandler::~RenderPassHandler()
-	{
-		delete clearColor;
-		delete iblRenderer;
-	}
+	RenderPassHandler::~RenderPassHandler() = default;
 
 	void RenderPassHandler::init()
 	{

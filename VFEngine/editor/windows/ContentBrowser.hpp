@@ -1,8 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "imgui.h"
-#include "Import.hpp"
-#include "EditorTextureController.hpp"
+#include "data/DTOs.hpp"
 
 #include <string>
 #include <filesystem>
@@ -24,7 +23,7 @@ namespace windows
     {
     private:
         std::vector<Asset> assets;
-        fs::path currentPath = "D:\\matan"; //todo get this path from the project file
+        fs::path currentPath = "C:\\matan"; //todo get this path from the project file
         std::string searchQuery;
 
         std::string newFolderName;
@@ -34,39 +33,37 @@ namespace windows
 
         fs::path selectedFile;
         AssetType selectedType;
-        dto::EditorTexture* selectedImage{nullptr};
         bool showFileWindow = false;
 
-        dto::EditorTexture* fileIcon;
-        dto::EditorTexture* folderIcon;
-        dto::EditorTexture* textureIcon;
-        dto::EditorTexture* audioIcon;
-        dto::EditorTexture* meshIcon;
-        dto::EditorTexture* glslIcon;
-        dto::EditorTexture* animationIcon;
-        dto::EditorTexture* hdrIcon;
+        // Service-based icons
+        services::EditorTextureHandle fileIcon;
+        services::EditorTextureHandle folderIcon;
+        services::EditorTextureHandle textureIcon;
+        services::EditorTextureHandle audioIcon;
+        services::EditorTextureHandle meshIcon;
+        services::EditorTextureHandle glslIcon;
+        services::EditorTextureHandle animationIcon;
+        services::EditorTextureHandle hdrIcon;
+
+        // Service-based image preview handle
+        services::EditorTextureHandle selectedImageHandle;
 
         bool navigateFolder = false;
+        bool iconsLoaded = false;
+        bool importLocationSet = false;
 
         static constexpr float THUMBNAIL_SIZE = 64.0f;
         static constexpr float PADDING = 16.0f;
 
     public:
-        explicit ContentBrowser();
-        ~ContentBrowser() override;
+        ContentBrowser();
+        ~ContentBrowser() override = default;
 
         void draw() override;
 
     private:
-        void navigateTo(const fs::path& path)
-        {
-            if (fs::exists(path) && fs::is_directory(path))
-            {
-                currentPath = path;
-                controllers::Import::setLocation(currentPath.string());
-                loadDirectory(currentPath);
-            }
-        }
+        void loadIcons();
+        void navigateTo(const fs::path& path);
 
         void loadDirectory(const fs::path& path);
 

@@ -1,17 +1,16 @@
 #include "MainImguiWindow.hpp"
-#include "Import.hpp"
-#include "config/Config.hpp"
 #include "files/FileUtils.hpp"
-#include <imgui.h>
-
-#include "scene/EntityRegistry.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/SceneEvents.hpp"
+#include "events/RenderEvents.hpp"
+#include "events/ResourceEvents.hpp"
+#include "events/InputEvents.hpp"
 #include "string/StringUtil.hpp"
-
+#include <imgui.h>
 
 namespace windows
 {
-	MainImguiWindow::MainImguiWindow(controllers::CoreInterface& coreInterface, controllers::OffScreen& offscreen, std::shared_ptr<scene::SceneGraphSystem> sceneGraphSystem)
-		: coreInterface{ coreInterface }, offscreen{ offscreen }, sceneGraphSystem{ sceneGraphSystem }
+	MainImguiWindow::MainImguiWindow()
 	{
 		ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking |
 			ImGuiWindowFlags_NoBackground;
@@ -19,11 +18,6 @@ namespace windows
 			ImGuiWindowFlags_NoMove;
 		window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 		windowFlags = window_flags;
-	}
-
-	MainImguiWindow::~MainImguiWindow()
-	{
-		delete iblPreview;
 	}
 
 	void MainImguiWindow::draw()
@@ -56,6 +50,7 @@ namespace windows
 		}
 
 		importModel();
+
 		if (ImGui::BeginMainMenuBar())
 		{
 			handleFileMenu();
@@ -67,51 +62,56 @@ namespace windows
 
 	void MainImguiWindow::importModel()
 	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
 		// Check if the popup modal is open
 		if (ImGui::BeginPopupModal("Import Files", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
-			std::vector<importConfig::ImportFiles> paths;
-			paths.reserve(files.size());
+			std::vector<services::ImportFileRequest> requests;
+			requests.reserve(files.size());
 			isFlip.resize(files.size(), false);
 
 			ImGui::Text("Files Dropped:");
-			// Display the dropped files in the modal popup
-			for (int i = 0; i < files.size(); i++)
+			for (size_t i = 0; i < files.size(); i++)
 			{
 				ImGui::PushID(files[i].c_str());
-				importConfig::ImportConfig config;
 				ImGui::BulletText("%s", files[i].c_str());
+
 				if (files::FileUtils::isHDRFile(files[i]))
 				{
 					bool flip = isFlip[i];
 					ImGui::Checkbox("Flip Vertically", &flip);
 					isFlip[i] = flip;
-					config.isImageFlipVertically = isFlip[i];
 				}
-				importConfig::ImportFiles importFile(files[i], config);
-				paths.emplace_back(importFile);
+
+				services::ImportFileRequest request;
+				request.path = files[i];
+				request.flipVertically = isFlip[i];
+				requests.push_back(request);
+
 				ImGui::PopID();
 			}
 
 			if (ImGui::Button("Continue"))
 			{
-				controllers::Import::importFiles(paths);
-				ImGui::CloseCurrentPopup(); // Close the popup
-				openModal = false; // Reset the flag
+				events::resource::ImportFilesCommand cmd;
+				cmd.files = requests;
+				dispatcher.execute(cmd);
+				ImGui::CloseCurrentPopup();
+				openModal = false;
 			}
 
 			ImGui::SameLine();
 			ImGui::SetCursorPosX(
-				ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x *
-				2);
+				ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x * 2);
 
 			if (ImGui::Button("Close"))
 			{
-				ImGui::CloseCurrentPopup(); // Close the popup
-				openModal = false; // Reset the flag
+				ImGui::CloseCurrentPopup();
+				openModal = false;
 			}
 
-			ImGui::EndPopup(); // End the modal
+			ImGui::EndPopup();
 		}
 	}
 
@@ -130,7 +130,8 @@ namespace windows
 			}
 			else if (ImGui::MenuItem("Exit"))
 			{
-				coreInterface.closeWindow();
+				events::input::CloseApplicationCommand cmd;
+				events::EventDispatcher::instance().execute(cmd);
 			}
 			ImGui::EndMenu();
 		}
@@ -182,10 +183,13 @@ namespace windows
 
 	void MainImguiWindow::iblWindow()
 	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
 		ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("IBL", &showIBLWindow))
 		{
 			ImGui::Text("IBL Window");
+
 			if (ImGui::Button("Select"))
 			{
 				std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
@@ -193,80 +197,83 @@ namespace windows
 				};
 
 				selectedIBLFile = fileDialog.openFileDialog(fileTypes);
-				auto root = sceneGraphSystem->GetRoot();
+				std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
 
-				if (root.hasComponent<components::IBLComponent>()) {
-					root.getComponent<components::IBLComponent>().fileName = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
-				}
-				else
-				{
-					root.addComponent<components::IBLComponent>(StringUtil::wstringToUtf8(selectedIBLFile.wstring()));
-				}
+				// Update IBL component on root entity via event system
+				events::scene::GetRootEntityQuery rootQuery;
+				auto rootHandle = dispatcher.query(rootQuery);
+
+				events::scene::SetIBLDataCommand iblCmd;
+				iblCmd.entity = rootHandle;
+				iblCmd.iblData.fileName = filePath;
+				dispatcher.execute(iblCmd);
 			}
+
 			ImGui::SameLine();
 			std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
-			ImGui::Text(filePath.c_str());
+			ImGui::Text("%s", filePath.c_str());
+
 			if (ImGui::Button("Preview", ImVec2(120, 0)))
 			{
-				if (iblPreview)
-				{
-					deletePreview = true;
-				}
-				if (!filePath.empty())
-				{
-					iblPreview = controllers::EditorTextureController::loadHdrTexture(filePath);
+				// Release old preview if exists
+				if (iblPreviewHandle.isValid()) {
+					events::render::ReleaseEditorTextureCommand releaseCmd;
+					releaseCmd.handle = iblPreviewHandle.imguiDescriptorSet;
+					dispatcher.execute(releaseCmd);
+					iblPreviewHandle = services::EditorTextureHandle{};
 				}
 
-			}
-
-			if (deletePreview)
-			{
-				delete iblPreview;
-				deletePreview = false;
-				iblPreview = nullptr;
-			}
-			else if(!deletePreview && iblPreview)
-			{
-				ImGui::Image(iblPreview->getDescriptorSet(), ImVec2(200, 200));
+				if (!filePath.empty()) {
+					events::render::LoadEditorTextureCommand loadCmd;
+					loadCmd.path = filePath;
+					loadCmd.isHDR = true;
+					iblPreviewHandle = dispatcher.execute(loadCmd);
+				}
 			}
 
 			if (ImGui::Button("Apply", ImVec2(120, 0)))
 			{
-				if (auto* firstCamera = getFirstCameraComponent(); firstCamera != nullptr) {
-					offscreen.iblAdd(filePath, firstCamera);
-				}
-
+				events::render::SetIBLCommand cmd;
+				cmd.hdrPath = filePath;
+				dispatcher.execute(cmd);
 			}
+
 			ImGui::SameLine();
 			ImGui::SetCursorPosX(
-				ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x *
-				2);
+				ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x * 2);
+
 			if (ImGui::Button("Remove", ImVec2(120, 0)))
 			{
 				selectedIBLFile = "";
-				offscreen.iblRemove();
-				if (iblPreview)
-				{
-					deletePreview = true;
+
+				// Release editor preview texture first
+				if (iblPreviewHandle.isValid()) {
+					events::render::ReleaseEditorTextureCommand releaseCmd;
+					releaseCmd.handle = iblPreviewHandle.imguiDescriptorSet;
+					dispatcher.execute(releaseCmd);
+					iblPreviewHandle = services::EditorTextureHandle{};
 				}
-				auto root = sceneGraphSystem->GetRoot();
-				if (root.hasComponent<components::IBLComponent>()) {
-					root.removeComponent<components::IBLComponent>();
-				}
+
+				// Then remove IBL from renderer
+				events::render::RemoveIBLCommand removeIblCmd;
+				dispatcher.execute(removeIblCmd);
+
+				// Remove IBL component from root via event system
+				events::scene::GetRootEntityQuery rootQuery;
+				auto rootHandle = dispatcher.query(rootQuery);
+
+				events::scene::RemoveIBLComponentCommand removeCmd;
+				removeCmd.entity = rootHandle;
+				dispatcher.execute(removeCmd);
+			}
+
+			// Display preview image AFTER all buttons are processed
+			// This ensures the descriptor set is valid if we display it
+			if (iblPreviewHandle.isValid()) {
+				ImGui::Image(iblPreviewHandle.imguiDescriptorSet, ImVec2(200, 200));
 			}
 		}
 		ImGui::End();
-	}
-
-	components::CameraComponent* MainImguiWindow::getFirstCameraComponent() const
-	{
-		auto& registry = scene::EntityRegistry::getRegistry();
-		// Must have both CameraComponent and TransformComponent for camera updates to work
-		auto view = registry.view<components::CameraComponent, components::TransformComponent>();
-		for (auto entity : view) {
-			return &view.get<components::CameraComponent>(entity);
-		}
-		return nullptr;
 	}
 
 }

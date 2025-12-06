@@ -3,6 +3,9 @@
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "print/EditorLogger.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/RenderEvents.hpp"
+#include "events/ResourceEvents.hpp"
 #include <IconsFontAwesome6.h>
 #include <algorithm>
 
@@ -10,40 +13,53 @@ namespace windows
 {
 	ContentBrowser::ContentBrowser()
 	{
-		navigateTo(currentPath);
-
-		fileIcon = controllers::EditorTextureController::loadTexture(
-			"../../resources/editor/contentBrowser/file.vfImage");
-		folderIcon = controllers::EditorTextureController::loadTexture(
-			"../../resources/editor/contentBrowser/folder.vfImage");
-		textureIcon = controllers::EditorTextureController::loadTexture(
-			"../../resources/editor/contentBrowser/texture-file.vfImage");
-		audioIcon = controllers::EditorTextureController::loadTexture(
-			"../../resources/editor/contentBrowser/audio-file.vfImage");
-		meshIcon = controllers::EditorTextureController::loadTexture(
-			"../../resources/editor/contentBrowser/mesh-file.vfImage");
-		glslIcon = controllers::EditorTextureController::loadTexture(
-			"../../resources/editor/contentBrowser/glsl-file.vfImage");
-		animationIcon = controllers::EditorTextureController::loadTexture(
-			"../../resources/editor/contentBrowser/animation-file.vfImage");
-		hdrIcon = controllers::EditorTextureController::loadTexture(
-			"../../resources/editor/contentBrowser/hdr-file.vfImage");
+		// Defer navigation until draw() when services are ready
+		// Just load directory without setting import location
+		if (fs::exists(currentPath) && fs::is_directory(currentPath)) {
+			loadDirectory(currentPath);
+		}
 	}
 
-	ContentBrowser::~ContentBrowser()
+	void ContentBrowser::loadIcons()
 	{
-		delete fileIcon;
-		delete folderIcon;
-		delete textureIcon;
-		delete audioIcon;
-		delete meshIcon;
-		delete glslIcon;
-		delete animationIcon;
-		delete hdrIcon;
+		auto& dispatcher = events::EventDispatcher::instance();
+
+		auto loadIcon = [&dispatcher](const std::string& path) {
+			events::render::LoadEditorTextureCommand cmd;
+			cmd.path = path;
+			cmd.isHDR = false;
+			return dispatcher.execute(cmd);
+		};
+
+		fileIcon = loadIcon("../../resources/editor/contentBrowser/file.vfImage");
+		folderIcon = loadIcon("../../resources/editor/contentBrowser/folder.vfImage");
+		textureIcon = loadIcon("../../resources/editor/contentBrowser/texture-file.vfImage");
+		audioIcon = loadIcon("../../resources/editor/contentBrowser/audio-file.vfImage");
+		meshIcon = loadIcon("../../resources/editor/contentBrowser/mesh-file.vfImage");
+		glslIcon = loadIcon("../../resources/editor/contentBrowser/glsl-file.vfImage");
+		animationIcon = loadIcon("../../resources/editor/contentBrowser/animation-file.vfImage");
+		hdrIcon = loadIcon("../../resources/editor/contentBrowser/hdr-file.vfImage");
+
+		iconsLoaded = true;
 	}
 
 	void ContentBrowser::draw()
 	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
+		// Lazy load icons on first draw (after services are initialized)
+		if (!iconsLoaded) {
+			loadIcons();
+		}
+
+		// Set import location on first draw when services are ready
+		if (!importLocationSet) {
+			events::resource::SetImportLocationCommand cmd;
+			cmd.path = currentPath.string();
+			dispatcher.execute(cmd);
+			importLocationSet = true;
+		}
+
 		if (showCreateFolderModal)
 		{
 			ImGui::OpenPopup("Create New Folder");
@@ -98,10 +114,12 @@ namespace windows
 			else
 			{
 				isShaderLoaded = false;
-				if (selectedImage)
+				if (selectedImageHandle.isValid())
 				{
-					delete selectedImage;
-					selectedImage = nullptr;
+					events::render::ReleaseEditorTextureCommand releaseCmd;
+					releaseCmd.handle = selectedImageHandle.imguiDescriptorSet;
+					dispatcher.execute(releaseCmd);
+					selectedImageHandle = services::EditorTextureHandle{};
 				}
 			}
 
@@ -120,15 +138,21 @@ namespace windows
 						selectedFile = asset.path;
 						selectedType = asset.type;
 						showFileWindow = true;
-						if (selectedType == AssetType::Texture)
-						{
-							selectedImage = controllers::EditorTextureController::loadTexture(
-								StringUtil::wstringToUtf8(selectedFile.wstring()));
+
+						// Release old preview if exists
+						if (selectedImageHandle.isValid()) {
+							events::render::ReleaseEditorTextureCommand releaseCmd;
+							releaseCmd.handle = selectedImageHandle.imguiDescriptorSet;
+							dispatcher.execute(releaseCmd);
+							selectedImageHandle = services::EditorTextureHandle{};
 						}
-						else if (selectedType == AssetType::HDR)
-						{
-							selectedImage = controllers::EditorTextureController::loadHdrTexture(
-								StringUtil::wstringToUtf8(selectedFile.wstring()));
+
+						std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+						if (selectedType == AssetType::Texture || selectedType == AssetType::HDR) {
+							events::render::LoadEditorTextureCommand loadCmd;
+							loadCmd.path = filePath;
+							loadCmd.isHDR = (selectedType == AssetType::HDR);
+							selectedImageHandle = dispatcher.execute(loadCmd);
 						}
 					}
 				}
@@ -143,7 +167,9 @@ namespace windows
 	void ContentBrowser::loadDirectory(const fs::path& path)
 	{
 		assets.clear();
-		for (auto& entry : fs::directory_iterator(path))
+
+		std::error_code ec;
+		for (auto& entry : fs::directory_iterator(path, ec))
 		{
 			using enum windows::AssetType;
 			Asset asset;
@@ -198,37 +224,49 @@ namespace windows
 			using enum windows::AssetType;
 		case Texture:
 			ImGui::BeginGroup();
-			ImGui::Image(textureIcon->getDescriptorSet(), ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			if (textureIcon.isValid()) {
+				ImGui::Image(textureIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			}
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
 			break;
 		case HDR:
 			ImGui::BeginGroup();
-			ImGui::Image(hdrIcon->getDescriptorSet(), ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			if (hdrIcon.isValid()) {
+				ImGui::Image(hdrIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			}
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
 			break;
 		case Model:
 			ImGui::BeginGroup();
-			ImGui::Image(meshIcon->getDescriptorSet(), ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			if (meshIcon.isValid()) {
+				ImGui::Image(meshIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			}
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
 			break;
 		case Audio:
 			ImGui::BeginGroup();
-			ImGui::Image(audioIcon->getDescriptorSet(), ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			if (audioIcon.isValid()) {
+				ImGui::Image(audioIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			}
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
 			break;
 		case Animation:
 			ImGui::BeginGroup();
-			ImGui::Image(animationIcon->getDescriptorSet(), ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			if (animationIcon.isValid()) {
+				ImGui::Image(animationIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			}
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
 			break;
 		case Shader:
 			ImGui::BeginGroup();
-			ImGui::Image(glslIcon->getDescriptorSet(), ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			if (glslIcon.isValid()) {
+				ImGui::Image(glslIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			}
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
 			break;
@@ -237,10 +275,12 @@ namespace windows
 			{
 				ImGui::BeginGroup();
 				std::string folderName = asset.name;
-				if (ImGui::ImageButton(folderName.c_str(), folderIcon->getDescriptorSet(),
-					ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE)))
-				{
-					navigateFolder = true;
+				if (folderIcon.isValid()) {
+					if (ImGui::ImageButton(folderName.c_str(), folderIcon.imguiDescriptorSet,
+						ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE)))
+					{
+						navigateFolder = true;
+					}
 				}
 
 				ImGui::TextWrapped("%s", folderName.c_str());
@@ -255,7 +295,9 @@ namespace windows
 			else
 			{
 				ImGui::BeginGroup();
-				ImGui::Image(fileIcon->getDescriptorSet(), ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+				if (fileIcon.isValid()) {
+					ImGui::Image(fileIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+				}
 				ImGui::Text("%s", asset.name.c_str());
 				ImGui::EndGroup();
 			}
@@ -276,21 +318,22 @@ namespace windows
 			ImGui::Text("File Path: %s", StringUtil::wstringToUtf8(selectedFile.wstring()).c_str());
 			ImGui::Separator();
 
-			if (selectedType == AssetType::Texture || selectedType == AssetType::HDR)
+			if ((selectedType == AssetType::Texture || selectedType == AssetType::HDR) && selectedImageHandle.isValid())
 			{
 				ImGui::Columns(2, nullptr, false);
 				ImGui::SetColumnOffset(1, 200.0f);
 
-				ImGui::Text("Width: %d", selectedImage->getWidth());
-				ImGui::Text("Height: %d", selectedImage->getHeight());
-				ImGui::Text("Numbers of Channels: %d", selectedImage->getNumbersOfChannels());
+				ImGui::Text("Width: %d", selectedImageHandle.width);
+				ImGui::Text("Height: %d", selectedImageHandle.height);
 
 				ImGui::NextColumn();
 
 				ImVec2 imageSize(600, 400);
-				auto aspectRatio = static_cast<float>(selectedImage->getWidth()) / selectedImage->getHeight();
-				imageSize.y = imageSize.x / aspectRatio;
-				ImGui::Image(selectedImage->getDescriptorSet(), imageSize);
+				if (selectedImageHandle.height > 0) {
+					auto aspectRatio = static_cast<float>(selectedImageHandle.width) / selectedImageHandle.height;
+					imageSize.y = imageSize.x / aspectRatio;
+				}
+				ImGui::Image(selectedImageHandle.imguiDescriptorSet, imageSize);
 
 				ImGui::Columns(1);
 			}
@@ -389,7 +432,8 @@ namespace windows
 
 	void ContentBrowser::drawFolderTree(const fs::path& path)
 	{
-		for (auto& entry : fs::directory_iterator(path))
+		std::error_code ec;
+		for (auto& entry : fs::directory_iterator(path, ec))
 		{
 			if (entry.is_directory())
 			{
@@ -425,5 +469,19 @@ namespace windows
 		std::string searchQueryLower = StringUtil::toLower(searchQuery);
 
 		return assetNameLower.find(searchQueryLower) != std::string::npos;
+	}
+
+	void ContentBrowser::navigateTo(const fs::path& path)
+	{
+		if (fs::exists(path) && fs::is_directory(path))
+		{
+			currentPath = path;
+
+			events::resource::SetImportLocationCommand cmd;
+			cmd.path = currentPath.string();
+			events::EventDispatcher::instance().execute(cmd);
+
+			loadDirectory(currentPath);
+		}
 	}
 }

@@ -105,11 +105,12 @@ namespace components {
 		}
 		// Update the view matrix based on the camera's position, rotation, and direction
 		void updateViewMatrix(const glm::vec3& position, const glm::vec3& rotation) {
-			// Create a transformation matrix based on position and rotation.
+			// For FPS-style camera: apply yaw (Y) first, then pitch (X)
+			// This ensures pitch always rotates around the camera's local X axis
 			glm::mat4 transform = glm::mat4(1.0f);
-			transform = glm::rotate(transform, glm::radians(rotation.x), glm::vec3(1, 0, 0));
-			transform = glm::rotate(transform, glm::radians(rotation.y), glm::vec3(0, 1, 0));
-			transform = glm::rotate(transform, glm::radians(rotation.z), glm::vec3(0, 0, 1));
+			transform = glm::rotate(transform, glm::radians(rotation.y), glm::vec3(0, 1, 0)); // Yaw
+			transform = glm::rotate(transform, glm::radians(rotation.x), glm::vec3(1, 0, 0)); // Pitch
+			transform = glm::rotate(transform, glm::radians(rotation.z), glm::vec3(0, 0, 1)); // Roll
 			transform = glm::translate(transform, -position);
 
 			// View matrix is the inverse of the transformation matrix.

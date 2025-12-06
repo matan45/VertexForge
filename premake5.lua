@@ -29,22 +29,24 @@ project "Editor"
    files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp" }
    
    includedirs {
-	  "dependencies/imgui",  
-	  "dependencies/ImGuizmo",   
-	  "dependencies/ImGuiColorTextEdit",   
+	  "dependencies/imgui",
+	  "dependencies/ImGuizmo",
+	  "dependencies/ImGuiColorTextEdit",
 	  "dependencies/imgui-node-editor",
 	  "dependencies/spdlog/include",
 	  "dependencies/glm",
 	  "dependencies/entt/single_include",
 	  "VFEngine/utilities",
-	  "VFEngine/core/controllers", 
-	  "dependencies/IconFontCppHeaders",	  
-	  "VFEngine/import/controllers"
+	  "VFEngine/core/controllers",
+	  "dependencies/IconFontCppHeaders",
+	  "VFEngine/import/controllers",
+	  "VFEngine/services"               -- Services layer interfaces
    }
 
    links {
       "Core",                           -- Link Core project
-	  "Import"
+	  "Import",
+	  "Services"                        -- Link Services project
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -69,18 +71,19 @@ project "Core"
    
    includedirs {
       "VFEngine/graphics/controllers",   -- Graphics headers
-      "VFEngine/window/controllers",   -- Graphics headers
+      "VFEngine/window/controllers",     -- Window headers
 	  "dependencies/spdlog/include",
 	  "dependencies/entt/single_include",
-      "VFEngine/utilities",             -- Utilities headers (if used in Core)
+      "VFEngine/utilities",              -- Utilities headers
+	  "VFEngine/services",               -- Services layer interfaces
 	  "dependencies/imgui",
 	  "dependencies/glm",
 	  "dependencies/glfw/include",
 	  "dependencies/imgui/backends",
-	  vulkanLibPath.."/Include"	  
+	  vulkanLibPath.."/Include"
    }
 
-   links { "Graphics" }  -- Link against Graphics and Utilities
+   links { "Graphics" }  -- Link against Graphics (Services is a higher layer, no link needed)
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
    filter "configurations:Debug"
@@ -121,11 +124,11 @@ project "Import"
       defines { "DEBUG" }
       symbols "On"
       libdirs { "dependencies/assimp/lib/Debug" }
-      links { "assimp-vc145-mtd.lib" }  -- Assimp Debug library
+      links { "assimp-vc143-mtd.lib" }  -- Assimp Debug library
 
     -- Copy the DLL to the Editor's output directory after the build
    postbuildcommands {
-      "{COPY} ../../dependencies/assimp/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/Debug/x64/"
+      "{COPY} ../../dependencies/assimp/bin/Debug/assimp-vc143-mtd.dll ../../bin/Editor/Debug/x64/"
    }
 
    -- Release configuration
@@ -236,8 +239,41 @@ project "Utilities"
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
-	  
-	  
+
+
+-- Project: Services (Event System, Service Interfaces, Service Implementations)
+project "Services"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/services"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/services/**.hpp", "VFEngine/services/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/glfw/include",
+      "dependencies/imgui",
+      "VFEngine/utilities",
+      "VFEngine/core/controllers",
+      "VFEngine/Window",
+      vulkanLibPath.."/Include"
+   }
+
+   links { "Utilities", "Window" }  -- Import is Editor-level, not Services dependency
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
 -- Project 6: Window
 project "Window"
    kind "StaticLib"

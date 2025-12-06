@@ -21,13 +21,13 @@
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v145</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v145</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -41,15 +41,15 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(ProjectDir)..\..\bin\Editor\Debug\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
+    <OutDir>..\..\bin\Editor\Debug\x64\</OutDir>
+    <IntDir>obj\x64\Debug\</IntDir>
     <TargetName>Editor</TargetName>
     <TargetExt>.exe</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(ProjectDir)..\..\bin\Editor\Release\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
+    <OutDir>..\..\bin\Editor\Release\x64\</OutDir>
+    <IntDir>obj\x64\Release\</IntDir>
     <TargetName>Editor</TargetName>
     <TargetExt>.exe</TargetExt>
   </PropertyGroup>
@@ -58,7 +58,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\ImGuiColorTextEdit;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\ImGuiColorTextEdit;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
@@ -75,7 +75,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\ImGuiColorTextEdit;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\ImGuiColorTextEdit;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -116,6 +116,9 @@
     </ProjectReference>
     <ProjectReference Include="..\import\Import.vcxproj">
       <Project>{605B1BBA-4CFD-4590-35B8-59E421F9CCE0}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\services\Services.vcxproj">
+      <Project>{A9F04386-95BD-9E91-BED6-8C39AA02D41F}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
