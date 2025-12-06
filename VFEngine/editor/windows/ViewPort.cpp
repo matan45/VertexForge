@@ -76,11 +76,11 @@ namespace windows {
 			transformChanged = true;
 		}
 		if (ImGui::IsKeyDown(ImGuiKey_E)) {
-			transform.position.y += -1.0f * cameraSpeed * dt;
+			transform.position.y += cameraSpeed * dt;
 			transformChanged = true;
 		}
 		if (ImGui::IsKeyDown(ImGuiKey_Q)) {
-			transform.position.y += 1.0f * cameraSpeed * dt;
+			transform.position.y -= cameraSpeed * dt;
 			transformChanged = true;
 		}
 
