@@ -2,6 +2,7 @@
 #include "Import.hpp"
 #include "config/Config.hpp"
 #include "files/FileUtils.hpp"
+#include "ServiceLocator.hpp"
 #include <imgui.h>
 
 #include "scene/EntityRegistry.hpp"
@@ -42,7 +43,11 @@ namespace windows
 			menuBar();
 			if (showIBLWindow)
 			{
-				iblWindow();
+				if (useServices) {
+					iblWindowWithServices();
+				} else {
+					iblWindow();
+				}
 			}
 		}
 		ImGui::End();
@@ -55,7 +60,12 @@ namespace windows
 			ImGui::OpenPopup("Import Files");
 		}
 
-		importModel();
+		if (useServices) {
+			importModelWithServices();
+		} else {
+			importModel();
+		}
+
 		if (ImGui::BeginMainMenuBar())
 		{
 			handleFileMenu();
@@ -130,7 +140,14 @@ namespace windows
 			}
 			else if (ImGui::MenuItem("Exit"))
 			{
-				coreInterface.closeWindow();
+				if (useServices) {
+					auto inputService = services::ServiceLocator::instance().tryGet<services::IInputService>();
+					if (inputService) {
+						inputService->requestClose();
+					}
+				} else {
+					coreInterface.closeWindow();
+				}
 			}
 			ImGui::EndMenu();
 		}
@@ -267,6 +284,152 @@ namespace windows
 			return &view.get<components::CameraComponent>(entity);
 		}
 		return nullptr;
+	}
+
+	// ========== Service-based methods ==========
+
+	void MainImguiWindow::importModelWithServices()
+	{
+		auto resourceService = services::ServiceLocator::instance().tryGet<services::IResourceService>();
+		if (!resourceService) {
+			// Fall back to legacy
+			importModel();
+			return;
+		}
+
+		// Check if the popup modal is open
+		if (ImGui::BeginPopupModal("Import Files", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			std::vector<services::ImportFileRequest> requests;
+			requests.reserve(files.size());
+			isFlip.resize(files.size(), false);
+
+			ImGui::Text("Files Dropped:");
+			for (int i = 0; i < files.size(); i++)
+			{
+				ImGui::PushID(files[i].c_str());
+				ImGui::BulletText("%s", files[i].c_str());
+
+				if (files::FileUtils::isHDRFile(files[i]))
+				{
+					bool flip = isFlip[i];
+					ImGui::Checkbox("Flip Vertically", &flip);
+					isFlip[i] = flip;
+				}
+
+				services::ImportFileRequest request;
+				request.path = files[i];
+				request.flipVertically = isFlip[i];
+				requests.push_back(request);
+
+				ImGui::PopID();
+			}
+
+			if (ImGui::Button("Continue"))
+			{
+				resourceService->importFiles(requests);
+				ImGui::CloseCurrentPopup();
+				openModal = false;
+			}
+
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(
+				ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x * 2);
+
+			if (ImGui::Button("Close"))
+			{
+				ImGui::CloseCurrentPopup();
+				openModal = false;
+			}
+
+			ImGui::EndPopup();
+		}
+	}
+
+	void MainImguiWindow::iblWindowWithServices()
+	{
+		auto renderService = services::ServiceLocator::instance().tryGet<services::IRenderService>();
+		auto sceneService = services::ServiceLocator::instance().tryGet<services::ISceneService>();
+
+		if (!renderService || !sceneService) {
+			// Fall back to legacy
+			iblWindow();
+			return;
+		}
+
+		ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+		if (ImGui::Begin("IBL", &showIBLWindow))
+		{
+			ImGui::Text("IBL Window");
+
+			if (ImGui::Button("Select"))
+			{
+				std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+					{L"Hdr Files (*.vfHdr)", L"*.vfHdr"}
+				};
+
+				selectedIBLFile = fileDialog.openFileDialog(fileTypes);
+				std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
+
+				// Update IBL component on root entity via service
+				auto rootHandle = sceneService->getRootEntity();
+				// The service doesn't currently have IBL setters, so we use legacy for now
+				auto root = sceneGraphSystem->GetRoot();
+				if (root.hasComponent<components::IBLComponent>()) {
+					root.getComponent<components::IBLComponent>().fileName = filePath;
+				} else {
+					root.addComponent<components::IBLComponent>(filePath);
+				}
+			}
+
+			ImGui::SameLine();
+			std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
+			ImGui::Text("%s", filePath.c_str());
+
+			if (ImGui::Button("Preview", ImVec2(120, 0)))
+			{
+				// Release old preview if exists
+				if (iblPreviewHandle.isValid()) {
+					renderService->releaseEditorTexture(iblPreviewHandle);
+					iblPreviewHandle = services::EditorTextureHandle{};
+				}
+
+				if (!filePath.empty()) {
+					iblPreviewHandle = renderService->loadEditorHDRTexture(filePath);
+				}
+			}
+
+			if (iblPreviewHandle.isValid()) {
+				ImGui::Image(iblPreviewHandle.imguiDescriptorSet, ImVec2(200, 200));
+			}
+
+			if (ImGui::Button("Apply", ImVec2(120, 0)))
+			{
+				renderService->setIBL(filePath);
+			}
+
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(
+				ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x * 2);
+
+			if (ImGui::Button("Remove", ImVec2(120, 0)))
+			{
+				selectedIBLFile = "";
+				renderService->removeIBL();
+
+				if (iblPreviewHandle.isValid()) {
+					renderService->releaseEditorTexture(iblPreviewHandle);
+					iblPreviewHandle = services::EditorTextureHandle{};
+				}
+
+				// Remove IBL component from root
+				auto root = sceneGraphSystem->GetRoot();
+				if (root.hasComponent<components::IBLComponent>()) {
+					root.removeComponent<components::IBLComponent>();
+				}
+			}
+		}
+		ImGui::End();
 	}
 
 }

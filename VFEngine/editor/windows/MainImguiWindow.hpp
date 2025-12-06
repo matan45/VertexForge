@@ -1,6 +1,12 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "nfd/FileDialog.hpp"
+#include "interfaces/ISceneService.hpp"
+#include "interfaces/IRenderService.hpp"
+#include "interfaces/IResourceService.hpp"
+#include "interfaces/IInputService.hpp"
+
+// Legacy includes for backward compatibility
 #include "CoreInterface.hpp"
 #include "OffScreen.hpp"
 #include "EditorTextureController.hpp"
@@ -15,27 +21,39 @@ namespace windows
 	class MainImguiWindow : public controllers::imguiHandler::ImguiWindow
 	{
 	private:
+		// Legacy references (kept for backward compatibility)
 		controllers::CoreInterface& coreInterface;
 		controllers::OffScreen& offscreen;
+		std::shared_ptr<scene::SceneGraphSystem> sceneGraphSystem;
+
 		int windowFlags;
-		//import settings
+
+		// Import settings
 		nfd::FileDialog fileDialog;
 		std::vector<std::string> files;
 		std::vector<bool> isFlip;
 		bool openModal = false;
 
-		//ibl window
+		// IBL window
 		fs::path selectedIBLFile;
 		bool showIBLWindow = false;
 		bool deletePreview = false;
 		dto::EditorTexture* iblPreview{ nullptr };
-		std::shared_ptr<scene::SceneGraphSystem> sceneGraphSystem;
+
+		// Service-based IBL preview handle
+		services::EditorTextureHandle iblPreviewHandle;
+
+		// Flag to use services
+		bool useServices = false;
 
 	public:
 		explicit MainImguiWindow(controllers::CoreInterface& coreInterface, controllers::OffScreen& offscreen, std::shared_ptr<scene::SceneGraphSystem> sceneGraphSystem);
 		~MainImguiWindow() override;
 
 		void draw() override;
+
+		// Enable service-based mode
+		void enableServiceMode() { useServices = true; }
 
 	private:
 		void menuBar();
@@ -46,6 +64,10 @@ namespace windows
 		void handleAddMenu();
 
 		void iblWindow();
+
+		// Service-based methods
+		void importModelWithServices();
+		void iblWindowWithServices();
 
 		components::CameraComponent* getFirstCameraComponent() const;
 	};

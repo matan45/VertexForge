@@ -23,6 +23,9 @@ namespace core {
 		void cleanUp() const;
 		void close();
 
+		// Get window pointer for service initialization
+		window::Window* getWindow() const { return mainWindow; }
+
 	private:
 		void newFrame() const;
 		void endFrame() const;

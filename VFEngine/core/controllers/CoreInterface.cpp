@@ -33,6 +33,9 @@ namespace controllers {
 		delete mainLoop;
 	}
 
-
+	window::Window* CoreInterface::getWindow() const
+	{
+		return mainLoop->getWindow();
+	}
 
 };

@@ -1,6 +1,10 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "imgui.h"
+#include "interfaces/IResourceService.hpp"
+#include "interfaces/IRenderService.hpp"
+
+// Legacy includes for backward compatibility
 #include "Import.hpp"
 #include "EditorTextureController.hpp"
 
@@ -37,6 +41,7 @@ namespace windows
         dto::EditorTexture* selectedImage{nullptr};
         bool showFileWindow = false;
 
+        // Legacy icons
         dto::EditorTexture* fileIcon;
         dto::EditorTexture* folderIcon;
         dto::EditorTexture* textureIcon;
@@ -46,7 +51,13 @@ namespace windows
         dto::EditorTexture* animationIcon;
         dto::EditorTexture* hdrIcon;
 
+        // Service-based image preview handle
+        services::EditorTextureHandle selectedImageHandle;
+
         bool navigateFolder = false;
+
+        // Flag to use services
+        bool useServices = false;
 
         static constexpr float THUMBNAIL_SIZE = 64.0f;
         static constexpr float PADDING = 16.0f;
@@ -57,16 +68,11 @@ namespace windows
 
         void draw() override;
 
+        // Enable service-based mode
+        void enableServiceMode() { useServices = true; }
+
     private:
-        void navigateTo(const fs::path& path)
-        {
-            if (fs::exists(path) && fs::is_directory(path))
-            {
-                currentPath = path;
-                controllers::Import::setLocation(currentPath.string());
-                loadDirectory(currentPath);
-            }
-        }
+        void navigateTo(const fs::path& path);
 
         void loadDirectory(const fs::path& path);
 

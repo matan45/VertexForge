@@ -16,19 +16,39 @@ namespace handlers
         sceneGraphSystem = level->getSceneGraphSystem();
     }
 
-    void WindowImguiHandler::init() const
+    void WindowImguiHandler::init()
     {
-        controllers::imguiHandler::ImguiWindowHandler::add(
-            std::make_shared<windows::MainImguiWindow>(coreInterface, offscreen, sceneGraphSystem));
+        // Create windows and store references for service mode enablement
+        mainImguiWindow = std::make_shared<windows::MainImguiWindow>(coreInterface, offscreen, sceneGraphSystem);
+        contentBrowserWindow = std::make_shared<windows::ContentBrowser>();
+        sceneGraphWindow = std::make_shared<windows::SceneGraph>(sceneGraphSystem);
+        viewPortWindow = std::make_shared<windows::ViewPort>(offscreen, sceneGraphSystem);
+
+        controllers::imguiHandler::ImguiWindowHandler::add(mainImguiWindow);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ConsoleLog>());
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ContentBrowser>());
-        controllers::imguiHandler::ImguiWindowHandler::add(
-            std::make_shared<windows::SceneGraph>(sceneGraphSystem));
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ViewPort>(offscreen, sceneGraphSystem));
+        controllers::imguiHandler::ImguiWindowHandler::add(contentBrowserWindow);
+        controllers::imguiHandler::ImguiWindowHandler::add(sceneGraphWindow);
+        controllers::imguiHandler::ImguiWindowHandler::add(viewPortWindow);
     }
 
     void WindowImguiHandler::cleanUp() const
     {
         controllers::imguiHandler::ImguiWindowHandler::cleanUp();
+    }
+
+    void WindowImguiHandler::enableServiceMode()
+    {
+        if (mainImguiWindow) {
+            mainImguiWindow->enableServiceMode();
+        }
+        if (contentBrowserWindow) {
+            contentBrowserWindow->enableServiceMode();
+        }
+        if (sceneGraphWindow) {
+            sceneGraphWindow->enableServiceMode();
+        }
+        if (viewPortWindow) {
+            viewPortWindow->enableServiceMode();
+        }
     }
 }

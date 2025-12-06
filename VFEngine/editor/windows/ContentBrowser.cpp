@@ -3,6 +3,7 @@
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "print/EditorLogger.hpp"
+#include "ServiceLocator.hpp"
 #include <IconsFontAwesome6.h>
 #include <algorithm>
 
@@ -120,15 +121,34 @@ namespace windows
 						selectedFile = asset.path;
 						selectedType = asset.type;
 						showFileWindow = true;
-						if (selectedType == AssetType::Texture)
-						{
-							selectedImage = controllers::EditorTextureController::loadTexture(
-								StringUtil::wstringToUtf8(selectedFile.wstring()));
-						}
-						else if (selectedType == AssetType::HDR)
-						{
-							selectedImage = controllers::EditorTextureController::loadHdrTexture(
-								StringUtil::wstringToUtf8(selectedFile.wstring()));
+
+						if (useServices) {
+							auto renderService = services::ServiceLocator::instance().tryGet<services::IRenderService>();
+							if (renderService) {
+								// Release old preview if exists
+								if (selectedImageHandle.isValid()) {
+									renderService->releaseEditorTexture(selectedImageHandle);
+									selectedImageHandle = services::EditorTextureHandle{};
+								}
+
+								std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+								if (selectedType == AssetType::Texture) {
+									selectedImageHandle = renderService->loadEditorTexture(filePath);
+								} else if (selectedType == AssetType::HDR) {
+									selectedImageHandle = renderService->loadEditorHDRTexture(filePath);
+								}
+							}
+						} else {
+							if (selectedType == AssetType::Texture)
+							{
+								selectedImage = controllers::EditorTextureController::loadTexture(
+									StringUtil::wstringToUtf8(selectedFile.wstring()));
+							}
+							else if (selectedType == AssetType::HDR)
+							{
+								selectedImage = controllers::EditorTextureController::loadHdrTexture(
+									StringUtil::wstringToUtf8(selectedFile.wstring()));
+							}
 						}
 					}
 				}
@@ -425,5 +445,24 @@ namespace windows
 		std::string searchQueryLower = StringUtil::toLower(searchQuery);
 
 		return assetNameLower.find(searchQueryLower) != std::string::npos;
+	}
+
+	void ContentBrowser::navigateTo(const fs::path& path)
+	{
+		if (fs::exists(path) && fs::is_directory(path))
+		{
+			currentPath = path;
+
+			if (useServices) {
+				auto resourceService = services::ServiceLocator::instance().tryGet<services::IResourceService>();
+				if (resourceService) {
+					resourceService->setImportLocation(currentPath.string());
+				}
+			} else {
+				controllers::Import::setLocation(currentPath.string());
+			}
+
+			loadDirectory(currentPath);
+		}
 	}
 }

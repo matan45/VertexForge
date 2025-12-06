@@ -1,0 +1,108 @@
+#pragma once
+#include "EntityHandle.hpp"
+#include <glm/glm.hpp>
+#include <string>
+#include <vector>
+#include <optional>
+
+namespace services {
+
+    // Data Transfer Objects (DTOs) for cross-layer communication
+    // These are value types that can be safely passed between layers
+    // without creating dependencies on internal implementations
+
+    struct TransformData {
+        glm::vec3 position{ 0.0f, 0.0f, 0.0f };
+        glm::vec3 rotation{ 0.0f, 0.0f, 0.0f };  // Euler angles in degrees
+        glm::vec3 scale{ 1.0f, 1.0f, 1.0f };
+
+        bool operator==(const TransformData& other) const {
+            return position == other.position &&
+                rotation == other.rotation &&
+                scale == other.scale;
+        }
+    };
+
+    struct CameraData {
+        float fieldOfView = 45.0f;
+        float nearPlane = 0.1f;
+        float farPlane = 1000.0f;
+        float aspectRatio = 16.0f / 9.0f;
+        bool isPerspective = true;
+        float orthoSize = 10.0f;
+    };
+
+    struct IBLData {
+        std::string fileName;
+    };
+
+    struct EntityData {
+        EntityHandle handle;
+        std::string name;
+        std::optional<EntityHandle> parent;
+        std::vector<EntityHandle> children;
+        TransformData localTransform;
+        TransformData worldTransform;
+        std::vector<ComponentTypeId> components;
+
+        bool hasComponent(ComponentTypeId type) const {
+            for (auto c : components) {
+                if (c == type) return true;
+            }
+            return false;
+        }
+    };
+
+    struct SceneHierarchyData {
+        EntityHandle root;
+        std::vector<EntityData> entities;
+
+        const EntityData* findEntity(EntityHandle handle) const {
+            for (const auto& entity : entities) {
+                if (entity.handle == handle) {
+                    return &entity;
+                }
+            }
+            return nullptr;
+        }
+    };
+
+    // Viewport rendering result
+    struct ViewportTextureHandle {
+        void* imguiDescriptorSet = nullptr;
+        uint32_t width = 0;
+        uint32_t height = 0;
+
+        bool isValid() const { return imguiDescriptorSet != nullptr; }
+    };
+
+    // Resource import request
+    struct ImportFileRequest {
+        std::string path;
+        bool flipVertically = false;
+    };
+
+    // Resource import result
+    struct ImportResult {
+        std::string sourcePath;
+        std::string outputPath;
+        bool success = false;
+        std::string errorMessage;
+    };
+
+    // Editor texture handle (for UI icons, previews)
+    struct EditorTextureHandle {
+        void* imguiDescriptorSet = nullptr;
+        uint32_t width = 0;
+        uint32_t height = 0;
+
+        bool isValid() const { return imguiDescriptorSet != nullptr; }
+    };
+
+    // Camera input/movement
+    struct CameraMovement {
+        glm::vec3 deltaPosition{ 0.0f };
+        glm::vec2 deltaRotation{ 0.0f };  // yaw, pitch
+    };
+
+}

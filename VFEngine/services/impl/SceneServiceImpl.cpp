@@ -1,0 +1,518 @@
+#include "SceneServiceImpl.hpp"
+#include "../../utilities/scene/SceneGraphSystem.hpp"
+#include "../../utilities/scene/Entity.hpp"
+#include "../../utilities/scene/EntityRegistry.hpp"
+#include "../../utilities/components/Components.hpp"
+
+namespace services {
+
+    SceneServiceImpl::SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
+        : sceneGraph(std::move(sceneGraph)) {}
+
+    EntityHandle SceneServiceImpl::createEntity(const std::string& name,
+        std::optional<EntityHandle> parent) {
+
+        scene::Entity newEntity(name);
+
+        // Add to parent or root
+        if (parent.has_value() && parent->isValid()) {
+            scene::Entity parentEntity(internal::fromHandle(*parent));
+            sceneGraph->addChild(parentEntity, newEntity);
+        }
+        else {
+            sceneGraph->addChild(sceneGraph->GetRoot(), newEntity);
+        }
+
+        auto handle = internal::toHandle(newEntity.getHandle());
+
+        // Publish notification
+        events::scene::EntityCreatedNotification notification;
+        notification.entity = handle;
+        notification.name = name;
+        notification.parent = parent;
+        events::EventDispatcher::instance().publish(notification);
+
+        return handle;
+    }
+
+    bool SceneServiceImpl::deleteEntity(EntityHandle entity, bool deleteChildren) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        sceneGraph->removeEntity(sceneEntity);
+
+        // Publish notification
+        events::scene::EntityDeletedNotification notification;
+        notification.entity = entity;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    EntityHandle SceneServiceImpl::duplicateEntity(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return EntityHandle::invalid();
+        }
+
+        scene::Entity original(internal::fromHandle(entity));
+        std::string newName = original.getName() + " (Copy)";
+
+        // Get parent
+        std::optional<EntityHandle> parent;
+        if (original.hasComponent<components::ParentComponent>()) {
+            parent = internal::toHandle(original.getComponent<components::ParentComponent>().parent);
+        }
+
+        // Create duplicate
+        auto newHandle = createEntity(newName, parent);
+
+        // Copy transform if exists
+        if (original.hasComponent<components::TransformComponent>()) {
+            auto& origTransform = original.getComponent<components::TransformComponent>();
+            scene::Entity newEntity(internal::fromHandle(newHandle));
+            auto& newTransform = newEntity.getComponent<components::TransformComponent>();
+            newTransform.position = origTransform.position;
+            newTransform.rotation = origTransform.rotation;
+            newTransform.scale = origTransform.scale;
+            newTransform.isDirty = true;
+        }
+
+        return newHandle;
+    }
+
+    bool SceneServiceImpl::reparentEntity(EntityHandle entity, EntityHandle newParent) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry) ||
+            !internal::isValidHandle(newParent, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        scene::Entity newParentEntity(internal::fromHandle(newParent));
+
+        // Get old parent for notification
+        std::optional<EntityHandle> oldParent;
+        if (sceneEntity.hasComponent<components::ParentComponent>()) {
+            oldParent = internal::toHandle(sceneEntity.getComponent<components::ParentComponent>().parent);
+        }
+
+        sceneGraph->moveEntity(sceneEntity, newParentEntity);
+
+        // Publish notification
+        events::scene::EntityReparentedNotification notification;
+        notification.entity = entity;
+        notification.oldParent = oldParent;
+        notification.newParent = newParent;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    bool SceneServiceImpl::moveEntity(EntityHandle entity, EntityHandle targetParent, int insertIndex) {
+        // For now, just reparent - index handling would require more complex logic
+        return reparentEntity(entity, targetParent);
+    }
+
+    EntityHandle SceneServiceImpl::getRoot() const {
+        return internal::toHandle(sceneGraph->GetRoot().getHandle());
+    }
+
+    std::optional<EntityData> SceneServiceImpl::getEntity(EntityHandle handle) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(handle, registry)) {
+            return std::nullopt;
+        }
+
+        return buildEntityData(internal::fromHandle(handle));
+    }
+
+    std::optional<EntityHandle> SceneServiceImpl::findEntityByName(const std::string& name) const {
+        auto entities = sceneGraph->findAllEntitiesByName(name);
+        if (entities.empty()) {
+            return std::nullopt;
+        }
+        return internal::toHandle(entities[0].getHandle());
+    }
+
+    std::vector<EntityHandle> SceneServiceImpl::findEntitiesByName(const std::string& name) const {
+        auto entities = sceneGraph->findAllEntitiesByName(name);
+        std::vector<EntityHandle> handles;
+        handles.reserve(entities.size());
+        for (auto& entity : entities) {
+            handles.push_back(internal::toHandle(entity.getHandle()));
+        }
+        return handles;
+    }
+
+    std::vector<EntityHandle> SceneServiceImpl::getEntitiesWithComponent(ComponentTypeId type) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<EntityHandle> handles;
+
+        switch (type) {
+        case ComponentTypeId::Camera: {
+            auto view = registry.view<components::CameraComponent>();
+            for (auto entity : view) {
+                handles.push_back(internal::toHandle(entity));
+            }
+            break;
+        }
+        case ComponentTypeId::Transform: {
+            auto view = registry.view<components::TransformComponent>();
+            for (auto entity : view) {
+                handles.push_back(internal::toHandle(entity));
+            }
+            break;
+        }
+        case ComponentTypeId::IBL: {
+            auto view = registry.view<components::IBLComponent>();
+            for (auto entity : view) {
+                handles.push_back(internal::toHandle(entity));
+            }
+            break;
+        }
+        default:
+            break;
+        }
+
+        return handles;
+    }
+
+    SceneHierarchyData SceneServiceImpl::getSceneHierarchy() const {
+        SceneHierarchyData data;
+        data.root = getRoot();
+
+        // Collect all entities recursively
+        collectHierarchy(internal::fromHandle(data.root), data.entities);
+
+        return data;
+    }
+
+    void SceneServiceImpl::setTransform(EntityHandle entity, const TransformData& transform) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::TransformComponent>()) {
+            auto& comp = sceneEntity.getComponent<components::TransformComponent>();
+            comp.position = transform.position;
+            comp.rotation = transform.rotation;
+            comp.scale = transform.scale;
+            comp.isDirty = true;
+
+            // Publish notification
+            events::scene::TransformChangedNotification notification;
+            notification.entity = entity;
+            notification.newTransform = transform;
+            events::EventDispatcher::instance().publish(notification);
+        }
+    }
+
+    std::optional<TransformData> SceneServiceImpl::getTransform(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::TransformComponent>()) {
+            return std::nullopt;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::TransformComponent>();
+        return TransformData{ comp.position, comp.rotation, comp.scale };
+    }
+
+    std::optional<TransformData> SceneServiceImpl::getWorldTransform(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::WorldTransformComponent>()) {
+            return getTransform(entity);  // Fall back to local transform
+        }
+
+        // WorldTransformComponent only has matrix, so we'd need to decompose
+        // For now, return local transform
+        return getTransform(entity);
+    }
+
+    bool SceneServiceImpl::hasComponent(EntityHandle entity, ComponentTypeId type) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+
+        switch (type) {
+        case ComponentTypeId::Transform:
+            return registry.all_of<components::TransformComponent>(enttEntity);
+        case ComponentTypeId::Camera:
+            return registry.all_of<components::CameraComponent>(enttEntity);
+        case ComponentTypeId::Name:
+            return registry.all_of<components::NameComponent>(enttEntity);
+        case ComponentTypeId::Parent:
+            return registry.all_of<components::ParentComponent>(enttEntity);
+        case ComponentTypeId::Children:
+            return registry.all_of<components::ChildrenComponent>(enttEntity);
+        case ComponentTypeId::WorldTransform:
+            return registry.all_of<components::WorldTransformComponent>(enttEntity);
+        case ComponentTypeId::IBL:
+            return registry.all_of<components::IBLComponent>(enttEntity);
+        default:
+            return false;
+        }
+    }
+
+    std::vector<ComponentTypeId> SceneServiceImpl::getComponentTypes(EntityHandle entity) const {
+        std::vector<ComponentTypeId> types;
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return types;
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+
+        if (registry.all_of<components::TransformComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Transform);
+        if (registry.all_of<components::CameraComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Camera);
+        if (registry.all_of<components::NameComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Name);
+        if (registry.all_of<components::ParentComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Parent);
+        if (registry.all_of<components::ChildrenComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Children);
+        if (registry.all_of<components::WorldTransformComponent>(enttEntity))
+            types.push_back(ComponentTypeId::WorldTransform);
+        if (registry.all_of<components::IBLComponent>(enttEntity))
+            types.push_back(ComponentTypeId::IBL);
+
+        return types;
+    }
+
+    std::optional<CameraData> SceneServiceImpl::getCameraData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::CameraComponent>()) {
+            return std::nullopt;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::CameraComponent>();
+        CameraData data;
+        data.fieldOfView = comp.fieldOfView;
+        data.nearPlane = comp.nearPlane;
+        data.farPlane = comp.farPlane;
+        data.aspectRatio = comp.aspectRatio;
+        data.isPerspective = comp.isPerspective;
+        data.orthoSize = comp.orthoSize;
+
+        return data;
+    }
+
+    bool SceneServiceImpl::setCameraData(EntityHandle entity, const CameraData& camera) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::CameraComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::CameraComponent>();
+        comp.fieldOfView = camera.fieldOfView;
+        comp.nearPlane = camera.nearPlane;
+        comp.farPlane = camera.farPlane;
+        comp.aspectRatio = camera.aspectRatio;
+        comp.isPerspective = camera.isPerspective;
+        comp.orthoSize = camera.orthoSize;
+        comp.updateProjectionMatrix();
+
+        return true;
+    }
+
+    std::optional<EntityHandle> SceneServiceImpl::getPrimaryCamera() const {
+        auto cameras = getEntitiesWithComponent(ComponentTypeId::Camera);
+        if (cameras.empty()) {
+            return std::nullopt;
+        }
+        return cameras[0];
+    }
+
+    bool SceneServiceImpl::addCameraComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+
+        // Ensure entity has TransformComponent (required for camera updates)
+        if (!sceneEntity.hasComponent<components::TransformComponent>()) {
+            sceneEntity.addComponent<components::TransformComponent>();
+        }
+
+        if (!sceneEntity.hasComponent<components::CameraComponent>()) {
+            sceneEntity.addComponent<components::CameraComponent>();
+            return true;
+        }
+
+        return false;  // Already has camera
+    }
+
+    bool SceneServiceImpl::removeCameraComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::CameraComponent>()) {
+            sceneEntity.removeComponent<components::CameraComponent>();
+            return true;
+        }
+
+        return false;
+    }
+
+    std::optional<IBLData> SceneServiceImpl::getIBLData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::IBLComponent>()) {
+            return std::nullopt;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::IBLComponent>();
+        IBLData data;
+        data.fileName = comp.fileName;
+
+        return data;
+    }
+
+    std::vector<EntityHandle> SceneServiceImpl::getChildren(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<EntityHandle> children;
+
+        if (!internal::isValidHandle(entity, registry)) {
+            return children;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::ChildrenComponent>()) {
+            return children;
+        }
+
+        auto& childrenComp = sceneEntity.getComponent<components::ChildrenComponent>();
+        for (auto child : childrenComp.children) {
+            children.push_back(internal::toHandle(child));
+        }
+
+        return children;
+    }
+
+    void SceneServiceImpl::setSelectedEntity(std::optional<EntityHandle> entity) {
+        selectedEntity = entity;
+
+        // Publish notification
+        events::scene::EntitySelectedNotification notification;
+        notification.entity = entity;
+        events::EventDispatcher::instance().publish(notification);
+    }
+
+    std::optional<EntityHandle> SceneServiceImpl::getSelectedEntity() const {
+        return selectedEntity;
+    }
+
+    std::string SceneServiceImpl::getEntityName(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return "";
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.getName();
+    }
+
+    void SceneServiceImpl::setEntityName(EntityHandle entity, const std::string& name) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        sceneEntity.setName(name);
+    }
+
+    EntityData SceneServiceImpl::buildEntityData(entt::entity entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        scene::Entity sceneEntity(entity);
+
+        EntityData data;
+        data.handle = internal::toHandle(entity);
+        data.name = sceneEntity.getName();
+
+        // Parent
+        if (sceneEntity.hasComponent<components::ParentComponent>()) {
+            data.parent = internal::toHandle(sceneEntity.getComponent<components::ParentComponent>().parent);
+        }
+
+        // Children
+        if (sceneEntity.hasComponent<components::ChildrenComponent>()) {
+            auto& children = sceneEntity.getComponent<components::ChildrenComponent>().children;
+            for (auto child : children) {
+                data.children.push_back(internal::toHandle(child));
+            }
+        }
+
+        // Transform
+        if (sceneEntity.hasComponent<components::TransformComponent>()) {
+            auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+            data.localTransform = TransformData{ transform.position, transform.rotation, transform.scale };
+        }
+
+        // World transform
+        if (sceneEntity.hasComponent<components::WorldTransformComponent>()) {
+            // For now, just copy local transform
+            data.worldTransform = data.localTransform;
+        }
+
+        // Components list
+        data.components = getComponentTypes(data.handle);
+
+        return data;
+    }
+
+    void SceneServiceImpl::collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.valid(entity)) return;
+
+        entities.push_back(buildEntityData(entity));
+
+        scene::Entity sceneEntity(entity);
+        if (sceneEntity.hasComponent<components::ChildrenComponent>()) {
+            auto& children = sceneEntity.getComponent<components::ChildrenComponent>().children;
+            for (auto child : children) {
+                collectHierarchy(child, entities);
+            }
+        }
+    }
+
+}

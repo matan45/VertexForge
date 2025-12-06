@@ -4,6 +4,12 @@
 #include "WindowImguiHandler.hpp"
 #include "OffScreen.hpp"
 
+// Service includes
+#include "interfaces/ISceneService.hpp"
+#include "interfaces/IRenderService.hpp"
+#include "interfaces/IInputService.hpp"
+#include "interfaces/IResourceService.hpp"
+
 namespace handlers {
 	class EditorHandler
 	{
@@ -13,13 +19,28 @@ namespace handlers {
 
 		std::unique_ptr<WindowImguiHandler> windowImguiHandler;
 
+		// Service implementations (stored to keep them alive)
+		std::shared_ptr<services::ISceneService> sceneService;
+		std::shared_ptr<services::IRenderService> renderService;
+		std::shared_ptr<services::IInputService> inputService;
+		std::shared_ptr<services::IResourceService> resourceService;
+
+		// Flag to enable service-based architecture
+		bool useServices = false;
+
 	public:
 		explicit EditorHandler();
 		~EditorHandler();
 
-		void init() const;
+		void init();
 		void run() const;
 		void cleanUp();
+
+		// Enable service-based architecture (call before init)
+		void enableServiceMode() { useServices = true; }
+
+	private:
+		void initializeServices();
 	};
 }
 
