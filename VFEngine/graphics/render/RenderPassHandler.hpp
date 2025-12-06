@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/OffScreen.hpp"
+#include <memory>
 
 namespace core
 {
@@ -19,8 +20,8 @@ namespace render
         core::Device& device;
         core::SwapChain& swapChain;
 
-        ClearColor* clearColor{nullptr};
-        IBL* iblRenderer{nullptr};
+        std::unique_ptr<ClearColor> clearColor;
+        std::unique_ptr<IBL> iblRenderer;
 
         core::OffscreenResources& offscreenResources;
 
@@ -33,7 +34,7 @@ namespace render
 
         void recreate() const;
 
-        IBL* getIBL() const { return iblRenderer; }
+        IBL* getIBL() const { return iblRenderer.get(); }
 
         void cleanUp() const;
 

@@ -1,12 +1,13 @@
 #pragma once
 
 #include "../core/Texture.hpp"
+#include <memory>
 
 namespace controllers {
 	class TextureController
 	{
 	public:
-		static core::Texture* createTexture();
+		static std::unique_ptr<core::Texture> createTexture();
 	};
 }
 

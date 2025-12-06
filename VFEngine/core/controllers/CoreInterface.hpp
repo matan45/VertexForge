@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 
 namespace core {
 	class MainLoop;
@@ -13,7 +14,7 @@ namespace controllers {
 	class CoreInterface
 	{
 	private:
-		core::MainLoop* mainLoop;
+		std::unique_ptr<core::MainLoop> mainLoop;
 	public:
 		explicit CoreInterface();
 		~CoreInterface();

@@ -7,15 +7,13 @@
 namespace controllers
 {
     OffScreenController::OffScreenController()
-        : swapChain{*core::VulkanContext::getSwapChain()}, device{*core::VulkanContext::getDevice()}
+        : swapChain{ *core::VulkanContext::getSwapChain() }
+        , device{ *core::VulkanContext::getDevice() }
+        , offScreen{ std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain) }
     {
-        offScreen = new imguiPass::OffScreenViewPort(device, swapChain);
     }
 
-    OffScreenController::~OffScreenController()
-    {
-        delete offScreen;
-    }
+    OffScreenController::~OffScreenController() = default;
 
     void OffScreenController::init()
     {

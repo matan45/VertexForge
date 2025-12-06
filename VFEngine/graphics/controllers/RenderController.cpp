@@ -5,11 +5,12 @@
 
 namespace controllers {
 
-	RenderController::RenderController() :window{ core::VulkanContext::getWindow() },
-		swapChain{ *core::VulkanContext::getSwapChain() }, device{ *core::VulkanContext::getDevice() }
+	RenderController::RenderController()
+		: window{ core::VulkanContext::getWindow() }
+		, swapChain{ *core::VulkanContext::getSwapChain() }
+		, device{ *core::VulkanContext::getDevice() }
+		, renderManager{ std::make_unique<core::RenderManager>(device, swapChain, window) }
 	{
-		renderManager = new core::RenderManager(device, swapChain, window);
-		
 	}
 
 	void RenderController::render()
@@ -25,10 +26,7 @@ namespace controllers {
 	}
 	
 
-	RenderController::~RenderController()
-	{
-		delete renderManager;
-	}
+	RenderController::~RenderController() = default;
 
 	void RenderController::init()
 	{

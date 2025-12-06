@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/OffScreen.hpp"
 #include <vector>
+#include <memory>
 
 namespace core
 {
@@ -21,9 +22,9 @@ namespace imguiPass
     private:
         core::Device& device;
         core::SwapChain& swapChain;
-        core::CommandPool* commandPool{nullptr};
+        std::unique_ptr<core::CommandPool> commandPool;
 
-        render::RenderPassHandler* renderPassHandler{nullptr};
+        std::unique_ptr<render::RenderPassHandler> renderPassHandler;
 
         vk::Sampler sampler;
         core::OffscreenResources offscreenResources;
@@ -35,7 +36,7 @@ namespace imguiPass
         void init();
         vk::DescriptorSet render();
         void cleanUp() const;
-        const render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler; }
+        const render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer) const;

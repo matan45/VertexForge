@@ -3,9 +3,9 @@
 
 namespace controllers {
 
-	CoreInterface::CoreInterface() : mainLoop{ new core::MainLoop() }
+	CoreInterface::CoreInterface()
+		: mainLoop{ std::make_unique<core::MainLoop>() }
 	{
-
 	}
 
 	void CoreInterface::init()
@@ -28,10 +28,7 @@ namespace controllers {
 		mainLoop->close();
 	}
 
-	CoreInterface::~CoreInterface()
-	{
-		delete mainLoop;
-	}
+	CoreInterface::~CoreInterface() = default;
 
 	window::Window* CoreInterface::getWindow() const
 	{

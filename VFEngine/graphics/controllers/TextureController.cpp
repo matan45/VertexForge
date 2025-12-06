@@ -3,8 +3,8 @@
 
 namespace controllers {
 
-	core::Texture* TextureController::createTexture()
+	std::unique_ptr<core::Texture> TextureController::createTexture()
 	{
-		return new core::Texture(*core::VulkanContext::getDevice());
+		return std::make_unique<core::Texture>(*core::VulkanContext::getDevice());
 	}
 }

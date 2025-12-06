@@ -20,7 +20,7 @@ namespace core {
 		controllers::WindowController::init();
 		mainWindow = controllers::WindowController::getWindow();
 		controllers::Graphics::createContext(mainWindow);
-		renderController = new controllers::RenderController();
+		renderController = std::make_unique<controllers::RenderController>();
 	}
 
 	void MainLoop::init()
@@ -65,10 +65,7 @@ namespace core {
 		mainWindow->closeWindow();
 	}
 
-	MainLoop::~MainLoop()
-	{
-		delete renderController;
-	}
+	MainLoop::~MainLoop() = default;
 
 	void MainLoop::newFrame() const
 	{

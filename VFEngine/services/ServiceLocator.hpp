@@ -8,10 +8,22 @@
 
 namespace services {
 
-    // Service Locator - provides dependency injection for services
-    // Usage:
-    //   ServiceLocator::instance().registerService<ISceneService>(sceneServiceImpl);
-    //   auto& sceneService = ServiceLocator::instance().get<ISceneService>();
+    /**
+     * Service Locator - provides dependency injection for services
+     *
+     * Usage:
+     *   ServiceLocator::instance().registerService<ISceneService>(sceneServiceImpl);
+     *   auto service = TRY_RESOLVE_SERVICE(ISceneService);
+     *   if (service) { service->doSomething(); }
+     *
+     * Thread Safety:
+     * - All methods are thread-safe
+     * - tryGet() returns shared_ptr that keeps the service alive for duration of use
+     *
+     * Lifetime Contract:
+     * - Services must be registered before consumers call tryGet()
+     * - Services should only be unregistered during shutdown when no consumers are active
+     */
     class ServiceLocator {
     public:
         static ServiceLocator& instance();
@@ -28,11 +40,8 @@ namespace services {
         template<typename TInterface>
         bool hasService() const;
 
-        // Get a service (throws if not found)
-        template<typename TInterface>
-        TInterface& get();
-
-        // Get a service (returns nullptr if not found)
+        // Try get a service (returns nullptr if not found)
+        // Thread-safe: keeps service alive for duration of use
         template<typename TInterface>
         std::shared_ptr<TInterface> tryGet();
 
@@ -66,20 +75,6 @@ namespace services {
     }
 
     template<typename TInterface>
-    TInterface& ServiceLocator::get() {
-        std::shared_lock lock(mutex);
-
-        auto it = services.find(std::type_index(typeid(TInterface)));
-        if (it == services.end()) {
-            throw std::runtime_error(
-                std::string("Service not registered: ") + typeid(TInterface).name());
-        }
-
-        auto ptr = std::static_pointer_cast<TInterface>(it->second);
-        return *ptr;
-    }
-
-    template<typename TInterface>
     std::shared_ptr<TInterface> ServiceLocator::tryGet() {
         std::shared_lock lock(mutex);
 
@@ -98,7 +93,7 @@ namespace services {
     }
 
     // Convenience macro for resolving services
-    #define RESOLVE_SERVICE(Type) services::ServiceLocator::instance().get<Type>()
+    // Returns shared_ptr or nullptr if not found - thread-safe
     #define TRY_RESOLVE_SERVICE(Type) services::ServiceLocator::instance().tryGet<Type>()
 
 }

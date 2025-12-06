@@ -58,7 +58,7 @@ namespace windows
 
 	void MainImguiWindow::importModel()
 	{
-		auto resourceService = services::ServiceLocator::instance().tryGet<services::IResourceService>();
+		auto resourceService = TRY_RESOLVE_SERVICE(services::IResourceService);
 		if (!resourceService) {
 			return;
 		}
@@ -127,7 +127,7 @@ namespace windows
 			}
 			else if (ImGui::MenuItem("Exit"))
 			{
-				auto inputService = services::ServiceLocator::instance().tryGet<services::IInputService>();
+				auto inputService = TRY_RESOLVE_SERVICE(services::IInputService);
 				if (inputService) {
 					inputService->requestClose();
 				}
@@ -182,8 +182,8 @@ namespace windows
 
 	void MainImguiWindow::iblWindow()
 	{
-		auto renderService = services::ServiceLocator::instance().tryGet<services::IRenderService>();
-		auto sceneService = services::ServiceLocator::instance().tryGet<services::ISceneService>();
+		auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
+		auto sceneService = TRY_RESOLVE_SERVICE(services::ISceneService);
 
 		if (!renderService || !sceneService) {
 			return;

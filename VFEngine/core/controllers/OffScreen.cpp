@@ -3,14 +3,11 @@
 
 namespace controllers {
 	OffScreen::OffScreen()
+		: offScreenController{ std::make_unique<controllers::OffScreenController>() }
 	{
-		offScreenController = new controllers::OffScreenController();
 	}
 
-	OffScreen::~OffScreen()
-	{
-		delete offScreenController;
-	}
+	OffScreen::~OffScreen() = default;
 
 	void OffScreen::init()
 	{

@@ -7,35 +7,56 @@
 #include "scene/LevelHandler.hpp"
 #include "Import.hpp"
 #include "config/Config.hpp"
+#include <stdexcept>
+#include "print/EditorLogger.hpp"
 
 namespace handlers {
-	EditorHandler::EditorHandler() :coreInterface{ std::make_unique<controllers::CoreInterface>() },
-		offScreenInterface{ new controllers::OffScreen() },
-		windowImguiHandler{ std::make_unique<WindowImguiHandler>() }
+	EditorHandler::EditorHandler()
+		: coreInterface{ std::make_unique<controllers::CoreInterface>() }
+		, offScreenInterface{ std::make_unique<controllers::OffScreen>() }
+		, windowImguiHandler{ std::make_unique<WindowImguiHandler>() }
 	{
-
 	}
 
-	EditorHandler::~EditorHandler()
+	EditorHandler::~EditorHandler() = default;
+
+	void EditorHandler::verifyPhase(InitPhase required, const char* operation) const
 	{
-		delete offScreenInterface;
+		if (currentPhase < required) {
+			vfLogError("EditorHandler: Cannot {} - initialization phase {} required, current is {}",
+				operation, static_cast<int>(required), static_cast<int>(currentPhase));
+			throw std::runtime_error(std::string("EditorHandler initialization order violation: ") + operation);
+		}
 	}
 
 	void EditorHandler::init()
 	{
-		//need also to load the level here
+		// Phase 1: Initialize Core (Vulkan context, window, graphics)
+		// This must complete before any services can be created
 		coreInterface->init();
+		currentPhase = InitPhase::CoreInitialized;
 
-		// Initialize services after core is ready (but before windows)
+		// Phase 2: Initialize services after core is ready
+		// Services depend on: Window (for input), OffScreen (for render), LevelHandler (for scene)
 		initializeServices();
+		currentPhase = InitPhase::ServicesInitialized;
 
+		// Phase 3: Initialize ImGui windows
+		// Windows depend on services being registered in ServiceLocator
 		windowImguiHandler->init();
+		currentPhase = InitPhase::WindowsInitialized;
 
+		// Phase 4: Initialize offscreen rendering
 		offScreenInterface->init();
+		currentPhase = InitPhase::OffScreenInitialized;
+
+		// Mark fully initialized
+		currentPhase = InitPhase::FullyInitialized;
 	}
 
 	void EditorHandler::run() const
 	{
+		verifyPhase(InitPhase::FullyInitialized, "run");
 		coreInterface->run();
 	}
 
@@ -56,6 +77,9 @@ namespace handlers {
 
 	void EditorHandler::initializeServices()
 	{
+		// Verify core is initialized before creating services
+		verifyPhase(InitPhase::CoreInitialized, "initializeServices");
+
 		// Get shared instances from the level/core
 		auto level = scene::LevelHandler::getInstance();
 		auto sceneGraphSystem = level->getSceneGraphSystem();
@@ -66,7 +90,7 @@ namespace handlers {
 
 		// Create service implementations
 		sceneService = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
-		renderService = std::make_shared<services::RenderServiceImpl>(offScreenInterface);
+		renderService = std::make_shared<services::RenderServiceImpl>(offScreenInterface.get());
 		inputService = std::make_shared<services::InputServiceImpl>(inputController.get());
 
 		// Create resource service with import delegate

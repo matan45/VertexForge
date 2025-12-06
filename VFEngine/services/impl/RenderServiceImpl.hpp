@@ -49,7 +49,7 @@ namespace services {
         uint64_t frameCounter = 0;
 
         // Track loaded editor textures for cleanup
-        std::unordered_map<void*, dto::EditorTexture*> loadedTextures;
+        std::unordered_map<void*, std::unique_ptr<dto::EditorTexture>> loadedTextures;
     };
 
 }

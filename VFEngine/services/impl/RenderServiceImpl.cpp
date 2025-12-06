@@ -11,13 +11,7 @@ namespace services {
     RenderServiceImpl::RenderServiceImpl(controllers::OffScreen* offScreen)
         : offScreen(offScreen) {}
 
-    RenderServiceImpl::~RenderServiceImpl() {
-        // Clean up any remaining loaded textures
-        for (auto& [handle, texture] : loadedTextures) {
-            delete texture;
-        }
-        loadedTextures.clear();
-    }
+    RenderServiceImpl::~RenderServiceImpl() = default;
 
     ViewportTextureHandle RenderServiceImpl::getViewportTexture() {
         if (!offScreen) {
@@ -109,7 +103,7 @@ namespace services {
     }
 
     EditorTextureHandle RenderServiceImpl::loadEditorTexture(const std::string& path) {
-        dto::EditorTexture* texture = controllers::EditorTextureController::loadTexture(path);
+        auto texture = controllers::EditorTextureController::loadTexture(path);
 
         if (!texture) {
             return EditorTextureHandle{};
@@ -121,13 +115,13 @@ namespace services {
         handle.height = static_cast<uint32_t>(texture->getHeight());
 
         // Track for cleanup
-        loadedTextures[handle.imguiDescriptorSet] = texture;
+        loadedTextures[handle.imguiDescriptorSet] = std::move(texture);
 
         return handle;
     }
 
     EditorTextureHandle RenderServiceImpl::loadEditorHDRTexture(const std::string& path) {
-        dto::EditorTexture* texture = controllers::EditorTextureController::loadHdrTexture(path);
+        auto texture = controllers::EditorTextureController::loadHdrTexture(path);
 
         if (!texture) {
             return EditorTextureHandle{};
@@ -139,17 +133,13 @@ namespace services {
         handle.height = static_cast<uint32_t>(texture->getHeight());
 
         // Track for cleanup
-        loadedTextures[handle.imguiDescriptorSet] = texture;
+        loadedTextures[handle.imguiDescriptorSet] = std::move(texture);
 
         return handle;
     }
 
     void RenderServiceImpl::releaseEditorTexture(const EditorTextureHandle& handle) {
-        auto it = loadedTextures.find(handle.imguiDescriptorSet);
-        if (it != loadedTextures.end()) {
-            delete it->second;
-            loadedTextures.erase(it);
-        }
+        loadedTextures.erase(handle.imguiDescriptorSet);
     }
 
     bool RenderServiceImpl::isReady() const {

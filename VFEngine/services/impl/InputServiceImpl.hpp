@@ -41,15 +41,7 @@ namespace services {
         void requestClose() override;
 
     private:
-        controllers::InputController* inputController;
-
-        // Previous frame state for detecting press/release
-        glm::vec2 lastMousePosition{ 0.0f, 0.0f };
-        glm::vec2 currentMousePosition{ 0.0f, 0.0f };
-        glm::vec2 mouseDelta{ 0.0f, 0.0f };
-        glm::vec2 scrollDelta{ 0.0f, 0.0f };
-
-        bool isFirstUpdate = true;
+        controllers::InputController* inputController;  // Non-owning pointer to Core layer
     };
 
 }

@@ -20,7 +20,7 @@ namespace windows
 
 	void ContentBrowser::loadIcons()
 	{
-		auto renderService = services::ServiceLocator::instance().tryGet<services::IRenderService>();
+		auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
 		if (!renderService) {
 			return;
 		}
@@ -46,7 +46,7 @@ namespace windows
 
 		// Set import location on first draw when services are ready
 		if (!importLocationSet) {
-			auto resourceService = services::ServiceLocator::instance().tryGet<services::IResourceService>();
+			auto resourceService = TRY_RESOLVE_SERVICE(services::IResourceService);
 			if (resourceService) {
 				resourceService->setImportLocation(currentPath.string());
 				importLocationSet = true;
@@ -109,7 +109,7 @@ namespace windows
 				isShaderLoaded = false;
 				if (selectedImageHandle.isValid())
 				{
-					auto renderService = services::ServiceLocator::instance().tryGet<services::IRenderService>();
+					auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
 					if (renderService) {
 						renderService->releaseEditorTexture(selectedImageHandle);
 						selectedImageHandle = services::EditorTextureHandle{};
@@ -133,7 +133,7 @@ namespace windows
 						selectedType = asset.type;
 						showFileWindow = true;
 
-						auto renderService = services::ServiceLocator::instance().tryGet<services::IRenderService>();
+						auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
 						if (renderService) {
 							// Release old preview if exists
 							if (selectedImageHandle.isValid()) {
@@ -471,7 +471,7 @@ namespace windows
 		{
 			currentPath = path;
 
-			auto resourceService = services::ServiceLocator::instance().tryGet<services::IResourceService>();
+			auto resourceService = TRY_RESOLVE_SERVICE(services::IResourceService);
 			if (resourceService) {
 				resourceService->setImportLocation(currentPath.string());
 			}

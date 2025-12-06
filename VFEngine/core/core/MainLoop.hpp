@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 
 namespace controllers {
 	class RenderController;
@@ -12,8 +13,8 @@ namespace core {
 	class MainLoop
 	{
 	private:
-		controllers::RenderController* renderController;
-		window::Window* mainWindow;
+		std::unique_ptr<controllers::RenderController> renderController;
+		window::Window* mainWindow;  // Non-owning pointer (owned by WindowController)
 	public:
 		explicit MainLoop();
 		~MainLoop();

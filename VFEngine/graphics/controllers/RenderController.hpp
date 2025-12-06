@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 
 namespace window {
 	class Window;
@@ -14,10 +15,10 @@ namespace controllers {
 	class RenderController
 	{
 	private:
-		const window::Window* window;
+		const window::Window* window;  // Non-owning pointer
 		core::SwapChain& swapChain;
 		core::Device& device;
-		core::RenderManager* renderManager;
+		std::unique_ptr<core::RenderManager> renderManager;
 
 	public:
 		explicit RenderController();

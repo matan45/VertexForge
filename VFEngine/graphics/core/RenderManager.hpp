@@ -1,6 +1,7 @@
 #pragma once
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
+#include <memory>
 
 namespace window {
 	class Window;
@@ -24,9 +25,9 @@ namespace core {
 	private:
 		Device& device;
 		SwapChain& swapChain;
-		const window::Window* window;
-		CommandPool* commandPool{ nullptr };
-		imguiPass::ImguiRender* imguiRender{ nullptr };
+		const window::Window* window;  // Non-owning pointer
+		std::unique_ptr<CommandPool> commandPool;
+		std::unique_ptr<imguiPass::ImguiRender> imguiRender;
 
 		vk::Semaphore imageAvailableSemaphore;
 		vk::Semaphore renderFinishedSemaphore;

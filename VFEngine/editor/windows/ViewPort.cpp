@@ -18,7 +18,7 @@ namespace windows {
 
 			ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
 
-			auto renderService = services::ServiceLocator::instance().tryGet<services::IRenderService>();
+			auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
 			if (renderService) {
 				auto texture = renderService->getViewportTexture();
 				if (texture.isValid()) {
@@ -31,7 +31,7 @@ namespace windows {
 
 	void ViewPort::handleCameraInput()
 	{
-		auto sceneService = services::ServiceLocator::instance().tryGet<services::ISceneService>();
+		auto sceneService = TRY_RESOLVE_SERVICE(services::ISceneService);
 		if (!sceneService) {
 			return;
 		}

@@ -15,17 +15,13 @@ namespace core {
 
 	}
 
-	RenderManager::~RenderManager()
-	{
-		delete commandPool;
-		delete imguiRender;
-	}
+	RenderManager::~RenderManager() = default;
 
 	void RenderManager::init()
 	{
-		commandPool = new CommandPool(device, swapChain);
+		commandPool = std::make_unique<CommandPool>(device, swapChain);
 
-		imguiRender = new imguiPass::ImguiRender(device, swapChain, *commandPool, window);
+		imguiRender = std::make_unique<imguiPass::ImguiRender>(device, swapChain, *commandPool, window);
 		imguiRender->init();
 
 		// Create semaphores for synchronization

@@ -12,11 +12,23 @@
 #include "interfaces/IResourceService.hpp"
 
 namespace handlers {
+
+	// Initialization phases for EditorHandler
+	// Must be initialized in order: Core -> Services -> Windows -> OffScreen
+	enum class InitPhase {
+		None,
+		CoreInitialized,
+		ServicesInitialized,
+		WindowsInitialized,
+		OffScreenInitialized,
+		FullyInitialized
+	};
+
 	class EditorHandler
 	{
 	private:
 		std::unique_ptr<controllers::CoreInterface> coreInterface;
-		controllers::OffScreen* offScreenInterface;
+		std::unique_ptr<controllers::OffScreen> offScreenInterface;
 		std::unique_ptr<controllers::InputController> inputController;
 
 		std::unique_ptr<WindowImguiHandler> windowImguiHandler;
@@ -27,6 +39,9 @@ namespace handlers {
 		std::shared_ptr<services::IInputService> inputService;
 		std::shared_ptr<services::IResourceService> resourceService;
 
+		// Tracks current initialization state
+		InitPhase currentPhase = InitPhase::None;
+
 	public:
 		explicit EditorHandler();
 		~EditorHandler();
@@ -35,7 +50,12 @@ namespace handlers {
 		void run() const;
 		void cleanUp();
 
+		// Query initialization state
+		bool isFullyInitialized() const { return currentPhase == InitPhase::FullyInitialized; }
+		InitPhase getInitPhase() const { return currentPhase; }
+
 	private:
 		void initializeServices();
+		void verifyPhase(InitPhase required, const char* operation) const;
 	};
 }

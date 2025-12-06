@@ -40,15 +40,23 @@ namespace services {
     }
 
     glm::vec2 InputServiceImpl::getMousePosition() const {
-        return currentMousePosition;
+        if (!inputController) return glm::vec2(0.0f);
+        double xpos, ypos;
+        inputController->getCursorPos(xpos, ypos);
+        return glm::vec2(static_cast<float>(xpos), static_cast<float>(ypos));
     }
 
     glm::vec2 InputServiceImpl::getMouseDelta() const {
-        return mouseDelta;
+        // Mouse delta tracking requires frame-to-frame state.
+        // ViewPort handles this directly via ImGui for camera control.
+        // If needed, this could be implemented with GLFW callbacks.
+        return glm::vec2(0.0f);
     }
 
     glm::vec2 InputServiceImpl::getScrollDelta() const {
-        return scrollDelta;
+        // Scroll tracking requires GLFW scroll callback.
+        // Not currently implemented - return zero.
+        return glm::vec2(0.0f);
     }
 
     CameraMovement InputServiceImpl::calculateCameraMovement(
@@ -65,9 +73,13 @@ namespace services {
         }
 
         // Calculate rotation from mouse delta
+        // Note: Mouse delta tracking is handled by ViewPort directly via ImGui.
+        // This method currently returns zero rotation delta.
+        // For full implementation, use getMouseDelta() when delta tracking is added.
         if (useMouseLook) {
-            movement.deltaRotation.x = mouseDelta.x * mouseSensitivity;  // yaw
-            movement.deltaRotation.y = mouseDelta.y * mouseSensitivity;  // pitch
+            glm::vec2 delta = getMouseDelta();
+            movement.deltaRotation.x = delta.x * mouseSensitivity;  // yaw
+            movement.deltaRotation.y = delta.y * mouseSensitivity;  // pitch
         }
 
         // Calculate movement direction based on WASD
@@ -85,10 +97,10 @@ namespace services {
         if (isKeyDown(Keys::D)) {
             direction.x += 1.0f;  // Right
         }
-        if (isKeyDown(Keys::E) || isKeyDown(Keys::Space)) {
+        if (isKeyDown(Keys::E)) {
             direction.y += 1.0f;  // Up
         }
-        if (isKeyDown(Keys::Q) || isKeyDown(Keys::LeftControl)) {
+        if (isKeyDown(Keys::Q)) {
             direction.y -= 1.0f;  // Down
         }
 
@@ -109,25 +121,8 @@ namespace services {
     }
 
     void InputServiceImpl::update() {
-        if (!inputController) return;
-
-        // Get current mouse position via Core controller
-        double xpos, ypos;
-        inputController->getCursorPos(xpos, ypos);
-
-        currentMousePosition = glm::vec2(static_cast<float>(xpos), static_cast<float>(ypos));
-
-        // Calculate delta
-        if (isFirstUpdate) {
-            lastMousePosition = currentMousePosition;
-            isFirstUpdate = false;
-        }
-
-        mouseDelta = currentMousePosition - lastMousePosition;
-        lastMousePosition = currentMousePosition;
-
-        // Reset scroll delta (would need GLFW scroll callback for proper implementation)
-        scrollDelta = glm::vec2(0.0f);
+        // No per-frame state to update currently.
+        // Mouse delta and scroll tracking would be added here if needed.
     }
 
     bool InputServiceImpl::isInputCapturedByUI() const {

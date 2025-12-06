@@ -3,17 +3,14 @@
 
 namespace dto
 {
-    EditorTexture::EditorTexture(core::Texture* texture): texture{texture}
+    EditorTexture::EditorTexture(std::unique_ptr<core::Texture> texture): texture{std::move(texture)}
     {
-        width = texture->getImageData().width;
-        height = texture->getImageData().height;
-        numbersOfChannels = texture->getImageData().numbersOfChannels;
+        width = this->texture->getImageData().width;
+        height = this->texture->getImageData().height;
+        numbersOfChannels = this->texture->getImageData().numbersOfChannels;
     }
 
-    EditorTexture::~EditorTexture()
-    {
-        delete texture;
-    }
+    EditorTexture::~EditorTexture() = default;
 
     void* dto::EditorTexture::getDescriptorSet() const
     {

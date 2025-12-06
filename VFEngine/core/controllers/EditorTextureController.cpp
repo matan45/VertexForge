@@ -3,17 +3,17 @@
 
 namespace controllers {
 
-	dto::EditorTexture* EditorTextureController::loadTexture(std::string_view path)
+	std::unique_ptr<dto::EditorTexture> EditorTextureController::loadTexture(std::string_view path)
 	{
 		auto texture = TextureController::createTexture();
 		texture->loadTextureFromFile(path);
-		return new dto::EditorTexture(texture);
+		return std::make_unique<dto::EditorTexture>(std::move(texture));
 	}
 
-	dto::EditorTexture* EditorTextureController::loadHdrTexture(std::string_view path)
+	std::unique_ptr<dto::EditorTexture> EditorTextureController::loadHdrTexture(std::string_view path)
 	{
 		auto texture = TextureController::createTexture();
 		texture->loadHDRFromFile(path);
-		return new dto::EditorTexture(texture);
+		return std::make_unique<dto::EditorTexture>(std::move(texture));
 	}
 }

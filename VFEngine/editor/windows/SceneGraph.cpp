@@ -7,7 +7,7 @@ namespace windows
 {
 	void SceneGraph::draw()
 	{
-		auto sceneService = services::ServiceLocator::instance().tryGet<services::ISceneService>();
+		auto sceneService = TRY_RESOLVE_SERVICE(services::ISceneService);
 		if (!sceneService) {
 			return;
 		}
