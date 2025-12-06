@@ -7,9 +7,12 @@ namespace services {
     // Opaque handle for entities - presentation layer uses this instead of entt::entity
     // This decouples the UI from the ECS implementation
     struct EntityHandle {
-        uint64_t id = 0;
+        // Use max uint64_t as invalid sentinel since entt uses 0 as a valid entity ID
+        static constexpr uint64_t INVALID_ID = ~0ULL;
 
-        bool isValid() const { return id != 0; }
+        uint64_t id = INVALID_ID;
+
+        bool isValid() const { return id != INVALID_ID; }
 
         bool operator==(const EntityHandle& other) const { return id == other.id; }
         bool operator!=(const EntityHandle& other) const { return id != other.id; }
@@ -22,7 +25,7 @@ namespace services {
         };
 
         // Create an invalid handle
-        static EntityHandle invalid() { return EntityHandle{ 0 }; }
+        static EntityHandle invalid() { return EntityHandle{ INVALID_ID }; }
     };
 
     // Component type identifiers - decouples from actual component types
