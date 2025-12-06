@@ -3,7 +3,6 @@
 #include "CoreInterface.hpp"
 #include "WindowImguiHandler.hpp"
 #include "OffScreen.hpp"
-#include "InputController.hpp"
 
 // Service includes
 #include "interfaces/ISceneService.hpp"
@@ -29,7 +28,6 @@ namespace handlers {
 	private:
 		std::unique_ptr<controllers::CoreInterface> coreInterface;
 		std::unique_ptr<controllers::OffScreen> offScreenInterface;
-		std::unique_ptr<controllers::InputController> inputController;
 
 		std::unique_ptr<WindowImguiHandler> windowImguiHandler;
 

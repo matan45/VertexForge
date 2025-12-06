@@ -3,8 +3,8 @@
 #include "../events/EventDispatcher.hpp"
 #include "../events/InputEvents.hpp"
 
-// Forward declaration - Core layer
-namespace controllers {
+// Forward declaration - Window library
+namespace window {
     class InputController;
 }
 
@@ -12,7 +12,7 @@ namespace services {
 
     class InputServiceImpl : public IInputService {
     public:
-        explicit InputServiceImpl(controllers::InputController* inputController);
+        explicit InputServiceImpl(window::InputController* inputController);
         ~InputServiceImpl() override = default;
 
         // Register all command and query handlers with the EventDispatcher
@@ -46,7 +46,7 @@ namespace services {
         void requestClose() override;
 
     private:
-        controllers::InputController* inputController;  // Non-owning pointer to Core layer
+        window::InputController* inputController;  // Non-owning pointer to Window library
     };
 
 }

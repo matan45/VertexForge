@@ -1,12 +1,12 @@
 #include "InputServiceImpl.hpp"
-#include "../../core/controllers/InputController.hpp"
+#include "../../Window/controllers/InputController.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace services {
 
-    InputServiceImpl::InputServiceImpl(controllers::InputController* inputController)
+    InputServiceImpl::InputServiceImpl(window::InputController* inputController)
         : inputController(inputController) {}
 
     bool InputServiceImpl::isKeyDown(int keyCode) const {

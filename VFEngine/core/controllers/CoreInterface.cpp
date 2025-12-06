@@ -1,5 +1,6 @@
 #include "CoreInterface.hpp"
 #include "../core/MainLoop.hpp"
+#include "../../Window/controllers/InputController.hpp"
 
 namespace controllers {
 
@@ -11,6 +12,9 @@ namespace controllers {
 	void CoreInterface::init()
 	{
 		mainLoop->init();
+
+		// Create input controller after window is initialized
+		inputController = std::make_unique<window::InputController>(getWindow());
 	}
 
 	void CoreInterface::run() const

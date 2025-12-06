@@ -82,17 +82,14 @@ namespace handlers {
 		auto level = scene::LevelHandler::getInstance();
 		auto sceneGraphSystem = level->getSceneGraphSystem();
 
-		// Create input controller (Core layer wrapping Window)
-		auto* windowPtr = coreInterface->getWindow();
-		inputController = std::make_unique<controllers::InputController>(windowPtr);
-
 		// Create service implementations
+		// InputController is owned by CoreInterface (created after window init)
 		auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
 		auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(offScreenInterface.get());
+		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(coreInterface->getInputController());
 
 		sceneService = sceneServiceImpl;
 		renderService = renderServiceImpl;
-		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(inputController.get());
 		inputService = inputServiceImpl;
 
 		// Register event handlers for command/query pattern
