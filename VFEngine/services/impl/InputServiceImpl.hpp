@@ -1,18 +1,16 @@
 #pragma once
 #include "../interfaces/IInputService.hpp"
 
-// Forward declaration
-struct GLFWwindow;
-
-namespace window {
-    class Window;
+// Forward declaration - Core layer
+namespace controllers {
+    class InputController;
 }
 
 namespace services {
 
     class InputServiceImpl : public IInputService {
     public:
-        explicit InputServiceImpl(window::Window* window);
+        explicit InputServiceImpl(controllers::InputController* inputController);
         ~InputServiceImpl() override = default;
 
         // Keyboard State
@@ -43,8 +41,7 @@ namespace services {
         void requestClose() override;
 
     private:
-        window::Window* window;
-        GLFWwindow* glfwWindow;
+        controllers::InputController* inputController;
 
         // Previous frame state for detecting press/release
         glm::vec2 lastMousePosition{ 0.0f, 0.0f };

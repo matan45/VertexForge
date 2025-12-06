@@ -60,13 +60,14 @@ namespace handlers {
 		auto level = scene::LevelHandler::getInstance();
 		auto sceneGraphSystem = level->getSceneGraphSystem();
 
-		// Get window pointer for input service
+		// Create input controller (Core layer wrapping Window)
 		auto* windowPtr = coreInterface->getWindow();
+		inputController = std::make_unique<controllers::InputController>(windowPtr);
 
 		// Create service implementations
 		sceneService = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
 		renderService = std::make_shared<services::RenderServiceImpl>(offScreenInterface);
-		inputService = std::make_shared<services::InputServiceImpl>(windowPtr);
+		inputService = std::make_shared<services::InputServiceImpl>(inputController.get());
 
 		// Create resource service with import delegate
 		auto resourceServiceImpl = std::make_shared<services::ResourceServiceImpl>();

@@ -1,19 +1,17 @@
 #include "InputServiceImpl.hpp"
-#include "../../Window/window/Window.hpp"
+#include "../../core/controllers/InputController.hpp"
 #include <imgui.h>
-#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace services {
 
-    InputServiceImpl::InputServiceImpl(window::Window* window)
-        : window(window)
-        , glfwWindow(window ? window->getWindowPtr() : nullptr) {}
+    InputServiceImpl::InputServiceImpl(controllers::InputController* inputController)
+        : inputController(inputController) {}
 
     bool InputServiceImpl::isKeyDown(int keyCode) const {
-        if (!glfwWindow) return false;
-        return glfwGetKey(glfwWindow, keyCode) == GLFW_PRESS;
+        if (!inputController) return false;
+        return inputController->isKeyDown(keyCode);
     }
 
     bool InputServiceImpl::isKeyPressed(int keyCode) const {
@@ -22,13 +20,13 @@ namespace services {
     }
 
     bool InputServiceImpl::isKeyReleased(int keyCode) const {
-        if (!glfwWindow) return false;
-        return glfwGetKey(glfwWindow, keyCode) == GLFW_RELEASE;
+        if (!inputController) return false;
+        return inputController->isKeyReleased(keyCode);
     }
 
     bool InputServiceImpl::isMouseButtonDown(int button) const {
-        if (!glfwWindow) return false;
-        return glfwGetMouseButton(glfwWindow, button) == GLFW_PRESS;
+        if (!inputController) return false;
+        return inputController->isMouseButtonDown(button);
     }
 
     bool InputServiceImpl::isMouseButtonPressed(int button) const {
@@ -37,8 +35,8 @@ namespace services {
     }
 
     bool InputServiceImpl::isMouseButtonReleased(int button) const {
-        if (!glfwWindow) return false;
-        return glfwGetMouseButton(glfwWindow, button) == GLFW_RELEASE;
+        if (!inputController) return false;
+        return inputController->isMouseButtonReleased(button);
     }
 
     glm::vec2 InputServiceImpl::getMousePosition() const {
@@ -111,11 +109,11 @@ namespace services {
     }
 
     void InputServiceImpl::update() {
-        if (!glfwWindow) return;
+        if (!inputController) return;
 
-        // Get current mouse position
+        // Get current mouse position via Core controller
         double xpos, ypos;
-        glfwGetCursorPos(glfwWindow, &xpos, &ypos);
+        inputController->getCursorPos(xpos, ypos);
 
         currentMousePosition = glm::vec2(static_cast<float>(xpos), static_cast<float>(ypos));
 
@@ -138,8 +136,8 @@ namespace services {
     }
 
     void InputServiceImpl::requestClose() {
-        if (glfwWindow) {
-            glfwSetWindowShouldClose(glfwWindow, GLFW_TRUE);
+        if (inputController) {
+            inputController->requestClose();
         }
     }
 
