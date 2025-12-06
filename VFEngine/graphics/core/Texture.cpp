@@ -18,6 +18,12 @@ namespace core
     Texture::~Texture()
     {
         device.getLogicalDevice().waitIdle();
+
+        // Remove ImGui descriptor set if this was an editor texture
+        if (isEditorTexture && descriptorSet) {
+            ImGui_ImplVulkan_RemoveTexture(descriptorSet);
+        }
+
         device.getLogicalDevice().destroyImageView(imageView);
         device.getLogicalDevice().destroyImage(image);
         device.getLogicalDevice().freeMemory(imageMemory);
@@ -88,6 +94,7 @@ namespace core
         Utilities::createImageView(imageDepthRequest, imageView);
         if (isEditor)
         {
+            isEditorTexture = true;
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
     }
@@ -153,6 +160,7 @@ namespace core
         Utilities::createImageView(imageDepthRequest, imageView);
         if (isEditor)
         {
+            isEditorTexture = true;
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
     }

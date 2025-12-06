@@ -52,6 +52,38 @@ namespace events::scene {
         std::string_view getName() const override { return "SelectEntity"; }
     };
 
+    struct SetIBLDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::IBLData iblData;
+
+        std::string_view getName() const override { return "SetIBLData"; }
+    };
+
+    struct RemoveIBLComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveIBLComponent"; }
+    };
+
+    struct AddCameraComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddCameraComponent"; }
+    };
+
+    struct RemoveCameraComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveCameraComponent"; }
+    };
+
+    struct SetCameraDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::CameraData cameraData;
+
+        std::string_view getName() const override { return "SetCameraData"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================
@@ -86,6 +118,26 @@ namespace events::scene {
         std::string name;
 
         std::string_view getName() const override { return "FindEntitiesByName"; }
+    };
+
+    struct GetPrimaryCameraQuery : IQuery<std::optional<services::EntityHandle>> {
+        std::string_view getName() const override { return "GetPrimaryCamera"; }
+    };
+
+    struct GetRootEntityQuery : IQuery<services::EntityHandle> {
+        std::string_view getName() const override { return "GetRootEntity"; }
+    };
+
+    struct GetCameraDataQuery : IQuery<std::optional<services::CameraData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetCameraData"; }
+    };
+
+    struct HasCameraComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasCameraComponent"; }
     };
 
     // ============================================

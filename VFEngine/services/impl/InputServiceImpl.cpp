@@ -134,6 +134,41 @@ namespace services {
         if (inputController) {
             inputController->requestClose();
         }
+
+        // Publish notification
+        events::input::ApplicationCloseRequestedNotification notification;
+        events::EventDispatcher::instance().publish(notification);
+    }
+
+    void InputServiceImpl::registerEventHandlers() {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Command handlers
+        dispatcher.registerCommandHandler<events::input::CloseApplicationCommand>(
+            [this](const events::input::CloseApplicationCommand&) {
+                requestClose();
+            });
+
+        // Query handlers
+        dispatcher.registerQueryHandler<events::input::IsKeyDownQuery>(
+            [this](const events::input::IsKeyDownQuery& query) {
+                return isKeyDown(query.keyCode);
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsMouseButtonDownQuery>(
+            [this](const events::input::IsMouseButtonDownQuery& query) {
+                return isMouseButtonDown(query.button);
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetMousePositionQuery>(
+            [this](const events::input::GetMousePositionQuery&) {
+                return getMousePosition();
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetMouseDeltaQuery>(
+            [this](const events::input::GetMouseDeltaQuery&) {
+                return getMouseDelta();
+            });
     }
 
 }

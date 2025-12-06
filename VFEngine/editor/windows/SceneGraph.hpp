@@ -1,6 +1,5 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
-#include "interfaces/ISceneService.hpp"
 #include "data/EntityHandle.hpp"
 
 namespace windows {
@@ -16,7 +15,7 @@ namespace windows {
 		void draw() override;
 
 	private:
-		void drawEntityNode(services::EntityHandle handle, services::ISceneService& sceneService);
-		void drawDetails(services::EntityHandle handle, services::ISceneService& sceneService);
+		void drawEntityNode(services::EntityHandle handle);
+		void drawDetails(services::EntityHandle handle);
 	};
 }

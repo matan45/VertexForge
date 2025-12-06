@@ -1,5 +1,4 @@
 #include "EditorHandler.hpp"
-#include "ServiceLocator.hpp"
 #include "impl/SceneServiceImpl.hpp"
 #include "impl/RenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
@@ -42,7 +41,7 @@ namespace handlers {
 		currentPhase = InitPhase::ServicesInitialized;
 
 		// Phase 3: Initialize ImGui windows
-		// Windows depend on services being registered in ServiceLocator
+		// Windows use EventDispatcher for cross-layer communication
 		windowImguiHandler->init();
 		currentPhase = InitPhase::WindowsInitialized;
 
@@ -64,8 +63,7 @@ namespace handlers {
 	{
 		windowImguiHandler->cleanUp();
 
-		// Clear services before graphics cleanup to release Vulkan resources
-		services::ServiceLocator::instance().clear();
+		// Reset services before graphics cleanup to release Vulkan resources
 		renderService.reset();
 		sceneService.reset();
 		inputService.reset();
@@ -89,9 +87,18 @@ namespace handlers {
 		inputController = std::make_unique<controllers::InputController>(windowPtr);
 
 		// Create service implementations
-		sceneService = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
-		renderService = std::make_shared<services::RenderServiceImpl>(offScreenInterface.get());
-		inputService = std::make_shared<services::InputServiceImpl>(inputController.get());
+		auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
+		auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(offScreenInterface.get());
+
+		sceneService = sceneServiceImpl;
+		renderService = renderServiceImpl;
+		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(inputController.get());
+		inputService = inputServiceImpl;
+
+		// Register event handlers for command/query pattern
+		sceneServiceImpl->registerEventHandlers();
+		renderServiceImpl->registerEventHandlers();
+		inputServiceImpl->registerEventHandlers();
 
 		// Create resource service with import delegate
 		auto resourceServiceImpl = std::make_shared<services::ResourceServiceImpl>();
@@ -115,13 +122,7 @@ namespace handlers {
 		};
 
 		resourceServiceImpl->setImportDelegate(importDelegate);
+		resourceServiceImpl->registerEventHandlers();
 		resourceService = resourceServiceImpl;
-
-		// Register with ServiceLocator
-		auto& locator = services::ServiceLocator::instance();
-		locator.registerService<services::ISceneService>(sceneService);
-		locator.registerService<services::IRenderService>(renderService);
-		locator.registerService<services::IInputService>(inputService);
-		locator.registerService<services::IResourceService>(resourceService);
 	}
 }

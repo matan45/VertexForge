@@ -1,6 +1,10 @@
 #include "MainImguiWindow.hpp"
 #include "files/FileUtils.hpp"
-#include "ServiceLocator.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/SceneEvents.hpp"
+#include "events/RenderEvents.hpp"
+#include "events/ResourceEvents.hpp"
+#include "events/InputEvents.hpp"
 #include "string/StringUtil.hpp"
 #include <imgui.h>
 
@@ -58,10 +62,7 @@ namespace windows
 
 	void MainImguiWindow::importModel()
 	{
-		auto resourceService = TRY_RESOLVE_SERVICE(services::IResourceService);
-		if (!resourceService) {
-			return;
-		}
+		auto& dispatcher = events::EventDispatcher::instance();
 
 		// Check if the popup modal is open
 		if (ImGui::BeginPopupModal("Import Files", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -93,7 +94,9 @@ namespace windows
 
 			if (ImGui::Button("Continue"))
 			{
-				resourceService->importFiles(requests);
+				events::resource::ImportFilesCommand cmd;
+				cmd.files = requests;
+				dispatcher.execute(cmd);
 				ImGui::CloseCurrentPopup();
 				openModal = false;
 			}
@@ -127,10 +130,8 @@ namespace windows
 			}
 			else if (ImGui::MenuItem("Exit"))
 			{
-				auto inputService = TRY_RESOLVE_SERVICE(services::IInputService);
-				if (inputService) {
-					inputService->requestClose();
-				}
+				events::input::CloseApplicationCommand cmd;
+				events::EventDispatcher::instance().execute(cmd);
 			}
 			ImGui::EndMenu();
 		}
@@ -182,12 +183,7 @@ namespace windows
 
 	void MainImguiWindow::iblWindow()
 	{
-		auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
-		auto sceneService = TRY_RESOLVE_SERVICE(services::ISceneService);
-
-		if (!renderService || !sceneService) {
-			return;
-		}
+		auto& dispatcher = events::EventDispatcher::instance();
 
 		ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("IBL", &showIBLWindow))
@@ -203,11 +199,14 @@ namespace windows
 				selectedIBLFile = fileDialog.openFileDialog(fileTypes);
 				std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
 
-				// Update IBL component on root entity via service
-				auto rootHandle = sceneService->getRootEntity();
-				services::IBLData iblData;
-				iblData.fileName = filePath;
-				sceneService->setIBLData(rootHandle, iblData);
+				// Update IBL component on root entity via event system
+				events::scene::GetRootEntityQuery rootQuery;
+				auto rootHandle = dispatcher.query(rootQuery);
+
+				events::scene::SetIBLDataCommand iblCmd;
+				iblCmd.entity = rootHandle;
+				iblCmd.iblData.fileName = filePath;
+				dispatcher.execute(iblCmd);
 			}
 
 			ImGui::SameLine();
@@ -218,22 +217,25 @@ namespace windows
 			{
 				// Release old preview if exists
 				if (iblPreviewHandle.isValid()) {
-					renderService->releaseEditorTexture(iblPreviewHandle);
+					events::render::ReleaseEditorTextureCommand releaseCmd;
+					releaseCmd.handle = iblPreviewHandle.imguiDescriptorSet;
+					dispatcher.execute(releaseCmd);
 					iblPreviewHandle = services::EditorTextureHandle{};
 				}
 
 				if (!filePath.empty()) {
-					iblPreviewHandle = renderService->loadEditorHDRTexture(filePath);
+					events::render::LoadEditorTextureCommand loadCmd;
+					loadCmd.path = filePath;
+					loadCmd.isHDR = true;
+					iblPreviewHandle = dispatcher.execute(loadCmd);
 				}
-			}
-
-			if (iblPreviewHandle.isValid()) {
-				ImGui::Image(iblPreviewHandle.imguiDescriptorSet, ImVec2(200, 200));
 			}
 
 			if (ImGui::Button("Apply", ImVec2(120, 0)))
 			{
-				renderService->setIBL(filePath);
+				events::render::SetIBLCommand cmd;
+				cmd.hdrPath = filePath;
+				dispatcher.execute(cmd);
 			}
 
 			ImGui::SameLine();
@@ -243,16 +245,32 @@ namespace windows
 			if (ImGui::Button("Remove", ImVec2(120, 0)))
 			{
 				selectedIBLFile = "";
-				renderService->removeIBL();
 
+				// Release editor preview texture first
 				if (iblPreviewHandle.isValid()) {
-					renderService->releaseEditorTexture(iblPreviewHandle);
+					events::render::ReleaseEditorTextureCommand releaseCmd;
+					releaseCmd.handle = iblPreviewHandle.imguiDescriptorSet;
+					dispatcher.execute(releaseCmd);
 					iblPreviewHandle = services::EditorTextureHandle{};
 				}
 
-				// Remove IBL component from root via service
-				auto rootHandle = sceneService->getRootEntity();
-				sceneService->removeIBLComponent(rootHandle);
+				// Then remove IBL from renderer
+				events::render::RemoveIBLCommand removeIblCmd;
+				dispatcher.execute(removeIblCmd);
+
+				// Remove IBL component from root via event system
+				events::scene::GetRootEntityQuery rootQuery;
+				auto rootHandle = dispatcher.query(rootQuery);
+
+				events::scene::RemoveIBLComponentCommand removeCmd;
+				removeCmd.entity = rootHandle;
+				dispatcher.execute(removeCmd);
+			}
+
+			// Display preview image AFTER all buttons are processed
+			// This ensures the descriptor set is valid if we display it
+			if (iblPreviewHandle.isValid()) {
+				ImGui::Image(iblPreviewHandle.imguiDescriptorSet, ImVec2(200, 200));
 			}
 		}
 		ImGui::End();

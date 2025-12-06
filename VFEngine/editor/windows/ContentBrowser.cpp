@@ -3,7 +3,9 @@
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "print/EditorLogger.hpp"
-#include "ServiceLocator.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/RenderEvents.hpp"
+#include "events/ResourceEvents.hpp"
 #include <IconsFontAwesome6.h>
 #include <algorithm>
 
@@ -20,25 +22,31 @@ namespace windows
 
 	void ContentBrowser::loadIcons()
 	{
-		auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
-		if (!renderService) {
-			return;
-		}
+		auto& dispatcher = events::EventDispatcher::instance();
 
-		fileIcon = renderService->loadEditorTexture("../../resources/editor/contentBrowser/file.vfImage");
-		folderIcon = renderService->loadEditorTexture("../../resources/editor/contentBrowser/folder.vfImage");
-		textureIcon = renderService->loadEditorTexture("../../resources/editor/contentBrowser/texture-file.vfImage");
-		audioIcon = renderService->loadEditorTexture("../../resources/editor/contentBrowser/audio-file.vfImage");
-		meshIcon = renderService->loadEditorTexture("../../resources/editor/contentBrowser/mesh-file.vfImage");
-		glslIcon = renderService->loadEditorTexture("../../resources/editor/contentBrowser/glsl-file.vfImage");
-		animationIcon = renderService->loadEditorTexture("../../resources/editor/contentBrowser/animation-file.vfImage");
-		hdrIcon = renderService->loadEditorTexture("../../resources/editor/contentBrowser/hdr-file.vfImage");
+		auto loadIcon = [&dispatcher](const std::string& path) {
+			events::render::LoadEditorTextureCommand cmd;
+			cmd.path = path;
+			cmd.isHDR = false;
+			return dispatcher.execute(cmd);
+		};
+
+		fileIcon = loadIcon("../../resources/editor/contentBrowser/file.vfImage");
+		folderIcon = loadIcon("../../resources/editor/contentBrowser/folder.vfImage");
+		textureIcon = loadIcon("../../resources/editor/contentBrowser/texture-file.vfImage");
+		audioIcon = loadIcon("../../resources/editor/contentBrowser/audio-file.vfImage");
+		meshIcon = loadIcon("../../resources/editor/contentBrowser/mesh-file.vfImage");
+		glslIcon = loadIcon("../../resources/editor/contentBrowser/glsl-file.vfImage");
+		animationIcon = loadIcon("../../resources/editor/contentBrowser/animation-file.vfImage");
+		hdrIcon = loadIcon("../../resources/editor/contentBrowser/hdr-file.vfImage");
 
 		iconsLoaded = true;
 	}
 
 	void ContentBrowser::draw()
 	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
 		// Lazy load icons on first draw (after services are initialized)
 		if (!iconsLoaded) {
 			loadIcons();
@@ -46,11 +54,10 @@ namespace windows
 
 		// Set import location on first draw when services are ready
 		if (!importLocationSet) {
-			auto resourceService = TRY_RESOLVE_SERVICE(services::IResourceService);
-			if (resourceService) {
-				resourceService->setImportLocation(currentPath.string());
-				importLocationSet = true;
-			}
+			events::resource::SetImportLocationCommand cmd;
+			cmd.path = currentPath.string();
+			dispatcher.execute(cmd);
+			importLocationSet = true;
 		}
 
 		if (showCreateFolderModal)
@@ -109,11 +116,10 @@ namespace windows
 				isShaderLoaded = false;
 				if (selectedImageHandle.isValid())
 				{
-					auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
-					if (renderService) {
-						renderService->releaseEditorTexture(selectedImageHandle);
-						selectedImageHandle = services::EditorTextureHandle{};
-					}
+					events::render::ReleaseEditorTextureCommand releaseCmd;
+					releaseCmd.handle = selectedImageHandle.imguiDescriptorSet;
+					dispatcher.execute(releaseCmd);
+					selectedImageHandle = services::EditorTextureHandle{};
 				}
 			}
 
@@ -133,20 +139,20 @@ namespace windows
 						selectedType = asset.type;
 						showFileWindow = true;
 
-						auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
-						if (renderService) {
-							// Release old preview if exists
-							if (selectedImageHandle.isValid()) {
-								renderService->releaseEditorTexture(selectedImageHandle);
-								selectedImageHandle = services::EditorTextureHandle{};
-							}
+						// Release old preview if exists
+						if (selectedImageHandle.isValid()) {
+							events::render::ReleaseEditorTextureCommand releaseCmd;
+							releaseCmd.handle = selectedImageHandle.imguiDescriptorSet;
+							dispatcher.execute(releaseCmd);
+							selectedImageHandle = services::EditorTextureHandle{};
+						}
 
-							std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
-							if (selectedType == AssetType::Texture) {
-								selectedImageHandle = renderService->loadEditorTexture(filePath);
-							} else if (selectedType == AssetType::HDR) {
-								selectedImageHandle = renderService->loadEditorHDRTexture(filePath);
-							}
+						std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+						if (selectedType == AssetType::Texture || selectedType == AssetType::HDR) {
+							events::render::LoadEditorTextureCommand loadCmd;
+							loadCmd.path = filePath;
+							loadCmd.isHDR = (selectedType == AssetType::HDR);
+							selectedImageHandle = dispatcher.execute(loadCmd);
 						}
 					}
 				}
@@ -471,10 +477,9 @@ namespace windows
 		{
 			currentPath = path;
 
-			auto resourceService = TRY_RESOLVE_SERVICE(services::IResourceService);
-			if (resourceService) {
-				resourceService->setImportLocation(currentPath.string());
-			}
+			events::resource::SetImportLocationCommand cmd;
+			cmd.path = currentPath.string();
+			events::EventDispatcher::instance().execute(cmd);
 
 			loadDirectory(currentPath);
 		}

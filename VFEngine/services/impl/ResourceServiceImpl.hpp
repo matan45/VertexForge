@@ -20,6 +20,9 @@ namespace services {
         ResourceServiceImpl();
         ~ResourceServiceImpl() override = default;
 
+        // Register all command and query handlers with the EventDispatcher
+        void registerEventHandlers();
+
         // Set the import delegate (called by Editor during initialization)
         void setImportDelegate(const ImportDelegate& delegate);
 

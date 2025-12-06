@@ -90,11 +90,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="ServiceLocator.hpp" />
     <ClInclude Include="data\DTOs.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
+    <ClInclude Include="events\InputEvents.hpp" />
     <ClInclude Include="events\RenderEvents.hpp" />
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
@@ -108,7 +108,6 @@
     <ClInclude Include="interfaces\ISceneService.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ServiceLocator.cpp" />
     <ClCompile Include="events\EventDispatcher.cpp" />
     <ClCompile Include="impl\InputServiceImpl.cpp" />
     <ClCompile Include="impl\RenderServiceImpl.cpp" />

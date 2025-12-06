@@ -1,10 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "nfd/FileDialog.hpp"
-#include "interfaces/ISceneService.hpp"
-#include "interfaces/IRenderService.hpp"
-#include "interfaces/IResourceService.hpp"
-#include "interfaces/IInputService.hpp"
+#include "data/DTOs.hpp"
 
 #include <filesystem>
 

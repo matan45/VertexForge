@@ -165,4 +165,40 @@ namespace services {
         return ext;
     }
 
+    void ResourceServiceImpl::registerEventHandlers() {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Command handlers
+        dispatcher.registerCommandHandler<events::resource::ImportFilesCommand>(
+            [this](const events::resource::ImportFilesCommand& cmd) {
+                importFiles(cmd.files);
+            });
+
+        dispatcher.registerCommandHandler<events::resource::SetImportLocationCommand>(
+            [this](const events::resource::SetImportLocationCommand& cmd) {
+                setImportLocation(cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::resource::CancelImportCommand>(
+            [this](const events::resource::CancelImportCommand&) {
+                cancelImport();
+            });
+
+        // Query handlers
+        dispatcher.registerQueryHandler<events::resource::GetImportLocationQuery>(
+            [this](const events::resource::GetImportLocationQuery&) {
+                return getImportLocation();
+            });
+
+        dispatcher.registerQueryHandler<events::resource::IsImportingQuery>(
+            [this](const events::resource::IsImportingQuery&) {
+                return isImporting();
+            });
+
+        dispatcher.registerQueryHandler<events::resource::GetImportProgressQuery>(
+            [this](const events::resource::GetImportProgressQuery&) {
+                return getImportProgress();
+            });
+    }
+
 }

@@ -1,5 +1,8 @@
 #include "ViewPort.hpp"
-#include "ServiceLocator.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/RenderEvents.hpp"
+#include "events/SceneEvents.hpp"
+#include "data/DTOs.hpp"
 #include "time/Timer.hpp"
 #include "imgui.h"
 #include <glm/glm.hpp>
@@ -10,6 +13,8 @@ namespace windows {
 
 	void ViewPort::draw()
 	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
 		if (ImGui::Begin("ViewPort")) {
 			// Handle camera input when viewport is focused or hovered
 			if (ImGui::IsWindowFocused() || ImGui::IsWindowHovered()) {
@@ -18,12 +23,11 @@ namespace windows {
 
 			ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
 
-			auto renderService = TRY_RESOLVE_SERVICE(services::IRenderService);
-			if (renderService) {
-				auto texture = renderService->getViewportTexture();
-				if (texture.isValid()) {
-					ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
-				}
+			// Get viewport texture through event system
+			events::render::GetViewportTextureQuery query;
+			auto texture = dispatcher.query(query);
+			if (texture.isValid()) {
+				ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
 			}
 		}
 		ImGui::End();
@@ -31,19 +35,19 @@ namespace windows {
 
 	void ViewPort::handleCameraInput()
 	{
-		auto sceneService = TRY_RESOLVE_SERVICE(services::ISceneService);
-		if (!sceneService) {
-			return;
-		}
+		auto& dispatcher = events::EventDispatcher::instance();
 
-		// Get primary camera
-		auto cameraHandle = sceneService->getPrimaryCamera();
+		// Get primary camera through event system
+		events::scene::GetPrimaryCameraQuery cameraQuery;
+		auto cameraHandle = dispatcher.query(cameraQuery);
 		if (!cameraHandle.has_value()) {
 			return;
 		}
 
-		// Get current transform
-		auto transformOpt = sceneService->getTransform(*cameraHandle);
+		// Get current transform through event system
+		events::scene::GetTransformQuery transformQuery;
+		transformQuery.entity = *cameraHandle;
+		auto transformOpt = dispatcher.query(transformQuery);
 		if (!transformOpt.has_value()) {
 			return;
 		}
@@ -115,9 +119,12 @@ namespace windows {
 			isFirst = true;
 		}
 
-		// Update transform through service if changed
+		// Update transform through event system if changed
 		if (transformChanged) {
-			sceneService->setTransform(*cameraHandle, transform);
+			events::scene::SetTransformCommand cmd;
+			cmd.entity = *cameraHandle;
+			cmd.transform = transform;
+			dispatcher.execute(cmd);
 		}
 	}
 

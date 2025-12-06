@@ -1,5 +1,7 @@
 #pragma once
 #include "../interfaces/IInputService.hpp"
+#include "../events/EventDispatcher.hpp"
+#include "../events/InputEvents.hpp"
 
 // Forward declaration - Core layer
 namespace controllers {
@@ -12,6 +14,9 @@ namespace services {
     public:
         explicit InputServiceImpl(controllers::InputController* inputController);
         ~InputServiceImpl() override = default;
+
+        // Register all command and query handlers with the EventDispatcher
+        void registerEventHandlers();
 
         // Keyboard State
         bool isKeyDown(int keyCode) const override;

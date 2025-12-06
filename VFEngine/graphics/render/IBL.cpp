@@ -55,7 +55,12 @@ namespace render
     {
         if (isDisplay)
         {
+            device.getLogicalDevice().waitIdle();
+
+            // Disable rendering first to prevent access during cleanup
+            skyboxRenderer->setCamera(nullptr);
             isDisplay = false;
+
             hdrTexture.reset();
 
             skyboxRenderer->cleanUp();

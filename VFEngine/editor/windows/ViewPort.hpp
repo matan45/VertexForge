@@ -1,8 +1,5 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
-#include "interfaces/ISceneService.hpp"
-#include "interfaces/IRenderService.hpp"
-#include "interfaces/IInputService.hpp"
 
 namespace windows {
 	class ViewPort : public controllers::imguiHandler::ImguiWindow

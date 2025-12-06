@@ -5,7 +5,7 @@ namespace handlers
 {
     void WindowImguiHandler::init()
     {
-        // Create windows - all use services via ServiceLocator
+        // Create windows - all use EventDispatcher for cross-layer communication
         mainImguiWindow = std::make_shared<windows::MainImguiWindow>();
         contentBrowserWindow = std::make_shared<windows::ContentBrowser>();
         sceneGraphWindow = std::make_shared<windows::SceneGraph>();

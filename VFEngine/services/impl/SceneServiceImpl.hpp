@@ -35,6 +35,9 @@ namespace services {
         explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~SceneServiceImpl() override = default;
 
+        // Register all command and query handlers with the EventDispatcher
+        void registerEventHandlers();
+
         // Entity Lifecycle
         EntityHandle createEntity(const std::string& name,
             std::optional<EntityHandle> parent = std::nullopt) override;

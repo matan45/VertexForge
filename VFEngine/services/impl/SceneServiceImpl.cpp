@@ -548,4 +548,110 @@ namespace services {
         }
     }
 
+    void SceneServiceImpl::registerEventHandlers() {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Command handlers
+        dispatcher.registerCommandHandler<events::scene::CreateEntityCommand>(
+            [this](const events::scene::CreateEntityCommand& cmd) {
+                return createEntity(cmd.name, cmd.parent);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::DeleteEntityCommand>(
+            [this](const events::scene::DeleteEntityCommand& cmd) {
+                return deleteEntity(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::ReparentEntityCommand>(
+            [this](const events::scene::ReparentEntityCommand& cmd) {
+                return reparentEntity(cmd.entity, cmd.newParent);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetTransformCommand>(
+            [this](const events::scene::SetTransformCommand& cmd) {
+                setTransform(cmd.entity, cmd.transform);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetEntityNameCommand>(
+            [this](const events::scene::SetEntityNameCommand& cmd) {
+                setEntityName(cmd.entity, cmd.newName);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SelectEntityCommand>(
+            [this](const events::scene::SelectEntityCommand& cmd) {
+                setSelectedEntity(cmd.entity);
+            });
+
+        // Query handlers
+        dispatcher.registerQueryHandler<events::scene::GetEntityQuery>(
+            [this](const events::scene::GetEntityQuery& query) {
+                return getEntity(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetTransformQuery>(
+            [this](const events::scene::GetTransformQuery& query) {
+                return getTransform(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetSceneHierarchyQuery>(
+            [this](const events::scene::GetSceneHierarchyQuery&) {
+                return getSceneHierarchy();
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetSelectedEntityQuery>(
+            [this](const events::scene::GetSelectedEntityQuery&) {
+                return getSelectedEntity();
+            });
+
+        dispatcher.registerQueryHandler<events::scene::FindEntitiesByNameQuery>(
+            [this](const events::scene::FindEntitiesByNameQuery& query) {
+                return findEntitiesByName(query.name);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetPrimaryCameraQuery>(
+            [this](const events::scene::GetPrimaryCameraQuery&) {
+                return getPrimaryCamera();
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetRootEntityQuery>(
+            [this](const events::scene::GetRootEntityQuery&) {
+                return getRoot();
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetIBLDataCommand>(
+            [this](const events::scene::SetIBLDataCommand& cmd) {
+                return setIBLData(cmd.entity, cmd.iblData);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveIBLComponentCommand>(
+            [this](const events::scene::RemoveIBLComponentCommand& cmd) {
+                return removeIBLComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::AddCameraComponentCommand>(
+            [this](const events::scene::AddCameraComponentCommand& cmd) {
+                return addCameraComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveCameraComponentCommand>(
+            [this](const events::scene::RemoveCameraComponentCommand& cmd) {
+                return removeCameraComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetCameraDataCommand>(
+            [this](const events::scene::SetCameraDataCommand& cmd) {
+                return setCameraData(cmd.entity, cmd.cameraData);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetCameraDataQuery>(
+            [this](const events::scene::GetCameraDataQuery& query) {
+                return getCameraData(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasCameraComponentQuery>(
+            [this](const events::scene::HasCameraComponentQuery& query) {
+                return hasComponent(query.entity, ComponentTypeId::Camera);
+            });
+    }
+
 }

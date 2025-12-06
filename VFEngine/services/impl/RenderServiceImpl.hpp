@@ -21,6 +21,9 @@ namespace services {
         explicit RenderServiceImpl(controllers::OffScreen* offScreen);
         ~RenderServiceImpl() override;
 
+        // Register all command and query handlers with the EventDispatcher
+        void registerEventHandlers();
+
         // Viewport Rendering
         ViewportTextureHandle getViewportTexture() override;
         void resizeViewport(uint32_t width, uint32_t height) override;

@@ -28,6 +28,8 @@ namespace core {
 		vk::DescriptorSet descriptorSet;
 		vk::UniqueDescriptorPool descriptorPool;
 
+		bool isEditorTexture = false;
+
 	public:
 		explicit Texture(Device& device);
 		~Texture();

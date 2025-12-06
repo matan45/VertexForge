@@ -1,8 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "imgui.h"
-#include "interfaces/IResourceService.hpp"
-#include "interfaces/IRenderService.hpp"
+#include "data/DTOs.hpp"
 
 #include <string>
 #include <filesystem>

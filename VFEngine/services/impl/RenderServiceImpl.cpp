@@ -69,6 +69,11 @@ namespace services {
             return false;
         }
 
+        // Remove existing IBL before adding new one
+        if (currentIBLPath.has_value()) {
+            offScreen->iblRemove();
+        }
+
         offScreen->iblAdd(hdrPath, camera);
         currentIBLPath = hdrPath;
 
@@ -148,6 +153,57 @@ namespace services {
 
     uint64_t RenderServiceImpl::getFrameNumber() const {
         return frameCounter;
+    }
+
+    void RenderServiceImpl::registerEventHandlers() {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Command handlers
+        dispatcher.registerCommandHandler<events::render::SetIBLCommand>(
+            [this](const events::render::SetIBLCommand& cmd) {
+                return setIBL(cmd.hdrPath);
+            });
+
+        dispatcher.registerCommandHandler<events::render::RemoveIBLCommand>(
+            [this](const events::render::RemoveIBLCommand&) {
+                removeIBL();
+            });
+
+        dispatcher.registerCommandHandler<events::render::ResizeViewportCommand>(
+            [this](const events::render::ResizeViewportCommand& cmd) {
+                resizeViewport(cmd.width, cmd.height);
+            });
+
+        dispatcher.registerCommandHandler<events::render::LoadEditorTextureCommand>(
+            [this](const events::render::LoadEditorTextureCommand& cmd) {
+                if (cmd.isHDR) {
+                    return loadEditorHDRTexture(cmd.path);
+                }
+                return loadEditorTexture(cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::render::ReleaseEditorTextureCommand>(
+            [this](const events::render::ReleaseEditorTextureCommand& cmd) {
+                EditorTextureHandle handle;
+                handle.imguiDescriptorSet = cmd.handle;
+                releaseEditorTexture(handle);
+            });
+
+        // Query handlers
+        dispatcher.registerQueryHandler<events::render::GetViewportTextureQuery>(
+            [this](const events::render::GetViewportTextureQuery&) {
+                return getViewportTexture();
+            });
+
+        dispatcher.registerQueryHandler<events::render::HasIBLQuery>(
+            [this](const events::render::HasIBLQuery&) {
+                return hasIBL();
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetIBLPathQuery>(
+            [this](const events::render::GetIBLPathQuery&) {
+                return getIBLPath();
+            });
     }
 
 }
