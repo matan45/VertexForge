@@ -1,6 +1,5 @@
 #pragma once
 #include "../interfaces/ISceneService.hpp"
-#include "../events/EventDispatcher.hpp"
 #include "../events/SceneEvents.hpp"
 #include <entt/entt.hpp>
 #include <memory>

@@ -1,21 +1,20 @@
 #include "WindowImguiHandler.hpp"
 #include "../windows/ConsoleLog.hpp"
+#include "imguiHandler/ImguiWindowHandler.hpp"
+#include "../windows/SceneGraph.hpp"
+#include "../windows/ViewPort.hpp"
+#include "../windows/MainImguiWindow.hpp"
+#include "../windows/ContentBrowser.hpp"
 
 namespace handlers
 {
     void WindowImguiHandler::init()
     {
-        // Create windows - all use EventDispatcher for cross-layer communication
-        mainImguiWindow = std::make_shared<windows::MainImguiWindow>();
-        contentBrowserWindow = std::make_shared<windows::ContentBrowser>();
-        sceneGraphWindow = std::make_shared<windows::SceneGraph>();
-        viewPortWindow = std::make_shared<windows::ViewPort>();
-
-        controllers::imguiHandler::ImguiWindowHandler::add(mainImguiWindow);
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::MainImguiWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ConsoleLog>());
-        controllers::imguiHandler::ImguiWindowHandler::add(contentBrowserWindow);
-        controllers::imguiHandler::ImguiWindowHandler::add(sceneGraphWindow);
-        controllers::imguiHandler::ImguiWindowHandler::add(viewPortWindow);
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ContentBrowser>());
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneGraph>());
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ViewPort>());
     }
 
     void WindowImguiHandler::cleanUp() const

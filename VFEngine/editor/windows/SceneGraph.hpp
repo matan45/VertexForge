@@ -17,5 +17,6 @@ namespace windows {
 	private:
 		void drawEntityNode(services::EntityHandle handle);
 		void drawDetails(services::EntityHandle handle);
+		void dragDropEntity(services::EntityHandle handle);
 	};
 }

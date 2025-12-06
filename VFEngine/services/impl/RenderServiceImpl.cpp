@@ -5,6 +5,7 @@
 #include "SceneServiceImpl.hpp"
 #include "../../utilities/scene/EntityRegistry.hpp"
 #include "../../utilities/components/Components.hpp"
+#include "../events/EventDispatcher.hpp"
 
 namespace services {
 

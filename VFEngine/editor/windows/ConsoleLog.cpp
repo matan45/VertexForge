@@ -1,6 +1,7 @@
 #include "ConsoleLog.hpp"
 #include "print/EditorLogger.hpp"
 #include "time/Timer.hpp"
+#include "imgui.h"
 
 namespace windows {
 	void ConsoleLog::draw()

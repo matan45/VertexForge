@@ -18,44 +18,20 @@ namespace handlers {
 	}
 
 	EditorHandler::~EditorHandler() = default;
-
-	void EditorHandler::verifyPhase(InitPhase required, const char* operation) const
-	{
-		if (currentPhase < required) {
-			vfLogError("EditorHandler: Cannot {} - initialization phase {} required, current is {}",
-				operation, static_cast<int>(required), static_cast<int>(currentPhase));
-			throw std::runtime_error(std::string("EditorHandler initialization order violation: ") + operation);
-		}
-	}
+	
 
 	void EditorHandler::init()
 	{
-		// Phase 1: Initialize Core (Vulkan context, window, graphics)
-		// This must complete before any services can be created
+		
 		coreInterface->init();
-		currentPhase = InitPhase::CoreInitialized;
-
-		// Phase 2: Initialize services after core is ready
-		// Services depend on: Window (for input), OffScreen (for render), LevelHandler (for scene)
 		initializeServices();
-		currentPhase = InitPhase::ServicesInitialized;
-
-		// Phase 3: Initialize ImGui windows
-		// Windows use EventDispatcher for cross-layer communication
+		
 		windowImguiHandler->init();
-		currentPhase = InitPhase::WindowsInitialized;
-
-		// Phase 4: Initialize offscreen rendering
 		offScreenInterface->init();
-		currentPhase = InitPhase::OffScreenInitialized;
-
-		// Mark fully initialized
-		currentPhase = InitPhase::FullyInitialized;
 	}
 
 	void EditorHandler::run() const
 	{
-		verifyPhase(InitPhase::FullyInitialized, "run");
 		coreInterface->run();
 	}
 
@@ -75,9 +51,6 @@ namespace handlers {
 
 	void EditorHandler::initializeServices()
 	{
-		// Verify core is initialized before creating services
-		verifyPhase(InitPhase::CoreInitialized, "initializeServices");
-
 		// Get shared instances from the level/core
 		auto level = scene::LevelHandler::getInstance();
 		auto sceneGraphSystem = level->getSceneGraphSystem();

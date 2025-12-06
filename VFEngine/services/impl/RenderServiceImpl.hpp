@@ -1,6 +1,5 @@
 #pragma once
 #include "../interfaces/IRenderService.hpp"
-#include "../events/EventDispatcher.hpp"
 #include "../events/RenderEvents.hpp"
 #include <memory>
 #include <unordered_map>

@@ -121,6 +121,15 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
+        if (ImGui::BeginDragDropSource())
+        {
+            ImGui::SetDragDropPayload("DND_ENTITY_HANDLE", &handle, sizeof(services::EntityHandle));
+            ImGui::Text("Move %s", entityName.c_str());
+            ImGui::EndDragDropSource();
+        }
+
+        dragDropEntity(handle);
+
         // If the entity has children, recursively draw them
         if (nodeOpen)
         {
@@ -228,6 +237,28 @@ namespace windows
                     }
                 }
             }
+        }
+    }
+
+    void SceneGraph::dragDropEntity(services::EntityHandle handle)
+    {
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_ENTITY_HANDLE"))
+            {
+                services::EntityHandle draggedHandle = *(services::EntityHandle*)payload->Data;
+
+                if (draggedHandle.id != handle.id)
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+
+                    events::scene::ReparentEntityCommand cmd;
+                    cmd.entity = draggedHandle;
+                    cmd.newParent = handle;
+                    dispatcher.execute(cmd);
+                }
+            }
+            ImGui::EndDragDropTarget();
         }
     }
 }

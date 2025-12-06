@@ -1,6 +1,5 @@
 #pragma once
 #include "../interfaces/IInputService.hpp"
-#include "../events/EventDispatcher.hpp"
 #include "../events/InputEvents.hpp"
 
 // Forward declaration - Window library

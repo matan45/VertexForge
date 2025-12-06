@@ -3,6 +3,7 @@
 #include "../../utilities/scene/Entity.hpp"
 #include "../../utilities/scene/EntityRegistry.hpp"
 #include "../../utilities/components/Components.hpp"
+#include "../events/EventDispatcher.hpp"
 
 namespace services {
 
@@ -495,7 +496,6 @@ namespace services {
     }
 
     EntityData SceneServiceImpl::buildEntityData(entt::entity entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
         scene::Entity sceneEntity(entity);
 
         EntityData data;
