@@ -91,14 +91,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="controllers\InputController.hpp" />
-    <ClInclude Include="controllers\MouseController.hpp" />
     <ClInclude Include="controllers\WindowController.hpp" />
     <ClInclude Include="window\Window.hpp" />
     <ClInclude Include="window\WindowContext.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\InputController.cpp" />
-    <ClCompile Include="controllers\MouseController.cpp" />
     <ClCompile Include="controllers\WindowController.cpp" />
     <ClCompile Include="window\Window.cpp" />
     <ClCompile Include="window\WindowContext.cpp" />

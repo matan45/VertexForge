@@ -1,9 +1,11 @@
 #pragma once
 #include "../interfaces/IInputService.hpp"
 #include "../events/InputEvents.hpp"
+#include <memory>
 
 // Forward declaration - Window library
 namespace window {
+    class Window;
     class InputController;
 }
 
@@ -11,20 +13,18 @@ namespace services {
 
     class InputServiceImpl : public IInputService {
     public:
-        explicit InputServiceImpl(window::InputController* inputController);
-        ~InputServiceImpl() override = default;
+        explicit InputServiceImpl(window::Window* window);
+        ~InputServiceImpl() override;
 
         // Register all command and query handlers with the EventDispatcher
         void registerEventHandlers();
 
         // Keyboard State
         bool isKeyDown(int keyCode) const override;
-        bool isKeyPressed(int keyCode) const override;
         bool isKeyReleased(int keyCode) const override;
 
         // Mouse State
         bool isMouseButtonDown(int button) const override;
-        bool isMouseButtonPressed(int button) const override;
         bool isMouseButtonReleased(int button) const override;
         glm::vec2 getMousePosition() const override;
         glm::vec2 getMouseDelta() const override;
@@ -45,7 +45,7 @@ namespace services {
         void requestClose() override;
 
     private:
-        window::InputController* inputController;  // Non-owning pointer to Window library
+       std::unique_ptr<window::InputController> inputController;  // Non-owning pointer to Window library
     };
 
 }

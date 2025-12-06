@@ -7,17 +7,14 @@
 
 namespace services {
 
-    InputServiceImpl::InputServiceImpl(window::InputController* inputController)
-        : inputController(inputController) {}
+    InputServiceImpl::InputServiceImpl(window::Window* window)
+        : inputController(std::make_unique<window::InputController>(window)) {}
+
+    InputServiceImpl::~InputServiceImpl() = default;
 
     bool InputServiceImpl::isKeyDown(int keyCode) const {
         if (!inputController) return false;
         return inputController->isKeyDown(keyCode);
-    }
-
-    bool InputServiceImpl::isKeyPressed(int keyCode) const {
-        // For now, same as isKeyDown - would need state tracking for true press detection
-        return isKeyDown(keyCode);
     }
 
     bool InputServiceImpl::isKeyReleased(int keyCode) const {
@@ -28,11 +25,6 @@ namespace services {
     bool InputServiceImpl::isMouseButtonDown(int button) const {
         if (!inputController) return false;
         return inputController->isMouseButtonDown(button);
-    }
-
-    bool InputServiceImpl::isMouseButtonPressed(int button) const {
-        // For now, same as isMouseButtonDown
-        return isMouseButtonDown(button);
     }
 
     bool InputServiceImpl::isMouseButtonReleased(int button) const {
@@ -48,16 +40,13 @@ namespace services {
     }
 
     glm::vec2 InputServiceImpl::getMouseDelta() const {
-        // Mouse delta tracking requires frame-to-frame state.
-        // ViewPort handles this directly via ImGui for camera control.
-        // If needed, this could be implemented with GLFW callbacks.
-        return glm::vec2(0.0f);
+        if (!inputController) return glm::vec2(0.0f);
+        return inputController->getMouseDelta();
     }
 
     glm::vec2 InputServiceImpl::getScrollDelta() const {
-        // Scroll tracking requires GLFW scroll callback.
-        // Not currently implemented - return zero.
-        return glm::vec2(0.0f);
+        if (!inputController) return glm::vec2(0.0f);
+        return inputController->getScrollDelta();
     }
 
     CameraMovement InputServiceImpl::calculateCameraMovement(
@@ -122,8 +111,9 @@ namespace services {
     }
 
     void InputServiceImpl::update() {
-        // No per-frame state to update currently.
-        // Mouse delta and scroll tracking would be added here if needed.
+        if (inputController) {
+            inputController->update();
+        }
     }
 
     bool InputServiceImpl::isInputCapturedByUI() const {

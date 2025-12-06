@@ -6,7 +6,6 @@
 #include "scene/LevelHandler.hpp"
 #include "Import.hpp"
 #include "config/Config.hpp"
-#include <stdexcept>
 #include "print/EditorLogger.hpp"
 
 namespace handlers {
@@ -56,10 +55,9 @@ namespace handlers {
 		auto sceneGraphSystem = level->getSceneGraphSystem();
 
 		// Create service implementations
-		// InputController is owned by CoreInterface (created after window init)
 		auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
 		auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(offScreenInterface.get());
-		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(coreInterface->getInputController());
+		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(coreInterface->getWindow());
 
 		sceneService = sceneServiceImpl;
 		renderService = renderServiceImpl;

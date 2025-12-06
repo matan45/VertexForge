@@ -12,7 +12,7 @@ namespace window {
 	class InputController {
 	public:
 		explicit InputController(Window* window);
-		~InputController() = default;
+		~InputController();
 
 		// Keyboard State
 		bool isKeyDown(int keyCode) const;
@@ -23,6 +23,11 @@ namespace window {
 		bool isMouseButtonReleased(int button) const;
 		glm::vec2 getMousePosition() const;
 		void getCursorPos(double& xpos, double& ypos) const;
+		glm::vec2 getMouseDelta() const;
+		glm::vec2 getScrollDelta() const;
+
+		// Frame update - must be called once per frame to track deltas
+		void update();
 
 		// Application Control
 		void requestClose();
@@ -30,9 +35,20 @@ namespace window {
 		// Access to underlying window
 		Window* getWindow() const { return window; }
 
+		// GLFW callback handler (called internally by scroll callback)
+		void onScroll(double xoffset, double yoffset);
+
 	private:
 		Window* window;
 		GLFWwindow* glfwWindow;
+
+		// Mouse delta tracking
+		glm::vec2 lastMousePos{ 0.0f };
+		glm::vec2 mouseDelta{ 0.0f };
+		bool firstMouseUpdate{ true };
+
+		// Scroll delta tracking (accumulated between frames)
+		glm::vec2 scrollDelta{ 0.0f };
 	};
 
 }

@@ -4,9 +4,32 @@
 
 namespace window {
 
+	// Static callback function for GLFW scroll events
+	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+		auto* controller = static_cast<InputController*>(glfwGetWindowUserPointer(window));
+		if (controller) {
+			controller->onScroll(xoffset, yoffset);
+		}
+	}
+
 	InputController::InputController(Window* window)
 		: window(window)
-		, glfwWindow(window ? window->getWindowPtr() : nullptr) {}
+		, glfwWindow(window ? window->getWindowPtr() : nullptr) {
+		if (glfwWindow) {
+			// Store this pointer for callback access
+			glfwSetWindowUserPointer(glfwWindow, this);
+			// Register scroll callback
+			glfwSetScrollCallback(glfwWindow, scrollCallback);
+		}
+	}
+
+	InputController::~InputController() {
+		if (glfwWindow) {
+			// Clear the scroll callback
+			glfwSetScrollCallback(glfwWindow, nullptr);
+			glfwSetWindowUserPointer(glfwWindow, nullptr);
+		}
+	}
 
 	bool InputController::isKeyDown(int keyCode) const {
 		if (!glfwWindow) return false;
@@ -43,6 +66,39 @@ namespace window {
 			return;
 		}
 		glfwGetCursorPos(glfwWindow, &xpos, &ypos);
+	}
+
+	glm::vec2 InputController::getMouseDelta() const {
+		return mouseDelta;
+	}
+
+	glm::vec2 InputController::getScrollDelta() const {
+		return scrollDelta;
+	}
+
+	void InputController::update() {
+		// Calculate mouse delta
+		glm::vec2 currentPos = getMousePosition();
+
+		if (firstMouseUpdate) {
+			lastMousePos = currentPos;
+			firstMouseUpdate = false;
+			mouseDelta = glm::vec2(0.0f);
+		}
+		else {
+			mouseDelta = currentPos - lastMousePos;
+			lastMousePos = currentPos;
+		}
+
+		// Reset scroll delta after it's been consumed
+		// (scrollDelta is accumulated by callback between frames)
+		scrollDelta = glm::vec2(0.0f);
+	}
+
+	void InputController::onScroll(double xoffset, double yoffset) {
+		// Accumulate scroll delta (can have multiple scroll events per frame)
+		scrollDelta.x += static_cast<float>(xoffset);
+		scrollDelta.y += static_cast<float>(yoffset);
 	}
 
 	void InputController::requestClose() {
