@@ -11,7 +11,7 @@
 namespace handlers {
 	EditorHandler::EditorHandler() :coreInterface{ std::make_unique<controllers::CoreInterface>() },
 		offScreenInterface{ new controllers::OffScreen() },
-		windowImguiHandler{ std::make_unique<WindowImguiHandler>(*offScreenInterface,*coreInterface) }
+		windowImguiHandler{ std::make_unique<WindowImguiHandler>() }
 	{
 
 	}
@@ -27,16 +27,9 @@ namespace handlers {
 		coreInterface->init();
 
 		// Initialize services after core is ready (but before windows)
-		if (useServices) {
-			initializeServices();
-		}
+		initializeServices();
 
 		windowImguiHandler->init();
-
-		// Enable service mode on windows if services are active
-		if (useServices) {
-			windowImguiHandler->enableServiceMode();
-		}
 
 		offScreenInterface->init();
 	}
@@ -49,6 +42,14 @@ namespace handlers {
 	void EditorHandler::cleanUp()
 	{
 		windowImguiHandler->cleanUp();
+
+		// Clear services before graphics cleanup to release Vulkan resources
+		services::ServiceLocator::instance().clear();
+		renderService.reset();
+		sceneService.reset();
+		inputService.reset();
+		resourceService.reset();
+
 		offScreenInterface->cleanUp();
 		coreInterface->cleanUp();
 	}
@@ -99,4 +100,3 @@ namespace handlers {
 		locator.registerService<services::IResourceService>(resourceService);
 	}
 }
-

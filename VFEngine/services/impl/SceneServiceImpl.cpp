@@ -407,6 +407,39 @@ namespace services {
         return data;
     }
 
+    bool SceneServiceImpl::setIBLData(EntityHandle entity, const IBLData& ibl) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::IBLComponent>()) {
+            auto& comp = sceneEntity.getComponent<components::IBLComponent>();
+            comp.fileName = ibl.fileName;
+        }
+        else {
+            sceneEntity.addComponent<components::IBLComponent>(ibl.fileName);
+        }
+
+        return true;
+    }
+
+    bool SceneServiceImpl::removeIBLComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::IBLComponent>()) {
+            sceneEntity.removeComponent<components::IBLComponent>();
+            return true;
+        }
+
+        return false;
+    }
+
     std::vector<EntityHandle> SceneServiceImpl::getChildren(EntityHandle entity) const {
         auto& registry = scene::EntityRegistry::getRegistry();
         std::vector<EntityHandle> children;

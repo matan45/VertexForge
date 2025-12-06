@@ -117,6 +117,12 @@ namespace services {
         // Get IBL component data
         virtual std::optional<IBLData> getIBLData(EntityHandle entity) const = 0;
 
+        // Set IBL component data (adds component if not present)
+        virtual bool setIBLData(EntityHandle entity, const IBLData& ibl) = 0;
+
+        // Remove IBL component from entity
+        virtual bool removeIBLComponent(EntityHandle entity) = 0;
+
         // ============================================
         // Selection State
         // ============================================

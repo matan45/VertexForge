@@ -25,9 +25,6 @@ namespace handlers {
 		std::shared_ptr<services::IInputService> inputService;
 		std::shared_ptr<services::IResourceService> resourceService;
 
-		// Flag to enable service-based architecture
-		bool useServices = false;
-
 	public:
 		explicit EditorHandler();
 		~EditorHandler();
@@ -36,12 +33,7 @@ namespace handlers {
 		void run() const;
 		void cleanUp();
 
-		// Enable service-based architecture (call before init)
-		void enableServiceMode() { useServices = true; }
-
 	private:
 		void initializeServices();
 	};
 }
-
-

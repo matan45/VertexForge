@@ -71,6 +71,8 @@ namespace services {
 
         // IBL Operations
         std::optional<IBLData> getIBLData(EntityHandle entity) const override;
+        bool setIBLData(EntityHandle entity, const IBLData& ibl) override;
+        bool removeIBLComponent(EntityHandle entity) override;
 
         // Hierarchy - Children
         std::vector<EntityHandle> getChildren(EntityHandle entity) const override;
