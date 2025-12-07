@@ -24,12 +24,12 @@ namespace editor {
         // For FPS-style camera: apply yaw (Y) first, then pitch (X)
         // This ensures pitch always rotates around the camera's local X axis
         glm::mat4 transform = glm::mat4(1.0f);
+        transform = glm::translate(transform, position);
         transform = glm::rotate(transform, glm::radians(rotation.y), glm::vec3(0, 1, 0)); // Yaw
         transform = glm::rotate(transform, glm::radians(rotation.x), glm::vec3(1, 0, 0)); // Pitch
         transform = glm::rotate(transform, glm::radians(rotation.z), glm::vec3(0, 0, 1)); // Roll
-        transform = glm::translate(transform, -position);
 
-        // View matrix is the inverse of the transformation matrix
+        // View matrix is the inverse of the camera's model matrix
         viewMatrix = glm::inverse(transform);
     }
 
@@ -86,10 +86,8 @@ namespace editor {
         rotation.y -= xOffset * mouseSensitivity;
         rotation.x -= yOffset * mouseSensitivity;
 
-        // Normalize yaw
-        if (rotation.y >= 360.0f || rotation.y <= -360.0f) {
-            rotation.y = 0.0f;
-        }
+        // Normalize yaw to [0, 360) range using proper modulo
+        rotation.y = std::fmod(rotation.y + 360.0f, 360.0f);
 
         // Clamp pitch to avoid gimbal lock
         rotation.x = std::clamp(rotation.x, -89.0f, 89.0f);

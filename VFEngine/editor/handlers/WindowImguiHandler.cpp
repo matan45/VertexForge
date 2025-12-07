@@ -10,11 +10,19 @@ namespace handlers
 {
     void WindowImguiHandler::init()
     {
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::MainImguiWindow>());
+        // Create windows
+        auto mainWindow = std::make_shared<windows::MainImguiWindow>();
+        auto viewPort = std::make_shared<windows::ViewPort>();
+        
+        // Connect editor camera from ViewPort to MainImguiWindow
+        mainWindow->setEditorCamera(viewPort->getEditorCamera());
+
+        // Add all windows
+        controllers::imguiHandler::ImguiWindowHandler::add(mainWindow);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ConsoleLog>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ContentBrowser>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneGraph>());
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ViewPort>());
+        controllers::imguiHandler::ImguiWindowHandler::add(viewPort);
     }
 
     void WindowImguiHandler::cleanUp() const
