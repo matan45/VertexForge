@@ -253,9 +253,9 @@ namespace render::ibl
 
     void SkyboxRenderer::recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        if (isDisplay && camera)
+        if (isDisplay)
         {
-            updateUniformBuffer(camera->viewMatrix, camera->projectionMatrix);
+            updateUniformBuffer(viewMatrix, projectionMatrix);
             vk::RenderPassBeginInfo renderPassInfo{};
             renderPassInfo.renderPass = renderPass;
             renderPassInfo.framebuffer = framebuffers[imageIndex];

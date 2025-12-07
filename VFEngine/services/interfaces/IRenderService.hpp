@@ -1,5 +1,6 @@
 #pragma once
 #include "../data/DTOs.hpp"
+#include <glm/glm.hpp>
 #include <string>
 #include <optional>
 
@@ -30,6 +31,9 @@ namespace services {
 
         // Set IBL from HDR image path
         virtual bool setIBL(const std::string& hdrPath) = 0;
+
+        // Update IBL camera matrices (called each frame with EditorCamera matrices)
+        virtual void updateIBLCamera(const glm::mat4& view, const glm::mat4& projection) = 0;
 
         // Remove current IBL
         virtual void removeIBL() = 0;

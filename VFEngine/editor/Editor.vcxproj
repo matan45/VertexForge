@@ -92,6 +92,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="camera\EditorCamera.hpp" />
     <ClInclude Include="handlers\EditorHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
@@ -101,6 +102,7 @@
     <ClInclude Include="windows\ViewPort.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="camera\EditorCamera.cpp" />
     <ClCompile Include="handlers\EditorHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />

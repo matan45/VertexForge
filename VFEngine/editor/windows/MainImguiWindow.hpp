@@ -7,6 +7,10 @@
 
 namespace fs = std::filesystem;
 
+namespace editor {
+	class EditorCamera;
+}
+
 namespace windows
 {
 	class MainImguiWindow : public controllers::imguiHandler::ImguiWindow
@@ -25,11 +29,18 @@ namespace windows
 		bool showIBLWindow = false;
 		services::EditorTextureHandle iblPreviewHandle;
 
+		// Editor Camera settings window
+		bool showEditorCameraWindow = false;
+		editor::EditorCamera* editorCameraRef = nullptr;  // Set by ViewPort
+
 	public:
 		MainImguiWindow();
 		~MainImguiWindow() override = default;
 
 		void draw() override;
+
+		// Set reference to editor camera (called by ViewPort or editor initialization)
+		void setEditorCamera(editor::EditorCamera* camera) { editorCameraRef = camera; }
 
 	private:
 		void menuBar();
@@ -40,5 +51,6 @@ namespace windows
 		void handleAddMenu();
 
 		void iblWindow();
+		void editorCameraWindow();
 	};
 }

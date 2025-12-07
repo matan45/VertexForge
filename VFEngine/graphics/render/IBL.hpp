@@ -1,6 +1,6 @@
 #pragma once
 #include "ibl/IBLTypes.hpp"
-#include "components/Components.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 #include <string_view>
 
@@ -47,7 +47,11 @@ namespace render
         void remove();
         void cleanUp();
 
-        void setCamera(components::CameraComponent* camera);
+        // Set camera matrices for skybox rendering (works with EditorCamera or CameraComponent)
+        void setCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
+        
+        // Disable skybox rendering
+        void disableCamera();
 
         const ibl::ImageData& getBrdfLUTImage() const;
         const ibl::ImageData& getPrefilterImage() const;

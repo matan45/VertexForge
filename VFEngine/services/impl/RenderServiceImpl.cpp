@@ -2,9 +2,6 @@
 #include "../../core/controllers/OffScreen.hpp"
 #include "../../core/controllers/EditorTextureController.hpp"
 #include "../../core/controllers/texture/EditorTexture.hpp"
-#include "SceneServiceImpl.hpp"
-#include "../../utilities/scene/EntityRegistry.hpp"
-#include "../../utilities/components/Components.hpp"
 #include "../events/EventDispatcher.hpp"
 
 namespace services {
@@ -56,26 +53,13 @@ namespace services {
             return false;
         }
 
-        // Find the first camera entity to pass to IBL
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::CameraComponent>();
-
-        components::CameraComponent* camera = nullptr;
-        for (auto entity : view) {
-            camera = &registry.get<components::CameraComponent>(entity);
-            break;
-        }
-
-        if (!camera) {
-            return false;
-        }
-
         // Remove existing IBL before adding new one
         if (currentIBLPath.has_value()) {
             offScreen->iblRemove();
         }
 
-        offScreen->iblAdd(hdrPath, camera);
+        // Initialize IBL - camera matrices will be set separately via updateIBLCamera
+        offScreen->iblSet(hdrPath);
         currentIBLPath = hdrPath;
 
         // Publish IBL changed notification
@@ -84,6 +68,14 @@ namespace services {
         events::EventDispatcher::instance().publish(notification);
 
         return true;
+    }
+
+    void RenderServiceImpl::updateIBLCamera(const glm::mat4& view, const glm::mat4& projection) {
+        if (!offScreen || !currentIBLPath.has_value()) {
+            return;
+        }
+
+        offScreen->iblSetCameraMatrices(view, projection);
     }
 
     void RenderServiceImpl::removeIBL() {
@@ -168,6 +160,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::render::RemoveIBLCommand>(
             [this](const events::render::RemoveIBLCommand&) {
                 removeIBL();
+            });
+
+        dispatcher.registerCommandHandler<events::render::UpdateIBLCameraCommand>(
+            [this](const events::render::UpdateIBLCameraCommand& cmd) {
+                updateIBLCamera(cmd.viewMatrix, cmd.projectionMatrix);
             });
 
         dispatcher.registerCommandHandler<events::render::ResizeViewportCommand>(

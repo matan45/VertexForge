@@ -1,15 +1,15 @@
 #include "ViewPort.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
-#include "events/SceneEvents.hpp"
-#include "data/DTOs.hpp"
 #include "time/Timer.hpp"
 #include "imgui.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/constants.hpp>
-#include <cmath>
 
 namespace windows {
+
+	ViewPort::ViewPort() 
+		: editorCamera(std::make_unique<editor::EditorCamera>()) 
+	{
+	}
 
 	void ViewPort::draw()
 	{
@@ -23,6 +23,17 @@ namespace windows {
 
 			ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
 
+			// Update editor camera aspect ratio based on viewport size
+			if (viewportPanelSize.x > 0 && viewportPanelSize.y > 0) {
+				editorCamera->setAspectRatio(viewportPanelSize.x / viewportPanelSize.y);
+			}
+
+			// Update IBL camera matrices with editor camera matrices each frame
+			events::render::UpdateIBLCameraCommand cameraCmd;
+			cameraCmd.viewMatrix = editorCamera->getViewMatrix();
+			cameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();
+			dispatcher.execute(cameraCmd);
+
 			// Get viewport texture through event system
 			events::render::GetViewportTextureQuery query;
 			auto texture = dispatcher.query(query);
@@ -35,57 +46,19 @@ namespace windows {
 
 	void ViewPort::handleCameraInput()
 	{
-		auto& dispatcher = events::EventDispatcher::instance();
-
-		// Get primary camera through event system
-		events::scene::GetPrimaryCameraQuery cameraQuery;
-		auto cameraHandle = dispatcher.query(cameraQuery);
-		if (!cameraHandle.has_value()) {
-			return;
-		}
-
-		// Get current transform through event system
-		events::scene::GetTransformQuery transformQuery;
-		transformQuery.entity = *cameraHandle;
-		auto transformOpt = dispatcher.query(transformQuery);
-		if (!transformOpt.has_value()) {
-			return;
-		}
-
-		services::TransformData transform = *transformOpt;
 		float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-		bool transformChanged = false;
 
 		// Camera movement (WASD + Q/E)
-		float yawRad = transform.rotation.y / 180.0f * glm::pi<float>();
+		bool forward = ImGui::IsKeyDown(ImGuiKey_W);
+		bool backward = ImGui::IsKeyDown(ImGuiKey_S);
+		bool left = ImGui::IsKeyDown(ImGuiKey_A);
+		bool right = ImGui::IsKeyDown(ImGuiKey_D);
+		bool up = ImGui::IsKeyDown(ImGuiKey_E);
+		bool down = ImGui::IsKeyDown(ImGuiKey_Q);
+		bool sprint = ImGui::IsKeyDown(ImGuiKey_LeftShift);
 
-		if (ImGui::IsKeyDown(ImGuiKey_W)) {
-			transform.position.x += std::sin(yawRad) * cameraSpeed * dt;
-			transform.position.z -= std::cos(yawRad) * cameraSpeed * dt;
-			transformChanged = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_S)) {
-			transform.position.x -= std::sin(yawRad) * cameraSpeed * dt;
-			transform.position.z += std::cos(yawRad) * cameraSpeed * dt;
-			transformChanged = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_A)) {
-			transform.position.x -= std::cos(yawRad) * cameraSpeed * dt;
-			transform.position.z -= std::sin(yawRad) * cameraSpeed * dt;
-			transformChanged = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_D)) {
-			transform.position.x += std::cos(yawRad) * cameraSpeed * dt;
-			transform.position.z += std::sin(yawRad) * cameraSpeed * dt;
-			transformChanged = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_E)) {
-			transform.position.y += cameraSpeed * dt;
-			transformChanged = true;
-		}
-		if (ImGui::IsKeyDown(ImGuiKey_Q)) {
-			transform.position.y -= cameraSpeed * dt;
-			transformChanged = true;
+		if (forward || backward || left || right || up || down) {
+			editorCamera->processKeyboardInput(dt, forward, backward, left, right, up, down, sprint);
 		}
 
 		// Mouse look (right mouse button held)
@@ -93,38 +66,23 @@ namespace windows {
 			ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 			ImVec2 mousePos = ImGui::GetMousePos();
 
-			if (isFirst) {
+			if (isFirstMouseInput) {
 				lastMouseX = mousePos.x;
 				lastMouseY = mousePos.y;
-				isFirst = false;
+				isFirstMouseInput = false;
 			}
 			else {
 				float xOffset = mousePos.x - lastMouseX;
 				float yOffset = mousePos.y - lastMouseY;
 
-				transform.rotation.y -= xOffset * mouseSensitivity;
-				transform.rotation.x -= yOffset * mouseSensitivity;
+				editorCamera->processMouseMovement(xOffset, yOffset);
 
-				if (transform.rotation.y >= 360.0f || transform.rotation.y <= -360.0f) {
-					transform.rotation.y = 0.0f;
-				}
-				transform.rotation.x = glm::clamp(transform.rotation.x, -89.0f, 89.0f);
-
-				transformChanged = true;
 				lastMouseX = mousePos.x;
 				lastMouseY = mousePos.y;
 			}
 		}
 		else {
-			isFirst = true;
-		}
-
-		// Update transform through event system if changed
-		if (transformChanged) {
-			events::scene::SetTransformCommand cmd;
-			cmd.entity = *cameraHandle;
-			cmd.transform = transform;
-			dispatcher.execute(cmd);
+			isFirstMouseInput = true;
 		}
 	}
 

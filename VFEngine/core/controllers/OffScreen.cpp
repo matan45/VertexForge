@@ -24,9 +24,14 @@ namespace controllers {
 		return offScreenController->render();
 	}
 
-	void OffScreen::iblAdd(std::string_view iblPath, components::CameraComponent* camera)
+	void OffScreen::iblSet(std::string_view iblPath)
 	{
-		offScreenController->iblAdd(iblPath, camera);
+		offScreenController->iblSet(iblPath);
+	}
+
+	void OffScreen::iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
+	{
+		offScreenController->iblSetCameraMatrices(view, projection);
 	}
 
 	void OffScreen::iblRemove()

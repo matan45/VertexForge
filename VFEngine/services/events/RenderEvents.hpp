@@ -1,6 +1,7 @@
 #pragma once
 #include "EventTypes.hpp"
 #include "../data/DTOs.hpp"
+#include <glm/glm.hpp>
 #include <optional>
 #include <string>
 
@@ -18,6 +19,14 @@ namespace events::render {
 
     struct RemoveIBLCommand : ICommand<> {
         std::string_view getName() const override { return "RemoveIBL"; }
+    };
+
+    // Update IBL camera matrices (called each frame from ViewPort with EditorCamera matrices)
+    struct UpdateIBLCameraCommand : ICommand<> {
+        glm::mat4 viewMatrix;
+        glm::mat4 projectionMatrix;
+
+        std::string_view getName() const override { return "UpdateIBLCamera"; }
     };
 
     struct ResizeViewportCommand : ICommand<> {
