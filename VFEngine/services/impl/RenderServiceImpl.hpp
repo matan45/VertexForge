@@ -30,6 +30,7 @@ namespace services {
 
         // IBL (Image-Based Lighting)
         bool setIBL(const std::string& hdrPath) override;
+        void updateIBLCamera(const glm::mat4& view, const glm::mat4& projection) override;
         void removeIBL() override;
         bool hasIBL() const override;
         std::optional<std::string> getIBLPath() const override;

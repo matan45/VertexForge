@@ -1,7 +1,7 @@
 #pragma once
+#include <glm/glm.hpp>
 #include <memory>
-#include "components/Components.hpp"
-
+#include <string_view>
 
 namespace core
 {
@@ -30,7 +30,12 @@ namespace controllers
         void init();
         void cleanUp() const;
 
-        void iblAdd(std::string_view iblPath, components::CameraComponent* camera);
+        // Initialize IBL with HDR path only
+        void iblSet(std::string_view iblPath);
+        
+        // Update camera matrices for IBL rendering
+        void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
+        
         void iblRemove();
 
         void* render();

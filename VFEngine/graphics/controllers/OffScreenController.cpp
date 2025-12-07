@@ -25,11 +25,16 @@ namespace controllers
         offScreen->cleanUp();
     }
 
-    void OffScreenController::iblAdd(std::string_view iblPath, components::CameraComponent* camera)
+    void OffScreenController::iblSet(std::string_view iblPath)
     {
         render::IBL* ibl = offScreen->getRenderPassHandler()->getIBL();
         ibl->init(iblPath);
-        ibl->setCamera(camera);
+    }
+
+    void OffScreenController::iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
+    {
+        render::IBL* ibl = offScreen->getRenderPassHandler()->getIBL();
+        ibl->setCameraMatrices(view, projection);
     }
 
     void OffScreenController::iblRemove()

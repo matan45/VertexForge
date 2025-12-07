@@ -58,7 +58,7 @@ namespace render
             device.getLogicalDevice().waitIdle();
 
             // Disable rendering first to prevent access during cleanup
-            skyboxRenderer->setCamera(nullptr);
+            skyboxRenderer->disable();
             isDisplay = false;
 
             hdrTexture.reset();
@@ -83,10 +83,16 @@ namespace render
         remove();
     }
 
-    void IBL::setCamera(components::CameraComponent* camera)
+    void IBL::setCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
-        skyboxRenderer->setCamera(camera);
-        isDisplay = (camera != nullptr);
+        skyboxRenderer->setCameraMatrices(view, projection);
+        isDisplay = true;
+    }
+
+    void IBL::disableCamera()
+    {
+        skyboxRenderer->disable();
+        isDisplay = false;
     }
 
     const ibl::ImageData& IBL::getBrdfLUTImage() const

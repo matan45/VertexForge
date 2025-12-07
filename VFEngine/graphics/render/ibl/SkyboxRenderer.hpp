@@ -1,6 +1,6 @@
 #pragma once
 #include "IBLTypes.hpp"
-#include "components/Components.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 
 namespace core
@@ -27,9 +27,15 @@ namespace render::ibl
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
-        void setCamera(components::CameraComponent* camera) {
-            this->camera = camera;
-            isDisplay = (camera != nullptr);
+        // Set camera matrices directly - works with both EditorCamera and CameraComponent
+        void setCameraMatrices(const glm::mat4& view, const glm::mat4& projection) {
+            viewMatrix = view;
+            projectionMatrix = projection;
+            isDisplay = true;
+        }
+
+        void disable() {
+            isDisplay = false;
         }
 
         bool isDisplaying() const { return isDisplay; }
@@ -52,7 +58,9 @@ namespace render::ibl
         vk::DescriptorSet descriptorSet;
         vk::DescriptorPool descriptorPool;
 
-        components::CameraComponent* camera = nullptr;
+        // Camera matrices (set via setCameraMatrices)
+        glm::mat4 viewMatrix{1.0f};
+        glm::mat4 projectionMatrix{1.0f};
         bool isDisplay = false;
 
         void updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix) const;
