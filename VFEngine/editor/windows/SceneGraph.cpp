@@ -70,23 +70,6 @@ namespace windows
             if (selectedHandle.isValid())
             {
                 drawDetails(selectedHandle);
-
-                if (ImGui::BeginPopupContextWindow())
-                {
-                    if (ImGui::MenuItem("Add Camera Component"))
-                    {
-                        events::scene::AddCameraComponentCommand cmd;
-                        cmd.entity = selectedHandle;
-                        dispatcher.execute(cmd);
-                    }
-                    if (ImGui::MenuItem("Remove Camera Component"))
-                    {
-                        events::scene::RemoveCameraComponentCommand cmd;
-                        cmd.entity = selectedHandle;
-                        dispatcher.execute(cmd);
-                    }
-                    ImGui::EndPopup();
-                }
             }
         }
         ImGui::End();
@@ -212,8 +195,40 @@ namespace windows
 
             if (cameraOpt.has_value())
             {
-                if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
+                ImGui::PushID("CameraComponent");
+
+                bool removeCamera = false;
+
+                // Component header with remove button (Unity-style)
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.28f, 0.28f, 0.28f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+
+                bool isOpen = ImGui::CollapsingHeader("##CameraHeader", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+
+                // Component label after the arrow
+                ImGui::SameLine();
+                ImGui::Text("Camera");
+
+                // Small X button on the right
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+
+                if (ImGui::Button("x##RemoveCamera", ImVec2(18, 18)))
                 {
+                    removeCamera = true;
+                }
+
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(6);
+
+                if (isOpen)
+                {
+                    ImGui::Indent(10.0f);
+
                     services::CameraData camera = *cameraOpt;
                     bool changed = false;
 
@@ -235,9 +250,74 @@ namespace windows
                         cmd.cameraData = camera;
                         dispatcher.execute(cmd);
                     }
+
+                    ImGui::Unindent(10.0f);
+                }
+
+                ImGui::PopID();
+
+                if (removeCamera)
+                {
+                    events::scene::RemoveCameraComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
                 }
             }
         }
+
+        // Add Component button (Unity-style)
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Center the button and style it
+        float buttonWidth = ImGui::GetContentRegionAvail().x * 0.6f;
+        float buttonOffset = (ImGui::GetContentRegionAvail().x - buttonWidth) * 0.5f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + buttonOffset);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.35f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+
+        if (ImGui::Button("Add Component", ImVec2(buttonWidth, 28)))
+        {
+            ImGui::OpenPopup("AddComponentPopup");
+        }
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        // Popup menu for adding components
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 6));
+
+        if (ImGui::BeginPopup("AddComponentPopup"))
+        {
+            ImGui::TextDisabled("Components");
+            ImGui::Separator();
+
+            if (!hasCamera)
+            {
+                if (ImGui::Selectable("  Camera"))
+                {
+                    events::scene::AddCameraComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            // Show message if all components are added
+            if (hasCamera)
+            {
+                ImGui::TextDisabled("All components added");
+            }
+
+            ImGui::EndPopup();
+        }
+
+        ImGui::PopStyleVar(2);
     }
 
     void SceneGraph::dragDropEntity(services::EntityHandle handle)
