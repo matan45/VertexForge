@@ -124,13 +124,13 @@ namespace windows
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			if (ImGui::MenuItem("New Level"))
+			if (ImGui::MenuItem("New Scene"))
 			{
 			}
-			else if (ImGui::MenuItem("Open Level"))
+			else if (ImGui::MenuItem("Load Scene"))
 			{
 			}
-			else if (ImGui::MenuItem("Save Level"))
+			else if (ImGui::MenuItem("Save Scene"))
 			{
 			}
 			else if (ImGui::MenuItem("Exit"))

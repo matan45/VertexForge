@@ -22,9 +22,6 @@
 [submodule "dependencies/entt"]
 	path = dependencies/entt
 	url = https://github.com/skypjack/entt.git
-[submodule "dependencies/json"]
-	path = dependencies/json
-	url = https://github.com/nlohmann/json.git
 [submodule "dependencies/dr_libs"]
 	path = dependencies/dr_libs
 	url = https://github.com/mackron/dr_libs.git
@@ -46,3 +43,6 @@
 [submodule "dependencies/glfw"]
 	path = dependencies/glfw
 	url = https://github.com/glfw/glfw.git
+[submodule "json"]
+	path = json
+	url = https://github.com/nlohmann/json.git
