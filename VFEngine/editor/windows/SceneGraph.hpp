@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/EntityHandle.hpp"
+#include "events/EventDispatcher.hpp"
 
 namespace windows
 {
@@ -8,10 +9,11 @@ namespace windows
     {
     private:
         services::EntityHandle selectedHandle;
+        events::SubscriptionToken sceneClearedToken;
 
     public:
-        SceneGraph() = default;
-        ~SceneGraph() override = default;
+        SceneGraph();
+        ~SceneGraph() override;
 
         void draw() override;
 
@@ -19,5 +21,7 @@ namespace windows
         void drawEntityNode(services::EntityHandle handle);
         void drawDetails(services::EntityHandle handle);
         void dragDropEntity(services::EntityHandle handle);
+        void subscribeToEvents();
+        void onSceneCleared();
     };
 }

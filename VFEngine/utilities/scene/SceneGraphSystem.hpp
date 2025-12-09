@@ -13,6 +13,7 @@ namespace scene {
 
 		entt::entity addChild(Entity& parent,Entity& child) const;
 		void removeEntity(Entity& entity);
+		void clearScene();
 
 		void moveEntity(Entity& entity, Entity& newParent) const;
 

@@ -19,6 +19,37 @@ namespace windows
 			ImGuiWindowFlags_NoMove;
 		window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 		windowFlags = window_flags;
+
+		subscribeToEvents();
+	}
+
+	MainImguiWindow::~MainImguiWindow()
+	{
+		events::EventDispatcher::instance().unsubscribe(sceneClearedToken);
+	}
+
+	void MainImguiWindow::subscribeToEvents()
+	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
+		sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+			[this](const events::scene::SceneClearedNotification&) {
+				onSceneCleared();
+			});
+	}
+
+	void MainImguiWindow::onSceneCleared()
+	{
+		// Release IBL preview texture if it exists
+		if (iblPreviewHandle.isValid()) {
+			events::render::ReleaseEditorTextureCommand releaseCmd;
+			releaseCmd.handle = iblPreviewHandle.imguiDescriptorSet;
+			events::EventDispatcher::instance().execute(releaseCmd);
+			iblPreviewHandle = services::EditorTextureHandle{};
+		}
+
+		// Clear IBL file selection
+		selectedIBLFile = "";
 	}
 
 	void MainImguiWindow::draw()
@@ -126,6 +157,8 @@ namespace windows
 		{
 			if (ImGui::MenuItem("New Scene"))
 			{
+				events::scene::NewSceneCommand cmd;
+				events::EventDispatcher::instance().execute(cmd);
 			}
 			else if (ImGui::MenuItem("Load Scene"))
 			{

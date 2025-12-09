@@ -44,6 +44,25 @@ namespace scene {
 		EntityRegistry::getRegistry().destroy(entity.getHandle());
 	}
 
+	void SceneGraphSystem::clearScene()
+	{
+		if (!root.isValid()) {
+			vfLogError("Root entity is invalid, cannot clear scene.");
+			return;
+		}
+
+		// Remove all children of root recursively
+		auto children = root.getChildren();
+		for (auto& child : children) {
+			removeEntity(child);
+		}
+
+		// Remove all optional components from root (keeps Name, Transform, etc.)
+		root.removeAllOptionalComponents();
+
+		vfLogInfo("Scene cleared successfully.");
+	}
+
 	void SceneGraphSystem::moveEntity(Entity& entity, Entity& newParent) const
 	{
 		if (isDescendant(entity, newParent)) {

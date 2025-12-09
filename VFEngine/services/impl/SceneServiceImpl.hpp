@@ -87,6 +87,9 @@ namespace services {
         std::string getEntityName(EntityHandle entity) const override;
         void setEntityName(EntityHandle entity, const std::string& name) override;
 
+        // Scene Lifecycle
+        bool newScene();
+
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
         std::optional<EntityHandle> selectedEntity;

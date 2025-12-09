@@ -166,6 +166,22 @@ namespace scene {
 
 			return childEntities;
 		}
+
+		// Remove all optional components (keeps Name, Transform, Parent, Children, WorldTransform)
+		void removeAllOptionalComponents() {
+			if (!isValid()) {
+				vfLogError("Trying to remove components from an invalid entity.");
+				return;
+			}
+
+			if (hasComponent<components::IBLComponent>()) {
+				removeComponent<components::IBLComponent>();
+			}
+
+			if (hasComponent<components::CameraComponent>()) {
+				removeComponent<components::CameraComponent>();
+			}
+		}
 	};
 }
 
