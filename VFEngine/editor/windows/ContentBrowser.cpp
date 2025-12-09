@@ -60,6 +60,14 @@ namespace windows
 			importLocationSet = true;
 		}
 
+		// Release pending texture from previous frame (deferred release)
+		if (pendingReleaseHandle.isValid()) {
+			events::render::ReleaseEditorTextureCommand releaseCmd;
+			releaseCmd.handle = pendingReleaseHandle.imguiDescriptorSet;
+			dispatcher.execute(releaseCmd);
+			pendingReleaseHandle = services::EditorTextureHandle{};
+		}
+
 		if (showCreateFolderModal)
 		{
 			ImGui::OpenPopup("Create New Folder");
@@ -116,9 +124,8 @@ namespace windows
 				isShaderLoaded = false;
 				if (selectedImageHandle.isValid())
 				{
-					events::render::ReleaseEditorTextureCommand releaseCmd;
-					releaseCmd.handle = selectedImageHandle.imguiDescriptorSet;
-					dispatcher.execute(releaseCmd);
+					// Mark for deferred release (will be released next frame)
+					pendingReleaseHandle = selectedImageHandle;
 					selectedImageHandle = services::EditorTextureHandle{};
 				}
 			}
@@ -139,11 +146,9 @@ namespace windows
 						selectedType = asset.type;
 						showFileWindow = true;
 
-						// Release old preview if exists
+						// Mark old preview for deferred release (will be released next frame)
 						if (selectedImageHandle.isValid()) {
-							events::render::ReleaseEditorTextureCommand releaseCmd;
-							releaseCmd.handle = selectedImageHandle.imguiDescriptorSet;
-							dispatcher.execute(releaseCmd);
+							pendingReleaseHandle = selectedImageHandle;
 							selectedImageHandle = services::EditorTextureHandle{};
 						}
 
