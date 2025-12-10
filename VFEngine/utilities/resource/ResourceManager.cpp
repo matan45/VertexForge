@@ -65,6 +65,10 @@ namespace resource
         {
             return FileType::SHADER;
         }
+        if (extension == ".vfscene")
+        {
+            return FileType::SCENE;
+        }
         
         // For binary formats, read the header
         std::ifstream file(filePath, std::ios::binary);

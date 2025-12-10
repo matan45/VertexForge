@@ -21,6 +21,7 @@ namespace scene {
 		explicit Entity(const std::string& name)
 		{
 			entityHandle = EntityRegistry::getRegistry().create();
+			addComponent<components::UUIDComponent>();     // Generate unique ID
 			addComponent<components::NameComponent>(name); // Set the name on creation
 			addComponent<components::TransformComponent>();
 		}
@@ -56,6 +57,15 @@ namespace scene {
 		// Get a component
 		template<typename T>
 		T& getComponent() {
+			if (!hasComponent<T>()) {
+				vfLogError("Entity does not have the requested component.");
+			}
+			return EntityRegistry::getRegistry().get<T>(entityHandle);
+		}
+
+		// Get a component (const version)
+		template<typename T>
+		const T& getComponent() const {
 			if (!hasComponent<T>()) {
 				vfLogError("Entity does not have the requested component.");
 			}
@@ -109,6 +119,15 @@ namespace scene {
 		// Set the entity name
 		void setName(std::string_view newName) {
 			addOrReplaceComponent<components::NameComponent>(std::string(newName));
+		}
+
+		// Get the entity UUID
+		uuid::UUID getUUID() const {
+			if (hasComponent<components::UUIDComponent>()) {
+				const auto& component = getComponent<components::UUIDComponent>();
+				return component.id;
+			}
+			return uuid::UUID::invalid();
 		}
 
 		// Add a child entity

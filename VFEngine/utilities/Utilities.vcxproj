@@ -109,11 +109,13 @@
     <ClInclude Include="scene\Level.hpp" />
     <ClInclude Include="scene\LevelHandler.hpp" />
     <ClInclude Include="scene\SceneGraphSystem.hpp" />
+    <ClInclude Include="serialization\JsonConverters.hpp" />
     <ClInclude Include="serialization\SceneSerialization.hpp" />
     <ClInclude Include="string\StringUtil.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Profiler.hpp" />
     <ClInclude Include="time\Timer.hpp" />
+    <ClInclude Include="uuid\UUID.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="math\MathHelper.cpp" />

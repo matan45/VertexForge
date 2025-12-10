@@ -9,7 +9,7 @@ namespace fs = std::filesystem;
 
 namespace windows
 {
-    enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Other };
+    enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Other };
 
     struct Asset
     {
@@ -42,6 +42,7 @@ namespace windows
         services::EditorTextureHandle glslIcon;
         services::EditorTextureHandle animationIcon;
         services::EditorTextureHandle hdrIcon;
+        services::EditorTextureHandle sceneIcon;
 
         // Service-based image preview handle
         services::EditorTextureHandle selectedImageHandle;

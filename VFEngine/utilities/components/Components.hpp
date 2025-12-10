@@ -3,6 +3,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <string>
 #include <entt/entt.hpp>
+#include "../uuid/UUID.hpp"
 
 namespace components {
 
@@ -29,6 +30,14 @@ namespace components {
 
 	struct NameComponent {
 		std::string name;
+	};
+
+	struct UUIDComponent {
+		uuid::UUID id;
+
+		UUIDComponent() : id() {}  // Generates new UUID
+		explicit UUIDComponent(uuid::UUID existingId) : id(existingId) {}
+		explicit UUIDComponent(uint64_t existingId) : id(existingId) {}
 	};
 
 	struct IBLComponent {
