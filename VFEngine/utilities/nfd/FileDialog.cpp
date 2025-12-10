@@ -203,4 +203,97 @@ namespace nfd {
 
 		return filePaths;
 	}
+
+	std::string FileDialog::saveFileDialog(const std::vector<std::pair<std::wstring, std::wstring>>& fileTypes,
+		const std::wstring& defaultExtension) const
+	{
+		IFileSaveDialog* pFileSave = nullptr;
+
+		// Create the FileSaveDialog object
+		HRESULT hr = CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_ALL, IID_IFileSaveDialog, std::bit_cast<void**>(&pFileSave));
+
+		if (FAILED(hr))
+		{
+			vfLogError("Failed to create File Save Dialog");
+			return std::string();
+		}
+
+		// Prepare COMDLG_FILTERSPEC array from the input fileTypes
+		std::vector<COMDLG_FILTERSPEC> filterSpec(fileTypes.size());
+		for (size_t i = 0; i < fileTypes.size(); ++i)
+		{
+			filterSpec[i].pszName = fileTypes[i].first.c_str();
+			filterSpec[i].pszSpec = fileTypes[i].second.c_str();
+		}
+
+		// Set file type filters
+		hr = pFileSave->SetFileTypes(static_cast<UINT>(filterSpec.size()), filterSpec.data());
+		if (FAILED(hr))
+		{
+			pFileSave->Release();
+			vfLogError("Failed to set file filters");
+			return std::string();
+		}
+
+		// Set the default file type index
+		hr = pFileSave->SetFileTypeIndex(1);
+		if (FAILED(hr))
+		{
+			pFileSave->Release();
+			vfLogError("Failed to set default file type");
+			return {};
+		}
+
+		// Set default extension
+		if (!defaultExtension.empty())
+		{
+			hr = pFileSave->SetDefaultExtension(defaultExtension.c_str());
+			if (FAILED(hr))
+			{
+				pFileSave->Release();
+				vfLogError("Failed to set default extension");
+				return {};
+			}
+		}
+
+		// Show the Save dialog box
+		hr = pFileSave->Show(nullptr);
+		if (FAILED(hr))
+		{
+			pFileSave->Release();
+			// User cancelled - not an error
+			return {};
+		}
+
+		// Get the file name from the dialog box
+		IShellItem* pItem = nullptr;
+		hr = pFileSave->GetResult(&pItem);
+		if (FAILED(hr))
+		{
+			pFileSave->Release();
+			vfLogError("Failed to retrieve file result");
+			return {};
+		}
+
+		// Extract the file path
+		PWSTR pszFilePath = nullptr;
+		hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+		if (FAILED(hr))
+		{
+			pItem->Release();
+			pFileSave->Release();
+			vfLogError("Failed to get file path");
+			return {};
+		}
+
+		// Convert the wide string (WCHAR) to a standard string (char)
+		std::string filePath = StringUtil::WideStringToString(pszFilePath);
+
+		// Free memory and release resources
+		CoTaskMemFree(pszFilePath);
+		pItem->Release();
+		pFileSave->Release();
+
+		return filePath;
+	}
 }

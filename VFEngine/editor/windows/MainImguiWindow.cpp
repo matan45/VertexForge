@@ -165,6 +165,17 @@ namespace windows
 			}
 			else if (ImGui::MenuItem("Save Scene"))
 			{
+				std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+					{L"VF Scene Files (*.vfScene)", L"*.vfScene"}
+				};
+
+				std::string savePath = fileDialog.saveFileDialog(fileTypes, L"vfScene");
+				if (!savePath.empty())
+				{
+					events::scene::SaveSceneCommand cmd;
+					cmd.filePath = savePath;
+					events::EventDispatcher::instance().execute(cmd);
+				}
 			}
 			else if (ImGui::MenuItem("Exit"))
 			{

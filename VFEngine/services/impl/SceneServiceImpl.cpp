@@ -3,6 +3,7 @@
 #include "../../utilities/scene/Entity.hpp"
 #include "../../utilities/scene/EntityRegistry.hpp"
 #include "../../utilities/components/Components.hpp"
+#include "../../utilities/serialization/SceneSerialization.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../events/RenderEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -519,6 +520,20 @@ namespace services {
         return true;
     }
 
+    bool SceneServiceImpl::saveScene(const std::string& filePath) {
+        if (!sceneGraph) {
+            vfLogError("SceneGraph is null, cannot save scene.");
+            return false;
+        }
+
+        if (filePath.empty()) {
+            vfLogError("File path is empty, cannot save scene.");
+            return false;
+        }
+
+        return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);
+    }
+
     EntityData SceneServiceImpl::buildEntityData(entt::entity entity) const {
         scene::Entity sceneEntity(entity);
 
@@ -690,6 +705,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::scene::NewSceneCommand>(
             [this](const events::scene::NewSceneCommand&) {
                 return newScene();
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SaveSceneCommand>(
+            [this](const events::scene::SaveSceneCommand& cmd) {
+                return saveScene(cmd.filePath);
             });
     }
 
