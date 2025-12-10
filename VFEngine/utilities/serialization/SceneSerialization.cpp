@@ -89,36 +89,39 @@ namespace serialization {
 
 	// Deserialize transform component from JSON
 	static void deserializeTransform(const json& j, components::TransformComponent& transform) {
-		if (j.contains("position")) {
-			const auto& pos = j["position"];
-			transform.position = glm::vec3(pos[0].get<float>(), pos[1].get<float>(), pos[2].get<float>());
+		if (auto it = j.find("position"); it != j.end() && it->is_array() && it->size() >= 3) {
+			transform.position = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
 		}
-		if (j.contains("rotation")) {
-			const auto& rot = j["rotation"];
-			transform.rotation = glm::vec3(rot[0].get<float>(), rot[1].get<float>(), rot[2].get<float>());
+		if (auto it = j.find("rotation"); it != j.end() && it->is_array() && it->size() >= 3) {
+			transform.rotation = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
 		}
-		if (j.contains("scale")) {
-			const auto& scl = j["scale"];
-			transform.scale = glm::vec3(scl[0].get<float>(), scl[1].get<float>(), scl[2].get<float>());
+		if (auto it = j.find("scale"); it != j.end() && it->is_array() && it->size() >= 3) {
+			transform.scale = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
 		}
 		transform.isDirty = true;
 	}
 
 	// Deserialize camera component from JSON
 	static void deserializeCamera(const json& j, components::CameraComponent& camera) {
-		if (j.contains("fieldOfView")) camera.fieldOfView = j["fieldOfView"].get<float>();
-		if (j.contains("nearPlane")) camera.nearPlane = j["nearPlane"].get<float>();
-		if (j.contains("farPlane")) camera.farPlane = j["farPlane"].get<float>();
-		if (j.contains("aspectRatio")) camera.aspectRatio = j["aspectRatio"].get<float>();
-		if (j.contains("isPerspective")) camera.isPerspective = j["isPerspective"].get<bool>();
-		if (j.contains("orthoSize")) camera.orthoSize = j["orthoSize"].get<float>();
+		if (auto it = j.find("fieldOfView"); it != j.end() && it->is_number())
+			camera.fieldOfView = it->get<float>();
+		if (auto it = j.find("nearPlane"); it != j.end() && it->is_number())
+			camera.nearPlane = it->get<float>();
+		if (auto it = j.find("farPlane"); it != j.end() && it->is_number())
+			camera.farPlane = it->get<float>();
+		if (auto it = j.find("aspectRatio"); it != j.end() && it->is_number())
+			camera.aspectRatio = it->get<float>();
+		if (auto it = j.find("isPerspective"); it != j.end() && it->is_boolean())
+			camera.isPerspective = it->get<bool>();
+		if (auto it = j.find("orthoSize"); it != j.end() && it->is_number())
+			camera.orthoSize = it->get<float>();
 		camera.updateProjectionMatrix();
 	}
 
 	// Deserialize IBL component from JSON - returns filename
 	static std::string deserializeIBL(const json& j) {
-		if (j.contains("fileName")) {
-			return j["fileName"].get<std::string>();
+		if (auto it = j.find("fileName"); it != j.end() && it->is_string()) {
+			return it->get<std::string>();
 		}
 		return "";
 	}
@@ -129,14 +132,26 @@ namespace serialization {
 	// Recursively deserialize children entities
 	static void deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph) {
 		for (const auto& childJson : childrenJson) {
+			// Validate child JSON is an object
+			if (!childJson.is_object()) {
+				vfLogWarning("Skipping invalid child entry in scene file (not an object)");
+				continue;
+			}
+
 			// Get name for the child
 			std::string childName = childJson.value("name", "Unnamed");
 
 			// Create new child entity
 			scene::Entity child(childName);
 
+			// Verify entity was created successfully
+			if (!child.isValid()) {
+				vfLogError("Failed to create child entity '{}' during scene load", childName);
+				continue;
+			}
+
 			// Restore UUID if present
-			if (childJson.contains("uuid")) {
+			if (childJson.contains("uuid") && childJson["uuid"].is_number_unsigned()) {
 				uint64_t uuidValue = childJson["uuid"].get<uint64_t>();
 				child.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
 			}
@@ -202,8 +217,10 @@ namespace serialization {
 
 	bool SceneSerialization::loadSceneInto(std::string_view filename, scene::SceneGraphSystem& sceneGraph)
 	{
+		json sceneJson;
+
+		// Phase 1: Validate file and parse JSON before modifying scene
 		try {
-			// Open and parse file
 			std::string filePath{ filename };
 			std::ifstream file{ filePath };
 			if (!file.is_open()) {
@@ -211,33 +228,50 @@ namespace serialization {
 				return false;
 			}
 
-			json sceneJson = json::parse(file);
+			sceneJson = json::parse(file);
 			file.close();
 
-			// Validate and log version
-			if (sceneJson.contains("version")) {
+			// Validate required structure before clearing scene
+			if (!sceneJson.is_object()) {
+				vfLogError("Invalid scene file: root is not a JSON object");
+				return false;
+			}
+
+			if (!sceneJson.contains("root") || !sceneJson["root"].is_object()) {
+				vfLogError("Invalid scene file: missing or invalid 'root' object");
+				return false;
+			}
+
+			// Log version if present
+			if (sceneJson.contains("version") && sceneJson["version"].is_string()) {
 				std::string version = sceneJson["version"].get<std::string>();
 				vfLogInfo("Loading scene version: {}", version);
 			}
-
-			// Clear existing scene first
-			sceneGraph.clearScene();
-
-			// Deserialize root entity
-			if (sceneJson.contains("root")) {
-				scene::Entity& root = sceneGraph.GetRoot();
-				deserializeEntity(sceneJson["root"], root, sceneGraph, true);
-			}
-
-			vfLogInfo("Scene loaded successfully from: {}", filename);
-			return true;
 		}
 		catch (const json::parse_error& e) {
 			vfLogError("JSON parse error while loading scene: {}", e.what());
 			return false;
 		}
 		catch (const std::exception& e) {
-			vfLogError("Failed to load scene: {}", e.what());
+			vfLogError("Failed to read scene file: {}", e.what());
+			return false;
+		}
+
+		// Phase 2: File validated successfully - now safe to clear and load
+		try {
+			sceneGraph.clearScene();
+
+			// Deserialize root entity
+			scene::Entity& root = sceneGraph.GetRoot();
+			deserializeEntity(sceneJson["root"], root, sceneGraph, true);
+
+			vfLogInfo("Scene loaded successfully from: {}", filename);
+			return true;
+		}
+		catch (const std::exception& e) {
+			vfLogError("Failed to deserialize scene: {}", e.what());
+			// Scene is in partial state - clear to avoid corruption
+			sceneGraph.clearScene();
 			return false;
 		}
 	}

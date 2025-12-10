@@ -558,7 +558,8 @@ namespace services {
         bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph);
 
         if (success) {
-            // After loading, check if root has IBL component and apply it
+            // IBL is a scene-level property, always attached to root entity only.
+            // Non-root entities should not have IBL components (enforced by editor UI).
             scene::Entity& root = sceneGraph->GetRoot();
             if (root.hasComponent<components::IBLComponent>()) {
                 const auto& ibl = root.getComponent<components::IBLComponent>();

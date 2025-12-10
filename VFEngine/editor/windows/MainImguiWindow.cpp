@@ -251,6 +251,21 @@ namespace windows
 		{
 			ImGui::Text("IBL Window");
 
+			// Sync selectedIBLFile from scene's IBL component (handles scene load)
+			events::scene::GetRootEntityQuery rootQuery;
+			auto rootHandle = dispatcher.query(rootQuery);
+
+			events::scene::GetIBLDataQuery iblQuery;
+			iblQuery.entity = rootHandle;
+			auto iblData = dispatcher.query(iblQuery);
+			if (iblData.has_value() && !iblData->fileName.empty()) {
+				// Update local state from scene if different
+				std::string currentPath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
+				if (currentPath != iblData->fileName) {
+					selectedIBLFile = iblData->fileName;
+				}
+			}
+
 			if (ImGui::Button("Select"))
 			{
 				std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
@@ -261,9 +276,6 @@ namespace windows
 				std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
 
 				// Update IBL component on root entity via event system
-				events::scene::GetRootEntityQuery rootQuery;
-				auto rootHandle = dispatcher.query(rootQuery);
-
 				events::scene::SetIBLDataCommand iblCmd;
 				iblCmd.entity = rootHandle;
 				iblCmd.iblData.fileName = filePath;
@@ -274,6 +286,10 @@ namespace windows
 			std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
 			ImGui::Text("%s", filePath.c_str());
 
+			// Disable Preview and Apply buttons when no file is selected
+			const bool hasFile = !filePath.empty();
+
+			if (!hasFile) ImGui::BeginDisabled();
 			if (ImGui::Button("Preview", ImVec2(120, 0)))
 			{
 				// Release old preview if exists
@@ -284,12 +300,10 @@ namespace windows
 					iblPreviewHandle = services::EditorTextureHandle{};
 				}
 
-				if (!filePath.empty()) {
-					events::render::LoadEditorTextureCommand loadCmd;
-					loadCmd.path = filePath;
-					loadCmd.isHDR = true;
-					iblPreviewHandle = dispatcher.execute(loadCmd);
-				}
+				events::render::LoadEditorTextureCommand loadCmd;
+				loadCmd.path = filePath;
+				loadCmd.isHDR = true;
+				iblPreviewHandle = dispatcher.execute(loadCmd);
 			}
 
 			if (ImGui::Button("Apply", ImVec2(120, 0)))
@@ -298,6 +312,7 @@ namespace windows
 				cmd.hdrPath = filePath;
 				dispatcher.execute(cmd);
 			}
+			if (!hasFile) ImGui::EndDisabled();
 
 			ImGui::SameLine();
 			ImGui::SetCursorPosX(
