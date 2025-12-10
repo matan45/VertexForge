@@ -84,6 +84,10 @@ namespace events::scene {
         std::string_view getName() const override { return "SetCameraData"; }
     };
 
+    struct NewSceneCommand : ICommand<bool> {
+        std::string_view getName() const override { return "NewScene"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================
@@ -138,6 +142,18 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "HasCameraComponent"; }
+    };
+
+    struct HasIBLComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasIBLComponent"; }
+    };
+
+    struct GetIBLDataQuery : IQuery<std::optional<services::IBLData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetIBLData"; }
     };
 
     // ============================================

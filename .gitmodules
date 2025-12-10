@@ -43,6 +43,6 @@
 [submodule "dependencies/glfw"]
 	path = dependencies/glfw
 	url = https://github.com/glfw/glfw.git
-[submodule "json"]
-	path = json
+[submodule "dependencies/json"]
+	path = dependencies/json
 	url = https://github.com/nlohmann/json.git

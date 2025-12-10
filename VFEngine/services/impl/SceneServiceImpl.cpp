@@ -4,6 +4,8 @@
 #include "../../utilities/scene/EntityRegistry.hpp"
 #include "../../utilities/components/Components.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/RenderEvents.hpp"
+#include "print/EditorLogger.hpp"
 
 namespace services {
 
@@ -495,6 +497,28 @@ namespace services {
         sceneEntity.setName(name);
     }
 
+    bool SceneServiceImpl::newScene() {
+        if (!sceneGraph) {
+            vfLogError("SceneGraph is null, cannot create new scene.");
+            return false;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        
+        events::render::RemoveIBLCommand removeIblCmd;
+        dispatcher.execute(removeIblCmd);
+        
+        sceneGraph->clearScene();
+        
+        selectedEntity = std::nullopt;
+        
+        events::scene::SceneClearedNotification notification;
+        dispatcher.publish(notification);
+
+        vfLogInfo("New scene created.");
+        return true;
+    }
+
     EntityData SceneServiceImpl::buildEntityData(entt::entity entity) const {
         scene::Entity sceneEntity(entity);
 
@@ -651,6 +675,21 @@ namespace services {
         dispatcher.registerQueryHandler<events::scene::HasCameraComponentQuery>(
             [this](const events::scene::HasCameraComponentQuery& query) {
                 return hasComponent(query.entity, ComponentTypeId::Camera);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasIBLComponentQuery>(
+            [this](const events::scene::HasIBLComponentQuery& query) {
+                return hasComponent(query.entity, ComponentTypeId::IBL);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetIBLDataQuery>(
+            [this](const events::scene::GetIBLDataQuery& query) {
+                return getIBLData(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::NewSceneCommand>(
+            [this](const events::scene::NewSceneCommand&) {
+                return newScene();
             });
     }
 

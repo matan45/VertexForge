@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "nfd/FileDialog.hpp"
 #include "data/DTOs.hpp"
+#include "events/EventDispatcher.hpp"
 
 #include <filesystem>
 
@@ -33,9 +34,12 @@ namespace windows
 		bool showEditorCameraWindow = false;
 		editor::EditorCamera* editorCameraRef = nullptr;  // Set by ViewPort
 
+		// Event subscription
+		events::SubscriptionToken sceneClearedToken;
+
 	public:
 		MainImguiWindow();
-		~MainImguiWindow() override = default;
+		~MainImguiWindow() override;
 
 		void draw() override;
 
@@ -52,5 +56,8 @@ namespace windows
 
 		void iblWindow();
 		void editorCameraWindow();
+
+		void subscribeToEvents();
+		void onSceneCleared();
 	};
 }

@@ -29,8 +29,6 @@ namespace windows
         std::string newFolderName;
         bool showCreateFolderModal = false;
 
-        bool isShaderLoaded = false;
-
         fs::path selectedFile;
         AssetType selectedType;
         bool showFileWindow = false;
@@ -47,6 +45,9 @@ namespace windows
 
         // Service-based image preview handle
         services::EditorTextureHandle selectedImageHandle;
+
+        // Pending release handle - to defer release to next frame
+        services::EditorTextureHandle pendingReleaseHandle;
 
         bool navigateFolder = false;
         bool iconsLoaded = false;
@@ -77,5 +78,6 @@ namespace windows
 
         void drawFolderTree(const fs::path& path);
         bool matchesSearchQuery(const Asset& asset) const;
+        void deferredRelease();
     };
 }

@@ -1,10 +1,36 @@
 #include "SceneGraph.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/RenderEvents.hpp"
 #include <imgui.h>
 
 namespace windows
 {
+    SceneGraph::SceneGraph()
+    {
+        subscribeToEvents();
+    }
+
+    SceneGraph::~SceneGraph()
+    {
+        events::EventDispatcher::instance().unsubscribe(sceneClearedToken);
+    }
+
+    void SceneGraph::subscribeToEvents()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&) {
+                onSceneCleared();
+            });
+    }
+
+    void SceneGraph::onSceneCleared()
+    {
+        selectedHandle = services::EntityHandle::invalid();
+    }
+
     void SceneGraph::draw()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -265,8 +291,74 @@ namespace windows
             }
         }
 
-        // Add Component button (Unity-style)
-        ImGui::Spacing();
+        // IBL component
+        events::scene::HasIBLComponentQuery hasIBLQuery;
+        hasIBLQuery.entity = handle;
+        bool hasIBL = dispatcher.query(hasIBLQuery);
+
+        if (hasIBL)
+        {
+            events::scene::GetIBLDataQuery iblQuery;
+            iblQuery.entity = handle;
+            auto iblOpt = dispatcher.query(iblQuery);
+
+            if (iblOpt.has_value())
+            {
+                ImGui::PushID("IBLComponent");
+
+                bool removeIBL = false;
+
+                // Component header with remove button (Unity-style)
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.28f, 0.28f, 0.28f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+
+                bool isOpen = ImGui::CollapsingHeader("##IBLHeader", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+
+                // Component label after the arrow
+                ImGui::SameLine();
+                ImGui::Text("IBL");
+
+                // Small X button on the right
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+
+                if (ImGui::Button("x##RemoveIBL", ImVec2(18, 18)))
+                {
+                    removeIBL = true;
+                }
+
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(6);
+
+                if (isOpen)
+                {
+                    ImGui::Indent(10.0f);
+
+                    // Display IBL file path (read-only)
+                    ImGui::Text("File: %s", iblOpt->fileName.c_str());
+
+                    ImGui::Unindent(10.0f);
+                }
+
+                ImGui::PopID();
+
+                if (removeIBL)
+                {
+                    events::scene::RemoveIBLComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+
+                    // Also remove from renderer
+                    events::render::RemoveIBLCommand removeRenderCmd;
+                    dispatcher.execute(removeRenderCmd);
+                }
+            }
+        }
+        
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
@@ -307,8 +399,7 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
             }
-
-            // Show message if all components are added
+            
             if (hasCamera)
             {
                 ImGui::TextDisabled("All components added");

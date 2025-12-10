@@ -166,6 +166,28 @@ namespace scene {
 
 			return childEntities;
 		}
+		
+		void removeAllOptionalComponents() {
+			if (!isValid()) {
+				vfLogError("Trying to remove components from an invalid entity.");
+				return;
+			}
+
+			removeOptionalComponentsImpl(components::OptionalComponents{});
+		}
+
+	private:
+		template<typename... Ts>
+		void removeOptionalComponentsImpl(entt::type_list<Ts...>) {
+			(tryRemoveComponent<Ts>(), ...);
+		}
+
+		template<typename T>
+		void tryRemoveComponent() {
+			if (hasComponent<T>()) {
+				removeComponent<T>();
+			}
+		}
 	};
 }
 

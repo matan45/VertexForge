@@ -227,7 +227,8 @@ project "Utilities"
    includedirs {
       "dependencies/spdlog/include",
       "dependencies/glm",
-	  "dependencies/entt/single_include"
+	  "dependencies/entt/single_include",
+	  "dependencies/json/single_include"
    }
 
    links { "spdLog" }
