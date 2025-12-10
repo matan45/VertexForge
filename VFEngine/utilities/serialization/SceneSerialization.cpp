@@ -89,15 +89,13 @@ namespace serialization {
 		return scene::SceneGraphSystem();
 	}
 
-	bool SceneSerialization::saveScene(const scene::SceneGraphSystem& sceneGraph, std::string_view filename)
+	bool SceneSerialization::saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename)
 	{
 		try {
 			json sceneJson;
 			sceneJson["version"] = "1.0";
 
-			// Get mutable reference to root for traversal
-			auto& mutableGraph = const_cast<scene::SceneGraphSystem&>(sceneGraph);
-			scene::Entity& root = mutableGraph.GetRoot();
+			scene::Entity& root = sceneGraph.GetRoot();
 
 			sceneJson["root"] = serializeEntity(root);
 

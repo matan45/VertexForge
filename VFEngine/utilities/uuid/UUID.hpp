@@ -38,9 +38,9 @@ namespace uuid {
 		uint64_t value;
 
 		static uint64_t generateRandom() {
-			static std::random_device rd;
-			static std::mt19937_64 generator(rd());
-			static std::uniform_int_distribution<uint64_t> distribution(1, UINT64_MAX);
+			// Use thread_local to ensure thread safety without mutex overhead
+			thread_local std::mt19937_64 generator(std::random_device{}());
+			thread_local std::uniform_int_distribution<uint64_t> distribution(1, UINT64_MAX);
 			return distribution(generator);
 		}
 	};

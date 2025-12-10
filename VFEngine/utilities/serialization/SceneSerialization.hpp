@@ -11,7 +11,7 @@ namespace serialization
 	{
 	public:
 		static scene::SceneGraphSystem loadScene(std::string_view filename);
-		static bool saveScene(const scene::SceneGraphSystem& sceneGraph, std::string_view filename);
+		static bool saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename);
 	};
 }
 

@@ -63,6 +63,15 @@ namespace scene {
 			return EntityRegistry::getRegistry().get<T>(entityHandle);
 		}
 
+		// Get a component (const version)
+		template<typename T>
+		const T& getComponent() const {
+			if (!hasComponent<T>()) {
+				vfLogError("Entity does not have the requested component.");
+			}
+			return EntityRegistry::getRegistry().get<T>(entityHandle);
+		}
+
 		// Check if the entity has a specific component
 		template<typename T>
 		bool hasComponent() const {
@@ -113,9 +122,10 @@ namespace scene {
 		}
 
 		// Get the entity UUID
-		uuid::UUID getUUID() {
+		uuid::UUID getUUID() const {
 			if (hasComponent<components::UUIDComponent>()) {
-				return getComponent<components::UUIDComponent>().id;
+				const auto& component = getComponent<components::UUIDComponent>();
+				return component.id;
 			}
 			return uuid::UUID::invalid();
 		}
