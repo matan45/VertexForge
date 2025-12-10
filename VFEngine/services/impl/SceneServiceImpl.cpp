@@ -546,15 +546,13 @@ namespace services {
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
-
-        // Remove existing IBL from renderer before clearing scene
+        
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
         // Clear selection
         selectedEntity = std::nullopt;
-
-        // Load the scene using serialization
+        
         bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph);
 
         if (success) {

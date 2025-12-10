@@ -250,8 +250,7 @@ namespace windows
 		if (ImGui::Begin("IBL", &showIBLWindow))
 		{
 			ImGui::Text("IBL Window");
-
-			// Sync selectedIBLFile from scene's IBL component (handles scene load)
+			
 			events::scene::GetRootEntityQuery rootQuery;
 			auto rootHandle = dispatcher.query(rootQuery);
 
@@ -285,8 +284,7 @@ namespace windows
 			ImGui::SameLine();
 			std::string filePath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
 			ImGui::Text("%s", filePath.c_str());
-
-			// Disable Preview and Apply buttons when no file is selected
+			
 			const bool hasFile = !filePath.empty();
 
 			if (!hasFile) ImGui::BeginDisabled();

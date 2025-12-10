@@ -258,6 +258,7 @@ project "Services"
       "dependencies/entt/single_include",
       "dependencies/glfw/include",
       "dependencies/imgui",
+      "dependencies/json/single_include",
       "VFEngine/utilities",
       "VFEngine/core/controllers",
       "VFEngine/Window",

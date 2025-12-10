@@ -1,30 +1,22 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../scene/SceneGraphSystem.hpp"
-#include "../scene/Entity.hpp"
 #include "../components/Components.hpp"
 #include "../print/EditorLogger.hpp"
-#include <nlohmann/json.hpp>
 #include <fstream>
 
 namespace serialization {
-
-	using json = nlohmann::json;
-
-	// Forward declaration of recursive serialization helper
-	static json serializeEntity(scene::Entity& entity);
-
+	
 	// Serialize transform component
-	static json serializeTransform(const components::TransformComponent& transform) {
+	json SceneSerialization::serializeTransform(const components::TransformComponent& transform) {
 		json j;
 		j["position"] = json::array({ transform.position.x, transform.position.y, transform.position.z });
 		j["rotation"] = json::array({ transform.rotation.x, transform.rotation.y, transform.rotation.z });
 		j["scale"] = json::array({ transform.scale.x, transform.scale.y, transform.scale.z });
 		return j;
 	}
-
-	// Serialize camera component
-	static json serializeCamera(const components::CameraComponent& camera) {
+	
+	json SceneSerialization::serializeCamera(const components::CameraComponent& camera) {
 		json j;
 		j["fieldOfView"] = camera.fieldOfView;
 		j["nearPlane"] = camera.nearPlane;
@@ -34,9 +26,8 @@ namespace serialization {
 		j["orthoSize"] = camera.orthoSize;
 		return j;
 	}
-
-	// Serialize IBL component
-	static json serializeIBL(const components::IBLComponent& ibl) {
+	
+	json SceneSerialization::serializeIBL(const components::IBLComponent& ibl) {
 		json j;
 		// Remove any embedded null terminators from the string
 		std::string cleanFileName = ibl.fileName;
@@ -48,7 +39,7 @@ namespace serialization {
 	}
 
 	// Recursively serialize an entity and its children
-	static json serializeEntity(scene::Entity& entity) {
+	json SceneSerialization::serializeEntity(scene::Entity& entity) {
 		json entityJson;
 
 		// Use UUID for persistent identification
@@ -82,13 +73,8 @@ namespace serialization {
 
 		return entityJson;
 	}
-
-	// ============================================
-	// DESERIALIZATION HELPERS
-	// ============================================
-
-	// Deserialize transform component from JSON
-	static void deserializeTransform(const json& j, components::TransformComponent& transform) {
+	
+	void SceneSerialization::deserializeTransform(const json& j, components::TransformComponent& transform) {
 		if (auto it = j.find("position"); it != j.end() && it->is_array() && it->size() >= 3) {
 			transform.position = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
 		}
@@ -100,9 +86,8 @@ namespace serialization {
 		}
 		transform.isDirty = true;
 	}
-
-	// Deserialize camera component from JSON
-	static void deserializeCamera(const json& j, components::CameraComponent& camera) {
+	
+	void SceneSerialization::deserializeCamera(const json& j, components::CameraComponent& camera) {
 		if (auto it = j.find("fieldOfView"); it != j.end() && it->is_number())
 			camera.fieldOfView = it->get<float>();
 		if (auto it = j.find("nearPlane"); it != j.end() && it->is_number())
@@ -117,40 +102,30 @@ namespace serialization {
 			camera.orthoSize = it->get<float>();
 		camera.updateProjectionMatrix();
 	}
-
-	// Deserialize IBL component from JSON - returns filename
-	static std::string deserializeIBL(const json& j) {
+	
+	std::string SceneSerialization::deserializeIBL(const json& j) {
 		if (auto it = j.find("fileName"); it != j.end() && it->is_string()) {
 			return it->get<std::string>();
 		}
 		return "";
 	}
-
-	// Forward declaration for recursive deserialization
-	static void deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot);
-
-	// Recursively deserialize children entities
-	static void deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph) {
+	
+	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph) {
 		for (const auto& childJson : childrenJson) {
-			// Validate child JSON is an object
 			if (!childJson.is_object()) {
 				vfLogWarning("Skipping invalid child entry in scene file (not an object)");
 				continue;
 			}
-
-			// Get name for the child
+			
 			std::string childName = childJson.value("name", "Unnamed");
-
-			// Create new child entity
+			
 			scene::Entity child(childName);
-
-			// Verify entity was created successfully
+			
 			if (!child.isValid()) {
 				vfLogError("Failed to create child entity '{}' during scene load", childName);
 				continue;
 			}
-
-			// Restore UUID if present
+			
 			if (childJson.contains("uuid") && childJson["uuid"].is_number_unsigned()) {
 				uint64_t uuidValue = childJson["uuid"].get<uint64_t>();
 				child.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
@@ -165,7 +140,7 @@ namespace serialization {
 	}
 
 	// Main entity deserialization (handles both root and children)
-	static void deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot) {
+	void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot) {
 		// Set name
 		if (entityJson.contains("name")) {
 			entity.setName(entityJson["name"].get<std::string>());
