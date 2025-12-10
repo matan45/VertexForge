@@ -1,5 +1,4 @@
 #include "ContentBrowser.hpp"
-#include "files/FileUtils.hpp"
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "print/EditorLogger.hpp"
@@ -59,8 +58,7 @@ namespace windows
 			dispatcher.execute(cmd);
 			importLocationSet = true;
 		}
-
-		// Release pending texture from previous frame (deferred release)
+		
 		if (pendingReleaseHandle.isValid()) {
 			events::render::ReleaseEditorTextureCommand releaseCmd;
 			releaseCmd.handle = pendingReleaseHandle.imguiDescriptorSet;
@@ -73,9 +71,7 @@ namespace windows
 			ImGui::OpenPopup("Create New Folder");
 		}
 		createNewFolderModel();
-
-
-		// Draw the folder panel on the left.
+		
 		if (ImGui::Begin("Folder Structure", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
 		{
 			drawFolderTree(currentPath);
@@ -92,10 +88,9 @@ namespace windows
 			}
 
 			ImGui::SameLine();
-			// Show current path and navigation options
+			
 			ImGui::Text("Current Path: %s", StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
-
-			// Draw search bar
+			
 			ImGui::Text("Search:");
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(150.0f);
@@ -121,17 +116,11 @@ namespace windows
 			}
 			else
 			{
-				isShaderLoaded = false;
-				if (selectedImageHandle.isValid())
-				{
-					// Mark for deferred release (will be released next frame)
-					pendingReleaseHandle = selectedImageHandle;
-					selectedImageHandle = services::EditorTextureHandle{};
-				}
+				deferredRelease();
 			}
 
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-			// Display contents of the current directory
+			
 			for (const auto& asset : assets)
 			{
 				if (matchesSearchQuery(asset))
@@ -344,16 +333,7 @@ namespace windows
 			}
 			else if (selectedType == AssetType::Shader)
 			{
-				if (!isShaderLoaded)
-				{
-					std::ifstream shaderFile(selectedFile.string());
-					if (shaderFile)
-					{
-						std::string shaderCode((std::istreambuf_iterator<char>(shaderFile)),
-							std::istreambuf_iterator<char>());
-						isShaderLoaded = true;
-					}
-				}
+				//TODO open in vscode or internal code editor
 			}
 		}
 
@@ -474,6 +454,16 @@ namespace windows
 		std::string searchQueryLower = StringUtil::toLower(searchQuery);
 
 		return assetNameLower.find(searchQueryLower) != std::string::npos;
+	}
+
+	void ContentBrowser::deferredRelease()
+	{
+		if (selectedImageHandle.isValid())
+		{
+			// Mark for deferred release (will be released next frame)
+			pendingReleaseHandle = selectedImageHandle;
+			selectedImageHandle = services::EditorTextureHandle{};
+		}
 	}
 
 	void ContentBrowser::navigateTo(const fs::path& path)

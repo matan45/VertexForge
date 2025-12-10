@@ -29,8 +29,6 @@ namespace windows
         std::string newFolderName;
         bool showCreateFolderModal = false;
 
-        bool isShaderLoaded = false;
-
         fs::path selectedFile;
         AssetType selectedType;
         bool showFileWindow = false;
@@ -80,5 +78,6 @@ namespace windows
 
         void drawFolderTree(const fs::path& path);
         bool matchesSearchQuery(const Asset& asset) const;
+        void deferredRelease();
     };
 }

@@ -358,9 +358,7 @@ namespace windows
                 }
             }
         }
-
-        // Add Component button (Unity-style)
-        ImGui::Spacing();
+        
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
@@ -401,8 +399,7 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
             }
-
-            // Show message if all components are added
+            
             if (hasCamera)
             {
                 ImGui::TextDisabled("All components added");

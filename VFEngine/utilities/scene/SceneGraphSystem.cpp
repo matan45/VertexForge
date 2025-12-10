@@ -56,8 +56,7 @@ namespace scene {
 		for (auto& child : children) {
 			removeEntity(child);
 		}
-
-		// Remove all optional components from root (keeps Name, Transform, etc.)
+		
 		root.removeAllOptionalComponents();
 
 		vfLogInfo("Scene cleared successfully.");

@@ -504,18 +504,14 @@ namespace services {
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
-
-        // Remove IBL from renderer before clearing scene
+        
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
-
-        // Clear the scene graph (removes all entities except root)
+        
         sceneGraph->clearScene();
-
-        // Reset selected entity
+        
         selectedEntity = std::nullopt;
-
-        // Publish notification for UI to react
+        
         events::scene::SceneClearedNotification notification;
         dispatcher.publish(notification);
 

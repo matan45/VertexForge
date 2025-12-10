@@ -166,9 +166,7 @@ namespace scene {
 
 			return childEntities;
 		}
-
-		// Remove all optional components (keeps Name, Transform, Parent, Children, WorldTransform)
-		// Optional components are defined in components::OptionalComponents type list
+		
 		void removeAllOptionalComponents() {
 			if (!isValid()) {
 				vfLogError("Trying to remove components from an invalid entity.");
@@ -179,7 +177,6 @@ namespace scene {
 		}
 
 	private:
-		// Helper to iterate over OptionalComponents type list and remove each
 		template<typename... Ts>
 		void removeOptionalComponentsImpl(entt::type_list<Ts...>) {
 			(tryRemoveComponent<Ts>(), ...);
