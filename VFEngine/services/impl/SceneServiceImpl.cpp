@@ -498,6 +498,11 @@ namespace services {
     }
 
     bool SceneServiceImpl::newScene() {
+        if (!sceneGraph) {
+            vfLogError("SceneGraph is null, cannot create new scene.");
+            return false;
+        }
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         // Remove IBL from renderer before clearing scene
@@ -505,9 +510,7 @@ namespace services {
         dispatcher.execute(removeIblCmd);
 
         // Clear the scene graph (removes all entities except root)
-        if (sceneGraph) {
-            sceneGraph->clearScene();
-        }
+        sceneGraph->clearScene();
 
         // Reset selected entity
         selectedEntity = std::nullopt;

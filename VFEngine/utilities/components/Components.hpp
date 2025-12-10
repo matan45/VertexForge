@@ -6,6 +6,14 @@
 
 namespace components {
 
+	// Forward declarations for type list
+	struct IBLComponent;
+	struct CameraComponent;
+
+	// Type list of optional components that can be removed during cleanup
+	// Add new optional component types here when they are created
+	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent>;
+
 	struct WorldTransformComponent
 	{
 		glm::mat4 worldMatrix;

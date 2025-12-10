@@ -1,5 +1,6 @@
 #pragma once
 #include "EventTypes.hpp"
+#include "print/EditorLogger.hpp"
 #include <any>
 #include <atomic>
 #include <functional>
@@ -135,13 +136,21 @@ namespace events {
     template<typename TCommand>
     void EventDispatcher::registerCommandHandler(std::function<typename TCommand::ResultType(const TCommand&)> handler) {
         std::unique_lock lock(mutex);
-        commandHandlers[std::type_index(typeid(TCommand))] = std::move(handler);
+        auto typeIdx = std::type_index(typeid(TCommand));
+        if (commandHandlers.contains(typeIdx)) {
+            vfLogWarning("Command handler for '{}' is being replaced. This may indicate duplicate registration.", typeid(TCommand).name());
+        }
+        commandHandlers[typeIdx] = std::move(handler);
     }
 
     template<typename TQuery>
     void EventDispatcher::registerQueryHandler(std::function<typename TQuery::ResultType(const TQuery&)> handler) {
         std::unique_lock lock(mutex);
-        queryHandlers[std::type_index(typeid(TQuery))] = std::move(handler);
+        auto typeIdx = std::type_index(typeid(TQuery));
+        if (queryHandlers.contains(typeIdx)) {
+            vfLogWarning("Query handler for '{}' is being replaced. This may indicate duplicate registration.", typeid(TQuery).name());
+        }
+        queryHandlers[typeIdx] = std::move(handler);
     }
 
     template<typename TNotification>
