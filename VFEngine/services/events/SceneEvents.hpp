@@ -94,6 +94,12 @@ namespace events::scene {
         std::string_view getName() const override { return "SaveScene"; }
     };
 
+    struct LoadSceneCommand : ICommand<bool> {
+        std::string filePath;
+
+        std::string_view getName() const override { return "LoadScene"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================

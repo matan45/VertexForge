@@ -83,10 +83,163 @@ namespace serialization {
 		return entityJson;
 	}
 
+	// ============================================
+	// DESERIALIZATION HELPERS
+	// ============================================
+
+	// Deserialize transform component from JSON
+	static void deserializeTransform(const json& j, components::TransformComponent& transform) {
+		if (j.contains("position")) {
+			const auto& pos = j["position"];
+			transform.position = glm::vec3(pos[0].get<float>(), pos[1].get<float>(), pos[2].get<float>());
+		}
+		if (j.contains("rotation")) {
+			const auto& rot = j["rotation"];
+			transform.rotation = glm::vec3(rot[0].get<float>(), rot[1].get<float>(), rot[2].get<float>());
+		}
+		if (j.contains("scale")) {
+			const auto& scl = j["scale"];
+			transform.scale = glm::vec3(scl[0].get<float>(), scl[1].get<float>(), scl[2].get<float>());
+		}
+		transform.isDirty = true;
+	}
+
+	// Deserialize camera component from JSON
+	static void deserializeCamera(const json& j, components::CameraComponent& camera) {
+		if (j.contains("fieldOfView")) camera.fieldOfView = j["fieldOfView"].get<float>();
+		if (j.contains("nearPlane")) camera.nearPlane = j["nearPlane"].get<float>();
+		if (j.contains("farPlane")) camera.farPlane = j["farPlane"].get<float>();
+		if (j.contains("aspectRatio")) camera.aspectRatio = j["aspectRatio"].get<float>();
+		if (j.contains("isPerspective")) camera.isPerspective = j["isPerspective"].get<bool>();
+		if (j.contains("orthoSize")) camera.orthoSize = j["orthoSize"].get<float>();
+		camera.updateProjectionMatrix();
+	}
+
+	// Deserialize IBL component from JSON - returns filename
+	static std::string deserializeIBL(const json& j) {
+		if (j.contains("fileName")) {
+			return j["fileName"].get<std::string>();
+		}
+		return "";
+	}
+
+	// Forward declaration for recursive deserialization
+	static void deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot);
+
+	// Recursively deserialize children entities
+	static void deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph) {
+		for (const auto& childJson : childrenJson) {
+			// Get name for the child
+			std::string childName = childJson.value("name", "Unnamed");
+
+			// Create new child entity
+			scene::Entity child(childName);
+
+			// Restore UUID if present
+			if (childJson.contains("uuid")) {
+				uint64_t uuidValue = childJson["uuid"].get<uint64_t>();
+				child.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
+			}
+
+			// Add to parent
+			sceneGraph.addChild(parent, child);
+
+			// Deserialize the child's data (transform, components, children)
+			deserializeEntity(childJson, child, sceneGraph, false);
+		}
+	}
+
+	// Main entity deserialization (handles both root and children)
+	static void deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot) {
+		// Set name
+		if (entityJson.contains("name")) {
+			entity.setName(entityJson["name"].get<std::string>());
+		}
+
+		// Restore UUID for root
+		if (isRoot && entityJson.contains("uuid")) {
+			uint64_t uuidValue = entityJson["uuid"].get<uint64_t>();
+			entity.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
+		}
+
+		// Deserialize transform
+		if (entityJson.contains("transform")) {
+			auto& transform = entity.getComponent<components::TransformComponent>();
+			deserializeTransform(entityJson["transform"], transform);
+		}
+
+		// Deserialize optional components
+		if (entityJson.contains("components")) {
+			const auto& componentsJson = entityJson["components"];
+
+			// Camera component
+			if (componentsJson.contains("camera")) {
+				auto& camera = entity.addOrReplaceComponent<components::CameraComponent>();
+				deserializeCamera(componentsJson["camera"], camera);
+			}
+
+			// IBL component
+			if (componentsJson.contains("ibl")) {
+				std::string iblFileName = deserializeIBL(componentsJson["ibl"]);
+				if (!iblFileName.empty()) {
+					entity.addOrReplaceComponent<components::IBLComponent>().fileName = iblFileName;
+				}
+			}
+		}
+
+		// Deserialize children recursively
+		if (entityJson.contains("children") && entityJson["children"].is_array()) {
+			deserializeChildren(entityJson["children"], entity, sceneGraph);
+		}
+	}
+
 	scene::SceneGraphSystem SceneSerialization::loadScene(std::string_view filename)
 	{
-		// TODO: Implement in VK-39
-		return scene::SceneGraphSystem();
+		scene::SceneGraphSystem sceneGraph;
+		loadSceneInto(filename, sceneGraph);
+		return sceneGraph;
+	}
+
+	bool SceneSerialization::loadSceneInto(std::string_view filename, scene::SceneGraphSystem& sceneGraph)
+	{
+		try {
+			// Open and parse file
+			std::string filePath{ filename };
+			std::ifstream file{ filePath };
+			if (!file.is_open()) {
+				vfLogError("Failed to open file for reading: {}", filename);
+				return false;
+			}
+
+			json sceneJson = json::parse(file);
+			file.close();
+
+			// Validate and log version
+			if (sceneJson.contains("version")) {
+				std::string version = sceneJson["version"].get<std::string>();
+				vfLogInfo("Loading scene version: {}", version);
+			}
+
+			// Clear existing scene first
+			sceneGraph.clearScene();
+
+			// Deserialize root entity
+			if (sceneJson.contains("root")) {
+				scene::Entity& root = sceneGraph.GetRoot();
+				deserializeEntity(sceneJson["root"], root, sceneGraph, true);
+			}
+
+			vfLogInfo("Scene loaded successfully from: {}", filename);
+			return true;
+		}
+		catch (const json::parse_error& e) {
+			vfLogError("JSON parse error while loading scene: {}", e.what());
+			return false;
+		}
+		catch (const std::exception& e) {
+			vfLogError("Failed to load scene: {}", e.what());
+			return false;
+		}
 	}
 
 	bool SceneSerialization::saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename)
