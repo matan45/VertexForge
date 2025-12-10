@@ -28,6 +28,7 @@ namespace resource
         ANIMATION,
         HDR,
         AUDIO,
+        SCENE,
         UNKNOWN
     };
 

@@ -38,6 +38,7 @@ namespace windows
 		glslIcon = loadIcon("../../resources/editor/contentBrowser/glsl-file.vfImage");
 		animationIcon = loadIcon("../../resources/editor/contentBrowser/animation-file.vfImage");
 		hdrIcon = loadIcon("../../resources/editor/contentBrowser/hdr-file.vfImage");
+		sceneIcon = loadIcon("../../resources/editor/contentBrowser/scene.vfImage");
 
 		iconsLoaded = true;
 	}
@@ -50,8 +51,7 @@ namespace windows
 		if (!iconsLoaded) {
 			loadIcons();
 		}
-
-		// Set import location on first draw when services are ready
+		
 		if (!importLocationSet) {
 			events::resource::SetImportLocationCommand cmd;
 			cmd.path = currentPath.string();
@@ -182,6 +182,10 @@ namespace windows
 				{
 					asset.type = Texture;
 				}
+				else if (ext == resource::FileType::SCENE)
+				{
+					asset.type = Scene;
+				}
 				else if (ext == resource::FileType::HDR)
 				{
 					asset.type = HDR;
@@ -228,6 +232,14 @@ namespace windows
 			ImGui::BeginGroup();
 			if (hdrIcon.isValid()) {
 				ImGui::Image(hdrIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			}
+			ImGui::TextWrapped("%s", asset.name.c_str());
+			ImGui::EndGroup();
+			break;
+		case Scene:
+			ImGui::BeginGroup();
+			if (sceneIcon.isValid()) {
+				ImGui::Image(sceneIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
 			}
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
