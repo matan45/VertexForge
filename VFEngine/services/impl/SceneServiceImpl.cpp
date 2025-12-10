@@ -534,6 +534,49 @@ namespace services {
         return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);
     }
 
+    bool SceneServiceImpl::loadScene(const std::string& filePath) {
+        if (!sceneGraph) {
+            vfLogError("SceneGraph is null, cannot load scene.");
+            return false;
+        }
+
+        if (filePath.empty()) {
+            vfLogError("File path is empty, cannot load scene.");
+            return false;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        
+        events::render::RemoveIBLCommand removeIblCmd;
+        dispatcher.execute(removeIblCmd);
+
+        // Clear selection
+        selectedEntity = std::nullopt;
+        
+        bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph);
+
+        if (success) {
+            // IBL is a scene-level property, always attached to root entity only.
+            // Non-root entities should not have IBL components (enforced by editor UI).
+            scene::Entity& root = sceneGraph->GetRoot();
+            if (root.hasComponent<components::IBLComponent>()) {
+                const auto& ibl = root.getComponent<components::IBLComponent>();
+                if (!ibl.fileName.empty()) {
+                    events::render::SetIBLCommand setIblCmd;
+                    setIblCmd.hdrPath = ibl.fileName;
+                    dispatcher.execute(setIblCmd);
+                }
+            }
+
+            // Publish scene loaded notification
+            events::scene::SceneLoadedNotification notification;
+            notification.scenePath = filePath;
+            dispatcher.publish(notification);
+        }
+
+        return success;
+    }
+
     EntityData SceneServiceImpl::buildEntityData(entt::entity entity) const {
         scene::Entity sceneEntity(entity);
 
@@ -710,6 +753,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::scene::SaveSceneCommand>(
             [this](const events::scene::SaveSceneCommand& cmd) {
                 return saveScene(cmd.filePath);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::LoadSceneCommand>(
+            [this](const events::scene::LoadSceneCommand& cmd) {
+                return loadScene(cmd.filePath);
             });
     }
 

@@ -90,6 +90,7 @@ namespace services {
         // Scene Lifecycle
         bool newScene();
         bool saveScene(const std::string& filePath);
+        bool loadScene(const std::string& filePath);
 
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
