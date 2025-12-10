@@ -12,7 +12,7 @@ namespace serialization {
 	using json = nlohmann::json;
 
 	// Forward declaration of recursive serialization helper
-	static json serializeEntity(scene::Entity& entity, int& idCounter);
+	static json serializeEntity(scene::Entity& entity);
 
 	// Serialize transform component
 	static json serializeTransform(const components::TransformComponent& transform) {
@@ -48,9 +48,11 @@ namespace serialization {
 	}
 
 	// Recursively serialize an entity and its children
-	static json serializeEntity(scene::Entity& entity, int& idCounter) {
+	static json serializeEntity(scene::Entity& entity) {
 		json entityJson;
-		entityJson["id"] = idCounter++;
+
+		// Use UUID for persistent identification
+		entityJson["uuid"] = entity.getUUID().getValue();
 		entityJson["name"] = entity.getName();
 
 		// Transform (always present per Entity constructor)
@@ -74,7 +76,7 @@ namespace serialization {
 		// Serialize children recursively
 		json childrenJson = json::array();
 		for (auto& child : entity.getChildren()) {
-			childrenJson.push_back(serializeEntity(child, idCounter));
+			childrenJson.push_back(serializeEntity(child));
 		}
 		entityJson["children"] = childrenJson;
 
@@ -97,8 +99,7 @@ namespace serialization {
 			auto& mutableGraph = const_cast<scene::SceneGraphSystem&>(sceneGraph);
 			scene::Entity& root = mutableGraph.GetRoot();
 
-			int idCounter = 0;
-			sceneJson["root"] = serializeEntity(root, idCounter);
+			sceneJson["root"] = serializeEntity(root);
 
 			// Write to file with UTF-8 encoding, no BOM, pretty-printed
 			std::string filePath{filename};

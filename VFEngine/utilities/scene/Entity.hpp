@@ -21,6 +21,7 @@ namespace scene {
 		explicit Entity(const std::string& name)
 		{
 			entityHandle = EntityRegistry::getRegistry().create();
+			addComponent<components::UUIDComponent>();     // Generate unique ID
 			addComponent<components::NameComponent>(name); // Set the name on creation
 			addComponent<components::TransformComponent>();
 		}
@@ -109,6 +110,14 @@ namespace scene {
 		// Set the entity name
 		void setName(std::string_view newName) {
 			addOrReplaceComponent<components::NameComponent>(std::string(newName));
+		}
+
+		// Get the entity UUID
+		uuid::UUID getUUID() {
+			if (hasComponent<components::UUIDComponent>()) {
+				return getComponent<components::UUIDComponent>().id;
+			}
+			return uuid::UUID::invalid();
 		}
 
 		// Add a child entity
