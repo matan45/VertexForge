@@ -1,5 +1,6 @@
 #include "Utilities.hpp"
 #include "print/Logger.hpp"
+#include <cstring>
 
 namespace core {
 
@@ -266,6 +267,49 @@ namespace core {
 		viewInfo.subresourceRange.layerCount = imageInfoView.layerCount;
 
 		imageView = imageInfoView.logicalDevice.createImageView(viewInfo);
+	}
+
+	void Utilities::copyToBuffer(
+		const vk::Device& device,
+		const vk::PhysicalDevice& physicalDevice,
+		const vk::Queue& queue,
+		const vk::CommandPool& commandPool,
+		vk::Buffer dstBuffer,
+		const void* srcData,
+		vk::DeviceSize size,
+		vk::DeviceSize offset)
+	{
+		if (size == 0 || srcData == nullptr) {
+			return;
+		}
+
+		// Create staging buffer with host-visible memory
+		vk::Buffer stagingBuffer;
+		vk::DeviceMemory stagingMemory;
+
+		BufferInfoRequest stagingInfo(
+			device,
+			physicalDevice,
+			size,
+			vk::BufferUsageFlagBits::eTransferSrc,
+			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+		);
+		createBuffer(stagingInfo, stagingBuffer, stagingMemory);
+
+		// Copy data to staging buffer
+		void* mappedData = device.mapMemory(stagingMemory, 0, size, {});
+		std::memcpy(mappedData, srcData, static_cast<size_t>(size));
+		device.unmapMemory(stagingMemory);
+
+		// Copy from staging to destination buffer with offset
+		auto cmd = beginSingleTimeCommands(device, commandPool);
+		vk::BufferCopy copyRegion{ 0, offset, size };
+		cmd->copyBuffer(stagingBuffer, dstBuffer, copyRegion);
+		endSingleTimeCommands(queue, cmd);
+
+		// Cleanup staging buffer
+		device.destroyBuffer(stagingBuffer);
+		device.freeMemory(stagingMemory);
 	}
 
 }

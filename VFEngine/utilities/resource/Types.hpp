@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <functional>
 #include "../config/Config.hpp"
 
 namespace resource
@@ -117,4 +118,43 @@ namespace resource
         uint32_t frames = 0;
         std::vector<short> data;
     };
+
+    // Streaming mesh loading types
+    enum class MeshLoadState : uint8_t
+    {
+        NotStarted,
+        Loading,
+        Complete,
+        Error
+    };
+
+    struct StreamingMeshData
+    {
+        uint32_t totalVertices = 0;
+        uint32_t totalIndices = 0;
+        MeshLoadState state = MeshLoadState::NotStarted;
+    };
+
+    struct StreamingMeshesData
+    {
+        FileType headerFileType = FileType::MESH;
+        Version version{};
+        uint32_t numberOfMeshes = 0;
+        std::vector<StreamingMeshData> meshes;
+    };
+
+    // Callback for receiving mesh chunks during streaming load
+    // meshIndex: which mesh in the file (for multi-mesh files)
+    // vertices/indices: chunk data (one will be empty per call)
+    // vertexOffset/indexOffset: where this chunk starts in the full mesh
+    using MeshChunkCallback = std::function<void(
+        uint32_t meshIndex,
+        const std::vector<Vertex>& vertices,
+        const std::vector<uint32_t>& indices,
+        uint32_t vertexOffset,
+        uint32_t indexOffset
+    )>;
+
+    // Callback when a mesh finishes loading
+    using MeshLoadCompleteCallback = std::function<void(uint32_t meshIndex, bool success)>;
 }

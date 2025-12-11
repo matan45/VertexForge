@@ -153,5 +153,18 @@ namespace core
 			vk::DeviceMemory& bufferMemory);
 		static void createImage(const ImageInfoRequest& imageInfo, vk::Image& image, vk::DeviceMemory& imageMemory);
 		static void createImageView(const ImageViewInfoRequest& imageInfoView, vk::ImageView& imageView);
+
+		// Copy data to a buffer at a specific offset using a staging buffer
+		// Useful for streaming uploads where chunks are uploaded incrementally
+		static void copyToBuffer(
+			const vk::Device& device,
+			const vk::PhysicalDevice& physicalDevice,
+			const vk::Queue& queue,
+			const vk::CommandPool& commandPool,
+			vk::Buffer dstBuffer,
+			const void* srcData,
+			vk::DeviceSize size,
+			vk::DeviceSize offset = 0
+		);
 	};
 }
