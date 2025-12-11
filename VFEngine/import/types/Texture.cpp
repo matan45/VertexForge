@@ -40,7 +40,8 @@ namespace types
 		int height;
 		int channels;
 
-		unsigned char* imageData = stbi_load(file.path.data(), &width, &height, &channels, 0);
+		std::string filePath(file.path);
+		unsigned char* imageData = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
 
 		if (!imageData)
 		{
@@ -84,7 +85,8 @@ namespace types
 		hdrData.headerFileType = resource::FileType::HDR;
 
 		// File type detection is now handled by the pipeline, determine from extension
-		std::string extension = files::FileUtils::getFileExtension(file.path.data());
+		std::string filePath(file.path);
+		std::string extension = files::FileUtils::getFileExtension(filePath);
 		if (extension == ".hdr")
 		{
 			if (file.config.isImageFlipVertically)
@@ -95,7 +97,7 @@ namespace types
 			int width;
 			int height;
 			int channels;
-			float* imageData = stbi_loadf(file.path.data(), &width, &height, &channels, 0);
+			float* imageData = stbi_loadf(filePath.c_str(), &width, &height, &channels, 0);
 			if (!imageData)
 			{
 				vfLogError("Failed to load texture: {}", file.path.data());
@@ -113,7 +115,7 @@ namespace types
 			hdrData.width = static_cast<uint32_t>(width);
 			hdrData.height = static_cast<uint32_t>(height);
 			hdrData.numbersOfChannels = channels;
-			hdrData.textureData = std::vector<float>(imageData, imageData + (width * height * channels));
+			hdrData.textureData = std::vector<float>(imageData, imageData + (static_cast<ptrdiff_t>(width) * height * channels));
 
 			// Report 70% - data copied, saving to file
 			if (progressCallback) progressCallback(0.7f);
@@ -129,10 +131,10 @@ namespace types
 		{
 			EXRVersion exrVersion;
 
-			int ret = ParseEXRVersionFromFile(&exrVersion, file.path.data());
+			int ret = ParseEXRVersionFromFile(&exrVersion, filePath.c_str());
 			if (ret != TINYEXR_SUCCESS)
 			{
-				vfLogError("Invalid EXR file: {}", file.path.data());
+				vfLogError("Invalid EXR file: {}", filePath);
 				return;
 			}
 
@@ -143,7 +145,7 @@ namespace types
 			InitEXRHeader(&exrHeader);
 
 			const char* exrError = nullptr;
-			ret = ParseEXRHeaderFromFile(&exrHeader, &exrVersion, file.path.data(), &exrError);
+			ret = ParseEXRHeaderFromFile(&exrHeader, &exrVersion, filePath.c_str(), &exrError);
 			if (ret != TINYEXR_SUCCESS)
 			{
 				vfLogError("Parse EXR err: {}", exrError);
@@ -157,7 +159,7 @@ namespace types
 			EXRImage exrImage;
 			InitEXRImage(&exrImage);
 
-			ret = LoadEXRImageFromFile(&exrImage, &exrHeader, file.path.data(), &exrError);
+			ret = LoadEXRImageFromFile(&exrImage, &exrHeader, filePath.c_str(), &exrError);
 			if (ret != TINYEXR_SUCCESS)
 			{
 				vfLogError("Load EXR err: {}", exrError);
@@ -173,7 +175,7 @@ namespace types
 			int width;
 			int height;
 
-			int result = LoadEXR(&out, &width, &height, file.path.data(), &exrError);
+			int result = LoadEXR(&out, &width, &height, filePath.c_str(), &exrError);
 			if (result != TINYEXR_SUCCESS)
 			{
 				vfLogError("Failed to load EXR image: {}", exrError);
@@ -265,7 +267,8 @@ namespace types
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.height);
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.numbersOfChannels);
 
-		HDRWriter::writeHDR(outFile, hdrData.width, hdrData.height, hdrData.numbersOfChannels, hdrData.textureData);
+		HDRWriter::writeHDR(outFile, static_cast<int>(hdrData.width), static_cast<int>(hdrData.height),
+		                    static_cast<int>(hdrData.numbersOfChannels), hdrData.textureData);
 
 		outFile.close();
 	}
@@ -273,10 +276,11 @@ namespace types
 	void Texture::convertTo4Channels(unsigned char* inputData, int width, int height, int inputChannels, std::vector<unsigned char>& outputData)
 	{
 		int outputChannels = 4; // RGBA
-		outputData.resize(width * height * outputChannels);
+		size_t totalPixels = static_cast<size_t>(width) * height;
+		outputData.resize(totalPixels * outputChannels);
 
-		for (int i = 0; i < width * height; ++i) {
-			unsigned char r, g, b, a;
+		for (size_t i = 0; i < totalPixels; ++i) {
+			unsigned char r = 0, g = 0, b = 0, a = 255;
 			if (inputChannels == 1) {
 				// Grayscale -> RGBA
 				r = g = b = inputData[i];
@@ -301,9 +305,6 @@ namespace types
 				b = inputData[i * 4 + 2];
 				a = inputData[i * 4 + 3];
 			}
-			else {
-				//throw std::runtime_error("Unsupported number of channels");
-			}
 
 			outputData[i * 4] = r;
 			outputData[i * 4 + 1] = g;
@@ -314,7 +315,7 @@ namespace types
 
 	std::vector<float> Texture::convertFromEXRToHDR(const float* data, int width, int height) const
 	{
-		std::vector<float> result(width * height * 3); // RGB needs 3 floats per pixel
+		std::vector<float> result(static_cast<size_t>(width) * height * 3); // RGB needs 3 floats per pixel
 		for (int y = 0; y < height; ++y)
 		{
 			for (int x = 0; x < width; ++x)
@@ -350,14 +351,14 @@ namespace types
 			return; // Invalid input
 		}
 
-		int rowSize = width * 4; // Number of floats per row (RGBA)
+		size_t rowSize = static_cast<size_t>(width) * 4; // Number of floats per row (RGBA)
 		float* tempRow = new float[rowSize]; // Temporary buffer to hold a row
 
 		for (int y = 0; y < height / 2; ++y)
 		{
 			// Calculate row indices to swap
-			float* topRow = imageData + y * rowSize;
-			float* bottomRow = imageData + (height - 1 - y) * rowSize;
+			float* topRow = imageData + static_cast<ptrdiff_t>(y) * static_cast<ptrdiff_t>(rowSize);
+			float* bottomRow = imageData + static_cast<ptrdiff_t>(height - 1 - y) * static_cast<ptrdiff_t>(rowSize);
 
 			// Swap rows
 			std::memcpy(tempRow, topRow, rowSize * sizeof(float));
@@ -371,7 +372,7 @@ namespace types
 	void HDRWriter::writeHDR(std::ofstream& file, int width, int height, int numbersOfChannels,
 		const std::vector<float>& pixels)
 	{
-		if (pixels.size() != width * height * numbersOfChannels)
+		if (pixels.size() != static_cast<size_t>(width) * height * numbersOfChannels)
 		{
 			vfLogError("Pixel data size does not match image dimensions!");
 			return;
@@ -399,15 +400,15 @@ namespace types
 					{
 						// RLE
 						uint8_t value = getChannel(pixels, width, y, x, channel);
-						file.put(128 + runLength);
-						file.put(value);
+						file.put(static_cast<char>(128 + runLength));
+						file.put(static_cast<char>(value));
 					}
 					else
 					{
 						// Raw data
 						uint8_t value = getChannel(pixels, width, y, x, channel);
-						file.put(1);
-						file.put(value);
+						file.put(static_cast<char>(1));
+						file.put(static_cast<char>(value));
 					}
 					x += runLength;
 				}
