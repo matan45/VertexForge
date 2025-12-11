@@ -57,6 +57,17 @@ namespace pipeline::stages
 
     void FileProcessingStage::processMesh(ImportContext& context)
     {
-        meshProcessor.loadFromFile(context.file, context.fileName, context.location);
+        // Create a mesh progress callback that wraps the import progress callback
+        types::MeshProgressCallback meshProgress = nullptr;
+        if (context.progressCallback)
+        {
+            meshProgress = [&context](float progress) {
+                // Report mesh progress through the import progress callback
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, progress);
+            };
+        }
+
+        meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
     }
 }

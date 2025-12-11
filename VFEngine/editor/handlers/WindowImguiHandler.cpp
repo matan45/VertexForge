@@ -5,6 +5,7 @@
 #include "../windows/ViewPort.hpp"
 #include "../windows/MainImguiWindow.hpp"
 #include "../windows/ContentBrowser.hpp"
+#include "../windows/ImportProgressWindow.hpp"
 
 namespace handlers
 {
@@ -23,6 +24,7 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ContentBrowser>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneGraph>());
         controllers::imguiHandler::ImguiWindowHandler::add(viewPort);
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ImportProgressWindow>());
     }
 
     void WindowImguiHandler::cleanUp() const

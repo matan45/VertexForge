@@ -76,14 +76,25 @@ namespace handlers {
 		importDelegate.initialize = []() {
 			controllers::Import::initialize();
 		};
-		importDelegate.importFiles = [](const std::vector<services::ImportFileRequest>& files) {
+		importDelegate.importFiles = [](const std::vector<services::ImportFileRequest>& files,
+		                                services::ImportProgressCallback progressCallback) {
 			std::vector<importConfig::ImportFiles> importFiles;
 			for (const auto& file : files) {
 				importConfig::ImportConfig config;
 				config.isImageFlipVertically = file.flipVertically;
 				importFiles.emplace_back(file.path, config);
 			}
-			controllers::Import::importFiles(importFiles);
+			// Convert progress callback to Import's callback type
+			controllers::ImportProgressCallback importProgressCallback = nullptr;
+			if (progressCallback) {
+				importProgressCallback = [progressCallback](std::string_view currentFile,
+				                                             uint32_t fileIndex,
+				                                             uint32_t totalFiles,
+				                                             float fileProgress) {
+					progressCallback(currentFile, fileIndex, totalFiles, fileProgress);
+				};
+			}
+			controllers::Import::importFiles(importFiles, importProgressCallback);
 		};
 		importDelegate.setLocation = [](const std::string& path) {
 			controllers::Import::setLocation(path);

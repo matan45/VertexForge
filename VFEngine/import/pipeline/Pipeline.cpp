@@ -10,26 +10,44 @@ namespace pipeline
     }
 
     std::vector<std::future<std::optional<ImportContext>>> ImportPipeline::processFiles(
-        const std::vector<importConfig::ImportFiles>& files, 
-        std::string_view location)
+        const std::vector<importConfig::ImportFiles>& files,
+        std::string_view location,
+        controllers::ImportProgressCallback progressCallback)
     {
         std::vector<std::future<std::optional<ImportContext>>> futures;
         futures.reserve(files.size());
 
+        uint32_t totalFiles = static_cast<uint32_t>(files.size());
+        uint32_t fileIndex = 0;
+
         for (const auto& file : files)
         {
-            futures.push_back(std::async(std::launch::async, 
-                [this, file, location]() -> std::optional<ImportContext> {
-                    return processFile(file, location);
+            futures.push_back(std::async(std::launch::async,
+                [this, file, location, fileIndex, totalFiles, progressCallback]() -> std::optional<ImportContext> {
+                    return processFile(file, location, fileIndex, totalFiles, progressCallback);
                 }));
+            fileIndex++;
         }
 
         return futures;
     }
 
-    std::optional<ImportContext> ImportPipeline::processFile(importConfig::ImportFiles file, std::string_view location)
+    std::optional<ImportContext> ImportPipeline::processFile(importConfig::ImportFiles file,
+                                                              std::string_view location,
+                                                              uint32_t fileIndex,
+                                                              uint32_t totalFiles,
+                                                              controllers::ImportProgressCallback progressCallback)
     {
         ImportContext context(file, location);
+        context.fileIndex = fileIndex;
+        context.totalFiles = totalFiles;
+        context.progressCallback = progressCallback;
+
+        // Report initial progress for this file
+        if (progressCallback)
+        {
+            progressCallback(file.path, fileIndex + 1, totalFiles, 0.0f);
+        }
 
         try
         {

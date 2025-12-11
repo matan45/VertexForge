@@ -5,13 +5,23 @@
 #include <atomic>
 #include <string>
 #include <functional>
+#include <mutex>
+#include <future>
 
 namespace services {
+
+    // Progress callback type for import operations
+    using ImportProgressCallback = std::function<void(
+        std::string_view currentFile,
+        uint32_t fileIndex,
+        uint32_t totalFiles,
+        float fileProgress
+    )>;
 
     // Delegate types for import functionality (injected by Editor)
     struct ImportDelegate {
         std::function<void()> initialize;
-        std::function<void(const std::vector<ImportFileRequest>&)> importFiles;
+        std::function<void(const std::vector<ImportFileRequest>&, ImportProgressCallback)> importFiles;
         std::function<void(const std::string&)> setLocation;
     };
 
@@ -53,6 +63,8 @@ namespace services {
         std::atomic<bool> importing{ false };
         std::atomic<float> progress{ 0.0f };
         std::string currentFile;
+        mutable std::mutex currentFileMutex;
+        std::future<void> importFuture;  // For async import
 
         std::string getExtension(const std::string& path) const;
     };

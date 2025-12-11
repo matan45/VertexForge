@@ -97,6 +97,7 @@
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
     <ClInclude Include="windows\ContentBrowser.hpp" />
+    <ClInclude Include="windows\ImportProgressWindow.hpp" />
     <ClInclude Include="windows\MainImguiWindow.hpp" />
     <ClInclude Include="windows\SceneGraph.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
@@ -108,6 +109,7 @@
     <ClCompile Include="run\Main.cpp" />
     <ClCompile Include="windows\ConsoleLog.cpp" />
     <ClCompile Include="windows\ContentBrowser.cpp" />
+    <ClCompile Include="windows\ImportProgressWindow.cpp" />
     <ClCompile Include="windows\MainImguiWindow.cpp" />
     <ClCompile Include="windows\SceneGraph.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />

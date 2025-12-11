@@ -1,6 +1,7 @@
 #include "ResourceServiceImpl.hpp"
 #include <filesystem>
 #include <algorithm>
+#include <future>
 
 namespace services {
 
@@ -18,37 +19,64 @@ namespace services {
     void ResourceServiceImpl::importFiles(const std::vector<ImportFileRequest>& files) {
         if (files.empty()) return;
 
-        importing = true;
-        progress = 0.0f;
+        // Don't start a new import if one is already in progress
+        if (importing.load()) {
+            return;
+        }
 
+        importing.store(true);
+        progress.store(0.0f);
+
+        // Publish started notification on main thread
         std::vector<std::string> filePaths;
         for (const auto& file : files) {
             filePaths.push_back(file.path);
         }
-
-        // Publish started notification
         events::resource::ImportStartedNotification startNotification;
         startNotification.files = filePaths;
         events::EventDispatcher::instance().publish(startNotification);
 
-        // Call the Import delegate if set
-        if (importDelegate.importFiles) {
-            importDelegate.importFiles(files);
-        }
+        // Run import asynchronously so UI can update
+        importFuture = std::async(std::launch::async, [this, files]() {
+            // Create progress callback that publishes events
+            auto progressCallback = [this](std::string_view currentFileName, uint32_t fileIndex,
+                                           uint32_t totalFiles, float fileProgress) {
+                // Calculate overall progress
+                float overallProgress = (static_cast<float>(fileIndex - 1) + fileProgress) / totalFiles;
+                progress.store(overallProgress);
 
-        // For now, mark as complete (actual async tracking would require Import modifications)
-        importing = false;
-        progress = 1.0f;
+                // Thread-safe update of current file
+                {
+                    std::lock_guard<std::mutex> lock(currentFileMutex);
+                    currentFile = std::string(currentFileName);
+                }
 
-        // Publish completed notification
-        events::resource::ImportCompletedNotification completeNotification;
-        for (const auto& file : files) {
-            ImportResult result;
-            result.sourcePath = file.path;
-            result.success = true;  // Assume success for now
-            completeNotification.results.push_back(result);
-        }
-        events::EventDispatcher::instance().publish(completeNotification);
+                // Publish progress notification
+                events::resource::ImportProgressNotification progressNotif;
+                progressNotif.currentFile = std::string(currentFileName);
+                progressNotif.progress = overallProgress;
+                events::EventDispatcher::instance().publish(progressNotif);
+            };
+
+            // Call the Import delegate if set
+            if (importDelegate.importFiles) {
+                importDelegate.importFiles(files, progressCallback);
+            }
+
+            // Mark as complete
+            importing.store(false);
+            progress.store(1.0f);
+
+            // Publish completed notification
+            events::resource::ImportCompletedNotification completeNotification;
+            for (const auto& file : files) {
+                ImportResult result;
+                result.sourcePath = file.path;
+                result.success = true;  // Assume success for now
+                completeNotification.results.push_back(result);
+            }
+            events::EventDispatcher::instance().publish(completeNotification);
+        });
     }
 
     void ResourceServiceImpl::setImportLocation(const std::string& path) {
@@ -83,6 +111,7 @@ namespace services {
     }
 
     std::string ResourceServiceImpl::getCurrentImportFile() const {
+        std::lock_guard<std::mutex> lock(currentFileMutex);
         return currentFile;
     }
 
