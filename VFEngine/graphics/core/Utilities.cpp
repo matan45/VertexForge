@@ -302,10 +302,17 @@ namespace core {
 		device.unmapMemory(stagingMemory);
 
 		// Copy from staging to destination buffer with offset
-		auto cmd = beginSingleTimeCommands(device, commandPool);
-		vk::BufferCopy copyRegion{ 0, offset, size };
-		cmd->copyBuffer(stagingBuffer, dstBuffer, copyRegion);
-		endSingleTimeCommands(queue, cmd);
+		// Use try/catch to ensure staging resources are cleaned up on failure
+		try {
+			auto cmd = beginSingleTimeCommands(device, commandPool);
+			vk::BufferCopy copyRegion{ 0, offset, size };
+			cmd->copyBuffer(stagingBuffer, dstBuffer, copyRegion);
+			endSingleTimeCommands(queue, cmd);
+		} catch (...) {
+			device.destroyBuffer(stagingBuffer);
+			device.freeMemory(stagingMemory);
+			throw;
+		}
 
 		// Cleanup staging buffer
 		device.destroyBuffer(stagingBuffer);

@@ -42,7 +42,11 @@ namespace services {
             auto progressCallback = [this](std::string_view currentFileName, uint32_t fileIndex,
                                            uint32_t totalFiles, float fileProgress) {
                 // Calculate overall progress
-                float overallProgress = (static_cast<float>(fileIndex - 1) + fileProgress) / totalFiles;
+                // fileIndex is 1-based, fileProgress is 0.0-1.0 for current file
+                // Formula: (completedFiles + currentFileProgress) / totalFiles
+                uint32_t completedFiles = (fileIndex > 0) ? fileIndex - 1 : 0;
+                float overallProgress = (static_cast<float>(completedFiles) + fileProgress) / totalFiles;
+                overallProgress = std::clamp(overallProgress, 0.0f, 1.0f);
                 progress.store(overallProgress);
 
                 // Thread-safe update of current file

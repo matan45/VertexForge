@@ -5,6 +5,7 @@
 #include <fstream>
 #include <bit>  // For std::bit_cast
 #include <algorithm>
+#include <limits>
 
 namespace resource {
 
@@ -78,8 +79,8 @@ namespace resource {
 			uint32_t vertexCount = endian::readLE<uint32_t>(inFile);
 
 			// Validate vertex count to prevent excessive memory allocation
-			if (vertexCount > 10000000) { // 10M vertices seems reasonable limit
-				vfLogError("Vertex count {} exceeds maximum limit", vertexCount);
+			if (vertexCount > maxVertexCount) {
+				vfLogError("Vertex count {} exceeds maximum limit {}", vertexCount, maxVertexCount);
 				return {};
 			}
 
@@ -111,8 +112,8 @@ namespace resource {
 			uint32_t indexCount = endian::readLE<uint32_t>(inFile);
 
 			// Validate index count to prevent excessive memory allocation
-			if (indexCount > 30000000) { // 30M indices seems reasonable limit
-				vfLogError("Index count {} exceeds maximum limit", indexCount);
+			if (indexCount > maxIndexCount) {
+				vfLogError("Index count {} exceeds maximum limit {}", indexCount, maxIndexCount);
 				return {};
 			}
 
@@ -160,16 +161,42 @@ namespace resource {
 			uint32_t vertexCount = endian::readLE<uint32_t>(inFile);
 			meshData.totalVertices = vertexCount;
 
+			// Validate vertex count and check for overflow before seeking
+			if (vertexCount > maxVertexCount) {
+				vfLogError("Vertex count {} exceeds maximum limit {} in mesh {}", vertexCount, maxVertexCount, meshIdx);
+				meshData.state = MeshLoadState::Error;
+				return result;
+			}
+
+			// Calculate seek offset safely (vertexCount <= maxVertexCount ensures no overflow)
 			// Skip vertex data (32 bytes per vertex: 3 floats pos + 3 floats normal + 2 floats uv)
-			constexpr size_t vertexSize = sizeof(float) * 8;
-			inFile.seekg(static_cast<std::streamoff>(vertexCount * vertexSize), std::ios::cur);
+			size_t vertexDataSize = static_cast<size_t>(vertexCount) * vertexSize;
+			if (vertexDataSize > static_cast<size_t>(std::numeric_limits<std::streamoff>::max())) {
+				vfLogError("Vertex data size too large for file seek in mesh {}", meshIdx);
+				meshData.state = MeshLoadState::Error;
+				return result;
+			}
+			inFile.seekg(static_cast<std::streamoff>(vertexDataSize), std::ios::cur);
 
 			// Read index count
 			uint32_t indexCount = endian::readLE<uint32_t>(inFile);
 			meshData.totalIndices = indexCount;
 
-			// Skip index data
-			inFile.seekg(static_cast<std::streamoff>(indexCount * sizeof(uint32_t)), std::ios::cur);
+			// Validate index count and check for overflow before seeking
+			if (indexCount > maxIndexCount) {
+				vfLogError("Index count {} exceeds maximum limit {} in mesh {}", indexCount, maxIndexCount, meshIdx);
+				meshData.state = MeshLoadState::Error;
+				return result;
+			}
+
+			// Calculate seek offset safely
+			size_t indexDataSize = static_cast<size_t>(indexCount) * sizeof(uint32_t);
+			if (indexDataSize > static_cast<size_t>(std::numeric_limits<std::streamoff>::max())) {
+				vfLogError("Index data size too large for file seek in mesh {}", meshIdx);
+				meshData.state = MeshLoadState::Error;
+				return result;
+			}
+			inFile.seekg(static_cast<std::streamoff>(indexDataSize), std::ios::cur);
 
 			if (inFile.fail()) {
 				vfLogError("Failed to analyze mesh {} in file: {}", meshIdx, path);
