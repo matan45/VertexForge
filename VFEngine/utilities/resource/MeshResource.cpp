@@ -43,106 +43,12 @@ namespace resource {
 		return v;
 	}
 
-	MeshesData MeshResource::loadMesh(std::string_view path)
-	{
-		resource::MeshesData meshesData;
-		// Open the file in binary mode
-		std::ifstream inFile(path.data(), std::ios::binary);
-		if (!inFile) {
-			vfLogError("Failed to open file for reading: ", path);
-			return {}; // Return an empty audioData on failure
-		}
-
-		// Read the header file type (endian-safe)
-		uint8_t headerFileType = endian::readLE<uint8_t>(inFile);
-		meshesData.headerFileType = static_cast<resource::FileType>(headerFileType);
-
-		// Read version information (endian-safe)
-		uint32_t majorVersion = endian::readLE<uint32_t>(inFile);
-		uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
-		uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
-
-		// Validate version compatibility
-		if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch) {
-			vfLogError("Incompatible file version: {}.{}.{}", majorVersion, minorVersion, patchVersion);
-			return {};
-		}
-
-		// Read the number of meshes (endian-safe)
-		uint32_t numberOfMeshes = endian::readLE<uint32_t>(inFile);
-		meshesData.numberOfMeshes = numberOfMeshes;
-		meshesData.meshes.resize(numberOfMeshes);
-
-		for (uint32_t i = 0; i < numberOfMeshes; i++)
-		{
-			MeshData meshData;
-			uint32_t vertexCount = endian::readLE<uint32_t>(inFile);
-
-			// Validate vertex count to prevent excessive memory allocation
-			if (vertexCount > maxVertexCount) {
-				vfLogError("Vertex count {} exceeds maximum limit {}", vertexCount, maxVertexCount);
-				return {};
-			}
-
-			// Read vertex data (endian-safe)
-			meshData.vertices.resize(vertexCount);
-
-			// For vertex data, we need to handle each component (glm::vec3, glm::vec2 contain floats)
-			for (uint32_t v = 0; v < vertexCount; ++v) {
-				// Read position (3 floats)
-				meshData.vertices[v].position.x = endian::readLE<float>(inFile);
-				meshData.vertices[v].position.y = endian::readLE<float>(inFile);
-				meshData.vertices[v].position.z = endian::readLE<float>(inFile);
-
-				// Read normal (3 floats)
-				meshData.vertices[v].normal.x = endian::readLE<float>(inFile);
-				meshData.vertices[v].normal.y = endian::readLE<float>(inFile);
-				meshData.vertices[v].normal.z = endian::readLE<float>(inFile);
-
-				// Read texture coordinates (2 floats)
-				meshData.vertices[v].texCoords.x = endian::readLE<float>(inFile);
-				meshData.vertices[v].texCoords.y = endian::readLE<float>(inFile);
-
-				if (inFile.fail()) {
-					vfLogError("Failed to read vertex {} from file", v);
-					return {};
-				}
-			}
-			// Read indices (endian-safe)
-			uint32_t indexCount = endian::readLE<uint32_t>(inFile);
-
-			// Validate index count to prevent excessive memory allocation
-			if (indexCount > maxIndexCount) {
-				vfLogError("Index count {} exceeds maximum limit {}", indexCount, maxIndexCount);
-				return {};
-			}
-
-			// Read index data using endian-safe vector read
-			endian::readVectorLE<uint32_t>(inFile, meshData.indices, indexCount);
-
-			if (inFile.fail()) {
-				vfLogError("Failed to read index data from file");
-				return {};
-			}
-
-			// Validate that we read the expected amount of data
-			if (meshData.vertices.size() != vertexCount || meshData.indices.size() != indexCount) {
-				vfLogError("Mesh data size mismatch: expected {} vertices and {} indices, got {} and {}",
-					vertexCount, indexCount, meshData.vertices.size(), meshData.indices.size());
-				return {};
-			}
-
-			meshesData.meshes.emplace_back(std::move(meshData));
-		}
-
-		return meshesData;
-	}
-
 	StreamingMeshesData MeshResource::analyzeMeshFile(std::string_view path)
 	{
 		StreamingMeshesData result;
 
-		std::ifstream inFile(path.data(), std::ios::binary);
+		std::string filePath(path);
+		std::ifstream inFile(filePath, std::ios::binary);
 		if (!inFile) {
 			vfLogError("Failed to open file for analysis: {}", path);
 			return result;
@@ -210,14 +116,65 @@ namespace resource {
 		return result;
 	}
 
+	MeshesData MeshResource::loadMeshStreaming(std::string_view path)
+	{
+		MeshesData result;
+
+		// First, analyze the file to get mesh sizes for pre-allocation
+		auto analysis = analyzeMeshFile(path);
+		if (analysis.numberOfMeshes == 0) {
+			vfLogError("Failed to analyze mesh file or file is empty: {}", path);
+			return result;
+		}
+
+		// Pre-allocate result structure based on analysis
+		result.headerFileType = analysis.headerFileType;
+		result.numberOfMeshes = analysis.numberOfMeshes;
+		result.meshes.resize(analysis.numberOfMeshes);
+
+		// Pre-allocate vertex and index buffers for each mesh
+		for (uint32_t i = 0; i < analysis.numberOfMeshes; ++i) {
+			result.meshes[i].vertices.reserve(analysis.meshes[i].totalVertices);
+			result.meshes[i].indices.reserve(analysis.meshes[i].totalIndices);
+		}
+
+		// Use streaming loader with callback to fill pre-allocated buffers
+		auto onChunk = [&result](uint32_t meshIdx,
+		                         const std::vector<Vertex>& vertices,
+		                         const std::vector<uint32_t>& indices,
+		                         uint32_t /*vertexOffset*/,
+		                         uint32_t /*indexOffset*/) {
+			if (meshIdx < result.meshes.size()) {
+				auto& meshData = result.meshes[meshIdx];
+
+				// Append vertices
+				if (!vertices.empty()) {
+					meshData.vertices.insert(meshData.vertices.end(),
+					                         vertices.begin(), vertices.end());
+				}
+
+				// Append indices
+				if (!indices.empty()) {
+					meshData.indices.insert(meshData.indices.end(),
+					                        indices.begin(), indices.end());
+				}
+			}
+		};
+
+		// Load using streaming with our accumulation callback
+		loadMeshStreaming(path, onChunk);
+
+		return result;
+	}
+
 	StreamingMeshesData MeshResource::loadMeshStreaming(
 		std::string_view path,
-		MeshChunkCallback onChunk,
-		MeshLoadCompleteCallback onComplete)
+		MeshChunkCallback onChunk)
 	{
 		StreamingMeshesData result;
 
-		std::ifstream inFile(path.data(), std::ios::binary);
+		std::string filePath(path);
+		std::ifstream inFile(filePath, std::ios::binary);
 		if (!inFile) {
 			vfLogError("Failed to open file for streaming: {}", path);
 			return result;
@@ -244,7 +201,6 @@ namespace resource {
 			if (inFile.fail()) {
 				vfLogError("Failed to read vertex count for mesh {}", meshIdx);
 				meshData.state = MeshLoadState::Error;
-				if (onComplete) onComplete(meshIdx, false);
 				continue;
 			}
 
@@ -268,7 +224,6 @@ namespace resource {
 					if (inFile.fail()) {
 						vfLogError("Failed to read vertex {} of mesh {}", verticesLoaded + i, meshIdx);
 						meshData.state = MeshLoadState::Error;
-						if (onComplete) onComplete(meshIdx, false);
 						meshFailed = true;
 						break;
 					}
@@ -296,7 +251,6 @@ namespace resource {
 			if (inFile.fail()) {
 				vfLogError("Failed to read index count for mesh {}", meshIdx);
 				meshData.state = MeshLoadState::Error;
-				if (onComplete) onComplete(meshIdx, false);
 				continue;
 			}
 
@@ -316,7 +270,6 @@ namespace resource {
 				if (inFile.fail()) {
 					vfLogError("Failed to read indices for mesh {}", meshIdx);
 					meshData.state = MeshLoadState::Error;
-					if (onComplete) onComplete(meshIdx, false);
 					meshFailed = true;
 					break;
 				}
@@ -333,7 +286,6 @@ namespace resource {
 			if (meshFailed) continue;
 
 			meshData.state = MeshLoadState::Complete;
-			if (onComplete) onComplete(meshIdx, true);
 		}
 
 		return result;

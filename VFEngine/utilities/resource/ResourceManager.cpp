@@ -127,48 +127,11 @@ namespace resource
         return loadResourceAsync<MeshesData>(
             path,
             meshCache,
-            [](std::string_view p) { return MeshResource::loadMesh(p); });
-    }
-
-    std::future<std::shared_ptr<StreamingMeshesData>> ResourceManager::loadMeshStreamingAsync(
-        std::string_view path,
-        MeshChunkCallback onChunk,
-        MeshLoadCompleteCallback onComplete)
-    {
-        // Check cache first
-        if (auto cached = streamingMeshCache[path.data()].lock()) {
-            return make_ready_future(cached);
-        }
-
-        return std::async(std::launch::async,
-            [path = std::string(path), onChunk, onComplete]() -> std::shared_ptr<StreamingMeshesData> {
-                try {
-                    if (path.empty()) {
-                        vfLogError("Empty path provided for streaming mesh loading");
-                        return nullptr;
-                    }
-
-                    auto result = std::make_shared<StreamingMeshesData>(
-                        MeshResource::loadMeshStreaming(path, onChunk, onComplete)
-                    );
-
-                    if (result && result->numberOfMeshes > 0) {
-                        std::scoped_lock lock(cacheMutex);
-                        streamingMeshCache[path] = result;
-                    }
-
-                    return result;
-                }
-                catch (const std::exception& e) {
-                    vfLogError("Exception during streaming mesh load '{}': {}", path, e.what());
-                    return nullptr;
-                }
-                catch (...) {
-                    vfLogError("Unknown exception during streaming mesh load: {}", path);
-                    return nullptr;
-                }
+            [](std::string_view p) {
+                return MeshResource::loadMeshStreaming(p);
             });
     }
+    
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {
