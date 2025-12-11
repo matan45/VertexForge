@@ -64,14 +64,7 @@ namespace resource
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
     };
-
-    struct MeshesData
-    {
-        FileType headerFileType = FileType::MESH;
-        Version version{}; // Default initialize
-        uint32_t numberOfMeshes = 0;
-        std::vector<MeshData> meshes;
-    };
+    
 
     struct Bone
     {
@@ -117,4 +110,13 @@ namespace resource
         uint32_t frames = 0;
         std::vector<short> data;
     };
+
+    struct MeshesData
+    {
+        FileType headerFileType = FileType::MESH;
+        Version version{};
+        uint32_t numberOfMeshes = 0;
+        std::vector<MeshData> meshes;
+    };
+    
 }

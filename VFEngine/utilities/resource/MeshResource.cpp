@@ -3,103 +3,89 @@
 #include "EndianUtils.hpp"
 
 #include <fstream>
-#include <bit>  // For std::bit_cast
 
 namespace resource {
 
 	MeshesData MeshResource::loadMesh(std::string_view path)
 	{
-		resource::MeshesData meshesData;
-		// Open the file in binary mode
-		std::ifstream inFile(path.data(), std::ios::binary);
+		MeshesData result;
+
+		std::string filePath(path);
+		std::ifstream inFile(filePath, std::ios::binary);
 		if (!inFile) {
-			vfLogError("Failed to open file for reading: ", path);
-			return {}; // Return an empty audioData on failure
+			vfLogError("Failed to open mesh file: {}", path);
+			return result;
 		}
 
-		// Read the header file type (endian-safe)
+		// Read header
 		uint8_t headerFileType = endian::readLE<uint8_t>(inFile);
-		meshesData.headerFileType = static_cast<resource::FileType>(headerFileType);
+		result.headerFileType = static_cast<FileType>(headerFileType);
 
-		// Read version information (endian-safe)
 		uint32_t majorVersion = endian::readLE<uint32_t>(inFile);
 		uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
 		uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
 
-		// Validate version compatibility
 		if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch) {
-			vfLogError("Incompatible file version: {}.{}.{}", majorVersion, minorVersion, patchVersion);
-			return {};
+			vfLogError("Incompatible mesh file version: {}.{}.{}", majorVersion, minorVersion, patchVersion);
+			return result;
 		}
 
-		// Read the number of meshes (endian-safe)
-		uint32_t numberOfMeshes = endian::readLE<uint32_t>(inFile);
-		meshesData.numberOfMeshes = numberOfMeshes;
-		meshesData.meshes.resize(numberOfMeshes);
+		result.numberOfMeshes = endian::readLE<uint32_t>(inFile);
+		result.meshes.resize(result.numberOfMeshes);
 
-		for (uint32_t i = 0; i < numberOfMeshes; i++)
-		{
-			MeshData meshData;
+		if (inFile.fail()) {
+			vfLogError("Failed to read mesh header: {}", path);
+			return result;
+		}
+
+		// Read each mesh
+		for (uint32_t meshIdx = 0; meshIdx < result.numberOfMeshes; ++meshIdx) {
+			auto& meshData = result.meshes[meshIdx];
+
+			// Read vertex count
 			uint32_t vertexCount = endian::readLE<uint32_t>(inFile);
-			
-			// Validate vertex count to prevent excessive memory allocation
-			if (vertexCount > 10000000) { // 10M vertices seems reasonable limit
-				vfLogError("Vertex count {} exceeds maximum limit", vertexCount);
-				return {};
+
+			if (vertexCount > maxVertexCount) {
+				vfLogError("Vertex count {} exceeds maximum limit {} in mesh {}", vertexCount, maxVertexCount, meshIdx);
+				return result;
 			}
-			
-			// Read vertex data (endian-safe)
+
+			// Read vertices
 			meshData.vertices.resize(vertexCount);
-			
-			// For vertex data, we need to handle each component (glm::vec3, glm::vec2 contain floats)
 			for (uint32_t v = 0; v < vertexCount; ++v) {
-				// Read position (3 floats)
 				meshData.vertices[v].position.x = endian::readLE<float>(inFile);
 				meshData.vertices[v].position.y = endian::readLE<float>(inFile);
 				meshData.vertices[v].position.z = endian::readLE<float>(inFile);
-				
-				// Read normal (3 floats)
 				meshData.vertices[v].normal.x = endian::readLE<float>(inFile);
 				meshData.vertices[v].normal.y = endian::readLE<float>(inFile);
 				meshData.vertices[v].normal.z = endian::readLE<float>(inFile);
-				
-				// Read texture coordinates (2 floats)
 				meshData.vertices[v].texCoords.x = endian::readLE<float>(inFile);
 				meshData.vertices[v].texCoords.y = endian::readLE<float>(inFile);
-				
+
 				if (inFile.fail()) {
-					vfLogError("Failed to read vertex {} from file", v);
-					return {};
+					vfLogError("Failed to read vertex {} of mesh {}", v, meshIdx);
+					return result;
 				}
 			}
-			// Read indices (endian-safe)
+
+			// Read index count
 			uint32_t indexCount = endian::readLE<uint32_t>(inFile);
-			
-			// Validate index count to prevent excessive memory allocation
-			if (indexCount > 30000000) { // 30M indices seems reasonable limit
-				vfLogError("Index count {} exceeds maximum limit", indexCount);
-				return {};
+
+			if (indexCount > maxIndexCount) {
+				vfLogError("Index count {} exceeds maximum limit {} in mesh {}", indexCount, maxIndexCount, meshIdx);
+				return result;
 			}
-			
-			// Read index data using endian-safe vector read
+
+			// Read indices
 			endian::readVectorLE<uint32_t>(inFile, meshData.indices, indexCount);
-			
+
 			if (inFile.fail()) {
-				vfLogError("Failed to read index data from file");
-				return {};
+				vfLogError("Failed to read indices of mesh {}", meshIdx);
+				return result;
 			}
-			
-			// Validate that we read the expected amount of data
-			if (meshData.vertices.size() != vertexCount || meshData.indices.size() != indexCount) {
-				vfLogError("Mesh data size mismatch: expected {} vertices and {} indices, got {} and {}",
-					vertexCount, indexCount, meshData.vertices.size(), meshData.indices.size());
-				return {};
-			}
-			
-			meshesData.meshes.emplace_back(std::move(meshData));
 		}
 
-		return meshesData;
+		vfLogInfo("Loaded mesh file with {} meshes: {}", result.numberOfMeshes, path);
+		return result;
 	}
 }
-

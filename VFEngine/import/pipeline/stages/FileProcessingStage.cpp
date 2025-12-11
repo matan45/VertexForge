@@ -42,21 +42,66 @@ namespace pipeline::stages
 
     void FileProcessingStage::processTexture(ImportContext& context)
     {
-        textureProcessor.loadTextureFileWithType(context.file, context.fileName, context.location, context.fileType);
+        // Create a texture progress callback that wraps the import progress callback
+        types::TextureProgressCallback textureProgress = nullptr;
+        if (context.progressCallback)
+        {
+            textureProgress = [&context](float progress) {
+                // Report texture progress through the import progress callback
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, progress);
+            };
+        }
+
+        textureProcessor.loadTextureFile(context.file, context.fileName, context.location,textureProgress);
     }
 
     void FileProcessingStage::processHDR(ImportContext& context)
     {
-        textureProcessor.loadHDRFileWithType(context.file, context.fileName, context.location, context.fileType);
+        // Create a texture progress callback that wraps the import progress callback
+        types::TextureProgressCallback textureProgress = nullptr;
+        if (context.progressCallback)
+        {
+            textureProgress = [&context](float progress) {
+                // Report HDR progress through the import progress callback
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, progress);
+            };
+        }
+
+        textureProcessor.loadHDRFile(context.file, context.fileName, context.location,textureProgress);
     }
 
     void FileProcessingStage::processAudio(ImportContext& context)
     {
-        audioProcessor.loadFromFileWithType(context.file, context.fileName, context.location, context.fileType);
+        // Create an audio progress callback that wraps the import progress callback
+        types::AudioProgressCallback audioProgress = nullptr;
+        if (context.progressCallback)
+        {
+            audioProgress = [&context](float progress) {
+                // Report audio progress through the import progress callback
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, progress);
+            };
+        }
+
+        audioProcessor.loadFromFileWithType(context.file, context.fileName, context.location,
+                                            context.fileType, audioProgress);
     }
 
     void FileProcessingStage::processMesh(ImportContext& context)
     {
-        meshProcessor.loadFromFile(context.file, context.fileName, context.location);
+        // Create a mesh progress callback that wraps the import progress callback
+        types::MeshProgressCallback meshProgress = nullptr;
+        if (context.progressCallback)
+        {
+            meshProgress = [&context](float progress) {
+                // Report mesh progress through the import progress callback
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, progress);
+            };
+        }
+
+        meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
     }
 }

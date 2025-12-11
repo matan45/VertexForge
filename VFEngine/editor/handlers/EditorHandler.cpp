@@ -76,14 +76,39 @@ namespace handlers {
 		importDelegate.initialize = []() {
 			controllers::Import::initialize();
 		};
-		importDelegate.importFiles = [](const std::vector<services::ImportFileRequest>& files) {
+		importDelegate.importFiles = [](const std::vector<services::ImportFileRequest>& files,
+		                                services::ImportProgressCallback progressCallback) -> services::ImportResultData {
 			std::vector<importConfig::ImportFiles> importFiles;
 			for (const auto& file : files) {
 				importConfig::ImportConfig config;
 				config.isImageFlipVertically = file.flipVertically;
 				importFiles.emplace_back(file.path, config);
 			}
-			controllers::Import::importFiles(importFiles);
+			// Convert progress callback to Import's callback type
+			controllers::ImportProgressCallback importProgressCallback = nullptr;
+			if (progressCallback) {
+				importProgressCallback = [progressCallback](std::string_view currentFile,
+				                                             uint32_t fileIndex,
+				                                             uint32_t totalFiles,
+				                                             float fileProgress) {
+					progressCallback(currentFile, fileIndex, totalFiles, fileProgress);
+				};
+			}
+			auto controllerResult = controllers::Import::importFiles(importFiles, importProgressCallback);
+
+			// Convert controller result to service result
+			services::ImportResultData result;
+			result.successCount = controllerResult.successCount;
+			result.failureCount = controllerResult.failureCount;
+			for (const auto& fileResult : controllerResult.fileResults) {
+				services::ImportFileResultData serviceFileResult;
+				serviceFileResult.sourcePath = fileResult.sourcePath;
+				serviceFileResult.fileName = fileResult.fileName;
+				serviceFileResult.success = fileResult.success;
+				serviceFileResult.errorMessage = fileResult.errorMessage;
+				result.fileResults.push_back(std::move(serviceFileResult));
+			}
+			return result;
 		};
 		importDelegate.setLocation = [](const std::string& path) {
 			controllers::Import::setLocation(path);

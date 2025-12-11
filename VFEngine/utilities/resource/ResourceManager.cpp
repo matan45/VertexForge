@@ -36,7 +36,7 @@ namespace resource
         std::erase_if(textureCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(hdrCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(audioCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(meshCache, [](const auto& pair) { return pair.second.expired(); });
+        std::erase_if(streamingMeshCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
@@ -125,9 +125,12 @@ namespace resource
     {
         return loadResourceAsync<MeshesData>(
             path,
-            meshCache,
-            [](std::string_view p) { return MeshResource::loadMesh(p); });
+            streamingMeshCache,
+            [](std::string_view p) {
+                return MeshResource::loadMesh(p);
+            });
     }
+    
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {
@@ -160,14 +163,14 @@ namespace resource
     {
         std::scoped_lock lock(cacheMutex);
         unloadUnusedResources();
-        
+
         // Clear all caches
         textureCache.clear();
         hdrCache.clear();
         audioCache.clear();
-        meshCache.clear();
+        streamingMeshCache.clear();
         shaderCache.clear();
-        
+
         vfLogInfo("All resource caches cleared");
     }
 }

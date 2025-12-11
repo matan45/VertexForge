@@ -5,14 +5,19 @@
 #include <vector>
 #include <fstream>
 #include <bit>  // For std::bit_cast
-#include <filesystem> 
+#include <filesystem>
+#include <algorithm>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
 namespace types {
-	void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location) const
+	void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
+	                        std::string_view location, MeshProgressCallback progressCallback) const
 	{
+		// Report 0% - starting Assimp load
+		if (progressCallback) progressCallback(0.0f);
+
 		Assimp::Importer importer;
 		const aiScene* scene = importer.ReadFile(file.path.data(),
 			aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
@@ -21,87 +26,75 @@ namespace types {
 			vfLogError("Failed to load Mesh file: {}", importer.GetErrorString());
 			return;
 		}
-		//TODO also extract the animation each animation to single file 
-		// and extract texture that embedded 
-		processAssimpScene(scene, fileName, location);
+
+		// Report 30% - Assimp loading complete, starting file write
+		if (progressCallback) progressCallback(0.3f);
+
+		//TODO also extract the animation each animation to single file
+		// and extract texture that embedded
+		saveToFileStreaming(location, fileName, scene, progressCallback);
+
+		// Report 100% - complete
+		if (progressCallback) progressCallback(1.0f);
 	}
 
-	void Mesh::saveToFile(std::string_view location, std::string_view fileName, const resource::MeshesData& meshesData) const
+	void Mesh::saveToFileStreaming(std::string_view location, std::string_view fileName,
+	                               const aiScene* scene, MeshProgressCallback progressCallback) const
 	{
-		// Open the file in binary mode
 		std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." + FileExtension::mesh);
 		std::ofstream outFile(newFileLocation, std::ios::binary);
 
 		if (!outFile) {
-			vfLogError("Failed to open file for writing: ", newFileLocation.string());
+			vfLogError("Failed to open file for writing: {}", newFileLocation.string());
 			return;
 		}
 
-		// Write header, version, and mesh count (endian-safe)
-		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(meshesData.headerFileType));
+		// Write header
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
 		resource::endian::writeLE<uint32_t>(outFile, Version::major);
 		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
 		resource::endian::writeLE<uint32_t>(outFile, Version::patch);
-		resource::endian::writeLE<uint32_t>(outFile, meshesData.numberOfMeshes);
+		resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
 
-		// Iterate through each mesh and write its data
-		for (const auto& meshData : meshesData.meshes) {
-			// Write vertex count (endian-safe)
-			uint32_t vertexCount = static_cast<uint32_t>(meshData.vertices.size());
-			resource::endian::writeLE<uint32_t>(outFile, vertexCount);
+		// Process each mesh one at a time (not all at once)
+		for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
+			writeMeshChunked(outFile, scene->mMeshes[i]);
 
-			// Write vertex data (endian-safe, component by component)
-			for (const auto& vertex : meshData.vertices) {
-				// Write position (3 floats)
-				resource::endian::writeLE<float>(outFile, vertex.position.x);
-				resource::endian::writeLE<float>(outFile, vertex.position.y);
-				resource::endian::writeLE<float>(outFile, vertex.position.z);
-				
-				// Write normal (3 floats)
-				resource::endian::writeLE<float>(outFile, vertex.normal.x);
-				resource::endian::writeLE<float>(outFile, vertex.normal.y);
-				resource::endian::writeLE<float>(outFile, vertex.normal.z);
-				
-				// Write texture coordinates (2 floats)
-				resource::endian::writeLE<float>(outFile, vertex.texCoords.x);
-				resource::endian::writeLE<float>(outFile, vertex.texCoords.y);
+			// Report progress: 30% + (i+1)/totalMeshes * 70%
+			if (progressCallback) {
+				float progress = 0.3f + (static_cast<float>(i + 1) / scene->mNumMeshes) * 0.7f;
+				progressCallback(progress);
 			}
-
-			// Write index count and data (endian-safe)
-			uint32_t indexCount = static_cast<uint32_t>(meshData.indices.size());
-			resource::endian::writeLE<uint32_t>(outFile, indexCount);
-			resource::endian::writeVectorLE<uint32_t>(outFile, meshData.indices);
 		}
 
 		outFile.close();
 	}
 
-	void Mesh::processAssimpScene(const aiScene* scene, std::string_view fileName, std::string_view location) const
+	void Mesh::writeMeshChunked(std::ofstream& outFile, const aiMesh* assimpMesh) const
 	{
-		resource::MeshesData meshesData;
-		meshesData.headerFileType = resource::FileType::MESH;
-		meshesData.meshes.reserve(scene->mNumMeshes);
-		meshesData.numberOfMeshes = scene->mNumMeshes;
-		// Loop over each mesh in the scene
-		for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
-			const aiMesh* assimpMesh = scene->mMeshes[i];
-			resource::MeshData meshData;
-			// Reserve space for vertices and indices
-			meshData.vertices.reserve(assimpMesh->mNumVertices);
-			meshData.indices.reserve(assimpMesh->mNumFaces * 3); // Assuming all faces are triangles
+		constexpr size_t verticesPerChunk = chunkSize / sizeof(resource::Vertex);  // ~8K vertices per chunk
 
-			// Extract vertex data (positions, normals, texCoords)
-			for (unsigned int j = 0; j < assimpMesh->mNumVertices; ++j) {
+		// Write vertex count
+		resource::endian::writeLE<uint32_t>(outFile, assimpMesh->mNumVertices);
+
+		// Process vertices in chunks to limit memory usage
+		std::vector<resource::Vertex> chunkBuffer;
+		chunkBuffer.reserve(verticesPerChunk);
+
+		for (unsigned int v = 0; v < assimpMesh->mNumVertices; ) {
+			unsigned int chunkEnd = static_cast<unsigned int>(
+				std::min(static_cast<size_t>(v + verticesPerChunk),
+				         static_cast<size_t>(assimpMesh->mNumVertices))
+			);
+			
+			for (unsigned int j = v; j < chunkEnd; ++j) {
 				resource::Vertex vertex;
-
-				// Extract position
 				vertex.position = {
 					assimpMesh->mVertices[j].x,
 					assimpMesh->mVertices[j].y,
 					assimpMesh->mVertices[j].z
 				};
 
-				// Extract normals (if they exist)
 				if (assimpMesh->HasNormals()) {
 					vertex.normal = {
 						assimpMesh->mNormals[j].x,
@@ -110,35 +103,63 @@ namespace types {
 					};
 				}
 				else {
-					vertex.normal = { 0.0f, 0.0f, 0.0f }; // Default normal if not available
+					vertex.normal = { 0.0f, 0.0f, 0.0f };
 				}
 
-				// Extract texture coordinates (if they exist)
-				if (assimpMesh->mTextureCoords[0]) { // Assimp allows multiple sets of UVs, we use the first one
+				if (assimpMesh->mTextureCoords[0]) {
 					vertex.texCoords = {
 						assimpMesh->mTextureCoords[0][j].x,
 						assimpMesh->mTextureCoords[0][j].y
 					};
 				}
 				else {
-					vertex.texCoords = { 0.0f, 0.0f }; // Default texture coordinates if not available
+					vertex.texCoords = { 0.0f, 0.0f };
 				}
 
-				// Add the vertex to the mesh data
-				meshData.vertices.push_back(vertex);
+				chunkBuffer.push_back(vertex);
+			}
+			
+			for (const auto& vertex : chunkBuffer) {
+				resource::endian::writeLE<float>(outFile, vertex.position.x);
+				resource::endian::writeLE<float>(outFile, vertex.position.y);
+				resource::endian::writeLE<float>(outFile, vertex.position.z);
+				resource::endian::writeLE<float>(outFile, vertex.normal.x);
+				resource::endian::writeLE<float>(outFile, vertex.normal.y);
+				resource::endian::writeLE<float>(outFile, vertex.normal.z);
+				resource::endian::writeLE<float>(outFile, vertex.texCoords.x);
+				resource::endian::writeLE<float>(outFile, vertex.texCoords.y);
 			}
 
-			// Extract indices
-			for (unsigned int j = 0; j < assimpMesh->mNumFaces; ++j) {
-				aiFace face = assimpMesh->mFaces[j];
-
-				// Assimp ensures all faces are triangles when using aiProcess_Triangulate
-				for (unsigned int k = 0; k < face.mNumIndices; ++k) {
-					meshData.indices.push_back(face.mIndices[k]);
-				}
-			}
-			meshesData.meshes.emplace_back(meshData);
+			v = chunkEnd;
+			chunkBuffer.clear();
 		}
-		saveToFile(location, fileName, meshesData);
+		
+		uint32_t totalIndices = 0;
+		for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f) {
+			totalIndices += assimpMesh->mFaces[f].mNumIndices;
+		}
+		resource::endian::writeLE<uint32_t>(outFile, totalIndices);
+		
+		constexpr size_t indicesPerChunk = chunkSize / sizeof(uint32_t);  // ~64K indices per chunk
+		std::vector<uint32_t> indexBuffer;
+		indexBuffer.reserve(indicesPerChunk);
+
+		for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f) {
+			const aiFace& face = assimpMesh->mFaces[f];
+			for (unsigned int k = 0; k < face.mNumIndices; ++k) {
+				indexBuffer.push_back(face.mIndices[k]);
+
+				// Flush when chunk is full
+				if (indexBuffer.size() >= indicesPerChunk) {
+					resource::endian::writeVectorLE<uint32_t>(outFile, indexBuffer);
+					indexBuffer.clear();
+				}
+			}
+		}
+
+		// Write remaining indices
+		if (!indexBuffer.empty()) {
+			resource::endian::writeVectorLE<uint32_t>(outFile, indexBuffer);
+		}
 	}
 }
