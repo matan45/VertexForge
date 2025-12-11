@@ -6,7 +6,8 @@
 #include <mutex>
 #include <atomic>
 
-namespace windows {
+namespace windows
+{
     class ImportProgressWindow : public controllers::imguiHandler::ImguiWindow
     {
     public:
@@ -16,8 +17,8 @@ namespace windows {
         void draw() override;
 
     private:
-        std::atomic<bool> showWindow{ false };
-        std::atomic<float> currentProgress{ 0.0f };
+        std::atomic<bool> showWindow{false};
+        std::atomic<float> currentProgress{0.0f};
         std::string currentFile;
         mutable std::mutex fileMutex;
 

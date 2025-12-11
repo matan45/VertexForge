@@ -25,8 +25,11 @@
 namespace types
 {
 	void Texture::loadTextureFile(const importConfig::ImportFiles& file, std::string_view fileName,
-		std::string_view location)
+		std::string_view location, TextureProgressCallback progressCallback)
 	{
+		// Report 0% - starting load
+		if (progressCallback) progressCallback(0.0f);
+
 		resource::TextureData textureData;
 		textureData.headerFileType = resource::FileType::TEXTURE;
 
@@ -47,12 +50,18 @@ namespace types
 			return; // Return
 		}
 
+		// Report 30% - image loaded from disk
+		if (progressCallback) progressCallback(0.3f);
+
 		// Store texture information
 		textureData.width = static_cast<uint32_t>(width);
 		textureData.height = static_cast<uint32_t>(height);
 		textureData.numbersOfChannels = channels;
 
 		convertTo4Channels(imageData, width, height, channels, textureData.textureData);
+
+		// Report 60% - channel conversion complete
+		if (progressCallback) progressCallback(0.6f);
 
 		if (file.config.isImageFlipVertically)
 		{
@@ -62,14 +71,20 @@ namespace types
 		stbi_image_free(imageData);
 
 		saveToFileTexture(fileName, location, textureData);
+
+		// Report 100% - complete
+		if (progressCallback) progressCallback(1.0f);
 	}
 
 	void Texture::loadHDRFile(const importConfig::ImportFiles& file, std::string_view fileName,
-		std::string_view location) const
+		std::string_view location, TextureProgressCallback progressCallback) const
 	{
+		// Report 0% - starting load
+		if (progressCallback) progressCallback(0.0f);
+
 		resource::HDRData hdrData;
 		hdrData.headerFileType = resource::FileType::HDR;
-		
+
 		// File type detection is now handled by the pipeline, determine from extension
 		std::string extension = files::FileUtils::getFileExtension(file.path.data());
 		if (extension == ".hdr")
@@ -89,6 +104,9 @@ namespace types
 				return;
 			}
 
+			// Report 40% - HDR loaded
+			if (progressCallback) progressCallback(0.4f);
+
 			if (file.config.isImageFlipVertically)
 			{
 				stbi_set_flip_vertically_on_load(false);
@@ -99,9 +117,15 @@ namespace types
 			hdrData.numbersOfChannels = channels;
 			hdrData.textureData = std::vector<float>(imageData, imageData + (width * height * channels));
 
+			// Report 70% - data copied, saving to file
+			if (progressCallback) progressCallback(0.7f);
+
 			saveToFileHDR(fileName, location, hdrData);
 
 			stbi_image_free(imageData);
+
+			// Report 100% - complete
+			if (progressCallback) progressCallback(1.0f);
 		}
 		else if (extension == ".exr")
 		{
@@ -113,6 +137,9 @@ namespace types
 				vfLogError("Invalid EXR file: {}", file.path.data());
 				return;
 			}
+
+			// Report 10% - EXR version parsed
+			if (progressCallback) progressCallback(0.1f);
 
 			EXRHeader exrHeader;
 			InitEXRHeader(&exrHeader);
@@ -126,6 +153,9 @@ namespace types
 				return;
 			}
 
+			// Report 20% - EXR header parsed
+			if (progressCallback) progressCallback(0.2f);
+
 			EXRImage exrImage;
 			InitEXRImage(&exrImage);
 
@@ -137,6 +167,9 @@ namespace types
 				FreeEXRErrorMessage(exrError);
 				return;
 			}
+
+			// Report 40% - EXR image loaded
+			if (progressCallback) progressCallback(0.4f);
 
 			float* out;
 			int width;
@@ -150,6 +183,9 @@ namespace types
 				return;
 			}
 
+			// Report 50% - EXR data extracted
+			if (progressCallback) progressCallback(0.5f);
+
 			if (file.config.isImageFlipVertically)
 			{
 				flipImageVertically(out, width, height);
@@ -162,11 +198,17 @@ namespace types
 			hdrData.numbersOfChannels = static_cast<uint32_t>(channels);
 			hdrData.textureData = convertFromEXRToHDR(out, width, height);
 
+			// Report 70% - conversion complete
+			if (progressCallback) progressCallback(0.7f);
+
 			free(out);
 			FreeEXRImage(&exrImage);
 			FreeEXRHeader(&exrHeader);
 
 			saveToFileHDR(fileName, location, hdrData);
+
+			// Report 100% - complete
+			if (progressCallback) progressCallback(1.0f);
 		}
 		else {
 			vfLogError("Unsupported HDR file extension: {}", extension);
@@ -174,18 +216,21 @@ namespace types
 	}
 
 	void Texture::loadTextureFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
-		std::string_view location, std::string_view fileType)
+		std::string_view location, std::string_view fileType, TextureProgressCallback progressCallback)
 	{
 		// This method can use the detected file type directly instead of checking extensions
-		loadTextureFile(file, fileName, location); // For now, delegate to existing method
+		loadTextureFile(file, fileName, location, progressCallback); // Delegate to existing method
 	}
 
 	void Texture::loadHDRFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
-		std::string_view location, std::string_view fileType) const
+		std::string_view location, std::string_view fileType, TextureProgressCallback progressCallback) const
 	{
+		// Report 0% - starting load
+		if (progressCallback) progressCallback(0.0f);
+
 		resource::HDRData hdrData;
 		hdrData.headerFileType = resource::FileType::HDR;
-		
+
 		if (fileType == "HDR")
 		{
 			if (file.config.isImageFlipVertically)
@@ -203,6 +248,9 @@ namespace types
 				return;
 			}
 
+			// Report 40% - HDR loaded
+			if (progressCallback) progressCallback(0.4f);
+
 			if (file.config.isImageFlipVertically)
 			{
 				stbi_set_flip_vertically_on_load(false);
@@ -213,13 +261,19 @@ namespace types
 			hdrData.numbersOfChannels = channels;
 			hdrData.textureData = std::vector<float>(imageData, imageData + (width * height * channels));
 
+			// Report 70% - data copied, saving to file
+			if (progressCallback) progressCallback(0.7f);
+
 			saveToFileHDR(fileName, location, hdrData);
 
 			stbi_image_free(imageData);
+
+			// Report 100% - complete
+			if (progressCallback) progressCallback(1.0f);
 		}
 		else if (fileType == "EXR")
 		{
-			// EXR processing code (same as before)
+			// EXR processing code
 			EXRVersion exrVersion;
 
 			int ret = ParseEXRVersionFromFile(&exrVersion, file.path.data());
@@ -228,6 +282,9 @@ namespace types
 				vfLogError("Invalid EXR file: {}", file.path.data());
 				return;
 			}
+
+			// Report 10% - EXR version parsed
+			if (progressCallback) progressCallback(0.1f);
 
 			EXRHeader exrHeader;
 			InitEXRHeader(&exrHeader);
@@ -241,6 +298,9 @@ namespace types
 				return;
 			}
 
+			// Report 20% - EXR header parsed
+			if (progressCallback) progressCallback(0.2f);
+
 			EXRImage exrImage;
 			InitEXRImage(&exrImage);
 
@@ -252,6 +312,9 @@ namespace types
 				FreeEXRErrorMessage(exrError);
 				return;
 			}
+
+			// Report 40% - EXR image loaded
+			if (progressCallback) progressCallback(0.4f);
 
 			float* out;
 			int width;
@@ -265,6 +328,9 @@ namespace types
 				return;
 			}
 
+			// Report 50% - EXR data extracted
+			if (progressCallback) progressCallback(0.5f);
+
 			if (file.config.isImageFlipVertically)
 			{
 				flipImageVertically(out, width, height);
@@ -277,11 +343,17 @@ namespace types
 			hdrData.numbersOfChannels = static_cast<uint32_t>(channels);
 			hdrData.textureData = convertFromEXRToHDR(out, width, height);
 
+			// Report 70% - conversion complete
+			if (progressCallback) progressCallback(0.7f);
+
 			free(out);
 			FreeEXRImage(&exrImage);
 			FreeEXRHeader(&exrHeader);
 
 			saveToFileHDR(fileName, location, hdrData);
+
+			// Report 100% - complete
+			if (progressCallback) progressCallback(1.0f);
 		}
 		else {
 			vfLogError("Unsupported HDR file type: {}", fileType);

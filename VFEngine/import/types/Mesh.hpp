@@ -8,7 +8,7 @@ struct aiScene;
 struct aiMesh;
 
 namespace types {
-	// Sub-progress callback for mesh processing: 0.0-1.0
+	
 	using MeshProgressCallback = std::function<void(float progress)>;
 
 	class Mesh
@@ -18,7 +18,6 @@ namespace types {
 		                  std::string_view location, MeshProgressCallback progressCallback = nullptr) const;
 
 	private:
-		// Streaming writer that processes Assimp scene directly to file
 		void saveToFileStreaming(std::string_view location, std::string_view fileName,
 		                         const aiScene* scene, MeshProgressCallback progressCallback) const;
 

@@ -1,21 +1,26 @@
 #pragma once
 #include <string>
+#include <functional>
 #include "config/Config.hpp"
 #include "resource/Types.hpp"
 
 namespace types
 {
+    using TextureProgressCallback = std::function<void(float progress)>;
+
     class Texture
     {
     public:
         void loadTextureFile(const importConfig::ImportFiles& file, std::string_view fileName,
-                             std::string_view location);
+                             std::string_view location, TextureProgressCallback progressCallback = nullptr);
         void loadHDRFile(const importConfig::ImportFiles& file, std::string_view fileName,
-                         std::string_view location) const;
+                         std::string_view location, TextureProgressCallback progressCallback = nullptr) const;
         void loadTextureFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
-                             std::string_view location, std::string_view fileType);
+                             std::string_view location, std::string_view fileType,
+                             TextureProgressCallback progressCallback = nullptr);
         void loadHDRFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
-                         std::string_view location, std::string_view fileType) const;
+                         std::string_view location, std::string_view fileType,
+                         TextureProgressCallback progressCallback = nullptr) const;
 
     private:
         void saveToFileTexture(std::string_view fileName, std::string_view location,

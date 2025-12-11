@@ -17,43 +17,50 @@
 
 
 namespace types {
-	void Audio::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location) const
+	void Audio::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
+	                         std::string_view location, AudioProgressCallback progressCallback) const
 	{
 		// File type detection is now handled by the pipeline, so we need to determine type from file extension
 		std::string extension = files::FileUtils::getFileExtension(file.path.data());
-		
+
 		if (extension == ".ogg") {
-			loadOggFile(file.path, fileName, location);
+			loadOggFile(file.path, fileName, location, progressCallback);
 		}
 		else if (extension == ".wav") {
-			loadWavFile(file.path, fileName, location);
+			loadWavFile(file.path, fileName, location, progressCallback);
 		}
 		else if (extension == ".mp3") {
-			loadMp3File(file.path, fileName, location);
+			loadMp3File(file.path, fileName, location, progressCallback);
 		}
 		else {
 			vfLogError("Unsupported audio file extension: {}", extension);
 		}
 	}
 
-	void Audio::loadFromFileWithType(const importConfig::ImportFiles& file, std::string_view fileName, std::string_view location, std::string_view fileType) const
+	void Audio::loadFromFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
+	                                 std::string_view location, std::string_view fileType,
+	                                 AudioProgressCallback progressCallback) const
 	{
 		if (fileType == "OGG") {
-			loadOggFile(file.path, fileName, location);
+			loadOggFile(file.path, fileName, location, progressCallback);
 		}
 		else if (fileType == "WAV") {
-			loadWavFile(file.path, fileName, location);
+			loadWavFile(file.path, fileName, location, progressCallback);
 		}
 		else if (fileType == "MP3") {
-			loadMp3File(file.path, fileName, location);
+			loadMp3File(file.path, fileName, location, progressCallback);
 		}
 		else {
 			vfLogError("Unsupported audio file type: {}", fileType);
 		}
 	}
 
-	void Audio::loadOggFile(std::string_view path, std::string_view fileName, std::string_view location) const
+	void Audio::loadOggFile(std::string_view path, std::string_view fileName, std::string_view location,
+	                        AudioProgressCallback progressCallback) const
 	{
+		// Report 0% - starting load
+		if (progressCallback) progressCallback(0.0f);
+
 		resource::AudioData audioData;
 		audioData.headerFileType = resource::FileType::AUDIO;
 		// Open and load Ogg Vorbis file using stb_vorbis
@@ -63,6 +70,9 @@ namespace types {
 			vfLogError("Failed to load Ogg Vorbis file: {}", path);
 			return;
 		}
+
+		// Report 20% - file opened
+		if (progressCallback) progressCallback(0.2f);
 
 		// Retrieve file information
 		stb_vorbis_info info = stb_vorbis_get_info(vorbis);
@@ -75,18 +85,31 @@ namespace types {
 		audioData.frames = frames;
 		audioData.totalDurationInSeconds = static_cast<uint32_t>(stb_vorbis_stream_length_in_seconds(vorbis));
 
+		// Report 40% - metadata read
+		if (progressCallback) progressCallback(0.4f);
+
 		// Resize the data buffer and read samples
 		audioData.data.resize(totalSamples);
 		stb_vorbis_get_samples_short_interleaved(vorbis, info.channels, audioData.data.data(), totalSamples);
+
+		// Report 70% - audio data decoded
+		if (progressCallback) progressCallback(0.7f);
 
 		saveToFile(location, fileName, audioData);
 
 		// Cleanup
 		stb_vorbis_close(vorbis);
+
+		// Report 100% - complete
+		if (progressCallback) progressCallback(1.0f);
 	}
 
-	void Audio::loadWavFile(std::string_view path, std::string_view fileName, std::string_view location) const
+	void Audio::loadWavFile(std::string_view path, std::string_view fileName, std::string_view location,
+	                        AudioProgressCallback progressCallback) const
 	{
+		// Report 0% - starting load
+		if (progressCallback) progressCallback(0.0f);
+
 		resource::AudioData audioData;
 		audioData.headerFileType = resource::FileType::AUDIO;
 		// Open and load WAV file using dr_wav
@@ -96,24 +119,40 @@ namespace types {
 			return ;
 		}
 
+		// Report 20% - file opened
+		if (progressCallback) progressCallback(0.2f);
+
 		// Set up the AudioData structure
 		audioData.sampleRate = wav.sampleRate;
 		audioData.channels = wav.channels;
 		audioData.frames = static_cast<uint32_t>(wav.totalPCMFrameCount);
 		audioData.totalDurationInSeconds = static_cast<uint32_t>(wav.totalPCMFrameCount / wav.sampleRate);
 
+		// Report 40% - metadata read
+		if (progressCallback) progressCallback(0.4f);
+
 		// Load WAV data into the vector (16-bit signed samples)
 		audioData.data.resize(wav.totalPCMFrameCount * wav.channels);
 		drwav_read_pcm_frames_s16(&wav, wav.totalPCMFrameCount, audioData.data.data());
+
+		// Report 70% - audio data read
+		if (progressCallback) progressCallback(0.7f);
 
 		saveToFile(location, fileName, audioData);
 
 		// Cleanup
 		drwav_uninit(&wav);
+
+		// Report 100% - complete
+		if (progressCallback) progressCallback(1.0f);
 	}
 
-	void Audio::loadMp3File(std::string_view path, std::string_view fileName, std::string_view location) const
+	void Audio::loadMp3File(std::string_view path, std::string_view fileName, std::string_view location,
+	                        AudioProgressCallback progressCallback) const
 	{
+		// Report 0% - starting load
+		if (progressCallback) progressCallback(0.0f);
+
 		resource::AudioData audioData;
 		audioData.headerFileType = resource::FileType::AUDIO;
 
@@ -124,6 +163,9 @@ namespace types {
 			return ;
 		}
 
+		// Report 20% - file opened
+		if (progressCallback) progressCallback(0.2f);
+
 		// Set up the AudioData structure
 		audioData.sampleRate = mp3.sampleRate;
 		audioData.channels = mp3.channels;
@@ -133,14 +175,23 @@ namespace types {
 		audioData.frames = static_cast<uint32_t>(totalFrames);
 		audioData.totalDurationInSeconds = static_cast<uint32_t>(totalFrames / mp3.sampleRate);
 
+		// Report 40% - metadata read
+		if (progressCallback) progressCallback(0.4f);
+
 		// Resize the audio data buffer and read into it
 		audioData.data.resize(totalFrames * mp3.channels);
 		drmp3_read_pcm_frames_s16(&mp3, totalFrames, audioData.data.data());
+
+		// Report 70% - audio data decoded
+		if (progressCallback) progressCallback(0.7f);
 
 		saveToFile(location, fileName, audioData);
 
 		// Cleanup
 		drmp3_uninit(&mp3);
+
+		// Report 100% - complete
+		if (progressCallback) progressCallback(1.0f);
 	}
 
 	void Audio::saveToFile(std::string_view location, std::string_view fileName, const resource::AudioData& audioData) const

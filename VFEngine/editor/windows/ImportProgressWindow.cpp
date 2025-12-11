@@ -62,17 +62,14 @@ namespace windows {
                 std::lock_guard<std::mutex> lock(fileMutex);
                 fileName = currentFile;
             }
-
-            // Display current file being processed
+            
             ImGui::Text("Current: %s", fileName.c_str());
             ImGui::Spacing();
-
-            // Progress bar
+            
             ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f));
 
             ImGui::Spacing();
-
-            // Show close button only when complete
+            
             if (progress >= 1.0f) {
                 ImGui::Separator();
                 if (ImGui::Button("Close", ImVec2(-1.0f, 0.0f))) {
