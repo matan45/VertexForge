@@ -23,7 +23,8 @@ msbuild VFEngine/VertexForge.sln /p:Configuration=Release /p:Platform=x64
 
 ```
 Editor ──┬──> Core ──> Graphics ──> Window ──> Utilities
-         └──> Import ──────────────────────────> Utilities
+         ├──> Import ──────────────────────────> Utilities
+         └──> Services ────────────────────────> Utilities
 Runtime ────> Core
 ```
 
@@ -35,6 +36,7 @@ All modules are static libraries except Editor and Runtime (ConsoleApp executabl
 - **Handlers**: Internal orchestrators that coordinate subsystems within a module.
 - **ECS**: EnTT-based. Entities wrap `entt::entity` handles; components defined in `utilities/components/Components.hpp`.
 - **Async Resources**: `ResourceManager` loads assets via `std::async`, returns futures.
+- **Event System**: `EventDispatcher` singleton for decoupled communication between modules (see Services Layer below).
 
 ### Entry Points
 
@@ -52,8 +54,44 @@ VFEngine/
 ├── window/         # GLFW window, input handling
 ├── utilities/      # ECS components, scene graph, resource loading, serialization
 ├── import/         # Asset import pipeline (mesh, texture, audio, animation)
+├── services/       # Event dispatcher, service interfaces/implementations, DTOs
 ├── editor/         # ImGui panels, gizmos, node editor
 └── runtime/        # Standalone runtime (minimal)
+```
+
+### Services Layer
+
+The `services/` module provides decoupled communication via CQRS pattern:
+
+```cpp
+// Commands - execute actions, may return results
+events::EventDispatcher::instance().execute(SomeCommand{args});
+
+// Queries - read-only data retrieval
+auto result = events::EventDispatcher::instance().query(SomeQuery{});
+
+// Notifications - fire-and-forget broadcasts (pub/sub)
+events::EventDispatcher::instance().publish(SomeNotification{data});
+
+// Subscribe to notifications
+auto token = dispatcher.subscribe<SomeNotification>([](const auto& n) { ... });
+dispatcher.unsubscribe(token);
+```
+
+Event types are defined in `services/events/` (e.g., `ResourceEvents.hpp`, `SceneEvents.hpp`, `InputEvents.hpp`).
+
+### Import Pipeline
+
+Asset imports flow through a staged pipeline (`import/pipeline/`):
+
+```
+File → HeaderValidationStage → FileTypeDetectionStage → FileProcessingStage → .vf* output
+```
+
+Each asset type (Mesh, Texture, Audio) has a processor in `import/types/` with progress callback support:
+```cpp
+using MeshProgressCallback = std::function<void(float progress)>;
+meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 ```
 
 ## Naming Conventions

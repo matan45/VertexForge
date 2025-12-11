@@ -53,8 +53,7 @@ namespace pipeline::stages
             };
         }
 
-        textureProcessor.loadTextureFileWithType(context.file, context.fileName, context.location,
-                                                  context.fileType, textureProgress);
+        textureProcessor.loadTextureFile(context.file, context.fileName, context.location,textureProgress);
     }
 
     void FileProcessingStage::processHDR(ImportContext& context)
@@ -70,8 +69,7 @@ namespace pipeline::stages
             };
         }
 
-        textureProcessor.loadHDRFileWithType(context.file, context.fileName, context.location,
-                                              context.fileType, textureProgress);
+        textureProcessor.loadHDRFile(context.file, context.fileName, context.location,textureProgress);
     }
 
     void FileProcessingStage::processAudio(ImportContext& context)

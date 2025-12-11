@@ -11,8 +11,6 @@ namespace types {
 	class Audio
 	{
 	public:
-		void loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
-		                  std::string_view location, AudioProgressCallback progressCallback = nullptr) const;
 		void loadFromFileWithType(const importConfig::ImportFiles& file, std::string_view fileName,
 		                          std::string_view location, std::string_view fileType,
 		                          AudioProgressCallback progressCallback = nullptr) const;
