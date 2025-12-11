@@ -18,10 +18,27 @@ namespace services {
         float fileProgress
     )>;
 
+    // Result of a single file import (mirrors controllers::ImportFileResult)
+    struct ImportFileResultData
+    {
+        std::string sourcePath;
+        std::string fileName;
+        bool success = false;
+        std::string errorMessage;
+    };
+
+    // Result of the entire import operation (mirrors controllers::ImportResult)
+    struct ImportResultData
+    {
+        std::vector<ImportFileResultData> fileResults;
+        size_t successCount = 0;
+        size_t failureCount = 0;
+    };
+
     // Delegate types for import functionality (injected by Editor)
     struct ImportDelegate {
         std::function<void()> initialize;
-        std::function<void(const std::vector<ImportFileRequest>&, ImportProgressCallback)> importFiles;
+        std::function<ImportResultData(const std::vector<ImportFileRequest>&, ImportProgressCallback)> importFiles;
         std::function<void(const std::string&)> setLocation;
     };
 

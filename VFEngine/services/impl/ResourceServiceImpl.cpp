@@ -58,21 +58,23 @@ namespace services {
                 events::EventDispatcher::instance().publish(progressNotif);
             };
 
-            // Call the Import delegate if set
+            // Call the Import delegate if set and capture results
+            ImportResultData importResult;
             if (importDelegate.importFiles) {
-                importDelegate.importFiles(files, progressCallback);
+                importResult = importDelegate.importFiles(files, progressCallback);
             }
 
             // Mark as complete
             importing.store(false);
             progress.store(1.0f);
 
-            // Publish completed notification
+            // Publish completed notification with actual results
             events::resource::ImportCompletedNotification completeNotification;
-            for (const auto& file : files) {
+            for (const auto& fileResult : importResult.fileResults) {
                 ImportResult result;
-                result.sourcePath = file.path;
-                result.success = true;  // Assume success for now
+                result.sourcePath = fileResult.sourcePath;
+                result.success = fileResult.success;
+                result.errorMessage = fileResult.errorMessage;
                 completeNotification.results.push_back(result);
             }
             events::EventDispatcher::instance().publish(completeNotification);

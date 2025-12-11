@@ -17,6 +17,23 @@ namespace controllers
         float fileProgress
     )>;
 
+    // Result of a single file import
+    struct ImportFileResult
+    {
+        std::string sourcePath;
+        std::string fileName;
+        bool success = false;
+        std::string errorMessage;
+    };
+
+    // Result of the entire import operation
+    struct ImportResult
+    {
+        std::vector<ImportFileResult> fileResults;
+        size_t successCount = 0;
+        size_t failureCount = 0;
+    };
+
     class Import
     {
     private:
@@ -24,15 +41,16 @@ namespace controllers
         inline static std::unique_ptr<pipeline::ImportPipeline> importPipeline;
 
     public:
-        static void importFiles(const std::vector<importConfig::ImportFiles>& paths,
-                                ImportProgressCallback progressCallback = nullptr);
+        static ImportResult importFiles(const std::vector<importConfig::ImportFiles>& paths,
+                                        ImportProgressCallback progressCallback = nullptr);
         static void setLocation(std::string_view newLocation);
         static void initialize();
 
     private:
         static void setupPipeline();
-        static void waitForCompletion(std::vector<std::future<std::optional<pipeline::ImportContext>>>&& futures,
-                                      ImportProgressCallback progressCallback,
-                                      uint32_t totalFiles);
+        static ImportResult waitForCompletion(std::vector<std::future<std::optional<pipeline::ImportContext>>>&& futures,
+                                              ImportProgressCallback progressCallback,
+                                              uint32_t totalFiles,
+                                              const std::vector<importConfig::ImportFiles>& originalPaths);
     };
 }

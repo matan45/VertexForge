@@ -9,10 +9,11 @@
 
 namespace controllers
 {
-    void Import::importFiles(const std::vector<importConfig::ImportFiles>& paths,
-                             ImportProgressCallback progressCallback)
+    ImportResult Import::importFiles(const std::vector<importConfig::ImportFiles>& paths,
+                                     ImportProgressCallback progressCallback)
     {
-        if (paths.empty()) return;
+        ImportResult result;
+        if (paths.empty()) return result;
 
         if (!importPipeline)
         {
@@ -22,9 +23,10 @@ namespace controllers
         vfLogInfo("Starting import of {} files", paths.size());
 
         auto futures = importPipeline->processFiles(paths, location, progressCallback);
-        waitForCompletion(std::move(futures), progressCallback, static_cast<uint32_t>(paths.size()));
+        result = waitForCompletion(std::move(futures), progressCallback, static_cast<uint32_t>(paths.size()), paths);
 
         vfLogInfo("Import process completed");
+        return result;
     }
 
     void Import::setLocation(std::string_view newLocation)
@@ -50,35 +52,43 @@ namespace controllers
         vfLogInfo("Import pipeline initialized with {} stages", 4);
     }
 
-    void Import::waitForCompletion(std::vector<std::future<std::optional<pipeline::ImportContext>>>&& futures,
-                                     ImportProgressCallback progressCallback,
-                                     uint32_t totalFiles)
+    ImportResult Import::waitForCompletion(std::vector<std::future<std::optional<pipeline::ImportContext>>>&& futures,
+                                           ImportProgressCallback progressCallback,
+                                           uint32_t totalFiles,
+                                           const std::vector<importConfig::ImportFiles>& originalPaths)
     {
-        size_t successCount = 0;
-        size_t failureCount = 0;
+        ImportResult result;
         uint32_t completed = 0;
 
-        for (auto& future : futures)
+        for (size_t i = 0; i < futures.size(); ++i)
         {
+            auto& future = futures[i];
+            ImportFileResult fileResult;
+            fileResult.sourcePath = (i < originalPaths.size()) ? originalPaths[i].path : "";
+
             try
             {
-                auto result = future.get();
+                auto futureResult = future.get();
                 completed++;
 
-                if (result.has_value())
+                if (futureResult.has_value())
                 {
-                    successCount++;
-                    vfLogInfo("Successfully processed: {}", result->file.path);
+                    result.successCount++;
+                    fileResult.success = true;
+                    fileResult.fileName = futureResult->fileName;
+                    vfLogInfo("Successfully processed: {}", futureResult->file.path);
 
                     // Report progress for completed file
                     if (progressCallback)
                     {
-                        progressCallback(result->fileName, completed, totalFiles, 1.0f);
+                        progressCallback(futureResult->fileName, completed, totalFiles, 1.0f);
                     }
                 }
                 else
                 {
-                    failureCount++;
+                    result.failureCount++;
+                    fileResult.success = false;
+                    fileResult.errorMessage = "Failed to process file";
                     vfLogError("Failed to process file");
 
                     // Report progress even for failed files
@@ -90,8 +100,10 @@ namespace controllers
             }
             catch (const std::exception& e)
             {
-                failureCount++;
+                result.failureCount++;
                 completed++;
+                fileResult.success = false;
+                fileResult.errorMessage = e.what();
                 vfLogError("Exception during file processing: {}", e.what());
 
                 if (progressCallback)
@@ -99,8 +111,11 @@ namespace controllers
                     progressCallback("error", completed, totalFiles, 1.0f);
                 }
             }
+
+            result.fileResults.push_back(std::move(fileResult));
         }
 
-        vfLogInfo("Import completed: {} successful, {} failed", successCount, failureCount);
+        vfLogInfo("Import completed: {} successful, {} failed", result.successCount, result.failureCount);
+        return result;
     }
 }
