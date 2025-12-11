@@ -21,8 +21,7 @@ namespace resource {
 		inline static std::unordered_map<std::string, std::weak_ptr<TextureData>> textureCache;
 		inline static std::unordered_map<std::string, std::weak_ptr<HDRData>> hdrCache;
 		inline static std::unordered_map<std::string, std::weak_ptr<AudioData>> audioCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<MeshesData>> meshCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<StreamingMeshesData>> streamingMeshCache;
+		inline static std::unordered_map<std::string, std::weak_ptr<MeshesData>> streamingMeshCache;
 		inline static std::unordered_map<std::string, std::weak_ptr<std::vector<ShaderModel>>> shaderCache;
 
 		inline static std::mutex cacheMutex;
@@ -37,15 +36,6 @@ namespace resource {
 		static std::future <std::shared_ptr<AudioData>> loadAudioAsync(std::string_view path);
 		static std::future <std::shared_ptr<MeshesData>> loadMeshAsync(std::string_view path);
 		static std::future <std::shared_ptr<std::vector<ShaderModel>>> loadShaderAsync(std::string_view path);
-
-		// Streaming mesh loader - loads mesh in chunks to handle meshes larger than RAM
-		// onChunk is called for each loaded chunk, allowing consumer to upload to GPU
-		// onComplete is called when each mesh finishes loading
-		static std::future<std::shared_ptr<StreamingMeshesData>> loadMeshStreamingAsync(
-			std::string_view path,
-			MeshChunkCallback onChunk,
-			MeshLoadCompleteCallback onComplete = nullptr
-		);
 
 		static void init();
 		static void cleanUp();

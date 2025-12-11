@@ -36,7 +36,6 @@ namespace resource
         std::erase_if(textureCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(hdrCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(audioCache, [](const auto& pair) { return pair.second.expired(); });
-        std::erase_if(meshCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(streamingMeshCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });
     }
@@ -126,9 +125,9 @@ namespace resource
     {
         return loadResourceAsync<MeshesData>(
             path,
-            meshCache,
+            streamingMeshCache,
             [](std::string_view p) {
-                return MeshResource::loadMeshStreaming(p);
+                return MeshResource::loadMesh(p);
             });
     }
     
@@ -169,7 +168,6 @@ namespace resource
         textureCache.clear();
         hdrCache.clear();
         audioCache.clear();
-        meshCache.clear();
         streamingMeshCache.clear();
         shaderCache.clear();
 
