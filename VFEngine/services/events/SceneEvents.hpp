@@ -83,8 +83,7 @@ namespace events::scene {
 
         std::string_view getName() const override { return "SetCameraData"; }
     };
-
-    // Mesh Component Commands
+    
     struct AddMeshComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -187,8 +186,7 @@ namespace events::scene {
 
         std::string_view getName() const override { return "GetIBLData"; }
     };
-
-    // Mesh Component Queries
+    
     struct HasMeshComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 

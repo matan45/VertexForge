@@ -847,8 +847,7 @@ namespace services {
             [this](const events::scene::LoadSceneCommand& cmd) {
                 return loadScene(cmd.filePath);
             });
-
-        // Mesh Component handlers
+        
         dispatcher.registerCommandHandler<events::scene::AddMeshComponentCommand>(
             [this](const events::scene::AddMeshComponentCommand& cmd) {
                 return addMeshComponent(cmd.entity);

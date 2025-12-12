@@ -197,8 +197,7 @@ namespace serialization {
 					entity.addOrReplaceComponent<components::IBLComponent>().fileName = iblFileName;
 				}
 			}
-
-			// Mesh component
+			
 			if (componentsJson.contains("mesh")) {
 				std::string meshPath = deserializeMesh(componentsJson["mesh"]);
 				if (!meshPath.empty()) {

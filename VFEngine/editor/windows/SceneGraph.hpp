@@ -23,5 +23,11 @@ namespace windows
         void dragDropEntity(services::EntityHandle handle);
         void subscribeToEvents();
         void onSceneCleared();
+
+        // UI styling helpers
+        static void pushComponentHeaderStyle();
+        static void popComponentHeaderStyle();
+        static void pushRemoveButtonStyle();
+        static void popRemoveButtonStyle();
     };
 }
