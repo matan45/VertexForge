@@ -7,6 +7,8 @@
 #include "../events/EventDispatcher.hpp"
 #include "../events/RenderEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include <nlohmann/json.hpp>
+#include <fstream>
 
 namespace services {
 
@@ -634,14 +636,55 @@ namespace services {
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
-        
+
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
         // Clear selection
         selectedEntity = std::nullopt;
-        
-        bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph);
+
+        // Count entities first for progress reporting
+        size_t totalEntities = 0;
+        {
+            std::ifstream countFile(filePath);
+            if (countFile.is_open()) {
+                try {
+                    auto countJson = nlohmann::json::parse(countFile);
+                    if (countJson.contains("root")) {
+                        totalEntities = serialization::SceneSerialization::countEntities(countJson["root"]);
+                    }
+                } catch (...) {
+                    // Ignore counting errors, proceed without progress
+                }
+            }
+        }
+
+        // Publish loading started notification
+        events::scene::SceneLoadingStartedNotification startNotif;
+        startNotif.scenePath = filePath;
+        startNotif.totalEntities = totalEntities;
+        dispatcher.publish(startNotif);
+
+        // Create progress callback that publishes notifications
+        auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total) {
+            events::scene::SceneLoadingProgressNotification progressNotif;
+            progressNotif.currentEntityName = entityName;
+            progressNotif.entitiesLoaded = loaded;
+            progressNotif.totalEntities = total;
+            progressNotif.progress = (total > 0) ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
+            dispatcher.publish(progressNotif);
+        };
+
+        bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph, progressCallback);
+
+        // Publish loading completed notification
+        events::scene::SceneLoadingCompletedNotification completeNotif;
+        completeNotif.scenePath = filePath;
+        completeNotif.success = success;
+        if (!success) {
+            completeNotif.errorMessage = "Failed to load scene file";
+        }
+        dispatcher.publish(completeNotif);
 
         if (success) {
             // IBL is a scene-level property, always attached to root entity only.

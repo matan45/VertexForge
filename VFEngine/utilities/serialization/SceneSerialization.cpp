@@ -132,22 +132,23 @@ namespace serialization {
 		return "";
 	}
 
-	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph) {
+	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph,
+											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
 		for (const auto& childJson : childrenJson) {
 			if (!childJson.is_object()) {
 				vfLogWarning("Skipping invalid child entry in scene file (not an object)");
 				continue;
 			}
-			
+
 			std::string childName = childJson.value("name", "Unnamed");
-			
+
 			scene::Entity child(childName);
-			
+
 			if (!child.isValid()) {
 				vfLogError("Failed to create child entity '{}' during scene load", childName);
 				continue;
 			}
-			
+
 			if (childJson.contains("uuid") && childJson["uuid"].is_number_unsigned()) {
 				uint64_t uuidValue = childJson["uuid"].get<uint64_t>();
 				child.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
@@ -157,16 +158,25 @@ namespace serialization {
 			sceneGraph.addChild(parent, child);
 
 			// Deserialize the child's data (transform, components, children)
-			deserializeEntity(childJson, child, sceneGraph, false);
+			deserializeEntity(childJson, child, sceneGraph, false, progressCallback, entitiesLoaded, totalEntities);
 		}
 	}
 
 	// Main entity deserialization (handles both root and children)
-	void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot) {
+	void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot,
+											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
 		// Set name
+		std::string entityName = "Unnamed";
 		if (entityJson.contains("name")) {
-			entity.setName(entityJson["name"].get<std::string>());
+			entityName = entityJson["name"].get<std::string>();
+			entity.setName(entityName);
 		}
+
+		// Report progress
+		if (progressCallback) {
+			progressCallback(entityName, entitiesLoaded, totalEntities);
+		}
+		++entitiesLoaded;
 
 		// Restore UUID for root
 		if (isRoot && entityJson.contains("uuid")) {
@@ -197,7 +207,7 @@ namespace serialization {
 					entity.addOrReplaceComponent<components::IBLComponent>().fileName = iblFileName;
 				}
 			}
-			
+
 			if (componentsJson.contains("mesh")) {
 				std::string meshPath = deserializeMesh(componentsJson["mesh"]);
 				if (!meshPath.empty()) {
@@ -208,7 +218,7 @@ namespace serialization {
 
 		// Deserialize children recursively
 		if (entityJson.contains("children") && entityJson["children"].is_array()) {
-			deserializeChildren(entityJson["children"], entity, sceneGraph);
+			deserializeChildren(entityJson["children"], entity, sceneGraph, progressCallback, entitiesLoaded, totalEntities);
 		}
 	}
 
@@ -219,7 +229,18 @@ namespace serialization {
 		return sceneGraph;
 	}
 
-	bool SceneSerialization::loadSceneInto(std::string_view filename, scene::SceneGraphSystem& sceneGraph)
+	size_t SceneSerialization::countEntities(const json& entityJson) {
+		size_t count = 1; // Count this entity
+		if (entityJson.contains("children") && entityJson["children"].is_array()) {
+			for (const auto& child : entityJson["children"]) {
+				count += countEntities(child);
+			}
+		}
+		return count;
+	}
+
+	bool SceneSerialization::loadSceneInto(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
+										   SceneLoadProgressCallback progressCallback)
 	{
 		json sceneJson;
 
@@ -263,11 +284,15 @@ namespace serialization {
 
 		// Phase 2: File validated successfully - now safe to clear and load
 		try {
+			// Count total entities for progress tracking
+			size_t totalEntities = countEntities(sceneJson["root"]);
+			size_t entitiesLoaded = 0;
+
 			sceneGraph.clearScene();
 
 			// Deserialize root entity
 			scene::Entity& root = sceneGraph.GetRoot();
-			deserializeEntity(sceneJson["root"], root, sceneGraph, true);
+			deserializeEntity(sceneJson["root"], root, sceneGraph, true, progressCallback, entitiesLoaded, totalEntities);
 
 			vfLogInfo("Scene loaded successfully from: {}", filename);
 			return true;
