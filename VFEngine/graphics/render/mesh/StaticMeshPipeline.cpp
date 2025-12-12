@@ -1,0 +1,585 @@
+#include "StaticMeshPipeline.hpp"
+#include "../../core/Device.hpp"
+#include "../../core/SwapChain.hpp"
+#include "../../core/Shader.hpp"
+#include "../../core/OffScreen.hpp"
+#include "../../core/Utilities.hpp"
+#include "resource/MeshResource.hpp"
+#include "print/Logger.hpp"
+
+namespace render::mesh
+{
+    StaticMeshPipeline::StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
+                                           core::OffscreenResources& offscreenResources)
+        : device{device}, swapChain{swapChain}, offscreenResources{offscreenResources}
+    {
+        // Create command pool for buffer upload operations
+        vk::CommandPoolCreateInfo commandPoolInfo;
+        commandPoolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
+        commandPoolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
+        commandPool = device.getLogicalDevice().createCommandPoolUnique(commandPoolInfo);
+
+        meshShader = std::make_shared<core::Shader>(device);
+        meshShader->readShader("../../resources/shaders/mesh/mesh.glsl");
+    }
+
+    void StaticMeshPipeline::init(const ibl::ImageData& irradianceMap,
+                                  const ibl::ImageData& prefilterMap,
+                                  const ibl::ImageData& brdfLUT)
+    {
+        createRenderPass();
+        createDescriptorSetLayout();
+        createDescriptorPool();
+        createCameraUBO();
+        createDescriptorSet(irradianceMap, prefilterMap, brdfLUT);
+        createPipelineLayout();
+        createGraphicsPipeline();
+        createFramebuffers();
+    }
+
+    void StaticMeshPipeline::recreate()
+    {
+        // Cleanup framebuffers and render pass for recreation
+        for (auto& framebuffer : framebuffers)
+        {
+            device.getLogicalDevice().destroyFramebuffer(framebuffer);
+        }
+        device.getLogicalDevice().destroyRenderPass(renderPass);
+        device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+
+        createRenderPass();
+        createGraphicsPipeline();
+        createFramebuffers();
+    }
+
+    void StaticMeshPipeline::createRenderPass()
+    {
+        // Color attachment - load existing content (preserve skybox)
+        vk::AttachmentDescription colorAttachment{};
+        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.samples = vk::SampleCountFlagBits::e1;
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;  // Preserve skybox
+        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::AttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+        // Depth attachment
+        vk::AttachmentDescription depthAttachment{};
+        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
+        depthAttachment.samples = vk::SampleCountFlagBits::e1;
+        depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+        vk::AttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+        vk::SubpassDescription subpass{};
+        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+
+        vk::RenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+
+        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+    }
+
+    void StaticMeshPipeline::createDescriptorSetLayout()
+    {
+        std::vector<vk::DescriptorSetLayoutBinding> bindings(4);
+
+        // Binding 0: Camera UBO (vertex + fragment)
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        bindings[0].pImmutableSamplers = nullptr;
+
+        // Binding 1: Irradiance cubemap (fragment only)
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        bindings[1].pImmutableSamplers = nullptr;
+
+        // Binding 2: Prefilter cubemap (fragment only)
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        bindings[2].pImmutableSamplers = nullptr;
+
+        // Binding 3: BRDF LUT (fragment only)
+        bindings[3].binding = 3;
+        bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        bindings[3].pImmutableSamplers = nullptr;
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+
+        descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
+    }
+
+    void StaticMeshPipeline::createDescriptorPool()
+    {
+        std::vector<vk::DescriptorPoolSize> poolSizes(2);
+        poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+        poolSizes[0].descriptorCount = 1;
+        poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[1].descriptorCount = 3;  // irradiance, prefilter, brdfLUT
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = 1;
+
+        descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
+    }
+
+    void StaticMeshPipeline::createCameraUBO()
+    {
+        core::BufferInfoRequest bufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        bufferRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+        bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                   vk::MemoryPropertyFlagBits::eHostCoherent;
+        bufferRequest.size = sizeof(CameraUBO);
+        core::Utilities::createBuffer(bufferRequest, cameraUBO, cameraUBOMemory);
+    }
+
+    void StaticMeshPipeline::createDescriptorSet(const ibl::ImageData& irradianceMap,
+                                                  const ibl::ImageData& prefilterMap,
+                                                  const ibl::ImageData& brdfLUT)
+    {
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        descriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+
+        // Camera UBO binding
+        vk::DescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = cameraUBO;
+        uboBufferInfo.offset = 0;
+        uboBufferInfo.range = sizeof(CameraUBO);
+
+        vk::WriteDescriptorSet uboWrite{};
+        uboWrite.dstSet = descriptorSet;
+        uboWrite.dstBinding = 0;
+        uboWrite.dstArrayElement = 0;
+        uboWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+        uboWrite.descriptorCount = 1;
+        uboWrite.pBufferInfo = &uboBufferInfo;
+
+        // Irradiance map binding
+        vk::DescriptorImageInfo irradianceImageInfo{};
+        irradianceImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        irradianceImageInfo.imageView = irradianceMap.imageView;
+        irradianceImageInfo.sampler = irradianceMap.sampler;
+
+        vk::WriteDescriptorSet irradianceWrite{};
+        irradianceWrite.dstSet = descriptorSet;
+        irradianceWrite.dstBinding = 1;
+        irradianceWrite.dstArrayElement = 0;
+        irradianceWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        irradianceWrite.descriptorCount = 1;
+        irradianceWrite.pImageInfo = &irradianceImageInfo;
+
+        // Prefilter map binding
+        vk::DescriptorImageInfo prefilterImageInfo{};
+        prefilterImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        prefilterImageInfo.imageView = prefilterMap.imageView;
+        prefilterImageInfo.sampler = prefilterMap.sampler;
+
+        vk::WriteDescriptorSet prefilterWrite{};
+        prefilterWrite.dstSet = descriptorSet;
+        prefilterWrite.dstBinding = 2;
+        prefilterWrite.dstArrayElement = 0;
+        prefilterWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        prefilterWrite.descriptorCount = 1;
+        prefilterWrite.pImageInfo = &prefilterImageInfo;
+
+        // BRDF LUT binding
+        vk::DescriptorImageInfo brdfImageInfo{};
+        brdfImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        brdfImageInfo.imageView = brdfLUT.imageView;
+        brdfImageInfo.sampler = brdfLUT.sampler;
+
+        vk::WriteDescriptorSet brdfWrite{};
+        brdfWrite.dstSet = descriptorSet;
+        brdfWrite.dstBinding = 3;
+        brdfWrite.dstArrayElement = 0;
+        brdfWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        brdfWrite.descriptorCount = 1;
+        brdfWrite.pImageInfo = &brdfImageInfo;
+
+        std::array<vk::WriteDescriptorSet, 4> descriptorWrites = {
+            uboWrite, irradianceWrite, prefilterWrite, brdfWrite
+        };
+        device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
+    }
+
+    void StaticMeshPipeline::createPipelineLayout()
+    {
+        // Push constant range for MeshPushConstants
+        vk::PushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(MeshPushConstants);
+
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+        pipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
+    }
+
+    void StaticMeshPipeline::createGraphicsPipeline()
+    {
+        // Vertex input state - using MeshVertexInput helper
+        auto bindingDescription = MeshVertexInput::getBindingDescription();
+        auto attributeDescriptions = MeshVertexInput::getAttributeDescriptions();
+
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+        // Input assembly
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        // Viewport and scissor
+        vk::Viewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(swapChain.getSwapchainExtent().width);
+        viewport.height = static_cast<float>(swapChain.getSwapchainExtent().height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        vk::Rect2D scissor{};
+        scissor.offset = vk::Offset2D(0, 0);
+        scissor.extent = swapChain.getSwapchainExtent();
+
+        vk::PipelineViewportStateCreateInfo viewportState{};
+        viewportState.viewportCount = 1;
+        viewportState.pViewports = &viewport;
+        viewportState.scissorCount = 1;
+        viewportState.pScissors = &scissor;
+
+        // Rasterizer - back-face culling enabled for meshes
+        vk::PipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = vk::PolygonMode::eFill;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = vk::CullModeFlagBits::eBack;
+        rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        // Multisampling
+        vk::PipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+        // Depth testing - enabled for meshes
+        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = vk::CompareOp::eLess;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.stencilTestEnable = VK_FALSE;
+
+        // Color blending - no blending
+        vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
+                                              vk::ColorComponentFlagBits::eG |
+                                              vk::ColorComponentFlagBits::eB |
+                                              vk::ColorComponentFlagBits::eA;
+        colorBlendAttachment.blendEnable = VK_FALSE;
+
+        vk::PipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+
+        // Create pipeline
+        vk::GraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.stageCount = static_cast<uint32_t>(meshShader->getShaderStages().size());
+        pipelineInfo.pStages = meshShader->getShaderStages().data();
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+
+        graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
+    }
+
+    void StaticMeshPipeline::createFramebuffers()
+    {
+        framebuffers.resize(offscreenResources.colorImages.size());
+        vk::ImageView depth = offscreenResources.depthImage.depthImageView;
+
+        for (uint32_t i = 0; i < framebuffers.size(); i++)
+        {
+            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
+            std::array<vk::ImageView, 2> attachments = {colorView, depth};
+
+            vk::FramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
+            framebufferInfo.width = swapChain.getSwapchainExtent().width;
+            framebufferInfo.height = swapChain.getSwapchainExtent().height;
+            framebufferInfo.layers = 1;
+
+            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
+        }
+    }
+
+    void StaticMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
+                                              const glm::vec3& cameraPos) const
+    {
+        CameraUBO ubo{};
+        ubo.view = view;
+        ubo.projection = projection;
+        ubo.cameraPos = cameraPos;
+
+        void* data;
+        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
+        if (result == vk::Result::eSuccess)
+        {
+            memcpy(data, &ubo, sizeof(ubo));
+            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
+        }
+    }
+
+    void StaticMeshPipeline::cleanUp()
+    {
+        // Unload all meshes first
+        unloadAllMeshes();
+
+        // Reverse order of creation
+        for (auto& framebuffer : framebuffers)
+        {
+            device.getLogicalDevice().destroyFramebuffer(framebuffer);
+        }
+
+        device.getLogicalDevice().destroyBuffer(cameraUBO);
+        device.getLogicalDevice().freeMemory(cameraUBOMemory);
+
+        device.getLogicalDevice().destroyRenderPass(renderPass);
+        device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
+        device.getLogicalDevice().freeDescriptorSets(descriptorPool, descriptorSet);
+        device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
+        device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
+
+        // Reset command pool (automatic cleanup via UniqueCommandPool)
+        commandPool.reset();
+    }
+
+    void StaticMeshPipeline::cleanUpShader()
+    {
+        meshShader->cleanUp();
+    }
+
+    std::string StaticMeshPipeline::loadMesh(std::string_view meshPath)
+    {
+        std::string pathStr{meshPath};
+
+        // Check if already loaded
+        if (loadedMeshes.contains(pathStr))
+        {
+            return pathStr;
+        }
+
+        // Load mesh data from file
+        resource::MeshesData meshesData = resource::MeshResource::loadMesh(meshPath);
+        if (meshesData.meshes.empty())
+        {
+            loggerError("Failed to load mesh from: {}", meshPath);
+            return "";
+        }
+
+        // For now, combine all submeshes into one (or just use first mesh)
+        // In future, could return multiple mesh IDs
+        const auto& meshData = meshesData.meshes[0];
+
+        if (meshData.vertices.empty())
+        {
+            loggerError("Mesh has no vertices: {}", meshPath);
+            return "";
+        }
+
+        MeshGPUData gpuData{};
+        gpuData.sourcePath = pathStr;
+        gpuData.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
+        gpuData.indexCount = static_cast<uint32_t>(meshData.indices.size());
+
+        // Create vertex buffer (device local for best performance)
+        vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * meshData.vertices.size();
+
+        core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        vertexBufferRequest.size = vertexBufferSize;
+        vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::Utilities::createBuffer(vertexBufferRequest, gpuData.vertexBuffer, gpuData.vertexBufferMemory);
+
+        // Copy vertex data to GPU using staging buffer
+        core::Utilities::copyToBuffer(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            device.getGraphicsQueue(),
+            commandPool.get(),
+            gpuData.vertexBuffer,
+            meshData.vertices.data(),
+            vertexBufferSize
+        );
+
+        // Create index buffer if indices exist
+        if (!meshData.indices.empty())
+        {
+            vk::DeviceSize indexBufferSize = sizeof(uint32_t) * meshData.indices.size();
+
+            core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            indexBufferRequest.size = indexBufferSize;
+            indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::Utilities::createBuffer(indexBufferRequest, gpuData.indexBuffer, gpuData.indexBufferMemory);
+
+            // Copy index data to GPU
+            core::Utilities::copyToBuffer(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                device.getGraphicsQueue(),
+                commandPool.get(),
+                gpuData.indexBuffer,
+                meshData.indices.data(),
+                indexBufferSize
+            );
+        }
+
+        loadedMeshes[pathStr] = gpuData;
+        loggerInfo("Loaded mesh: {} ({} vertices, {} indices)", meshPath, gpuData.vertexCount, gpuData.indexCount);
+
+        return pathStr;
+    }
+
+    void StaticMeshPipeline::unloadMesh(const std::string& meshId)
+    {
+        auto it = loadedMeshes.find(meshId);
+        if (it == loadedMeshes.end())
+        {
+            return;
+        }
+
+        const auto& gpuData = it->second;
+
+        // Wait for device to finish using the buffers
+        device.getLogicalDevice().waitIdle();
+
+        // Destroy vertex buffer
+        if (gpuData.vertexBuffer)
+        {
+            device.getLogicalDevice().destroyBuffer(gpuData.vertexBuffer);
+            device.getLogicalDevice().freeMemory(gpuData.vertexBufferMemory);
+        }
+
+        // Destroy index buffer
+        if (gpuData.indexBuffer)
+        {
+            device.getLogicalDevice().destroyBuffer(gpuData.indexBuffer);
+            device.getLogicalDevice().freeMemory(gpuData.indexBufferMemory);
+        }
+
+        loadedMeshes.erase(it);
+        loggerInfo("Unloaded mesh: {}", meshId);
+    }
+
+    void StaticMeshPipeline::unloadAllMeshes()
+    {
+        if (loadedMeshes.empty())
+        {
+            return;
+        }
+
+        // Wait for device to finish
+        device.getLogicalDevice().waitIdle();
+
+        for (auto& [path, gpuData] : loadedMeshes)
+        {
+            if (gpuData.vertexBuffer)
+            {
+                device.getLogicalDevice().destroyBuffer(gpuData.vertexBuffer);
+                device.getLogicalDevice().freeMemory(gpuData.vertexBufferMemory);
+            }
+            if (gpuData.indexBuffer)
+            {
+                device.getLogicalDevice().destroyBuffer(gpuData.indexBuffer);
+                device.getLogicalDevice().freeMemory(gpuData.indexBufferMemory);
+            }
+        }
+
+        loadedMeshes.clear();
+        loggerInfo("Unloaded all meshes");
+    }
+
+    const MeshGPUData* StaticMeshPipeline::getMesh(const std::string& meshId) const
+    {
+        auto it = loadedMeshes.find(meshId);
+        if (it != loadedMeshes.end())
+        {
+            return &it->second;
+        }
+        return nullptr;
+    }
+
+    bool StaticMeshPipeline::isMeshLoaded(const std::string& meshId) const
+    {
+        return loadedMeshes.contains(meshId);
+    }
+
+    std::vector<std::string> StaticMeshPipeline::getLoadedMeshIds() const
+    {
+        std::vector<std::string> ids;
+        ids.reserve(loadedMeshes.size());
+        for (const auto& [path, _] : loadedMeshes)
+        {
+            ids.push_back(path);
+        }
+        return ids;
+    }
+}

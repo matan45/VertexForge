@@ -121,6 +121,8 @@
     <ClInclude Include="render\ibl\IrradianceGenerator.hpp" />
     <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
     <ClInclude Include="render\ibl\SkyboxRenderer.hpp" />
+    <ClInclude Include="render\mesh\MeshTypes.hpp" />
+    <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Graphics.cpp" />
@@ -144,6 +146,7 @@
     <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
+    <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\ibl\brdf.glsl" />
