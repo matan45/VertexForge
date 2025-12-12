@@ -124,6 +124,25 @@ namespace services {
         virtual bool removeIBLComponent(EntityHandle entity) = 0;
 
         // ============================================
+        // Mesh Component Operations
+        // ============================================
+
+        // Get mesh component data
+        virtual std::optional<MeshData> getMeshData(EntityHandle entity) const = 0;
+
+        // Set mesh component data (adds component if not present)
+        virtual bool setMeshData(EntityHandle entity, const MeshData& mesh) = 0;
+
+        // Add mesh component to entity
+        virtual bool addMeshComponent(EntityHandle entity) = 0;
+
+        // Remove mesh component from entity
+        virtual bool removeMeshComponent(EntityHandle entity) = 0;
+
+        // Check if entity has mesh component
+        virtual bool hasMeshComponent(EntityHandle entity) const = 0;
+
+        // ============================================
         // Selection State
         // ============================================
 

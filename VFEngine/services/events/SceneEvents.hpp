@@ -84,6 +84,26 @@ namespace events::scene {
         std::string_view getName() const override { return "SetCameraData"; }
     };
 
+    // Mesh Component Commands
+    struct AddMeshComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddMeshComponent"; }
+    };
+
+    struct RemoveMeshComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveMeshComponent"; }
+    };
+
+    struct SetMeshDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::MeshData meshData;
+
+        std::string_view getName() const override { return "SetMeshData"; }
+    };
+
     struct NewSceneCommand : ICommand<bool> {
         std::string_view getName() const override { return "NewScene"; }
     };
@@ -166,6 +186,19 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetIBLData"; }
+    };
+
+    // Mesh Component Queries
+    struct HasMeshComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasMeshComponent"; }
+    };
+
+    struct GetMeshDataQuery : IQuery<std::optional<services::MeshData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetMeshData"; }
     };
 
     // ============================================
