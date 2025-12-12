@@ -34,6 +34,13 @@ namespace windows {
 			cameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();
 			dispatcher.execute(cameraCmd);
 
+			// Update mesh camera matrices with editor camera matrices each frame
+			events::render::UpdateMeshCameraCommand meshCameraCmd;
+			meshCameraCmd.viewMatrix = editorCamera->getViewMatrix();
+			meshCameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();
+			meshCameraCmd.cameraPosition = editorCamera->position;
+			dispatcher.execute(meshCameraCmd);
+
 			// Get viewport texture through event system
 			events::render::GetViewportTextureQuery query;
 			auto texture = dispatcher.query(query);

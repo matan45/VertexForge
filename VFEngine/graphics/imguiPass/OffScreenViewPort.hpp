@@ -36,7 +36,7 @@ namespace imguiPass
         void init();
         vk::DescriptorSet render();
         void cleanUp() const;
-        const render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
+        render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer) const;

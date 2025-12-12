@@ -37,12 +37,20 @@ namespace render::mesh
                   const ibl::ImageData& prefilterMap,
                   const ibl::ImageData& brdfLUT);
 
+        // Initialize pipeline with default placeholder IBL textures
+        // Use this when no IBL environment is set in the scene
+        void initWithDefaults();
+
         // Recreate pipeline (e.g., on window resize)
         void recreate();
 
         // Cleanup resources
         void cleanUp();
         void cleanUpShader();
+
+        // Cleanup only descriptor/pipeline resources (preserves loaded meshes)
+        // Used when switching between IBL and default textures
+        void cleanUpForReinit();
 
         // Accessors for external use
         vk::Pipeline getGraphicsPipeline() const { return graphicsPipeline; }
@@ -78,6 +86,11 @@ namespace render::mesh
         // Get all loaded mesh IDs
         std::vector<std::string> getLoadedMeshIds() const;
 
+        // Record rendering commands for all meshes in the draw list
+        void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
+                                 uint32_t imageIndex,
+                                 const std::vector<MeshRenderData>& meshDrawList) const;
+
     private:
         core::Device& device;
         core::SwapChain& swapChain;
@@ -105,7 +118,14 @@ namespace render::mesh
         // Loaded meshes (key = mesh path)
         std::unordered_map<std::string, MeshGPUData> loadedMeshes;
 
+        // Default IBL textures (used when no IBL is set)
+        bool usingDefaultTextures = false;
+        ibl::ImageData defaultIrradiance{};
+        ibl::ImageData defaultPrefilter{};
+        ibl::ImageData defaultBrdfLUT{};
+
         // Private initialization methods
+        void createDefaultIBLTextures();
         void createRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();

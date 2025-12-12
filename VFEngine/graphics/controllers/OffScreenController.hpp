@@ -2,6 +2,8 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <string_view>
+#include <string>
+#include <vector>
 
 namespace core
 {
@@ -30,13 +32,21 @@ namespace controllers
         void init();
         void cleanUp() const;
 
-        // Initialize IBL with HDR path only
+        // IBL API
         void iblSet(std::string_view iblPath);
-        
-        // Update camera matrices for IBL rendering
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
-        
         void iblRemove();
+
+        // Mesh API
+        std::string meshLoad(std::string_view meshPath);
+        void meshUnload(const std::string& meshId);
+        void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
+                              const glm::vec3& cameraPos);
+        bool isMeshLoaded(const std::string& meshPath) const;
+        std::vector<std::string> getLoadedMeshes() const;
+
+        // Called each frame to prepare mesh render list from ECS entities
+        void prepareFrameMeshes();
 
         void* render();
     };

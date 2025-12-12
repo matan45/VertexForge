@@ -37,6 +37,300 @@ namespace render::mesh
         createFramebuffers();
     }
 
+    void StaticMeshPipeline::initWithDefaults()
+    {
+        createRenderPass();
+        createDescriptorSetLayout();
+        createDescriptorPool();
+        createCameraUBO();
+        createDefaultIBLTextures();
+        createDescriptorSet(defaultIrradiance, defaultPrefilter, defaultBrdfLUT);
+        createPipelineLayout();
+        createGraphicsPipeline();
+        createFramebuffers();
+        usingDefaultTextures = true;
+    }
+
+    void StaticMeshPipeline::createDefaultIBLTextures()
+    {
+        // Create simple 1x1 cubemap textures with neutral values for fallback PBR lighting
+        const uint32_t size = 1;
+        const uint32_t mipLevels = 1;
+
+        auto createCubemap = [&](ibl::ImageData& imageData, std::array<float, 4> color) {
+            // Create image
+            vk::ImageCreateInfo imageInfo{};
+            imageInfo.imageType = vk::ImageType::e2D;
+            imageInfo.extent = vk::Extent3D{size, size, 1};
+            imageInfo.mipLevels = mipLevels;
+            imageInfo.arrayLayers = 6;  // Cubemap
+            imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
+            imageInfo.tiling = vk::ImageTiling::eOptimal;
+            imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+            imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+            imageInfo.samples = vk::SampleCountFlagBits::e1;
+            imageInfo.sharingMode = vk::SharingMode::eExclusive;
+            imageInfo.flags = vk::ImageCreateFlagBits::eCubeCompatible;
+
+            imageData.image = device.getLogicalDevice().createImage(imageInfo);
+
+            // Allocate memory
+            vk::MemoryRequirements memRequirements = device.getLogicalDevice().getImageMemoryRequirements(imageData.image);
+            vk::MemoryAllocateInfo allocInfo{};
+            allocInfo.allocationSize = memRequirements.size;
+            allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
+                memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+            imageData.imageMemory = device.getLogicalDevice().allocateMemory(allocInfo);
+            device.getLogicalDevice().bindImageMemory(imageData.image, imageData.imageMemory, 0);
+
+            // Create staging buffer with color data for all 6 faces
+            std::vector<float> pixels(6 * 4);  // 6 faces * 4 components (RGBA)
+            for (int i = 0; i < 6; i++) {
+                pixels[i * 4 + 0] = color[0];
+                pixels[i * 4 + 1] = color[1];
+                pixels[i * 4 + 2] = color[2];
+                pixels[i * 4 + 3] = color[3];
+            }
+
+            vk::DeviceSize imageSize = pixels.size() * sizeof(float);
+            vk::Buffer stagingBuffer;
+            vk::DeviceMemory stagingMemory;
+
+            core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            stagingRequest.size = imageSize;
+            stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
+            stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+
+            void* data;
+            [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+            memcpy(data, pixels.data(), imageSize);
+            device.getLogicalDevice().unmapMemory(stagingMemory);
+
+            // Transition image layout and copy data
+            vk::CommandBufferAllocateInfo cmdAllocInfo{};
+            cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
+            cmdAllocInfo.commandPool = commandPool.get();
+            cmdAllocInfo.commandBufferCount = 1;
+            auto cmdBuffers = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo);
+            vk::CommandBuffer cmd = cmdBuffers[0];
+
+            vk::CommandBufferBeginInfo beginInfo{};
+            beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+            cmd.begin(beginInfo);
+
+            // Transition to transfer destination
+            vk::ImageMemoryBarrier barrier{};
+            barrier.oldLayout = vk::ImageLayout::eUndefined;
+            barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = imageData.image;
+            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = mipLevels;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = 6;
+            barrier.srcAccessMask = {};
+            barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
+                {}, nullptr, nullptr, barrier);
+
+            // Copy buffer to image (all 6 faces)
+            std::vector<vk::BufferImageCopy> copyRegions(6);
+            for (uint32_t face = 0; face < 6; face++) {
+                copyRegions[face].bufferOffset = face * 4 * sizeof(float);
+                copyRegions[face].bufferRowLength = 0;
+                copyRegions[face].bufferImageHeight = 0;
+                copyRegions[face].imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                copyRegions[face].imageSubresource.mipLevel = 0;
+                copyRegions[face].imageSubresource.baseArrayLayer = face;
+                copyRegions[face].imageSubresource.layerCount = 1;
+                copyRegions[face].imageOffset = vk::Offset3D{0, 0, 0};
+                copyRegions[face].imageExtent = vk::Extent3D{size, size, 1};
+            }
+            cmd.copyBufferToImage(stagingBuffer, imageData.image, vk::ImageLayout::eTransferDstOptimal, copyRegions);
+
+            // Transition to shader read
+            barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
+                {}, nullptr, nullptr, barrier);
+
+            cmd.end();
+
+            vk::SubmitInfo submitInfo{};
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &cmd;
+            device.getGraphicsQueue().submit(submitInfo);
+            device.getGraphicsQueue().waitIdle();
+
+            device.getLogicalDevice().freeCommandBuffers(commandPool.get(), cmd);
+            device.getLogicalDevice().destroyBuffer(stagingBuffer);
+            device.getLogicalDevice().freeMemory(stagingMemory);
+
+            // Create image view
+            vk::ImageViewCreateInfo viewInfo{};
+            viewInfo.image = imageData.image;
+            viewInfo.viewType = vk::ImageViewType::eCube;
+            viewInfo.format = vk::Format::eR32G32B32A32Sfloat;
+            viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+            viewInfo.subresourceRange.baseMipLevel = 0;
+            viewInfo.subresourceRange.levelCount = mipLevels;
+            viewInfo.subresourceRange.baseArrayLayer = 0;
+            viewInfo.subresourceRange.layerCount = 6;
+            imageData.imageView = device.getLogicalDevice().createImageView(viewInfo);
+
+            // Create sampler
+            vk::SamplerCreateInfo samplerInfo{};
+            samplerInfo.magFilter = vk::Filter::eLinear;
+            samplerInfo.minFilter = vk::Filter::eLinear;
+            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.mipLodBias = 0.0f;
+            samplerInfo.maxAnisotropy = 1.0f;
+            samplerInfo.minLod = 0.0f;
+            samplerInfo.maxLod = static_cast<float>(mipLevels);
+            samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+            imageData.sampler = device.getLogicalDevice().createSampler(samplerInfo);
+        };
+
+        // Create 2D texture for BRDF LUT (not a cubemap)
+        auto create2DTexture = [&](ibl::ImageData& imageData) {
+            vk::ImageCreateInfo imageInfo{};
+            imageInfo.imageType = vk::ImageType::e2D;
+            imageInfo.extent = vk::Extent3D{size, size, 1};
+            imageInfo.mipLevels = 1;
+            imageInfo.arrayLayers = 1;
+            imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
+            imageInfo.tiling = vk::ImageTiling::eOptimal;
+            imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+            imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+            imageInfo.samples = vk::SampleCountFlagBits::e1;
+            imageInfo.sharingMode = vk::SharingMode::eExclusive;
+
+            imageData.image = device.getLogicalDevice().createImage(imageInfo);
+
+            vk::MemoryRequirements memRequirements = device.getLogicalDevice().getImageMemoryRequirements(imageData.image);
+            vk::MemoryAllocateInfo allocInfo{};
+            allocInfo.allocationSize = memRequirements.size;
+            allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
+                memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+            imageData.imageMemory = device.getLogicalDevice().allocateMemory(allocInfo);
+            device.getLogicalDevice().bindImageMemory(imageData.image, imageData.imageMemory, 0);
+
+            // Default BRDF LUT value (white = full reflection)
+            std::array<float, 4> pixel = {1.0f, 1.0f, 1.0f, 1.0f};
+            vk::DeviceSize imageSize = sizeof(pixel);
+            vk::Buffer stagingBuffer;
+            vk::DeviceMemory stagingMemory;
+
+            core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            stagingRequest.size = imageSize;
+            stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
+            stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+
+            void* data;
+            [[maybe_unused]] auto mapResult2 = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+            memcpy(data, pixel.data(), imageSize);
+            device.getLogicalDevice().unmapMemory(stagingMemory);
+
+            vk::CommandBufferAllocateInfo cmdAllocInfo{};
+            cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
+            cmdAllocInfo.commandPool = commandPool.get();
+            cmdAllocInfo.commandBufferCount = 1;
+            auto cmdBuffers = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo);
+            vk::CommandBuffer cmd = cmdBuffers[0];
+
+            vk::CommandBufferBeginInfo beginInfo{};
+            beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+            cmd.begin(beginInfo);
+
+            vk::ImageMemoryBarrier barrier{};
+            barrier.oldLayout = vk::ImageLayout::eUndefined;
+            barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = imageData.image;
+            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = 1;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = 1;
+            barrier.srcAccessMask = {};
+            barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
+                {}, nullptr, nullptr, barrier);
+
+            vk::BufferImageCopy copyRegion{};
+            copyRegion.bufferOffset = 0;
+            copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            copyRegion.imageSubresource.mipLevel = 0;
+            copyRegion.imageSubresource.baseArrayLayer = 0;
+            copyRegion.imageSubresource.layerCount = 1;
+            copyRegion.imageExtent = vk::Extent3D{size, size, 1};
+            cmd.copyBufferToImage(stagingBuffer, imageData.image, vk::ImageLayout::eTransferDstOptimal, copyRegion);
+
+            barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
+                {}, nullptr, nullptr, barrier);
+
+            cmd.end();
+
+            vk::SubmitInfo submitInfo{};
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &cmd;
+            device.getGraphicsQueue().submit(submitInfo);
+            device.getGraphicsQueue().waitIdle();
+
+            device.getLogicalDevice().freeCommandBuffers(commandPool.get(), cmd);
+            device.getLogicalDevice().destroyBuffer(stagingBuffer);
+            device.getLogicalDevice().freeMemory(stagingMemory);
+
+            vk::ImageViewCreateInfo viewInfo{};
+            viewInfo.image = imageData.image;
+            viewInfo.viewType = vk::ImageViewType::e2D;
+            viewInfo.format = vk::Format::eR32G32B32A32Sfloat;
+            viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+            viewInfo.subresourceRange.baseMipLevel = 0;
+            viewInfo.subresourceRange.levelCount = 1;
+            viewInfo.subresourceRange.baseArrayLayer = 0;
+            viewInfo.subresourceRange.layerCount = 1;
+            imageData.imageView = device.getLogicalDevice().createImageView(viewInfo);
+
+            vk::SamplerCreateInfo samplerInfo{};
+            samplerInfo.magFilter = vk::Filter::eLinear;
+            samplerInfo.minFilter = vk::Filter::eLinear;
+            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.mipLodBias = 0.0f;
+            samplerInfo.maxAnisotropy = 1.0f;
+            samplerInfo.minLod = 0.0f;
+            samplerInfo.maxLod = 1.0f;
+            samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+            imageData.sampler = device.getLogicalDevice().createSampler(samplerInfo);
+        };
+
+        // Irradiance: neutral ambient light (gray)
+        createCubemap(defaultIrradiance, {0.3f, 0.3f, 0.3f, 1.0f});
+        // Prefilter: same neutral value
+        createCubemap(defaultPrefilter, {0.3f, 0.3f, 0.3f, 1.0f});
+        // BRDF LUT: 2D texture
+        create2DTexture(defaultBrdfLUT);
+    }
+
     void StaticMeshPipeline::recreate()
     {
         // Cleanup framebuffers and render pass for recreation
@@ -386,19 +680,20 @@ namespace render::mesh
         }
     }
 
-    void StaticMeshPipeline::cleanUp()
+    void StaticMeshPipeline::cleanUpForReinit()
     {
-        // Unload all meshes first
-        unloadAllMeshes();
+        // Clean up pipeline/descriptor resources but preserve loaded meshes and command pool
 
-        // Reverse order of creation
         for (auto& framebuffer : framebuffers)
         {
             device.getLogicalDevice().destroyFramebuffer(framebuffer);
         }
+        framebuffers.clear();
 
         device.getLogicalDevice().destroyBuffer(cameraUBO);
         device.getLogicalDevice().freeMemory(cameraUBOMemory);
+        cameraUBO = nullptr;
+        cameraUBOMemory = nullptr;
 
         device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
@@ -406,6 +701,39 @@ namespace render::mesh
         device.getLogicalDevice().freeDescriptorSets(descriptorPool, descriptorSet);
         device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
         device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
+
+        renderPass = nullptr;
+        graphicsPipeline = nullptr;
+        pipelineLayout = nullptr;
+        descriptorSet = nullptr;
+        descriptorPool = nullptr;
+        descriptorSetLayout = nullptr;
+
+        // Clean up default textures if we created them
+        if (usingDefaultTextures)
+        {
+            auto cleanupImageData = [&](ibl::ImageData& imageData) {
+                if (imageData.sampler) device.getLogicalDevice().destroySampler(imageData.sampler);
+                if (imageData.imageView) device.getLogicalDevice().destroyImageView(imageData.imageView);
+                if (imageData.image) device.getLogicalDevice().destroyImage(imageData.image);
+                if (imageData.imageMemory) device.getLogicalDevice().freeMemory(imageData.imageMemory);
+                imageData = {};
+            };
+
+            cleanupImageData(defaultIrradiance);
+            cleanupImageData(defaultPrefilter);
+            cleanupImageData(defaultBrdfLUT);
+            usingDefaultTextures = false;
+        }
+    }
+
+    void StaticMeshPipeline::cleanUp()
+    {
+        // Unload all meshes first
+        unloadAllMeshes();
+
+        // Clean up pipeline/descriptor resources
+        cleanUpForReinit();
 
         // Reset command pool (automatic cleanup via UniqueCommandPool)
         commandPool.reset();
@@ -581,5 +909,76 @@ namespace render::mesh
             ids.push_back(path);
         }
         return ids;
+    }
+
+    void StaticMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
+                                                  uint32_t imageIndex,
+                                                  const std::vector<MeshRenderData>& meshDrawList) const
+    {
+        if (meshDrawList.empty())
+        {
+            return;
+        }
+
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = framebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+
+        // Clear values for depth only - color uses loadOp::eLoad to preserve skybox
+        std::array<vk::ClearValue, 2> clearValues{};
+        clearValues[0].color = vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
+        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+        // Bind pipeline and descriptor set once for all meshes
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                         pipelineLayout, 0, descriptorSet, nullptr);
+
+        // Render each mesh in the draw list
+        for (const auto& meshData : meshDrawList)
+        {
+            const MeshGPUData* gpuData = getMesh(meshData.meshPath);
+            if (!gpuData)
+            {
+                continue;  // Skip meshes that aren't loaded
+            }
+
+            // Setup push constants with transform and material properties
+            MeshPushConstants pushConstants{};
+            pushConstants.model = meshData.modelMatrix;
+            pushConstants.albedo = meshData.albedo;
+            pushConstants.metallic = meshData.metallic;
+            pushConstants.roughness = meshData.roughness;
+            pushConstants.ao = meshData.ao;
+            pushConstants.padding = 0.0f;
+
+            commandBuffer.pushConstants(pipelineLayout,
+                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                0, sizeof(MeshPushConstants), &pushConstants);
+
+            // Bind vertex buffer
+            vk::Buffer vertexBuffers[] = {gpuData->vertexBuffer};
+            vk::DeviceSize offsets[] = {0};
+            commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+            // Draw with indices if available, otherwise draw vertices directly
+            if (gpuData->indexCount > 0)
+            {
+                commandBuffer.bindIndexBuffer(gpuData->indexBuffer, 0, vk::IndexType::eUint32);
+                commandBuffer.drawIndexed(gpuData->indexCount, 1, 0, 0, 0);
+            }
+            else
+            {
+                commandBuffer.draw(gpuData->vertexCount, 1, 0, 0);
+            }
+        }
+
+        commandBuffer.endRenderPass();
     }
 }

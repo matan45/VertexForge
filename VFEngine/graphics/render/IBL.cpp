@@ -44,6 +44,7 @@ namespace render
         brdfLUTGen->generate(commandPool.get());
         prefilteredGen->generate(irradianceGen->getImageData(), commandPool.get());
         skyboxRenderer->init(irradianceGen->getImageData());
+        iblInitialized = true;
     }
 
     void IBL::recreate()
@@ -53,13 +54,14 @@ namespace render
 
     void IBL::remove()
     {
-        if (isDisplay)
+        if (iblInitialized)
         {
             device.getLogicalDevice().waitIdle();
 
             // Disable rendering first to prevent access during cleanup
             skyboxRenderer->disable();
             isDisplay = false;
+            iblInitialized = false;
 
             hdrTexture.reset();
 
@@ -103,5 +105,10 @@ namespace render
     const ibl::ImageData& IBL::getPrefilterImage() const
     {
         return prefilteredGen->getImageData();
+    }
+
+    const ibl::ImageData& IBL::getIrradianceImage() const
+    {
+        return irradianceGen->getImageData();
     }
 }

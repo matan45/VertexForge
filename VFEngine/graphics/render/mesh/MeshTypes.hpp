@@ -19,6 +19,17 @@ namespace render::mesh
         uint32_t vertexCount = 0;
         std::string sourcePath;  // Original .vfmesh file path
     };
+
+    // Data needed to render a single mesh instance each frame
+    struct MeshRenderData
+    {
+        std::string meshPath;                              // Path to identify loaded mesh
+        glm::mat4 modelMatrix{1.0f};                       // World transform
+        glm::vec4 albedo{1.0f, 1.0f, 1.0f, 1.0f};         // Base color (RGB + alpha)
+        float metallic = 0.0f;
+        float roughness = 0.5f;
+        float ao = 1.0f;
+    };
     // Camera UBO - matches binding 0 in mesh.glsl
     struct CameraUBO
     {
