@@ -42,12 +42,18 @@ namespace editor {
 
     glm::vec3 EditorCamera::getForwardDirection() const {
         float yawRad = glm::radians(rotation.y);
-        return glm::vec3(std::sin(yawRad), 0.0f, -std::cos(yawRad));
+        // Forward is -Z in camera space, rotated by yaw
+        // When yaw=0, forward should be (0, 0, -1)
+        // When yaw=90 (turned right), forward should be (-1, 0, 0)
+        return glm::vec3(-std::sin(yawRad), 0.0f, -std::cos(yawRad));
     }
 
     glm::vec3 EditorCamera::getRightDirection() const {
         float yawRad = glm::radians(rotation.y);
-        return glm::vec3(std::cos(yawRad), 0.0f, std::sin(yawRad));
+        // Right is +X in camera space, rotated by yaw
+        // When yaw=0, right should be (1, 0, 0)
+        // When yaw=90 (turned right), right should be (0, 0, -1)
+        return glm::vec3(std::cos(yawRad), 0.0f, -std::sin(yawRad));
     }
 
     void EditorCamera::processKeyboardInput(float deltaTime, bool forward, bool backward,
