@@ -146,6 +146,13 @@
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\resources\shaders\ibl\brdf.glsl" />
+    <None Include="..\..\resources\shaders\ibl\equirectangular_convolution.glsl" />
+    <None Include="..\..\resources\shaders\ibl\prefilter.glsl" />
+    <None Include="..\..\resources\shaders\ibl\skybox.glsl" />
+    <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">
       <Project>{3DEA79DA-298C-A4B0-1247-B804FE872B01}</Project>
     </ProjectReference>

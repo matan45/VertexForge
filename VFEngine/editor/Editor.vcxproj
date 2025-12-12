@@ -115,6 +115,19 @@
     <ClCompile Include="windows\ViewPort.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\resources\editor\VertexForge-icon.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\animation-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\audio-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\folder.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\glsl-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\hdr-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\mesh-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\scene.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\texture-file.vfImage" />
+    <None Include="..\..\resources\editor\window-icon.vfImage" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\core\Core.vcxproj">
       <Project>{2EB4837C-1AEB-840D-C3D7-6A10AFED000F}</Project>
     </ProjectReference>
