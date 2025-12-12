@@ -76,6 +76,13 @@ namespace services {
         bool setIBLData(EntityHandle entity, const IBLData& ibl) override;
         bool removeIBLComponent(EntityHandle entity) override;
 
+        // Mesh Operations
+        std::optional<MeshData> getMeshData(EntityHandle entity) const override;
+        bool setMeshData(EntityHandle entity, const MeshData& mesh) override;
+        bool addMeshComponent(EntityHandle entity) override;
+        bool removeMeshComponent(EntityHandle entity) override;
+        bool hasMeshComponent(EntityHandle entity) const override;
+
         // Hierarchy - Children
         std::vector<EntityHandle> getChildren(EntityHandle entity) const override;
 

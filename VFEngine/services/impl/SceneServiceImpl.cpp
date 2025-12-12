@@ -178,6 +178,13 @@ namespace services {
             }
             break;
         }
+        case ComponentTypeId::Mesh: {
+            auto view = registry.view<components::MeshComponent>();
+            for (auto entity : view) {
+                handles.push_back(internal::toHandle(entity));
+            }
+            break;
+        }
         default:
             break;
         }
@@ -271,6 +278,8 @@ namespace services {
             return registry.all_of<components::WorldTransformComponent>(enttEntity);
         case ComponentTypeId::IBL:
             return registry.all_of<components::IBLComponent>(enttEntity);
+        case ComponentTypeId::Mesh:
+            return registry.all_of<components::MeshComponent>(enttEntity);
         default:
             return false;
         }
@@ -299,6 +308,8 @@ namespace services {
             types.push_back(ComponentTypeId::WorldTransform);
         if (registry.all_of<components::IBLComponent>(enttEntity))
             types.push_back(ComponentTypeId::IBL);
+        if (registry.all_of<components::MeshComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Mesh);
 
         return types;
     }
@@ -442,6 +453,83 @@ namespace services {
         }
 
         return false;
+    }
+
+    std::optional<MeshData> SceneServiceImpl::getMeshData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::MeshComponent>()) {
+            return std::nullopt;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::MeshComponent>();
+        MeshData data;
+        data.meshPath = comp.meshPath;
+
+        return data;
+    }
+
+    bool SceneServiceImpl::setMeshData(EntityHandle entity, const MeshData& mesh) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::MeshComponent>()) {
+            auto& comp = sceneEntity.getComponent<components::MeshComponent>();
+            comp.meshPath = mesh.meshPath;
+        }
+        else {
+            auto& comp = sceneEntity.addComponent<components::MeshComponent>();
+            comp.meshPath = mesh.meshPath;
+        }
+
+        return true;
+    }
+
+    bool SceneServiceImpl::addMeshComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::MeshComponent>()) {
+            sceneEntity.addComponent<components::MeshComponent>();
+            return true;
+        }
+
+        return false;  // Already has mesh component
+    }
+
+    bool SceneServiceImpl::removeMeshComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::MeshComponent>()) {
+            sceneEntity.removeComponent<components::MeshComponent>();
+            return true;
+        }
+
+        return false;
+    }
+
+    bool SceneServiceImpl::hasMeshComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::MeshComponent>();
     }
 
     std::vector<EntityHandle> SceneServiceImpl::getChildren(EntityHandle entity) const {
@@ -758,6 +846,31 @@ namespace services {
         dispatcher.registerCommandHandler<events::scene::LoadSceneCommand>(
             [this](const events::scene::LoadSceneCommand& cmd) {
                 return loadScene(cmd.filePath);
+            });
+        
+        dispatcher.registerCommandHandler<events::scene::AddMeshComponentCommand>(
+            [this](const events::scene::AddMeshComponentCommand& cmd) {
+                return addMeshComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveMeshComponentCommand>(
+            [this](const events::scene::RemoveMeshComponentCommand& cmd) {
+                return removeMeshComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetMeshDataCommand>(
+            [this](const events::scene::SetMeshDataCommand& cmd) {
+                return setMeshData(cmd.entity, cmd.meshData);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasMeshComponentQuery>(
+            [this](const events::scene::HasMeshComponentQuery& query) {
+                return hasMeshComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetMeshDataQuery>(
+            [this](const events::scene::GetMeshDataQuery& query) {
+                return getMeshData(query.entity);
             });
     }
 

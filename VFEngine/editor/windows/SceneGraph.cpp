@@ -2,7 +2,10 @@
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
+#include "nfd/FileDialog.hpp"
+#include "print/EditorLogger.hpp"
 #include <imgui.h>
+#include <fstream>
 
 namespace windows
 {
@@ -225,31 +228,19 @@ namespace windows
 
                 bool removeCamera = false;
 
-                // Component header with remove button (Unity-style)
-                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.28f, 0.28f, 0.28f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
-
+                pushComponentHeaderStyle();
                 bool isOpen = ImGui::CollapsingHeader("##CameraHeader", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
 
-                // Component label after the arrow
                 ImGui::SameLine();
                 ImGui::Text("Camera");
 
-                // Small X button on the right
-                ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-
+                pushRemoveButtonStyle();
                 if (ImGui::Button("x##RemoveCamera", ImVec2(18, 18)))
                 {
                     removeCamera = true;
                 }
-
-                ImGui::PopStyleVar();
-                ImGui::PopStyleColor(6);
+                popRemoveButtonStyle();
+                popComponentHeaderStyle();
 
                 if (isOpen)
                 {
@@ -308,31 +299,19 @@ namespace windows
 
                 bool removeIBL = false;
 
-                // Component header with remove button (Unity-style)
-                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.28f, 0.28f, 0.28f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
-
+                pushComponentHeaderStyle();
                 bool isOpen = ImGui::CollapsingHeader("##IBLHeader", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
 
-                // Component label after the arrow
                 ImGui::SameLine();
                 ImGui::Text("IBL");
 
-                // Small X button on the right
-                ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-
+                pushRemoveButtonStyle();
                 if (ImGui::Button("x##RemoveIBL", ImVec2(18, 18)))
                 {
                     removeIBL = true;
                 }
-
-                ImGui::PopStyleVar();
-                ImGui::PopStyleColor(6);
+                popRemoveButtonStyle();
+                popComponentHeaderStyle();
 
                 if (isOpen)
                 {
@@ -359,6 +338,96 @@ namespace windows
             }
         }
         
+        events::scene::HasMeshComponentQuery hasMeshQuery;
+        hasMeshQuery.entity = handle;
+        bool hasMesh = dispatcher.query(hasMeshQuery);
+
+        if (hasMesh)
+        {
+            events::scene::GetMeshDataQuery meshQuery;
+            meshQuery.entity = handle;
+            auto meshOpt = dispatcher.query(meshQuery);
+
+            if (meshOpt.has_value())
+            {
+                ImGui::PushID("MeshComponent");
+
+                bool removeMesh = false;
+
+                pushComponentHeaderStyle();
+                bool isOpen = ImGui::CollapsingHeader("##MeshHeader", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+
+                ImGui::SameLine();
+                ImGui::Text("Mesh");
+
+                pushRemoveButtonStyle();
+                if (ImGui::Button("x##RemoveMesh", ImVec2(18, 18)))
+                {
+                    removeMesh = true;
+                }
+                popRemoveButtonStyle();
+                popComponentHeaderStyle();
+
+                if (isOpen)
+                {
+                    ImGui::Indent(10.0f);
+
+                    // Display current mesh path
+                    if (!meshOpt->meshPath.empty())
+                    {
+                        // Extract filename for display
+                        std::string filename = meshOpt->meshPath;
+                        auto lastSlash = filename.find_last_of("/\\");
+                        if (lastSlash != std::string::npos)
+                        {
+                            filename = filename.substr(lastSlash + 1);
+                        }
+                        ImGui::Text("Mesh: %s", filename.c_str());
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("No mesh selected");
+                    }
+
+                    // Select Mesh button
+                    if (ImGui::Button("Select Mesh"))
+                    {
+                        nfd::FileDialog fileDialog;
+                        std::string path = fileDialog.openFileDialog(
+                            {{L"VF Mesh Files (*.vfmesh)", L"*.vfmesh"}});
+                        if (!path.empty())
+                        {
+                            // Verify file exists before setting
+                            std::ifstream file(path);
+                            if (file.good())
+                            {
+                                file.close();
+                                events::scene::SetMeshDataCommand cmd;
+                                cmd.entity = handle;
+                                cmd.meshData.meshPath = path;
+                                dispatcher.execute(cmd);
+                            }
+                            else
+                            {
+                                vfLogError("Selected mesh file does not exist or cannot be read: {}", path);
+                            }
+                        }
+                    }
+
+                    ImGui::Unindent(10.0f);
+                }
+
+                ImGui::PopID();
+
+                if (removeMesh)
+                {
+                    events::scene::RemoveMeshComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+            }
+        }
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
@@ -399,8 +468,18 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
             }
-            
-            if (hasCamera)
+
+            if (!hasMesh)
+            {
+                if (ImGui::Selectable("  Mesh"))
+                {
+                    events::scene::AddMeshComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            if (hasCamera && hasMesh)
             {
                 ImGui::TextDisabled("All components added");
             }
@@ -431,5 +510,32 @@ namespace windows
             }
             ImGui::EndDragDropTarget();
         }
+    }
+
+    void SceneGraph::pushComponentHeaderStyle()
+    {
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.28f, 0.28f, 0.28f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+    }
+
+    void SceneGraph::popComponentHeaderStyle()
+    {
+        ImGui::PopStyleColor(3);
+    }
+
+    void SceneGraph::pushRemoveButtonStyle()
+    {
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+    }
+
+    void SceneGraph::popRemoveButtonStyle()
+    {
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
     }
 }

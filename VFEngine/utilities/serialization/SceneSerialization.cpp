@@ -38,6 +38,17 @@ namespace serialization {
 		return j;
 	}
 
+	json SceneSerialization::serializeMesh(const components::MeshComponent& mesh) {
+		json j;
+		// Remove any embedded null terminators from the string
+		std::string cleanPath = mesh.meshPath;
+		if (auto pos = cleanPath.find('\0'); pos != std::string::npos) {
+			cleanPath.resize(pos);
+		}
+		j["meshPath"] = cleanPath;
+		return j;
+	}
+
 	// Recursively serialize an entity and its children
 	json SceneSerialization::serializeEntity(scene::Entity& entity) {
 		json entityJson;
@@ -60,6 +71,10 @@ namespace serialization {
 
 		if (entity.hasComponent<components::IBLComponent>()) {
 			componentsJson["ibl"] = serializeIBL(entity.getComponent<components::IBLComponent>());
+		}
+
+		if (entity.hasComponent<components::MeshComponent>()) {
+			componentsJson["mesh"] = serializeMesh(entity.getComponent<components::MeshComponent>());
 		}
 
 		entityJson["components"] = componentsJson;
@@ -109,7 +124,14 @@ namespace serialization {
 		}
 		return "";
 	}
-	
+
+	std::string SceneSerialization::deserializeMesh(const json& j) {
+		if (auto it = j.find("meshPath"); it != j.end() && it->is_string()) {
+			return it->get<std::string>();
+		}
+		return "";
+	}
+
 	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph) {
 		for (const auto& childJson : childrenJson) {
 			if (!childJson.is_object()) {
@@ -173,6 +195,13 @@ namespace serialization {
 				std::string iblFileName = deserializeIBL(componentsJson["ibl"]);
 				if (!iblFileName.empty()) {
 					entity.addOrReplaceComponent<components::IBLComponent>().fileName = iblFileName;
+				}
+			}
+			
+			if (componentsJson.contains("mesh")) {
+				std::string meshPath = deserializeMesh(componentsJson["mesh"]);
+				if (!meshPath.empty()) {
+					entity.addOrReplaceComponent<components::MeshComponent>().meshPath = meshPath;
 				}
 			}
 		}

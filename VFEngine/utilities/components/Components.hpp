@@ -10,10 +10,11 @@ namespace components {
 	// Forward declarations for type list
 	struct IBLComponent;
 	struct CameraComponent;
+	struct MeshComponent;
 
 	// Type list of optional components that can be removed during cleanup
 	// Add new optional component types here when they are created
-	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent>;
+	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent>;
 
 	struct WorldTransformComponent
 	{
@@ -133,6 +134,10 @@ namespace components {
 			// View matrix is the inverse of the transformation matrix.
 			viewMatrix = glm::inverse(transform);
 		}
+	};
+
+	struct MeshComponent {
+		std::string meshPath;  // Path to .vfmesh file
 	};
 
 }

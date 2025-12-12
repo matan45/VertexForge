@@ -36,6 +36,10 @@ namespace services {
         std::string fileName;
     };
 
+    struct MeshData {
+        std::string meshPath;
+    };
+
     struct EntityData {
         EntityHandle handle;
         std::string name;
