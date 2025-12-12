@@ -19,8 +19,20 @@ namespace render::mesh
         commandPoolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
         commandPool = device.getLogicalDevice().createCommandPoolUnique(commandPoolInfo);
 
+        // Create async transfer manager - uses dedicated transfer queue if available
+        uint32_t transferQueueFamily = device.getQueueFamilyIndices().transferFamily.value();
+        transferManager = std::make_unique<core::TransferManager>(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            device.getTransferQueue(),
+            transferQueueFamily
+        );
+
         meshShader = std::make_shared<core::Shader>(device);
         meshShader->readShader("../../resources/shaders/mesh/mesh.glsl");
+
+        wireframeShader = std::make_shared<core::Shader>(device);
+        wireframeShader->readShader("../../resources/shaders/mesh/wireframe.glsl");
     }
 
     void StaticMeshPipeline::init(const ibl::ImageData& irradianceMap,
@@ -35,6 +47,8 @@ namespace render::mesh
         createPipelineLayout();
         createGraphicsPipeline();
         createFramebuffers();
+        createWireframePipeline();
+        createAABBBuffers();
     }
 
     void StaticMeshPipeline::initWithDefaults()
@@ -48,6 +62,8 @@ namespace render::mesh
         createPipelineLayout();
         createGraphicsPipeline();
         createFramebuffers();
+        createWireframePipeline();
+        createAABBBuffers();
         usingDefaultTextures = true;
     }
 
@@ -666,6 +682,11 @@ namespace render::mesh
     void StaticMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                               const glm::vec3& cameraPos) const
     {
+        // Store for AABB wireframe rendering and frustum culling
+        currentView = view;
+        currentProjection = projection;
+        currentFrustum.extractFromMatrix(projection * view);
+
         CameraUBO ubo{};
         ubo.view = view;
         ubo.projection = projection;
@@ -702,6 +723,34 @@ namespace render::mesh
         device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
         device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
 
+        // Clean up wireframe pipeline
+        if (wireframePipeline)
+        {
+            device.getLogicalDevice().destroyPipeline(wireframePipeline);
+            wireframePipeline = nullptr;
+        }
+        if (wireframePipelineLayout)
+        {
+            device.getLogicalDevice().destroyPipelineLayout(wireframePipelineLayout);
+            wireframePipelineLayout = nullptr;
+        }
+
+        // Clean up AABB buffers
+        if (aabbVertexBuffer)
+        {
+            device.getLogicalDevice().destroyBuffer(aabbVertexBuffer);
+            device.getLogicalDevice().freeMemory(aabbVertexBufferMemory);
+            aabbVertexBuffer = nullptr;
+            aabbVertexBufferMemory = nullptr;
+        }
+        if (aabbIndexBuffer)
+        {
+            device.getLogicalDevice().destroyBuffer(aabbIndexBuffer);
+            device.getLogicalDevice().freeMemory(aabbIndexBufferMemory);
+            aabbIndexBuffer = nullptr;
+            aabbIndexBufferMemory = nullptr;
+        }
+
         renderPass = nullptr;
         graphicsPipeline = nullptr;
         pipelineLayout = nullptr;
@@ -729,11 +778,19 @@ namespace render::mesh
 
     void StaticMeshPipeline::cleanUp()
     {
+        // Wait for any pending transfers before cleanup
+        if (transferManager) {
+            transferManager->waitAll();
+        }
+
         // Unload all meshes first
         unloadAllMeshes();
 
         // Clean up pipeline/descriptor resources
         cleanUpForReinit();
+
+        // Reset transfer manager (must happen before command pool reset)
+        transferManager.reset();
 
         // Reset command pool (automatic cleanup via UniqueCommandPool)
         commandPool.reset();
@@ -742,6 +799,7 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUpShader()
     {
         meshShader->cleanUp();
+        wireframeShader->cleanUp();
     }
 
     std::string StaticMeshPipeline::loadMesh(std::string_view meshPath)
@@ -768,6 +826,9 @@ namespace render::mesh
         uint32_t totalVertices = 0;
         uint32_t totalIndices = 0;
 
+        // Initialize bounding box with first vertex we find
+        bool boundingBoxInitialized = false;
+
         // Upload all submeshes to GPU
         for (const auto& meshData : meshesDataPtr->meshes)
         {
@@ -778,6 +839,34 @@ namespace render::mesh
             }
 
             SubMeshGPUData subMesh{};
+
+            // Compute per-submesh bounding box
+            bool subMeshBBInitialized = false;
+            for (const auto& vertex : meshData.vertices)
+            {
+                if (!subMeshBBInitialized)
+                {
+                    subMesh.boundingBox.min = vertex.position;
+                    subMesh.boundingBox.max = vertex.position;
+                    subMeshBBInitialized = true;
+                }
+                else
+                {
+                    subMesh.boundingBox.expand(vertex.position);
+                }
+
+                // Also expand the combined mesh bounding box
+                if (!boundingBoxInitialized)
+                {
+                    gpuData.boundingBox.min = vertex.position;
+                    gpuData.boundingBox.max = vertex.position;
+                    boundingBoxInitialized = true;
+                }
+                else
+                {
+                    gpuData.boundingBox.expand(vertex.position);
+                }
+            }
             subMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
             subMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
@@ -790,12 +879,8 @@ namespace render::mesh
             vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::Utilities::createBuffer(vertexBufferRequest, subMesh.vertexBuffer, subMesh.vertexBufferMemory);
 
-            // Copy vertex data to GPU using staging buffer
-            core::Utilities::copyToBuffer(
-                device.getLogicalDevice(),
-                device.getPhysicalDevice(),
-                device.getGraphicsQueue(),
-                commandPool.get(),
+            // Copy vertex data to GPU using async transfer (non-blocking)
+            transferManager->copyToBufferAsync(
                 subMesh.vertexBuffer,
                 meshData.vertices.data(),
                 vertexBufferSize
@@ -812,12 +897,8 @@ namespace render::mesh
                 indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
                 core::Utilities::createBuffer(indexBufferRequest, subMesh.indexBuffer, subMesh.indexBufferMemory);
 
-                // Copy index data to GPU
-                core::Utilities::copyToBuffer(
-                    device.getLogicalDevice(),
-                    device.getPhysicalDevice(),
-                    device.getGraphicsQueue(),
-                    commandPool.get(),
+                // Copy index data to GPU using async transfer (non-blocking)
+                transferManager->copyToBufferAsync(
                     subMesh.indexBuffer,
                     meshData.indices.data(),
                     indexBufferSize
@@ -834,6 +915,12 @@ namespace render::mesh
             loggerError("Mesh has no valid submeshes: {}", meshPath);
             return "";
         }
+
+        // Wait for all async transfers to complete before the mesh can be used
+        // This is still faster than synchronous transfers because:
+        // 1. Multiple submeshes are uploaded in parallel
+        // 2. Uses dedicated transfer queue (if available) without blocking graphics
+        transferManager->waitAll();
 
         loadedMeshes[pathStr] = std::move(gpuData);
         loggerInfo("Loaded mesh: {} ({} submeshes, {} total vertices, {} total indices)",
@@ -920,6 +1007,16 @@ namespace render::mesh
         return loadedMeshes.contains(meshId);
     }
 
+    const math::AABB* StaticMeshPipeline::getMeshBoundingBox(const std::string& meshId) const
+    {
+        auto it = loadedMeshes.find(meshId);
+        if (it == loadedMeshes.end())
+        {
+            return nullptr;
+        }
+        return &it->second.boundingBox;
+    }
+
     std::vector<std::string> StaticMeshPipeline::getLoadedMeshIds() const
     {
         std::vector<std::string> ids;
@@ -982,9 +1079,16 @@ namespace render::mesh
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                 0, sizeof(MeshPushConstants), &pushConstants);
 
-            // Render all submeshes with the same transform/material
+            // Render all submeshes with the same transform/material (with per-submesh frustum culling)
             for (const auto& subMesh : gpuData->subMeshes)
             {
+                // Per-submesh frustum culling (only if frustum is initialized)
+                if (currentFrustum.isInitialized() &&
+                    !currentFrustum.intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
+                {
+                    continue;  // Submesh is outside frustum, skip rendering
+                }
+
                 // Bind vertex buffer
                 vk::Buffer vertexBuffers[] = {subMesh.vertexBuffer};
                 vk::DeviceSize offsets[] = {0};
@@ -1003,6 +1107,258 @@ namespace render::mesh
             }
         }
 
+        // Render AABB wireframes for meshes with showBoundingBox enabled
+        if (wireframePipeline && aabbVertexBuffer)
+        {
+            commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, wireframePipeline);
+
+            vk::Buffer vertexBuffers[] = {aabbVertexBuffer};
+            vk::DeviceSize offsets[] = {0};
+            commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+            commandBuffer.bindIndexBuffer(aabbIndexBuffer, 0, vk::IndexType::eUint32);
+
+            for (const auto& meshData : meshDrawList)
+            {
+                if (!meshData.showBoundingBox)
+                {
+                    continue;
+                }
+
+                const MeshGPUData* gpuData = getMesh(meshData.meshPath);
+                if (!gpuData)
+                {
+                    continue;
+                }
+
+                // Render combined mesh AABB (green)
+                {
+                    const math::AABB& aabb = gpuData->boundingBox;
+                    glm::vec3 center = aabb.getCenter();
+                    glm::vec3 extents = aabb.getExtents();
+
+                    // Scale and translate unit cube [-1,1] to AABB bounds
+                    glm::mat4 aabbModel = meshData.modelMatrix;
+                    aabbModel = glm::translate(aabbModel, center);
+                    aabbModel = glm::scale(aabbModel, extents);
+
+                    // Calculate MVP
+                    glm::mat4 mvp = currentProjection * currentView * aabbModel;
+
+                    AABBPushConstants aabbPushConstants{};
+                    aabbPushConstants.mvp = mvp;
+                    aabbPushConstants.color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green wireframe
+
+                    commandBuffer.pushConstants(wireframePipelineLayout,
+                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                        0, sizeof(AABBPushConstants), &aabbPushConstants);
+
+                    // Draw unit cube wireframe (24 indices for 12 lines)
+                    commandBuffer.drawIndexed(24, 1, 0, 0, 0);
+                }
+
+                // Render per-submesh AABBs (yellow) - only if there are multiple submeshes
+                if (gpuData->subMeshes.size() > 1)
+                {
+                    for (const auto& subMesh : gpuData->subMeshes)
+                    {
+                        const math::AABB& aabb = subMesh.boundingBox;
+                        glm::vec3 center = aabb.getCenter();
+                        glm::vec3 extents = aabb.getExtents();
+
+                        // Scale and translate unit cube [-1,1] to AABB bounds
+                        glm::mat4 aabbModel = meshData.modelMatrix;
+                        aabbModel = glm::translate(aabbModel, center);
+                        aabbModel = glm::scale(aabbModel, extents);
+
+                        // Calculate MVP
+                        glm::mat4 mvp = currentProjection * currentView * aabbModel;
+
+                        AABBPushConstants aabbPushConstants{};
+                        aabbPushConstants.mvp = mvp;
+                        aabbPushConstants.color = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow wireframe
+
+                        commandBuffer.pushConstants(wireframePipelineLayout,
+                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                            0, sizeof(AABBPushConstants), &aabbPushConstants);
+
+                        // Draw unit cube wireframe (24 indices for 12 lines)
+                        commandBuffer.drawIndexed(24, 1, 0, 0, 0);
+                    }
+                }
+            }
+        }
+
         commandBuffer.endRenderPass();
+    }
+
+    void StaticMeshPipeline::createWireframePipeline()
+    {
+        // Push constant range for MVP + color
+        vk::PushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(AABBPushConstants);
+
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.setLayoutCount = 0;  // No descriptor sets needed
+        pipelineLayoutInfo.pSetLayouts = nullptr;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+        wireframePipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
+
+        // Vertex input - simple vec3 positions
+        vk::VertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = 0;
+        bindingDescription.stride = sizeof(glm::vec3);
+        bindingDescription.inputRate = vk::VertexInputRate::eVertex;
+
+        vk::VertexInputAttributeDescription attributeDescription{};
+        attributeDescription.binding = 0;
+        attributeDescription.location = 0;
+        attributeDescription.format = vk::Format::eR32G32B32Sfloat;
+        attributeDescription.offset = 0;
+
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = 1;
+        vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.topology = vk::PrimitiveTopology::eLineList;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        vk::Viewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(swapChain.getSwapchainExtent().width);
+        viewport.height = static_cast<float>(swapChain.getSwapchainExtent().height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        vk::Rect2D scissor{};
+        scissor.offset = vk::Offset2D{0, 0};
+        scissor.extent = swapChain.getSwapchainExtent();
+
+        vk::PipelineViewportStateCreateInfo viewportState{};
+        viewportState.viewportCount = 1;
+        viewportState.pViewports = &viewport;
+        viewportState.scissorCount = 1;
+        viewportState.pScissors = &scissor;
+
+        vk::PipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = vk::PolygonMode::eFill;  // Use Fill - we're drawing lines via LineList topology
+        rasterizer.lineWidth = 1.0f;  // Must be 1.0 without wideLines feature
+        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
+        rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        vk::PipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_FALSE;  // Don't write depth for wireframe
+        depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.stencilTestEnable = VK_FALSE;
+
+        vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
+                                               vk::ColorComponentFlagBits::eG |
+                                               vk::ColorComponentFlagBits::eB |
+                                               vk::ColorComponentFlagBits::eA;
+        colorBlendAttachment.blendEnable = VK_FALSE;
+
+        vk::PipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+
+        vk::GraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.stageCount = static_cast<uint32_t>(wireframeShader->getShaderStages().size());
+        pipelineInfo.pStages = wireframeShader->getShaderStages().data();
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.layout = wireframePipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+
+        auto result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);
+        if (result.result != vk::Result::eSuccess)
+        {
+            throw std::runtime_error("Failed to create wireframe graphics pipeline");
+        }
+        wireframePipeline = result.value;
+    }
+
+    void StaticMeshPipeline::createAABBBuffers()
+    {
+        // Unit cube vertices (8 corners, from -1 to 1)
+        std::vector<glm::vec3> vertices = {
+            {-1.0f, -1.0f, -1.0f},  // 0: back-bottom-left
+            { 1.0f, -1.0f, -1.0f},  // 1: back-bottom-right
+            { 1.0f,  1.0f, -1.0f},  // 2: back-top-right
+            {-1.0f,  1.0f, -1.0f},  // 3: back-top-left
+            {-1.0f, -1.0f,  1.0f},  // 4: front-bottom-left
+            { 1.0f, -1.0f,  1.0f},  // 5: front-bottom-right
+            { 1.0f,  1.0f,  1.0f},  // 6: front-top-right
+            {-1.0f,  1.0f,  1.0f},  // 7: front-top-left
+        };
+
+        // Line indices for 12 edges of the cube
+        std::vector<uint32_t> indices = {
+            // Back face edges
+            0, 1,  1, 2,  2, 3,  3, 0,
+            // Front face edges
+            4, 5,  5, 6,  6, 7,  7, 4,
+            // Connecting edges
+            0, 4,  1, 5,  2, 6,  3, 7
+        };
+
+        // Create vertex buffer
+        vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * vertices.size();
+        core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        vertexRequest.size = vertexBufferSize;
+        vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::Utilities::createBuffer(vertexRequest, aabbVertexBuffer, aabbVertexBufferMemory);
+
+        core::Utilities::copyToBuffer(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            device.getGraphicsQueue(),
+            commandPool.get(),
+            aabbVertexBuffer,
+            vertices.data(),
+            vertexBufferSize
+        );
+
+        // Create index buffer
+        vk::DeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
+        core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        indexRequest.size = indexBufferSize;
+        indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::Utilities::createBuffer(indexRequest, aabbIndexBuffer, aabbIndexBufferMemory);
+
+        core::Utilities::copyToBuffer(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            device.getGraphicsQueue(),
+            commandPool.get(),
+            aabbIndexBuffer,
+            indices.data(),
+            indexBufferSize
+        );
     }
 }

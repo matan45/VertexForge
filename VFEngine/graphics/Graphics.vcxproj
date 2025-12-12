@@ -154,6 +154,7 @@
     <None Include="..\..\resources\shaders\ibl\prefilter.glsl" />
     <None Include="..\..\resources\shaders\ibl\skybox.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
+    <None Include="..\..\resources\shaders\mesh\wireframe.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">

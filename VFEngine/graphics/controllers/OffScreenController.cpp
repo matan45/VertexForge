@@ -96,6 +96,9 @@ namespace controllers
         {
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos);
         }
+
+        // Update frustum for culling
+        currentFrustum.extractFromMatrix(projection * view);
     }
 
     bool OffScreenController::isMeshLoaded(const std::string& meshPath) const
@@ -142,16 +145,20 @@ namespace controllers
                 continue;
             }
 
-            // Lazy load mesh if not already loaded
+            // Skip meshes that aren't loaded yet - they will be preloaded via
+            // MeshDataChangedNotification subscription when mesh data is set on entities
             if (!meshPipeline->isMeshLoaded(meshComp.meshPath))
             {
-                // Initialize mesh pipeline if needed (requires IBL textures)
-                renderHandler->initMeshPipeline();
+                continue;
+            }
 
-                std::string loadedId = meshPipeline->loadMesh(meshComp.meshPath);
-                if (loadedId.empty())
+            // Frustum culling - skip meshes outside the camera frustum (only if frustum is initialized)
+            if (currentFrustum.isInitialized())
+            {
+                const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
+                if (boundingBox && !currentFrustum.intersectsAABB(*boundingBox, worldTransform.worldMatrix))
                 {
-                    continue;  // Failed to load
+                    continue;  // Mesh is outside frustum, skip rendering
                 }
             }
 
@@ -163,6 +170,7 @@ namespace controllers
             renderData.metallic = 0.0f;
             renderData.roughness = 0.5f;
             renderData.ao = 1.0f;
+            renderData.showBoundingBox = meshComp.showBoundingBox;
 
             meshDrawList.push_back(renderData);
         }

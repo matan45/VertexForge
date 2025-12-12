@@ -1,6 +1,7 @@
 #pragma once
 #include "../interfaces/IRenderService.hpp"
 #include "../events/RenderEvents.hpp"
+#include "../events/SceneEvents.hpp"
 #include <memory>
 #include <unordered_map>
 
@@ -62,6 +63,9 @@ namespace services {
 
         // Track loaded editor textures for cleanup
         std::unordered_map<void*, std::unique_ptr<dto::EditorTexture>> loadedTextures;
+
+        // Subscription token for mesh preloading
+        events::SubscriptionToken meshDataChangedToken;
     };
 
 }

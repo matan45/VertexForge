@@ -44,7 +44,7 @@ namespace serialization
 		static std::string deserializeIBL(const json& j);
 
 		static json serializeMesh(const components::MeshComponent& mesh);
-		static std::string deserializeMesh(const json& j);
+		static void deserializeMesh(const json& j, components::MeshComponent& mesh);
 
 	};
 }

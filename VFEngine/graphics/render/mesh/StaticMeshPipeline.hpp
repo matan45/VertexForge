@@ -12,6 +12,7 @@ namespace core
     class Device;
     class SwapChain;
     class Shader;
+    class TransferManager;
     struct OffscreenResources;
 }
 
@@ -62,8 +63,11 @@ namespace render::mesh
         void unloadAllMeshes();
         
         const MeshGPUData* getMesh(const std::string& meshId) const;
-        
+
         bool isMeshLoaded(const std::string& meshId) const;
+
+        // Get bounding box of a loaded mesh (for frustum culling)
+        const math::AABB* getMeshBoundingBox(const std::string& meshId) const;
         
         std::vector<std::string> getLoadedMeshIds() const;
 
@@ -77,22 +81,41 @@ namespace render::mesh
         core::SwapChain& swapChain;
         core::OffscreenResources& offscreenResources;
 
-        // Shader
+        // Shaders
         std::shared_ptr<core::Shader> meshShader;
+        std::shared_ptr<core::Shader> wireframeShader;
 
         // Vulkan resources
         vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
+
+        // Wireframe pipeline for AABB debug rendering
+        vk::Pipeline wireframePipeline;
+        vk::PipelineLayout wireframePipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSet;
         std::vector<vk::Framebuffer> framebuffers;
         
         vk::UniqueCommandPool commandPool;
-        
+
+        // Async transfer manager for non-blocking buffer uploads
+        std::unique_ptr<core::TransferManager> transferManager;
+
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
+
+        // AABB wireframe vertex/index buffers (unit cube, transformed via push constants)
+        vk::Buffer aabbVertexBuffer;
+        vk::DeviceMemory aabbVertexBufferMemory;
+        vk::Buffer aabbIndexBuffer;
+        vk::DeviceMemory aabbIndexBufferMemory;
+
+        // Current camera matrices for AABB rendering and frustum culling
+        mutable glm::mat4 currentView{1.0f};
+        mutable glm::mat4 currentProjection{1.0f};
+        mutable math::Frustum currentFrustum;
 
         // Loaded meshes (key = mesh path)
         std::unordered_map<std::string, MeshGPUData> loadedMeshes;
@@ -115,5 +138,7 @@ namespace render::mesh
         void createPipelineLayout();
         void createGraphicsPipeline();
         void createFramebuffers();
+        void createWireframePipeline();
+        void createAABBBuffers();
     };
 }

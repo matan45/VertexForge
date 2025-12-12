@@ -471,6 +471,7 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::MeshComponent>();
         MeshData data;
         data.meshPath = comp.meshPath;
+        data.showBoundingBox = comp.showBoundingBox;
 
         return data;
     }
@@ -485,10 +486,20 @@ namespace services {
         if (sceneEntity.hasComponent<components::MeshComponent>()) {
             auto& comp = sceneEntity.getComponent<components::MeshComponent>();
             comp.meshPath = mesh.meshPath;
+            comp.showBoundingBox = mesh.showBoundingBox;
         }
         else {
             auto& comp = sceneEntity.addComponent<components::MeshComponent>();
             comp.meshPath = mesh.meshPath;
+            comp.showBoundingBox = mesh.showBoundingBox;
+        }
+
+        // Publish notification to allow preloading of mesh assets
+        if (!mesh.meshPath.empty()) {
+            events::scene::MeshDataChangedNotification notification;
+            notification.entity = entity;
+            notification.meshPath = mesh.meshPath;
+            events::EventDispatcher::instance().publish(notification);
         }
 
         return true;
@@ -677,6 +688,20 @@ namespace services {
                     events::render::SetIBLCommand setIblCmd;
                     setIblCmd.hdrPath = ibl.fileName;
                     dispatcher.execute(setIblCmd);
+                }
+            }
+
+            // Preload meshes for all entities with MeshComponent
+            // This is needed because scene loading bypasses setMeshData which normally triggers preloading
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto meshView = registry.view<components::MeshComponent>();
+            for (auto entity : meshView) {
+                const auto& meshComp = meshView.get<components::MeshComponent>(entity);
+                if (!meshComp.meshPath.empty()) {
+                    events::scene::MeshDataChangedNotification meshNotif;
+                    meshNotif.entity = internal::toHandle(entity);
+                    meshNotif.meshPath = meshComp.meshPath;
+                    dispatcher.publish(meshNotif);
                 }
             }
 

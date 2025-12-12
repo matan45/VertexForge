@@ -232,6 +232,15 @@ namespace services {
             [this](const events::render::GetLoadedMeshesQuery&) {
                 return getLoadedMeshes();
             });
+
+        // Subscribe to mesh data changes to preload meshes when they're assigned to entities
+        // This avoids synchronous loading during frame preparation which causes frame spikes
+        meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
+            [this](const events::scene::MeshDataChangedNotification& notification) {
+                if (!notification.meshPath.empty() && !isMeshLoaded(notification.meshPath)) {
+                    loadMesh(notification.meshPath);
+                }
+            });
     }
 
     // Mesh Operations

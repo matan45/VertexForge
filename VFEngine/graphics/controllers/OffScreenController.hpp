@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
+#include "math/Frustum.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
@@ -24,6 +25,7 @@ namespace controllers
         core::SwapChain& swapChain;
         core::Device& device;
         std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
+        math::Frustum currentFrustum;  // Current camera frustum for culling
 
     public:
         explicit OffScreenController();

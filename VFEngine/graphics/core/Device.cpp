@@ -181,12 +181,36 @@ namespace core {
 		queueFamilyIndices = Utilities::findQueueFamiliesFromDevice(physicalDevice, surface);
 		const float queuePriority = 1.0f;
 
-		vk::DeviceQueueCreateInfo queueCreateInfo{};
-		queueCreateInfo.queueFamilyIndex = queueFamilyIndices.graphicsAndComputeFamily.value();
-		queueCreateInfo.queueCount = 1;
-		queueCreateInfo.pQueuePriorities = &queuePriority;
+		// Collect unique queue families to create
+		std::unordered_set<uint32_t> uniqueQueueFamilies;
+		uniqueQueueFamilies.insert(queueFamilyIndices.graphicsAndComputeFamily.value());
+		uniqueQueueFamilies.insert(queueFamilyIndices.presentFamily.value());
 
-		std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos = { queueCreateInfo };
+		// Add dedicated transfer queue if available and different
+		if (queueFamilyIndices.hasDedicatedTransferQueue()) {
+			uniqueQueueFamilies.insert(queueFamilyIndices.transferFamily.value());
+		}
+
+		if (debug) {
+			loggerInfo("Creating {} unique queue families:", uniqueQueueFamilies.size());
+			loggerInfo("  Graphics/Compute family: {}", queueFamilyIndices.graphicsAndComputeFamily.value());
+			loggerInfo("  Present family: {}", queueFamilyIndices.presentFamily.value());
+			if (queueFamilyIndices.hasDedicatedTransferQueue()) {
+				loggerInfo("  Dedicated Transfer family: {}", queueFamilyIndices.transferFamily.value());
+			}
+		}
+
+		std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+		for (uint32_t queueFamily : uniqueQueueFamilies) {
+			vk::DeviceQueueCreateInfo queueCreateInfo{};
+			queueCreateInfo.queueFamilyIndex = queueFamily;
+			queueCreateInfo.queueCount = 1;
+			queueCreateInfo.pQueuePriorities = &queuePriority;
+			queueCreateInfos.push_back(queueCreateInfo);
+			if (debug) {
+				loggerInfo("  Creating queue for family {}", queueFamily);
+			}
+		}
 
 		vk::PhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
@@ -207,6 +231,21 @@ namespace core {
 			VULKAN_HPP_DEFAULT_DISPATCHER.init(*logicalDevice);
 			graphicsAndComputeQueue = logicalDevice.get().getQueue(queueFamilyIndices.graphicsAndComputeFamily.value(), 0);
 			presentQueue = logicalDevice.get().getQueue(queueFamilyIndices.presentFamily.value(), 0);
+
+			// Get transfer queue (dedicated if available, otherwise use graphics queue)
+			if (queueFamilyIndices.hasDedicatedTransferQueue()) {
+				transferQueue = logicalDevice.get().getQueue(queueFamilyIndices.transferFamily.value(), 0);
+				if (debug) {
+					loggerInfo("Using dedicated transfer queue (family {}) for async transfers",
+					           queueFamilyIndices.transferFamily.value());
+				}
+			} else {
+				// Fall back to graphics queue for transfers
+				transferQueue = graphicsAndComputeQueue;
+				if (debug) {
+					loggerInfo("Using graphics queue for transfers (no dedicated transfer queue available)");
+				}
+			}
 		}
 		catch (const vk::SystemError& err) {
 			loggerError("Failed to create logical device: {}", err.what());

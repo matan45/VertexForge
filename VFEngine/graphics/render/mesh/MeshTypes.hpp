@@ -3,6 +3,7 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include "math/Frustum.hpp"
 #include <array>
 #include <string>
 
@@ -17,6 +18,7 @@ namespace render::mesh
         vk::DeviceMemory indexBufferMemory;
         uint32_t indexCount = 0;
         uint32_t vertexCount = 0;
+        math::AABB boundingBox;  // AABB for this submesh (local space)
     };
 
     // GPU-side mesh data containing all submeshes from a .vfmesh file
@@ -24,6 +26,7 @@ namespace render::mesh
     {
         std::string sourcePath;  // Original .vfmesh file path
         std::vector<SubMeshGPUData> subMeshes;
+        math::AABB boundingBox;  // Combined AABB of all submeshes (local space)
     };
 
     // Data needed to render a single mesh instance each frame
@@ -35,6 +38,14 @@ namespace render::mesh
         float metallic = 0.0f;
         float roughness = 0.5f;
         float ao = 1.0f;
+        bool showBoundingBox = false;                      // Debug: render AABB wireframe
+    };
+
+    // Push constants for wireframe AABB rendering
+    struct AABBPushConstants
+    {
+        glm::mat4 mvp;        // 64 bytes - Model-View-Projection matrix
+        glm::vec4 color;      // 16 bytes - Wireframe color
     };
     // Camera UBO - matches binding 0 in mesh.glsl
     struct CameraUBO

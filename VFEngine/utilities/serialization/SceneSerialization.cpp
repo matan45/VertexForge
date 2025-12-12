@@ -46,6 +46,7 @@ namespace serialization {
 			cleanPath.resize(pos);
 		}
 		j["meshPath"] = cleanPath;
+		j["showBoundingBox"] = mesh.showBoundingBox;
 		return j;
 	}
 
@@ -125,11 +126,13 @@ namespace serialization {
 		return "";
 	}
 
-	std::string SceneSerialization::deserializeMesh(const json& j) {
+	void SceneSerialization::deserializeMesh(const json& j, components::MeshComponent& mesh) {
 		if (auto it = j.find("meshPath"); it != j.end() && it->is_string()) {
-			return it->get<std::string>();
+			mesh.meshPath = it->get<std::string>();
 		}
-		return "";
+		if (auto it = j.find("showBoundingBox"); it != j.end() && it->is_boolean()) {
+			mesh.showBoundingBox = it->get<bool>();
+		}
 	}
 
 	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph,
@@ -209,10 +212,8 @@ namespace serialization {
 			}
 
 			if (componentsJson.contains("mesh")) {
-				std::string meshPath = deserializeMesh(componentsJson["mesh"]);
-				if (!meshPath.empty()) {
-					entity.addOrReplaceComponent<components::MeshComponent>().meshPath = meshPath;
-				}
+				auto& meshComp = entity.addOrReplaceComponent<components::MeshComponent>();
+				deserializeMesh(componentsJson["mesh"], meshComp);
 			}
 		}
 

@@ -2,6 +2,7 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 #include <memory>
+#include <vector>
 
 namespace window {
 	class Window;
@@ -20,6 +21,8 @@ namespace core {
 	class SwapChain;
 	class CommandPool;
 
+	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
 	class RenderManager
 	{
 	private:
@@ -29,10 +32,17 @@ namespace core {
 		std::unique_ptr<CommandPool> commandPool;
 		std::unique_ptr<imguiPass::ImguiRender> imguiRender;
 
-		vk::Semaphore imageAvailableSemaphore;
-		vk::Semaphore renderFinishedSemaphore;
-		vk::Fence renderFence;
+		// Per-frame synchronization objects (indexed by currentFrame)
+		std::vector<vk::Semaphore> imageAvailableSemaphores;
+		std::vector<vk::Fence> inFlightFences;
 
+		// Per-swapchain-image semaphores (indexed by imageIndex)
+		std::vector<vk::Semaphore> renderFinishedSemaphores;
+
+		// Track which fence is associated with each swapchain image
+		std::vector<vk::Fence> imagesInFlight;
+
+		uint32_t currentFrame = 0;
 		inline static uint32_t imageIndex;
 
 	public:
@@ -52,7 +62,7 @@ namespace core {
 	private:
 		void draw(const vk::CommandBuffer& commandBuffer) const;
 
-		void present() const;
+		void present(uint32_t frameIndex) const;
 	};
 }
 

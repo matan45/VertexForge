@@ -270,4 +270,11 @@ namespace events::scene {
         std::string_view getName() const override { return "SceneLoadingCompleted"; }
     };
 
+    struct MeshDataChangedNotification : INotification {
+        services::EntityHandle entity;
+        std::string meshPath;
+
+        std::string_view getName() const override { return "MeshDataChanged"; }
+    };
+
 }
