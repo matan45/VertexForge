@@ -747,12 +747,12 @@ namespace render::mesh
     std::string StaticMeshPipeline::loadMesh(std::string_view meshPath)
     {
         std::string pathStr(meshPath);
-        
+
         if (loadedMeshes.contains(pathStr))
         {
             return pathStr;
         }
-        
+
         auto meshFuture = resource::ResourceManager::loadMeshAsync(meshPath);
         auto meshesDataPtr = meshFuture.get();
 
@@ -762,66 +762,82 @@ namespace render::mesh
             return "";
         }
 
-        // For now, combine all submeshes into one (or just use first mesh)
-        // In future, could return multiple mesh IDs
-        const auto& meshData = meshesDataPtr->meshes[0];
-
-        if (meshData.vertices.empty())
-        {
-            loggerError("Mesh has no vertices: {}", meshPath);
-            return "";
-        }
-
         MeshGPUData gpuData{};
         gpuData.sourcePath = pathStr;
-        gpuData.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
-        gpuData.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
-        // Create vertex buffer (device local for best performance)
-        vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * meshData.vertices.size();
+        uint32_t totalVertices = 0;
+        uint32_t totalIndices = 0;
 
-        core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-        vertexBufferRequest.size = vertexBufferSize;
-        vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-        vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createBuffer(vertexBufferRequest, gpuData.vertexBuffer, gpuData.vertexBufferMemory);
-
-        // Copy vertex data to GPU using staging buffer
-        core::Utilities::copyToBuffer(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            device.getGraphicsQueue(),
-            commandPool.get(),
-            gpuData.vertexBuffer,
-            meshData.vertices.data(),
-            vertexBufferSize
-        );
-
-        // Create index buffer if indices exist
-        if (!meshData.indices.empty())
+        // Upload all submeshes to GPU
+        for (const auto& meshData : meshesDataPtr->meshes)
         {
-            vk::DeviceSize indexBufferSize = sizeof(uint32_t) * meshData.indices.size();
+            if (meshData.vertices.empty())
+            {
+                loggerWarning("Skipping empty submesh in: {}", meshPath);
+                continue;
+            }
 
-            core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-            indexBufferRequest.size = indexBufferSize;
-            indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-            indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(indexBufferRequest, gpuData.indexBuffer, gpuData.indexBufferMemory);
+            SubMeshGPUData subMesh{};
+            subMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
+            subMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
-            // Copy index data to GPU
+            // Create vertex buffer (device local for best performance)
+            vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * meshData.vertices.size();
+
+            core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            vertexBufferRequest.size = vertexBufferSize;
+            vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::Utilities::createBuffer(vertexBufferRequest, subMesh.vertexBuffer, subMesh.vertexBufferMemory);
+
+            // Copy vertex data to GPU using staging buffer
             core::Utilities::copyToBuffer(
                 device.getLogicalDevice(),
                 device.getPhysicalDevice(),
                 device.getGraphicsQueue(),
                 commandPool.get(),
-                gpuData.indexBuffer,
-                meshData.indices.data(),
-                indexBufferSize
+                subMesh.vertexBuffer,
+                meshData.vertices.data(),
+                vertexBufferSize
             );
+
+            // Create index buffer if indices exist
+            if (!meshData.indices.empty())
+            {
+                vk::DeviceSize indexBufferSize = sizeof(uint32_t) * meshData.indices.size();
+
+                core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+                indexBufferRequest.size = indexBufferSize;
+                indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+                indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::Utilities::createBuffer(indexBufferRequest, subMesh.indexBuffer, subMesh.indexBufferMemory);
+
+                // Copy index data to GPU
+                core::Utilities::copyToBuffer(
+                    device.getLogicalDevice(),
+                    device.getPhysicalDevice(),
+                    device.getGraphicsQueue(),
+                    commandPool.get(),
+                    subMesh.indexBuffer,
+                    meshData.indices.data(),
+                    indexBufferSize
+                );
+            }
+
+            totalVertices += subMesh.vertexCount;
+            totalIndices += subMesh.indexCount;
+            gpuData.subMeshes.push_back(subMesh);
         }
 
-        loadedMeshes[pathStr] = gpuData;
-        loggerInfo("Loaded mesh: {} ({} vertices, {} indices)", meshPath, gpuData.vertexCount, gpuData.indexCount);
+        if (gpuData.subMeshes.empty())
+        {
+            loggerError("Mesh has no valid submeshes: {}", meshPath);
+            return "";
+        }
+
+        loadedMeshes[pathStr] = std::move(gpuData);
+        loggerInfo("Loaded mesh: {} ({} submeshes, {} total vertices, {} total indices)",
+                   meshPath, loadedMeshes[pathStr].subMeshes.size(), totalVertices, totalIndices);
 
         return pathStr;
     }
@@ -839,18 +855,19 @@ namespace render::mesh
         // Wait for device to finish using the buffers
         device.getLogicalDevice().waitIdle();
 
-        // Destroy vertex buffer
-        if (gpuData.vertexBuffer)
+        // Destroy all submesh buffers
+        for (const auto& subMesh : gpuData.subMeshes)
         {
-            device.getLogicalDevice().destroyBuffer(gpuData.vertexBuffer);
-            device.getLogicalDevice().freeMemory(gpuData.vertexBufferMemory);
-        }
-
-        // Destroy index buffer
-        if (gpuData.indexBuffer)
-        {
-            device.getLogicalDevice().destroyBuffer(gpuData.indexBuffer);
-            device.getLogicalDevice().freeMemory(gpuData.indexBufferMemory);
+            if (subMesh.vertexBuffer)
+            {
+                device.getLogicalDevice().destroyBuffer(subMesh.vertexBuffer);
+                device.getLogicalDevice().freeMemory(subMesh.vertexBufferMemory);
+            }
+            if (subMesh.indexBuffer)
+            {
+                device.getLogicalDevice().destroyBuffer(subMesh.indexBuffer);
+                device.getLogicalDevice().freeMemory(subMesh.indexBufferMemory);
+            }
         }
 
         loadedMeshes.erase(it);
@@ -869,15 +886,18 @@ namespace render::mesh
 
         for (auto& [path, gpuData] : loadedMeshes)
         {
-            if (gpuData.vertexBuffer)
+            for (const auto& subMesh : gpuData.subMeshes)
             {
-                device.getLogicalDevice().destroyBuffer(gpuData.vertexBuffer);
-                device.getLogicalDevice().freeMemory(gpuData.vertexBufferMemory);
-            }
-            if (gpuData.indexBuffer)
-            {
-                device.getLogicalDevice().destroyBuffer(gpuData.indexBuffer);
-                device.getLogicalDevice().freeMemory(gpuData.indexBufferMemory);
+                if (subMesh.vertexBuffer)
+                {
+                    device.getLogicalDevice().destroyBuffer(subMesh.vertexBuffer);
+                    device.getLogicalDevice().freeMemory(subMesh.vertexBufferMemory);
+                }
+                if (subMesh.indexBuffer)
+                {
+                    device.getLogicalDevice().destroyBuffer(subMesh.indexBuffer);
+                    device.getLogicalDevice().freeMemory(subMesh.indexBufferMemory);
+                }
             }
         }
 
@@ -944,7 +964,7 @@ namespace render::mesh
         for (const auto& meshData : meshDrawList)
         {
             const MeshGPUData* gpuData = getMesh(meshData.meshPath);
-            if (!gpuData)
+            if (!gpuData || gpuData->subMeshes.empty())
             {
                 continue;  // Skip meshes that aren't loaded
             }
@@ -962,20 +982,24 @@ namespace render::mesh
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                 0, sizeof(MeshPushConstants), &pushConstants);
 
-            // Bind vertex buffer
-            vk::Buffer vertexBuffers[] = {gpuData->vertexBuffer};
-            vk::DeviceSize offsets[] = {0};
-            commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+            // Render all submeshes with the same transform/material
+            for (const auto& subMesh : gpuData->subMeshes)
+            {
+                // Bind vertex buffer
+                vk::Buffer vertexBuffers[] = {subMesh.vertexBuffer};
+                vk::DeviceSize offsets[] = {0};
+                commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-            // Draw with indices if available, otherwise draw vertices directly
-            if (gpuData->indexCount > 0)
-            {
-                commandBuffer.bindIndexBuffer(gpuData->indexBuffer, 0, vk::IndexType::eUint32);
-                commandBuffer.drawIndexed(gpuData->indexCount, 1, 0, 0, 0);
-            }
-            else
-            {
-                commandBuffer.draw(gpuData->vertexCount, 1, 0, 0);
+                // Draw with indices if available, otherwise draw vertices directly
+                if (subMesh.indexCount > 0)
+                {
+                    commandBuffer.bindIndexBuffer(subMesh.indexBuffer, 0, vk::IndexType::eUint32);
+                    commandBuffer.drawIndexed(subMesh.indexCount, 1, 0, 0, 0);
+                }
+                else
+                {
+                    commandBuffer.draw(subMesh.vertexCount, 1, 0, 0);
+                }
             }
         }
 

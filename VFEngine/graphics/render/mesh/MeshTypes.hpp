@@ -8,8 +8,8 @@
 
 namespace render::mesh
 {
-    // GPU-side mesh data (vertex and index buffers)
-    struct MeshGPUData
+    // GPU-side data for a single submesh
+    struct SubMeshGPUData
     {
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
@@ -17,7 +17,13 @@ namespace render::mesh
         vk::DeviceMemory indexBufferMemory;
         uint32_t indexCount = 0;
         uint32_t vertexCount = 0;
+    };
+
+    // GPU-side mesh data containing all submeshes from a .vfmesh file
+    struct MeshGPUData
+    {
         std::string sourcePath;  // Original .vfmesh file path
+        std::vector<SubMeshGPUData> subMeshes;
     };
 
     // Data needed to render a single mesh instance each frame
