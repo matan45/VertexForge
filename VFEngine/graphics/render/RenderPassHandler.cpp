@@ -20,7 +20,6 @@ namespace render {
 	void RenderPassHandler::init()
 	{
 		clearColor->init();
-		// meshPipeline->init() is called later via initMeshPipeline() when IBL textures are ready
 	}
 
 	void RenderPassHandler::initMeshPipeline()
@@ -29,8 +28,7 @@ namespace render {
 		{
 			return;
 		}
-
-		// Check if IBL is initialized - if so, use its textures; otherwise use defaults
+		
 		if (iblRenderer->isInitialized())
 		{
 			const auto& irradiance = iblRenderer->getIrradianceImage();
@@ -40,7 +38,6 @@ namespace render {
 		}
 		else
 		{
-			// Use default placeholder textures for mesh rendering without IBL
 			meshPipeline->initWithDefaults();
 		}
 		meshPipelineInitialized = true;
@@ -52,14 +49,11 @@ namespace render {
 		{
 			return;
 		}
-
-		// Wait for GPU to finish using current resources
+		
 		device.getLogicalDevice().waitIdle();
-
-		// Clean up current mesh pipeline resources (preserves loaded meshes)
+		
 		meshPipeline->cleanUpForReinit();
-
-		// Reinitialize with default textures
+		
 		meshPipeline->initWithDefaults();
 	}
 
@@ -69,20 +63,16 @@ namespace render {
 		{
 			return;
 		}
-
-		// IBL must be initialized
+		
 		if (!iblRenderer->isInitialized())
 		{
 			return;
 		}
-
-		// Wait for GPU to finish using current resources
+		
 		device.getLogicalDevice().waitIdle();
-
-		// Clean up current mesh pipeline resources (preserves loaded meshes)
+		
 		meshPipeline->cleanUpForReinit();
-
-		// Reinitialize with IBL textures
+		
 		const auto& irradiance = iblRenderer->getIrradianceImage();
 		const auto& prefilter = iblRenderer->getPrefilterImage();
 		const auto& brdfLUT = iblRenderer->getBrdfLUTImage();
@@ -121,8 +111,7 @@ namespace render {
 	{
 		clearColor->recordCommandBuffer(commandBuffer, imageIndex);
 		iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
-
-		// Render meshes after skybox
+		
 		if (meshPipelineInitialized && !currentMeshDrawList.empty())
 		{
 			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList);

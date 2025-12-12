@@ -251,15 +251,12 @@ namespace events::scene {
     // Scene loading progress notifications
     struct SceneLoadingStartedNotification : INotification {
         std::string scenePath;
-        size_t totalEntities;
 
         std::string_view getName() const override { return "SceneLoadingStarted"; }
     };
 
     struct SceneLoadingProgressNotification : INotification {
         std::string currentEntityName;
-        size_t entitiesLoaded;
-        size_t totalEntities;
         float progress;  // 0.0 - 1.0
 
         std::string_view getName() const override { return "SceneLoadingProgress"; }

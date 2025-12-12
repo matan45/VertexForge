@@ -746,17 +746,17 @@ namespace render::mesh
 
     std::string StaticMeshPipeline::loadMesh(std::string_view meshPath)
     {
-        std::string pathStr{meshPath};
-
-        // Check if already loaded
+        std::string pathStr(meshPath);
+        
         if (loadedMeshes.contains(pathStr))
         {
             return pathStr;
         }
+        
+        auto meshFuture = resource::ResourceManager::loadMeshAsync(meshPath);
+        auto meshesDataPtr = meshFuture.get();
 
-        // Load mesh data from file
-        resource::MeshesData meshesData = resource::MeshResource::loadMesh(meshPath);
-        if (meshesData.meshes.empty())
+        if (!meshesDataPtr || meshesDataPtr->meshes.empty())
         {
             loggerError("Failed to load mesh from: {}", meshPath);
             return "";
@@ -764,7 +764,7 @@ namespace render::mesh
 
         // For now, combine all submeshes into one (or just use first mesh)
         // In future, could return multiple mesh IDs
-        const auto& meshData = meshesData.meshes[0];
+        const auto& meshData = meshesDataPtr->meshes[0];
 
         if (meshData.vertices.empty())
         {

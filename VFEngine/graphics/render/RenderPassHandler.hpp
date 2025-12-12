@@ -46,21 +46,18 @@ namespace render
         void recreate() const;
 
         IBL* getIBL() const { return iblRenderer.get(); }
-
-        // Mesh pipeline access
+        
         mesh::StaticMeshPipeline* getMeshPipeline() const { return meshPipeline.get(); }
         bool isMeshPipelineInitialized() const { return meshPipelineInitialized; }
-
-        // Initialize mesh pipeline (called when IBL is ready with textures)
+        
         void initMeshPipeline();
 
-        // Reinitialize mesh pipeline with default textures (called when IBL is removed)
+        // (called when IBL is removed)
         void reinitMeshPipelineWithDefaults();
 
-        // Reinitialize mesh pipeline with IBL textures (called when IBL is set/changed)
+        //(called when IBL is set/changed)
         void reinitMeshPipelineWithIBL();
-
-        // Set mesh draw list for the current frame
+        
         void setMeshDrawList(std::vector<mesh::MeshRenderData> meshes);
 
         void cleanUp() const;

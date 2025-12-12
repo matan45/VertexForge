@@ -19,8 +19,6 @@ namespace windows
     private:
         std::atomic<bool> showWindow{false};
         std::atomic<float> currentProgress{0.0f};
-        std::atomic<size_t> entitiesLoaded{0};
-        std::atomic<size_t> totalEntities{0};
         std::string currentEntityName;
         std::string scenePath;
         std::atomic<bool> loadingComplete{false};
