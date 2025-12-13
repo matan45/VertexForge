@@ -143,6 +143,37 @@ namespace services {
         virtual bool hasMeshComponent(EntityHandle entity) const = 0;
 
         // ============================================
+        // Material Component Operations
+        // ============================================
+
+        // Add material component to entity
+        virtual bool addMaterialComponent(EntityHandle entity) = 0;
+
+        // Remove material component from entity
+        virtual bool removeMaterialComponent(EntityHandle entity) = 0;
+
+        // Check if entity has material component
+        virtual bool hasMaterialComponent(EntityHandle entity) const = 0;
+
+        // Get material component data
+        virtual std::optional<MaterialData> getMaterialData(EntityHandle entity) const = 0;
+
+        // Set material component data
+        virtual bool setMaterialData(EntityHandle entity, const MaterialData& material) = 0;
+
+        // Set default material
+        virtual bool setDefaultMaterial(EntityHandle entity, const std::string& materialPath) = 0;
+
+        // Set material for a specific submesh
+        virtual bool setSubMeshMaterial(EntityHandle entity, const std::string& submeshName, const std::string& materialPath) = 0;
+
+        // Get material for a specific submesh
+        virtual std::string getSubMeshMaterial(EntityHandle entity, const std::string& submeshName) const = 0;
+
+        // Get all submesh material assignments
+        virtual std::map<std::string, std::string> getAllSubMeshMaterials(EntityHandle entity) const = 0;
+
+        // ============================================
         // Selection State
         // ============================================
 

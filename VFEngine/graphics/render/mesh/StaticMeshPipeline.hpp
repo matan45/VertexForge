@@ -2,6 +2,7 @@
 
 #include "MeshTypes.hpp"
 #include "../ibl/IBLTypes.hpp"
+#include "material/MaterialTypes.hpp"
 #include <memory>
 #include <vector>
 #include <string_view>
@@ -120,6 +121,9 @@ namespace render::mesh
 
         // Loaded meshes (key = mesh path)
         std::unordered_map<std::string, MeshGPUData> loadedMeshes;
+
+        // Cache for loaded materials to prevent reloading every frame
+        mutable std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> materialCache;
 
         // Default IBL textures (used when no IBL is set)
         bool usingDefaultTextures = false;

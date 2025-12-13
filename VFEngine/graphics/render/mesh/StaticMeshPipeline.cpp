@@ -8,6 +8,7 @@
 #include "material/MaterialManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
+#include <optional>
 
 namespace render::mesh
 {
@@ -21,67 +22,110 @@ namespace render::mesh
         float emission = 0.0f;
     };
 
-    // Extract PBR values from a loaded MaterialData
+    // Helper to get value from a node connected to a specific pin
+    static std::optional<material::NodeProperty> getConnectedValue(
+        const material::ShaderGraph& graph,
+        uint32_t targetNodeId,
+        const std::string& targetPinName)
+    {
+        // Find link to this pin
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == targetNodeId && link.targetPin == targetPinName) {
+                // Found a connection - get the source node
+                const auto* sourceNode = graph.findNode(link.sourceNodeId);
+                if (!sourceNode) continue;
+
+                // Check if it's a constant node and get its value
+                switch (sourceNode->type) {
+                    case material::NodeType::ConstantScalar: {
+                        auto it = sourceNode->properties.find("value");
+                        if (it != sourceNode->properties.end()) {
+                            return it->second;
+                        }
+                        break;
+                    }
+                    case material::NodeType::ConstantVec2:
+                    case material::NodeType::ConstantVec3:
+                    case material::NodeType::ConstantColor: {
+                        auto it = sourceNode->properties.find("value");
+                        if (it != sourceNode->properties.end()) {
+                            return it->second;
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Extract PBR values from a loaded MaterialData by traversing the shader graph
     static ExtractedPBRValues extractPBRFromMaterial(const material::MaterialData& matData)
     {
         ExtractedPBRValues pbr;
 
-        // Try to find parameters by common names
+        // Find PBR Output node
+        const auto* outputNode = matData.graph.findOutputNode();
+        if (!outputNode) {
+            return pbr;  // Return defaults if no output node
+        }
+
+        // Try to get Albedo from connected node
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Albedo")) {
+            if (std::holds_alternative<glm::vec4>(*val)) {
+                pbr.albedo = std::get<glm::vec4>(*val);
+            } else if (std::holds_alternative<glm::vec3>(*val)) {
+                glm::vec3 rgb = std::get<glm::vec3>(*val);
+                pbr.albedo = glm::vec4(rgb, 1.0f);
+            }
+        }
+
+        // Try to get Metallic
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Metallic")) {
+            if (std::holds_alternative<float>(*val)) {
+                pbr.metallic = std::get<float>(*val);
+            }
+        }
+
+        // Try to get Roughness
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Roughness")) {
+            if (std::holds_alternative<float>(*val)) {
+                pbr.roughness = std::get<float>(*val);
+            }
+        }
+
+        // Try to get AO
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "AO")) {
+            if (std::holds_alternative<float>(*val)) {
+                pbr.ao = std::get<float>(*val);
+            }
+        }
+
+        // Try to get Emission
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Emission")) {
+            if (std::holds_alternative<float>(*val)) {
+                pbr.emission = std::get<float>(*val);
+            }
+        }
+
+        // Also check exposed parameters as fallback
         auto findParam = [&matData](const std::string& name) -> const material::MaterialParameter* {
             auto it = matData.parameters.find(name);
             return (it != matData.parameters.end()) ? &it->second : nullptr;
         };
 
-        // Albedo / Base Color
-        if (const auto* param = findParam("Albedo")) {
-            if (std::holds_alternative<glm::vec4>(param->value)) {
-                pbr.albedo = std::get<glm::vec4>(param->value);
-            } else if (std::holds_alternative<glm::vec3>(param->value)) {
-                glm::vec3 rgb = std::get<glm::vec3>(param->value);
-                pbr.albedo = glm::vec4(rgb, 1.0f);
-            }
-        } else if (const auto* param = findParam("BaseColor")) {
-            if (std::holds_alternative<glm::vec4>(param->value)) {
-                pbr.albedo = std::get<glm::vec4>(param->value);
-            } else if (std::holds_alternative<glm::vec3>(param->value)) {
-                glm::vec3 rgb = std::get<glm::vec3>(param->value);
-                pbr.albedo = glm::vec4(rgb, 1.0f);
-            }
-        }
-
-        // Metallic
-        if (const auto* param = findParam("Metallic")) {
-            if (std::holds_alternative<float>(param->value)) {
-                pbr.metallic = std::get<float>(param->value);
-            }
-        }
-
-        // Roughness
-        if (const auto* param = findParam("Roughness")) {
-            if (std::holds_alternative<float>(param->value)) {
-                pbr.roughness = std::get<float>(param->value);
-            }
-        }
-
-        // Ambient Occlusion
-        if (const auto* param = findParam("AO")) {
-            if (std::holds_alternative<float>(param->value)) {
-                pbr.ao = std::get<float>(param->value);
-            }
-        } else if (const auto* param = findParam("AmbientOcclusion")) {
-            if (std::holds_alternative<float>(param->value)) {
-                pbr.ao = std::get<float>(param->value);
-            }
-        }
-
-        // Emission
-        if (const auto* param = findParam("Emission")) {
-            if (std::holds_alternative<float>(param->value)) {
-                pbr.emission = std::get<float>(param->value);
-            }
-        } else if (const auto* param = findParam("EmissiveStrength")) {
-            if (std::holds_alternative<float>(param->value)) {
-                pbr.emission = std::get<float>(param->value);
+        // Fallback to parameters if graph values not found
+        if (pbr.albedo == glm::vec4(1.0f)) {
+            if (const auto* param = findParam("Albedo")) {
+                if (std::holds_alternative<glm::vec4>(param->value)) {
+                    pbr.albedo = std::get<glm::vec4>(param->value);
+                }
+            } else if (const auto* param = findParam("BaseColor")) {
+                if (std::holds_alternative<glm::vec4>(param->value)) {
+                    pbr.albedo = std::get<glm::vec4>(param->value);
+                }
             }
         }
 
@@ -92,7 +136,10 @@ namespace render::mesh
     // 1. Per-submesh material override
     // 2. Default material for the mesh
     // 3. Fallback defaults from MeshRenderData
-    static ExtractedPBRValues getPBRForSubmesh(const MeshRenderData& meshData, const std::string& submeshName)
+    static ExtractedPBRValues getPBRForSubmesh(
+        const MeshRenderData& meshData,
+        const std::string& submeshName,
+        std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& matCache)
     {
         ExtractedPBRValues pbr;
         pbr.albedo = meshData.albedo;
@@ -113,11 +160,19 @@ namespace render::mesh
             materialPath = meshData.defaultMaterialPath;
         }
 
-        // Load and extract PBR values from the material
+        // Load and extract PBR values from the material (using cache)
         if (!materialPath.empty()) {
-            auto matData = material::MaterialManager::instance().loadMaterial(materialPath);
-            if (matData) {
-                pbr = extractPBRFromMaterial(*matData);
+            // Check cache first
+            auto cacheIt = matCache.find(materialPath);
+            if (cacheIt != matCache.end() && cacheIt->second) {
+                pbr = extractPBRFromMaterial(*cacheIt->second);
+            } else {
+                // Load and cache the material
+                auto matData = material::MaterialManager::instance().loadMaterial(materialPath);
+                if (matData) {
+                    matCache[materialPath] = matData;
+                    pbr = extractPBRFromMaterial(*matData);
+                }
             }
         }
 
@@ -934,6 +989,9 @@ namespace render::mesh
             transferManager->waitAll();
         }
 
+        // Clear material cache
+        materialCache.clear();
+
         // Unload all meshes first
         unloadAllMeshes();
 
@@ -1350,7 +1408,7 @@ namespace render::mesh
                 }
 
                 // Get PBR values from assigned material (or fallback to mesh defaults)
-                ExtractedPBRValues pbrValues = getPBRForSubmesh(meshData, subMesh.name);
+                ExtractedPBRValues pbrValues = getPBRForSubmesh(meshData, subMesh.name, materialCache);
 
                 // Setup push constants with transform and material properties
                 MeshPushConstants pushConstants{};

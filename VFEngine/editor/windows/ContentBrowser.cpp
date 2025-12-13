@@ -72,7 +72,25 @@ namespace windows
 			ImGui::OpenPopup("Create New Folder");
 		}
 		createNewFolderModel();
-		
+
+		if (showCreateMaterialModal)
+		{
+			ImGui::OpenPopup("Create New Material");
+		}
+		createNewMaterialModal();
+
+		if (showRenameFileModal)
+		{
+			ImGui::OpenPopup("Rename File");
+		}
+		renameFileModal();
+
+		if (showDeleteConfirmModal)
+		{
+			ImGui::OpenPopup("Delete File?");
+		}
+		deleteFileConfirmModal();
+
 		if (ImGui::Begin("Folder Structure", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
 		{
 			drawFolderTree(currentPath);
@@ -472,6 +490,155 @@ namespace windows
 		}
 	}
 
+	void ContentBrowser::createNewMaterialModal()
+	{
+		if (showCreateMaterialModal &&
+			ImGui::BeginPopupModal("Create New Material", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			char buffer[256];
+			std::strncpy(buffer, newMaterialName.c_str(), sizeof(buffer));
+			if (ImGui::InputText("Material Name", buffer, IM_ARRAYSIZE(buffer)))
+			{
+				newMaterialName = std::string(buffer);
+			}
+
+			if (ImGui::Button("Create", ImVec2(120, 0)))
+			{
+				if (!newMaterialName.empty())
+				{
+					std::string extension = ".vfMat";
+					fs::path newMaterialPath = currentPath / (newMaterialName + extension);
+
+					// Check if file already exists
+					int counter = 1;
+					while (fs::exists(newMaterialPath)) {
+						newMaterialPath = currentPath / (newMaterialName + "_" + std::to_string(counter) + extension);
+						counter++;
+					}
+
+					// Create default material and save it
+					std::string pathStr = StringUtil::wstringToUtf8(newMaterialPath.wstring());
+					auto defaultMat = material::MaterialAsset::createDefault(newMaterialName);
+					if (material::MaterialAsset::save(pathStr, defaultMat)) {
+						loadDirectory(currentPath);  // Refresh
+					}
+				}
+				ImGui::CloseCurrentPopup();
+				showCreateMaterialModal = false;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+				showCreateMaterialModal = false;
+			}
+			ImGui::EndPopup();
+		}
+	}
+
+	void ContentBrowser::renameFileModal()
+	{
+		if (showRenameFileModal &&
+			ImGui::BeginPopupModal("Rename File", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Renaming: %s", StringUtil::wstringToUtf8(selectedFile.filename().wstring()).c_str());
+			ImGui::Separator();
+
+			char buffer[256];
+			std::strncpy(buffer, renameFileName.c_str(), sizeof(buffer));
+			if (ImGui::InputText("New Name", buffer, IM_ARRAYSIZE(buffer)))
+			{
+				renameFileName = std::string(buffer);
+			}
+
+			if (ImGui::Button("Rename", ImVec2(120, 0)))
+			{
+				if (!renameFileName.empty() && !selectedFile.empty())
+				{
+					fs::path newPath = selectedFile.parent_path() / (renameFileName + selectedFile.extension().string());
+
+					std::error_code ec;
+					if (!fs::exists(newPath))
+					{
+						fs::rename(selectedFile, newPath, ec);
+						if (!ec)
+						{
+							selectedFile = newPath;
+							loadDirectory(currentPath);  // Refresh
+						}
+						else
+						{
+							vfLogError("Failed to rename file: {}", ec.message());
+						}
+					}
+					else
+					{
+						vfLogError("A file with that name already exists");
+					}
+				}
+				ImGui::CloseCurrentPopup();
+				showRenameFileModal = false;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+				showRenameFileModal = false;
+			}
+			ImGui::EndPopup();
+		}
+	}
+
+	void ContentBrowser::deleteFileConfirmModal()
+	{
+		if (showDeleteConfirmModal &&
+			ImGui::BeginPopupModal("Delete File?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Are you sure you want to delete:");
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "%s",
+				StringUtil::wstringToUtf8(selectedFile.filename().wstring()).c_str());
+			ImGui::Separator();
+			ImGui::Text("This action cannot be undone!");
+
+			ImGui::Spacing();
+
+			if (ImGui::Button("Delete", ImVec2(120, 0)))
+			{
+				if (!selectedFile.empty())
+				{
+					std::error_code ec;
+					if (fs::is_directory(selectedFile))
+					{
+						fs::remove_all(selectedFile, ec);
+					}
+					else
+					{
+						fs::remove(selectedFile, ec);
+					}
+
+					if (!ec)
+					{
+						selectedFile.clear();
+						loadDirectory(currentPath);  // Refresh
+					}
+					else
+					{
+						vfLogError("Failed to delete file: {}", ec.message());
+					}
+				}
+				ImGui::CloseCurrentPopup();
+				showDeleteConfirmModal = false;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+				showDeleteConfirmModal = false;
+			}
+			ImGui::EndPopup();
+		}
+	}
+
 	void ContentBrowser::handleCreateFiles()
 	{
 		if (ImGui::BeginPopupContextWindow())
@@ -485,36 +652,21 @@ namespace windows
 			{
 				if (ImGui::MenuItem("Material"))
 				{
-					// Generate unique filename
-					std::string baseName = "NewMaterial";
-					std::string extension = ".vfMat";
-					fs::path newMaterialPath = currentPath / (baseName + extension);
-					int counter = 1;
-					while (fs::exists(newMaterialPath)) {
-						newMaterialPath = currentPath / (baseName + "_" + std::to_string(counter) + extension);
-						counter++;
-					}
-
-					// Create default material and save it
-					std::string pathStr = StringUtil::wstringToUtf8(newMaterialPath.wstring());
-					auto defaultMat = material::MaterialAsset::createDefault(baseName);
-					if (material::MaterialAsset::save(pathStr, defaultMat)) {
-						loadDirectory(currentPath);  // Refresh
-						// Open the material editor
-						auto editorWindow = std::make_shared<MaterialEditorWindow>(pathStr);
-						controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
-						openMaterialEditors[pathStr] = editorWindow;
-					}
+					showCreateMaterialModal = true;
+					newMaterialName.clear();
 				}
 				ImGui::EndMenu();
 			}
-			if (ImGui::MenuItem("Delete File"))
+			bool hasSelection = !selectedFile.empty();
+			if (ImGui::MenuItem("Delete", nullptr, false, hasSelection))
 			{
-				// Logic to delete file
+				showDeleteConfirmModal = true;
 			}
-			if (ImGui::MenuItem("Rename File"))
+			if (ImGui::MenuItem("Rename", nullptr, false, hasSelection))
 			{
-				// Logic to Rename file
+				// Get filename without extension for the input field
+				renameFileName = StringUtil::wstringToUtf8(selectedFile.stem().wstring());
+				showRenameFileModal = true;
 			}
 			ImGui::EndPopup();
 		}

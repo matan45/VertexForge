@@ -37,6 +37,13 @@ namespace windows
         std::string newFolderName;
         bool showCreateFolderModal = false;
 
+        std::string newMaterialName;
+        bool showCreateMaterialModal = false;
+
+        std::string renameFileName;
+        bool showRenameFileModal = false;
+        bool showDeleteConfirmModal = false;
+
         fs::path selectedFile;
         AssetType selectedType;
         bool showFileWindow = false;
@@ -84,6 +91,9 @@ namespace windows
 
         void createNewFolder(const std::string& folderName);
         void createNewFolderModel();
+        void createNewMaterialModal();
+        void renameFileModal();
+        void deleteFileConfirmModal();
         void handleCreateFiles();
 
         void drawFolderTree(const fs::path& path);
