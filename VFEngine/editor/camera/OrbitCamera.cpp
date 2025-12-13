@@ -1,5 +1,4 @@
 #include "OrbitCamera.hpp"
-#include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -39,22 +38,6 @@ namespace editor {
         yaw = 45.0f;
         pitch = 30.0f;
 
-        updateMatrices();
-    }
-
-    void OrbitCamera::processMouseDrag(float xOffset, float yOffset)
-    {
-        yaw += xOffset * orbitSensitivity;
-        pitch += yOffset * orbitSensitivity;
-
-        clampPitch();
-        updateMatrices();
-    }
-
-    void OrbitCamera::processScroll(float delta)
-    {
-        distance -= delta * zoomSensitivity * distance * 0.1f;
-        distance = glm::clamp(distance, minDistance, maxDistance);
         updateMatrices();
     }
 

@@ -33,10 +33,6 @@ namespace editor {
         // Fit camera to show entire bounding box
         void fitToBounds(const math::AABB& bounds);
 
-        // Input processing
-        void processMouseDrag(float xOffset, float yOffset);
-        void processScroll(float delta);
-
         // Matrix access
         const glm::mat4& getViewMatrix() const { return viewMatrix; }
         const glm::mat4& getProjectionMatrix() const { return projectionMatrix; }

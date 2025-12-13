@@ -116,15 +116,6 @@ namespace windows
         {
             ImGui::Image(texture, ImVec2(width, height));
 
-            // Handle scroll to zoom when hovering over viewport
-            if (ImGui::IsItemHovered())
-            {
-                float scroll = ImGui::GetIO().MouseWheel;
-                if (scroll != 0.0f)
-                {
-                    camera->processScroll(scroll);
-                }
-            }
         }
     }
 
@@ -259,12 +250,12 @@ namespace windows
             // Zoom buttons
             if (ImGui::Button("+", ImVec2(itemWidth / 2 - 2, 0)))
             {
-                camera->processScroll(1.0f);
+                camera->setDistance(dist * 0.9f);
             }
             ImGui::SameLine();
             if (ImGui::Button("-", ImVec2(itemWidth / 2 - 2, 0)))
             {
-                camera->processScroll(-1.0f);
+                camera->setDistance(dist * 1.1f);
             }
         }
     }

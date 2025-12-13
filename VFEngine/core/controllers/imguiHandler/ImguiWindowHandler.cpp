@@ -16,8 +16,9 @@ namespace controllers::imguiHandler {
 	}
 
 	void ImguiWindowHandler::draw() {
-		// Draw all windows
-		for (const auto& window : imguiWindows) {
+		// Draw all windows (copy vector in case draw() adds new windows)
+		auto windowsCopy = imguiWindows;
+		for (const auto& window : windowsCopy) {
 			if (window) {
 				window->draw();
 			}
