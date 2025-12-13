@@ -399,74 +399,14 @@ namespace material {
         material.twoSided = false;
         material.needsRecompile = true;
 
-        // Create PBR Output node
+        // Create only the PBR Output node - user will add other nodes
         ShaderNode outputNode;
         outputNode.id = material.graph.nextNodeId++;
         outputNode.type = NodeType::PBROutput;
         outputNode.name = "PBR Output";
-        outputNode.position = glm::vec2(400.0f, 200.0f);
+        outputNode.position = glm::vec2(300.0f, 200.0f);
 
-        // Create default constant nodes
-        ShaderNode albedoNode;
-        albedoNode.id = material.graph.nextNodeId++;
-        albedoNode.type = NodeType::ConstantColor;
-        albedoNode.name = "Albedo";
-        albedoNode.position = glm::vec2(100.0f, 100.0f);
-        albedoNode.properties["value"] = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
-        albedoNode.properties["parameterName"] = std::string("Albedo");
-
-        ShaderNode metallicNode;
-        metallicNode.id = material.graph.nextNodeId++;
-        metallicNode.type = NodeType::ConstantScalar;
-        metallicNode.name = "Metallic";
-        metallicNode.position = glm::vec2(100.0f, 250.0f);
-        metallicNode.properties["value"] = 0.0f;
-        metallicNode.properties["parameterName"] = std::string("Metallic");
-
-        ShaderNode roughnessNode;
-        roughnessNode.id = material.graph.nextNodeId++;
-        roughnessNode.type = NodeType::ConstantScalar;
-        roughnessNode.name = "Roughness";
-        roughnessNode.position = glm::vec2(100.0f, 350.0f);
-        roughnessNode.properties["value"] = 0.5f;
-        roughnessNode.properties["parameterName"] = std::string("Roughness");
-
-        // Add nodes to graph
         material.graph.nodes.push_back(std::move(outputNode));
-        material.graph.nodes.push_back(std::move(albedoNode));
-        material.graph.nodes.push_back(std::move(metallicNode));
-        material.graph.nodes.push_back(std::move(roughnessNode));
-
-        // Create links (albedo -> output, etc.)
-        NodeLink albedoLink;
-        albedoLink.id = material.graph.nextLinkId++;
-        albedoLink.sourceNodeId = 2;  // albedoNode
-        albedoLink.targetNodeId = 1;  // outputNode
-        albedoLink.sourcePin = "RGB";
-        albedoLink.targetPin = "Albedo";
-
-        NodeLink metallicLink;
-        metallicLink.id = material.graph.nextLinkId++;
-        metallicLink.sourceNodeId = 3;  // metallicNode
-        metallicLink.targetNodeId = 1;  // outputNode
-        metallicLink.sourcePin = "Value";
-        metallicLink.targetPin = "Metallic";
-
-        NodeLink roughnessLink;
-        roughnessLink.id = material.graph.nextLinkId++;
-        roughnessLink.sourceNodeId = 4;  // roughnessNode
-        roughnessLink.targetNodeId = 1;  // outputNode
-        roughnessLink.sourcePin = "Value";
-        roughnessLink.targetPin = "Roughness";
-
-        material.graph.links.push_back(std::move(albedoLink));
-        material.graph.links.push_back(std::move(metallicLink));
-        material.graph.links.push_back(std::move(roughnessLink));
-
-        // Create exposed parameters
-        material.parameters["Albedo"] = MaterialParameter("Albedo", glm::vec3(0.8f, 0.8f, 0.8f), true);
-        material.parameters["Metallic"] = MaterialParameter("Metallic", 0.0f, 0.0f, 1.0f);
-        material.parameters["Roughness"] = MaterialParameter("Roughness", 0.5f, 0.0f, 1.0f);
 
         return material;
     }

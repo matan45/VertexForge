@@ -56,20 +56,24 @@ namespace editor::graph {
         // Context menu state
         bool showCreateNodeMenu = false;
         ImVec2 newNodePosition;
+        ImVec2 popupMousePos;  // Mouse position for popup placement
         ax::NodeEditor::PinId newNodeLinkPin;
 
-        // ID mapping helpers
-        ax::NodeEditor::NodeId toEditorNodeId(uint32_t id) const { return ax::NodeEditor::NodeId(id); }
-        ax::NodeEditor::PinId toEditorPinId(uint32_t id) const { return ax::NodeEditor::PinId(id); }
-        ax::NodeEditor::LinkId toEditorLinkId(uint32_t id) const { return ax::NodeEditor::LinkId(id); }
+        // ID mapping helpers - use offsets to prevent conflicts between node/pin/link IDs
+        static constexpr uintptr_t NODE_ID_OFFSET = 100000;
+        static constexpr uintptr_t PIN_ID_OFFSET = 200000;
+        static constexpr uintptr_t LINK_ID_OFFSET = 300000;
 
-        uint32_t fromEditorNodeId(ax::NodeEditor::NodeId id) const { return static_cast<uint32_t>(id.Get()); }
-        uint32_t fromEditorPinId(ax::NodeEditor::PinId id) const { return static_cast<uint32_t>(id.Get()); }
-        uint32_t fromEditorLinkId(ax::NodeEditor::LinkId id) const { return static_cast<uint32_t>(id.Get()); }
+        ax::NodeEditor::NodeId toEditorNodeId(uint32_t id) const { return ax::NodeEditor::NodeId(NODE_ID_OFFSET + id); }
+        ax::NodeEditor::PinId toEditorPinId(uint32_t id) const { return ax::NodeEditor::PinId(PIN_ID_OFFSET + id); }
+        ax::NodeEditor::LinkId toEditorLinkId(uint32_t id) const { return ax::NodeEditor::LinkId(LINK_ID_OFFSET + id); }
+
+        uint32_t fromEditorNodeId(ax::NodeEditor::NodeId id) const { return static_cast<uint32_t>(id.Get() - NODE_ID_OFFSET); }
+        uint32_t fromEditorPinId(ax::NodeEditor::PinId id) const { return static_cast<uint32_t>(id.Get() - PIN_ID_OFFSET); }
+        uint32_t fromEditorLinkId(ax::NodeEditor::LinkId id) const { return static_cast<uint32_t>(id.Get() - LINK_ID_OFFSET); }
 
         // Drawing helpers
         void drawNode(material::ShaderNode& node);
-        void drawPin(const material::NodePin& pin, bool isOutput);
         void drawLinks();
 
         // Handle interactions

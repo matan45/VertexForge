@@ -48,15 +48,15 @@ namespace editor::graph {
 
         ed::SetCurrentEditor(editorContext);
 
-        // Initialize node positions from graph data on first frame
+        ed::Begin("ShaderGraphEditor");
+
+        // Initialize node positions from graph data on first frame (must be after Begin)
         if (needsPositionInit) {
             for (const auto& node : currentGraph->nodes) {
                 ed::SetNodePosition(toEditorNodeId(node.id), ImVec2(node.position.x, node.position.y));
             }
             needsPositionInit = false;
         }
-
-        ed::Begin("ShaderGraphEditor");
 
         // Draw all nodes
         for (auto& node : currentGraph->nodes) {
@@ -100,91 +100,23 @@ namespace editor::graph {
         ed::BeginNode(toEditorNodeId(node.id));
 
         // Header
-        ImU32 headerColor = getNodeHeaderColor(node.type);
-        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 255));
         ImGui::TextUnformatted(node.name.empty() ? getNodeTypeName(node.type) : node.name.c_str());
-        ImGui::PopStyleColor();
-
-        ImGui::Separator();
 
         // Draw input pins
         for (const auto& pin : node.inputs) {
-            drawPin(pin, false);
+            ed::BeginPin(toEditorPinId(pin.id), ed::PinKind::Input);
+            ImGui::Text("> %s", pin.name.c_str());
+            ed::EndPin();
         }
 
         // Draw output pins
         for (const auto& pin : node.outputs) {
-            drawPin(pin, true);
-        }
-
-        // Draw node-specific properties
-        if (node.type == material::NodeType::ConstantScalar) {
-            auto it = node.properties.find("value");
-            if (it != node.properties.end() && std::holds_alternative<float>(it->second)) {
-                float value = std::get<float>(it->second);
-                ImGui::SetNextItemWidth(80);
-                if (ImGui::DragFloat("##value", &value, 0.01f, 0.0f, 1.0f, "%.3f")) {
-                    it->second = value;
-                    if (onGraphChanged) onGraphChanged();
-                }
-            }
-        }
-        else if (node.type == material::NodeType::ConstantVec3 || node.type == material::NodeType::ConstantColor) {
-            auto it = node.properties.find("value");
-            if (it != node.properties.end() && std::holds_alternative<glm::vec3>(it->second)) {
-                glm::vec3 value = std::get<glm::vec3>(it->second);
-                ImGui::SetNextItemWidth(150);
-                bool changed = false;
-                if (node.type == material::NodeType::ConstantColor) {
-                    changed = ImGui::ColorEdit3("##color", &value.x, ImGuiColorEditFlags_NoInputs);
-                } else {
-                    changed = ImGui::DragFloat3("##vec3", &value.x, 0.01f);
-                }
-                if (changed) {
-                    it->second = value;
-                    if (onGraphChanged) onGraphChanged();
-                }
-            }
+            ed::BeginPin(toEditorPinId(pin.id), ed::PinKind::Output);
+            ImGui::Text("%s >", pin.name.c_str());
+            ed::EndPin();
         }
 
         ed::EndNode();
-    }
-
-    void ShaderGraphEditor::drawPin(const material::NodePin& pin, bool isOutput) {
-        ImU32 color = getPinColor(pin.type);
-
-        if (isOutput) {
-            // Right-aligned output pins
-            float nodeWidth = ImGui::GetContentRegionAvail().x;
-            ImGui::Indent(nodeWidth - 80);
-        }
-
-        ed::BeginPin(toEditorPinId(pin.id), isOutput ? ed::PinKind::Output : ed::PinKind::Input);
-
-        // Draw pin circle
-        ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        float pinRadius = 5.0f;
-        ImVec2 pinCenter = ImVec2(cursorPos.x + (isOutput ? 70 : 8), cursorPos.y + 8);
-
-        drawList->AddCircleFilled(pinCenter, pinRadius, color);
-        drawList->AddCircle(pinCenter, pinRadius, IM_COL32(200, 200, 200, 255));
-
-        // Pin label
-        if (isOutput) {
-            ImGui::TextUnformatted(pin.name.c_str());
-        } else {
-            ImGui::Dummy(ImVec2(15, 0));
-            ImGui::SameLine();
-            ImGui::TextUnformatted(pin.name.c_str());
-        }
-
-        ed::EndPin();
-
-        if (isOutput) {
-            ImGui::Unindent();
-        }
     }
 
     void ShaderGraphEditor::drawLinks() {
@@ -283,11 +215,8 @@ namespace editor::graph {
 
             ed::PinId pinId;
             if (ed::QueryNewNode(&pinId)) {
-                newNodeLinkPin = pinId;
-                if (ed::AcceptNewItem()) {
-                    showCreateNodeMenu = true;
-                    newNodePosition = ImGui::GetMousePos();
-                }
+                // Reject creating nodes by dragging from pins - use right-click menu instead
+                ed::RejectNewItem();
             }
         }
         ed::EndCreate();
@@ -339,62 +268,28 @@ namespace editor::graph {
     }
 
     void ShaderGraphEditor::handleContextMenu() {
-        // Background context menu
+        // Check for right-click on background using native ImGui detection
+        ed::Suspend();
         if (ed::ShowBackgroundContextMenu()) {
+            // Get the canvas position for node creation
+            newNodePosition = ed::ScreenToCanvas(ImGui::GetMousePos());
+            showCreateNodeMenu = true;
+        }
+        ed::Resume();
+
+        // Handle popup outside of suspend/resume, in normal ImGui context
+        if (showCreateNodeMenu) {
             ImGui::OpenPopup("CreateNodeMenu");
-            newNodePosition = ImGui::GetMousePos();
+            showCreateNodeMenu = false;
         }
 
-        // Node creation popup
-        ed::Suspend();
         if (ImGui::BeginPopup("CreateNodeMenu")) {
-            if (ImGui::BeginMenu("Constants")) {
-                if (ImGui::MenuItem("Scalar")) createNode(material::NodeType::ConstantScalar, newNodePosition);
-                if (ImGui::MenuItem("Vector2")) createNode(material::NodeType::ConstantVec2, newNodePosition);
-                if (ImGui::MenuItem("Vector3")) createNode(material::NodeType::ConstantVec3, newNodePosition);
-                if (ImGui::MenuItem("Color")) createNode(material::NodeType::ConstantColor, newNodePosition);
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Math")) {
-                if (ImGui::MenuItem("Add")) createNode(material::NodeType::Add, newNodePosition);
-                if (ImGui::MenuItem("Subtract")) createNode(material::NodeType::Subtract, newNodePosition);
-                if (ImGui::MenuItem("Multiply")) createNode(material::NodeType::Multiply, newNodePosition);
-                if (ImGui::MenuItem("Divide")) createNode(material::NodeType::Divide, newNodePosition);
-                if (ImGui::MenuItem("Lerp")) createNode(material::NodeType::Lerp, newNodePosition);
-                if (ImGui::MenuItem("Clamp")) createNode(material::NodeType::Clamp, newNodePosition);
-                if (ImGui::MenuItem("Saturate")) createNode(material::NodeType::Saturate, newNodePosition);
-                if (ImGui::MenuItem("One Minus")) createNode(material::NodeType::OneMinus, newNodePosition);
-                if (ImGui::MenuItem("Power")) createNode(material::NodeType::Power, newNodePosition);
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Trigonometry")) {
-                if (ImGui::MenuItem("Sin")) createNode(material::NodeType::Sin, newNodePosition);
-                if (ImGui::MenuItem("Cos")) createNode(material::NodeType::Cos, newNodePosition);
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Vector")) {
-                if (ImGui::MenuItem("Dot Product")) createNode(material::NodeType::Dot, newNodePosition);
-                if (ImGui::MenuItem("Cross Product")) createNode(material::NodeType::Cross, newNodePosition);
-                if (ImGui::MenuItem("Normalize")) createNode(material::NodeType::Normalize, newNodePosition);
-                if (ImGui::MenuItem("Length")) createNode(material::NodeType::Length, newNodePosition);
-                if (ImGui::MenuItem("Make Vec3")) createNode(material::NodeType::MakeVec3, newNodePosition);
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Input")) {
-                if (ImGui::MenuItem("UV")) createNode(material::NodeType::VertexUV, newNodePosition);
-                if (ImGui::MenuItem("Normal")) createNode(material::NodeType::VertexNormal, newNodePosition);
-                if (ImGui::MenuItem("Position")) createNode(material::NodeType::VertexPosition, newNodePosition);
-                if (ImGui::MenuItem("Time")) createNode(material::NodeType::Time, newNodePosition);
-                if (ImGui::MenuItem("Camera Position")) createNode(material::NodeType::CameraPosition, newNodePosition);
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Utility")) {
-                if (ImGui::MenuItem("Fresnel")) createNode(material::NodeType::Fresnel, newNodePosition);
-                ImGui::EndMenu();
+            if (ImGui::MenuItem("Scalar")) {
+                createNode(material::NodeType::ConstantScalar, newNodePosition);
+                ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
         }
-        ed::Resume();
     }
 
     void ShaderGraphEditor::createNode(material::NodeType type, const ImVec2& position) {
