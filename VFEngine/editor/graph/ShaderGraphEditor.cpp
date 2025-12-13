@@ -29,6 +29,7 @@ namespace editor::graph {
 
     void ShaderGraphEditor::setGraph(material::ShaderGraph* graph) {
         currentGraph = graph;
+        needsPositionInit = true;  // Initialize positions on next draw
     }
 
     void ShaderGraphEditor::navigateToContent() {
@@ -46,6 +47,14 @@ namespace editor::graph {
         }
 
         ed::SetCurrentEditor(editorContext);
+
+        // Initialize node positions from graph data on first frame
+        if (needsPositionInit) {
+            for (const auto& node : currentGraph->nodes) {
+                ed::SetNodePosition(toEditorNodeId(node.id), ImVec2(node.position.x, node.position.y));
+            }
+            needsPositionInit = false;
+        }
 
         ed::Begin("ShaderGraphEditor");
 
@@ -73,6 +82,15 @@ namespace editor::graph {
             ed::NodeId selectedNodes[1];
             int count = ed::GetSelectedNodes(selectedNodes, 1);
             selectedNodeId = count > 0 ? fromEditorNodeId(selectedNodes[0]) : 0;
+        }
+
+        // Update node positions in graph data (for saving)
+        for (auto& node : currentGraph->nodes) {
+            ImVec2 pos = ed::GetNodePosition(toEditorNodeId(node.id));
+            if (pos.x != node.position.x || pos.y != node.position.y) {
+                node.position.x = pos.x;
+                node.position.y = pos.y;
+            }
         }
 
         ed::SetCurrentEditor(nullptr);
@@ -269,7 +287,6 @@ namespace editor::graph {
                 if (ed::AcceptNewItem()) {
                     showCreateNodeMenu = true;
                     newNodePosition = ImGui::GetMousePos();
-                    ed::Suspend();
                 }
             }
         }

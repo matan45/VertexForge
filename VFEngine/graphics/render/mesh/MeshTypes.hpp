@@ -6,12 +6,14 @@
 #include "math/Frustum.hpp"
 #include <array>
 #include <string>
+#include <unordered_map>
 
 namespace render::mesh
 {
-    
+
     struct SubMeshGPUData
     {
+        std::string name;  // Submesh name for material assignment
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
         vk::Buffer indexBuffer;
@@ -26,19 +28,52 @@ namespace render::mesh
     {
         std::vector<SubMeshGPUData> subMeshes;
         math::AABB boundingBox;  // Combined AABB of all submeshes (local space)
+
+        // Find submesh index by name, returns -1 if not found
+        int findSubmeshIndex(const std::string& name) const {
+            for (size_t i = 0; i < subMeshes.size(); ++i) {
+                if (subMeshes[i].name == name) return static_cast<int>(i);
+            }
+            return -1;
+        }
     };
     
+    // Per-submesh material override
+    struct SubMeshMaterialInfo
+    {
+        std::string materialPath;  // Path to .vfMat file (empty = use default)
+        // Override PBR values if no material file
+        glm::vec4 albedo{1.0f, 1.0f, 1.0f, 1.0f};
+        float metallic = 0.0f;
+        float roughness = 0.5f;
+        float ao = 1.0f;
+        float emission = 0.0f;
+    };
+
     struct MeshRenderData
     {
         std::string meshPath;                              // Path to identify loaded mesh
         glm::mat4 modelMatrix{1.0f};                       // World transform
+
+        // Default PBR values (used if no MaterialComponent or no material assigned)
         glm::vec4 albedo{1.0f, 1.0f, 1.0f, 1.0f};         // Base color (RGB + alpha)
         float metallic = 0.0f;
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
+
+        // Material assignments per submesh (keyed by submesh name)
+        std::unordered_map<std::string, SubMeshMaterialInfo> submeshMaterials;
+        std::string defaultMaterialPath;                   // Default material for unassigned submeshes
+
         bool showBoundingBox = false;                      // Debug: render AABB wireframe
         int highlightedSubMesh = -1;                       // -1 = none, otherwise index of submesh to highlight
+
+        // Get material info for a submesh by name
+        const SubMeshMaterialInfo* getMaterialForSubmesh(const std::string& submeshName) const {
+            auto it = submeshMaterials.find(submeshName);
+            return (it != submeshMaterials.end()) ? &it->second : nullptr;
+        }
     };
 
     // Push constants for wireframe AABB rendering

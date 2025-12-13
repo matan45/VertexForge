@@ -1,6 +1,7 @@
 #include "MaterialEditorWindow.hpp"
 #include "../graph/ShaderGraphEditor.hpp"
 #include "../graph/ShaderGraphCompiler.hpp"
+#include "../graph/nodes/ShaderNode.hpp"
 #include <material/MaterialManager.hpp>
 #include <material/MaterialAsset.hpp>
 #include "imgui.h"
@@ -44,6 +45,16 @@ namespace windows {
             std::filesystem::path path(materialPath);
             materialData = material::MaterialManager::instance().createMaterial(
                 path.stem().string(), materialPath);
+        }
+
+        // Initialize node pins (not saved in .vfMat file, regenerated from node types)
+        if (materialData) {
+            for (auto& node : materialData->graph.nodes) {
+                // Only initialize if pins are empty (loaded from file)
+                if (node.inputs.empty() && node.outputs.empty()) {
+                    editor::graph::ShaderNodeFactory::initializeNode(node, materialData->graph.nextPinId);
+                }
+            }
         }
     }
 

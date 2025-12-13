@@ -5,10 +5,125 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/Utilities.hpp"
 #include "resource/MeshResource.hpp"
+#include "material/MaterialManager.hpp"
+#include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
 
 namespace render::mesh
 {
+    // Helper struct to hold extracted PBR values from a material
+    struct ExtractedPBRValues
+    {
+        glm::vec4 albedo{ 1.0f, 1.0f, 1.0f, 1.0f };
+        float metallic = 0.0f;
+        float roughness = 0.5f;
+        float ao = 1.0f;
+        float emission = 0.0f;
+    };
+
+    // Extract PBR values from a loaded MaterialData
+    static ExtractedPBRValues extractPBRFromMaterial(const material::MaterialData& matData)
+    {
+        ExtractedPBRValues pbr;
+
+        // Try to find parameters by common names
+        auto findParam = [&matData](const std::string& name) -> const material::MaterialParameter* {
+            auto it = matData.parameters.find(name);
+            return (it != matData.parameters.end()) ? &it->second : nullptr;
+        };
+
+        // Albedo / Base Color
+        if (const auto* param = findParam("Albedo")) {
+            if (std::holds_alternative<glm::vec4>(param->value)) {
+                pbr.albedo = std::get<glm::vec4>(param->value);
+            } else if (std::holds_alternative<glm::vec3>(param->value)) {
+                glm::vec3 rgb = std::get<glm::vec3>(param->value);
+                pbr.albedo = glm::vec4(rgb, 1.0f);
+            }
+        } else if (const auto* param = findParam("BaseColor")) {
+            if (std::holds_alternative<glm::vec4>(param->value)) {
+                pbr.albedo = std::get<glm::vec4>(param->value);
+            } else if (std::holds_alternative<glm::vec3>(param->value)) {
+                glm::vec3 rgb = std::get<glm::vec3>(param->value);
+                pbr.albedo = glm::vec4(rgb, 1.0f);
+            }
+        }
+
+        // Metallic
+        if (const auto* param = findParam("Metallic")) {
+            if (std::holds_alternative<float>(param->value)) {
+                pbr.metallic = std::get<float>(param->value);
+            }
+        }
+
+        // Roughness
+        if (const auto* param = findParam("Roughness")) {
+            if (std::holds_alternative<float>(param->value)) {
+                pbr.roughness = std::get<float>(param->value);
+            }
+        }
+
+        // Ambient Occlusion
+        if (const auto* param = findParam("AO")) {
+            if (std::holds_alternative<float>(param->value)) {
+                pbr.ao = std::get<float>(param->value);
+            }
+        } else if (const auto* param = findParam("AmbientOcclusion")) {
+            if (std::holds_alternative<float>(param->value)) {
+                pbr.ao = std::get<float>(param->value);
+            }
+        }
+
+        // Emission
+        if (const auto* param = findParam("Emission")) {
+            if (std::holds_alternative<float>(param->value)) {
+                pbr.emission = std::get<float>(param->value);
+            }
+        } else if (const auto* param = findParam("EmissiveStrength")) {
+            if (std::holds_alternative<float>(param->value)) {
+                pbr.emission = std::get<float>(param->value);
+            }
+        }
+
+        return pbr;
+    }
+
+    // Get PBR values for a submesh, checking material assignments in order:
+    // 1. Per-submesh material override
+    // 2. Default material for the mesh
+    // 3. Fallback defaults from MeshRenderData
+    static ExtractedPBRValues getPBRForSubmesh(const MeshRenderData& meshData, const std::string& submeshName)
+    {
+        ExtractedPBRValues pbr;
+        pbr.albedo = meshData.albedo;
+        pbr.metallic = meshData.metallic;
+        pbr.roughness = meshData.roughness;
+        pbr.ao = meshData.ao;
+        pbr.emission = meshData.emission;
+
+        std::string materialPath;
+
+        // Check for per-submesh material override
+        const auto* submeshMat = meshData.getMaterialForSubmesh(submeshName);
+        if (submeshMat && !submeshMat->materialPath.empty()) {
+            materialPath = submeshMat->materialPath;
+        }
+        // Fall back to default material
+        else if (!meshData.defaultMaterialPath.empty()) {
+            materialPath = meshData.defaultMaterialPath;
+        }
+
+        // Load and extract PBR values from the material
+        if (!materialPath.empty()) {
+            auto matData = material::MaterialManager::instance().loadMaterial(materialPath);
+            if (matData) {
+                pbr = extractPBRFromMaterial(*matData);
+            }
+        }
+
+        return pbr;
+    }
+
     StaticMeshPipeline::StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
                                            core::OffscreenResources& offscreenResources)
         : device{device}, swapChain{swapChain}, offscreenResources{offscreenResources}
@@ -875,6 +990,7 @@ namespace render::mesh
             }
 
             SubMeshGPUData subMesh{};
+            subMesh.name = meshData.name;  // Store submesh name for material assignment
 
             // Compute per-submesh bounding box
             bool subMeshBBInitialized = false;
@@ -1115,12 +1231,15 @@ namespace render::mesh
                     continue;  // Submesh is outside frustum, skip rendering
                 }
 
+                // Get PBR values from assigned material (or fallback to mesh defaults)
+                ExtractedPBRValues pbrValues = getPBRForSubmesh(meshData, subMesh.name);
+
                 // Setup push constants with transform and material properties
                 MeshPushConstants pushConstants{};
                 pushConstants.model = meshData.modelMatrix;
-                pushConstants.metallic = meshData.metallic;
-                pushConstants.roughness = meshData.roughness;
-                pushConstants.ao = meshData.ao;
+                pushConstants.metallic = pbrValues.metallic;
+                pushConstants.roughness = pbrValues.roughness;
+                pushConstants.ao = pbrValues.ao;
                 pushConstants.padding = 0.0f;
 
                 // Highlight selected submesh with different color and emission
@@ -1133,8 +1252,8 @@ namespace render::mesh
                 }
                 else
                 {
-                    pushConstants.albedo = meshData.albedo;
-                    pushConstants.emission = meshData.emission;
+                    pushConstants.albedo = pbrValues.albedo;
+                    pushConstants.emission = pbrValues.emission;
                 }
 
                 commandBuffer.pushConstants(pipelineLayout,

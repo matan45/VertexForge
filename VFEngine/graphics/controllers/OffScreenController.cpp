@@ -163,13 +163,31 @@ namespace controllers
             render::mesh::MeshRenderData renderData;
             renderData.meshPath = meshComp.meshPath;
             renderData.modelMatrix = worldTransform.worldMatrix;
-            // Default PBR values - could be extended with MaterialComponent in the future
+
+            // Default PBR values (used if no material assigned)
             renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
             renderData.metallic = 0.0f;
             renderData.roughness = 0.5f;
             renderData.ao = 1.0f;
             renderData.emission = 0.0f;
             renderData.showBoundingBox = meshComp.showBoundingBox;
+
+            // Check for MaterialComponent and populate material assignments
+            if (registry.all_of<components::MaterialComponent>(entity))
+            {
+                const auto& materialComp = registry.get<components::MaterialComponent>(entity);
+
+                // Set default material path
+                renderData.defaultMaterialPath = materialComp.defaultMaterial;
+
+                // Copy per-submesh material assignments
+                for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                {
+                    render::mesh::SubMeshMaterialInfo matInfo;
+                    matInfo.materialPath = materialPath;
+                    renderData.submeshMaterials[submeshName] = matInfo;
+                }
+            }
 
             meshDrawList.push_back(renderData);
         }

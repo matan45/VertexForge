@@ -50,6 +50,9 @@ namespace editor::graph {
         // Selection state
         uint32_t selectedNodeId = 0;
 
+        // First frame flag - to initialize node positions
+        bool needsPositionInit = false;
+
         // Context menu state
         bool showCreateNodeMenu = false;
         ImVec2 newNodePosition;
