@@ -1,10 +1,12 @@
 #include "ContentBrowser.hpp"
+#include "MeshPreviewWindow.hpp"
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/ResourceEvents.hpp"
+#include "imguiHandler/ImguiWindowHandler.hpp"
 #include <IconsFontAwesome6.h>
 #include <algorithm>
 
@@ -346,6 +348,24 @@ namespace windows
 			else if (selectedType == AssetType::Shader)
 			{
 				//TODO open in vscode or internal code editor
+			}
+			else if (selectedType == AssetType::Model)
+			{
+				// Open mesh preview window
+				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
+
+				// Check if preview window already exists and is still open
+				auto it = openMeshPreviews.find(path);
+				if (it == openMeshPreviews.end() || it->second.expired())
+				{
+					// Create new preview window
+					auto previewWindow = std::make_shared<MeshPreviewWindow>(path);
+					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+					openMeshPreviews[path] = previewWindow;
+				}
+
+				// Close the file info window since we're opening the preview
+				showFileWindow = false;
 			}
 		}
 

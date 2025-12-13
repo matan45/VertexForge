@@ -15,7 +15,11 @@ namespace render {
 	{
 	}
 
-	RenderPassHandler::~RenderPassHandler() = default;
+	RenderPassHandler::~RenderPassHandler()
+	{
+		// NOTE: Do NOT call Vulkan cleanup here - the device may already be destroyed
+		// All cleanup must happen in cleanUp() which is called before device destruction
+	}
 
 	void RenderPassHandler::init()
 	{
@@ -84,6 +88,11 @@ namespace render {
 		currentMeshDrawList = std::move(meshes);
 	}
 
+	void RenderPassHandler::setClearColor(const glm::vec4& color)
+	{
+		clearColor->setClearColor(color);
+	}
+
 	void RenderPassHandler::recreate() const
 	{
 		iblRenderer->recreate();
@@ -101,6 +110,12 @@ namespace render {
 		{
 			meshPipeline->cleanUp();
 			meshPipeline->cleanUpShader();
+		}
+		else if (meshPipeline)
+		{
+			// Even if not initialized, StaticMeshPipeline constructor creates a command pool
+			// that needs to be cleaned up before device destruction
+			meshPipeline->cleanUp();
 		}
 
 		iblRenderer->cleanUp();

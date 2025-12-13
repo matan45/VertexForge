@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/OffScreen.hpp"
 #include "math/Frustum.hpp"
+#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
@@ -62,6 +63,8 @@ namespace render
         
         void setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
+
+        void setClearColor(const glm::vec4& color);
 
         void cleanUp() const;
 

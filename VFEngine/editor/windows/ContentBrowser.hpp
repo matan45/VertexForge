@@ -5,10 +5,15 @@
 
 #include <string>
 #include <filesystem>
+#include <unordered_map>
+#include <memory>
 namespace fs = std::filesystem;
 
 namespace windows
 {
+    // Forward declaration
+    class MeshPreviewWindow;
+
     enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Other };
 
     struct Asset
@@ -53,6 +58,9 @@ namespace windows
         bool navigateFolder = false;
         bool iconsLoaded = false;
         bool importLocationSet = false;
+
+        // Track open mesh preview windows (key = mesh path)
+        std::unordered_map<std::string, std::weak_ptr<MeshPreviewWindow>> openMeshPreviews;
 
         static constexpr float THUMBNAIL_SIZE = 64.0f;
         static constexpr float PADDING = 16.0f;
