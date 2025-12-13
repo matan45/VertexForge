@@ -247,8 +247,7 @@ namespace events::scene {
     struct SceneClearedNotification : INotification {
         std::string_view getName() const override { return "SceneCleared"; }
     };
-
-    // Scene loading progress notifications
+    
     struct SceneLoadingStartedNotification : INotification {
         std::string scenePath;
 

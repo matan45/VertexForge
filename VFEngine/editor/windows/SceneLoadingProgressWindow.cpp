@@ -85,8 +85,7 @@ namespace windows {
             ImGui::Text("Loading: %s", entityName.c_str());
 
             ImGui::Spacing();
-
-            // Progress bar
+            
             ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f));
 
             ImGui::Spacing();

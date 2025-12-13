@@ -33,8 +33,7 @@ namespace windows {
 			cameraCmd.viewMatrix = editorCamera->getViewMatrix();
 			cameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();
 			dispatcher.execute(cameraCmd);
-
-			// Update mesh camera matrices with editor camera matrices each frame
+			
 			events::render::UpdateMeshCameraCommand meshCameraCmd;
 			meshCameraCmd.viewMatrix = editorCamera->getViewMatrix();
 			meshCameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();

@@ -25,7 +25,7 @@ namespace core {
 		vk::SurfaceKHR surface{ nullptr };
 		vk::Queue presentQueue{ nullptr };
 		vk::Queue graphicsAndComputeQueue{ nullptr };
-		vk::Queue transferQueue{ nullptr };  // Dedicated transfer queue (if available)
+		vk::Queue transferQueue{ nullptr };
 
 		QueueFamilyIndices queueFamilyIndices{};
 

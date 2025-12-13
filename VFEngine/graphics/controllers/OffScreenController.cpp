@@ -32,8 +32,7 @@ namespace controllers
     void OffScreenController::iblSet(std::string_view iblPath)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-
-        // Initialize IBL with new HDR
+        
         renderHandler->getIBL()->init(iblPath);
 
         // If mesh pipeline was initialized, reinitialize it with the new IBL textures
@@ -52,8 +51,7 @@ namespace controllers
     void OffScreenController::iblRemove()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-
-        // Remove IBL
+        
         renderHandler->getIBL()->remove();
 
         // If mesh pipeline was initialized with IBL textures, reinitialize with defaults
@@ -170,6 +168,7 @@ namespace controllers
             renderData.metallic = 0.0f;
             renderData.roughness = 0.5f;
             renderData.ao = 1.0f;
+            renderData.emission = 0.0f;
             renderData.showBoundingBox = meshComp.showBoundingBox;
 
             meshDrawList.push_back(renderData);

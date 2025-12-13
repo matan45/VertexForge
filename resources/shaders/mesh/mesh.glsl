@@ -21,6 +21,7 @@ layout(push_constant) uniform PushConstants {
     float metallic;
     float roughness;
     float ao;
+    float emission;
 } pc;
 
 void main() {
@@ -61,6 +62,7 @@ layout(push_constant) uniform PushConstants {
     float metallic;
     float roughness;
     float ao;
+    float emission;
 } pc;
 
 const float PI = 3.14159265359;

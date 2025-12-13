@@ -26,7 +26,7 @@ namespace render::mesh
     class StaticMeshPipeline
     {
     public:
-        StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
+        explicit StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
                            core::OffscreenResources& offscreenResources);
         ~StaticMeshPipeline() = default;
         
@@ -48,8 +48,7 @@ namespace render::mesh
         vk::RenderPass getRenderPass() const { return renderPass; }
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
-
-        // Update camera UBO (call once per frame before rendering)
+        
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos) const;
 
@@ -70,8 +69,7 @@ namespace render::mesh
         const math::AABB* getMeshBoundingBox(const std::string& meshId) const;
         
         std::vector<std::string> getLoadedMeshIds() const;
-
-        // Record rendering commands for all meshes in the draw list
+        
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                  uint32_t imageIndex,
                                  const std::vector<MeshRenderData>& meshDrawList) const;
@@ -125,8 +123,8 @@ namespace render::mesh
         ibl::ImageData defaultIrradiance{};
         ibl::ImageData defaultPrefilter{};
         ibl::ImageData defaultBrdfLUT{};
-
-        // Private initialization methods
+        
+        void loadShaders();
         void createDefaultIBLTextures();
         void createRenderPass();
         void createDescriptorSetLayout();

@@ -79,7 +79,7 @@ namespace render {
 		meshPipeline->init(irradiance, prefilter, brdfLUT);
 	}
 
-	void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData> meshes)
+	void RenderPassHandler::setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes)
 	{
 		currentMeshDrawList = std::move(meshes);
 	}

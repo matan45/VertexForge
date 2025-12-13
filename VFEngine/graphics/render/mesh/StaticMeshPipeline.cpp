@@ -27,18 +27,13 @@ namespace render::mesh
             device.getTransferQueue(),
             transferQueueFamily
         );
-
-        meshShader = std::make_shared<core::Shader>(device);
-        meshShader->readShader("../../resources/shaders/mesh/mesh.glsl");
-
-        wireframeShader = std::make_shared<core::Shader>(device);
-        wireframeShader->readShader("../../resources/shaders/mesh/wireframe.glsl");
     }
 
     void StaticMeshPipeline::init(const ibl::ImageData& irradianceMap,
                                   const ibl::ImageData& prefilterMap,
                                   const ibl::ImageData& brdfLUT)
     {
+        loadShaders();
         createRenderPass();
         createDescriptorSetLayout();
         createDescriptorPool();
@@ -53,6 +48,7 @@ namespace render::mesh
 
     void StaticMeshPipeline::initWithDefaults()
     {
+        loadShaders();
         createRenderPass();
         createDescriptorSetLayout();
         createDescriptorPool();
@@ -65,6 +61,15 @@ namespace render::mesh
         createWireframePipeline();
         createAABBBuffers();
         usingDefaultTextures = true;
+    }
+
+    void StaticMeshPipeline::loadShaders()
+    {
+        meshShader = std::make_shared<core::Shader>(device);
+        meshShader->readShader("../../resources/shaders/mesh/mesh.glsl");
+
+        wireframeShader = std::make_shared<core::Shader>(device);
+        wireframeShader->readShader("../../resources/shaders/mesh/wireframe.glsl");
     }
 
     void StaticMeshPipeline::createDefaultIBLTextures()
@@ -821,7 +826,6 @@ namespace render::mesh
         }
 
         MeshGPUData gpuData{};
-        gpuData.sourcePath = pathStr;
 
         uint32_t totalVertices = 0;
         uint32_t totalIndices = 0;
@@ -1073,6 +1077,7 @@ namespace render::mesh
             pushConstants.metallic = meshData.metallic;
             pushConstants.roughness = meshData.roughness;
             pushConstants.ao = meshData.ao;
+            pushConstants.emission = meshData.emission;
             pushConstants.padding = 0.0f;
 
             commandBuffer.pushConstants(pipelineLayout,

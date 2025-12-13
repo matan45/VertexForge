@@ -58,7 +58,7 @@ namespace render
         //(called when IBL is set/changed)
         void reinitMeshPipelineWithIBL();
         
-        void setMeshDrawList(std::vector<mesh::MeshRenderData> meshes);
+        void setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes);
 
         void cleanUp() const;
 

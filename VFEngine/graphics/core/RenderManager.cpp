@@ -51,14 +51,12 @@ namespace core {
 
 	void RenderManager::render()
 	{
-		// Wait for the previous frame using this slot to complete
 		vk::Result result = device.getLogicalDevice().waitForFences(
 			1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 		if (result != vk::Result::eSuccess) {
 			loggerError("failed to wait for in-flight fence");
 		}
-
-		// Acquire the next image from the swapchain
+		
 		result = device.getLogicalDevice().acquireNextImageKHR(
 			swapChain.getSwapchain(),
 			UINT64_MAX,

@@ -9,7 +9,7 @@
 
 namespace render::mesh
 {
-    // GPU-side data for a single submesh
+    
     struct SubMeshGPUData
     {
         vk::Buffer vertexBuffer;
@@ -24,12 +24,10 @@ namespace render::mesh
     // GPU-side mesh data containing all submeshes from a .vfmesh file
     struct MeshGPUData
     {
-        std::string sourcePath;  // Original .vfmesh file path
         std::vector<SubMeshGPUData> subMeshes;
         math::AABB boundingBox;  // Combined AABB of all submeshes (local space)
     };
-
-    // Data needed to render a single mesh instance each frame
+    
     struct MeshRenderData
     {
         std::string meshPath;                              // Path to identify loaded mesh
@@ -38,6 +36,7 @@ namespace render::mesh
         float metallic = 0.0f;
         float roughness = 0.5f;
         float ao = 1.0f;
+        float emission = 0.0f;
         bool showBoundingBox = false;                      // Debug: render AABB wireframe
     };
 
@@ -47,7 +46,7 @@ namespace render::mesh
         glm::mat4 mvp;        // 64 bytes - Model-View-Projection matrix
         glm::vec4 color;      // 16 bytes - Wireframe color
     };
-    // Camera UBO - matches binding 0 in mesh.glsl
+    
     struct CameraUBO
     {
         alignas(16) glm::mat4 view;
@@ -64,6 +63,7 @@ namespace render::mesh
         float metallic;       // 4 bytes
         float roughness;      // 4 bytes
         float ao;             // 4 bytes
+        float emission;        // 4 bytes
         float padding;        // 4 bytes (alignment)
     };
 

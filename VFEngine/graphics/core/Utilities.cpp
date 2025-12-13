@@ -308,8 +308,7 @@ namespace core {
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
 		);
 		createBuffer(stagingInfo, stagingBuffer, stagingMemory);
-
-		// Copy data to staging buffer
+		
 		void* mappedData = device.mapMemory(stagingMemory, 0, size, {});
 		std::memcpy(mappedData, srcData, static_cast<size_t>(size));
 		device.unmapMemory(stagingMemory);
@@ -331,14 +330,12 @@ namespace core {
 		device.destroyBuffer(stagingBuffer);
 		device.freeMemory(stagingMemory);
 	}
-
-	// TransferManager implementation
+	
 	TransferManager::TransferManager(const vk::Device& device, const vk::PhysicalDevice& physicalDevice,
 	                                 const vk::Queue& transferQueue, uint32_t transferQueueFamily)
 		: device(device), physicalDevice(physicalDevice), transferQueue(transferQueue),
 		  transferQueueFamily(transferQueueFamily)
 	{
-		// Create command pool for transfer operations
 		vk::CommandPoolCreateInfo poolInfo{};
 		poolInfo.queueFamilyIndex = transferQueueFamily;
 		poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer |
@@ -375,13 +372,11 @@ namespace core {
 			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 		Utilities::createBuffer(stagingInfo, op.stagingBuffer, op.stagingMemory);
-
-		// Copy data to staging buffer
+		
 		void* mappedData = device.mapMemory(op.stagingMemory, 0, size, {});
 		std::memcpy(mappedData, srcData, static_cast<size_t>(size));
 		device.unmapMemory(op.stagingMemory);
-
-		// Allocate command buffer
+		
 		vk::CommandBufferAllocateInfo allocInfo{};
 		allocInfo.commandPool = commandPool;
 		allocInfo.level = vk::CommandBufferLevel::ePrimary;

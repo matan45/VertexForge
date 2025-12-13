@@ -16,7 +16,7 @@ namespace core
 	{
 		std::optional<uint32_t> presentFamily;
 		std::optional<uint32_t> graphicsAndComputeFamily;
-		std::optional<uint32_t> transferFamily;  // Dedicated transfer queue (if available)
+		std::optional<uint32_t> transferFamily;
 
 		bool isComplete() const
 		{

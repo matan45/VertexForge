@@ -180,8 +180,7 @@ namespace core {
 	{
 		queueFamilyIndices = Utilities::findQueueFamiliesFromDevice(physicalDevice, surface);
 		const float queuePriority = 1.0f;
-
-		// Collect unique queue families to create
+		
 		std::unordered_set<uint32_t> uniqueQueueFamilies;
 		uniqueQueueFamilies.insert(queueFamilyIndices.graphicsAndComputeFamily.value());
 		uniqueQueueFamilies.insert(queueFamilyIndices.presentFamily.value());
