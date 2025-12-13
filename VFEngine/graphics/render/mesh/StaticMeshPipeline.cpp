@@ -77,8 +77,7 @@ namespace render::mesh
         // Create simple 1x1 cubemap textures with neutral values for fallback PBR lighting
         const uint32_t size = 1;
         const uint32_t mipLevels = 1;
-
-        // Studio-style IBL face colors:
+        
         // Face order: +X, -X, +Y (top), -Y (bottom), +Z, -Z
         auto createCubemap = [&](ibl::ImageData& imageData, const std::array<std::array<float, 4>, 6>& faceColors) {
             // Create image
@@ -1129,7 +1128,7 @@ namespace render::mesh
                     static_cast<size_t>(meshData.highlightedSubMesh) == subMeshIndex)
                 {
                     // Highlighted submesh: bright orange color with strong emission glow
-                    pushConstants.albedo = glm::vec4(1.0f, 0.4f, 0.0f, 1.0f);
+                    pushConstants.albedo = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
                     pushConstants.emission = 0.8f;
                 }
                 else

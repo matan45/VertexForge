@@ -234,8 +234,7 @@ namespace windows
             }
 
             ImGui::Spacing();
-
-            // Reset button
+            
             if (ImGui::Button("Reset", ImVec2(-1, 0)))
             {
                 meshPosition = glm::vec3(0.0f);
@@ -250,13 +249,11 @@ namespace windows
                 camera->fitToBounds(bounds);
             }
         }
-
-        // Camera controls
+        
         if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
-
-            // Zoom (camera distance)
+            
             float dist = camera->getDistance();
             float minDist = camera->getMinDistance();
             float maxDist = camera->getMaxDistance();

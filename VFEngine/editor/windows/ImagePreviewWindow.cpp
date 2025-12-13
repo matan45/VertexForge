@@ -175,8 +175,7 @@ namespace windows
             }
 
             ImGui::Spacing();
-
-            // Reset button
+            
             if (ImGui::Button("Reset View", ImVec2(-1, 0)))
             {
                 zoom = 1.0f;

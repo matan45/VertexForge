@@ -34,9 +34,6 @@ namespace controllers
         auto* renderHandler = offScreen->getRenderPassHandler();
         renderHandler->initMeshPipeline();
 
-        // Set neutral gray background for mesh preview
-        renderHandler->setClearColor(glm::vec4(0.18f, 0.18f, 0.18f, 1.0f));
-
         initialized = true;
     }
 
@@ -184,9 +181,9 @@ namespace controllers
         render::mesh::MeshRenderData renderData;
         renderData.meshPath = loadedMeshPath;
         renderData.modelMatrix = modelMatrix;
-        renderData.albedo = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);  // Light gray
+        renderData.albedo = glm::vec4(0.5294f, 0.8078f, 0.9216f, 1.0f);  // Light blue
         renderData.metallic = 0.0f;
-        renderData.roughness = 0.5f;
+        renderData.roughness = 1.0f;
         renderData.ao = 1.0f;
         renderData.emission = 0.0f;
         renderData.showBoundingBox = false;

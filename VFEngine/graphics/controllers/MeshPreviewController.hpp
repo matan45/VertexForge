@@ -34,32 +34,26 @@ namespace controllers
         bool initialized = false;
 
     public:
-        MeshPreviewController();
+        explicit MeshPreviewController();
         ~MeshPreviewController();
 
         void init();
         void cleanUp();
 
-        // Load a mesh and get its bounding box for camera fitting
-        // Returns true if mesh was loaded successfully
+        
         bool loadMesh(const std::string& meshPath, math::AABB& outBounds);
         void unloadMesh();
-
-        // Get submesh information for the loaded mesh
+        
         std::vector<services::SubMeshInfo> getSubMeshInfo() const;
-
-        // Set which submesh to highlight (-1 = none)
+        
         void setHighlightedSubMesh(int index) { highlightedSubMesh = index; }
         int getHighlightedSubMesh() const { return highlightedSubMesh; }
-
-        // Set mesh transform
+        
         void setModelMatrix(const glm::mat4& matrix) { modelMatrix = matrix; }
-
-        // Update camera matrices before rendering
+        
         void updateCamera(const glm::mat4& view, const glm::mat4& projection,
                          const glm::vec3& cameraPos);
-
-        // Render and return the ImGui texture handle
+        
         void* render();
 
         const math::AABB& getMeshBounds() const { return meshBounds; }

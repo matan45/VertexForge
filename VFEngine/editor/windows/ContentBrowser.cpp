@@ -329,7 +329,6 @@ namespace windows
 
 			if (selectedType == AssetType::Texture || selectedType == AssetType::HDR)
 			{
-				// Open image preview window
 				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
 				bool isHDR = (selectedType == AssetType::HDR);
 
@@ -342,17 +341,15 @@ namespace windows
 					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
 					openImagePreviews[path] = previewWindow;
 				}
-
-				// Close the file info window since we're opening the preview
+				
 				showFileWindow = false;
 			}
 			else if (selectedType == AssetType::Shader)
 			{
-				//TODO open in vscode or internal code editor
+				//TODO open in vscode
 			}
 			else if (selectedType == AssetType::Model)
 			{
-				// Open mesh preview window
 				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
 
 				// Check if preview window already exists and is still open
@@ -364,13 +361,11 @@ namespace windows
 					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
 					openMeshPreviews[path] = previewWindow;
 				}
-
-				// Close the file info window since we're opening the preview
+				
 				showFileWindow = false;
 			}
 			else if (selectedType == AssetType::Audio)
 			{
-				// Open audio preview window
 				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
 
 				// Check if preview window already exists and is still open
@@ -382,8 +377,7 @@ namespace windows
 					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
 					openAudioPreviews[path] = previewWindow;
 				}
-
-				// Close the file info window since we're opening the preview
+				
 				showFileWindow = false;
 			}
 		}

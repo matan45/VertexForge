@@ -11,7 +11,6 @@ namespace editor {
 
     void OrbitCamera::fitToBounds(const math::AABB& bounds)
     {
-        // Set target to center of bounding box
         target = bounds.getCenter();
 
         // Calculate distance to fit the entire mesh in view
@@ -73,12 +72,6 @@ namespace editor {
         glm::vec3 position = getPosition();
         viewMatrix = glm::lookAt(position, target, glm::vec3(0.0f, 1.0f, 0.0f));
         projectionMatrix = glm::perspective(glm::radians(fieldOfView), aspectRatio, nearPlane, farPlane);
-    }
-
-    void OrbitCamera::clampPitch()
-    {
-        // Clamp pitch to avoid gimbal lock and going upside down
-        pitch = glm::clamp(pitch, -89.0f, 89.0f);
     }
 
 }

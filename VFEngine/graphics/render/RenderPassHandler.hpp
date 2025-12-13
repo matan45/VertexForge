@@ -64,8 +64,6 @@ namespace render
         void setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
 
-        void setClearColor(const glm::vec4& color);
-
         void cleanUp() const;
 
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

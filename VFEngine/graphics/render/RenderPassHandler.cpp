@@ -15,11 +15,7 @@ namespace render {
 	{
 	}
 
-	RenderPassHandler::~RenderPassHandler()
-	{
-		// NOTE: Do NOT call Vulkan cleanup here - the device may already be destroyed
-		// All cleanup must happen in cleanUp() which is called before device destruction
-	}
+	RenderPassHandler::~RenderPassHandler() = default;
 
 	void RenderPassHandler::init()
 	{
@@ -86,11 +82,6 @@ namespace render {
 	void RenderPassHandler::setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes)
 	{
 		currentMeshDrawList = std::move(meshes);
-	}
-
-	void RenderPassHandler::setClearColor(const glm::vec4& color)
-	{
-		clearColor->setClearColor(color);
 	}
 
 	void RenderPassHandler::recreate() const

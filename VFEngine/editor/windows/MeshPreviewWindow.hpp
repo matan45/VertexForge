@@ -25,12 +25,10 @@ namespace windows
         std::string windowTitle;
         std::unique_ptr<editor::OrbitCamera> camera;
         std::unique_ptr<controllers::MeshPreviewController> controller;
-
-        // Mesh data
+        
         std::vector<services::SubMeshInfo> subMeshes;
         int selectedSubMesh = -1;  // -1 = all submeshes
-
-        // Mesh transform
+        
         glm::vec3 meshPosition{ 0.0f };
         glm::vec3 meshRotation{ 0.0f };  // Euler angles in degrees
         float meshScale = 1.0f;

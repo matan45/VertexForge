@@ -146,7 +146,10 @@ void main() {
     // Combine ambient
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    vec3 color = ambient;
+    // Add emission
+    vec3 emissive = albedo * pc.emission;
+
+    vec3 color = ambient + emissive;
 
     // HDR tonemapping (Reinhard)
     color = color / (color + vec3(1.0));
