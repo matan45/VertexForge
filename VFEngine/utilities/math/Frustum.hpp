@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <array>
+#include <cmath>
 
 namespace math
 {
@@ -40,32 +41,24 @@ namespace math
         }
 
         // Transform AABB by a matrix and return new AABB
-        AABB getTransformed(const glm::mat4& matrix) const
+        // Uses Arvo's algorithm for optimal performance (1 transform instead of 8)
+        AABB getTransformed(const glm::mat4& m) const
         {
-            // Get all 8 corners of the AABB
-            glm::vec3 corners[8] = {
-                glm::vec3(min.x, min.y, min.z),
-                glm::vec3(max.x, min.y, min.z),
-                glm::vec3(min.x, max.y, min.z),
-                glm::vec3(max.x, max.y, min.z),
-                glm::vec3(min.x, min.y, max.z),
-                glm::vec3(max.x, min.y, max.z),
-                glm::vec3(min.x, max.y, max.z),
-                glm::vec3(max.x, max.y, max.z)
-            };
+            glm::vec3 center = getCenter();
+            glm::vec3 extents = getExtents();
 
-            // Transform first corner to initialize new AABB
-            glm::vec4 transformed = matrix * glm::vec4(corners[0], 1.0f);
-            AABB result{glm::vec3(transformed), glm::vec3(transformed)};
+            // Transform center point
+            glm::vec3 newCenter = glm::vec3(m * glm::vec4(center, 1.0f));
 
-            // Expand to include all other transformed corners
-            for (int i = 1; i < 8; ++i)
-            {
-                transformed = matrix * glm::vec4(corners[i], 1.0f);
-                result.expand(glm::vec3(transformed));
-            }
+            // Compute new extents using absolute values of the rotation/scale matrix
+            // Each new axis extent is the sum of contributions from all original axes
+            glm::vec3 newExtents(
+                std::abs(m[0][0]) * extents.x + std::abs(m[1][0]) * extents.y + std::abs(m[2][0]) * extents.z,
+                std::abs(m[0][1]) * extents.x + std::abs(m[1][1]) * extents.y + std::abs(m[2][1]) * extents.z,
+                std::abs(m[0][2]) * extents.x + std::abs(m[1][2]) * extents.y + std::abs(m[2][2]) * extents.z
+            );
 
-            return result;
+            return AABB(newCenter - newExtents, newCenter + newExtents);
         }
     };
 

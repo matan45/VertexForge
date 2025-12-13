@@ -72,7 +72,8 @@ namespace render::mesh
         
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                  uint32_t imageIndex,
-                                 const std::vector<MeshRenderData>& meshDrawList) const;
+                                 const std::vector<MeshRenderData>& meshDrawList,
+                                 const math::Frustum* frustum) const;
 
     private:
         core::Device& device;
@@ -110,10 +111,9 @@ namespace render::mesh
         vk::Buffer aabbIndexBuffer;
         vk::DeviceMemory aabbIndexBufferMemory;
 
-        // Current camera matrices for AABB rendering and frustum culling
+        // Current camera matrices for AABB rendering
         mutable glm::mat4 currentView{1.0f};
         mutable glm::mat4 currentProjection{1.0f};
-        mutable math::Frustum currentFrustum;
 
         // Loaded meshes (key = mesh path)
         std::unordered_map<std::string, MeshGPUData> loadedMeshes;

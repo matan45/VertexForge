@@ -175,6 +175,7 @@ namespace controllers
         }
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
+        renderHandler->setCurrentFrustum(&currentFrustum);
     }
 
     void* OffScreenController::render()

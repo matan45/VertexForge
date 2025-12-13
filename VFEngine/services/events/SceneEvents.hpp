@@ -254,11 +254,11 @@ namespace events::scene {
         std::string_view getName() const override { return "SceneLoadingStarted"; }
     };
 
-    struct SceneLoadingProgressNotification : INotification {
+    struct SceneLoadingProgressUpdatedNotification : INotification {
         std::string currentEntityName;
         float progress;  // 0.0 - 1.0
 
-        std::string_view getName() const override { return "SceneLoadingProgress"; }
+        std::string_view getName() const override { return "SceneLoadingProgressUpdated"; }
     };
 
     struct SceneLoadingCompletedNotification : INotification {

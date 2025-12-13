@@ -114,7 +114,7 @@ namespace render {
 		
 		if (meshPipelineInitialized && !currentMeshDrawList.empty())
 		{
-			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList);
+			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum);
 		}
 	}
 

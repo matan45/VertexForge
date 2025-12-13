@@ -3,6 +3,7 @@
 #include "print/Logger.hpp"
 #include "../window/Window.hpp"
 
+#include <cassert>
 #include <unordered_set>
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -179,8 +180,13 @@ namespace core {
 	void Device::createLogicalDevice()
 	{
 		queueFamilyIndices = Utilities::findQueueFamiliesFromDevice(physicalDevice, surface);
+
+		// Precondition: pickPhysicalDevice() ensures isComplete() was true
+		assert(queueFamilyIndices.isComplete() &&
+			"Queue families must be complete - was pickPhysicalDevice() called first?");
+
 		const float queuePriority = 1.0f;
-		
+
 		std::unordered_set<uint32_t> uniqueQueueFamilies;
 		uniqueQueueFamilies.insert(queueFamilyIndices.graphicsAndComputeFamily.value());
 		uniqueQueueFamilies.insert(queueFamilyIndices.presentFamily.value());

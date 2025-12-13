@@ -687,10 +687,9 @@ namespace render::mesh
     void StaticMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                               const glm::vec3& cameraPos) const
     {
-        // Store for AABB wireframe rendering and frustum culling
+        // Store for AABB wireframe rendering
         currentView = view;
         currentProjection = projection;
-        currentFrustum.extractFromMatrix(projection * view);
 
         CameraUBO ubo{};
         ubo.view = view;
@@ -1034,7 +1033,8 @@ namespace render::mesh
 
     void StaticMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                                   uint32_t imageIndex,
-                                                  const std::vector<MeshRenderData>& meshDrawList) const
+                                                  const std::vector<MeshRenderData>& meshDrawList,
+                                                  const math::Frustum* frustum) const
     {
         if (meshDrawList.empty())
         {
@@ -1087,9 +1087,9 @@ namespace render::mesh
             // Render all submeshes with the same transform/material (with per-submesh frustum culling)
             for (const auto& subMesh : gpuData->subMeshes)
             {
-                // Per-submesh frustum culling (only if frustum is initialized)
-                if (currentFrustum.isInitialized() &&
-                    !currentFrustum.intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
+                // Per-submesh frustum culling (only if frustum is provided and initialized)
+                if (frustum && frustum->isInitialized() &&
+                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
                 {
                     continue;  // Submesh is outside frustum, skip rendering
                 }

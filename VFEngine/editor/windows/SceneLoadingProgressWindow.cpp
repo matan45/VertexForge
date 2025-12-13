@@ -21,8 +21,8 @@ namespace windows {
                 }
             });
 
-        progressToken = dispatcher.subscribe<events::scene::SceneLoadingProgressNotification>(
-            [this](const events::scene::SceneLoadingProgressNotification& notif) {
+        progressToken = dispatcher.subscribe<events::scene::SceneLoadingProgressUpdatedNotification>(
+            [this](const events::scene::SceneLoadingProgressUpdatedNotification& notif) {
                 currentProgress.store(notif.progress);
                 {
                     std::lock_guard<std::mutex> lock(dataMutex);

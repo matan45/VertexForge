@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/OffScreen.hpp"
+#include "math/Frustum.hpp"
 #include <memory>
 #include <vector>
 
@@ -35,6 +36,7 @@ namespace render
         // Mesh rendering state
         bool meshPipelineInitialized = false;
         mutable std::vector<mesh::MeshRenderData> currentMeshDrawList;
+        const math::Frustum* currentFrustum = nullptr;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -59,6 +61,7 @@ namespace render
         void reinitMeshPipelineWithIBL();
         
         void setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes);
+        void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
 
         void cleanUp() const;
 

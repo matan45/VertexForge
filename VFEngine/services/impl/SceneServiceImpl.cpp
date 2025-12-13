@@ -661,7 +661,7 @@ namespace services {
 
         // Create progress callback that publishes notifications
         auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total) {
-            events::scene::SceneLoadingProgressNotification progressNotif;
+            events::scene::SceneLoadingProgressUpdatedNotification progressNotif;
             progressNotif.currentEntityName = entityName;
             progressNotif.progress = (total > 0) ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
             dispatcher.publish(progressNotif);
