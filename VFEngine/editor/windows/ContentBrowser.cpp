@@ -1,10 +1,14 @@
 #include "ContentBrowser.hpp"
+#include "MeshPreviewWindow.hpp"
+#include "ImagePreviewWindow.hpp"
+#include "AudioPreviewWindow.hpp"
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/ResourceEvents.hpp"
+#include "imguiHandler/ImguiWindowHandler.hpp"
 #include <IconsFontAwesome6.h>
 #include <algorithm>
 
@@ -59,13 +63,6 @@ namespace windows
 			importLocationSet = true;
 		}
 		
-		if (pendingReleaseHandle.isValid()) {
-			events::render::ReleaseEditorTextureCommand releaseCmd;
-			releaseCmd.handle = pendingReleaseHandle.imguiDescriptorSet;
-			dispatcher.execute(releaseCmd);
-			pendingReleaseHandle = services::EditorTextureHandle{};
-		}
-
 		if (showCreateFolderModal)
 		{
 			ImGui::OpenPopup("Create New Folder");
@@ -114,39 +111,28 @@ namespace windows
 			{
 				drawFileWindow();
 			}
-			else
-			{
-				deferredRelease();
-			}
 
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-			
+
 			for (const auto& asset : assets)
 			{
 				if (matchesSearchQuery(asset))
 				{
-					printFilesNames(asset);
+					bool isSelected = (selectedFile == fs::path(asset.path));
+					printFilesNames(asset, isSelected);
 
-					if (ImGui::IsItemClicked(ImGuiMouseButton_Left) &&
-						ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-						&& (asset.type != AssetType::Other || !fs::is_directory(asset.path)))
+					// Single click to select
+					if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 					{
 						selectedFile = asset.path;
 						selectedType = asset.type;
-						showFileWindow = true;
-
-						// Mark old preview for deferred release (will be released next frame)
-						if (selectedImageHandle.isValid()) {
-							pendingReleaseHandle = selectedImageHandle;
-							selectedImageHandle = services::EditorTextureHandle{};
-						}
-
-						std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
-						if (selectedType == AssetType::Texture || selectedType == AssetType::HDR) {
-							events::render::LoadEditorTextureCommand loadCmd;
-							loadCmd.path = filePath;
-							loadCmd.isHDR = (selectedType == AssetType::HDR);
-							selectedImageHandle = dispatcher.execute(loadCmd);
+						
+						// Double click to open preview (for non-folders, excluding scenes)
+						if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
+							&& selectedType != AssetType::Scene
+							&& (selectedType != AssetType::Other || !fs::is_directory(asset.path)))
+						{
+							showFileWindow = true;
 						}
 					}
 				}
@@ -215,8 +201,25 @@ namespace windows
 		}
 	}
 
-	void ContentBrowser::printFilesNames(const Asset& asset)
+	void ContentBrowser::printFilesNames(const Asset& asset, bool isSelected)
 	{
+		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+		float itemWidth = THUMBNAIL_SIZE + PADDING;
+		float itemHeight = THUMBNAIL_SIZE + ImGui::GetTextLineHeightWithSpacing() + 4.0f;
+
+		// Draw selection highlight background
+		if (isSelected)
+		{
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			ImU32 highlightColor = IM_COL32(70, 130, 180, 100);  // Steel blue with transparency
+			drawList->AddRectFilled(
+				cursorPos,
+				ImVec2(cursorPos.x + itemWidth, cursorPos.y + itemHeight),
+				highlightColor,
+				4.0f  // Rounded corners
+			);
+		}
+
 		switch (asset.type)
 		{
 			using enum windows::AssetType;
@@ -324,28 +327,58 @@ namespace windows
 			ImGui::Text("File Path: %s", StringUtil::wstringToUtf8(selectedFile.wstring()).c_str());
 			ImGui::Separator();
 
-			if ((selectedType == AssetType::Texture || selectedType == AssetType::HDR) && selectedImageHandle.isValid())
+			if (selectedType == AssetType::Texture || selectedType == AssetType::HDR)
 			{
-				ImGui::Columns(2, nullptr, false);
-				ImGui::SetColumnOffset(1, 200.0f);
+				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
+				bool isHDR = (selectedType == AssetType::HDR);
 
-				ImGui::Text("Width: %d", selectedImageHandle.width);
-				ImGui::Text("Height: %d", selectedImageHandle.height);
-
-				ImGui::NextColumn();
-
-				ImVec2 imageSize(600, 400);
-				if (selectedImageHandle.height > 0) {
-					auto aspectRatio = static_cast<float>(selectedImageHandle.width) / selectedImageHandle.height;
-					imageSize.y = imageSize.x / aspectRatio;
+				// Check if preview window already exists and is still open
+				auto it = openImagePreviews.find(path);
+				if (it == openImagePreviews.end() || it->second.expired())
+				{
+					// Create new preview window
+					auto previewWindow = std::make_shared<ImagePreviewWindow>(path, isHDR);
+					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+					openImagePreviews[path] = previewWindow;
 				}
-				ImGui::Image(selectedImageHandle.imguiDescriptorSet, imageSize);
-
-				ImGui::Columns(1);
+				
+				showFileWindow = false;
 			}
 			else if (selectedType == AssetType::Shader)
 			{
-				//TODO open in vscode or internal code editor
+				//TODO open in vscode
+			}
+			else if (selectedType == AssetType::Model)
+			{
+				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
+
+				// Check if preview window already exists and is still open
+				auto it = openMeshPreviews.find(path);
+				if (it == openMeshPreviews.end() || it->second.expired())
+				{
+					// Create new preview window
+					auto previewWindow = std::make_shared<MeshPreviewWindow>(path);
+					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+					openMeshPreviews[path] = previewWindow;
+				}
+				
+				showFileWindow = false;
+			}
+			else if (selectedType == AssetType::Audio)
+			{
+				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
+
+				// Check if preview window already exists and is still open
+				auto it = openAudioPreviews.find(path);
+				if (it == openAudioPreviews.end() || it->second.expired())
+				{
+					// Create new preview window
+					auto previewWindow = std::make_shared<AudioPreviewWindow>(path);
+					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+					openAudioPreviews[path] = previewWindow;
+				}
+				
+				showFileWindow = false;
 			}
 		}
 
@@ -411,9 +444,13 @@ namespace windows
 				showCreateFolderModal = true;
 				newFolderName.clear(); // Clear the previous input.
 			}
-			if (ImGui::MenuItem("Create New File"))
+			if (ImGui::BeginMenu("Create"))
 			{
-				// Logic to create a new file
+				if (ImGui::MenuItem("Material"))
+				{
+					// Logic to create a new material
+				}
+				ImGui::EndMenu();
 			}
 			if (ImGui::MenuItem("Delete File"))
 			{
@@ -466,16 +503,6 @@ namespace windows
 		std::string searchQueryLower = StringUtil::toLower(searchQuery);
 
 		return assetNameLower.find(searchQueryLower) != std::string::npos;
-	}
-
-	void ContentBrowser::deferredRelease()
-	{
-		if (selectedImageHandle.isValid())
-		{
-			// Mark for deferred release (will be released next frame)
-			pendingReleaseHandle = selectedImageHandle;
-			selectedImageHandle = services::EditorTextureHandle{};
-		}
 	}
 
 	void ContentBrowser::navigateTo(const fs::path& path)

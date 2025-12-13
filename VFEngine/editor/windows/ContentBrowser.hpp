@@ -5,10 +5,17 @@
 
 #include <string>
 #include <filesystem>
+#include <unordered_map>
+#include <memory>
 namespace fs = std::filesystem;
 
 namespace windows
 {
+    // Forward declarations
+    class MeshPreviewWindow;
+    class ImagePreviewWindow;
+    class AudioPreviewWindow;
+
     enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Other };
 
     struct Asset
@@ -44,15 +51,14 @@ namespace windows
         services::EditorTextureHandle hdrIcon;
         services::EditorTextureHandle sceneIcon;
 
-        // Service-based image preview handle
-        services::EditorTextureHandle selectedImageHandle;
-
-        // Pending release handle - to defer release to next frame
-        services::EditorTextureHandle pendingReleaseHandle;
-
         bool navigateFolder = false;
         bool iconsLoaded = false;
         bool importLocationSet = false;
+
+        // Track open preview windows (key = file path)
+        std::unordered_map<std::string, std::weak_ptr<MeshPreviewWindow>> openMeshPreviews;
+        std::unordered_map<std::string, std::weak_ptr<ImagePreviewWindow>> openImagePreviews;
+        std::unordered_map<std::string, std::weak_ptr<AudioPreviewWindow>> openAudioPreviews;
 
         static constexpr float THUMBNAIL_SIZE = 64.0f;
         static constexpr float PADDING = 16.0f;
@@ -69,7 +75,7 @@ namespace windows
 
         void loadDirectory(const fs::path& path);
 
-        void printFilesNames(const Asset& asset);
+        void printFilesNames(const Asset& asset, bool isSelected);
 
         void drawFileWindow();
 
@@ -79,6 +85,5 @@ namespace windows
 
         void drawFolderTree(const fs::path& path);
         bool matchesSearchQuery(const Asset& asset) const;
-        void deferredRelease();
     };
 }

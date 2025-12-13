@@ -21,6 +21,8 @@ namespace render {
 		std::vector<vk::Framebuffer> framebuffers;
 
 		core::OffscreenResources& offscreenResources;
+		
+		glm::vec4 clearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
 
 	public:
 		explicit ClearColor(core::Device& device, core::SwapChain& swapChain, core::OffscreenResources& offscreenResources);
@@ -29,6 +31,8 @@ namespace render {
 		void init();
 		void recreate();
 		void cleanUp() const;
+		
+		const glm::vec4& getClearColor() const { return clearColorValue; }
 
 		void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

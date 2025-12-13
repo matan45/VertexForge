@@ -102,6 +102,12 @@ namespace render {
 			meshPipeline->cleanUp();
 			meshPipeline->cleanUpShader();
 		}
+		else if (meshPipeline)
+		{
+			// Even if not initialized, StaticMeshPipeline constructor creates a command pool
+			// that needs to be cleaned up before device destruction
+			meshPipeline->cleanUp();
+		}
 
 		iblRenderer->cleanUp();
 		clearColor->cleanUp();

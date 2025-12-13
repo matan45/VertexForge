@@ -41,6 +41,13 @@ namespace services {
         bool showBoundingBox = false;
     };
 
+    // Submesh information for mesh preview
+    struct SubMeshInfo {
+        std::string name;
+        uint32_t vertexCount = 0;
+        uint32_t indexCount = 0;
+    };
+
     struct EntityData {
         EntityHandle handle;
         std::string name;

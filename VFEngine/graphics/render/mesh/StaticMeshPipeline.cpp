@@ -77,8 +77,9 @@ namespace render::mesh
         // Create simple 1x1 cubemap textures with neutral values for fallback PBR lighting
         const uint32_t size = 1;
         const uint32_t mipLevels = 1;
-
-        auto createCubemap = [&](ibl::ImageData& imageData, std::array<float, 4> color) {
+        
+        // Face order: +X, -X, +Y (top), -Y (bottom), +Z, -Z
+        auto createCubemap = [&](ibl::ImageData& imageData, const std::array<std::array<float, 4>, 6>& faceColors) {
             // Create image
             vk::ImageCreateInfo imageInfo{};
             imageInfo.imageType = vk::ImageType::e2D;
@@ -107,10 +108,10 @@ namespace render::mesh
             // Create staging buffer with color data for all 6 faces
             std::vector<float> pixels(6 * 4);  // 6 faces * 4 components (RGBA)
             for (int i = 0; i < 6; i++) {
-                pixels[i * 4 + 0] = color[0];
-                pixels[i * 4 + 1] = color[1];
-                pixels[i * 4 + 2] = color[2];
-                pixels[i * 4 + 3] = color[3];
+                pixels[i * 4 + 0] = faceColors[i][0];
+                pixels[i * 4 + 1] = faceColors[i][1];
+                pixels[i * 4 + 2] = faceColors[i][2];
+                pixels[i * 4 + 3] = faceColors[i][3];
             }
 
             vk::DeviceSize imageSize = pixels.size() * sizeof(float);
@@ -205,11 +206,11 @@ namespace render::mesh
             viewInfo.subresourceRange.layerCount = 6;
             imageData.imageView = device.getLogicalDevice().createImageView(viewInfo);
 
-            // Create sampler
+            // Create sampler - use nearest filtering for 1x1 cubemap to prevent face blending
             vk::SamplerCreateInfo samplerInfo{};
-            samplerInfo.magFilter = vk::Filter::eLinear;
-            samplerInfo.minFilter = vk::Filter::eLinear;
-            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+            samplerInfo.magFilter = vk::Filter::eNearest;
+            samplerInfo.minFilter = vk::Filter::eNearest;
+            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
             samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
             samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
             samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
@@ -245,8 +246,8 @@ namespace render::mesh
             imageData.imageMemory = device.getLogicalDevice().allocateMemory(allocInfo);
             device.getLogicalDevice().bindImageMemory(imageData.image, imageData.imageMemory, 0);
 
-            // Default BRDF LUT value (white = full reflection)
-            std::array<float, 4> pixel = {1.0f, 1.0f, 1.0f, 1.0f};
+            // Default BRDF LUT value: (scale=1.0, bias=0.0) for specular = prefilteredColor * F
+            std::array<float, 4> pixel = {1.0f, 0.0f, 0.0f, 1.0f};
             vk::DeviceSize imageSize = sizeof(pixel);
             vk::Buffer stagingBuffer;
             vk::DeviceMemory stagingMemory;
@@ -344,10 +345,31 @@ namespace render::mesh
             imageData.sampler = device.getLogicalDevice().createSampler(samplerInfo);
         };
 
-        // Irradiance: neutral ambient light (gray)
-        createCubemap(defaultIrradiance, {0.3f, 0.3f, 0.3f, 1.0f});
-        // Prefilter: same neutral value
-        createCubemap(defaultPrefilter, {0.3f, 0.3f, 0.3f, 1.0f});
+        // Studio-style IBL colors per face (HDR values, high contrast for 1x1 cubemap):
+        // Face order: +X (right), -X (left), +Y (top), -Y (bottom), +Z (front), -Z (back)
+        // High contrast needed since 1x1 cubemap gets smoothed by linear filtering
+        std::array<std::array<float, 4>, 6> studioIrradiance = {{
+            {1.5f, 1.5f, 1.6f, 1.0f},    // +X: Right fill
+            {1.5f, 1.5f, 1.6f, 1.0f},    // -X: Left fill
+            {5.0f, 4.8f, 4.5f, 1.0f},    // +Y: Top key light (very bright, warm)
+            {0.15f, 0.18f, 0.22f, 1.0f}, // -Y: Bottom/floor (very dark)
+            {2.0f, 2.0f, 2.2f, 1.0f},    // +Z: Front fill
+            {0.8f, 0.8f, 1.0f, 1.0f}     // -Z: Back rim light
+        }};
+
+        std::array<std::array<float, 4>, 6> studioPrefilter = {{
+            {1.2f, 1.2f, 1.3f, 1.0f},    // +X
+            {1.2f, 1.2f, 1.3f, 1.0f},    // -X
+            {4.0f, 3.8f, 3.5f, 1.0f},    // +Y: Bright top reflection
+            {0.1f, 0.12f, 0.15f, 1.0f},  // -Y: Dark bottom
+            {1.5f, 1.5f, 1.6f, 1.0f},    // +Z
+            {0.6f, 0.6f, 0.8f, 1.0f}     // -Z
+        }};
+
+        // Irradiance: studio ambient lighting
+        createCubemap(defaultIrradiance, studioIrradiance);
+        // Prefilter: studio reflections
+        createCubemap(defaultPrefilter, studioPrefilter);
         // BRDF LUT: 2D texture
         create2DTexture(defaultBrdfLUT);
     }
@@ -715,17 +737,28 @@ namespace render::mesh
         }
         framebuffers.clear();
 
-        device.getLogicalDevice().destroyBuffer(cameraUBO);
-        device.getLogicalDevice().freeMemory(cameraUBOMemory);
-        cameraUBO = nullptr;
-        cameraUBOMemory = nullptr;
+        if (cameraUBO)
+        {
+            device.getLogicalDevice().destroyBuffer(cameraUBO);
+            device.getLogicalDevice().freeMemory(cameraUBOMemory);
+            cameraUBO = nullptr;
+            cameraUBOMemory = nullptr;
+        }
 
-        device.getLogicalDevice().destroyRenderPass(renderPass);
-        device.getLogicalDevice().destroyPipeline(graphicsPipeline);
-        device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
-        device.getLogicalDevice().freeDescriptorSets(descriptorPool, descriptorSet);
-        device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
-        device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
+        if (renderPass)
+            device.getLogicalDevice().destroyRenderPass(renderPass);
+        if (graphicsPipeline)
+            device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        if (pipelineLayout)
+            device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
+        if (descriptorPool)
+        {
+            if (descriptorSet)
+                device.getLogicalDevice().freeDescriptorSets(descriptorPool, descriptorSet);
+            device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
+        }
+        if (descriptorSetLayout)
+            device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
 
         // Clean up wireframe pipeline
         if (wireframePipeline)
@@ -1070,29 +1103,43 @@ namespace render::mesh
                 continue;  // Skip meshes that aren't loaded
             }
 
-            // Setup push constants with transform and material properties
-            MeshPushConstants pushConstants{};
-            pushConstants.model = meshData.modelMatrix;
-            pushConstants.albedo = meshData.albedo;
-            pushConstants.metallic = meshData.metallic;
-            pushConstants.roughness = meshData.roughness;
-            pushConstants.ao = meshData.ao;
-            pushConstants.emission = meshData.emission;
-            pushConstants.padding = 0.0f;
-
-            commandBuffer.pushConstants(pipelineLayout,
-                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                0, sizeof(MeshPushConstants), &pushConstants);
-
-            // Render all submeshes with the same transform/material (with per-submesh frustum culling)
-            for (const auto& subMesh : gpuData->subMeshes)
+            // Render all submeshes (with per-submesh frustum culling and highlighting)
+            for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
             {
+                const auto& subMesh = gpuData->subMeshes[subMeshIndex];
+
                 // Per-submesh frustum culling (only if frustum is provided and initialized)
                 if (frustum && frustum->isInitialized() &&
                     !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
                 {
                     continue;  // Submesh is outside frustum, skip rendering
                 }
+
+                // Setup push constants with transform and material properties
+                MeshPushConstants pushConstants{};
+                pushConstants.model = meshData.modelMatrix;
+                pushConstants.metallic = meshData.metallic;
+                pushConstants.roughness = meshData.roughness;
+                pushConstants.ao = meshData.ao;
+                pushConstants.padding = 0.0f;
+
+                // Highlight selected submesh with different color and emission
+                if (meshData.highlightedSubMesh >= 0 &&
+                    static_cast<size_t>(meshData.highlightedSubMesh) == subMeshIndex)
+                {
+                    // Highlighted submesh: bright orange color with strong emission glow
+                    pushConstants.albedo = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
+                    pushConstants.emission = 0.8f;
+                }
+                else
+                {
+                    pushConstants.albedo = meshData.albedo;
+                    pushConstants.emission = meshData.emission;
+                }
+
+                commandBuffer.pushConstants(pipelineLayout,
+                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                    0, sizeof(MeshPushConstants), &pushConstants);
 
                 // Bind vertex buffer
                 vk::Buffer vertexBuffers[] = {subMesh.vertexBuffer};

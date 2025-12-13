@@ -99,6 +99,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="controllers\Graphics.hpp" />
+    <ClInclude Include="controllers\MeshPreviewController.hpp" />
     <ClInclude Include="controllers\OffScreenController.hpp" />
     <ClInclude Include="controllers\RenderController.hpp" />
     <ClInclude Include="controllers\TextureController.hpp" />
@@ -126,6 +127,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Graphics.cpp" />
+    <ClCompile Include="controllers\MeshPreviewController.cpp" />
     <ClCompile Include="controllers\OffScreenController.cpp" />
     <ClCompile Include="controllers\RenderController.cpp" />
     <ClCompile Include="controllers\TextureController.cpp" />

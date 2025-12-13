@@ -17,7 +17,13 @@ namespace imguiPass {
 	{
 	}
 
-	OffScreenViewPort::~OffScreenViewPort() = default;
+	OffScreenViewPort::~OffScreenViewPort()
+	{
+		if (commandPool)
+		{
+			commandPool->cleanUp();
+		}
+	}
 
 	void OffScreenViewPort::init()
 	{
@@ -64,8 +70,13 @@ namespace imguiPass {
 		device.getLogicalDevice().waitIdle();
 
 		renderPassHandler->cleanUp();
-
 		commandPool->cleanUp();
+
+		for (auto const& resources : offscreenResources.colorImages) {
+			if (resources.descriptorSet) {
+				ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+			}
+		}
 
 		device.getLogicalDevice().destroySampler(sampler);
 
