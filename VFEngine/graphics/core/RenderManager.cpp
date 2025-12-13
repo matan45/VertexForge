@@ -128,6 +128,10 @@ namespace core {
 	void RenderManager::recreate(uint32_t width, uint32_t height) const
 	{
 		if (width == 0 || height == 0) return;  // Skip if minimized
+
+		// Wait for all GPU work to complete before recreating resources
+		device.getLogicalDevice().waitIdle();
+
 		commandPool->recreate();  // Reallocate command buffers if needed
 
 		imguiRender->recreate();
