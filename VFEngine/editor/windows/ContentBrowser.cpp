@@ -63,13 +63,6 @@ namespace windows
 			importLocationSet = true;
 		}
 		
-		if (pendingReleaseHandle.isValid()) {
-			events::render::ReleaseEditorTextureCommand releaseCmd;
-			releaseCmd.handle = pendingReleaseHandle.imguiDescriptorSet;
-			dispatcher.execute(releaseCmd);
-			pendingReleaseHandle = services::EditorTextureHandle{};
-		}
-
 		if (showCreateFolderModal)
 		{
 			ImGui::OpenPopup("Create New Folder");
@@ -118,10 +111,6 @@ namespace windows
 			{
 				drawFileWindow();
 			}
-			else
-			{
-				deferredRelease();
-			}
 
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 
@@ -137,10 +126,11 @@ namespace windows
 					{
 						selectedFile = asset.path;
 						selectedType = asset.type;
-
-						// Double click to open preview (for non-folders)
+						
+						// Double click to open preview (for non-folders, excluding scenes)
 						if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-							&& (asset.type != AssetType::Other || !fs::is_directory(asset.path)))
+							&& selectedType != AssetType::Scene
+							&& (selectedType != AssetType::Other || !fs::is_directory(asset.path)))
 						{
 							showFileWindow = true;
 						}
@@ -460,9 +450,13 @@ namespace windows
 				showCreateFolderModal = true;
 				newFolderName.clear(); // Clear the previous input.
 			}
-			if (ImGui::MenuItem("Create New File"))
+			if (ImGui::BeginMenu("Create"))
 			{
-				// Logic to create a new file
+				if (ImGui::MenuItem("Material"))
+				{
+					// Logic to create a new material
+				}
+				ImGui::EndMenu();
 			}
 			if (ImGui::MenuItem("Delete File"))
 			{
@@ -515,16 +509,6 @@ namespace windows
 		std::string searchQueryLower = StringUtil::toLower(searchQuery);
 
 		return assetNameLower.find(searchQueryLower) != std::string::npos;
-	}
-
-	void ContentBrowser::deferredRelease()
-	{
-		if (selectedImageHandle.isValid())
-		{
-			// Mark for deferred release (will be released next frame)
-			pendingReleaseHandle = selectedImageHandle;
-			selectedImageHandle = services::EditorTextureHandle{};
-		}
 	}
 
 	void ContentBrowser::navigateTo(const fs::path& path)

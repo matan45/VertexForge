@@ -100,9 +100,13 @@ namespace windows
             short minVal = 0, maxVal = 0;
             for (size_t j = sampleStart; j < sampleEnd; j += channels)
             {
-                short sample = data.data[j];
-                minVal = std::min(minVal, sample);
-                maxVal = std::max(maxVal, sample);
+                // Check all channels to get accurate amplitude
+                for (uint32_t ch = 0; ch < channels && j + ch < sampleEnd; ++ch)
+                {
+                    short sample = data.data[j + ch];
+                    minVal = std::min(minVal, sample);
+                    maxVal = std::max(maxVal, sample);
+                }
             }
 
             WaveformPoint point;

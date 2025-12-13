@@ -95,12 +95,13 @@ namespace windows
         // Update camera aspect ratio
         camera->setAspectRatio(width / height);
 
-        // Build model matrix from scale and rotation
+        // Build model matrix from position, rotation, and scale (TRS order)
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::scale(model, glm::vec3(meshScale));
+        model = glm::translate(model, meshPosition);
         model = glm::rotate(model, glm::radians(meshRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::scale(model, glm::vec3(meshScale));
         controller->setModelMatrix(model);
 
         // Update camera matrices in the controller
@@ -187,14 +188,23 @@ namespace windows
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
 
-            // Scale
-            ImGui::Text("Scale");
+            // Position
+            ImGui::Text("Pos X");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
-            if (ImGui::SliderFloat("##Scale", &meshScale, 0.01f, 10.0f, "%.2f"))
-            {
-                meshScale = glm::clamp(meshScale, 0.001f, 100.0f);
-            }
+            ImGui::DragFloat("##PosX", &meshPosition.x, 0.1f, -1000.0f, 1000.0f, "%.2f");
+
+            ImGui::Text("Pos Y");
+            ImGui::SameLine(50.0f);
+            ImGui::SetNextItemWidth(itemWidth);
+            ImGui::DragFloat("##PosY", &meshPosition.y, 0.1f, -1000.0f, 1000.0f, "%.2f");
+
+            ImGui::Text("Pos Z");
+            ImGui::SameLine(50.0f);
+            ImGui::SetNextItemWidth(itemWidth);
+            ImGui::DragFloat("##PosZ", &meshPosition.z, 0.1f, -1000.0f, 1000.0f, "%.2f");
+
+            ImGui::Spacing();
 
             // Rotation
             ImGui::Text("Rot X");
@@ -214,11 +224,23 @@ namespace windows
 
             ImGui::Spacing();
 
+            // Scale
+            ImGui::Text("Scale");
+            ImGui::SameLine(50.0f);
+            ImGui::SetNextItemWidth(itemWidth);
+            if (ImGui::SliderFloat("##Scale", &meshScale, 0.01f, 10.0f, "%.2f"))
+            {
+                meshScale = glm::clamp(meshScale, 0.001f, 100.0f);
+            }
+
+            ImGui::Spacing();
+
             // Reset button
             if (ImGui::Button("Reset", ImVec2(-1, 0)))
             {
-                meshScale = 1.0f;
+                meshPosition = glm::vec3(0.0f);
                 meshRotation = glm::vec3(0.0f);
+                meshScale = 1.0f;
             }
 
             // Fit camera button

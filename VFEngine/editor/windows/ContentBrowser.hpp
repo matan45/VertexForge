@@ -51,12 +51,6 @@ namespace windows
         services::EditorTextureHandle hdrIcon;
         services::EditorTextureHandle sceneIcon;
 
-        // Service-based image preview handle
-        services::EditorTextureHandle selectedImageHandle;
-
-        // Pending release handle - to defer release to next frame
-        services::EditorTextureHandle pendingReleaseHandle;
-
         bool navigateFolder = false;
         bool iconsLoaded = false;
         bool importLocationSet = false;
@@ -91,6 +85,5 @@ namespace windows
 
         void drawFolderTree(const fs::path& path);
         bool matchesSearchQuery(const Asset& asset) const;
-        void deferredRelease();
     };
 }

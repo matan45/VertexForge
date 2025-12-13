@@ -31,8 +31,9 @@ namespace windows
         int selectedSubMesh = -1;  // -1 = all submeshes
 
         // Mesh transform
-        float meshScale = 1.0f;
+        glm::vec3 meshPosition{ 0.0f };
         glm::vec3 meshRotation{ 0.0f };  // Euler angles in degrees
+        float meshScale = 1.0f;
 
         // Window state
         bool isOpen = true;
