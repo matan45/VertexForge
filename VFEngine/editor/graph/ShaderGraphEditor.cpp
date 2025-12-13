@@ -72,8 +72,13 @@ namespace editor::graph {
         // Handle deletion
         handleDeletion();
 
-        // Handle context menu
-        handleContextMenu();
+        // Check for context menu trigger (inside editor context)
+        ed::Suspend();
+        if (ed::ShowBackgroundContextMenu()) {
+            newNodePosition = ed::ScreenToCanvas(ImGui::GetMousePos());
+            showCreateNodeMenu = true;
+        }
+        ed::Resume();
 
         ed::End();
 
@@ -94,6 +99,9 @@ namespace editor::graph {
         }
 
         ed::SetCurrentEditor(nullptr);
+
+        // Handle popup outside of editor context entirely
+        handleContextMenu();
     }
 
     void ShaderGraphEditor::drawNode(material::ShaderNode& node) {
@@ -268,22 +276,13 @@ namespace editor::graph {
     }
 
     void ShaderGraphEditor::handleContextMenu() {
-        // Check for right-click on background using native ImGui detection
-        ed::Suspend();
-        if (ed::ShowBackgroundContextMenu()) {
-            // Get the canvas position for node creation
-            newNodePosition = ed::ScreenToCanvas(ImGui::GetMousePos());
-            showCreateNodeMenu = true;
-        }
-        ed::Resume();
-
-        // Handle popup outside of suspend/resume, in normal ImGui context
+        // This is called outside ed::SetCurrentEditor context
         if (showCreateNodeMenu) {
-            ImGui::OpenPopup("CreateNodeMenu");
+            ImGui::OpenPopup("AddNode");
             showCreateNodeMenu = false;
         }
 
-        if (ImGui::BeginPopup("CreateNodeMenu")) {
+        if (ImGui::BeginPopup("AddNode")) {
             if (ImGui::MenuItem("Scalar")) {
                 createNode(material::NodeType::ConstantScalar, newNodePosition);
                 ImGui::CloseCurrentPopup();
@@ -304,8 +303,10 @@ namespace editor::graph {
 
         currentGraph->nodes.push_back(node);
 
-        // Set node position in editor
+        // Set node position in editor (need to set editor context since we might be outside it)
+        ed::SetCurrentEditor(editorContext);
         ed::SetNodePosition(toEditorNodeId(node.id), position);
+        ed::SetCurrentEditor(nullptr);
 
         if (onGraphChanged) onGraphChanged();
     }

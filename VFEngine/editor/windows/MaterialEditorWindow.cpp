@@ -105,10 +105,10 @@ namespace windows {
 
         ImGui::SetNextWindowSize(ImVec2(1200, 800), ImGuiCond_FirstUseEver);
 
-        std::string title = windowTitle;
-        if (isDirty) title += " *";
+        // Use consistent title width to prevent window resizing when dirty state changes
+        std::string title = windowTitle + (isDirty ? " *" : "  ");
 
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar;
         if (ImGui::Begin(title.c_str(), &isOpen, flags)) {
             if (isOpen) {
                 drawToolbar();
@@ -122,7 +122,7 @@ namespace windows {
                 float bottomHeight = contentSize.y - graphHeight - ImGui::GetStyle().ItemSpacing.y;
 
                 // Top row
-                ImGui::BeginChild("TopRow", ImVec2(0, graphHeight), false);
+                ImGui::BeginChild("TopRow", ImVec2(0, graphHeight), false, ImGuiWindowFlags_NoScrollbar);
                 {
                     ImVec2 topSize = ImGui::GetContentRegionAvail();
 
@@ -143,7 +143,7 @@ namespace windows {
                 ImGui::EndChild();
 
                 // Bottom row
-                ImGui::BeginChild("BottomRow", ImVec2(0, bottomHeight), false);
+                ImGui::BeginChild("BottomRow", ImVec2(0, bottomHeight), false, ImGuiWindowFlags_NoScrollbar);
                 {
                     ImVec2 bottomSize = ImGui::GetContentRegionAvail();
 
@@ -201,8 +201,10 @@ namespace windows {
             compileMaterial();
         }
 
-        // Compile status
+        // Compile status (fixed width to prevent layout shifts)
         ImGui::SameLine();
+        ImGui::BeginGroup();
+        ImGui::PushItemWidth(120);
         if (showCompileError) {
             ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Compile Error!");
             if (ImGui::IsItemHovered()) {
@@ -211,10 +213,12 @@ namespace windows {
                 ImGui::EndTooltip();
             }
         } else if (materialData && !materialData->needsRecompile) {
-            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Compiled");
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Compiled      ");
         } else {
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Needs Compile");
         }
+        ImGui::PopItemWidth();
+        ImGui::EndGroup();
 
         ImGui::Separator();
     }
