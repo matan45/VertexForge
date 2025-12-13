@@ -92,6 +92,7 @@
   <ItemGroup>
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="config\Config.hpp" />
+    <ClInclude Include="math\Frustum.hpp" />
     <ClInclude Include="math\MathHelper.hpp" />
     <ClInclude Include="nfd\FileDialog.hpp" />
     <ClInclude Include="print\EditorLogger.hpp" />

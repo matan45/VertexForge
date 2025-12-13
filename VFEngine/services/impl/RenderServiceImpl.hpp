@@ -1,6 +1,7 @@
 #pragma once
 #include "../interfaces/IRenderService.hpp"
 #include "../events/RenderEvents.hpp"
+#include "../events/SceneEvents.hpp"
 #include <memory>
 #include <unordered_map>
 
@@ -44,6 +45,15 @@ namespace services {
         bool isReady() const override;
         uint64_t getFrameNumber() const override;
 
+        // Mesh Operations
+        std::string loadMesh(const std::string& meshPath);
+        void unloadMesh(const std::string& meshId);
+        void updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
+                              const glm::vec3& cameraPos);
+        bool isMeshLoaded(const std::string& meshPath) const;
+        std::vector<std::string> getLoadedMeshes() const;
+        void prepareFrameMeshes();
+
     private:
         controllers::OffScreen* offScreen;
         std::optional<std::string> currentIBLPath;
@@ -53,6 +63,9 @@ namespace services {
 
         // Track loaded editor textures for cleanup
         std::unordered_map<void*, std::unique_ptr<dto::EditorTexture>> loadedTextures;
+
+        // Subscription token for mesh preloading
+        events::SubscriptionToken meshDataChangedToken;
     };
 
 }

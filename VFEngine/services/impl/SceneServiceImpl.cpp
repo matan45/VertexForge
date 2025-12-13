@@ -7,6 +7,8 @@
 #include "../events/EventDispatcher.hpp"
 #include "../events/RenderEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include <nlohmann/json.hpp>
+#include <fstream>
 
 namespace services {
 
@@ -469,6 +471,7 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::MeshComponent>();
         MeshData data;
         data.meshPath = comp.meshPath;
+        data.showBoundingBox = comp.showBoundingBox;
 
         return data;
     }
@@ -483,10 +486,20 @@ namespace services {
         if (sceneEntity.hasComponent<components::MeshComponent>()) {
             auto& comp = sceneEntity.getComponent<components::MeshComponent>();
             comp.meshPath = mesh.meshPath;
+            comp.showBoundingBox = mesh.showBoundingBox;
         }
         else {
             auto& comp = sceneEntity.addComponent<components::MeshComponent>();
             comp.meshPath = mesh.meshPath;
+            comp.showBoundingBox = mesh.showBoundingBox;
+        }
+
+        // Publish notification to allow preloading of mesh assets
+        if (!mesh.meshPath.empty()) {
+            events::scene::MeshDataChangedNotification notification;
+            notification.entity = entity;
+            notification.meshPath = mesh.meshPath;
+            events::EventDispatcher::instance().publish(notification);
         }
 
         return true;
@@ -634,14 +647,36 @@ namespace services {
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
-        
+
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
         // Clear selection
         selectedEntity = std::nullopt;
-        
-        bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph);
+
+        // Publish loading started notification
+        events::scene::SceneLoadingStartedNotification startNotif;
+        startNotif.scenePath = filePath;
+        dispatcher.publish(startNotif);
+
+        // Create progress callback that publishes notifications
+        auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total) {
+            events::scene::SceneLoadingProgressUpdatedNotification progressNotif;
+            progressNotif.currentEntityName = entityName;
+            progressNotif.progress = (total > 0) ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
+            dispatcher.publish(progressNotif);
+        };
+
+        bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph, progressCallback);
+
+        // Publish loading completed notification
+        events::scene::SceneLoadingCompletedNotification completeNotif;
+        completeNotif.scenePath = filePath;
+        completeNotif.success = success;
+        if (!success) {
+            completeNotif.errorMessage = "Failed to load scene file";
+        }
+        dispatcher.publish(completeNotif);
 
         if (success) {
             // IBL is a scene-level property, always attached to root entity only.
@@ -653,6 +688,20 @@ namespace services {
                     events::render::SetIBLCommand setIblCmd;
                     setIblCmd.hdrPath = ibl.fileName;
                     dispatcher.execute(setIblCmd);
+                }
+            }
+
+            // Preload meshes for all entities with MeshComponent
+            // This is needed because scene loading bypasses setMeshData which normally triggers preloading
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto meshView = registry.view<components::MeshComponent>();
+            for (auto entity : meshView) {
+                const auto& meshComp = meshView.get<components::MeshComponent>(entity);
+                if (!meshComp.meshPath.empty()) {
+                    events::scene::MeshDataChangedNotification meshNotif;
+                    meshNotif.entity = internal::toHandle(entity);
+                    meshNotif.meshPath = meshComp.meshPath;
+                    dispatcher.publish(meshNotif);
                 }
             }
 

@@ -24,37 +24,67 @@ namespace core {
 		imguiRender = std::make_unique<imguiPass::ImguiRender>(device, swapChain, *commandPool, window);
 		imguiRender->init();
 
-		// Create semaphores for synchronization
+		uint32_t imageCount = swapChain.getImageCount();
+
+		// Per-frame sync objects
+		imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+		inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+		// Per-swapchain-image semaphores (as suggested by validation layer)
+		renderFinishedSemaphores.resize(imageCount);
+
+		// Track which fence each image is using (initially null)
+		imagesInFlight.resize(imageCount, nullptr);
+
 		vk::SemaphoreCreateInfo semaphoreInfo{};
+		vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
 
-		imageAvailableSemaphore = device.getLogicalDevice().createSemaphore(semaphoreInfo);
-		renderFinishedSemaphore = device.getLogicalDevice().createSemaphore(semaphoreInfo);
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			imageAvailableSemaphores[i] = device.getLogicalDevice().createSemaphore(semaphoreInfo);
+			inFlightFences[i] = device.getLogicalDevice().createFence(fenceInfo);
+		}
 
-		// Create a fence for GPU-CPU synchronization
-		vk::FenceCreateInfo fenceInfo{};
-		renderFence = device.getLogicalDevice().createFence(fenceInfo);
+		for (uint32_t i = 0; i < imageCount; i++) {
+			renderFinishedSemaphores[i] = device.getLogicalDevice().createSemaphore(semaphoreInfo);
+		}
 	}
 
 	void RenderManager::render()
 	{
-		// Acquire the next image from the swapchain
-		vk::Result result = device.getLogicalDevice().acquireNextImageKHR(
+		vk::Result result = device.getLogicalDevice().waitForFences(
+			1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+		if (result != vk::Result::eSuccess) {
+			loggerError("failed to wait for in-flight fence");
+		}
+		
+		result = device.getLogicalDevice().acquireNextImageKHR(
 			swapChain.getSwapchain(),
 			UINT64_MAX,
-			imageAvailableSemaphore,
+			imageAvailableSemaphores[currentFrame],
 			nullptr,
 			&imageIndex
 		);
 
 		if (result == vk::Result::eErrorOutOfDateKHR) {
-			recreate(window->getHeight(), window->getWidth());  // Handle swapchain recreation
+			recreate(window->getHeight(), window->getWidth());
 			return;
 		}
 
-		// Reset the fence before using it for synchronization
-		result = device.getLogicalDevice().resetFences(1, &renderFence);
+		// Check if a previous frame is using this image (wait for it)
+		if (imagesInFlight[imageIndex]) {
+			result = device.getLogicalDevice().waitForFences(
+				1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+			if (result != vk::Result::eSuccess) {
+				loggerError("failed to wait for image in flight fence");
+			}
+		}
+		// Mark this image as now being in use by this frame
+		imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
+		// Reset the fence only after we know we will submit work
+		result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
 		if (result != vk::Result::eSuccess) {
-			loggerError("failed to reset fences");
+			loggerError("failed to reset fence");
 		}
 
 		commandPool->resetCommandBuffer(imageIndex);
@@ -71,12 +101,12 @@ namespace core {
 		commandPool->getCommandBuffer(imageIndex).end();
 
 		// Submit the command buffer for rendering
+		// Use per-frame semaphore for wait, per-image semaphore for signal
 		vk::SubmitInfo submitInfo{};
-		std::array <vk::Semaphore, 1> waitSemaphores = { imageAvailableSemaphore };
-		std::array < vk::Semaphore, 1> signalSemaphores = { renderFinishedSemaphore };
-		std::array < vk::PipelineStageFlags, 1> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+		std::array<vk::Semaphore, 1> waitSemaphores = { imageAvailableSemaphores[currentFrame] };
+		std::array<vk::Semaphore, 1> signalSemaphores = { renderFinishedSemaphores[imageIndex] };
+		std::array<vk::PipelineStageFlags, 1> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
-		//need also get here the offscreen command buffer
 		vk::CommandBuffer cmdBuffer = commandPool->getCommandBuffer(imageIndex);
 		submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
 		submitInfo.pWaitSemaphores = waitSemaphores.data();
@@ -86,17 +116,13 @@ namespace core {
 		submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphores.size());
 		submitInfo.pSignalSemaphores = signalSemaphores.data();
 
-		device.getGraphicsQueue().submit(submitInfo, renderFence);
+		device.getGraphicsQueue().submit(submitInfo, inFlightFences[currentFrame]);
 
-		// Wait for the GPU to finish executing the command buffer before continuing
-		result = device.getLogicalDevice().waitForFences(1, &renderFence, VK_TRUE, UINT64_MAX);
-		if (result != vk::Result::eSuccess) {
-			loggerError("failed to wait fences");
-		}
+		// Present the rendered image (use per-image semaphore)
+		present(imageIndex);
 
-		// Present the rendered image
-		present();
-
+		// Advance to next frame
+		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
 	void RenderManager::recreate(uint32_t width, uint32_t height) const
@@ -115,9 +141,14 @@ namespace core {
 
 		imguiRender->cleanUp();
 
-		device.getLogicalDevice().destroySemaphore(imageAvailableSemaphore);
-		device.getLogicalDevice().destroySemaphore(renderFinishedSemaphore);
-		device.getLogicalDevice().destroyFence(renderFence);
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			device.getLogicalDevice().destroySemaphore(imageAvailableSemaphores[i]);
+			device.getLogicalDevice().destroyFence(inFlightFences[i]);
+		}
+
+		for (const auto& semaphore : renderFinishedSemaphores) {
+			device.getLogicalDevice().destroySemaphore(semaphore);
+		}
 	}
 
 	void RenderManager::draw(const vk::CommandBuffer& commandBuffer) const
@@ -127,14 +158,14 @@ namespace core {
 		imguiRender->render(commandBuffer, imageIndex);
 	}
 
-	void RenderManager::present() const
+	void RenderManager::present(uint32_t frameIndex) const
 	{
 		// Present the image to the screen
 		vk::PresentInfoKHR presentInfo{};
-		std::array<vk::Semaphore, 1> waitSemaphores = { renderFinishedSemaphore };
+		std::array<vk::Semaphore, 1> waitSemaphores = { renderFinishedSemaphores[frameIndex] };
 		presentInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
 		presentInfo.pWaitSemaphores = waitSemaphores.data();
-		std::array <vk::SwapchainKHR, 1> swapChains = { swapChain.getSwapchain() };
+		std::array<vk::SwapchainKHR, 1> swapChains = { swapChain.getSwapchain() };
 		presentInfo.swapchainCount = static_cast<uint32_t>(swapChains.size());
 		presentInfo.pSwapchains = swapChains.data();
 		presentInfo.pImageIndices = &imageIndex;

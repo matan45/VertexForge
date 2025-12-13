@@ -25,6 +25,7 @@ namespace core {
 		vk::SurfaceKHR surface{ nullptr };
 		vk::Queue presentQueue{ nullptr };
 		vk::Queue graphicsAndComputeQueue{ nullptr };
+		vk::Queue transferQueue{ nullptr };
 
 		QueueFamilyIndices queueFamilyIndices{};
 
@@ -56,6 +57,8 @@ namespace core {
 		const QueueFamilyIndices& getQueueFamilyIndices() const { return queueFamilyIndices; }
 		const vk::Queue& getPresentQueue() const { return presentQueue; }
 		const vk::Queue& getGraphicsQueue() const { return graphicsAndComputeQueue; }
+		const vk::Queue& getTransferQueue() const { return transferQueue; }
+		bool hasDedicatedTransferQueue() const { return queueFamilyIndices.hasDedicatedTransferQueue(); }
 
 	};
 

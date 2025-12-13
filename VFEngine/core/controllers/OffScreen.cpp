@@ -38,4 +38,35 @@ namespace controllers {
 	{
 		offScreenController->iblRemove();
 	}
+
+	std::string OffScreen::meshLoad(std::string_view meshPath)
+	{
+		return offScreenController->meshLoad(meshPath);
+	}
+
+	void OffScreen::meshUnload(const std::string& meshId)
+	{
+		offScreenController->meshUnload(meshId);
+	}
+
+	void OffScreen::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
+	                                 const glm::vec3& cameraPos)
+	{
+		offScreenController->meshUpdateCamera(view, projection, cameraPos);
+	}
+
+	bool OffScreen::isMeshLoaded(const std::string& meshPath) const
+	{
+		return offScreenController->isMeshLoaded(meshPath);
+	}
+
+	std::vector<std::string> OffScreen::getLoadedMeshes() const
+	{
+		return offScreenController->getLoadedMeshes();
+	}
+
+	void OffScreen::prepareFrameMeshes()
+	{
+		offScreenController->prepareFrameMeshes();
+	}
 }

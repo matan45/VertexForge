@@ -138,6 +138,7 @@ namespace components {
 
 	struct MeshComponent {
 		std::string meshPath;  // Path to .vfmesh file
+		bool showBoundingBox = false;  // Debug: render AABB wireframe
 	};
 
 }

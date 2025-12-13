@@ -55,6 +55,10 @@ namespace render
 
         const ibl::ImageData& getBrdfLUTImage() const;
         const ibl::ImageData& getPrefilterImage() const;
+        const ibl::ImageData& getIrradianceImage() const;
+
+        // Check if IBL textures have been generated (init() was called)
+        bool isInitialized() const { return iblInitialized; }
 
     private:
         core::Device& device;
@@ -63,6 +67,7 @@ namespace render
         vk::UniqueCommandPool commandPool;
         std::shared_ptr<core::Texture> hdrTexture;
         bool isDisplay = false;
+        bool iblInitialized = false;
 
         std::unique_ptr<ibl::IrradianceGenerator> irradianceGen;
         std::unique_ptr<ibl::BRDFLUTGenerator> brdfLUTGen;

@@ -100,6 +100,7 @@
     <ClInclude Include="windows\ImportProgressWindow.hpp" />
     <ClInclude Include="windows\MainImguiWindow.hpp" />
     <ClInclude Include="windows\SceneGraph.hpp" />
+    <ClInclude Include="windows\SceneLoadingProgressWindow.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -112,7 +113,21 @@
     <ClCompile Include="windows\ImportProgressWindow.cpp" />
     <ClCompile Include="windows\MainImguiWindow.cpp" />
     <ClCompile Include="windows\SceneGraph.cpp" />
+    <ClCompile Include="windows\SceneLoadingProgressWindow.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\resources\editor\VertexForge-icon.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\animation-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\audio-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\folder.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\glsl-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\hdr-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\mesh-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\scene.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\texture-file.vfImage" />
+    <None Include="..\..\resources\editor\window-icon.vfImage" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\core\Core.vcxproj">

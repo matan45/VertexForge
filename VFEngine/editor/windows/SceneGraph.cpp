@@ -405,6 +405,7 @@ namespace windows
                                 events::scene::SetMeshDataCommand cmd;
                                 cmd.entity = handle;
                                 cmd.meshData.meshPath = path;
+                                cmd.meshData.showBoundingBox = meshOpt->showBoundingBox;
                                 dispatcher.execute(cmd);
                             }
                             else
@@ -412,6 +413,17 @@ namespace windows
                                 vfLogError("Selected mesh file does not exist or cannot be read: {}", path);
                             }
                         }
+                    }
+
+                    // Show Bounding Box checkbox
+                    bool showBoundingBox = meshOpt->showBoundingBox;
+                    if (ImGui::Checkbox("Show Bounding Box", &showBoundingBox))
+                    {
+                        events::scene::SetMeshDataCommand cmd;
+                        cmd.entity = handle;
+                        cmd.meshData.meshPath = meshOpt->meshPath;
+                        cmd.meshData.showBoundingBox = showBoundingBox;
+                        dispatcher.execute(cmd);
                     }
 
                     ImGui::Unindent(10.0f);

@@ -247,5 +247,33 @@ namespace events::scene {
     struct SceneClearedNotification : INotification {
         std::string_view getName() const override { return "SceneCleared"; }
     };
+    
+    struct SceneLoadingStartedNotification : INotification {
+        std::string scenePath;
+
+        std::string_view getName() const override { return "SceneLoadingStarted"; }
+    };
+
+    struct SceneLoadingProgressUpdatedNotification : INotification {
+        std::string currentEntityName;
+        float progress;  // 0.0 - 1.0
+
+        std::string_view getName() const override { return "SceneLoadingProgressUpdated"; }
+    };
+
+    struct SceneLoadingCompletedNotification : INotification {
+        std::string scenePath;
+        bool success;
+        std::string errorMessage;  // Only set if success is false
+
+        std::string_view getName() const override { return "SceneLoadingCompleted"; }
+    };
+
+    struct MeshDataChangedNotification : INotification {
+        services::EntityHandle entity;
+        std::string meshPath;
+
+        std::string_view getName() const override { return "MeshDataChanged"; }
+    };
 
 }

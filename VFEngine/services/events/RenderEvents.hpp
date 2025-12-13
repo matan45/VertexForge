@@ -89,4 +89,42 @@ namespace events::render {
         std::string_view getName() const override { return "RenderFrameComplete"; }
     };
 
+    // ============================================
+    // MESH COMMANDS - Mesh loading and rendering
+    // ============================================
+    
+    struct LoadMeshCommand : ICommand<std::string> {
+        std::string meshPath;
+
+        std::string_view getName() const override { return "LoadMesh"; }
+    };
+    
+    struct UnloadMeshCommand : ICommand<> {
+        std::string meshId;
+
+        std::string_view getName() const override { return "UnloadMesh"; }
+    };
+    
+    struct UpdateMeshCameraCommand : ICommand<> {
+        glm::mat4 viewMatrix;
+        glm::mat4 projectionMatrix;
+        glm::vec3 cameraPosition;
+
+        std::string_view getName() const override { return "UpdateMeshCamera"; }
+    };
+
+    // ============================================
+    // MESH QUERIES
+    // ============================================
+
+    struct IsMeshLoadedQuery : IQuery<bool> {
+        std::string meshPath;
+
+        std::string_view getName() const override { return "IsMeshLoaded"; }
+    };
+
+    struct GetLoadedMeshesQuery : IQuery<std::vector<std::string>> {
+        std::string_view getName() const override { return "GetLoadedMeshes"; }
+    };
+
 }

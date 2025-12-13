@@ -32,17 +32,30 @@ namespace core {
 				indices.graphicsAndComputeFamily = i;
 			}
 
-			if (indices.isComplete()) {
-				break;
+			// Look for a dedicated transfer queue (transfer-only, no graphics)
+			// This allows async transfers without blocking graphics work
+			if ((queueFamily.queueFlags & vk::QueueFlagBits::eTransfer) &&
+			    !(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) &&
+			    !indices.transferFamily.has_value()) {
+				indices.transferFamily = i;
 			}
 
 			i++;
+		}
+
+		// If no dedicated transfer queue found, fall back to graphics queue for transfers
+		if (!indices.transferFamily.has_value() && indices.graphicsAndComputeFamily.has_value()) {
+			indices.transferFamily = indices.graphicsAndComputeFamily;
 		}
 
 		if (!indices.isComplete()) {
 			if (debug) {
 				loggerWarning("Could not find complete queue family support.");
 			}
+		}
+
+		if (debug && indices.hasDedicatedTransferQueue()) {
+			loggerInfo("Found dedicated transfer queue family: {}", indices.transferFamily.value());
 		}
 
 		return indices;
@@ -295,8 +308,7 @@ namespace core {
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
 		);
 		createBuffer(stagingInfo, stagingBuffer, stagingMemory);
-
-		// Copy data to staging buffer
+		
 		void* mappedData = device.mapMemory(stagingMemory, 0, size, {});
 		std::memcpy(mappedData, srcData, static_cast<size_t>(size));
 		device.unmapMemory(stagingMemory);
@@ -317,6 +329,132 @@ namespace core {
 		// Cleanup staging buffer
 		device.destroyBuffer(stagingBuffer);
 		device.freeMemory(stagingMemory);
+	}
+	
+	TransferManager::TransferManager(const vk::Device& device, const vk::PhysicalDevice& physicalDevice,
+	                                 const vk::Queue& transferQueue, uint32_t transferQueueFamily)
+		: device(device), physicalDevice(physicalDevice), transferQueue(transferQueue),
+		  transferQueueFamily(transferQueueFamily)
+	{
+		vk::CommandPoolCreateInfo poolInfo{};
+		poolInfo.queueFamilyIndex = transferQueueFamily;
+		poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer |
+		                 vk::CommandPoolCreateFlagBits::eTransient;
+		commandPool = device.createCommandPool(poolInfo);
+	}
+
+	TransferManager::~TransferManager()
+	{
+		waitAll();
+		if (commandPool) {
+			device.destroyCommandPool(commandPool);
+		}
+	}
+
+	void TransferManager::copyToBufferAsync(vk::Buffer dstBuffer, const void* srcData,
+	                                        vk::DeviceSize size, vk::DeviceSize offset)
+	{
+		if (size == 0 || srcData == nullptr) {
+			return;
+		}
+
+		// Poll first to clean up any completed transfers
+		pollTransfers();
+
+		TransferOperation op{};
+
+		// Create fence for this transfer
+		vk::FenceCreateInfo fenceInfo{};
+		op.fence = device.createFence(fenceInfo);
+
+		// Create staging buffer
+		BufferInfoRequest stagingInfo(device, physicalDevice, size,
+			vk::BufferUsageFlagBits::eTransferSrc,
+			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		Utilities::createBuffer(stagingInfo, op.stagingBuffer, op.stagingMemory);
+		
+		void* mappedData = device.mapMemory(op.stagingMemory, 0, size, {});
+		std::memcpy(mappedData, srcData, static_cast<size_t>(size));
+		device.unmapMemory(op.stagingMemory);
+		
+		vk::CommandBufferAllocateInfo allocInfo{};
+		allocInfo.commandPool = commandPool;
+		allocInfo.level = vk::CommandBufferLevel::ePrimary;
+		allocInfo.commandBufferCount = 1;
+		auto cmdBuffers = device.allocateCommandBuffers(allocInfo);
+		op.commandBuffer = cmdBuffers[0];
+
+		// Record copy command
+		vk::CommandBufferBeginInfo beginInfo{};
+		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+		op.commandBuffer.begin(beginInfo);
+		vk::BufferCopy copyRegion{0, offset, size};
+		op.commandBuffer.copyBuffer(op.stagingBuffer, dstBuffer, copyRegion);
+		op.commandBuffer.end();
+
+		// Submit to transfer queue with fence
+		vk::SubmitInfo submitInfo{};
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &op.commandBuffer;
+		transferQueue.submit(submitInfo, op.fence);
+
+		pendingTransfers.push_back(op);
+	}
+
+	void TransferManager::pollTransfers()
+	{
+		auto it = pendingTransfers.begin();
+		while (it != pendingTransfers.end()) {
+			// Check if transfer is complete (non-blocking)
+			vk::Result result = device.getFenceStatus(it->fence);
+			if (result == vk::Result::eSuccess) {
+				cleanupTransfer(*it);
+				it = pendingTransfers.erase(it);
+			} else {
+				++it;
+			}
+		}
+	}
+
+	void TransferManager::waitAll()
+	{
+		if (pendingTransfers.empty()) {
+			return;
+		}
+
+		// Collect all fences
+		std::vector<vk::Fence> fences;
+		fences.reserve(pendingTransfers.size());
+		for (const auto& op : pendingTransfers) {
+			fences.push_back(op.fence);
+		}
+
+		// Wait for all fences
+		if (!fences.empty()) {
+			[[maybe_unused]] auto result = device.waitForFences(fences, VK_TRUE, UINT64_MAX);
+		}
+
+		// Clean up all transfers
+		for (auto& op : pendingTransfers) {
+			cleanupTransfer(op);
+		}
+		pendingTransfers.clear();
+	}
+
+	void TransferManager::cleanupTransfer(TransferOperation& op)
+	{
+		if (op.fence) {
+			device.destroyFence(op.fence);
+		}
+		if (op.commandBuffer) {
+			device.freeCommandBuffers(commandPool, op.commandBuffer);
+		}
+		if (op.stagingBuffer) {
+			device.destroyBuffer(op.stagingBuffer);
+		}
+		if (op.stagingMemory) {
+			device.freeMemory(op.stagingMemory);
+		}
 	}
 
 }

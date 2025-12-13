@@ -121,6 +121,8 @@
     <ClInclude Include="render\ibl\IrradianceGenerator.hpp" />
     <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
     <ClInclude Include="render\ibl\SkyboxRenderer.hpp" />
+    <ClInclude Include="render\mesh\MeshTypes.hpp" />
+    <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Graphics.cpp" />
@@ -144,6 +146,15 @@
     <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
+    <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\resources\shaders\ibl\brdf.glsl" />
+    <None Include="..\..\resources\shaders\ibl\equirectangular_convolution.glsl" />
+    <None Include="..\..\resources\shaders\ibl\prefilter.glsl" />
+    <None Include="..\..\resources\shaders\ibl\skybox.glsl" />
+    <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
+    <None Include="..\..\resources\shaders\mesh\wireframe.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">

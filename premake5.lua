@@ -26,7 +26,7 @@ project "Editor"
    location "VFEngine/editor"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp" }
+   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp","resources/editor/**.vfImage" }
    
    includedirs {
 	  "dependencies/imgui",
@@ -152,7 +152,7 @@ project "Graphics"
    location "VFEngine/graphics"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/graphics/**.hpp", "VFEngine/graphics/**.cpp" }
+   files { "VFEngine/graphics/**.hpp", "VFEngine/graphics/**.cpp" ,"resources/shaders/**.glsl"}
 
    includedirs {
       "dependencies/glfw/include",

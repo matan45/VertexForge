@@ -18,6 +18,9 @@ namespace services {
 
         frameCounter++;
 
+        // Prepare mesh draw list from ECS entities before rendering
+        prepareFrameMeshes();
+
         void* descriptorSet = offScreen->render();
 
         ViewportTextureHandle handle;
@@ -202,6 +205,80 @@ namespace services {
             [this](const events::render::GetIBLPathQuery&) {
                 return getIBLPath();
             });
+
+        // Mesh command handlers
+        dispatcher.registerCommandHandler<events::render::LoadMeshCommand>(
+            [this](const events::render::LoadMeshCommand& cmd) {
+                return loadMesh(cmd.meshPath);
+            });
+
+        dispatcher.registerCommandHandler<events::render::UnloadMeshCommand>(
+            [this](const events::render::UnloadMeshCommand& cmd) {
+                unloadMesh(cmd.meshId);
+            });
+
+        dispatcher.registerCommandHandler<events::render::UpdateMeshCameraCommand>(
+            [this](const events::render::UpdateMeshCameraCommand& cmd) {
+                updateMeshCamera(cmd.viewMatrix, cmd.projectionMatrix, cmd.cameraPosition);
+            });
+
+        // Mesh query handlers
+        dispatcher.registerQueryHandler<events::render::IsMeshLoadedQuery>(
+            [this](const events::render::IsMeshLoadedQuery& q) {
+                return isMeshLoaded(q.meshPath);
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetLoadedMeshesQuery>(
+            [this](const events::render::GetLoadedMeshesQuery&) {
+                return getLoadedMeshes();
+            });
+
+        // Subscribe to mesh data changes to preload meshes when they're assigned to entities
+        // This avoids synchronous loading during frame preparation which causes frame spikes
+        meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
+            [this](const events::scene::MeshDataChangedNotification& notification) {
+                if (!notification.meshPath.empty() && !isMeshLoaded(notification.meshPath)) {
+                    loadMesh(notification.meshPath);
+                }
+            });
+    }
+
+    // Mesh Operations
+    std::string RenderServiceImpl::loadMesh(const std::string& meshPath) {
+        if (!offScreen) {
+            return "";
+        }
+        return offScreen->meshLoad(meshPath);
+    }
+
+    void RenderServiceImpl::unloadMesh(const std::string& meshId) {
+        if (offScreen) {
+            offScreen->meshUnload(meshId);
+        }
+    }
+
+    void RenderServiceImpl::updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
+                                             const glm::vec3& cameraPos) {
+        if (offScreen) {
+            offScreen->meshUpdateCamera(view, projection, cameraPos);
+        }
+    }
+
+    bool RenderServiceImpl::isMeshLoaded(const std::string& meshPath) const {
+        return offScreen && offScreen->isMeshLoaded(meshPath);
+    }
+
+    std::vector<std::string> RenderServiceImpl::getLoadedMeshes() const {
+        if (!offScreen) {
+            return {};
+        }
+        return offScreen->getLoadedMeshes();
+    }
+
+    void RenderServiceImpl::prepareFrameMeshes() {
+        if (offScreen) {
+            offScreen->prepareFrameMeshes();
+        }
     }
 
 }

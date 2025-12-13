@@ -38,6 +38,7 @@ namespace services {
 
     struct MeshData {
         std::string meshPath;
+        bool showBoundingBox = false;
     };
 
     struct EntityData {
