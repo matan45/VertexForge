@@ -46,5 +46,8 @@ namespace serialization
 		static json serializeMesh(const components::MeshComponent& mesh);
 		static void deserializeMesh(const json& j, components::MeshComponent& mesh);
 
+		static json serializeMaterial(const components::MaterialComponent& material);
+		static void deserializeMaterial(const json& j, components::MaterialComponent& material);
+
 	};
 }

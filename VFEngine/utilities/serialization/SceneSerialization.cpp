@@ -78,6 +78,10 @@ namespace serialization {
 			componentsJson["mesh"] = serializeMesh(entity.getComponent<components::MeshComponent>());
 		}
 
+		if (entity.hasComponent<components::MaterialComponent>()) {
+			componentsJson["material"] = serializeMaterial(entity.getComponent<components::MaterialComponent>());
+		}
+
 		entityJson["components"] = componentsJson;
 
 		// Serialize children recursively
@@ -132,6 +136,61 @@ namespace serialization {
 		}
 		if (auto it = j.find("showBoundingBox"); it != j.end() && it->is_boolean()) {
 			mesh.showBoundingBox = it->get<bool>();
+		}
+	}
+
+	json SceneSerialization::serializeMaterial(const components::MaterialComponent& material) {
+		json j;
+
+		// Clean and save default material path
+		std::string cleanDefaultPath = material.defaultMaterial;
+		if (auto pos = cleanDefaultPath.find('\0'); pos != std::string::npos) {
+			cleanDefaultPath.resize(pos);
+		}
+		j["defaultMaterial"] = cleanDefaultPath;
+
+		// Serialize submesh materials map
+		json subMeshMaterialsJson = json::object();
+		for (const auto& [submeshName, matPath] : material.subMeshMaterials) {
+			std::string cleanMatPath = matPath;
+			if (auto pos = cleanMatPath.find('\0'); pos != std::string::npos) {
+				cleanMatPath.resize(pos);
+			}
+			subMeshMaterialsJson[submeshName] = cleanMatPath;
+		}
+		j["subMeshMaterials"] = subMeshMaterialsJson;
+
+		// Serialize parameter overrides
+		json paramOverridesJson = json::object();
+		for (const auto& [paramName, value] : material.parameterOverrides) {
+			paramOverridesJson[paramName] = value;
+		}
+		j["parameterOverrides"] = paramOverridesJson;
+
+		return j;
+	}
+
+	void SceneSerialization::deserializeMaterial(const json& j, components::MaterialComponent& material) {
+		if (auto it = j.find("defaultMaterial"); it != j.end() && it->is_string()) {
+			material.defaultMaterial = it->get<std::string>();
+		}
+
+		if (auto it = j.find("subMeshMaterials"); it != j.end() && it->is_object()) {
+			material.subMeshMaterials.clear();
+			for (auto& [key, value] : it->items()) {
+				if (value.is_string()) {
+					material.subMeshMaterials[key] = value.get<std::string>();
+				}
+			}
+		}
+
+		if (auto it = j.find("parameterOverrides"); it != j.end() && it->is_object()) {
+			material.parameterOverrides.clear();
+			for (auto& [key, value] : it->items()) {
+				if (value.is_number()) {
+					material.parameterOverrides[key] = value.get<float>();
+				}
+			}
 		}
 	}
 
@@ -214,6 +273,11 @@ namespace serialization {
 			if (componentsJson.contains("mesh")) {
 				auto& meshComp = entity.addOrReplaceComponent<components::MeshComponent>();
 				deserializeMesh(componentsJson["mesh"], meshComp);
+			}
+
+			if (componentsJson.contains("material")) {
+				auto& matComp = entity.addOrReplaceComponent<components::MaterialComponent>();
+				deserializeMaterial(componentsJson["material"], matComp);
 			}
 		}
 

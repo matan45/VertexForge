@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\..\bin\Utilities\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\</IntDir>
+    <OutDir>$(ProjectDir)..\..\bin\Utilities\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
     <TargetName>Utilities</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\..\bin\Utilities\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\</IntDir>
+    <OutDir>$(ProjectDir)..\..\bin\Utilities\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
     <TargetName>Utilities</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -92,6 +92,9 @@
   <ItemGroup>
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="config\Config.hpp" />
+    <ClInclude Include="material\MaterialAsset.hpp" />
+    <ClInclude Include="material\MaterialManager.hpp" />
+    <ClInclude Include="material\MaterialTypes.hpp" />
     <ClInclude Include="math\Frustum.hpp" />
     <ClInclude Include="math\MathHelper.hpp" />
     <ClInclude Include="nfd\FileDialog.hpp" />
@@ -119,6 +122,8 @@
     <ClInclude Include="uuid\UUID.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="material\MaterialAsset.cpp" />
+    <ClCompile Include="material\MaterialManager.cpp" />
     <ClCompile Include="math\MathHelper.cpp" />
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />

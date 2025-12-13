@@ -61,6 +61,7 @@ namespace resource
 
     struct MeshData
     {
+        std::string name;  // Submesh name (from Assimp's aiMesh->mName)
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
     };

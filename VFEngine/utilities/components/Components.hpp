@@ -2,6 +2,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string>
+#include <map>
+#include <optional>
 #include <entt/entt.hpp>
 #include "../uuid/UUID.hpp"
 
@@ -11,10 +13,11 @@ namespace components {
 	struct IBLComponent;
 	struct CameraComponent;
 	struct MeshComponent;
+	struct MaterialComponent;
 
 	// Type list of optional components that can be removed during cleanup
 	// Add new optional component types here when they are created
-	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent>;
+	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent>;
 
 	struct WorldTransformComponent
 	{
@@ -139,6 +142,55 @@ namespace components {
 	struct MeshComponent {
 		std::string meshPath;  // Path to .vfmesh file
 		bool showBoundingBox = false;  // Debug: render AABB wireframe
+	};
+
+	struct MaterialComponent {
+		std::string defaultMaterial;  // .vfMat path for unmapped submeshes
+		std::map<std::string, std::string> subMeshMaterials;  // submesh NAME -> .vfMat path
+		std::map<std::string, float> parameterOverrides;  // Runtime parameter tweaks
+
+		// Set material for a specific submesh by name
+		void setSubMeshMaterial(const std::string& submeshName, const std::string& matPath) {
+			subMeshMaterials[submeshName] = matPath;
+		}
+
+		// Set the default material for all unmapped submeshes
+		void setDefaultMaterial(const std::string& matPath) {
+			defaultMaterial = matPath;
+		}
+
+		// Get material path for a submesh, falling back to default if not mapped
+		std::string getMaterialForSubmesh(const std::string& submeshName) const {
+			auto it = subMeshMaterials.find(submeshName);
+			if (it != subMeshMaterials.end()) {
+				return it->second;
+			}
+			return defaultMaterial;
+		}
+
+		// Check if a submesh has a specific material assigned
+		bool hasSubmeshMaterial(const std::string& submeshName) const {
+			return subMeshMaterials.find(submeshName) != subMeshMaterials.end();
+		}
+
+		// Clear all submesh material assignments
+		void clearSubMeshMaterials() {
+			subMeshMaterials.clear();
+		}
+
+		// Set a runtime parameter override
+		void setParameterOverride(const std::string& paramName, float value) {
+			parameterOverrides[paramName] = value;
+		}
+
+		// Get a parameter override value, returns nullopt if not set
+		std::optional<float> getParameterOverride(const std::string& paramName) const {
+			auto it = parameterOverrides.find(paramName);
+			if (it != parameterOverrides.end()) {
+				return it->second;
+			}
+			return std::nullopt;
+		}
 	};
 
 }

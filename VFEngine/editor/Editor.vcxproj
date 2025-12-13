@@ -41,15 +41,15 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\..\bin\Editor\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\</IntDir>
+    <OutDir>$(ProjectDir)..\..\bin\Editor\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
     <TargetName>Editor</TargetName>
     <TargetExt>.exe</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\..\bin\Editor\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\</IntDir>
+    <OutDir>$(ProjectDir)..\..\bin\Editor\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
     <TargetName>Editor</TargetName>
     <TargetExt>.exe</TargetExt>
   </PropertyGroup>
@@ -58,7 +58,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\ImGuiColorTextEdit;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
@@ -75,7 +75,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\ImGuiColorTextEdit;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -94,6 +94,12 @@
   <ItemGroup>
     <ClInclude Include="camera\EditorCamera.hpp" />
     <ClInclude Include="camera\OrbitCamera.hpp" />
+    <ClInclude Include="graph\ShaderGraphCompiler.hpp" />
+    <ClInclude Include="graph\ShaderGraphEditor.hpp" />
+    <ClInclude Include="graph\nodes\ConstantNodes.hpp" />
+    <ClInclude Include="graph\nodes\MathNodes.hpp" />
+    <ClInclude Include="graph\nodes\PBROutputNode.hpp" />
+    <ClInclude Include="graph\nodes\ShaderNode.hpp" />
     <ClInclude Include="handlers\EditorHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="windows\AudioPreviewWindow.hpp" />
@@ -102,6 +108,7 @@
     <ClInclude Include="windows\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\ImportProgressWindow.hpp" />
     <ClInclude Include="windows\MainImguiWindow.hpp" />
+    <ClInclude Include="windows\MaterialEditorWindow.hpp" />
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
     <ClInclude Include="windows\SceneGraph.hpp" />
     <ClInclude Include="windows\SceneLoadingProgressWindow.hpp" />
@@ -110,6 +117,9 @@
   <ItemGroup>
     <ClCompile Include="camera\EditorCamera.cpp" />
     <ClCompile Include="camera\OrbitCamera.cpp" />
+    <ClCompile Include="graph\ShaderGraphCompiler.cpp" />
+    <ClCompile Include="graph\ShaderGraphEditor.cpp" />
+    <ClCompile Include="graph\nodes\ShaderNodeFactory.cpp" />
     <ClCompile Include="handlers\EditorHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />
@@ -119,6 +129,7 @@
     <ClCompile Include="windows\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\ImportProgressWindow.cpp" />
     <ClCompile Include="windows\MainImguiWindow.cpp" />
+    <ClCompile Include="windows\MaterialEditorWindow.cpp" />
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
     <ClCompile Include="windows\SceneGraph.cpp" />
     <ClCompile Include="windows\SceneLoadingProgressWindow.cpp" />
@@ -146,6 +157,9 @@
     </ProjectReference>
     <ProjectReference Include="..\services\Services.vcxproj">
       <Project>{A9F04386-95BD-9E91-BED6-8C39AA02D41F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\imgui.vcxproj">
+      <Project>{0098A80F-6CAC-D0C0-352E-7420A101CDF1}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -2,6 +2,8 @@
 #include "MeshPreviewWindow.hpp"
 #include "ImagePreviewWindow.hpp"
 #include "AudioPreviewWindow.hpp"
+#include "MaterialEditorWindow.hpp"
+#include <material/MaterialAsset.hpp>
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "print/EditorLogger.hpp"
@@ -43,6 +45,8 @@ namespace windows
 		animationIcon = loadIcon("../../resources/editor/contentBrowser/animation-file.vfImage");
 		hdrIcon = loadIcon("../../resources/editor/contentBrowser/hdr-file.vfImage");
 		sceneIcon = loadIcon("../../resources/editor/contentBrowser/scene.vfImage");
+		// Use file icon for materials until dedicated icon is created
+		materialIcon = loadIcon("../../resources/editor/contentBrowser/file.vfImage");
 
 		iconsLoaded = true;
 	}
@@ -161,40 +165,49 @@ namespace windows
 			}
 			else
 			{
-				// Determine the asset type by its file extension.
-				resource::FileType ext = resource::ResourceManager::readHeaderFile(entry);
-
-				if (ext == resource::FileType::TEXTURE)
+				// Check for .vfMat files first (JSON format, not binary header)
+				std::string extension = entry.path().extension().string();
+				if (extension == ".vfMat")
 				{
-					asset.type = Texture;
-				}
-				else if (ext == resource::FileType::SCENE)
-				{
-					asset.type = Scene;
-				}
-				else if (ext == resource::FileType::HDR)
-				{
-					asset.type = HDR;
-				}
-				else if (ext == resource::FileType::MESH)
-				{
-					asset.type = Model;
-				}
-				else if (ext == resource::FileType::SHADER)
-				{
-					asset.type = Shader;
-				}
-				else if (ext == resource::FileType::AUDIO)
-				{
-					asset.type = Audio;
-				}
-				else if (ext == resource::FileType::ANIMATION)
-				{
-					asset.type = Animation;
+					asset.type = Material;
 				}
 				else
 				{
-					asset.type = Other;
+					// Determine the asset type by its file extension.
+					resource::FileType ext = resource::ResourceManager::readHeaderFile(entry);
+
+					if (ext == resource::FileType::TEXTURE)
+					{
+						asset.type = Texture;
+					}
+					else if (ext == resource::FileType::SCENE)
+					{
+						asset.type = Scene;
+					}
+					else if (ext == resource::FileType::HDR)
+					{
+						asset.type = HDR;
+					}
+					else if (ext == resource::FileType::MESH)
+					{
+						asset.type = Model;
+					}
+					else if (ext == resource::FileType::SHADER)
+					{
+						asset.type = Shader;
+					}
+					else if (ext == resource::FileType::AUDIO)
+					{
+						asset.type = Audio;
+					}
+					else if (ext == resource::FileType::ANIMATION)
+					{
+						asset.type = Animation;
+					}
+					else
+					{
+						asset.type = Other;
+					}
 				}
 			}
 			assets.push_back(asset);
@@ -275,6 +288,14 @@ namespace windows
 			ImGui::BeginGroup();
 			if (glslIcon.isValid()) {
 				ImGui::Image(glslIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+			}
+			ImGui::TextWrapped("%s", asset.name.c_str());
+			ImGui::EndGroup();
+			break;
+		case Material:
+			ImGui::BeginGroup();
+			if (materialIcon.isValid()) {
+				ImGui::Image(materialIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
 			}
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
@@ -377,7 +398,23 @@ namespace windows
 					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
 					openAudioPreviews[path] = previewWindow;
 				}
-				
+
+				showFileWindow = false;
+			}
+			else if (selectedType == AssetType::Material)
+			{
+				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
+
+				// Check if editor window already exists and is still open
+				auto it = openMaterialEditors.find(path);
+				if (it == openMaterialEditors.end() || it->second.expired())
+				{
+					// Create new material editor window
+					auto editorWindow = std::make_shared<MaterialEditorWindow>(path);
+					controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
+					openMaterialEditors[path] = editorWindow;
+				}
+
 				showFileWindow = false;
 			}
 		}
@@ -448,7 +485,26 @@ namespace windows
 			{
 				if (ImGui::MenuItem("Material"))
 				{
-					// Logic to create a new material
+					// Generate unique filename
+					std::string baseName = "NewMaterial";
+					std::string extension = ".vfMat";
+					fs::path newMaterialPath = currentPath / (baseName + extension);
+					int counter = 1;
+					while (fs::exists(newMaterialPath)) {
+						newMaterialPath = currentPath / (baseName + "_" + std::to_string(counter) + extension);
+						counter++;
+					}
+
+					// Create default material and save it
+					std::string pathStr = StringUtil::wstringToUtf8(newMaterialPath.wstring());
+					auto defaultMat = material::MaterialAsset::createDefault(baseName);
+					if (material::MaterialAsset::save(pathStr, defaultMat)) {
+						loadDirectory(currentPath);  // Refresh
+						// Open the material editor
+						auto editorWindow = std::make_shared<MaterialEditorWindow>(pathStr);
+						controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
+						openMaterialEditors[pathStr] = editorWindow;
+					}
 				}
 				ImGui::EndMenu();
 			}
