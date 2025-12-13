@@ -110,17 +110,92 @@ namespace editor::graph {
         // Header
         ImGui::TextUnformatted(node.name.empty() ? getNodeTypeName(node.type) : node.name.c_str());
 
-        // Draw input pins
+        // Show color preview for ConstantColor nodes
+        if (node.type == material::NodeType::ConstantColor) {
+            glm::vec4 color(1.0f);
+            auto it = node.properties.find("value");
+            if (it != node.properties.end()) {
+                if (auto* col = std::get_if<glm::vec4>(&it->second)) {
+                    color = *col;
+                }
+            }
+            // Just show a small color preview button (editing done in Properties panel)
+            ImGui::ColorButton("##preview", ImVec4(color.x, color.y, color.z, color.w),
+                ImGuiColorEditFlags_NoTooltip, ImVec2(20, 20));
+        }
+
+        // Show texture path for TextureSample nodes
+        if (node.type == material::NodeType::TextureSample) {
+            std::string texPath = "";
+            auto it = node.properties.find("texturePath");
+            if (it != node.properties.end()) {
+                if (auto* path = std::get_if<std::string>(&it->second)) {
+                    texPath = *path;
+                }
+            }
+
+            // Show truncated path or "No texture"
+            std::string displayText = texPath.empty() ? "(No texture)" :
+                (texPath.length() > 15 ? "..." + texPath.substr(texPath.length() - 12) : texPath);
+            ImGui::TextDisabled("%s", displayText.c_str());
+        }
+
+        // Draw input pins with type-based icons
         for (const auto& pin : node.inputs) {
             ed::BeginPin(toEditorPinId(pin.id), ed::PinKind::Input);
-            ImGui::Text("> %s", pin.name.c_str());
+
+            // Draw pin icon
+            ImVec2 iconPos = ImGui::GetCursorScreenPos();
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImU32 pinColor = getPinColor(pin.type);
+            float iconSize = 8.0f;
+
+            if (pin.type == material::PinType::Texture2D) {
+                // Square for texture
+                drawList->AddRectFilled(
+                    ImVec2(iconPos.x, iconPos.y + 3),
+                    ImVec2(iconPos.x + iconSize, iconPos.y + 3 + iconSize),
+                    pinColor);
+            } else {
+                // Circle for scalar/vector types
+                drawList->AddCircleFilled(
+                    ImVec2(iconPos.x + iconSize/2, iconPos.y + 7),
+                    iconSize/2, pinColor);
+            }
+
+            ImGui::Dummy(ImVec2(iconSize + 4, iconSize));
+            ImGui::SameLine();
+            ImGui::Text("%s", pin.name.c_str());
             ed::EndPin();
         }
 
-        // Draw output pins
+        // Draw output pins with type-based icons
         for (const auto& pin : node.outputs) {
             ed::BeginPin(toEditorPinId(pin.id), ed::PinKind::Output);
-            ImGui::Text("%s >", pin.name.c_str());
+
+            ImGui::Text("%s", pin.name.c_str());
+            ImGui::SameLine();
+
+            // Draw pin icon
+            ImVec2 iconPos = ImGui::GetCursorScreenPos();
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImU32 pinColor = getPinColor(pin.type);
+            float iconSize = 8.0f;
+
+            if (pin.type == material::PinType::Texture2D) {
+                // Square for texture
+                drawList->AddRectFilled(
+                    ImVec2(iconPos.x, iconPos.y + 3),
+                    ImVec2(iconPos.x + iconSize, iconPos.y + 3 + iconSize),
+                    pinColor);
+            } else {
+                // Circle for scalar/vector types
+                drawList->AddCircleFilled(
+                    ImVec2(iconPos.x + iconSize/2, iconPos.y + 7),
+                    iconSize/2, pinColor);
+            }
+
+            ImGui::Dummy(ImVec2(iconSize, iconSize));
             ed::EndPin();
         }
 
@@ -283,10 +358,148 @@ namespace editor::graph {
         }
 
         if (ImGui::BeginPopup("AddNode")) {
-            if (ImGui::MenuItem("Scalar")) {
-                createNode(material::NodeType::ConstantScalar, newNodePosition);
-                ImGui::CloseCurrentPopup();
+            // Constants
+            if (ImGui::BeginMenu("Constants")) {
+                if (ImGui::MenuItem("Scalar")) {
+                    createNode(material::NodeType::ConstantScalar, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Vector2")) {
+                    createNode(material::NodeType::ConstantVec2, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Vector3")) {
+                    createNode(material::NodeType::ConstantVec3, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Color")) {
+                    createNode(material::NodeType::ConstantColor, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
             }
+
+            // Math
+            if (ImGui::BeginMenu("Math")) {
+                if (ImGui::MenuItem("Add")) {
+                    createNode(material::NodeType::Add, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Subtract")) {
+                    createNode(material::NodeType::Subtract, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Multiply")) {
+                    createNode(material::NodeType::Multiply, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Divide")) {
+                    createNode(material::NodeType::Divide, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Power")) {
+                    createNode(material::NodeType::Power, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Lerp")) {
+                    createNode(material::NodeType::Lerp, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Clamp")) {
+                    createNode(material::NodeType::Clamp, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Saturate")) {
+                    createNode(material::NodeType::Saturate, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("One Minus")) {
+                    createNode(material::NodeType::OneMinus, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Abs")) {
+                    createNode(material::NodeType::Abs, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
+            }
+
+            // Trig
+            if (ImGui::BeginMenu("Trigonometry")) {
+                if (ImGui::MenuItem("Sin")) {
+                    createNode(material::NodeType::Sin, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Cos")) {
+                    createNode(material::NodeType::Cos, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
+            }
+
+            // Vector
+            if (ImGui::BeginMenu("Vector")) {
+                if (ImGui::MenuItem("Make Vec3")) {
+                    createNode(material::NodeType::MakeVec3, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Normalize")) {
+                    createNode(material::NodeType::Normalize, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Length")) {
+                    createNode(material::NodeType::Length, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Dot")) {
+                    createNode(material::NodeType::Dot, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Cross")) {
+                    createNode(material::NodeType::Cross, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Fresnel")) {
+                    createNode(material::NodeType::Fresnel, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
+            }
+
+            // Inputs
+            if (ImGui::BeginMenu("Inputs")) {
+                if (ImGui::MenuItem("UV")) {
+                    createNode(material::NodeType::VertexUV, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Normal")) {
+                    createNode(material::NodeType::VertexNormal, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Position")) {
+                    createNode(material::NodeType::VertexPosition, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Camera Position")) {
+                    createNode(material::NodeType::CameraPosition, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Time")) {
+                    createNode(material::NodeType::Time, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
+            }
+
+            // Texture
+            if (ImGui::BeginMenu("Texture")) {
+                if (ImGui::MenuItem("Texture Sample")) {
+                    createNode(material::NodeType::TextureSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
+            }
+
             ImGui::EndPopup();
         }
     }
@@ -381,6 +594,8 @@ namespace editor::graph {
             case material::NodeType::Time:
             case material::NodeType::CameraPosition:
                 return IM_COL32(150, 150, 80, 255);  // Yellow for inputs
+            case material::NodeType::TextureSample:
+                return IM_COL32(180, 100, 180, 255);  // Purple for textures
             default:
                 return IM_COL32(100, 100, 100, 255);
         }
@@ -424,6 +639,7 @@ namespace editor::graph {
             case material::NodeType::VertexUV: return "UV";
             case material::NodeType::Time: return "Time";
             case material::NodeType::CameraPosition: return "Camera Pos";
+            case material::NodeType::TextureSample: return "Texture Sample";
             default: return "Unknown";
         }
     }

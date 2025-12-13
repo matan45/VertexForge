@@ -306,4 +306,62 @@ namespace editor::graph {
         }
     };
 
+    // Texture sampler node - samples a texture at UV coordinates
+    class TextureSampleNode : public ShaderNodeBase {
+    public:
+        TextureSampleNode() {
+            type = material::NodeType::TextureSample;
+            name = "Texture Sample";
+            properties["texturePath"] = std::string("");  // Path to .vfImage file
+            properties["textureIndex"] = 0.0f;  // Index in texture array (for shader binding)
+
+            addInputPin("UV", material::PinType::Vec2, glm::vec2(0.0f));  // Default uses vertex UV
+            addOutputPin("RGBA", material::PinType::Vec4);
+            addOutputPin("RGB", material::PinType::Vec3);
+            addOutputPin("R", material::PinType::Float);
+            addOutputPin("G", material::PinType::Float);
+            addOutputPin("B", material::PinType::Float);
+            addOutputPin("A", material::PinType::Float);
+        }
+
+        std::string generateCode(const std::string& outputVarPrefix,
+                                const std::map<std::string, std::string>& inputVarNames) const override {
+            // Get UV input (use vertex UV if not connected)
+            std::string uvVar = "fragTexCoord";
+            auto it = inputVarNames.find("UV");
+            if (it != inputVarNames.end() && !it->second.empty()) {
+                uvVar = it->second;
+            }
+
+            // Get texture index from properties
+            int texIndex = static_cast<int>(getPropertyValue<float>("textureIndex", 0.0f));
+
+            std::string code;
+            // Sample the texture - uses texture array indexed by textureIndex
+            code += "vec4 " + outputVarPrefix + "RGBA = texture(u_Textures[" + std::to_string(texIndex) + "], " + uvVar + ");\n";
+            code += "vec3 " + outputVarPrefix + "RGB = " + outputVarPrefix + "RGBA.rgb;\n";
+            code += "float " + outputVarPrefix + "R = " + outputVarPrefix + "RGBA.r;\n";
+            code += "float " + outputVarPrefix + "G = " + outputVarPrefix + "RGBA.g;\n";
+            code += "float " + outputVarPrefix + "B = " + outputVarPrefix + "RGBA.b;\n";
+            code += "float " + outputVarPrefix + "A = " + outputVarPrefix + "RGBA.a;\n";
+            return code;
+        }
+
+        std::string getOutputVarName(const std::string& outputVarPrefix,
+                                    const std::string& pinName) const override {
+            if (pinName == "RGB") return outputVarPrefix + "RGB";
+            if (pinName == "R") return outputVarPrefix + "R";
+            if (pinName == "G") return outputVarPrefix + "G";
+            if (pinName == "B") return outputVarPrefix + "B";
+            if (pinName == "A") return outputVarPrefix + "A";
+            return outputVarPrefix + "RGBA";
+        }
+
+        std::string getOutputType(const std::string& pinName) const override {
+            if (pinName == "R" || pinName == "G" || pinName == "B" || pinName == "A") return "float";
+            if (pinName == "RGB") return "vec3";
+            return "vec4";
+        }
+    };
+
 }

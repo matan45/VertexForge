@@ -77,6 +77,10 @@ namespace editor::graph {
             case material::NodeType::Fresnel:
                 return std::make_unique<FresnelNode>();
 
+            // Texture
+            case material::NodeType::TextureSample:
+                return std::make_unique<TextureSampleNode>();
+
             default:
                 return std::make_unique<ConstantScalarNode>();  // Default fallback
         }

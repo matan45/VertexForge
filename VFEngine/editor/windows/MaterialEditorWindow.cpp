@@ -2,25 +2,42 @@
 #include "../graph/ShaderGraphEditor.hpp"
 #include "../graph/ShaderGraphCompiler.hpp"
 #include "../graph/nodes/ShaderNode.hpp"
+#include "../camera/OrbitCamera.hpp"
+#include "../../graphics/controllers/MaterialPreviewController.hpp"
 #include <material/MaterialManager.hpp>
 #include <material/MaterialAsset.hpp>
+#include <nfd/FileDialog.hpp>
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
 #include <filesystem>
+#include <algorithm>
 
 namespace windows {
 
     MaterialEditorWindow::MaterialEditorWindow(const std::string& materialPath)
         : materialPath(materialPath)
         , graphEditor(std::make_unique<editor::graph::ShaderGraphEditor>())
+        , previewController(std::make_unique<controllers::MaterialPreviewController>())
+        , previewCamera(std::make_unique<editor::OrbitCamera>())
     {
         std::filesystem::path path(materialPath);
         windowTitle = "Material Editor: " + path.filename().string();
+
+        // Configure camera for material preview sphere
+        previewCamera->target = glm::vec3(0.0f);
+        previewCamera->distance = 3.0f;
+        previewCamera->yaw = 45.0f;
+        previewCamera->pitch = 30.0f;
+        previewCamera->minDistance = 1.5f;
+        previewCamera->maxDistance = 10.0f;
     }
 
     MaterialEditorWindow::~MaterialEditorWindow() {
         if (graphEditor) {
             graphEditor->cleanUp();
+        }
+        if (previewController) {
+            previewController->cleanUp();
         }
     }
 
@@ -32,6 +49,9 @@ namespace windows {
             graphEditor->setGraph(&materialData->graph);
             graphEditor->setOnGraphChanged([this]() { onGraphChanged(); });
             graphEditor->navigateToContent();
+
+            // Initial compile to show preview
+            compileMaterial();
         }
     }
 
@@ -83,6 +103,9 @@ namespace windows {
             materialData->needsRecompile = false;
             showCompileError = false;
             vfLogInfo("Material compiled successfully: {}", materialData->name);
+
+            // Update preview only after successful compilation
+            updatePreviewMaterial();
         } else {
             showCompileError = true;
             compileErrorMessage = result.errorMessage;
@@ -223,34 +246,195 @@ namespace windows {
         ImGui::Separator();
     }
 
+    void MaterialEditorWindow::initPreview() {
+        previewController->init();
+        previewCamera->updateMatrices();
+        previewNeedsInit = false;
+    }
+
+    void MaterialEditorWindow::handlePreviewInput() {
+        bool isHovered = ImGui::IsWindowHovered();
+
+        // Track drag start/end
+        if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            isDraggingPreview = true;
+        }
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+            isDraggingPreview = false;
+        }
+
+        // Only process input when hovered
+        if (!isHovered) return;
+
+        ImGuiIO& io = ImGui::GetIO();
+
+        // Scroll to zoom
+        if (io.MouseWheel != 0.0f) {
+            float zoomFactor = 1.0f - io.MouseWheel * previewCamera->zoomSensitivity * 0.1f;
+            previewCamera->setDistance(previewCamera->distance * zoomFactor);
+            previewCamera->updateMatrices();
+        }
+
+        // Left mouse drag to orbit - only if drag started in preview
+        if (isDraggingPreview && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            ImVec2 delta = io.MouseDelta;
+
+            if (delta.x != 0.0f || delta.y != 0.0f) {
+                previewCamera->yaw += delta.x * previewCamera->orbitSensitivity;
+                previewCamera->pitch -= delta.y * previewCamera->orbitSensitivity;
+
+                // Clamp pitch to avoid gimbal lock
+                previewCamera->pitch = glm::clamp(previewCamera->pitch, -89.0f, 89.0f);
+
+                previewCamera->updateMatrices();
+            }
+        }
+    }
+
+    void MaterialEditorWindow::updatePreviewMaterial() {
+        if (!materialData) return;
+
+        controllers::PreviewMaterialParams params;
+
+        // Find PBR Output node
+        material::ShaderNode* pbrOutput = nullptr;
+        for (auto& node : materialData->graph.nodes) {
+            if (node.type == material::NodeType::PBROutput) {
+                pbrOutput = &node;
+                break;
+            }
+        }
+
+        if (!pbrOutput) {
+            previewController->setMaterialParams(params);
+            return;
+        }
+
+        // Helper to find connected node's value for a given input pin name
+        auto getConnectedValue = [this, pbrOutput](const std::string& pinName) -> std::optional<float> {
+            // Find the input pin on PBR Output
+            for (const auto& pin : pbrOutput->inputs) {
+                if (pin.name == pinName) {
+                    // Find link connected to this pin
+                    for (const auto& link : materialData->graph.links) {
+                        if (link.targetNodeId == pbrOutput->id && link.targetPin == pinName) {
+                            // Find the source node
+                            for (const auto& node : materialData->graph.nodes) {
+                                if (node.id == link.sourceNodeId) {
+                                    // Get value from source node's properties
+                                    if (node.type == material::NodeType::ConstantScalar) {
+                                        auto it = node.properties.find("value");
+                                        if (it != node.properties.end() && std::holds_alternative<float>(it->second)) {
+                                            return std::get<float>(it->second);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+            return std::nullopt;
+        };
+
+        // Helper to get connected color value
+        auto getConnectedColor = [this, pbrOutput](const std::string& pinName) -> std::optional<glm::vec4> {
+            for (const auto& pin : pbrOutput->inputs) {
+                if (pin.name == pinName) {
+                    for (const auto& link : materialData->graph.links) {
+                        if (link.targetNodeId == pbrOutput->id && link.targetPin == pinName) {
+                            for (const auto& node : materialData->graph.nodes) {
+                                if (node.id == link.sourceNodeId) {
+                                    if (node.type == material::NodeType::ConstantColor) {
+                                        auto it = node.properties.find("value");
+                                        // ConstantColorNode stores glm::vec4
+                                        if (it != node.properties.end() && std::holds_alternative<glm::vec4>(it->second)) {
+                                            return std::get<glm::vec4>(it->second);
+                                        }
+                                    }
+                                    else if (node.type == material::NodeType::ConstantVec3) {
+                                        auto it = node.properties.find("value");
+                                        if (it != node.properties.end() && std::holds_alternative<glm::vec3>(it->second)) {
+                                            glm::vec3 vec = std::get<glm::vec3>(it->second);
+                                            return glm::vec4(vec, 1.0f);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+            return std::nullopt;
+        };
+
+        // Extract values from connected nodes
+        if (auto albedo = getConnectedColor("Albedo")) {
+            params.albedo = *albedo;
+        }
+        if (auto metallic = getConnectedValue("Metallic")) {
+            params.metallic = *metallic;
+        }
+        if (auto roughness = getConnectedValue("Roughness")) {
+            params.roughness = *roughness;
+        }
+        if (auto ao = getConnectedValue("AO")) {
+            params.ao = *ao;
+        }
+        if (auto emission = getConnectedValue("Emission")) {
+            params.emission = *emission;
+        }
+
+        previewController->setMaterialParams(params);
+    }
+
     void MaterialEditorWindow::drawPreviewPanel(float height) {
         ImGui::Text("Preview");
         ImGui::Separator();
 
-        // Placeholder for sphere preview
-        ImVec2 previewSize = ImGui::GetContentRegionAvail();
-        previewSize.y = previewSize.x;  // Square aspect ratio
+        // Initialize preview on first draw
+        if (previewNeedsInit) {
+            initPreview();
+        }
 
-        ImGui::BeginChild("PreviewViewport", previewSize, true,
+        // Calculate square viewport size
+        ImVec2 previewSize = ImGui::GetContentRegionAvail();
+        float viewportSize = std::min(previewSize.x - 10.0f, previewSize.y - 100.0f);
+        viewportSize = std::max(viewportSize, 100.0f);  // Minimum size
+
+        ImGui::BeginChild("PreviewViewport", ImVec2(viewportSize, viewportSize), true,
                          ImGuiWindowFlags_NoScrollbar);
         {
-            // Draw a placeholder rectangle
-            ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            drawList->AddRectFilled(pos, ImVec2(pos.x + previewSize.x - 20, pos.y + previewSize.y - 20),
-                                   IM_COL32(40, 40, 40, 255));
+            // Update camera aspect ratio
+            previewCamera->setAspectRatio(1.0f);  // Square
 
-            // Draw a simple sphere representation
-            ImVec2 center(pos.x + previewSize.x / 2 - 10, pos.y + previewSize.y / 2 - 10);
-            float radius = std::min(previewSize.x, previewSize.y) / 3;
-            drawList->AddCircleFilled(center, radius, IM_COL32(100, 100, 100, 255));
-            drawList->AddCircle(center, radius, IM_COL32(150, 150, 150, 255), 32, 2.0f);
+            // Handle mouse input for orbit
+            handlePreviewInput();
 
-            // Add highlight
-            ImVec2 highlight(center.x - radius * 0.3f, center.y - radius * 0.3f);
-            drawList->AddCircleFilled(highlight, radius * 0.15f, IM_COL32(200, 200, 200, 100));
+            // Note: Preview material is updated only when Compile is clicked
+            // (see compileMaterial())
 
-            ImGui::TextDisabled("(Preview coming soon)");
+            // Update camera in controller
+            previewController->updateCamera(
+                previewCamera->getViewMatrix(),
+                previewCamera->getProjectionMatrix(),
+                previewCamera->getPosition()
+            );
+
+            // Render and display
+            void* texture = previewController->render();
+            if (texture) {
+                ImVec2 size(viewportSize - 16, viewportSize - 16);
+                ImGui::Image(texture, size);
+            } else {
+                ImGui::TextDisabled("Initializing preview...");
+            }
         }
         ImGui::EndChild();
 
@@ -424,11 +608,44 @@ namespace windows {
             }
             else if (std::holds_alternative<std::string>(propValue)) {
                 std::string value = std::get<std::string>(propValue);
-                char buffer[256];
-                strncpy_s(buffer, value.c_str(), sizeof(buffer) - 1);
-                if (ImGui::InputText(propName.c_str(), buffer, sizeof(buffer))) {
-                    propValue = std::string(buffer);
-                    changed = true;
+
+                // Special handling for texture path property
+                if (propName == "texturePath" && selectedNode->type == material::NodeType::TextureSample) {
+                    ImGui::Text("Texture:");
+                    ImGui::SameLine();
+
+                    // Show current path (truncated if too long)
+                    std::string displayPath = value.empty() ? "(None)" :
+                        (value.length() > 30 ? "..." + value.substr(value.length() - 27) : value);
+                    ImGui::TextDisabled("%s", displayPath.c_str());
+
+                    // Browse button - opens native file dialog
+                    if (ImGui::Button("Browse...")) {
+                        nfd::FileDialog fileDialog;
+                        std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                            {L"VF Image", L"*.vfImage"}
+                        };
+                        std::string selectedPath = fileDialog.openFileDialog(filters);
+                        if (!selectedPath.empty()) {
+                            propValue = selectedPath;
+                            changed = true;
+                        }
+                    }
+
+                    // Clear button
+                    ImGui::SameLine();
+                    if (ImGui::Button("Clear")) {
+                        propValue = std::string("");
+                        changed = true;
+                    }
+                } else {
+                    // Default string input
+                    char buffer[256];
+                    strncpy_s(buffer, value.c_str(), sizeof(buffer) - 1);
+                    if (ImGui::InputText(propName.c_str(), buffer, sizeof(buffer))) {
+                        propValue = std::string(buffer);
+                        changed = true;
+                    }
                 }
             }
 

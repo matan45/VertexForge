@@ -4,8 +4,16 @@
 #include <memory>
 #include <string>
 
+namespace editor {
+    class OrbitCamera;
+}
+
 namespace editor::graph {
     class ShaderGraphEditor;
+}
+
+namespace controllers {
+    class MaterialPreviewController;
 }
 
 namespace windows {
@@ -26,6 +34,11 @@ namespace windows {
         std::shared_ptr<material::MaterialData> materialData;
         std::unique_ptr<editor::graph::ShaderGraphEditor> graphEditor;
 
+        // Preview rendering
+        std::unique_ptr<controllers::MaterialPreviewController> previewController;
+        std::unique_ptr<editor::OrbitCamera> previewCamera;
+        bool previewNeedsInit = true;
+
         bool isOpen = true;
         bool needsInit = true;
         bool isDirty = false;
@@ -34,17 +47,22 @@ namespace windows {
 
         // Preview panel state
         float previewPanelWidth = 250.0f;
+        bool isDraggingPreview = false;  // Track if drag started in preview
 
         void initEditor();
         void loadMaterial();
         void saveMaterial();
         void compileMaterial();
 
+        void initPreview();
         void drawToolbar();
         void drawPreviewPanel(float height);
         void drawGraphPanel(float width, float height);
         void drawParameterPanel();
         void drawPropertiesPanel();
+
+        void handlePreviewInput();
+        void updatePreviewMaterial();
 
         void onGraphChanged();
     };

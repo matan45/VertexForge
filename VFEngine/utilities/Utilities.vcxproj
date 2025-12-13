@@ -92,6 +92,7 @@
   <ItemGroup>
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="config\Config.hpp" />
+    <ClInclude Include="geometry\SphereGenerator.hpp" />
     <ClInclude Include="material\MaterialAsset.hpp" />
     <ClInclude Include="material\MaterialManager.hpp" />
     <ClInclude Include="material\MaterialTypes.hpp" />
@@ -122,6 +123,7 @@
     <ClInclude Include="uuid\UUID.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />
     <ClCompile Include="material\MaterialManager.cpp" />
     <ClCompile Include="math\MathHelper.cpp" />

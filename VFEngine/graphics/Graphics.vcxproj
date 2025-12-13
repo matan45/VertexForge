@@ -99,6 +99,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="controllers\Graphics.hpp" />
+    <ClInclude Include="controllers\MaterialPreviewController.hpp" />
     <ClInclude Include="controllers\MeshPreviewController.hpp" />
     <ClInclude Include="controllers\OffScreenController.hpp" />
     <ClInclude Include="controllers\RenderController.hpp" />
@@ -128,6 +129,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Graphics.cpp" />
+    <ClCompile Include="controllers\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\MeshPreviewController.cpp" />
     <ClCompile Include="controllers\OffScreenController.cpp" />
     <ClCompile Include="controllers\RenderController.cpp" />

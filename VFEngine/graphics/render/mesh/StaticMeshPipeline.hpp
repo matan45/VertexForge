@@ -56,7 +56,10 @@ namespace render::mesh
         vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
         
         std::string loadMesh(std::string_view meshPath);
-        
+
+        // Upload procedural mesh data directly (bypasses file loading)
+        std::string uploadMesh(const std::string& meshId, const resource::MeshesData& meshData);
+
         void unloadMesh(const std::string& meshId);
         
         void unloadAllMeshes();

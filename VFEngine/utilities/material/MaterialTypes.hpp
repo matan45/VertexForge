@@ -110,7 +110,10 @@ namespace material {
         VertexNormal,
         VertexUV,
         Time,
-        CameraPosition
+        CameraPosition,
+
+        // Texture
+        TextureSample
     };
 
     // Node property variant (for node-specific settings)

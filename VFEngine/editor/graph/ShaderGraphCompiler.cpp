@@ -93,6 +93,9 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
+// Material textures (max 8 textures per material)
+layout(set = 1, binding = 0) uniform sampler2D u_Textures[8];
+
 // Time uniform for animated materials
 uniform float u_Time;
 

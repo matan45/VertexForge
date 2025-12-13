@@ -460,25 +460,24 @@ namespace render::mesh
             imageData.sampler = device.getLogicalDevice().createSampler(samplerInfo);
         };
 
-        // Studio-style IBL colors per face (HDR values, high contrast for 1x1 cubemap):
-        // Face order: +X (right), -X (left), +Y (top), -Y (bottom), +Z (front), -Z (back)
-        // High contrast needed since 1x1 cubemap gets smoothed by linear filtering
+        // Completely uniform IBL for smooth shading - no cubemap face boundaries visible
+        // All faces identical to eliminate any banding from face transitions
         std::array<std::array<float, 4>, 6> studioIrradiance = {{
-            {1.5f, 1.5f, 1.6f, 1.0f},    // +X: Right fill
-            {1.5f, 1.5f, 1.6f, 1.0f},    // -X: Left fill
-            {5.0f, 4.8f, 4.5f, 1.0f},    // +Y: Top key light (very bright, warm)
-            {0.15f, 0.18f, 0.22f, 1.0f}, // -Y: Bottom/floor (very dark)
-            {2.0f, 2.0f, 2.2f, 1.0f},    // +Z: Front fill
-            {0.8f, 0.8f, 1.0f, 1.0f}     // -Z: Back rim light
+            {0.8f, 0.8f, 0.85f, 1.0f},   // +X
+            {0.8f, 0.8f, 0.85f, 1.0f},   // -X
+            {0.8f, 0.8f, 0.85f, 1.0f},   // +Y
+            {0.8f, 0.8f, 0.85f, 1.0f},   // -Y
+            {0.8f, 0.8f, 0.85f, 1.0f},   // +Z
+            {0.8f, 0.8f, 0.85f, 1.0f}    // -Z
         }};
 
         std::array<std::array<float, 4>, 6> studioPrefilter = {{
-            {1.2f, 1.2f, 1.3f, 1.0f},    // +X
-            {1.2f, 1.2f, 1.3f, 1.0f},    // -X
-            {4.0f, 3.8f, 3.5f, 1.0f},    // +Y: Bright top reflection
-            {0.1f, 0.12f, 0.15f, 1.0f},  // -Y: Dark bottom
-            {1.5f, 1.5f, 1.6f, 1.0f},    // +Z
-            {0.6f, 0.6f, 0.8f, 1.0f}     // -Z
+            {0.6f, 0.6f, 0.65f, 1.0f},   // +X
+            {0.6f, 0.6f, 0.65f, 1.0f},   // -X
+            {0.6f, 0.6f, 0.65f, 1.0f},   // +Y
+            {0.6f, 0.6f, 0.65f, 1.0f},   // -Y
+            {0.6f, 0.6f, 0.65f, 1.0f},   // +Z
+            {0.6f, 0.6f, 0.65f, 1.0f}    // -Z
         }};
 
         // Irradiance: studio ambient lighting
@@ -1079,6 +1078,125 @@ namespace render::mesh
                    meshPath, loadedMeshes[pathStr].subMeshes.size(), totalVertices, totalIndices);
 
         return pathStr;
+    }
+
+    std::string StaticMeshPipeline::uploadMesh(const std::string& meshId, const resource::MeshesData& meshesData)
+    {
+        if (loadedMeshes.contains(meshId))
+        {
+            return meshId;  // Already loaded
+        }
+
+        if (meshesData.meshes.empty())
+        {
+            loggerError("Cannot upload empty mesh data for: {}", meshId);
+            return "";
+        }
+
+        MeshGPUData gpuData{};
+
+        uint32_t totalVertices = 0;
+        uint32_t totalIndices = 0;
+
+        // Initialize bounding box with first vertex we find
+        bool boundingBoxInitialized = false;
+
+        // Upload all submeshes to GPU
+        for (const auto& meshData : meshesData.meshes)
+        {
+            if (meshData.vertices.empty())
+            {
+                loggerWarning("Skipping empty submesh in procedural mesh: {}", meshId);
+                continue;
+            }
+
+            SubMeshGPUData subMesh{};
+            subMesh.name = meshData.name;
+
+            // Compute per-submesh bounding box
+            bool subMeshBBInitialized = false;
+            for (const auto& vertex : meshData.vertices)
+            {
+                if (!subMeshBBInitialized)
+                {
+                    subMesh.boundingBox.min = vertex.position;
+                    subMesh.boundingBox.max = vertex.position;
+                    subMeshBBInitialized = true;
+                }
+                else
+                {
+                    subMesh.boundingBox.expand(vertex.position);
+                }
+
+                // Also expand the combined mesh bounding box
+                if (!boundingBoxInitialized)
+                {
+                    gpuData.boundingBox.min = vertex.position;
+                    gpuData.boundingBox.max = vertex.position;
+                    boundingBoxInitialized = true;
+                }
+                else
+                {
+                    gpuData.boundingBox.expand(vertex.position);
+                }
+            }
+            subMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
+            subMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
+
+            // Create vertex buffer (device local for best performance)
+            vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * meshData.vertices.size();
+
+            core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            vertexBufferRequest.size = vertexBufferSize;
+            vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::Utilities::createBuffer(vertexBufferRequest, subMesh.vertexBuffer, subMesh.vertexBufferMemory);
+
+            // Copy vertex data to GPU using async transfer
+            transferManager->copyToBufferAsync(
+                subMesh.vertexBuffer,
+                meshData.vertices.data(),
+                vertexBufferSize
+            );
+
+            // Create index buffer if indices exist
+            if (!meshData.indices.empty())
+            {
+                vk::DeviceSize indexBufferSize = sizeof(uint32_t) * meshData.indices.size();
+
+                core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+                indexBufferRequest.size = indexBufferSize;
+                indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+                indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::Utilities::createBuffer(indexBufferRequest, subMesh.indexBuffer, subMesh.indexBufferMemory);
+
+                // Copy index data to GPU using async transfer
+                transferManager->copyToBufferAsync(
+                    subMesh.indexBuffer,
+                    meshData.indices.data(),
+                    indexBufferSize
+                );
+            }
+
+            totalVertices += subMesh.vertexCount;
+            totalIndices += subMesh.indexCount;
+            gpuData.subMeshes.push_back(subMesh);
+        }
+
+        if (gpuData.subMeshes.empty())
+        {
+            loggerError("Procedural mesh has no valid submeshes: {}", meshId);
+            return "";
+        }
+
+        // Wait for all async transfers to complete
+        transferManager->waitAll();
+
+        loadedMeshes[meshId] = std::move(gpuData);
+        loggerInfo("Uploaded procedural mesh: {} ({} submeshes, {} vertices, {} indices)",
+                   meshId, loadedMeshes[meshId].subMeshes.size(), totalVertices, totalIndices);
+
+        return meshId;
     }
 
     void StaticMeshPipeline::unloadMesh(const std::string& meshId)
