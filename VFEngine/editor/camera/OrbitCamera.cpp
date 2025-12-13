@@ -79,6 +79,12 @@ namespace editor {
         }
     }
 
+    void OrbitCamera::setDistance(float dist)
+    {
+        distance = glm::clamp(dist, minDistance, maxDistance);
+        updateMatrices();
+    }
+
     void OrbitCamera::updateMatrices()
     {
         glm::vec3 position = getPosition();

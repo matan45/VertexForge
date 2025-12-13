@@ -43,6 +43,10 @@ namespace editor {
         glm::vec3 getPosition() const;
 
         void setAspectRatio(float aspect);
+        void setDistance(float dist);
+        float getDistance() const { return distance; }
+        float getMinDistance() const { return minDistance; }
+        float getMaxDistance() const { return maxDistance; }
         void updateMatrices();
 
     private:

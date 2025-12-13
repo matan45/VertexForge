@@ -190,6 +190,7 @@ namespace controllers
         renderData.ao = 1.0f;
         renderData.emission = 0.0f;
         renderData.showBoundingBox = false;
+        renderData.highlightedSubMesh = highlightedSubMesh;
 
         meshDrawList.push_back(renderData);
 

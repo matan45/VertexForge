@@ -116,30 +116,15 @@ namespace windows
         {
             ImGui::Image(texture, ImVec2(width, height));
 
-            // Check if mouse is over the image for camera input
-            bool imageHovered = ImGui::IsItemHovered();
-
-            // Track if drag started on the image
-            if (imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            // Handle scroll to zoom when hovering over viewport
+            if (ImGui::IsItemHovered())
             {
-                isDragging = true;
+                float scroll = ImGui::GetIO().MouseWheel;
+                if (scroll != 0.0f)
+                {
+                    camera->processScroll(scroll);
+                }
             }
-
-            // Stop dragging when mouse released
-            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
-            {
-                isDragging = false;
-            }
-
-            // Handle camera input only when appropriate
-            if (imageHovered || isDragging)
-            {
-                handleCameraInput(imageHovered);
-            }
-        }
-        else
-        {
-            ImGui::Text("Loading mesh...");
         }
     }
 
@@ -207,64 +192,81 @@ namespace windows
         ImGui::Spacing();
 
         // Transform controls
-        ImGui::Text("Transform");
-        ImGui::Separator();
-
-        // Scale slider
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::DragFloat("Scale", &meshScale, 0.01f, 0.001f, 100.0f, "%.3f"))
+        if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            meshScale = glm::clamp(meshScale, 0.001f, 100.0f);
-        }
+            float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
 
-        // Rotation sliders
-        ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("Rot X", &meshRotation.x, 1.0f, -180.0f, 180.0f, "%.1f");
-        ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("Rot Y", &meshRotation.y, 1.0f, -180.0f, 180.0f, "%.1f");
-        ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("Rot Z", &meshRotation.z, 1.0f, -180.0f, 180.0f, "%.1f");
-
-        // Reset button
-        if (ImGui::Button("Reset Transform", ImVec2(-1, 0)))
-        {
-            meshScale = 1.0f;
-            meshRotation = glm::vec3(0.0f);
-        }
-
-        // Fit camera button
-        if (ImGui::Button("Fit Camera", ImVec2(-1, 0)))
-        {
-            math::AABB bounds = controller->getMeshBounds();
-            camera->fitToBounds(bounds);
-        }
-    }
-
-    void MeshPreviewWindow::handleCameraInput(bool imageHovered)
-    {
-        // Left mouse drag to orbit - only when drag started on the image
-        if (isDragging && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-        {
-            ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
-            camera->processMouseDrag(delta.x, -delta.y);  // Invert Y for natural feel
-            ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
-        }
-
-        // Scroll to zoom (only when image is hovered)
-        if (imageHovered)
-        {
-            float scroll = ImGui::GetIO().MouseWheel;
-            if (scroll != 0.0f)
+            // Scale
+            ImGui::Text("Scale");
+            ImGui::SameLine(50.0f);
+            ImGui::SetNextItemWidth(itemWidth);
+            if (ImGui::SliderFloat("##Scale", &meshScale, 0.01f, 10.0f, "%.2f"))
             {
-                camera->processScroll(scroll);
+                meshScale = glm::clamp(meshScale, 0.001f, 100.0f);
             }
 
-            // Middle mouse to reset view
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+            // Rotation
+            ImGui::Text("Rot X");
+            ImGui::SameLine(50.0f);
+            ImGui::SetNextItemWidth(itemWidth);
+            ImGui::SliderFloat("##RotX", &meshRotation.x, -180.0f, 180.0f, "%.0f");
+
+            ImGui::Text("Rot Y");
+            ImGui::SameLine(50.0f);
+            ImGui::SetNextItemWidth(itemWidth);
+            ImGui::SliderFloat("##RotY", &meshRotation.y, -180.0f, 180.0f, "%.0f");
+
+            ImGui::Text("Rot Z");
+            ImGui::SameLine(50.0f);
+            ImGui::SetNextItemWidth(itemWidth);
+            ImGui::SliderFloat("##RotZ", &meshRotation.z, -180.0f, 180.0f, "%.0f");
+
+            ImGui::Spacing();
+
+            // Reset button
+            if (ImGui::Button("Reset", ImVec2(-1, 0)))
+            {
+                meshScale = 1.0f;
+                meshRotation = glm::vec3(0.0f);
+            }
+
+            // Fit camera button
+            if (ImGui::Button("Fit Camera", ImVec2(-1, 0)))
             {
                 math::AABB bounds = controller->getMeshBounds();
                 camera->fitToBounds(bounds);
             }
         }
+
+        // Camera controls
+        if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
+
+            // Zoom (camera distance)
+            float dist = camera->getDistance();
+            float minDist = camera->getMinDistance();
+            float maxDist = camera->getMaxDistance();
+
+            ImGui::Text("Zoom");
+            ImGui::SameLine(50.0f);
+            ImGui::SetNextItemWidth(itemWidth);
+            if (ImGui::SliderFloat("##Zoom", &dist, minDist, maxDist, "%.1f", ImGuiSliderFlags_Logarithmic))
+            {
+                camera->setDistance(dist);
+            }
+
+            // Zoom buttons
+            if (ImGui::Button("+", ImVec2(itemWidth / 2 - 2, 0)))
+            {
+                camera->processScroll(1.0f);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("-", ImVec2(itemWidth / 2 - 2, 0)))
+            {
+                camera->processScroll(-1.0f);
+            }
+        }
     }
+
 }

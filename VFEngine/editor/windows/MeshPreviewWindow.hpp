@@ -38,11 +38,6 @@ namespace windows
         bool isOpen = true;
         bool needsInit = true;
 
-        // Mouse tracking for camera
-        bool isDragging = false;
-        float lastMouseX = 0.0f;
-        float lastMouseY = 0.0f;
-
     public:
         explicit MeshPreviewWindow(const std::string& meshFilePath);
         ~MeshPreviewWindow() override;
@@ -56,6 +51,5 @@ namespace windows
         void initRenderer();
         void drawViewport(float width, float height);
         void drawSubMeshPanel();
-        void handleCameraInput(bool imageHovered);
     };
 }

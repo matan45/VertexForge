@@ -1104,29 +1104,43 @@ namespace render::mesh
                 continue;  // Skip meshes that aren't loaded
             }
 
-            // Setup push constants with transform and material properties
-            MeshPushConstants pushConstants{};
-            pushConstants.model = meshData.modelMatrix;
-            pushConstants.albedo = meshData.albedo;
-            pushConstants.metallic = meshData.metallic;
-            pushConstants.roughness = meshData.roughness;
-            pushConstants.ao = meshData.ao;
-            pushConstants.emission = meshData.emission;
-            pushConstants.padding = 0.0f;
-
-            commandBuffer.pushConstants(pipelineLayout,
-                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                0, sizeof(MeshPushConstants), &pushConstants);
-
-            // Render all submeshes with the same transform/material (with per-submesh frustum culling)
-            for (const auto& subMesh : gpuData->subMeshes)
+            // Render all submeshes (with per-submesh frustum culling and highlighting)
+            for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
             {
+                const auto& subMesh = gpuData->subMeshes[subMeshIndex];
+
                 // Per-submesh frustum culling (only if frustum is provided and initialized)
                 if (frustum && frustum->isInitialized() &&
                     !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
                 {
                     continue;  // Submesh is outside frustum, skip rendering
                 }
+
+                // Setup push constants with transform and material properties
+                MeshPushConstants pushConstants{};
+                pushConstants.model = meshData.modelMatrix;
+                pushConstants.metallic = meshData.metallic;
+                pushConstants.roughness = meshData.roughness;
+                pushConstants.ao = meshData.ao;
+                pushConstants.padding = 0.0f;
+
+                // Highlight selected submesh with different color and emission
+                if (meshData.highlightedSubMesh >= 0 &&
+                    static_cast<size_t>(meshData.highlightedSubMesh) == subMeshIndex)
+                {
+                    // Highlighted submesh: bright orange color with strong emission glow
+                    pushConstants.albedo = glm::vec4(1.0f, 0.4f, 0.0f, 1.0f);
+                    pushConstants.emission = 0.8f;
+                }
+                else
+                {
+                    pushConstants.albedo = meshData.albedo;
+                    pushConstants.emission = meshData.emission;
+                }
+
+                commandBuffer.pushConstants(pipelineLayout,
+                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                    0, sizeof(MeshPushConstants), &pushConstants);
 
                 // Bind vertex buffer
                 vk::Buffer vertexBuffers[] = {subMesh.vertexBuffer};

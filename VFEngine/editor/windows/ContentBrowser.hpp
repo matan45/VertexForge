@@ -11,8 +11,10 @@ namespace fs = std::filesystem;
 
 namespace windows
 {
-    // Forward declaration
+    // Forward declarations
     class MeshPreviewWindow;
+    class ImagePreviewWindow;
+    class AudioPreviewWindow;
 
     enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Other };
 
@@ -59,8 +61,10 @@ namespace windows
         bool iconsLoaded = false;
         bool importLocationSet = false;
 
-        // Track open mesh preview windows (key = mesh path)
+        // Track open preview windows (key = file path)
         std::unordered_map<std::string, std::weak_ptr<MeshPreviewWindow>> openMeshPreviews;
+        std::unordered_map<std::string, std::weak_ptr<ImagePreviewWindow>> openImagePreviews;
+        std::unordered_map<std::string, std::weak_ptr<AudioPreviewWindow>> openAudioPreviews;
 
         static constexpr float THUMBNAIL_SIZE = 64.0f;
         static constexpr float PADDING = 16.0f;
@@ -77,7 +81,7 @@ namespace windows
 
         void loadDirectory(const fs::path& path);
 
-        void printFilesNames(const Asset& asset);
+        void printFilesNames(const Asset& asset, bool isSelected);
 
         void drawFileWindow();
 

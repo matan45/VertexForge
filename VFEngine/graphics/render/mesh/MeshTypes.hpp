@@ -38,6 +38,7 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
         bool showBoundingBox = false;                      // Debug: render AABB wireframe
+        int highlightedSubMesh = -1;                       // -1 = none, otherwise index of submesh to highlight
     };
 
     // Push constants for wireframe AABB rendering
