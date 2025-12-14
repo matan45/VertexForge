@@ -193,5 +193,6 @@ namespace render::mesh
         // Texture descriptor set methods (set 1)
         void createTextureDescriptorSetLayout();
         void createTextureDescriptorPool();
+        void initializeDefaultTextureDescriptors();
     };
 }

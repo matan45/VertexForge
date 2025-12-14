@@ -7,6 +7,9 @@
 #include <functional>
 #include <map>
 
+// Forward declarations
+struct ImDrawList;
+
 namespace ax::NodeEditor {
     struct EditorContext;
 }
@@ -99,6 +102,13 @@ namespace editor::graph {
 
         // Get display name for node type
         const char* getNodeTypeName(material::NodeType type) const;
+
+        // Check if a pin has a link connected
+        bool isPinLinked(uint32_t pinId) const;
+
+        // Draw pin shape based on type (filled if linked, hollow if not)
+        void drawPinShape(ImDrawList* drawList, ImVec2 center, material::PinType type,
+                          ImU32 color, bool filled, float size) const;
     };
 
 }

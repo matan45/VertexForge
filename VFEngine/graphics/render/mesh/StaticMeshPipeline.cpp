@@ -253,6 +253,7 @@ namespace render::mesh
         createDescriptorSet(irradianceMap, prefilterMap, brdfLUT);
         createPipelineLayout();
         createGraphicsPipeline();
+        initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
         createWireframePipeline();
         createAABBBuffers();
@@ -271,6 +272,7 @@ namespace render::mesh
         createDescriptorSet(defaultIrradiance, defaultPrefilter, defaultBrdfLUT);
         createPipelineLayout();
         createGraphicsPipeline();
+        initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
         createWireframePipeline();
         createAABBBuffers();
@@ -820,6 +822,23 @@ namespace render::mesh
         poolInfo.maxSets = 1;
 
         textureDescriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
+    }
+
+    void StaticMeshPipeline::initializeDefaultTextureDescriptors()
+    {
+        // Create default 1x1 white texture if not already created
+        if (!defaultTextureCreated) {
+            createDefaultTexture();
+        }
+
+        // Initialize texture descriptor set with all default textures
+        std::array<vk::ImageView, 8> imageViews;
+        std::array<vk::Sampler, 8> samplers;
+        for (int i = 0; i < 8; ++i) {
+            imageViews[i] = defaultTexture.view;
+            samplers[i] = defaultTexture.sampler;
+        }
+        updateTextureDescriptors(imageViews, samplers);
     }
 
     void StaticMeshPipeline::updateTextureDescriptors(

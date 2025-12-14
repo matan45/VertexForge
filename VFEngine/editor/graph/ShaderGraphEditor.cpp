@@ -1,6 +1,7 @@
 #include "ShaderGraphEditor.hpp"
 #include "nodes/ShaderNode.hpp"
 #include "imgui.h"
+#include <cmath>
 
 namespace ed = ax::NodeEditor;
 
@@ -17,6 +18,7 @@ namespace editor::graph {
 
         ed::Config config;
         config.SettingsFile = nullptr;  // Don't save to file
+        config.NavigateButtonIndex = 1; // Right mouse button to pan
         editorContext = ed::CreateEditor(&config);
     }
 
@@ -48,7 +50,14 @@ namespace editor::graph {
 
         ed::SetCurrentEditor(editorContext);
 
+        // Draw zoom controls overlay before Begin
+        ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+        ImVec2 canvasSize = ImGui::GetContentRegionAvail();
+
         ed::Begin("ShaderGraphEditor");
+
+        // Get current zoom level for display
+        float currentZoom = ed::GetCurrentZoom();
 
         // Initialize node positions from graph data on first frame (must be after Begin)
         if (needsPositionInit) {
@@ -82,6 +91,39 @@ namespace editor::graph {
 
         ed::End();
 
+        // Draw zoom controls overlay (bottom-right corner)
+        {
+            ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + canvasSize.x - 100, canvasPos.y + canvasSize.y - 35));
+
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 0.9f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.9f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 0.9f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+
+            // Zoom level display
+            ImGui::Text("%.0f%%", currentZoom * 100.0f);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Zoom: Mouse wheel\nPan: Right mouse drag");
+            }
+
+            ImGui::SameLine();
+
+            // Fit to content button
+            if (ImGui::Button("Fit", ImVec2(35, 25))) {
+                ed::SetCurrentEditor(editorContext);
+                ed::NavigateToContent(0.3f);  // Smooth animation
+                ed::SetCurrentEditor(nullptr);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Fit All Nodes in View (F key)");
+            }
+
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar(2);
+        }
+
         // Update selection
         if (ed::HasSelectionChanged()) {
             ed::NodeId selectedNodes[1];
@@ -104,11 +146,128 @@ namespace editor::graph {
         handleContextMenu();
     }
 
+    // Helper to check if a pin has a link
+    bool ShaderGraphEditor::isPinLinked(uint32_t pinId) const {
+        for (const auto& node : currentGraph->nodes) {
+            for (const auto& pin : node.outputs) {
+                if (pin.id == pinId) {
+                    // Output pin - check if it's a source of any link
+                    for (const auto& link : currentGraph->links) {
+                        if (link.sourceNodeId == node.id && link.sourcePin == pin.name) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            }
+            for (const auto& pin : node.inputs) {
+                if (pin.id == pinId) {
+                    // Input pin - check if it's a target of any link
+                    for (const auto& link : currentGraph->links) {
+                        if (link.targetNodeId == node.id && link.targetPin == pin.name) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Helper to draw pin shape based on type
+    void ShaderGraphEditor::drawPinShape(ImDrawList* drawList, ImVec2 center, material::PinType type,
+                                          ImU32 color, bool filled, float size) const {
+        float halfSize = size / 2.0f;
+
+        switch (type) {
+            case material::PinType::Float: {
+                // Circle for float
+                if (filled) {
+                    drawList->AddCircleFilled(center, halfSize, color);
+                } else {
+                    drawList->AddCircle(center, halfSize, color, 12, 2.0f);
+                }
+                break;
+            }
+            case material::PinType::Vec2: {
+                // Diamond for vec2
+                ImVec2 points[4] = {
+                    ImVec2(center.x, center.y - halfSize),      // top
+                    ImVec2(center.x + halfSize, center.y),      // right
+                    ImVec2(center.x, center.y + halfSize),      // bottom
+                    ImVec2(center.x - halfSize, center.y)       // left
+                };
+                if (filled) {
+                    drawList->AddConvexPolyFilled(points, 4, color);
+                } else {
+                    drawList->AddPolyline(points, 4, color, ImDrawFlags_Closed, 2.0f);
+                }
+                break;
+            }
+            case material::PinType::Vec3: {
+                // Triangle for vec3
+                ImVec2 points[3] = {
+                    ImVec2(center.x, center.y - halfSize),                    // top
+                    ImVec2(center.x + halfSize, center.y + halfSize * 0.7f),  // bottom right
+                    ImVec2(center.x - halfSize, center.y + halfSize * 0.7f)   // bottom left
+                };
+                if (filled) {
+                    drawList->AddConvexPolyFilled(points, 3, color);
+                } else {
+                    drawList->AddPolyline(points, 3, color, ImDrawFlags_Closed, 2.0f);
+                }
+                break;
+            }
+            case material::PinType::Vec4: {
+                // Hexagon for vec4
+                ImVec2 points[6];
+                for (int i = 0; i < 6; i++) {
+                    float angle = (float)i / 6.0f * 2.0f * 3.14159f - 3.14159f / 2.0f;
+                    points[i] = ImVec2(center.x + halfSize * cosf(angle),
+                                       center.y + halfSize * sinf(angle));
+                }
+                if (filled) {
+                    drawList->AddConvexPolyFilled(points, 6, color);
+                } else {
+                    drawList->AddPolyline(points, 6, color, ImDrawFlags_Closed, 2.0f);
+                }
+                break;
+            }
+            case material::PinType::Texture2D: {
+                // Square for texture
+                if (filled) {
+                    drawList->AddRectFilled(
+                        ImVec2(center.x - halfSize, center.y - halfSize),
+                        ImVec2(center.x + halfSize, center.y + halfSize),
+                        color);
+                } else {
+                    drawList->AddRect(
+                        ImVec2(center.x - halfSize, center.y - halfSize),
+                        ImVec2(center.x + halfSize, center.y + halfSize),
+                        color, 0.0f, 0, 2.0f);
+                }
+                break;
+            }
+            default: {
+                // Default circle
+                if (filled) {
+                    drawList->AddCircleFilled(center, halfSize, color);
+                } else {
+                    drawList->AddCircle(center, halfSize, color, 12, 2.0f);
+                }
+                break;
+            }
+        }
+    }
+
     void ShaderGraphEditor::drawNode(material::ShaderNode& node) {
         ed::BeginNode(toEditorNodeId(node.id));
 
-        // Header
+        // Node header
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 255));
         ImGui::TextUnformatted(node.name.empty() ? getNodeTypeName(node.type) : node.name.c_str());
+        ImGui::PopStyleColor();
 
         // Show color preview for ConstantColor nodes
         if (node.type == material::NodeType::ConstantColor) {
@@ -119,7 +278,6 @@ namespace editor::graph {
                     color = *col;
                 }
             }
-            // Just show a small color preview button (editing done in Properties panel)
             ImGui::ColorButton("##preview", ImVec4(color.x, color.y, color.z, color.w),
                 ImGuiColorEditFlags_NoTooltip, ImVec2(20, 20));
         }
@@ -133,70 +291,92 @@ namespace editor::graph {
                     texPath = *path;
                 }
             }
-
-            // Show truncated path or "No texture"
             std::string displayText = texPath.empty() ? "(No texture)" :
                 (texPath.length() > 15 ? "..." + texPath.substr(texPath.length() - 12) : texPath);
             ImGui::TextDisabled("%s", displayText.c_str());
         }
 
-        // Draw input pins with type-based icons
+        ImGui::Spacing();
+
+        float pinSize = 10.0f;
+        float rowHeight = pinSize + 4.0f;
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // Calculate widths for layout
+        float maxInputWidth = 0.0f;
+        float maxOutputWidth = 0.0f;
         for (const auto& pin : node.inputs) {
-            ed::BeginPin(toEditorPinId(pin.id), ed::PinKind::Input);
-
-            // Draw pin icon
-            ImVec2 iconPos = ImGui::GetCursorScreenPos();
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            ImU32 pinColor = getPinColor(pin.type);
-            float iconSize = 8.0f;
-
-            if (pin.type == material::PinType::Texture2D) {
-                // Square for texture
-                drawList->AddRectFilled(
-                    ImVec2(iconPos.x, iconPos.y + 3),
-                    ImVec2(iconPos.x + iconSize, iconPos.y + 3 + iconSize),
-                    pinColor);
-            } else {
-                // Circle for scalar/vector types
-                drawList->AddCircleFilled(
-                    ImVec2(iconPos.x + iconSize/2, iconPos.y + 7),
-                    iconSize/2, pinColor);
-            }
-
-            ImGui::Dummy(ImVec2(iconSize + 4, iconSize));
-            ImGui::SameLine();
-            ImGui::Text("%s", pin.name.c_str());
-            ed::EndPin();
+            maxInputWidth = std::max(maxInputWidth, ImGui::CalcTextSize(pin.name.c_str()).x);
+        }
+        for (const auto& pin : node.outputs) {
+            maxOutputWidth = std::max(maxOutputWidth, ImGui::CalcTextSize(pin.name.c_str()).x);
         }
 
-        // Draw output pins with type-based icons
-        for (const auto& pin : node.outputs) {
-            ed::BeginPin(toEditorPinId(pin.id), ed::PinKind::Output);
+        // Calculate column positions
+        float columnSpacing = 25.0f;
+        float inputColumnWidth = pinSize + 4 + maxInputWidth;
+        float outputColumnWidth = maxOutputWidth + 4 + pinSize;
+        float totalWidth = inputColumnWidth + columnSpacing + outputColumnWidth;
+        totalWidth = std::max(totalWidth, 80.0f);
 
-            ImGui::Text("%s", pin.name.c_str());
-            ImGui::SameLine();
+        // Starting X position for this node's content
+        float startX = ImGui::GetCursorPosX();
+        float outputColumnX = startX + totalWidth - outputColumnWidth;
 
-            // Draw pin icon
-            ImVec2 iconPos = ImGui::GetCursorScreenPos();
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            ImU32 pinColor = getPinColor(pin.type);
-            float iconSize = 8.0f;
+        // Draw inputs and outputs on the same rows
+        size_t maxPins = std::max(node.inputs.size(), node.outputs.size());
 
-            if (pin.type == material::PinType::Texture2D) {
-                // Square for texture
-                drawList->AddRectFilled(
-                    ImVec2(iconPos.x, iconPos.y + 3),
-                    ImVec2(iconPos.x + iconSize, iconPos.y + 3 + iconSize),
-                    pinColor);
-            } else {
-                // Circle for scalar/vector types
-                drawList->AddCircleFilled(
-                    ImVec2(iconPos.x + iconSize/2, iconPos.y + 7),
-                    iconSize/2, pinColor);
+        for (size_t i = 0; i < maxPins; ++i) {
+            float rowY = ImGui::GetCursorPosY();
+
+            // Input pin (left side): [icon] Label
+            if (i < node.inputs.size()) {
+                const auto& pin = node.inputs[i];
+
+                ImGui::SetCursorPos(ImVec2(startX, rowY));
+                ed::BeginPin(toEditorPinId(pin.id), ed::PinKind::Input);
+
+                ImVec2 iconPos = ImGui::GetCursorScreenPos();
+                ImU32 pinColor = getPinColor(pin.type);
+                bool isLinked = isPinLinked(pin.id);
+                drawPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                            pin.type, pinColor, isLinked, pinSize);
+
+                ImGui::Dummy(ImVec2(pinSize, pinSize));
+                ImGui::SameLine(0, 4);
+                ImGui::TextUnformatted(pin.name.c_str());
+
+                ed::EndPin();
             }
 
-            ImGui::Dummy(ImVec2(iconSize, iconSize));
-            ed::EndPin();
+            // Output pin (right side): Label [icon] - right-aligned
+            if (i < node.outputs.size()) {
+                const auto& pin = node.outputs[i];
+
+                // Calculate positions to right-align the icon
+                float labelWidth = ImGui::CalcTextSize(pin.name.c_str()).x;
+                float iconX = startX + totalWidth - pinSize;  // Icon at right edge
+                float labelX = iconX - 4 - labelWidth;        // Label before icon
+
+                ImGui::SetCursorPos(ImVec2(labelX, rowY));
+                ed::BeginPin(toEditorPinId(pin.id), ed::PinKind::Output);
+
+                ImGui::TextUnformatted(pin.name.c_str());
+                ImGui::SameLine(0, 4);
+
+                ImVec2 iconPos = ImGui::GetCursorScreenPos();
+                ImU32 pinColor = getPinColor(pin.type);
+                bool isLinked = isPinLinked(pin.id);
+                drawPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                            pin.type, pinColor, isLinked, pinSize);
+
+                ImGui::Dummy(ImVec2(pinSize, pinSize));
+
+                ed::EndPin();
+            }
+
+            // Move to next row
+            ImGui::SetCursorPosY(rowY + rowHeight);
         }
 
         ed::EndNode();
