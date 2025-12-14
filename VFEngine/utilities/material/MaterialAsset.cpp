@@ -5,6 +5,7 @@
 #include <fstream>
 #include <filesystem>
 #include <unordered_set>
+#include <unordered_map>
 #include <format>
 
 namespace material {
@@ -404,11 +405,50 @@ namespace material {
                         }
                     }
 
-                    // Build set of valid node IDs for link validation
+                    // Build maps for link validation
                     std::unordered_set<uint32_t> validNodeIds;
+                    std::unordered_map<uint32_t, NodeType> nodeTypeMap;
                     for (const auto& node : material.graph.nodes) {
                         validNodeIds.insert(node.id);
+                        nodeTypeMap[node.id] = node.type;
                     }
+
+                    // Helper: nodes that have NO output pins (only inputs)
+                    auto isNodeTypeWithNoOutputs = [](NodeType type) -> bool {
+                        return type == NodeType::PBROutput;
+                    };
+
+                    // Helper: nodes that have NO input pins (only outputs)
+                    auto isNodeTypeWithNoInputs = [](NodeType type) -> bool {
+                        return type == NodeType::VertexUV ||
+                               type == NodeType::VertexNormal ||
+                               type == NodeType::Time;
+                    };
+
+                    // Known output pin names for nodes that only have outputs
+                    auto isOutputOnlyPin = [](NodeType type, const std::string& pin) -> bool {
+                        if (type == NodeType::TextureSample) {
+                            return pin == "RGBA" || pin == "RGB" || pin == "R" ||
+                                   pin == "G" || pin == "B" || pin == "A";
+                        }
+                        if (type == NodeType::VertexUV) {
+                            return pin == "UV" || pin == "U" || pin == "V";
+                        }
+                        if (type == NodeType::VertexNormal) {
+                            return pin == "Normal" || pin == "X" || pin == "Y" || pin == "Z";
+                        }
+                        if (type == NodeType::Time) {
+                            return pin == "Time";
+                        }
+                        return false;
+                    };
+
+                    // Known input pin names for PBROutput
+                    auto isPBROutputInputPin = [](const std::string& pin) -> bool {
+                        return pin == "Albedo" || pin == "Metallic" || pin == "Roughness" ||
+                               pin == "Normal" || pin == "AO" || pin == "Emission" ||
+                               pin == "EmissionStrength" || pin == "Opacity";
+                    };
 
                     // Parse links with validation
                     if (graphJson.contains("links")) {
@@ -449,6 +489,36 @@ namespace material {
                                     if (link.sourcePin.empty() || link.targetPin.empty()) {
                                         logWarningLimited(std::format(
                                             "Link {} has empty pin name(s), skipping", link.id));
+                                        continue;
+                                    }
+
+                                    // Validate link direction - source node must have output pins
+                                    NodeType sourceType = nodeTypeMap[link.sourceNodeId];
+                                    NodeType targetType = nodeTypeMap[link.targetNodeId];
+
+                                    if (isNodeTypeWithNoOutputs(sourceType)) {
+                                        logWarningLimited(std::format(
+                                            "Link {} has invalid source: node {} ({}) has no output pins, skipping",
+                                            link.id, link.sourceNodeId, nodeTypeToString(sourceType)));
+                                        continue;
+                                    }
+
+                                    // Target node must have input pins
+                                    if (isNodeTypeWithNoInputs(targetType)) {
+                                        logWarningLimited(std::format(
+                                            "Link {} has invalid target: node {} ({}) has no input pins, skipping",
+                                            link.id, link.targetNodeId, nodeTypeToString(targetType)));
+                                        continue;
+                                    }
+
+                                    // Check if link appears to be reversed (source pin is an input, target pin is an output)
+                                    bool sourceIsActuallyInput = (sourceType == NodeType::PBROutput && isPBROutputInputPin(link.sourcePin));
+                                    bool targetIsActuallyOutput = isOutputOnlyPin(targetType, link.targetPin);
+
+                                    if (sourceIsActuallyInput || targetIsActuallyOutput) {
+                                        logWarningLimited(std::format(
+                                            "Link {} appears to have reversed direction (source pin '{}' or target pin '{}' has wrong kind), skipping",
+                                            link.id, link.sourcePin, link.targetPin));
                                         continue;
                                     }
 

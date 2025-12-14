@@ -57,7 +57,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
@@ -74,7 +74,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -119,6 +119,9 @@
     <ClCompile Include="camera\OrbitCamera.cpp" />
     <ClCompile Include="graph\ShaderGraphCompiler.cpp" />
     <ClCompile Include="graph\ShaderGraphEditor.cpp" />
+    <ClCompile Include="graph\ShaderGraphEditorDraw.cpp" />
+    <ClCompile Include="graph\ShaderGraphEditorEvents.cpp" />
+    <ClCompile Include="graph\ShaderGraphEditorUtils.cpp" />
     <ClCompile Include="graph\nodes\ShaderNodeFactory.cpp" />
     <ClCompile Include="handlers\EditorHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />

@@ -4,6 +4,7 @@
 #include <imgui_node_editor.h>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <functional>
 #include <map>
 
@@ -23,23 +24,19 @@ namespace editor::graph {
     public:
         ShaderGraphEditor();
         ~ShaderGraphEditor();
-
-        // Initialize the editor context
+        
         void init();
-
-        // Clean up resources
+        
         void cleanUp();
 
         // Set the graph to edit (does not take ownership)
         void setGraph(material::ShaderGraph* graph);
-
-        // Draw the editor (call within ImGui window)
+        
         void draw();
 
         // Register callback for graph changes
         void setOnGraphChanged(GraphChangedCallback callback) { onGraphChanged = callback; }
-
-        // Get selected node ID (0 if none)
+        
         uint32_t getSelectedNodeId() const { return selectedNodeId; }
 
         // Center view on all nodes
@@ -49,8 +46,7 @@ namespace editor::graph {
         ax::NodeEditor::EditorContext* editorContext = nullptr;
         material::ShaderGraph* currentGraph = nullptr;
         GraphChangedCallback onGraphChanged;
-
-        // Selection state
+        
         uint32_t selectedNodeId = 0;
 
         // First frame flag - to initialize node positions
@@ -63,7 +59,7 @@ namespace editor::graph {
         ax::NodeEditor::PinId newNodeLinkPin;
 
         // Zoom control state (for button-triggered zoom)
-        int pendingZoomSteps = 0;  // +1 for zoom in, -1 for zoom out
+        int pendingZoomSteps = 0; 
 
         // ID mapping helpers - use offsets to prevent conflicts between node/pin/link IDs
         static constexpr uintptr_t NODE_ID_OFFSET = 100000;
@@ -78,40 +74,27 @@ namespace editor::graph {
         uint32_t fromEditorPinId(ax::NodeEditor::PinId id) const { return static_cast<uint32_t>(id.Get() - PIN_ID_OFFSET); }
         uint32_t fromEditorLinkId(ax::NodeEditor::LinkId id) const { return static_cast<uint32_t>(id.Get() - LINK_ID_OFFSET); }
 
-        // Drawing helpers
+        // Drawing functions (in ShaderGraphEditorDraw.cpp)
         void drawNode(material::ShaderNode& node);
         void drawLinks();
+        void drawZoomControls(ImVec2 canvasPos, ImVec2 canvasSize, float currentZoom);
+        void drawPinShape(ImDrawList* drawList, ImVec2 center, material::PinType type,
+                          ImU32 color, bool filled, float size) const;
+        bool isPinLinked(uint32_t pinId) const;
 
-        // Handle interactions
+        // Event handling (in ShaderGraphEditorEvents.cpp)
         void handleCreation();
         void handleDeletion();
         void handleContextMenu();
-
-        // Create node of given type
         void createNode(material::NodeType type, const ImVec2& position);
 
-        // Find pin in graph
+        // Utility functions (in ShaderGraphEditorUtils.cpp)
         const material::NodePin* findPin(uint32_t pinId) const;
         material::ShaderNode* findNodeByPinId(uint32_t pinId);
-
-        // Check if link is valid (type compatibility)
         bool canCreateLink(uint32_t startPinId, uint32_t endPinId) const;
-
-        // Get color for pin type
         ImU32 getPinColor(material::PinType type) const;
-
-        // Get node header color
         ImU32 getNodeHeaderColor(material::NodeType type) const;
-
-        // Get display name for node type
-        const char* getNodeTypeName(material::NodeType type) const;
-
-        // Check if a pin has a link connected
-        bool isPinLinked(uint32_t pinId) const;
-
-        // Draw pin shape based on type (filled if linked, hollow if not)
-        void drawPinShape(ImDrawList* drawList, ImVec2 center, material::PinType type,
-                          ImU32 color, bool filled, float size) const;
+        std::string_view getNodeTypeName(material::NodeType type) const;
     };
 
 }

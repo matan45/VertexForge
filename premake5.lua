@@ -7,6 +7,7 @@ workspace "VertexForge"
    -- Enable UTF-8 support for all C++ projects (required by spdlog/fmt)
    filter "language:C++"
       buildoptions { "/utf-8" }
+      defines { "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1" }
    filter {}
 
 -- Check if the Vulkan SDK environment variable is set

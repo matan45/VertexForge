@@ -1,11 +1,11 @@
 #include "ShaderGraphCompiler.hpp"
 #include "nodes/ShaderNode.hpp"
-#include "nodes/ConstantNodes.hpp"
-#include "nodes/MathNodes.hpp"
-#include "nodes/PBROutputNode.hpp"
+#include "print/EditorLogger.hpp"
 #include <queue>
 #include <set>
-#include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <string_view>
 
 namespace editor::graph {
 
@@ -13,12 +13,30 @@ namespace editor::graph {
     static constexpr size_t MAX_RECURSION_DEPTH = 100;
     static constexpr size_t MAX_NODES = 1000;
 
+    // Shader template paths (relative to executable)
+    static constexpr std::string_view VERTEX_TEMPLATE_PATH = "../../resources/shaders/material/material_vertex.glsl";
+    static constexpr std::string_view FRAGMENT_HEADER_PATH = "../../resources/shaders/material/material_fragment_header.glsl";
+    static constexpr std::string_view FRAGMENT_FOOTER_PATH = "../../resources/shaders/material/material_fragment_footer.glsl";
+
+    // Static member initialization
+    std::string ShaderGraphCompiler::s_vertexTemplate;
+    std::string ShaderGraphCompiler::s_fragmentHeader;
+    std::string ShaderGraphCompiler::s_fragmentFooter;
+    bool ShaderGraphCompiler::s_templatesLoaded = false;
+
     CompilationResult ShaderGraphCompiler::compile(const material::MaterialData& material) {
         return compileGraph(material.graph);
     }
 
     CompilationResult ShaderGraphCompiler::compileGraph(const material::ShaderGraph& graph) {
         CompilationResult result;
+
+        // Load templates if not already loaded
+        if (!loadTemplates()) {
+            result.success = false;
+            result.errorMessage = "Failed to load shader templates from files";
+            return result;
+        }
 
         // Validate node count to prevent DoS
         if (graph.nodes.size() > MAX_NODES) {
@@ -51,118 +69,65 @@ namespace editor::graph {
         return result;
     }
 
+    std::string ShaderGraphCompiler::readTextFile(std::string_view path) {
+        std::string pathStr(path);
+        std::ifstream file(pathStr);
+        if (!file.is_open()) {
+            return "";
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return buffer.str();
+    }
+
+    bool ShaderGraphCompiler::loadTemplates() {
+        if (s_templatesLoaded) {
+            return true;
+        }
+
+        // Load vertex shader template
+        s_vertexTemplate = readTextFile(VERTEX_TEMPLATE_PATH);
+        if (s_vertexTemplate.empty()) {
+            vfLogError("Failed to load vertex shader template from: {}", VERTEX_TEMPLATE_PATH);
+            return false;
+        }
+
+        // Load fragment shader header
+        s_fragmentHeader = readTextFile(FRAGMENT_HEADER_PATH);
+        if (s_fragmentHeader.empty()) {
+            vfLogError("Failed to load fragment shader header from: {}", FRAGMENT_HEADER_PATH);
+            return false;
+        }
+
+        // Load fragment shader footer
+        s_fragmentFooter = readTextFile(FRAGMENT_FOOTER_PATH);
+        if (s_fragmentFooter.empty()) {
+            vfLogError("Failed to load fragment shader footer from: {}", FRAGMENT_FOOTER_PATH);
+            return false;
+        }
+
+        s_templatesLoaded = true;
+        vfLogInfo("Loaded shader templates from files");
+        return true;
+    }
+
+    void ShaderGraphCompiler::reloadTemplates() {
+        s_templatesLoaded = false;
+        s_vertexTemplate.clear();
+        s_fragmentHeader.clear();
+        s_fragmentFooter.clear();
+        loadTemplates();
+    }
+
     std::string ShaderGraphCompiler::generateVertexShader() {
-        // Standard vertex shader - same for all materials
-        return R"(#type VERTEX
-#version 460 core
-
-layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec2 inTexCoord;
-
-layout(location = 0) out vec3 fragWorldPos;
-layout(location = 1) out vec3 fragNormal;
-layout(location = 2) out vec2 fragTexCoord;
-
-layout(set = 0, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float u_Time;
-} camera;
-
-layout(push_constant) uniform PushConstants {
-    mat4 model;
-} pc;
-
-void main() {
-    vec4 worldPos = pc.model * vec4(inPosition, 1.0);
-    fragWorldPos = worldPos.xyz;
-
-    // Transform normal to world space
-    mat3 normalMatrix = transpose(inverse(mat3(pc.model)));
-    fragNormal = normalize(normalMatrix * inNormal);
-
-    fragTexCoord = inTexCoord;
-
-    gl_Position = camera.projection * camera.view * worldPos;
-}
-)";
+        return s_vertexTemplate;
     }
 
     std::string ShaderGraphCompiler::generateFragmentShader(const material::ShaderGraph& graph) {
         std::string code;
 
-        // Header
-        code += R"(#type FRAGMENT
-#version 460 core
-
-layout(location = 0) in vec3 fragWorldPos;
-layout(location = 1) in vec3 fragNormal;
-layout(location = 2) in vec2 fragTexCoord;
-
-layout(location = 0) out vec4 outColor;
-
-layout(set = 0, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float u_Time;
-} camera;
-
-layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
-layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
-layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
-
-// Material textures (max 8 textures per material)
-layout(set = 1, binding = 0) uniform sampler2D u_Textures[8];
-
-const float PI = 3.14159265359;
-const float MAX_REFLECTION_LOD = 4.0;
-
-// PBR Functions
-float DistributionGGX(vec3 N, vec3 H, float roughness) {
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float NdotH = max(dot(N, H), 0.0);
-    float NdotH2 = NdotH * NdotH;
-
-    float nom = a2;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
-
-    return nom / denom;
-}
-
-float GeometrySchlickGGX(float NdotV, float roughness) {
-    float r = (roughness + 1.0);
-    float k = (r * r) / 8.0;
-
-    float nom = NdotV;
-    float denom = NdotV * (1.0 - k) + k;
-
-    return nom / denom;
-}
-
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
-    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
-
-    return ggx1 * ggx2;
-}
-
-vec3 fresnelSchlick(float cosTheta, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
-vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
-void main() {
-)";
+        // Start with cached fragment header (includes uniforms, PBR functions, and main() opening)
+        code += s_fragmentHeader;
 
         // Get topologically sorted nodes
         std::vector<uint32_t> sortedNodes = topologicalSort(graph);
@@ -176,46 +141,8 @@ void main() {
             code += generateNodeCode(graph, nodeId, nodeOutputVars);
         }
 
-        // PBR lighting calculation (uses mat_albedo, mat_metallic, etc. from PBROutputNode)
-        code += R"(
-    // PBR Lighting
-    vec3 N = normalize(fragNormal);
-    vec3 V = normalize(camera.cameraPos - fragWorldPos);
-    vec3 R = reflect(-V, N);
-
-    // Calculate F0
-    vec3 F0 = vec3(0.04);
-    F0 = mix(F0, mat_albedo, mat_metallic);
-
-    // IBL Ambient Lighting
-    vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, mat_roughness);
-
-    vec3 kS = F;
-    vec3 kD = 1.0 - kS;
-    kD *= 1.0 - mat_metallic;
-
-    // Diffuse IBL
-    vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * mat_albedo;
-
-    // Specular IBL
-    vec3 prefilteredColor = textureLod(prefilterMap, R, mat_roughness * MAX_REFLECTION_LOD).rgb;
-    vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), mat_roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
-
-    // Combine
-    vec3 ambient = (kD * diffuse + specular) * mat_ao;
-    vec3 color = ambient + mat_emission;
-
-    // HDR tonemapping (Reinhard)
-    color = color / (color + vec3(1.0));
-
-    // Gamma correction
-    color = pow(color, vec3(1.0/2.2));
-
-    outColor = vec4(color, mat_opacity);
-}
-)";
+        // Append cached fragment footer (PBR lighting calculation and main() closing)
+        code += s_fragmentFooter;
 
         return code;
     }
@@ -237,20 +164,34 @@ void main() {
             dependencies[link.targetNodeId].insert(link.sourceNodeId);
         }
 
+        // Track which node caused the issue for debugging
+        uint32_t problemNodeId = 0;
+        std::string problemReason;
+
         // DFS-based topological sort with depth limit
         std::function<void(uint32_t, size_t)> visit = [&](uint32_t nodeId, size_t depth) {
             if (cycleDetected) return;
             if (visited.count(nodeId)) return;
 
+            // Check if node exists in graph
+            if (dependencies.find(nodeId) == dependencies.end()) {
+                vfLogWarning("Link references non-existent node {}, skipping", nodeId);
+                return;
+            }
+
             // Check depth limit to prevent stack overflow
             if (depth > MAX_RECURSION_DEPTH) {
                 cycleDetected = true;
+                problemNodeId = nodeId;
+                problemReason = "depth limit exceeded";
                 return;
             }
 
             if (inStack.count(nodeId)) {
                 // Cycle detected
                 cycleDetected = true;
+                problemNodeId = nodeId;
+                problemReason = "cycle detected";
                 return;
             }
 
@@ -272,8 +213,11 @@ void main() {
             visit(outputNode->id, 0);
         }
 
-        // If cycle detected, return empty result (will generate default shader)
+        // If cycle detected, log detailed error
         if (cycleDetected) {
+            const material::ShaderNode* problemNode = graph.findNode(problemNodeId);
+            std::string nodeName = problemNode ? problemNode->name : "unknown";
+            vfLogError("Shader graph error at node '{}' (id={}): {}", nodeName, problemNodeId, problemReason);
             return {};
         }
 

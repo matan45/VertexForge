@@ -1,11 +1,11 @@
 #pragma once
 #include "material/MaterialTypes.hpp"
 #include <string>
+#include <string_view>
 #include <optional>
 
 namespace editor::graph {
-
-    // Result of shader compilation
+    
     struct CompilationResult {
         bool success = false;
         std::string vertexShader;
@@ -13,7 +13,7 @@ namespace editor::graph {
         std::string errorMessage;
     };
 
-    // Compiles a shader graph to GLSL code
+    
     class ShaderGraphCompiler {
     public:
         // Compile a material's shader graph to GLSL
@@ -22,17 +22,22 @@ namespace editor::graph {
         // Compile just a shader graph (without material wrapper)
         static CompilationResult compileGraph(const material::ShaderGraph& graph);
 
-    private:
-        // Generate the vertex shader (mostly static, same for all materials)
-        static std::string generateVertexShader();
+        // Reload shader templates from disk (call after editing template files)
+        static void reloadTemplates();
 
-        // Generate the fragment shader from the graph
+    private:
+        static std::string generateVertexShader();
+        
         static std::string generateFragmentShader(const material::ShaderGraph& graph);
+
+        // Load shader templates from files (caches them for subsequent calls)
+        static bool loadTemplates();
+        
+        static std::string readTextFile(std::string_view path);
 
         // Topological sort of nodes for proper evaluation order
         static std::vector<uint32_t> topologicalSort(const material::ShaderGraph& graph);
-
-        // Generate code for a single node
+        
         static std::string generateNodeCode(const material::ShaderGraph& graph,
                                            uint32_t nodeId,
                                            std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars);
@@ -42,6 +47,12 @@ namespace editor::graph {
                                           uint32_t nodeId,
                                           const std::string& pinName,
                                           const std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars);
+
+        // Cached shader templates
+        static std::string s_vertexTemplate;
+        static std::string s_fragmentHeader;
+        static std::string s_fragmentFooter;
+        static bool s_templatesLoaded;
     };
 
 }
