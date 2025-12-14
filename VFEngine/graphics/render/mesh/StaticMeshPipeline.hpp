@@ -49,7 +49,17 @@ namespace render::mesh
         vk::RenderPass getRenderPass() const { return renderPass; }
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
-        
+
+        // Texture descriptor set (set 1)
+        vk::DescriptorSetLayout getTextureDescriptorSetLayout() const { return textureDescriptorSetLayout; }
+        vk::DescriptorSet getTextureDescriptorSet() const { return textureDescriptorSet; }
+        bool hasTextureDescriptors() const { return textureDescriptorsInitialized; }
+
+        // Update texture descriptors for material preview (8 texture slots)
+        void updateTextureDescriptors(
+            const std::array<vk::ImageView, 8>& imageViews,
+            const std::array<vk::Sampler, 8>& samplers);
+
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos) const;
 
@@ -99,6 +109,13 @@ namespace render::mesh
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSet;
+
+        // Texture descriptor set (set 1) for material textures
+        vk::DescriptorSetLayout textureDescriptorSetLayout;
+        vk::DescriptorPool textureDescriptorPool;
+        vk::DescriptorSet textureDescriptorSet;
+        bool textureDescriptorsInitialized = false;
+
         std::vector<vk::Framebuffer> framebuffers;
         
         vk::UniqueCommandPool commandPool;
@@ -125,6 +142,33 @@ namespace render::mesh
         // Cache for loaded materials to prevent reloading every frame
         mutable std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> materialCache;
 
+        // GPU texture data for material textures
+        struct MaterialTextureGPU {
+            vk::Image image;
+            vk::DeviceMemory memory;
+            vk::ImageView view;
+            vk::Sampler sampler;
+            int slotIndex = -1;  // Slot in u_Textures[8], -1 = not assigned
+        };
+
+        // Texture cache (path -> GPU texture)
+        mutable std::unordered_map<std::string, MaterialTextureGPU> textureCache;
+
+        // Default 1x1 white texture for empty slots
+        MaterialTextureGPU defaultTexture;
+        bool defaultTextureCreated = false;
+
+        // Currently bound textures (slot index -> path), max 8
+        mutable std::array<std::string, 8> boundTexturePaths;
+        mutable int nextTextureSlot = 0;
+
+        // Texture loading methods
+        void createDefaultTexture();
+        void cleanupTextures();
+        bool loadTexture(const std::string& path) const;
+        int getTextureSlot(const std::string& path) const;
+        void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
+
         // Default IBL textures (used when no IBL is set)
         bool usingDefaultTextures = false;
         ibl::ImageData defaultIrradiance{};
@@ -145,5 +189,9 @@ namespace render::mesh
         void createFramebuffers();
         void createWireframePipeline();
         void createAABBBuffers();
+
+        // Texture descriptor set methods (set 1)
+        void createTextureDescriptorSetLayout();
+        void createTextureDescriptorPool();
     };
 }

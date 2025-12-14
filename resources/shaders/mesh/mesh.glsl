@@ -22,6 +22,13 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
+    // Texture indices: < 0 = no texture, >= 0 = index in u_Textures[8]
+    float albedoTexIdx;
+    float metallicTexIdx;
+    float roughnessTexIdx;
+    float aoTexIdx;
+    float normalTexIdx;
+    float emissionTexIdx;
 } pc;
 
 void main() {
@@ -52,9 +59,13 @@ layout(binding = 0) uniform CameraUBO {
     vec3 cameraPos;
 } camera;
 
-layout(binding = 1) uniform samplerCube irradianceMap;
-layout(binding = 2) uniform samplerCube prefilterMap;
-layout(binding = 3) uniform sampler2D brdfLUT;
+// Set 0: Global resources (camera, IBL)
+layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
+layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
+layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
+
+// Set 1: Material textures (8 slots)
+layout(set = 1, binding = 0) uniform sampler2D u_Textures[8];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -63,6 +74,13 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
+    // Texture indices: < 0 = no texture, >= 0 = index in u_Textures[8]
+    float albedoTexIdx;
+    float metallicTexIdx;
+    float roughnessTexIdx;
+    float aoTexIdx;
+    float normalTexIdx;
+    float emissionTexIdx;
 } pc;
 
 const float PI = 3.14159265359;
@@ -116,12 +134,36 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
 void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
-    vec3 R = reflect(-V, N);
 
+    // Sample textures or use push constant values
     vec3 albedo = pc.albedo.rgb;
+    if (pc.albedoTexIdx >= 0.0) {
+        albedo = texture(u_Textures[int(pc.albedoTexIdx)], fragTexCoord).rgb;
+    }
+
     float metallic = pc.metallic;
+    if (pc.metallicTexIdx >= 0.0) {
+        metallic = texture(u_Textures[int(pc.metallicTexIdx)], fragTexCoord).r;
+    }
+
     float roughness = pc.roughness;
+    if (pc.roughnessTexIdx >= 0.0) {
+        roughness = texture(u_Textures[int(pc.roughnessTexIdx)], fragTexCoord).r;
+    }
+
     float ao = pc.ao;
+    if (pc.aoTexIdx >= 0.0) {
+        ao = texture(u_Textures[int(pc.aoTexIdx)], fragTexCoord).r;
+    }
+
+    // Normal mapping
+    if (pc.normalTexIdx >= 0.0) {
+        vec3 tangentNormal = texture(u_Textures[int(pc.normalTexIdx)], fragTexCoord).rgb * 2.0 - 1.0;
+        // Simple normal perturbation (proper TBN would require tangent/bitangent)
+        N = normalize(N + tangentNormal * 0.5);
+    }
+
+    vec3 R = reflect(-V, N);
 
     // Calculate F0 (reflectance at normal incidence)
     vec3 F0 = vec3(0.04);
@@ -147,7 +189,12 @@ void main() {
     vec3 ambient = (kD * diffuse + specular) * ao;
 
     // Add emission
-    vec3 emissive = albedo * pc.emission;
+    vec3 emissive = vec3(0.0);
+    if (pc.emissionTexIdx >= 0.0) {
+        emissive = texture(u_Textures[int(pc.emissionTexIdx)], fragTexCoord).rgb;
+    } else {
+        emissive = albedo * pc.emission;
+    }
 
     vec3 color = ambient + emissive;
 

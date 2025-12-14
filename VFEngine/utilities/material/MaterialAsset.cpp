@@ -49,6 +49,7 @@ namespace material {
             case NodeType::VertexUV: return "VertexUV";
             case NodeType::Time: return "Time";
             case NodeType::CameraPosition: return "CameraPosition";
+            case NodeType::TextureSample: return "TextureSample";
             default: return "Unknown";
         }
     }
@@ -91,6 +92,7 @@ namespace material {
         if (str == "VertexUV") return NodeType::VertexUV;
         if (str == "Time") return NodeType::Time;
         if (str == "CameraPosition") return NodeType::CameraPosition;
+        if (str == "TextureSample") return NodeType::TextureSample;
         return NodeType::ConstantScalar;  // Default
     }
 

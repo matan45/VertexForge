@@ -62,6 +62,14 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
 
+        // Texture indices (-1.0 = no texture, 0-7 = index in u_Textures[8])
+        float albedoTexIdx = -1.0f;
+        float metallicTexIdx = -1.0f;
+        float roughnessTexIdx = -1.0f;
+        float aoTexIdx = -1.0f;
+        float normalTexIdx = -1.0f;
+        float emissionTexIdx = -1.0f;
+
         // Material assignments per submesh (keyed by submesh name)
         std::unordered_map<std::string, SubMeshMaterialInfo> submeshMaterials;
         std::string defaultMaterialPath;                   // Default material for unassigned submeshes
@@ -91,7 +99,7 @@ namespace render::mesh
     };
 
     // Push constants - matches mesh.glsl push_constant block
-    // Total size: 64 (mat4) + 16 (vec4) + 4 + 4 + 4 + 4 = 96 bytes
+    // Total size: 64 (mat4) + 16 (vec4) + 4*4 + 4*6 = 120 bytes (under 128 limit)
     struct MeshPushConstants
     {
         glm::mat4 model;      // 64 bytes
@@ -99,8 +107,15 @@ namespace render::mesh
         float metallic;       // 4 bytes
         float roughness;      // 4 bytes
         float ao;             // 4 bytes
-        float emission;        // 4 bytes
-        float padding;        // 4 bytes (alignment)
+        float emission;       // 4 bytes
+
+        // Texture indices: -1.0 = no texture, >= 0 = index in u_Textures[8]
+        float albedoTexIdx;      // 4 bytes
+        float metallicTexIdx;    // 4 bytes
+        float roughnessTexIdx;   // 4 bytes
+        float aoTexIdx;          // 4 bytes
+        float normalTexIdx;      // 4 bytes
+        float emissionTexIdx;    // 4 bytes
     };
 
     // Vertex input helper matching resource::Vertex (32 bytes)

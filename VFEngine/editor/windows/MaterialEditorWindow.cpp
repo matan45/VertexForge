@@ -374,7 +374,24 @@ namespace windows {
             return std::nullopt;
         };
 
-        // Extract values from connected nodes
+        // Helper to get connected texture path from TextureSample node
+        auto getConnectedTexturePath = [this, pbrOutput](const std::string& pinName) -> std::string {
+            for (const auto& link : materialData->graph.links) {
+                if (link.targetNodeId == pbrOutput->id && link.targetPin == pinName) {
+                    for (const auto& node : materialData->graph.nodes) {
+                        if (node.id == link.sourceNodeId && node.type == material::NodeType::TextureSample) {
+                            auto it = node.properties.find("texturePath");
+                            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second)) {
+                                return std::get<std::string>(it->second);
+                            }
+                        }
+                    }
+                }
+            }
+            return "";
+        };
+
+        // Extract scalar values from connected constant nodes
         if (auto albedo = getConnectedColor("Albedo")) {
             params.albedo = *albedo;
         }
@@ -390,6 +407,14 @@ namespace windows {
         if (auto emission = getConnectedValue("Emission")) {
             params.emission = *emission;
         }
+
+        // Extract texture paths from connected TextureSample nodes
+        params.albedoTexturePath = getConnectedTexturePath("Albedo");
+        params.metallicTexturePath = getConnectedTexturePath("Metallic");
+        params.roughnessTexturePath = getConnectedTexturePath("Roughness");
+        params.aoTexturePath = getConnectedTexturePath("AO");
+        params.normalTexturePath = getConnectedTexturePath("Normal");
+        params.emissionTexturePath = getConnectedTexturePath("Emission");
 
         previewController->setMaterialParams(params);
     }

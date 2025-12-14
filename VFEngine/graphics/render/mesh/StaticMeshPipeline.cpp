@@ -5,6 +5,7 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/Utilities.hpp"
 #include "resource/MeshResource.hpp"
+#include "resource/ResourceManager.hpp"
 #include "material/MaterialManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
@@ -20,6 +21,14 @@ namespace render::mesh
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
+
+        // Texture paths (empty = use scalar value)
+        std::string albedoTexturePath;
+        std::string metallicTexturePath;
+        std::string roughnessTexturePath;
+        std::string aoTexturePath;
+        std::string normalTexturePath;
+        std::string emissionTexturePath;
     };
 
     // Helper to get value from a node connected to a specific pin
@@ -59,6 +68,29 @@ namespace render::mesh
             }
         }
         return std::nullopt;
+    }
+
+    // Helper to get texture path from a TextureSample node connected to a specific pin
+    static std::string getConnectedTexturePath(
+        const material::ShaderGraph& graph,
+        uint32_t targetNodeId,
+        const std::string& targetPinName)
+    {
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == targetNodeId && link.targetPin == targetPinName) {
+                const auto* sourceNode = graph.findNode(link.sourceNodeId);
+                if (!sourceNode) continue;
+
+                if (sourceNode->type == material::NodeType::TextureSample) {
+                    auto it = sourceNode->properties.find("texturePath");
+                    if (it != sourceNode->properties.end() &&
+                        std::holds_alternative<std::string>(it->second)) {
+                        return std::get<std::string>(it->second);
+                    }
+                }
+            }
+        }
+        return "";
     }
 
     // Extract PBR values from a loaded MaterialData by traversing the shader graph
@@ -128,6 +160,14 @@ namespace render::mesh
                 }
             }
         }
+
+        // Extract texture paths from connected TextureSample nodes
+        pbr.albedoTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Albedo");
+        pbr.metallicTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Metallic");
+        pbr.roughnessTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Roughness");
+        pbr.aoTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "AO");
+        pbr.normalTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Normal");
+        pbr.emissionTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Emission");
 
         return pbr;
     }
@@ -206,7 +246,9 @@ namespace render::mesh
         loadShaders();
         createRenderPass();
         createDescriptorSetLayout();
+        createTextureDescriptorSetLayout();  // Set 1 layout
         createDescriptorPool();
+        createTextureDescriptorPool();       // Set 1 pool
         createCameraUBO();
         createDescriptorSet(irradianceMap, prefilterMap, brdfLUT);
         createPipelineLayout();
@@ -221,7 +263,9 @@ namespace render::mesh
         loadShaders();
         createRenderPass();
         createDescriptorSetLayout();
+        createTextureDescriptorSetLayout();  // Set 1 layout
         createDescriptorPool();
+        createTextureDescriptorPool();       // Set 1 pool
         createCameraUBO();
         createDefaultIBLTextures();
         createDescriptorSet(defaultIrradiance, defaultPrefilter, defaultBrdfLUT);
@@ -746,6 +790,73 @@ namespace render::mesh
         device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
     }
 
+    void StaticMeshPipeline::createTextureDescriptorSetLayout()
+    {
+        // Set 1, Binding 0: Array of 8 material textures
+        vk::DescriptorSetLayoutBinding textureBinding{};
+        textureBinding.binding = 0;
+        textureBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        textureBinding.descriptorCount = 8;  // Array of 8 textures
+        textureBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+        textureBinding.pImmutableSamplers = nullptr;
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &textureBinding;
+
+        textureDescriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
+    }
+
+    void StaticMeshPipeline::createTextureDescriptorPool()
+    {
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.type = vk::DescriptorType::eCombinedImageSampler;
+        poolSize.descriptorCount = 8;  // 8 textures
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.maxSets = 1;
+
+        textureDescriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
+    }
+
+    void StaticMeshPipeline::updateTextureDescriptors(
+        const std::array<vk::ImageView, 8>& imageViews,
+        const std::array<vk::Sampler, 8>& samplers)
+    {
+        // Allocate descriptor set if not already allocated
+        if (!textureDescriptorSet)
+        {
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = textureDescriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &textureDescriptorSetLayout;
+            textureDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
+        }
+
+        // Update all 8 texture bindings
+        std::array<vk::DescriptorImageInfo, 8> imageInfos;
+        for (int i = 0; i < 8; ++i)
+        {
+            imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            imageInfos[i].imageView = imageViews[i];
+            imageInfos[i].sampler = samplers[i];
+        }
+
+        vk::WriteDescriptorSet writeSet{};
+        writeSet.dstSet = textureDescriptorSet;
+        writeSet.dstBinding = 0;
+        writeSet.dstArrayElement = 0;
+        writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        writeSet.descriptorCount = 8;
+        writeSet.pImageInfo = imageInfos.data();
+
+        device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
+        textureDescriptorsInitialized = true;
+    }
+
     void StaticMeshPipeline::createPipelineLayout()
     {
         // Push constant range for MeshPushConstants
@@ -754,9 +865,15 @@ namespace render::mesh
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(MeshPushConstants);
 
+        // Two descriptor set layouts: set 0 (camera + IBL), set 1 (material textures)
+        std::array<vk::DescriptorSetLayout, 2> setLayouts = {
+            descriptorSetLayout,        // Set 0: Camera + IBL
+            textureDescriptorSetLayout  // Set 1: Material textures
+        };
+
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+        pipelineLayoutInfo.pSetLayouts = setLayouts.data();
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -929,6 +1046,22 @@ namespace render::mesh
         if (descriptorSetLayout)
             device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
 
+        // Clean up texture descriptor set (set 1)
+        if (textureDescriptorPool)
+        {
+            if (textureDescriptorSet)
+                device.getLogicalDevice().freeDescriptorSets(textureDescriptorPool, textureDescriptorSet);
+            device.getLogicalDevice().destroyDescriptorPool(textureDescriptorPool);
+            textureDescriptorPool = nullptr;
+            textureDescriptorSet = nullptr;
+        }
+        if (textureDescriptorSetLayout)
+        {
+            device.getLogicalDevice().destroyDescriptorSetLayout(textureDescriptorSetLayout);
+            textureDescriptorSetLayout = nullptr;
+        }
+        textureDescriptorsInitialized = false;
+
         // Clean up wireframe pipeline
         if (wireframePipeline)
         {
@@ -991,6 +1124,9 @@ namespace render::mesh
 
         // Clear material cache
         materialCache.clear();
+
+        // Clean up material textures
+        cleanupTextures();
 
         // Unload all meshes first
         unloadAllMeshes();
@@ -1366,6 +1502,9 @@ namespace render::mesh
             return;
         }
 
+        // Prepare textures for this frame (load, assign slots, update descriptor set)
+        prepareTexturesForFrame(meshDrawList);
+
         vk::RenderPassBeginInfo renderPassInfo{};
         renderPassInfo.renderPass = renderPass;
         renderPassInfo.framebuffer = framebuffers[imageIndex];
@@ -1381,10 +1520,17 @@ namespace render::mesh
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        // Bind pipeline and descriptor set once for all meshes
+        // Bind pipeline and descriptor sets
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                          pipelineLayout, 0, descriptorSet, nullptr);
+
+        // Bind texture descriptor set (set 1) if available
+        if (textureDescriptorsInitialized && textureDescriptorSet)
+        {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                             pipelineLayout, 1, textureDescriptorSet, nullptr);
+        }
 
         // Render each mesh in the draw list
         for (const auto& meshData : meshDrawList)
@@ -1416,7 +1562,23 @@ namespace render::mesh
                 pushConstants.metallic = pbrValues.metallic;
                 pushConstants.roughness = pbrValues.roughness;
                 pushConstants.ao = pbrValues.ao;
-                pushConstants.padding = 0.0f;
+
+                // Get texture slot indices from loaded textures
+                // If material has texture paths, use those. Otherwise fall back to pre-set indices on meshData
+                // (used by material preview which sets indices directly)
+                auto getTexIdx = [this, &meshData](const std::string& texPath, float fallbackIdx) -> float {
+                    if (!texPath.empty()) {
+                        return static_cast<float>(getTextureSlot(texPath));
+                    }
+                    return fallbackIdx;
+                };
+
+                pushConstants.albedoTexIdx = getTexIdx(pbrValues.albedoTexturePath, meshData.albedoTexIdx);
+                pushConstants.metallicTexIdx = getTexIdx(pbrValues.metallicTexturePath, meshData.metallicTexIdx);
+                pushConstants.roughnessTexIdx = getTexIdx(pbrValues.roughnessTexturePath, meshData.roughnessTexIdx);
+                pushConstants.aoTexIdx = getTexIdx(pbrValues.aoTexturePath, meshData.aoTexIdx);
+                pushConstants.normalTexIdx = getTexIdx(pbrValues.normalTexturePath, meshData.normalTexIdx);
+                pushConstants.emissionTexIdx = getTexIdx(pbrValues.emissionTexturePath, meshData.emissionTexIdx);
 
                 // Highlight selected submesh with different color and emission
                 if (meshData.highlightedSubMesh >= 0 &&
@@ -1707,5 +1869,478 @@ namespace render::mesh
             indices.data(),
             indexBufferSize
         );
+    }
+
+    void StaticMeshPipeline::createDefaultTexture()
+    {
+        if (defaultTextureCreated) return;
+
+        // Create a 1x1 white texture for empty slots
+        const uint32_t size = 1;
+        std::array<uint8_t, 4> pixels = {255, 255, 255, 255};  // RGBA white
+
+        vk::ImageCreateInfo imageInfo{};
+        imageInfo.imageType = vk::ImageType::e2D;
+        imageInfo.extent = vk::Extent3D{size, size, 1};
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = vk::Format::eR8G8B8A8Unorm;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
+        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+        imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        imageInfo.samples = vk::SampleCountFlagBits::e1;
+        imageInfo.sharingMode = vk::SharingMode::eExclusive;
+
+        defaultTexture.image = device.getLogicalDevice().createImage(imageInfo);
+
+        vk::MemoryRequirements memReqs = device.getLogicalDevice().getImageMemoryRequirements(defaultTexture.image);
+        vk::MemoryAllocateInfo allocInfo{};
+        allocInfo.allocationSize = memReqs.size;
+        allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
+            memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        defaultTexture.memory = device.getLogicalDevice().allocateMemory(allocInfo);
+        device.getLogicalDevice().bindImageMemory(defaultTexture.image, defaultTexture.memory, 0);
+
+        // Create staging buffer and copy
+        vk::DeviceSize imageSize = sizeof(pixels);
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingMemory;
+
+        core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        stagingRequest.size = imageSize;
+        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+
+        void* data;
+        [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+        memcpy(data, pixels.data(), static_cast<size_t>(imageSize));
+        device.getLogicalDevice().unmapMemory(stagingMemory);
+
+        // Transition and copy
+        vk::CommandBufferAllocateInfo cmdAllocInfo{};
+        cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
+        cmdAllocInfo.commandPool = commandPool.get();
+        cmdAllocInfo.commandBufferCount = 1;
+        auto cmdBuffers = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo);
+        vk::CommandBuffer cmd = cmdBuffers[0];
+
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        cmd.begin(beginInfo);
+
+        vk::ImageMemoryBarrier barrier{};
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = defaultTexture.image;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
+            {}, nullptr, nullptr, barrier);
+
+        vk::BufferImageCopy copyRegion{};
+        copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        copyRegion.imageSubresource.mipLevel = 0;
+        copyRegion.imageSubresource.baseArrayLayer = 0;
+        copyRegion.imageSubresource.layerCount = 1;
+        copyRegion.imageExtent = vk::Extent3D{size, size, 1};
+        cmd.copyBufferToImage(stagingBuffer, defaultTexture.image, vk::ImageLayout::eTransferDstOptimal, copyRegion);
+
+        barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
+            {}, nullptr, nullptr, barrier);
+
+        cmd.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+        device.getGraphicsQueue().submit(submitInfo);
+        device.getGraphicsQueue().waitIdle();
+
+        device.getLogicalDevice().freeCommandBuffers(commandPool.get(), cmd);
+        device.getLogicalDevice().destroyBuffer(stagingBuffer);
+        device.getLogicalDevice().freeMemory(stagingMemory);
+
+        // Create image view
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.image = defaultTexture.image;
+        viewInfo.viewType = vk::ImageViewType::e2D;
+        viewInfo.format = vk::Format::eR8G8B8A8Unorm;
+        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        defaultTexture.view = device.getLogicalDevice().createImageView(viewInfo);
+
+        // Create sampler
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 1.0f;
+        defaultTexture.sampler = device.getLogicalDevice().createSampler(samplerInfo);
+
+        defaultTextureCreated = true;
+        loggerInfo("Created default 1x1 white texture for material slots");
+    }
+
+    void StaticMeshPipeline::cleanupTextures()
+    {
+        // Cleanup cached textures
+        for (auto& [path, tex] : textureCache) {
+            if (tex.sampler) device.getLogicalDevice().destroySampler(tex.sampler);
+            if (tex.view) device.getLogicalDevice().destroyImageView(tex.view);
+            if (tex.image) device.getLogicalDevice().destroyImage(tex.image);
+            if (tex.memory) device.getLogicalDevice().freeMemory(tex.memory);
+        }
+        textureCache.clear();
+
+        // Cleanup default texture
+        if (defaultTextureCreated) {
+            if (defaultTexture.sampler) device.getLogicalDevice().destroySampler(defaultTexture.sampler);
+            if (defaultTexture.view) device.getLogicalDevice().destroyImageView(defaultTexture.view);
+            if (defaultTexture.image) device.getLogicalDevice().destroyImage(defaultTexture.image);
+            if (defaultTexture.memory) device.getLogicalDevice().freeMemory(defaultTexture.memory);
+            defaultTexture = {};
+            defaultTextureCreated = false;
+        }
+
+        // Reset slot assignments
+        boundTexturePaths.fill("");
+        nextTextureSlot = 0;
+    }
+
+    bool StaticMeshPipeline::loadTexture(const std::string& path) const
+    {
+        if (path.empty()) return false;
+        if (textureCache.contains(path)) return true;  // Already loaded
+
+        // Load texture from .vfImage file
+        auto textureFuture = resource::ResourceManager::loadTextureAsync(path);
+        auto textureData = textureFuture.get();
+
+        if (!textureData || textureData->textureData.empty()) {
+            loggerWarning("Failed to load texture: {}", path);
+            return false;
+        }
+
+        MaterialTextureGPU tex{};
+
+        // Create image
+        vk::ImageCreateInfo imageInfo{};
+        imageInfo.imageType = vk::ImageType::e2D;
+        imageInfo.extent = vk::Extent3D{textureData->width, textureData->height, 1};
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = vk::Format::eR8G8B8A8Unorm;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
+        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+        imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        imageInfo.samples = vk::SampleCountFlagBits::e1;
+        imageInfo.sharingMode = vk::SharingMode::eExclusive;
+
+        tex.image = device.getLogicalDevice().createImage(imageInfo);
+
+        vk::MemoryRequirements memReqs = device.getLogicalDevice().getImageMemoryRequirements(tex.image);
+        vk::MemoryAllocateInfo allocInfo{};
+        allocInfo.allocationSize = memReqs.size;
+        allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
+            memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        tex.memory = device.getLogicalDevice().allocateMemory(allocInfo);
+        device.getLogicalDevice().bindImageMemory(tex.image, tex.memory, 0);
+
+        // Create staging buffer and copy
+        vk::DeviceSize imageSize = textureData->textureData.size();
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingMemory;
+
+        core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        stagingRequest.size = imageSize;
+        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+
+        void* data;
+        [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+        memcpy(data, textureData->textureData.data(), static_cast<size_t>(imageSize));
+        device.getLogicalDevice().unmapMemory(stagingMemory);
+
+        // Transition and copy
+        vk::CommandBufferAllocateInfo cmdAllocInfo{};
+        cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
+        cmdAllocInfo.commandPool = commandPool.get();
+        cmdAllocInfo.commandBufferCount = 1;
+        auto cmdBuffers = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo);
+        vk::CommandBuffer cmd = cmdBuffers[0];
+
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        cmd.begin(beginInfo);
+
+        vk::ImageMemoryBarrier barrier{};
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = tex.image;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
+            {}, nullptr, nullptr, barrier);
+
+        vk::BufferImageCopy copyRegion{};
+        copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        copyRegion.imageSubresource.mipLevel = 0;
+        copyRegion.imageSubresource.baseArrayLayer = 0;
+        copyRegion.imageSubresource.layerCount = 1;
+        copyRegion.imageExtent = vk::Extent3D{textureData->width, textureData->height, 1};
+        cmd.copyBufferToImage(stagingBuffer, tex.image, vk::ImageLayout::eTransferDstOptimal, copyRegion);
+
+        barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
+            {}, nullptr, nullptr, barrier);
+
+        cmd.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+        device.getGraphicsQueue().submit(submitInfo);
+        device.getGraphicsQueue().waitIdle();
+
+        device.getLogicalDevice().freeCommandBuffers(commandPool.get(), cmd);
+        device.getLogicalDevice().destroyBuffer(stagingBuffer);
+        device.getLogicalDevice().freeMemory(stagingMemory);
+
+        // Create image view
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.image = tex.image;
+        viewInfo.viewType = vk::ImageViewType::e2D;
+        viewInfo.format = vk::Format::eR8G8B8A8Unorm;
+        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        tex.view = device.getLogicalDevice().createImageView(viewInfo);
+
+        // Create sampler
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.maxAnisotropy = 16.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 1.0f;
+        tex.sampler = device.getLogicalDevice().createSampler(samplerInfo);
+
+        textureCache[path] = tex;
+        loggerInfo("Loaded material texture: {} ({}x{})", path, textureData->width, textureData->height);
+        return true;
+    }
+
+    int StaticMeshPipeline::getTextureSlot(const std::string& path) const
+    {
+        if (path.empty()) return -1;
+
+        auto it = textureCache.find(path);
+        if (it == textureCache.end()) return -1;
+
+        // If already assigned a slot, return it
+        if (it->second.slotIndex >= 0) return it->second.slotIndex;
+
+        // Assign a new slot if available
+        if (nextTextureSlot >= 8) {
+            loggerWarning("Exceeded maximum 8 texture slots, texture not bound: {}", path);
+            return -1;
+        }
+
+        it->second.slotIndex = nextTextureSlot;
+        boundTexturePaths[nextTextureSlot] = path;
+        nextTextureSlot++;
+
+        return it->second.slotIndex;
+    }
+
+    void StaticMeshPipeline::prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const
+    {
+        if (!defaultTextureCreated) {
+            const_cast<StaticMeshPipeline*>(this)->createDefaultTexture();
+        }
+
+        // Check if any meshes have materials. If not (e.g., material preview),
+        // skip texture preparation to preserve externally-bound textures
+        bool hasMaterials = false;
+        for (const auto& meshData : meshDrawList) {
+            if (!meshData.defaultMaterialPath.empty() || !meshData.submeshMaterials.empty()) {
+                hasMaterials = true;
+                break;
+            }
+        }
+
+        if (!hasMaterials) {
+            // No materials in draw list - don't reset texture bindings
+            // This allows external texture management (e.g., MaterialPreviewController)
+            return;
+        }
+
+        // Reset slot assignments for this frame
+        boundTexturePaths.fill("");
+        nextTextureSlot = 0;
+
+        // Reset all cached texture slots
+        for (auto& [path, tex] : textureCache) {
+            tex.slotIndex = -1;
+        }
+
+        // Collect and load all unique textures from materials
+        for (const auto& meshData : meshDrawList) {
+            // Get materials for this mesh
+            std::string materialPath = meshData.defaultMaterialPath;
+
+            // Load material and extract texture paths
+            if (!materialPath.empty()) {
+                auto cacheIt = materialCache.find(materialPath);
+                std::shared_ptr<material::MaterialData> matData;
+
+                if (cacheIt != materialCache.end() && cacheIt->second) {
+                    matData = cacheIt->second;
+                } else {
+                    matData = material::MaterialManager::instance().loadMaterial(materialPath);
+                    if (matData) {
+                        materialCache[materialPath] = matData;
+                    }
+                }
+
+                if (matData) {
+                    ExtractedPBRValues pbr = extractPBRFromMaterial(*matData);
+
+                    // Load textures if paths are specified
+                    if (!pbr.albedoTexturePath.empty()) {
+                        loadTexture(pbr.albedoTexturePath);
+                        getTextureSlot(pbr.albedoTexturePath);
+                    }
+                    if (!pbr.metallicTexturePath.empty()) {
+                        loadTexture(pbr.metallicTexturePath);
+                        getTextureSlot(pbr.metallicTexturePath);
+                    }
+                    if (!pbr.roughnessTexturePath.empty()) {
+                        loadTexture(pbr.roughnessTexturePath);
+                        getTextureSlot(pbr.roughnessTexturePath);
+                    }
+                    if (!pbr.aoTexturePath.empty()) {
+                        loadTexture(pbr.aoTexturePath);
+                        getTextureSlot(pbr.aoTexturePath);
+                    }
+                    if (!pbr.normalTexturePath.empty()) {
+                        loadTexture(pbr.normalTexturePath);
+                        getTextureSlot(pbr.normalTexturePath);
+                    }
+                    if (!pbr.emissionTexturePath.empty()) {
+                        loadTexture(pbr.emissionTexturePath);
+                        getTextureSlot(pbr.emissionTexturePath);
+                    }
+                }
+            }
+
+            // Also process per-submesh materials
+            for (const auto& [submeshName, matInfo] : meshData.submeshMaterials) {
+                if (!matInfo.materialPath.empty()) {
+                    auto cacheIt = materialCache.find(matInfo.materialPath);
+                    std::shared_ptr<material::MaterialData> matData;
+
+                    if (cacheIt != materialCache.end() && cacheIt->second) {
+                        matData = cacheIt->second;
+                    } else {
+                        matData = material::MaterialManager::instance().loadMaterial(matInfo.materialPath);
+                        if (matData) {
+                            materialCache[matInfo.materialPath] = matData;
+                        }
+                    }
+
+                    if (matData) {
+                        ExtractedPBRValues pbr = extractPBRFromMaterial(*matData);
+
+                        if (!pbr.albedoTexturePath.empty()) {
+                            loadTexture(pbr.albedoTexturePath);
+                            getTextureSlot(pbr.albedoTexturePath);
+                        }
+                        if (!pbr.metallicTexturePath.empty()) {
+                            loadTexture(pbr.metallicTexturePath);
+                            getTextureSlot(pbr.metallicTexturePath);
+                        }
+                        if (!pbr.roughnessTexturePath.empty()) {
+                            loadTexture(pbr.roughnessTexturePath);
+                            getTextureSlot(pbr.roughnessTexturePath);
+                        }
+                        if (!pbr.aoTexturePath.empty()) {
+                            loadTexture(pbr.aoTexturePath);
+                            getTextureSlot(pbr.aoTexturePath);
+                        }
+                        if (!pbr.normalTexturePath.empty()) {
+                            loadTexture(pbr.normalTexturePath);
+                            getTextureSlot(pbr.normalTexturePath);
+                        }
+                        if (!pbr.emissionTexturePath.empty()) {
+                            loadTexture(pbr.emissionTexturePath);
+                            getTextureSlot(pbr.emissionTexturePath);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update texture descriptor set with bound textures
+        std::array<vk::ImageView, 8> imageViews;
+        std::array<vk::Sampler, 8> samplers;
+
+        for (int i = 0; i < 8; ++i) {
+            if (!boundTexturePaths[i].empty()) {
+                auto it = textureCache.find(boundTexturePaths[i]);
+                if (it != textureCache.end()) {
+                    imageViews[i] = it->second.view;
+                    samplers[i] = it->second.sampler;
+                    continue;
+                }
+            }
+            // Use default texture for empty slots
+            imageViews[i] = defaultTexture.view;
+            samplers[i] = defaultTexture.sampler;
+        }
+
+        const_cast<StaticMeshPipeline*>(this)->updateTextureDescriptors(imageViews, samplers);
     }
 }

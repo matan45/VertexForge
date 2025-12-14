@@ -2,6 +2,9 @@
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
 #include <memory>
+#include <string>
+#include <array>
+#include <unordered_map>
 
 namespace core
 {
@@ -23,7 +26,18 @@ namespace controllers
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
+
+        // Texture paths (empty = use scalar value)
+        std::string albedoTexturePath;
+        std::string metallicTexturePath;
+        std::string roughnessTexturePath;
+        std::string aoTexturePath;
+        std::string normalTexturePath;
+        std::string emissionTexturePath;
     };
+
+    // Forward declaration for internal texture data (defined in cpp)
+    struct PreviewTextureGPU;
 
     class MaterialPreviewController
     {
@@ -40,6 +54,10 @@ namespace controllers
         // Internal mesh ID for the procedural sphere
         static constexpr const char* SPHERE_MESH_ID = "__material_preview_sphere__";
 
+        // Texture management (implementation details hidden via pImpl pattern)
+        struct TextureManagerImpl;
+        std::unique_ptr<TextureManagerImpl> textureManager;
+
     public:
         explicit MaterialPreviewController();
         ~MaterialPreviewController();
@@ -48,8 +66,11 @@ namespace controllers
         void cleanUp();
 
         // Update material parameters for preview
-        void setMaterialParams(const PreviewMaterialParams& params) { materialParams = params; }
+        void setMaterialParams(const PreviewMaterialParams& params);
         const PreviewMaterialParams& getMaterialParams() const { return materialParams; }
+
+        // Get texture slot index for a path (-1 if not loaded)
+        int getTextureSlot(const std::string& path) const;
 
         // Update camera (called each frame before render)
         void updateCamera(const glm::mat4& view, const glm::mat4& projection,
