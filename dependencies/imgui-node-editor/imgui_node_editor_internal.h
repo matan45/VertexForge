@@ -1315,6 +1315,7 @@ struct EditorContext
     const ImGuiEx::CanvasView& GetView() const { return m_Canvas.View(); }
     const ImRect& GetViewRect() const { return m_Canvas.ViewRect(); }
     const ImRect& GetRect() const { return m_Canvas.Rect(); }
+    void SetZoom(float zoom);  // Set zoom level programmatically
 
     void SetNodePosition(NodeId nodeId, const ImVec2& screenPosition);
     void SetGroupSize(NodeId nodeId, const ImVec2& size);

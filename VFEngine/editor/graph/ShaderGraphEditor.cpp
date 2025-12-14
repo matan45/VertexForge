@@ -1,6 +1,7 @@
 #include "ShaderGraphEditor.hpp"
 #include "nodes/ShaderNode.hpp"
 #include "imgui.h"
+#include <algorithm>
 #include <cmath>
 
 namespace ed = ax::NodeEditor;
@@ -59,6 +60,24 @@ namespace editor::graph {
         // Get current zoom level for display
         float currentZoom = ed::GetCurrentZoom();
 
+        // Apply pending zoom using the new SetCurrentZoom API
+        if (pendingZoomSteps != 0) {
+            // Use fixed zoom step (additive in log space for consistent feel)
+            float zoomStep = 0.1f;  // 10% per click
+            float newZoom;
+            if (pendingZoomSteps > 0) {
+                newZoom = currentZoom + zoomStep;
+            } else {
+                newZoom = currentZoom - zoomStep;
+            }
+            // Round to 1 decimal place to avoid floating point drift
+            newZoom = std::round(newZoom * 10.0f) / 10.0f;
+            newZoom = std::clamp(newZoom, 0.1f, 5.0f);
+            ed::SetCurrentZoom(newZoom);
+            currentZoom = ed::GetCurrentZoom();
+            pendingZoomSteps = 0;
+        }
+
         // Initialize node positions from graph data on first frame (must be after Begin)
         if (needsPositionInit) {
             for (const auto& node : currentGraph->nodes) {
@@ -91,37 +110,91 @@ namespace editor::graph {
 
         ed::End();
 
-        // Draw zoom controls overlay (bottom-right corner)
+        // Draw zoom controls using foreground draw list (renders on top of everything)
         {
-            ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + canvasSize.x - 100, canvasPos.y + canvasSize.y - 35));
+            ImDrawList* fgDrawList = ImGui::GetForegroundDrawList();
 
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 0.9f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.9f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 0.9f));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+            // Position in bottom-right of the canvas
+            float panelX = canvasPos.x + canvasSize.x - 130;
+            float panelY = canvasPos.y + canvasSize.y - 40;
+            float panelWidth = 125;
+            float panelHeight = 35;
 
-            // Zoom level display
-            ImGui::Text("%.0f%%", currentZoom * 100.0f);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Zoom: Mouse wheel\nPan: Right mouse drag");
+            // Draw background panel
+            fgDrawList->AddRectFilled(
+                ImVec2(panelX, panelY),
+                ImVec2(panelX + panelWidth, panelY + panelHeight),
+                IM_COL32(30, 30, 30, 220), 6.0f);
+            fgDrawList->AddRect(
+                ImVec2(panelX, panelY),
+                ImVec2(panelX + panelWidth, panelY + panelHeight),
+                IM_COL32(60, 60, 60, 255), 6.0f);
+
+            // Button dimensions
+            float btnSize = 25;
+            float btnY = panelY + 5;
+            float btnSpacing = 5;
+
+            // Get mouse position for hit testing
+            ImVec2 mousePos = ImGui::GetMousePos();
+            bool mouseClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+
+            // Zoom out button (-)
+            float zoomOutX = panelX + 5;
+            ImVec2 zoomOutMin(zoomOutX, btnY);
+            ImVec2 zoomOutMax(zoomOutX + btnSize, btnY + btnSize);
+            bool zoomOutHovered = mousePos.x >= zoomOutMin.x && mousePos.x <= zoomOutMax.x &&
+                                  mousePos.y >= zoomOutMin.y && mousePos.y <= zoomOutMax.y;
+
+            ImU32 zoomOutColor = zoomOutHovered ? IM_COL32(80, 80, 80, 255) : IM_COL32(50, 50, 50, 255);
+            fgDrawList->AddRectFilled(zoomOutMin, zoomOutMax, zoomOutColor, 4.0f);
+            fgDrawList->AddLine(
+                ImVec2(zoomOutX + 6, btnY + btnSize/2),
+                ImVec2(zoomOutX + btnSize - 6, btnY + btnSize/2),
+                IM_COL32(220, 220, 220, 255), 2.0f);
+
+            if (zoomOutHovered && mouseClicked) {
+                pendingZoomSteps = -1;
             }
 
-            ImGui::SameLine();
+            // Zoom percentage text
+            char zoomText[16];
+            snprintf(zoomText, sizeof(zoomText), "%.1f%%", currentZoom * 100.0f);
+            ImVec2 textSize = ImGui::CalcTextSize(zoomText);
+            float textAreaWidth = 55;
+            float textX = zoomOutX + btnSize + btnSpacing + (textAreaWidth - textSize.x) / 2;
+            float textY = btnY + (btnSize - textSize.y) / 2;
+            fgDrawList->AddText(ImVec2(textX, textY), IM_COL32(200, 200, 200, 255), zoomText);
 
-            // Fit to content button
-            if (ImGui::Button("Fit", ImVec2(35, 25))) {
-                ed::SetCurrentEditor(editorContext);
-                ed::NavigateToContent(0.3f);  // Smooth animation
-                ed::SetCurrentEditor(nullptr);
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Fit All Nodes in View (F key)");
+            // Tooltip for the panel - show when hovering over the panel
+            bool panelHovered = mousePos.x >= panelX && mousePos.x <= panelX + panelWidth &&
+                                mousePos.y >= panelY && mousePos.y <= panelY + panelHeight;
+            if (panelHovered) {
+                ImGui::SetTooltip("Press F to fit all nodes");
             }
 
-            ImGui::PopStyleColor(4);
-            ImGui::PopStyleVar(2);
+            // Zoom in button (+)
+            float zoomInX = zoomOutX + btnSize + btnSpacing + textAreaWidth + btnSpacing;
+            ImVec2 zoomInMin(zoomInX, btnY);
+            ImVec2 zoomInMax(zoomInX + btnSize, btnY + btnSize);
+            bool zoomInHovered = mousePos.x >= zoomInMin.x && mousePos.x <= zoomInMax.x &&
+                                 mousePos.y >= zoomInMin.y && mousePos.y <= zoomInMax.y;
+
+            ImU32 zoomInColor = zoomInHovered ? IM_COL32(80, 80, 80, 255) : IM_COL32(50, 50, 50, 255);
+            fgDrawList->AddRectFilled(zoomInMin, zoomInMax, zoomInColor, 4.0f);
+            ImVec2 plusCenter(zoomInX + btnSize/2, btnY + btnSize/2);
+            fgDrawList->AddLine(
+                ImVec2(plusCenter.x - 6, plusCenter.y),
+                ImVec2(plusCenter.x + 6, plusCenter.y),
+                IM_COL32(220, 220, 220, 255), 2.0f);
+            fgDrawList->AddLine(
+                ImVec2(plusCenter.x, plusCenter.y - 6),
+                ImVec2(plusCenter.x, plusCenter.y + 6),
+                IM_COL32(220, 220, 220, 255), 2.0f);
+
+            if (zoomInHovered && mouseClicked) {
+                pendingZoomSteps = 1;
+            }
         }
 
         // Update selection
@@ -737,7 +810,33 @@ namespace editor::graph {
         // Can't connect input to input or output to output
         if (startPin->kind == endPin->kind) return false;
 
-        // For now, allow any type connection (auto-conversion in shader)
+        // Determine source (output) and target (input) pins
+        const material::NodePin* sourcePin = (startPin->kind == material::PinKind::Output) ? startPin : endPin;
+        const material::NodePin* targetPin = (startPin->kind == material::PinKind::Input) ? startPin : endPin;
+
+        material::PinType srcType = sourcePin->type;
+        material::PinType dstType = targetPin->type;
+
+        // Same type is always compatible
+        if (srcType == dstType) return true;
+
+        // Texture2D can only connect to Texture2D
+        if (srcType == material::PinType::Texture2D || dstType == material::PinType::Texture2D) {
+            return false;
+        }
+
+        // Float can connect to any vector type (broadcasts)
+        if (srcType == material::PinType::Float) {
+            return true;  // Float -> Vec2/Vec3/Vec4
+        }
+
+        // Vector types can connect to Float (takes first component)
+        if (dstType == material::PinType::Float) {
+            return true;  // Vec2/Vec3/Vec4 -> Float
+        }
+
+        // Vector type conversions (with padding/truncating)
+        // Vec2, Vec3, Vec4 are all compatible with each other
         return true;
     }
 

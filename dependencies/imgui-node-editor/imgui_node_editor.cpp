@@ -2208,6 +2208,34 @@ void ed::EditorContext::SaveSettings()
     m_Config.EndSave();
 }
 
+void ed::EditorContext::SetZoom(float zoom)
+{
+    // GetCurrentZoom returns InvScale (1/scale), so we need to convert
+    // zoom parameter is what user expects GetCurrentZoom to return
+    // Internally, m_Zoom is the actual scale, so set it to 1/zoom
+    float internalZoom = 1.0f / zoom;
+
+    // Get current view center in canvas space
+    auto viewRect = m_NavigateAction.GetViewRect();
+    ImVec2 viewCenter = ImVec2(
+        (viewRect.Min.x + viewRect.Max.x) * 0.5f,
+        (viewRect.Min.y + viewRect.Max.y) * 0.5f
+    );
+
+    // Set new zoom (internal representation)
+    m_NavigateAction.m_Zoom = internalZoom;
+
+    // Recalculate scroll to keep the same center point
+    auto windowSize = m_Canvas.ViewRect().GetSize();
+    m_NavigateAction.m_Scroll = viewCenter - windowSize * 0.5f / internalZoom;
+
+    // Update canvas view
+    m_Canvas.SetView(m_NavigateAction.GetView());
+
+    // Mark as dirty
+    MakeDirty(SaveReasonFlags::Navigation);
+}
+
 void ed::EditorContext::MakeDirty(SaveReasonFlags reason)
 {
     m_Settings.MakeDirty(reason);

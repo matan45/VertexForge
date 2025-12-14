@@ -62,6 +62,9 @@ namespace editor::graph {
         ImVec2 popupMousePos;  // Mouse position for popup placement
         ax::NodeEditor::PinId newNodeLinkPin;
 
+        // Zoom control state (for button-triggered zoom)
+        int pendingZoomSteps = 0;  // +1 for zoom in, -1 for zoom out
+
         // ID mapping helpers - use offsets to prevent conflicts between node/pin/link IDs
         static constexpr uintptr_t NODE_ID_OFFSET = 100000;
         static constexpr uintptr_t PIN_ID_OFFSET = 200000;
