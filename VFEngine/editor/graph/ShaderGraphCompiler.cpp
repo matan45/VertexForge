@@ -9,6 +9,10 @@
 
 namespace editor::graph {
 
+    // Limits to prevent stack overflow from malicious/malformed material files
+    static constexpr size_t MAX_RECURSION_DEPTH = 100;
+    static constexpr size_t MAX_NODES = 1000;
+
     CompilationResult ShaderGraphCompiler::compile(const material::MaterialData& material) {
         return compileGraph(material.graph);
     }
@@ -16,11 +20,26 @@ namespace editor::graph {
     CompilationResult ShaderGraphCompiler::compileGraph(const material::ShaderGraph& graph) {
         CompilationResult result;
 
+        // Validate node count to prevent DoS
+        if (graph.nodes.size() > MAX_NODES) {
+            result.success = false;
+            result.errorMessage = "Shader graph exceeds maximum node limit (" + std::to_string(MAX_NODES) + ")";
+            return result;
+        }
+
         // Find output node
         const material::ShaderNode* outputNode = graph.findOutputNode();
         if (!outputNode) {
             result.success = false;
             result.errorMessage = "No PBR Output node found in shader graph";
+            return result;
+        }
+
+        // Check for cycles/depth issues before generating shaders
+        std::vector<uint32_t> sortedNodes = topologicalSort(graph);
+        if (sortedNodes.empty() && !graph.nodes.empty()) {
+            result.success = false;
+            result.errorMessage = "Shader graph contains a cycle or exceeds maximum depth limit";
             return result;
         }
 
@@ -205,6 +224,7 @@ void main() {
         std::vector<uint32_t> result;
         std::set<uint32_t> visited;
         std::set<uint32_t> inStack;
+        bool cycleDetected = false;
 
         // Build adjacency list (node -> nodes it depends on)
         std::map<uint32_t, std::set<uint32_t>> dependencies;
@@ -217,18 +237,28 @@ void main() {
             dependencies[link.targetNodeId].insert(link.sourceNodeId);
         }
 
-        // DFS-based topological sort
-        std::function<void(uint32_t)> visit = [&](uint32_t nodeId) {
+        // DFS-based topological sort with depth limit
+        std::function<void(uint32_t, size_t)> visit = [&](uint32_t nodeId, size_t depth) {
+            if (cycleDetected) return;
             if (visited.count(nodeId)) return;
+
+            // Check depth limit to prevent stack overflow
+            if (depth > MAX_RECURSION_DEPTH) {
+                cycleDetected = true;
+                return;
+            }
+
             if (inStack.count(nodeId)) {
-                // Cycle detected - just skip
+                // Cycle detected
+                cycleDetected = true;
                 return;
             }
 
             inStack.insert(nodeId);
 
             for (uint32_t dep : dependencies[nodeId]) {
-                visit(dep);
+                visit(dep, depth + 1);
+                if (cycleDetected) return;
             }
 
             inStack.erase(nodeId);
@@ -239,7 +269,12 @@ void main() {
         // Visit all nodes, starting from output node
         const material::ShaderNode* outputNode = graph.findOutputNode();
         if (outputNode) {
-            visit(outputNode->id);
+            visit(outputNode->id, 0);
+        }
+
+        // If cycle detected, return empty result (will generate default shader)
+        if (cycleDetected) {
+            return {};
         }
 
         return result;

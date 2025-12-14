@@ -470,6 +470,14 @@ namespace windows {
 
             // Render and display
             void* texture = previewController->render();
+
+            // Check for shader compilation errors from the preview pipeline
+            std::string shaderError = previewController->getLastShaderCompilationError();
+            if (!shaderError.empty() && !showCompileError) {
+                showCompileError = true;
+                compileErrorMessage = "SPIR-V: " + shaderError;
+            }
+
             if (texture) {
                 ImVec2 size(viewportSize - 16, viewportSize - 16);
                 ImGui::Image(texture, size);

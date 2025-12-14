@@ -62,6 +62,9 @@ namespace render::mesh
         void injectMaterialForPreview(const std::string& materialPath,
                                       std::shared_ptr<material::MaterialData> materialData);
 
+        // Get last shader compilation error (for UI display)
+        std::string getLastShaderCompilationError() const;
+
         // Texture descriptor set (set 1)
         vk::DescriptorSetLayout getTextureDescriptorSetLayout() const { return textureDescriptorSetLayout; }
         vk::DescriptorSet getTextureDescriptorSet() const { return textureDescriptorSet; }

@@ -90,6 +90,9 @@ namespace controllers
         // Render preview and return ImGui-compatible texture handle
         void* render();
 
+        // Get last shader compilation error (for UI display)
+        std::string getLastShaderCompilationError() const;
+
         bool isInitialized() const { return initialized; }
     };
 }

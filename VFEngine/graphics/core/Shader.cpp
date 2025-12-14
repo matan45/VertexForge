@@ -36,7 +36,7 @@ namespace core {
 		shaderModules.clear();
 	}
 
-	std::vector<uint32_t> Shader::compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName) const
+	std::vector<uint32_t> Shader::compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName)
 	{
 		shaderc_shader_kind kind;
 
@@ -51,6 +51,8 @@ namespace core {
 		case eTessellationEvaluation: kind = shaderc_tess_evaluation_shader; break;
 		default:
 			loggerError("Unsupported shader stage");
+			lastCompilationError = "Unsupported shader stage";
+			return {};
 		}
 
 		shaderc::Compiler compiler;
@@ -63,8 +65,9 @@ namespace core {
 
 		// Check for compilation errors
 		if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-			std::string errorMsg = result.GetErrorMessage();
-			loggerError("Shader compilation failed for {}: {}", shaderName, errorMsg);
+			lastCompilationError = result.GetErrorMessage();
+			loggerError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
+			return {};
 		}
 
 		// Return the compiled SPIR-V code
@@ -138,6 +141,8 @@ namespace core {
 	bool Shader::compileFromSources(std::string_view vertexSource, std::string_view fragmentSource,
 	                               std::string_view shaderName)
 	{
+		// Clear any previous error
+		lastCompilationError.clear();
 		bool success = true;
 
 		// Compile vertex shader

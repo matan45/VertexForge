@@ -626,4 +626,15 @@ namespace controllers
         vk::DescriptorSet descriptorSet = offScreen->render();
         return static_cast<void*>(descriptorSet);
     }
+
+    std::string MaterialPreviewController::getLastShaderCompilationError() const
+    {
+        if (!initialized || !offScreen) return "";
+
+        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        if (meshPipeline) {
+            return meshPipeline->getLastShaderCompilationError();
+        }
+        return "";
+    }
 }

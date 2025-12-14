@@ -1407,6 +1407,14 @@ namespace render::mesh
         }
     }
 
+    std::string StaticMeshPipeline::getLastShaderCompilationError() const
+    {
+        if (materialShaderCache) {
+            return materialShaderCache->getLastCompilationError();
+        }
+        return "";
+    }
+
     std::string StaticMeshPipeline::loadMesh(std::string_view meshPath)
     {
         std::string pathStr(meshPath);

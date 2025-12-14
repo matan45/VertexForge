@@ -17,6 +17,7 @@ namespace core {
 		Device& device;
 		std::vector<vk::UniqueShaderModule> shaderModules;
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+		std::string lastCompilationError;
 
 	public:
 		explicit Shader(Device& device);
@@ -35,10 +36,13 @@ namespace core {
 
 		const std::vector<vk::PipelineShaderStageCreateInfo>& getShaderStages() const { return shaderStages; }
 
+		// Get the last compilation error message (empty if no error)
+		const std::string& getLastCompilationError() const { return lastCompilationError; }
+
 		void cleanUp();
 
 	private:
-		std::vector<uint32_t> compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName) const;
+		std::vector<uint32_t> compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName);
 		void createShaderModule(const std::vector<uint32_t>& code, vk::ShaderStageFlagBits stage);
 		vk::ShaderStageFlagBits shaderTypeToVulkanStage(resource::ShaderType shaderType) const;
 

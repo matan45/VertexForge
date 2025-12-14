@@ -55,7 +55,11 @@ namespace render::mesh
         // Check if a material has a valid cached pipeline
         bool hasPipeline(const std::string& materialPath) const;
 
+        // Get last compilation error (empty if no error)
+        const std::string& getLastCompilationError() const { return lastCompilationError; }
+
     private:
+        std::string lastCompilationError;
         core::Device& device;
         vk::RenderPass renderPass;
         vk::PipelineLayout pipelineLayout;

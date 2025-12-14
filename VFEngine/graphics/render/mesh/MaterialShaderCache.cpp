@@ -85,9 +85,13 @@ namespace render::mesh
         );
 
         if (!success || outData.shader->getShaderStages().empty()) {
+            lastCompilationError = outData.shader->getLastCompilationError();
             loggerError("Failed to compile material shader: {}", materialPath);
             return false;
         }
+
+        // Clear error on success
+        lastCompilationError.clear();
 
         // Store hashes for change detection
         outData.vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
