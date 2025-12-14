@@ -36,6 +36,12 @@ namespace controllers
         std::string normalTexturePath;
         std::string emissionTexturePath;
 
+        // Material path for custom shader pipeline lookup
+        std::string materialPath;
+
+        // Flag to enable custom shader pipeline (only after explicit compile)
+        bool useCustomShader = false;
+
         // Material graph for dynamic evaluation (Time, Sin, Cos nodes)
         std::shared_ptr<material::MaterialData> materialData;
     };

@@ -24,12 +24,17 @@ namespace resource
 
 namespace render::mesh
 {
+    class MaterialShaderCache;
+}
+
+namespace render::mesh
+{
     class StaticMeshPipeline
     {
     public:
         explicit StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
                            core::OffscreenResources& offscreenResources);
-        ~StaticMeshPipeline() = default;
+        ~StaticMeshPipeline();
         
         void init(const ibl::ImageData& irradianceMap,
                   const ibl::ImageData& prefilterMap,
@@ -52,6 +57,10 @@ namespace render::mesh
 
         // Clear cached material to force reload (called when materials are saved)
         void invalidateMaterialCache(const std::string& materialPath = "");
+
+        // Inject a material into the cache (for preview with unsaved changes)
+        void injectMaterialForPreview(const std::string& materialPath,
+                                      std::shared_ptr<material::MaterialData> materialData);
 
         // Texture descriptor set (set 1)
         vk::DescriptorSetLayout getTextureDescriptorSetLayout() const { return textureDescriptorSetLayout; }
@@ -127,6 +136,9 @@ namespace render::mesh
 
         // Async transfer manager for non-blocking buffer uploads
         std::unique_ptr<core::TransferManager> transferManager;
+
+        // Material shader cache for per-material compiled shaders and pipelines
+        std::unique_ptr<MaterialShaderCache> materialShaderCache;
 
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;

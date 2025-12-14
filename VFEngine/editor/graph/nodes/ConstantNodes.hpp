@@ -255,11 +255,15 @@ namespace editor::graph {
 
         std::string generateCode(const std::string& outputVarPrefix,
                                 const std::map<std::string, std::string>& inputVarNames) const override {
-            // Get UV input (use vertex UV if not connected)
+            // Get UV input (use vertex UV if not connected or if using default value)
             std::string uvVar = "fragTexCoord";
             auto it = inputVarNames.find("UV");
             if (it != inputVarNames.end() && !it->second.empty()) {
-                uvVar = it->second;
+                // Check if it's the default value (vec2(0.0, 0.0)) - if so, use fragTexCoord
+                const std::string& uv = it->second;
+                if (uv.find("vec2(0.0") == std::string::npos) {
+                    uvVar = uv;
+                }
             }
 
             // Get texture index from properties

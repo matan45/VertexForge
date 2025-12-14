@@ -68,6 +68,8 @@ namespace editor::graph {
                 return std::make_unique<NormalizeNode>();
             case material::NodeType::Length:
                 return std::make_unique<LengthNode>();
+            case material::NodeType::MakeVec2:
+                return std::make_unique<MakeVec2Node>();
             case material::NodeType::MakeVec3:
                 return std::make_unique<MakeVec3Node>();
             case material::NodeType::Fresnel:

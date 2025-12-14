@@ -29,12 +29,30 @@ namespace editor::graph {
                                 const std::map<std::string, std::string>& inputVarNames) const override {
             std::string code;
 
+            // Helper to convert vec3 variable to float (extracts .r component)
+            // This handles cases like texture RGB connected to float inputs
+            auto toFloat = [](const std::string& var, const std::string& defaultVal) -> std::string {
+                if (var.empty()) return defaultVal;
+                // If it looks like a vec3 variable (ends with RGB or contains vec3), extract .r
+                if (var.find("_RGB") != std::string::npos ||
+                    var.find("vec3") != std::string::npos ||
+                    var.find("_Result") != std::string::npos) {
+                    // Check if it's already a component access
+                    if (var.back() == 'r' || var.back() == 'g' || var.back() == 'b' ||
+                        var.back() == 'x' || var.back() == 'y' || var.back() == 'z') {
+                        return var;
+                    }
+                    return "(" + var + ").r";
+                }
+                return var;
+            };
+
             // Get input values or use defaults
             std::string albedo = inputVarNames.count("Albedo") ? inputVarNames.at("Albedo") : "vec3(0.8, 0.8, 0.8)";
             std::string normal = inputVarNames.count("Normal") ? inputVarNames.at("Normal") : "vec3(0.0, 0.0, 1.0)";
-            std::string metallic = inputVarNames.count("Metallic") ? inputVarNames.at("Metallic") : "0.0";
-            std::string roughness = inputVarNames.count("Roughness") ? inputVarNames.at("Roughness") : "0.5";
-            std::string ao = inputVarNames.count("AO") ? inputVarNames.at("AO") : "1.0";
+            std::string metallic = inputVarNames.count("Metallic") ? toFloat(inputVarNames.at("Metallic"), "0.0") : "0.0";
+            std::string roughness = inputVarNames.count("Roughness") ? toFloat(inputVarNames.at("Roughness"), "0.5") : "0.5";
+            std::string ao = inputVarNames.count("AO") ? toFloat(inputVarNames.at("AO"), "1.0") : "1.0";
             std::string emission = inputVarNames.count("Emission") ? inputVarNames.at("Emission") : "vec3(0.0)";
             std::string emissionStrength = inputVarNames.count("EmissionStrength") ? inputVarNames.at("EmissionStrength") : "0.0";
             std::string opacity = inputVarNames.count("Opacity") ? inputVarNames.at("Opacity") : "1.0";

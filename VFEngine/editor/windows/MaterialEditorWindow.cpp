@@ -53,8 +53,8 @@ namespace windows {
             graphEditor->setOnGraphChanged([this]() { onGraphChanged(); });
             graphEditor->navigateToContent();
 
-            // Initial compile to show preview
-            compileMaterial();
+            // Initial preview without custom shader (user must hit Compile to enable)
+            updatePreviewMaterial(false);
         }
     }
 
@@ -112,8 +112,8 @@ namespace windows {
             showCompileError = false;
             vfLogInfo("Material compiled successfully: {}", materialData->name);
 
-            // Update preview only after successful compilation
-            updatePreviewMaterial();
+            // Update preview with custom shader enabled after successful compilation
+            updatePreviewMaterial(true);
         } else {
             showCompileError = true;
             compileErrorMessage = result.errorMessage;
@@ -299,10 +299,11 @@ namespace windows {
         }
     }
 
-    void MaterialEditorWindow::updatePreviewMaterial() {
+    void MaterialEditorWindow::updatePreviewMaterial(bool useCustomShader) {
         if (!materialData) return;
 
         controllers::PreviewMaterialParams params;
+        params.useCustomShader = useCustomShader;
 
         // Find PBR Output node
         material::ShaderNode* pbrOutput = nullptr;
@@ -423,6 +424,9 @@ namespace windows {
         params.aoTexturePath = getConnectedTexturePath("AO");
         params.normalTexturePath = getConnectedTexturePath("Normal");
         params.emissionTexturePath = getConnectedTexturePath("Emission");
+
+        // Pass material path for custom shader pipeline lookup
+        params.materialPath = materialPath;
 
         // Pass material graph for dynamic evaluation (Time, Sin, Cos nodes)
         params.materialData = materialData;

@@ -1,4 +1,5 @@
 #include "StaticMeshPipeline.hpp"
+#include "MaterialShaderCache.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -32,6 +33,9 @@ namespace render::mesh
         std::string aoTexturePath;
         std::string normalTexturePath;
         std::string emissionTexturePath;
+
+        // Material path for shader cache lookup
+        std::string materialPath;
     };
 
     // Forward declaration for recursive evaluation
@@ -354,6 +358,9 @@ namespace render::mesh
                     }
                 }
             }
+
+            // Store material path for shader cache lookup
+            pbr.materialPath = materialPath;
         }
 
         return pbr;
@@ -377,7 +384,12 @@ namespace render::mesh
             device.getTransferQueue(),
             transferQueueFamily
         );
+
+        // Create material shader cache for per-material pipeline compilation
+        materialShaderCache = std::make_unique<MaterialShaderCache>(device);
     }
+
+    StaticMeshPipeline::~StaticMeshPipeline() = default;
 
     void StaticMeshPipeline::init(const ibl::ImageData& irradianceMap,
                                   const ibl::ImageData& prefilterMap,
@@ -393,6 +405,7 @@ namespace render::mesh
         createDescriptorSet(irradianceMap, prefilterMap, brdfLUT);
         createPipelineLayout();
         createGraphicsPipeline();
+        materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
         createWireframePipeline();
@@ -412,6 +425,7 @@ namespace render::mesh
         createDescriptorSet(defaultIrradiance, defaultPrefilter, defaultBrdfLUT);
         createPipelineLayout();
         createGraphicsPipeline();
+        materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
         createWireframePipeline();
@@ -1328,6 +1342,11 @@ namespace render::mesh
         // Clear material cache
         materialCache.clear();
 
+        // Clean up material shader cache (per-material compiled pipelines)
+        if (materialShaderCache) {
+            materialShaderCache->cleanUp();
+        }
+
         // Clean up material textures
         cleanupTextures();
 
@@ -1355,9 +1374,36 @@ namespace render::mesh
         if (materialPath.empty()) {
             // Mark cache for full invalidation
             materialCacheInvalidated = true;
+            // Also invalidate all compiled shaders
+            if (materialShaderCache) {
+                materialShaderCache->invalidateAll();
+            }
         } else {
             // Clear specific material immediately
             materialCache.erase(materialPath);
+            // Also invalidate the compiled shader for this material
+            if (materialShaderCache) {
+                materialShaderCache->invalidate(materialPath);
+            }
+        }
+    }
+
+    void StaticMeshPipeline::injectMaterialForPreview(const std::string& materialPath,
+                                                       std::shared_ptr<material::MaterialData> materialData)
+    {
+        if (materialPath.empty() || !materialData) {
+            return;
+        }
+
+        // Inject/update the material in the cache
+        materialCache[materialPath] = materialData;
+
+        // If the material has custom shaders, invalidate the shader cache to force recompilation
+        // This ensures that if the shader code changed, it gets recompiled
+        if (!materialData->cachedVertexShader.empty() && !materialData->cachedFragmentShader.empty()) {
+            if (materialShaderCache) {
+                materialShaderCache->invalidate(materialPath);
+            }
         }
     }
 
@@ -1755,12 +1801,43 @@ namespace render::mesh
             // Skip if blend mode doesn't match current pass
             if (pbrValues.blendMode != targetBlendMode) return;
 
-            // Bind appropriate pipeline if needed
-            vk::Pipeline targetPipeline = graphicsPipeline;  // Default: opaque
-            if (pbrValues.blendMode == material::BlendMode::Masked) {
-                targetPipeline = maskedPipeline;
-            } else if (pbrValues.blendMode == material::BlendMode::Translucent) {
-                targetPipeline = translucentPipeline;
+            // Try to get material-specific pipeline from shader cache
+            vk::Pipeline targetPipeline = nullptr;
+            bool usingMaterialPipeline = false;
+
+            if (materialShaderCache && !pbrValues.materialPath.empty()) {
+                // Check if material has custom shaders
+                auto matIt = materialCache.find(pbrValues.materialPath);
+                if (matIt != materialCache.end() && matIt->second) {
+                    const material::MaterialData& matData = *matIt->second;
+                    // Only use custom pipeline if material has compiled shaders
+                    if (!matData.cachedVertexShader.empty() && !matData.cachedFragmentShader.empty()) {
+                        const MaterialPipelineData* matPipeline =
+                            materialShaderCache->getOrCreatePipeline(pbrValues.materialPath, matData);
+                        if (matPipeline && matPipeline->valid) {
+                            // Select appropriate pipeline variant based on blend mode
+                            if (pbrValues.blendMode == material::BlendMode::Masked) {
+                                targetPipeline = matPipeline->maskedPipeline;
+                            } else if (pbrValues.blendMode == material::BlendMode::Translucent) {
+                                targetPipeline = matPipeline->translucentPipeline;
+                            } else {
+                                targetPipeline = matPipeline->opaquePipeline;
+                            }
+                            usingMaterialPipeline = true;
+                        }
+                    }
+                }
+            }
+
+            // Fall back to default pipeline if no custom shader
+            if (!usingMaterialPipeline) {
+                if (pbrValues.blendMode == material::BlendMode::Masked) {
+                    targetPipeline = maskedPipeline;
+                } else if (pbrValues.blendMode == material::BlendMode::Translucent) {
+                    targetPipeline = translucentPipeline;
+                } else {
+                    targetPipeline = graphicsPipeline;
+                }
             }
 
             if (currentPipeline != targetPipeline) {

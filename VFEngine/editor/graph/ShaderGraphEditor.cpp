@@ -692,6 +692,10 @@ namespace editor::graph {
 
             // Vector
             if (ImGui::BeginMenu("Vector")) {
+                if (ImGui::MenuItem("Make Vec2")) {
+                    createNode(material::NodeType::MakeVec2, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
                 if (ImGui::MenuItem("Make Vec3")) {
                     createNode(material::NodeType::MakeVec3, newNodePosition);
                     ImGui::CloseCurrentPopup();

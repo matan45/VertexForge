@@ -455,6 +455,15 @@ namespace controllers
 
         if (!initialized) return;
 
+        // Inject material into mesh pipeline cache for custom shader support
+        // Only inject when useCustomShader is true (after explicit compile)
+        if (params.useCustomShader && !params.materialPath.empty() && params.materialData) {
+            auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+            if (meshPipeline) {
+                meshPipeline->injectMaterialForPreview(params.materialPath, params.materialData);
+            }
+        }
+
         // Load textures and assign slots
         std::array<std::string, 6> texturePaths = {
             params.albedoTexturePath,
@@ -588,6 +597,9 @@ namespace controllers
         renderData.ao = materialParams.ao;
         renderData.showBoundingBox = false;
         renderData.highlightedSubMesh = -1;
+
+        // Set material path for custom shader pipeline lookup
+        renderData.defaultMaterialPath = materialParams.materialPath;
 
         // Dynamically evaluate emission from material graph if available
         if (materialParams.materialData) {

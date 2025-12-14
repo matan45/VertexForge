@@ -143,6 +143,7 @@
     <None Include="..\..\resources\editor\contentBrowser\folder.vfImage" />
     <None Include="..\..\resources\editor\contentBrowser\glsl-file.vfImage" />
     <None Include="..\..\resources\editor\contentBrowser\hdr-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\material-icon.vfImage" />
     <None Include="..\..\resources\editor\contentBrowser\mesh-file.vfImage" />
     <None Include="..\..\resources\editor\contentBrowser\scene.vfImage" />
     <None Include="..\..\resources\editor\contentBrowser\texture-file.vfImage" />

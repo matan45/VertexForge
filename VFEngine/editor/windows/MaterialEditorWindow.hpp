@@ -62,7 +62,7 @@ namespace windows {
         void drawPropertiesPanel();
 
         void handlePreviewInput();
-        void updatePreviewMaterial();
+        void updatePreviewMaterial(bool useCustomShader = false);
 
         void onGraphChanged();
     };

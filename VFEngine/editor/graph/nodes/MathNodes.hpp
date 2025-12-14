@@ -479,6 +479,35 @@ namespace editor::graph {
         }
     };
 
+    // Make Vec2 from components
+    class MakeVec2Node : public ShaderNodeBase {
+    public:
+        MakeVec2Node() {
+            type = material::NodeType::MakeVec2;
+            name = "Make Vector2";
+
+            addInputPin("X", material::PinType::Float, 0.0f);
+            addInputPin("Y", material::PinType::Float, 0.0f);
+            addOutputPin("Result", material::PinType::Vec2);
+        }
+
+        std::string generateCode(const std::string& outputVarPrefix,
+                                const std::map<std::string, std::string>& inputVarNames) const override {
+            std::string x = inputVarNames.count("X") ? inputVarNames.at("X") : "0.0";
+            std::string y = inputVarNames.count("Y") ? inputVarNames.at("Y") : "0.0";
+            return "vec2 " + outputVarPrefix + "Result = vec2(" + x + ", " + y + ");\n";
+        }
+
+        std::string getOutputVarName(const std::string& outputVarPrefix,
+                                    const std::string& /*pinName*/) const override {
+            return outputVarPrefix + "Result";
+        }
+
+        std::string getOutputType(const std::string& /*pinName*/) const override {
+            return "vec2";
+        }
+    };
+
     // Make Vec3 from components
     class MakeVec3Node : public ShaderNodeBase {
     public:

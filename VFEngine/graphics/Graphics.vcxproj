@@ -124,6 +124,7 @@
     <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
     <ClInclude Include="render\ibl\SkyboxRenderer.hpp" />
     <ClInclude Include="render\material\MaterialPipeline.hpp" />
+    <ClInclude Include="render\mesh\MaterialShaderCache.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
   </ItemGroup>
@@ -152,6 +153,7 @@
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
     <ClCompile Include="render\material\MaterialPipeline.cpp" />
+    <ClCompile Include="render\mesh\MaterialShaderCache.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
