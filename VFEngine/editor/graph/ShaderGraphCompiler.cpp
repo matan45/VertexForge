@@ -49,6 +49,7 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
     vec3 cameraPos;
+    float u_Time;
 } camera;
 
 layout(push_constant) uniform PushConstants {
@@ -87,6 +88,7 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
     vec3 cameraPos;
+    float u_Time;
 } camera;
 
 layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
@@ -95,9 +97,6 @@ layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
 // Material textures (max 8 textures per material)
 layout(set = 1, binding = 0) uniform sampler2D u_Textures[8];
-
-// Time uniform for animated materials
-uniform float u_Time;
 
 const float PI = 3.14159265359;
 const float MAX_REFLECTION_LOD = 4.0;

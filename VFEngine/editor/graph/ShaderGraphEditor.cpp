@@ -729,14 +729,6 @@ namespace editor::graph {
                     createNode(material::NodeType::VertexNormal, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
-                if (ImGui::MenuItem("Position")) {
-                    createNode(material::NodeType::VertexPosition, newNodePosition);
-                    ImGui::CloseCurrentPopup();
-                }
-                if (ImGui::MenuItem("Camera Position")) {
-                    createNode(material::NodeType::CameraPosition, newNodePosition);
-                    ImGui::CloseCurrentPopup();
-                }
                 if (ImGui::MenuItem("Time")) {
                     createNode(material::NodeType::Time, newNodePosition);
                     ImGui::CloseCurrentPopup();
@@ -867,11 +859,9 @@ namespace editor::graph {
             case material::NodeType::Lerp:
             case material::NodeType::Power:
                 return IM_COL32(80, 80, 150, 255);  // Blue for math
-            case material::NodeType::VertexPosition:
             case material::NodeType::VertexNormal:
             case material::NodeType::VertexUV:
             case material::NodeType::Time:
-            case material::NodeType::CameraPosition:
                 return IM_COL32(150, 150, 80, 255);  // Yellow for inputs
             case material::NodeType::TextureSample:
                 return IM_COL32(180, 100, 180, 255);  // Purple for textures
@@ -913,11 +903,9 @@ namespace editor::graph {
             case material::NodeType::SplitVec3: return "Split Vec3";
             case material::NodeType::SplitVec4: return "Split Vec4";
             case material::NodeType::Fresnel: return "Fresnel";
-            case material::NodeType::VertexPosition: return "Position";
             case material::NodeType::VertexNormal: return "Normal";
             case material::NodeType::VertexUV: return "UV";
             case material::NodeType::Time: return "Time";
-            case material::NodeType::CameraPosition: return "Camera Pos";
             case material::NodeType::TextureSample: return "Texture Sample";
             default: return "Unknown";
         }

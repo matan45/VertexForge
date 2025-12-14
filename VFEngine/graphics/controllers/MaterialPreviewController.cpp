@@ -9,9 +9,142 @@
 #include "geometry/SphereGenerator.hpp"
 #include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
+#include <cmath>
+#include <optional>
 
 namespace controllers
 {
+    // Forward declaration for helper function
+    static std::optional<float> getInputFloat(
+        const material::ShaderGraph& graph,
+        uint32_t nodeId,
+        const std::string& pinName,
+        float time);
+
+    // Recursively evaluate a float value from the graph (handles Time, Sin, Cos, etc.)
+    static std::optional<float> evaluateFloatValue(
+        const material::ShaderGraph& graph,
+        uint32_t nodeId,
+        const std::string& pinName,
+        float time)
+    {
+        const auto* node = graph.findNode(nodeId);
+        if (!node) return std::nullopt;
+
+        switch (node->type) {
+            case material::NodeType::ConstantScalar: {
+                auto it = node->properties.find("value");
+                if (it != node->properties.end() && std::holds_alternative<float>(it->second)) {
+                    return std::get<float>(it->second);
+                }
+                return 0.0f;
+            }
+
+            case material::NodeType::Time: {
+                return time;
+            }
+
+            case material::NodeType::Sin: {
+                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
+                if (inputVal) return std::sin(*inputVal);
+                return 0.0f;
+            }
+
+            case material::NodeType::Cos: {
+                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
+                if (inputVal) return std::cos(*inputVal);
+                return 0.0f;
+            }
+
+            case material::NodeType::Multiply: {
+                auto a = getInputFloat(graph, nodeId, "A", time);
+                auto b = getInputFloat(graph, nodeId, "B", time);
+                return (a.value_or(1.0f)) * (b.value_or(1.0f));
+            }
+
+            case material::NodeType::Add: {
+                auto a = getInputFloat(graph, nodeId, "A", time);
+                auto b = getInputFloat(graph, nodeId, "B", time);
+                return (a.value_or(0.0f)) + (b.value_or(0.0f));
+            }
+
+            case material::NodeType::Subtract: {
+                auto a = getInputFloat(graph, nodeId, "A", time);
+                auto b = getInputFloat(graph, nodeId, "B", time);
+                return (a.value_or(0.0f)) - (b.value_or(0.0f));
+            }
+
+            case material::NodeType::Clamp: {
+                auto val = getInputFloat(graph, nodeId, "Value", time);
+                auto minVal = getInputFloat(graph, nodeId, "Min", time);
+                auto maxVal = getInputFloat(graph, nodeId, "Max", time);
+                float v = val.value_or(0.0f);
+                float mn = minVal.value_or(0.0f);
+                float mx = maxVal.value_or(1.0f);
+                return std::clamp(v, mn, mx);
+            }
+
+            case material::NodeType::Saturate: {
+                auto val = getInputFloat(graph, nodeId, "Value", time);
+                return std::clamp(val.value_or(0.0f), 0.0f, 1.0f);
+            }
+
+            case material::NodeType::Abs: {
+                auto val = getInputFloat(graph, nodeId, "Value", time);
+                return std::abs(val.value_or(0.0f));
+            }
+
+            case material::NodeType::OneMinus: {
+                auto val = getInputFloat(graph, nodeId, "Value", time);
+                return 1.0f - val.value_or(0.0f);
+            }
+
+            default:
+                break;
+        }
+
+        return std::nullopt;
+    }
+
+    // Get input float from a connected node
+    static std::optional<float> getInputFloat(
+        const material::ShaderGraph& graph,
+        uint32_t nodeId,
+        const std::string& pinName,
+        float time)
+    {
+        // Find link connected to this node's input pin
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == nodeId && link.targetPin == pinName) {
+                // Recursively evaluate the source node
+                return evaluateFloatValue(graph, link.sourceNodeId, link.sourcePin, time);
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Evaluate emission strength from the graph
+    static float evaluateEmissionStrength(const material::ShaderGraph& graph, float time)
+    {
+        // Find PBR Output node
+        const auto* outputNode = graph.findOutputNode();
+        if (!outputNode) {
+            return 0.0f;
+        }
+
+        // Find what's connected to EmissionStrength pin (not Emission - that's for color)
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == outputNode->id && link.targetPin == "EmissionStrength") {
+                auto val = evaluateFloatValue(graph, link.sourceNodeId, link.sourcePin, time);
+                if (val) {
+                    return *val;
+                }
+            }
+        }
+
+        return 0.0f;
+    }
+
     // GPU texture data for preview (internal implementation)
     struct PreviewTextureGPU {
         vk::Image image;
@@ -418,13 +551,16 @@ namespace controllers
     }
 
     void MaterialPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                                  const glm::vec3& cameraPos)
+                                                  const glm::vec3& cameraPos, float time)
     {
+        // Store time for dynamic graph evaluation
+        currentTime = time;
+
         auto* renderHandler = offScreen->getRenderPassHandler();
 
         if (renderHandler->isMeshPipelineInitialized())
         {
-            renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos);
+            renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
         }
 
         // Update frustum for culling
@@ -450,9 +586,16 @@ namespace controllers
         renderData.metallic = materialParams.metallic;
         renderData.roughness = materialParams.roughness;
         renderData.ao = materialParams.ao;
-        renderData.emission = materialParams.emission;
         renderData.showBoundingBox = false;
         renderData.highlightedSubMesh = -1;
+
+        // Dynamically evaluate emission from material graph if available
+        if (materialParams.materialData) {
+            renderData.emission = evaluateEmissionStrength(
+                materialParams.materialData->graph, currentTime);
+        } else {
+            renderData.emission = materialParams.emission;
+        }
 
         // Set texture indices based on loaded textures
         renderData.albedoTexIdx = static_cast<float>(getTextureSlot(materialParams.albedoTexturePath));

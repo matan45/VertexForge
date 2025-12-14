@@ -8,8 +8,12 @@
 #include <string>
 #include <unordered_map>
 
+namespace material { enum class BlendMode : uint8_t; }
+
 namespace render::mesh
 {
+    // Forward declare blend mode for use in render data
+    using BlendMode = ::material::BlendMode;
 
     struct SubMeshGPUData
     {
@@ -48,6 +52,7 @@ namespace render::mesh
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
+        uint8_t blendMode = 0;  // 0=Opaque, 1=Masked, 2=Translucent
     };
 
     struct MeshRenderData
@@ -96,10 +101,11 @@ namespace render::mesh
         alignas(16) glm::mat4 view;
         alignas(16) glm::mat4 projection;
         alignas(16) glm::vec3 cameraPos;
+        float time;  // Animation time in seconds
     };
 
     // Push constants - matches mesh.glsl push_constant block
-    // Total size: 64 (mat4) + 16 (vec4) + 4*4 + 4*6 = 120 bytes (under 128 limit)
+    // Total size: 64 (mat4) + 16 (vec4) + 4*4 + 4*7 = 124 bytes (under 128 limit)
     struct MeshPushConstants
     {
         glm::mat4 model;      // 64 bytes
@@ -116,6 +122,7 @@ namespace render::mesh
         float aoTexIdx;          // 4 bytes
         float normalTexIdx;      // 4 bytes
         float emissionTexIdx;    // 4 bytes
+        float blendMode;         // 4 bytes (0=Opaque, 1=Masked, 2=Translucent)
     };
 
     // Vertex input helper matching resource::Vertex (32 bytes)

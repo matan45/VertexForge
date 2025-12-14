@@ -26,10 +26,6 @@ namespace editor::graph {
                 return std::make_unique<VertexUVNode>();
             case material::NodeType::VertexNormal:
                 return std::make_unique<VertexNormalNode>();
-            case material::NodeType::VertexPosition:
-                return std::make_unique<VertexPositionNode>();
-            case material::NodeType::CameraPosition:
-                return std::make_unique<CameraPositionNode>();
             case material::NodeType::Time:
                 return std::make_unique<TimeNode>();
 

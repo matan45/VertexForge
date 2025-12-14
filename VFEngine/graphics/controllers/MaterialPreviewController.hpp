@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
+#include "material/MaterialTypes.hpp"
 #include <memory>
 #include <string>
 #include <array>
@@ -34,6 +35,9 @@ namespace controllers
         std::string aoTexturePath;
         std::string normalTexturePath;
         std::string emissionTexturePath;
+
+        // Material graph for dynamic evaluation (Time, Sin, Cos nodes)
+        std::shared_ptr<material::MaterialData> materialData;
     };
 
     // Forward declaration for internal texture data (defined in cpp)
@@ -50,6 +54,7 @@ namespace controllers
         PreviewMaterialParams materialParams;
         bool initialized = false;
         bool sphereLoaded = false;
+        float currentTime = 0.0f;
 
         // Internal mesh ID for the procedural sphere
         static constexpr const char* SPHERE_MESH_ID = "__material_preview_sphere__";
@@ -74,7 +79,7 @@ namespace controllers
 
         // Update camera (called each frame before render)
         void updateCamera(const glm::mat4& view, const glm::mat4& projection,
-                         const glm::vec3& cameraPos);
+                         const glm::vec3& cameraPos, float time = 0.0f);
 
         // Render preview and return ImGui-compatible texture handle
         void* render();

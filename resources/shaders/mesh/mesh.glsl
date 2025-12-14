@@ -13,6 +13,7 @@ layout(binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
     vec3 cameraPos;
+    float u_Time;
 } camera;
 
 layout(push_constant) uniform PushConstants {
@@ -57,6 +58,7 @@ layout(binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
     vec3 cameraPos;
+    float u_Time;
 } camera;
 
 // Set 0: Global resources (camera, IBL)
@@ -81,9 +83,11 @@ layout(push_constant) uniform PushConstants {
     float aoTexIdx;
     float normalTexIdx;
     float emissionTexIdx;
+    float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
 } pc;
 
 const float PI = 3.14159265359;
+const float ALPHA_CUTOFF = 0.5;  // Alpha threshold for masked mode
 const float MAX_REFLECTION_LOD = 4.0;
 
 // Normal Distribution Function (GGX/Trowbridge-Reitz)
@@ -137,8 +141,18 @@ void main() {
 
     // Sample textures or use push constant values
     vec3 albedo = pc.albedo.rgb;
+    float alpha = pc.albedo.a;
     if (pc.albedoTexIdx >= 0.0) {
-        albedo = texture(u_Textures[int(pc.albedoTexIdx)], fragTexCoord).rgb;
+        vec4 albedoSample = texture(u_Textures[int(pc.albedoTexIdx)], fragTexCoord);
+        albedo = albedoSample.rgb;
+        alpha = albedoSample.a;
+    }
+
+    // Masked mode: discard fragments below alpha threshold
+    if (pc.blendMode > 0.5 && pc.blendMode < 1.5) {  // blendMode == 1 (Masked)
+        if (alpha < ALPHA_CUTOFF) {
+            discard;
+        }
     }
 
     float metallic = pc.metallic;
@@ -204,5 +218,5 @@ void main() {
     // Gamma correction
     color = pow(color, vec3(1.0/2.2));
 
-    outColor = vec4(color, pc.albedo.a);
+    outColor = vec4(color, alpha);
 }

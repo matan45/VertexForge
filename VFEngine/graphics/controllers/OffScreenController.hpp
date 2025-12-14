@@ -47,7 +47,7 @@ namespace controllers
         std::string meshLoad(std::string_view meshPath);
         void meshUnload(const std::string& meshId);
         void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                              const glm::vec3& cameraPos);
+                              const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
 

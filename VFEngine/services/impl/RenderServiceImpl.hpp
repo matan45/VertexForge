@@ -49,7 +49,7 @@ namespace services {
         std::string loadMesh(const std::string& meshPath);
         void unloadMesh(const std::string& meshId);
         void updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
-                              const glm::vec3& cameraPos);
+                              const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
         void prepareFrameMeshes();

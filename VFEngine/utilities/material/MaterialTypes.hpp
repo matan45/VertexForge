@@ -106,11 +106,9 @@ namespace material {
         Fresnel,
 
         // Input (vertex data)
-        VertexPosition,
         VertexNormal,
         VertexUV,
         Time,
-        CameraPosition,
 
         // Texture
         TextureSample
@@ -193,7 +191,6 @@ namespace material {
         std::string uuid;
         std::string name;
         BlendMode blendMode = BlendMode::Opaque;
-        bool twoSided = false;
 
         // Shader graph
         ShaderGraph graph;

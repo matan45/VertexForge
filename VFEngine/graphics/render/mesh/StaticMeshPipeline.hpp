@@ -64,7 +64,7 @@ namespace render::mesh
             const std::array<vk::Sampler, 8>& samplers);
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                             const glm::vec3& cameraPos) const;
+                             const glm::vec3& cameraPos, float time = 0.0f) const;
 
         
         vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
@@ -103,8 +103,10 @@ namespace render::mesh
 
         // Vulkan resources
         vk::RenderPass renderPass;
-        vk::Pipeline graphicsPipeline;
-        vk::PipelineLayout pipelineLayout;
+        vk::Pipeline graphicsPipeline;           // Opaque pipeline
+        vk::Pipeline translucentPipeline;        // Translucent pipeline (alpha blending)
+        vk::Pipeline maskedPipeline;             // Masked pipeline (alpha testing)
+        vk::PipelineLayout pipelineLayout;       // Shared layout for all pipelines
 
         // Wireframe pipeline for AABB debug rendering
         vk::Pipeline wireframePipeline;
@@ -135,9 +137,11 @@ namespace render::mesh
         vk::Buffer aabbIndexBuffer;
         vk::DeviceMemory aabbIndexBufferMemory;
 
-        // Current camera matrices for AABB rendering
+        // Current camera matrices for AABB rendering and translucent sorting
         mutable glm::mat4 currentView{1.0f};
         mutable glm::mat4 currentProjection{1.0f};
+        mutable glm::vec3 currentCameraPos{0.0f};
+        mutable float currentTime{0.0f};
 
         // Loaded meshes (key = mesh path)
         std::unordered_map<std::string, MeshGPUData> loadedMeshes;

@@ -11,6 +11,7 @@
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/MaterialEvents.hpp"
+#include "time/Timer.hpp"
 #include <filesystem>
 #include <algorithm>
 
@@ -423,6 +424,9 @@ namespace windows {
         params.normalTexturePath = getConnectedTexturePath("Normal");
         params.emissionTexturePath = getConnectedTexturePath("Emission");
 
+        // Pass material graph for dynamic evaluation (Time, Sin, Cos nodes)
+        params.materialData = materialData;
+
         previewController->setMaterialParams(params);
     }
 
@@ -456,7 +460,8 @@ namespace windows {
             previewController->updateCamera(
                 previewCamera->getViewMatrix(),
                 previewCamera->getProjectionMatrix(),
-                previewCamera->getPosition()
+                previewCamera->getPosition(),
+                static_cast<float>(engineTime::Timer::getElapsedTime())
             );
 
             // Render and display
@@ -479,10 +484,6 @@ namespace windows {
             int blendMode = static_cast<int>(materialData->blendMode);
             if (ImGui::Combo("##BlendMode", &blendMode, blendModes, 3)) {
                 materialData->blendMode = static_cast<material::BlendMode>(blendMode);
-                isDirty = true;
-            }
-
-            if (ImGui::Checkbox("Two Sided", &materialData->twoSided)) {
                 isDirty = true;
             }
         }

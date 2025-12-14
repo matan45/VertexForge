@@ -10,6 +10,8 @@
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
 #include <optional>
+#include <algorithm>
+#include <cmath>
 
 namespace render::mesh
 {
@@ -21,6 +23,7 @@ namespace render::mesh
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
+        material::BlendMode blendMode = material::BlendMode::Opaque;
 
         // Texture paths (empty = use scalar value)
         std::string albedoTexturePath;
@@ -31,7 +34,84 @@ namespace render::mesh
         std::string emissionTexturePath;
     };
 
-    // Helper to get value from a node connected to a specific pin
+    // Forward declaration for recursive evaluation
+    static std::optional<float> evaluateFloatValue(
+        const material::ShaderGraph& graph,
+        uint32_t nodeId,
+        const std::string& pinName,
+        float time);
+
+    // Helper to get the input value for a node's pin (recursively evaluates connected nodes)
+    static std::optional<float> getInputFloat(
+        const material::ShaderGraph& graph,
+        uint32_t nodeId,
+        const std::string& pinName,
+        float time)
+    {
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == nodeId && link.targetPin == pinName) {
+                return evaluateFloatValue(graph, link.sourceNodeId, link.sourcePin, time);
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Evaluate a node and return its float output value
+    static std::optional<float> evaluateFloatValue(
+        const material::ShaderGraph& graph,
+        uint32_t nodeId,
+        const std::string& pinName,
+        float time)
+    {
+        const auto* node = graph.findNode(nodeId);
+        if (!node) return std::nullopt;
+
+        switch (node->type) {
+            case material::NodeType::ConstantScalar: {
+                auto it = node->properties.find("value");
+                if (it != node->properties.end() && std::holds_alternative<float>(it->second)) {
+                    return std::get<float>(it->second);
+                }
+                break;
+            }
+            case material::NodeType::Time: {
+                return time;
+            }
+            case material::NodeType::Sin: {
+                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
+                if (inputVal) {
+                    return std::sin(*inputVal);
+                }
+                return 0.0f;
+            }
+            case material::NodeType::Cos: {
+                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
+                if (inputVal) {
+                    return std::cos(*inputVal);
+                }
+                return 0.0f;
+            }
+            case material::NodeType::Multiply: {
+                auto a = getInputFloat(graph, nodeId, "A", time);
+                auto b = getInputFloat(graph, nodeId, "B", time);
+                float aVal = a.value_or(1.0f);
+                float bVal = b.value_or(1.0f);
+                return aVal * bVal;
+            }
+            case material::NodeType::Add: {
+                auto a = getInputFloat(graph, nodeId, "A", time);
+                auto b = getInputFloat(graph, nodeId, "B", time);
+                float aVal = a.value_or(0.0f);
+                float bVal = b.value_or(0.0f);
+                return aVal + bVal;
+            }
+            default:
+                break;
+        }
+        return std::nullopt;
+    }
+
+    // Helper to get value from a node connected to a specific pin (static values only)
     static std::optional<material::NodeProperty> getConnectedValue(
         const material::ShaderGraph& graph,
         uint32_t targetNodeId,
@@ -68,6 +148,23 @@ namespace render::mesh
             }
         }
         return std::nullopt;
+    }
+
+    // Helper to evaluate EmissionStrength dynamically (supports Time, Sin, Cos nodes)
+    static float evaluateEmissionStrength(
+        const material::ShaderGraph& graph,
+        uint32_t outputNodeId,
+        float time)
+    {
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == outputNodeId && link.targetPin == "EmissionStrength") {
+                auto val = evaluateFloatValue(graph, link.sourceNodeId, link.sourcePin, time);
+                if (val) {
+                    return *val;
+                }
+            }
+        }
+        return 0.0f;
     }
 
     // Helper to get texture path from a TextureSample node connected to a specific pin
@@ -135,10 +232,35 @@ namespace render::mesh
             }
         }
 
-        // Try to get Emission
+        // Try to get Emission (Vec3) and EmissionStrength (Float)
+        float emissionStrength = 0.0f;
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "EmissionStrength")) {
+            if (std::holds_alternative<float>(*val)) {
+                emissionStrength = std::get<float>(*val);
+            }
+        }
         if (auto val = getConnectedValue(matData.graph, outputNode->id, "Emission")) {
             if (std::holds_alternative<float>(*val)) {
-                pbr.emission = std::get<float>(*val);
+                // Single float emission value
+                pbr.emission = std::get<float>(*val) * emissionStrength;
+            } else if (std::holds_alternative<glm::vec3>(*val)) {
+                // Vec3 emission - use luminance approximation
+                glm::vec3 emissionColor = std::get<glm::vec3>(*val);
+                pbr.emission = (emissionColor.r * 0.299f + emissionColor.g * 0.587f + emissionColor.b * 0.114f) * emissionStrength;
+            } else if (std::holds_alternative<glm::vec4>(*val)) {
+                // Vec4 emission - use luminance approximation
+                glm::vec4 emissionColor = std::get<glm::vec4>(*val);
+                pbr.emission = (emissionColor.r * 0.299f + emissionColor.g * 0.587f + emissionColor.b * 0.114f) * emissionStrength;
+            }
+        } else if (emissionStrength > 0.0f) {
+            // No emission color connected but strength is set - use white emission
+            pbr.emission = emissionStrength;
+        }
+
+        // Try to get Opacity
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Opacity")) {
+            if (std::holds_alternative<float>(*val)) {
+                pbr.albedo.a = std::get<float>(*val);
             }
         }
 
@@ -169,6 +291,9 @@ namespace render::mesh
         pbr.normalTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Normal");
         pbr.emissionTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Emission");
 
+        // Get blend mode from material
+        pbr.blendMode = matData.blendMode;
+
         return pbr;
     }
 
@@ -179,7 +304,8 @@ namespace render::mesh
     static ExtractedPBRValues getPBRForSubmesh(
         const MeshRenderData& meshData,
         const std::string& submeshName,
-        std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& matCache)
+        std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& matCache,
+        float time = 0.0f)
     {
         ExtractedPBRValues pbr;
         pbr.albedo = meshData.albedo;
@@ -202,16 +328,30 @@ namespace render::mesh
 
         // Load and extract PBR values from the material (using cache)
         if (!materialPath.empty()) {
+            std::shared_ptr<material::MaterialData> matData;
+
             // Check cache first
             auto cacheIt = matCache.find(materialPath);
             if (cacheIt != matCache.end() && cacheIt->second) {
-                pbr = extractPBRFromMaterial(*cacheIt->second);
+                matData = cacheIt->second;
+                pbr = extractPBRFromMaterial(*matData);
             } else {
                 // Load and cache the material
-                auto matData = material::MaterialManager::instance().loadMaterial(materialPath);
+                matData = material::MaterialManager::instance().loadMaterial(materialPath);
                 if (matData) {
                     matCache[materialPath] = matData;
                     pbr = extractPBRFromMaterial(*matData);
+                }
+            }
+
+            // Evaluate dynamic emission strength (Time, Sin, Cos nodes)
+            if (matData) {
+                const auto* outputNode = matData->graph.findOutputNode();
+                if (outputNode) {
+                    float dynamicEmission = evaluateEmissionStrength(matData->graph, outputNode->id, time);
+                    if (dynamicEmission != 0.0f) {
+                        pbr.emission = dynamicEmission;
+                    }
                 }
             }
         }
@@ -598,6 +738,8 @@ namespace render::mesh
         }
         device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        device.getLogicalDevice().destroyPipeline(maskedPipeline);
+        device.getLogicalDevice().destroyPipeline(translucentPipeline);
 
         createRenderPass();
         createGraphicsPipeline();
@@ -971,7 +1113,7 @@ namespace render::mesh
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        // Create pipeline
+        // Create opaque pipeline
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(meshShader->getShaderStages().size());
         pipelineInfo.pStages = meshShader->getShaderStages().data();
@@ -987,6 +1129,41 @@ namespace render::mesh
         pipelineInfo.subpass = 0;
 
         graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
+
+        // Create masked pipeline (same as opaque - shader will handle alpha discard)
+        maskedPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
+
+        // Create translucent pipeline with alpha blending
+        vk::PipelineColorBlendAttachmentState translucentBlendAttachment{};
+        translucentBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
+                                                    vk::ColorComponentFlagBits::eG |
+                                                    vk::ColorComponentFlagBits::eB |
+                                                    vk::ColorComponentFlagBits::eA;
+        translucentBlendAttachment.blendEnable = VK_TRUE;
+        translucentBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+        translucentBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        translucentBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
+        translucentBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+        translucentBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+        translucentBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+
+        vk::PipelineColorBlendStateCreateInfo translucentBlending{};
+        translucentBlending.logicOpEnable = VK_FALSE;
+        translucentBlending.attachmentCount = 1;
+        translucentBlending.pAttachments = &translucentBlendAttachment;
+
+        // Translucent: depth test enabled but depth write disabled
+        vk::PipelineDepthStencilStateCreateInfo translucentDepthStencil{};
+        translucentDepthStencil.depthTestEnable = VK_TRUE;
+        translucentDepthStencil.depthWriteEnable = VK_FALSE;  // Don't write to depth buffer
+        translucentDepthStencil.depthCompareOp = vk::CompareOp::eLess;
+        translucentDepthStencil.depthBoundsTestEnable = VK_FALSE;
+        translucentDepthStencil.stencilTestEnable = VK_FALSE;
+
+        pipelineInfo.pDepthStencilState = &translucentDepthStencil;
+        pipelineInfo.pColorBlendState = &translucentBlending;
+
+        translucentPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 
     void StaticMeshPipeline::createFramebuffers()
@@ -1012,16 +1189,19 @@ namespace render::mesh
     }
 
     void StaticMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                                              const glm::vec3& cameraPos) const
+                                              const glm::vec3& cameraPos, float time) const
     {
-        // Store for AABB wireframe rendering
+        // Store for AABB wireframe rendering, translucent sorting, and animation
         currentView = view;
         currentProjection = projection;
+        currentCameraPos = cameraPos;
+        currentTime = time;
 
         CameraUBO ubo{};
         ubo.view = view;
         ubo.projection = projection;
         ubo.cameraPos = cameraPos;
+        ubo.time = time;
 
         void* data;
         vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
@@ -1054,6 +1234,10 @@ namespace render::mesh
             device.getLogicalDevice().destroyRenderPass(renderPass);
         if (graphicsPipeline)
             device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        if (maskedPipeline)
+            device.getLogicalDevice().destroyPipeline(maskedPipeline);
+        if (translucentPipeline)
+            device.getLogicalDevice().destroyPipeline(translucentPipeline);
         if (pipelineLayout)
             device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
         if (descriptorPool)
@@ -1550,8 +1734,7 @@ namespace render::mesh
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        // Bind pipeline and descriptor sets
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        // Bind descriptor sets (shared across all pipelines)
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                          pipelineLayout, 0, descriptorSet, nullptr);
 
@@ -1562,88 +1745,168 @@ namespace render::mesh
                                              pipelineLayout, 1, textureDescriptorSet, nullptr);
         }
 
-        // Render each mesh in the draw list
+        // Helper lambda to render a submesh with the correct pipeline
+        auto renderSubmesh = [&](const MeshRenderData& meshData, const SubMeshGPUData& subMesh,
+                                 size_t subMeshIndex, material::BlendMode targetBlendMode,
+                                 vk::Pipeline& currentPipeline) {
+            // Get PBR values from assigned material (or fallback to mesh defaults)
+            ExtractedPBRValues pbrValues = getPBRForSubmesh(meshData, subMesh.name, materialCache, currentTime);
+
+            // Skip if blend mode doesn't match current pass
+            if (pbrValues.blendMode != targetBlendMode) return;
+
+            // Bind appropriate pipeline if needed
+            vk::Pipeline targetPipeline = graphicsPipeline;  // Default: opaque
+            if (pbrValues.blendMode == material::BlendMode::Masked) {
+                targetPipeline = maskedPipeline;
+            } else if (pbrValues.blendMode == material::BlendMode::Translucent) {
+                targetPipeline = translucentPipeline;
+            }
+
+            if (currentPipeline != targetPipeline) {
+                commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, targetPipeline);
+                currentPipeline = targetPipeline;
+            }
+
+            // Setup push constants with transform and material properties
+            MeshPushConstants pushConstants{};
+            pushConstants.model = meshData.modelMatrix;
+            pushConstants.metallic = pbrValues.metallic;
+            pushConstants.roughness = pbrValues.roughness;
+            pushConstants.ao = pbrValues.ao;
+            pushConstants.blendMode = static_cast<float>(pbrValues.blendMode);
+
+            // Get texture slot indices from loaded textures
+            auto getTexIdx = [this, &meshData](const std::string& texPath, float fallbackIdx) -> float {
+                if (!texPath.empty()) {
+                    return static_cast<float>(getTextureSlot(texPath));
+                }
+                return fallbackIdx;
+            };
+
+            pushConstants.albedoTexIdx = getTexIdx(pbrValues.albedoTexturePath, meshData.albedoTexIdx);
+            pushConstants.metallicTexIdx = getTexIdx(pbrValues.metallicTexturePath, meshData.metallicTexIdx);
+            pushConstants.roughnessTexIdx = getTexIdx(pbrValues.roughnessTexturePath, meshData.roughnessTexIdx);
+            pushConstants.aoTexIdx = getTexIdx(pbrValues.aoTexturePath, meshData.aoTexIdx);
+            pushConstants.normalTexIdx = getTexIdx(pbrValues.normalTexturePath, meshData.normalTexIdx);
+            pushConstants.emissionTexIdx = getTexIdx(pbrValues.emissionTexturePath, meshData.emissionTexIdx);
+
+            // Highlight selected submesh with different color and emission
+            if (meshData.highlightedSubMesh >= 0 &&
+                static_cast<size_t>(meshData.highlightedSubMesh) == subMeshIndex)
+            {
+                pushConstants.albedo = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
+                pushConstants.emission = 0.8f;
+            }
+            else
+            {
+                pushConstants.albedo = pbrValues.albedo;
+                pushConstants.emission = pbrValues.emission;
+            }
+
+            commandBuffer.pushConstants(pipelineLayout,
+                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                0, sizeof(MeshPushConstants), &pushConstants);
+
+            // Bind vertex buffer
+            vk::Buffer vertexBuffers[] = {subMesh.vertexBuffer};
+            vk::DeviceSize offsets[] = {0};
+            commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+            // Draw with indices if available, otherwise draw vertices directly
+            if (subMesh.indexCount > 0)
+            {
+                commandBuffer.bindIndexBuffer(subMesh.indexBuffer, 0, vk::IndexType::eUint32);
+                commandBuffer.drawIndexed(subMesh.indexCount, 1, 0, 0, 0);
+            }
+            else
+            {
+                commandBuffer.draw(subMesh.vertexCount, 1, 0, 0);
+            }
+        };
+
+        vk::Pipeline currentPipeline = nullptr;
+
+        // Pass 1: Render opaque objects
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        currentPipeline = graphicsPipeline;
         for (const auto& meshData : meshDrawList)
         {
             const MeshGPUData* gpuData = getMesh(meshData.meshPath);
-            if (!gpuData || gpuData->subMeshes.empty())
-            {
-                continue;  // Skip meshes that aren't loaded
-            }
+            if (!gpuData || gpuData->subMeshes.empty()) continue;
 
-            // Render all submeshes (with per-submesh frustum culling and highlighting)
             for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
             {
                 const auto& subMesh = gpuData->subMeshes[subMeshIndex];
-
-                // Per-submesh frustum culling (only if frustum is provided and initialized)
                 if (frustum && frustum->isInitialized() &&
-                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
-                {
-                    continue;  // Submesh is outside frustum, skip rendering
-                }
-
-                // Get PBR values from assigned material (or fallback to mesh defaults)
-                ExtractedPBRValues pbrValues = getPBRForSubmesh(meshData, subMesh.name, materialCache);
-
-                // Setup push constants with transform and material properties
-                MeshPushConstants pushConstants{};
-                pushConstants.model = meshData.modelMatrix;
-                pushConstants.metallic = pbrValues.metallic;
-                pushConstants.roughness = pbrValues.roughness;
-                pushConstants.ao = pbrValues.ao;
-
-                // Get texture slot indices from loaded textures
-                // If material has texture paths, use those. Otherwise fall back to pre-set indices on meshData
-                // (used by material preview which sets indices directly)
-                auto getTexIdx = [this, &meshData](const std::string& texPath, float fallbackIdx) -> float {
-                    if (!texPath.empty()) {
-                        return static_cast<float>(getTextureSlot(texPath));
-                    }
-                    return fallbackIdx;
-                };
-
-                pushConstants.albedoTexIdx = getTexIdx(pbrValues.albedoTexturePath, meshData.albedoTexIdx);
-                pushConstants.metallicTexIdx = getTexIdx(pbrValues.metallicTexturePath, meshData.metallicTexIdx);
-                pushConstants.roughnessTexIdx = getTexIdx(pbrValues.roughnessTexturePath, meshData.roughnessTexIdx);
-                pushConstants.aoTexIdx = getTexIdx(pbrValues.aoTexturePath, meshData.aoTexIdx);
-                pushConstants.normalTexIdx = getTexIdx(pbrValues.normalTexturePath, meshData.normalTexIdx);
-                pushConstants.emissionTexIdx = getTexIdx(pbrValues.emissionTexturePath, meshData.emissionTexIdx);
-
-                // Highlight selected submesh with different color and emission
-                if (meshData.highlightedSubMesh >= 0 &&
-                    static_cast<size_t>(meshData.highlightedSubMesh) == subMeshIndex)
-                {
-                    // Highlighted submesh: bright orange color with strong emission glow
-                    pushConstants.albedo = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
-                    pushConstants.emission = 0.8f;
-                }
-                else
-                {
-                    pushConstants.albedo = pbrValues.albedo;
-                    pushConstants.emission = pbrValues.emission;
-                }
-
-                commandBuffer.pushConstants(pipelineLayout,
-                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                    0, sizeof(MeshPushConstants), &pushConstants);
-
-                // Bind vertex buffer
-                vk::Buffer vertexBuffers[] = {subMesh.vertexBuffer};
-                vk::DeviceSize offsets[] = {0};
-                commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-
-                // Draw with indices if available, otherwise draw vertices directly
-                if (subMesh.indexCount > 0)
-                {
-                    commandBuffer.bindIndexBuffer(subMesh.indexBuffer, 0, vk::IndexType::eUint32);
-                    commandBuffer.drawIndexed(subMesh.indexCount, 1, 0, 0, 0);
-                }
-                else
-                {
-                    commandBuffer.draw(subMesh.vertexCount, 1, 0, 0);
-                }
+                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix)) continue;
+                renderSubmesh(meshData, subMesh, subMeshIndex, material::BlendMode::Opaque, currentPipeline);
             }
+        }
+
+        // Pass 2: Render masked objects (alpha testing)
+        for (const auto& meshData : meshDrawList)
+        {
+            const MeshGPUData* gpuData = getMesh(meshData.meshPath);
+            if (!gpuData || gpuData->subMeshes.empty()) continue;
+
+            for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
+            {
+                const auto& subMesh = gpuData->subMeshes[subMeshIndex];
+                if (frustum && frustum->isInitialized() &&
+                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix)) continue;
+                renderSubmesh(meshData, subMesh, subMeshIndex, material::BlendMode::Masked, currentPipeline);
+            }
+        }
+
+        // Pass 3: Render translucent objects (alpha blending) - sorted back-to-front
+        // Collect translucent submeshes with distance from camera
+        struct TranslucentItem {
+            const MeshRenderData* meshData;
+            const SubMeshGPUData* subMesh;
+            size_t subMeshIndex;
+            float distanceSquared;
+        };
+        std::vector<TranslucentItem> translucentItems;
+
+        for (const auto& meshData : meshDrawList)
+        {
+            const MeshGPUData* gpuData = getMesh(meshData.meshPath);
+            if (!gpuData || gpuData->subMeshes.empty()) continue;
+
+            for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
+            {
+                const auto& subMesh = gpuData->subMeshes[subMeshIndex];
+                if (frustum && frustum->isInitialized() &&
+                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix)) continue;
+
+                // Check if this submesh is translucent
+                ExtractedPBRValues pbrValues = getPBRForSubmesh(meshData, subMesh.name, materialCache, currentTime);
+                if (pbrValues.blendMode != material::BlendMode::Translucent) continue;
+
+                // Calculate world-space center of submesh AABB
+                glm::vec3 localCenter = subMesh.boundingBox.getCenter();
+                glm::vec4 worldCenter = meshData.modelMatrix * glm::vec4(localCenter, 1.0f);
+
+                // Calculate squared distance from camera (avoid sqrt for performance)
+                glm::vec3 diff = glm::vec3(worldCenter) - currentCameraPos;
+                float distSq = glm::dot(diff, diff);
+
+                translucentItems.push_back({&meshData, &subMesh, subMeshIndex, distSq});
+            }
+        }
+
+        // Sort back-to-front (farthest first)
+        std::sort(translucentItems.begin(), translucentItems.end(),
+            [](const TranslucentItem& a, const TranslucentItem& b) {
+                return a.distanceSquared > b.distanceSquared;
+            });
+
+        // Render sorted translucent items
+        for (const auto& item : translucentItems)
+        {
+            renderSubmesh(*item.meshData, *item.subMesh, item.subMeshIndex,
+                          material::BlendMode::Translucent, currentPipeline);
         }
 
         // Render AABB wireframes for meshes with showBoundingBox enabled

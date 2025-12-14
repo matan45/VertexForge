@@ -106,12 +106,12 @@ namespace controllers
     }
 
     void OffScreenController::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                               const glm::vec3& cameraPos)
+                                               const glm::vec3& cameraPos, float time)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (renderHandler->isMeshPipelineInitialized())
         {
-            renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos);
+            renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
         }
 
         // Update frustum for culling

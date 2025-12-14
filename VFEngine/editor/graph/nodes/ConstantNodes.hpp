@@ -210,68 +210,6 @@ namespace editor::graph {
         }
     };
 
-    // Vertex world position input
-    class VertexPositionNode : public ShaderNodeBase {
-    public:
-        VertexPositionNode() {
-            type = material::NodeType::VertexPosition;
-            name = "World Position";
-
-            addOutputPin("Position", material::PinType::Vec3);
-            addOutputPin("X", material::PinType::Float);
-            addOutputPin("Y", material::PinType::Float);
-            addOutputPin("Z", material::PinType::Float);
-        }
-
-        std::string generateCode(const std::string& outputVarPrefix,
-                                const std::map<std::string, std::string>& /*inputVarNames*/) const override {
-            std::string code;
-            code += "vec3 " + outputVarPrefix + "Position = fragWorldPos;\n";
-            code += "float " + outputVarPrefix + "X = fragWorldPos.x;\n";
-            code += "float " + outputVarPrefix + "Y = fragWorldPos.y;\n";
-            code += "float " + outputVarPrefix + "Z = fragWorldPos.z;\n";
-            return code;
-        }
-
-        std::string getOutputVarName(const std::string& outputVarPrefix,
-                                    const std::string& pinName) const override {
-            if (pinName == "X") return outputVarPrefix + "X";
-            if (pinName == "Y") return outputVarPrefix + "Y";
-            if (pinName == "Z") return outputVarPrefix + "Z";
-            return outputVarPrefix + "Position";
-        }
-
-        std::string getOutputType(const std::string& pinName) const override {
-            if (pinName == "X" || pinName == "Y" || pinName == "Z") return "float";
-            return "vec3";
-        }
-    };
-
-    // Camera position input
-    class CameraPositionNode : public ShaderNodeBase {
-    public:
-        CameraPositionNode() {
-            type = material::NodeType::CameraPosition;
-            name = "Camera Position";
-
-            addOutputPin("Position", material::PinType::Vec3);
-        }
-
-        std::string generateCode(const std::string& outputVarPrefix,
-                                const std::map<std::string, std::string>& /*inputVarNames*/) const override {
-            return "vec3 " + outputVarPrefix + "Position = camera.cameraPos;\n";
-        }
-
-        std::string getOutputVarName(const std::string& outputVarPrefix,
-                                    const std::string& /*pinName*/) const override {
-            return outputVarPrefix + "Position";
-        }
-
-        std::string getOutputType(const std::string& /*pinName*/) const override {
-            return "vec3";
-        }
-    };
-
     // Time input for animations
     class TimeNode : public ShaderNodeBase {
     public:
@@ -279,26 +217,17 @@ namespace editor::graph {
             type = material::NodeType::Time;
             name = "Time";
 
-            addOutputPin("Seconds", material::PinType::Float);
-            addOutputPin("Sin", material::PinType::Float);
-            addOutputPin("Cos", material::PinType::Float);
+            addOutputPin("Time", material::PinType::Float);
         }
 
         std::string generateCode(const std::string& outputVarPrefix,
                                 const std::map<std::string, std::string>& /*inputVarNames*/) const override {
-            // Note: Time uniform needs to be added to the shader
-            std::string code;
-            code += "float " + outputVarPrefix + "Seconds = u_Time;\n";
-            code += "float " + outputVarPrefix + "Sin = sin(u_Time);\n";
-            code += "float " + outputVarPrefix + "Cos = cos(u_Time);\n";
-            return code;
+            return "float " + outputVarPrefix + "Time = camera.u_Time;\n";
         }
 
         std::string getOutputVarName(const std::string& outputVarPrefix,
-                                    const std::string& pinName) const override {
-            if (pinName == "Sin") return outputVarPrefix + "Sin";
-            if (pinName == "Cos") return outputVarPrefix + "Cos";
-            return outputVarPrefix + "Seconds";
+                                    const std::string& /*pinName*/) const override {
+            return outputVarPrefix + "Time";
         }
 
         std::string getOutputType(const std::string& /*pinName*/) const override {

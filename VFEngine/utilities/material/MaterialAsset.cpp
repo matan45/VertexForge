@@ -44,11 +44,9 @@ namespace material {
             case NodeType::SplitVec3: return "SplitVec3";
             case NodeType::SplitVec4: return "SplitVec4";
             case NodeType::Fresnel: return "Fresnel";
-            case NodeType::VertexPosition: return "VertexPosition";
             case NodeType::VertexNormal: return "VertexNormal";
             case NodeType::VertexUV: return "VertexUV";
             case NodeType::Time: return "Time";
-            case NodeType::CameraPosition: return "CameraPosition";
             case NodeType::TextureSample: return "TextureSample";
             default: return "Unknown";
         }
@@ -87,11 +85,9 @@ namespace material {
         if (str == "SplitVec3") return NodeType::SplitVec3;
         if (str == "SplitVec4") return NodeType::SplitVec4;
         if (str == "Fresnel") return NodeType::Fresnel;
-        if (str == "VertexPosition") return NodeType::VertexPosition;
         if (str == "VertexNormal") return NodeType::VertexNormal;
         if (str == "VertexUV") return NodeType::VertexUV;
         if (str == "Time") return NodeType::Time;
-        if (str == "CameraPosition") return NodeType::CameraPosition;
         if (str == "TextureSample") return NodeType::TextureSample;
         return NodeType::ConstantScalar;  // Default
     }
@@ -228,7 +224,6 @@ namespace material {
             material.uuid = j.value("uuid", std::to_string(uuid::UUID().getValue()));
             material.name = j.value("name", "Unnamed Material");
             material.blendMode = stringToBlendMode(j.value("blendMode", "opaque"));
-            material.twoSided = j.value("twoSided", false);
 
             // Shader graph
             if (j.contains("graph")) {
@@ -315,7 +310,6 @@ namespace material {
         j["uuid"] = material.uuid;
         j["name"] = material.name;
         j["blendMode"] = blendModeToString(material.blendMode);
-        j["twoSided"] = material.twoSided;
 
         // Shader graph
         json graphJson;
@@ -398,7 +392,6 @@ namespace material {
         material.uuid = std::to_string(uuid::UUID().getValue());
         material.name = name;
         material.blendMode = BlendMode::Opaque;
-        material.twoSided = false;
         material.needsRecompile = true;
 
         // Create only the PBR Output node - user will add other nodes
