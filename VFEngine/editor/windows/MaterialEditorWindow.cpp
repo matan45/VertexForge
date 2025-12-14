@@ -9,6 +9,8 @@
 #include <nfd/FileDialog.hpp>
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/MaterialEvents.hpp"
 #include <filesystem>
 #include <algorithm>
 
@@ -87,6 +89,11 @@ namespace windows {
         if (material::MaterialManager::instance().saveMaterial(materialPath, *materialData)) {
             isDirty = false;
             vfLogInfo("Material saved: {}", materialPath);
+
+            // Notify that material file was saved (for cache invalidation in render pipelines)
+            events::material::MaterialFileSavedNotification notification;
+            notification.materialPath = materialPath;
+            events::EventDispatcher::instance().publish(notification);
         } else {
             vfLogError("Failed to save material: {}", materialPath);
         }

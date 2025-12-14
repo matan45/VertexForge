@@ -1166,6 +1166,17 @@ namespace render::mesh
         wireframeShader->cleanUp();
     }
 
+    void StaticMeshPipeline::invalidateMaterialCache(const std::string& materialPath)
+    {
+        if (materialPath.empty()) {
+            // Mark cache for full invalidation
+            materialCacheInvalidated = true;
+        } else {
+            // Clear specific material immediately
+            materialCache.erase(materialPath);
+        }
+    }
+
     std::string StaticMeshPipeline::loadMesh(std::string_view meshPath)
     {
         std::string pathStr(meshPath);
@@ -2234,6 +2245,12 @@ namespace render::mesh
             // No materials in draw list - don't reset texture bindings
             // This allows external texture management (e.g., MaterialPreviewController)
             return;
+        }
+
+        // Check if cache needs to be invalidated (material was saved externally)
+        if (materialCacheInvalidated) {
+            materialCache.clear();
+            materialCacheInvalidated = false;
         }
 
         // Reset slot assignments for this frame

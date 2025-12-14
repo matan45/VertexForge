@@ -45,8 +45,7 @@ namespace windows
 		animationIcon = loadIcon("../../resources/editor/contentBrowser/animation-file.vfImage");
 		hdrIcon = loadIcon("../../resources/editor/contentBrowser/hdr-file.vfImage");
 		sceneIcon = loadIcon("../../resources/editor/contentBrowser/scene.vfImage");
-		// Use file icon for materials until dedicated icon is created
-		materialIcon = loadIcon("../../resources/editor/contentBrowser/file.vfImage");
+		materialIcon = loadIcon("../../resources/editor/contentBrowser/material-icon.vfImage");
 
 		iconsLoaded = true;
 	}

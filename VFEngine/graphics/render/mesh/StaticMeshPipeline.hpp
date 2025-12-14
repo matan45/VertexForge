@@ -50,6 +50,9 @@ namespace render::mesh
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
 
+        // Clear cached material to force reload (called when materials are saved)
+        void invalidateMaterialCache(const std::string& materialPath = "");
+
         // Texture descriptor set (set 1)
         vk::DescriptorSetLayout getTextureDescriptorSetLayout() const { return textureDescriptorSetLayout; }
         vk::DescriptorSet getTextureDescriptorSet() const { return textureDescriptorSet; }
@@ -141,6 +144,9 @@ namespace render::mesh
 
         // Cache for loaded materials to prevent reloading every frame
         mutable std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> materialCache;
+
+        // Flag to indicate cache should be invalidated (set by external notification)
+        mutable bool materialCacheInvalidated = false;
 
         // GPU texture data for material textures
         struct MaterialTextureGPU {

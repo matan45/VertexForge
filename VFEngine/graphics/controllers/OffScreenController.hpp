@@ -5,6 +5,9 @@
 #include <string_view>
 #include <string>
 #include <vector>
+#include <cstdint>
+
+namespace events { struct SubscriptionToken; }
 
 namespace core
 {
@@ -26,6 +29,7 @@ namespace controllers
         core::Device& device;
         std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
         math::Frustum currentFrustum;  // Current camera frustum for culling
+        std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;  // Subscription token for material saved notification
 
     public:
         explicit OffScreenController();

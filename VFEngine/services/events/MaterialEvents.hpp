@@ -144,4 +144,11 @@ namespace events::material {
         std::string_view getName() const override { return "MaterialParameterChanged"; }
     };
 
+    // Material file saved to disk (for cache invalidation)
+    struct MaterialFileSavedNotification : INotification {
+        std::string materialPath;
+
+        std::string_view getName() const override { return "MaterialFileSaved"; }
+    };
+
 }
