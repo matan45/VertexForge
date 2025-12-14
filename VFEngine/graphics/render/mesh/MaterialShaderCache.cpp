@@ -268,6 +268,8 @@ namespace render::mesh
 
     void MaterialShaderCache::invalidateAll()
     {
+        if (cache.empty()) return;
+
         device.getLogicalDevice().waitIdle();
 
         for (auto& [path, data] : cache) {
@@ -288,6 +290,7 @@ namespace render::mesh
 
     void MaterialShaderCache::cleanUp()
     {
+        if (!initialized) return;
         invalidateAll();
         initialized = false;
     }
