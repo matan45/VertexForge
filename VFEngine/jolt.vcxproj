@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(ProjectDir)..\bin\jolt\Debug\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Debug\jolt\</IntDir>
+    <OutDir>..\bin\jolt\Debug\x64\</OutDir>
+    <IntDir>obj\x64\Debug\jolt\</IntDir>
     <TargetName>jolt</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(ProjectDir)..\bin\jolt\Release\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Release\jolt\</IntDir>
+    <OutDir>..\bin\jolt\Release\x64\</OutDir>
+    <IntDir>obj\x64\Release\jolt\</IntDir>
     <TargetName>jolt</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
