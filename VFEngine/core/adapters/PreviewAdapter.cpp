@@ -4,35 +4,89 @@
 
 namespace core {
 
-    PreviewAdapter::PreviewAdapter()
-        : materialController(std::make_unique<::controllers::MaterialPreviewController>())
-        , meshController(std::make_unique<::controllers::MeshPreviewController>()) {}
+    PreviewAdapter::PreviewAdapter() = default;
 
     PreviewAdapter::~PreviewAdapter() {
-        cleanUpMaterialPreview();
-        cleanUpMeshPreview();
+        // Clean up all material controllers
+        for (auto& [id, controller] : materialControllers) {
+            if (controller) {
+                controller->cleanUp();
+            }
+        }
+        materialControllers.clear();
+
+        // Clean up all mesh controllers
+        for (auto& [id, controller] : meshControllers) {
+            if (controller) {
+                controller->cleanUp();
+            }
+        }
+        meshControllers.clear();
+    }
+
+    // === Helper Methods ===
+
+    ::controllers::MaterialPreviewController* PreviewAdapter::getMaterialController(void* instanceId) {
+        auto it = materialControllers.find(instanceId);
+        if (it != materialControllers.end()) {
+            return it->second.get();
+        }
+        return nullptr;
+    }
+
+    ::controllers::MaterialPreviewController* PreviewAdapter::getMaterialControllerConst(void* instanceId) const {
+        auto it = materialControllers.find(instanceId);
+        if (it != materialControllers.end()) {
+            return it->second.get();
+        }
+        return nullptr;
+    }
+
+    ::controllers::MeshPreviewController* PreviewAdapter::getMeshController(void* instanceId) {
+        auto it = meshControllers.find(instanceId);
+        if (it != meshControllers.end()) {
+            return it->second.get();
+        }
+        return nullptr;
+    }
+
+    ::controllers::MeshPreviewController* PreviewAdapter::getMeshControllerConst(void* instanceId) const {
+        auto it = meshControllers.find(instanceId);
+        if (it != meshControllers.end()) {
+            return it->second.get();
+        }
+        return nullptr;
     }
 
     // === Material Preview ===
 
-    void PreviewAdapter::initMaterialPreview() {
-        if (materialController) {
-            materialController->init();
+    void PreviewAdapter::initMaterialPreview(void* instanceId) {
+        // Create a new controller for this instance if it doesn't exist
+        auto& controller = materialControllers[instanceId];
+        if (!controller) {
+            controller = std::make_unique<::controllers::MaterialPreviewController>();
+        }
+        controller->init();
+    }
+
+    void PreviewAdapter::cleanUpMaterialPreview(void* instanceId) {
+        auto it = materialControllers.find(instanceId);
+        if (it != materialControllers.end()) {
+            if (it->second) {
+                it->second->cleanUp();
+            }
+            materialControllers.erase(it);
         }
     }
 
-    void PreviewAdapter::cleanUpMaterialPreview() {
-        if (materialController) {
-            materialController->cleanUp();
-        }
+    bool PreviewAdapter::isMaterialPreviewInitialized(void* instanceId) const {
+        auto* controller = getMaterialControllerConst(instanceId);
+        return controller && controller->isInitialized();
     }
 
-    bool PreviewAdapter::isMaterialPreviewInitialized() const {
-        return materialController && materialController->isInitialized();
-    }
-
-    void PreviewAdapter::setMaterialParams(const services::MaterialPreviewParams& params) {
-        if (!materialController) return;
+    void PreviewAdapter::setMaterialParams(void* instanceId, const services::MaterialPreviewParams& params) {
+        auto* controller = getMaterialController(instanceId);
+        if (!controller) return;
 
         // Convert service DTO to controller params
         ::controllers::PreviewMaterialParams controllerParams;
@@ -56,14 +110,15 @@ namespace core {
                 *static_cast<std::shared_ptr<material::MaterialData>*>(params.materialDataHandle);
         }
 
-        materialController->setMaterialParams(controllerParams);
+        controller->setMaterialParams(controllerParams);
     }
 
-    services::MaterialPreviewParams PreviewAdapter::getMaterialParams() const {
+    services::MaterialPreviewParams PreviewAdapter::getMaterialParams(void* instanceId) const {
         services::MaterialPreviewParams result;
-        if (!materialController) return result;
+        auto* controller = getMaterialControllerConst(instanceId);
+        if (!controller) return result;
 
-        const auto& controllerParams = materialController->getMaterialParams();
+        const auto& controllerParams = controller->getMaterialParams();
         result.albedo = controllerParams.albedo;
         result.metallic = controllerParams.metallic;
         result.roughness = controllerParams.roughness;
@@ -82,79 +137,98 @@ namespace core {
         return result;
     }
 
-    void PreviewAdapter::updateMaterialCamera(const glm::mat4& view, const glm::mat4& projection,
+    void PreviewAdapter::updateMaterialCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
                                                const glm::vec3& cameraPos, float time) {
-        if (materialController) {
-            materialController->updateCamera(view, projection, cameraPos, time);
+        auto* controller = getMaterialController(instanceId);
+        if (controller) {
+            controller->updateCamera(view, projection, cameraPos, time);
         }
     }
 
-    void* PreviewAdapter::renderMaterialPreview() {
-        return materialController ? materialController->render() : nullptr;
+    void* PreviewAdapter::renderMaterialPreview(void* instanceId) {
+        auto* controller = getMaterialController(instanceId);
+        return controller ? controller->render() : nullptr;
     }
 
-    std::string PreviewAdapter::getMaterialShaderError() const {
-        return materialController ? materialController->getLastShaderCompilationError() : "";
+    std::string PreviewAdapter::getMaterialShaderError(void* instanceId) const {
+        auto* controller = getMaterialControllerConst(instanceId);
+        return controller ? controller->getLastShaderCompilationError() : "";
     }
 
     // === Mesh Preview ===
 
-    void PreviewAdapter::initMeshPreview() {
-        if (meshController) {
-            meshController->init();
+    void PreviewAdapter::initMeshPreview(void* instanceId) {
+        // Create a new controller for this instance if it doesn't exist
+        auto& controller = meshControllers[instanceId];
+        if (!controller) {
+            controller = std::make_unique<::controllers::MeshPreviewController>();
+        }
+        controller->init();
+    }
+
+    void PreviewAdapter::cleanUpMeshPreview(void* instanceId) {
+        auto it = meshControllers.find(instanceId);
+        if (it != meshControllers.end()) {
+            if (it->second) {
+                it->second->cleanUp();
+            }
+            meshControllers.erase(it);
         }
     }
 
-    void PreviewAdapter::cleanUpMeshPreview() {
-        if (meshController) {
-            meshController->cleanUp();
+    bool PreviewAdapter::isMeshPreviewInitialized(void* instanceId) const {
+        auto* controller = getMeshControllerConst(instanceId);
+        // MeshPreviewController doesn't have isInitialized, check if controller exists
+        return controller != nullptr;
+    }
+
+    bool PreviewAdapter::loadPreviewMesh(void* instanceId, const std::string& meshPath, math::AABB& outBounds) {
+        auto* controller = getMeshController(instanceId);
+        return controller && controller->loadMesh(meshPath, outBounds);
+    }
+
+    void PreviewAdapter::unloadPreviewMesh(void* instanceId) {
+        auto* controller = getMeshController(instanceId);
+        if (controller) {
+            controller->unloadMesh();
         }
     }
 
-    bool PreviewAdapter::isMeshPreviewInitialized() const {
-        // MeshPreviewController doesn't have isInitialized, check if loadMesh would work
-        return meshController != nullptr;
+    bool PreviewAdapter::isPreviewMeshLoaded(void* instanceId) const {
+        auto* controller = getMeshControllerConst(instanceId);
+        return controller && controller->isMeshLoaded();
     }
 
-    bool PreviewAdapter::loadPreviewMesh(const std::string& meshPath, math::AABB& outBounds) {
-        return meshController && meshController->loadMesh(meshPath, outBounds);
+    std::vector<services::SubMeshInfo> PreviewAdapter::getPreviewMeshSubMeshInfo(void* instanceId) const {
+        auto* controller = getMeshControllerConst(instanceId);
+        if (!controller) return {};
+        return controller->getSubMeshInfo();
     }
 
-    void PreviewAdapter::unloadPreviewMesh() {
-        if (meshController) {
-            meshController->unloadMesh();
-        }
+    math::AABB PreviewAdapter::getPreviewMeshBounds(void* instanceId) const {
+        auto* controller = getMeshControllerConst(instanceId);
+        if (!controller) return math::AABB{};
+        return controller->getMeshBounds();
     }
 
-    bool PreviewAdapter::isPreviewMeshLoaded() const {
-        return meshController && meshController->isMeshLoaded();
+    void PreviewAdapter::setMeshPreviewParams(void* instanceId, const services::MeshPreviewParams& params) {
+        auto* controller = getMeshController(instanceId);
+        if (!controller) return;
+        controller->setModelMatrix(params.modelMatrix);
+        controller->setHighlightedSubMesh(params.highlightedSubMesh);
     }
 
-    std::vector<services::SubMeshInfo> PreviewAdapter::getPreviewMeshSubMeshInfo() const {
-        if (!meshController) return {};
-        return meshController->getSubMeshInfo();
-    }
-
-    math::AABB PreviewAdapter::getPreviewMeshBounds() const {
-        if (!meshController) return math::AABB{};
-        return meshController->getMeshBounds();
-    }
-
-    void PreviewAdapter::setMeshPreviewParams(const services::MeshPreviewParams& params) {
-        if (!meshController) return;
-        meshController->setModelMatrix(params.modelMatrix);
-        meshController->setHighlightedSubMesh(params.highlightedSubMesh);
-    }
-
-    void PreviewAdapter::updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
+    void PreviewAdapter::updateMeshCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
                                            const glm::vec3& cameraPos) {
-        if (meshController) {
-            meshController->updateCamera(view, projection, cameraPos);
+        auto* controller = getMeshController(instanceId);
+        if (controller) {
+            controller->updateCamera(view, projection, cameraPos);
         }
     }
 
-    void* PreviewAdapter::renderMeshPreview() {
-        return meshController ? meshController->render() : nullptr;
+    void* PreviewAdapter::renderMeshPreview(void* instanceId) {
+        auto* controller = getMeshController(instanceId);
+        return controller ? controller->render() : nullptr;
     }
 
 }

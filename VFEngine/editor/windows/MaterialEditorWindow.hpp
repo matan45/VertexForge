@@ -33,7 +33,7 @@ namespace windows
         std::shared_ptr<material::MaterialData> materialData;
         std::unique_ptr<editor::graph::ShaderGraphEditor> graphEditor;
 
-        // Preview rendering (uses PreviewService via EventDispatcher)
+        // Preview rendering - uses 'this' pointer as instanceId for service calls
         std::unique_ptr<editor::OrbitCamera> previewCamera;
         bool previewNeedsInit = true;
 

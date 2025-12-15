@@ -426,6 +426,12 @@ namespace controllers
             return;
         }
 
+        // Recreate offScreen if it was cleaned up (supports re-initialization)
+        if (!offScreen)
+        {
+            offScreen = std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain);
+        }
+
         offScreen->init();
 
         // Initialize mesh pipeline with default IBL textures
@@ -597,6 +603,7 @@ namespace controllers
             offScreen->cleanUp();
         }
 
+        // Reset offScreen - will be recreated in init() if needed
         offScreen.reset();
         initialized = false;
     }

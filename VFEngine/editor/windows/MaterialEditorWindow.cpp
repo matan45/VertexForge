@@ -38,9 +38,10 @@ namespace windows {
         if (graphEditor) {
             graphEditor->cleanUp();
         }
-        // Clean up material preview via PreviewService
-        events::EventDispatcher::instance().execute(
-            services::events::preview::CleanUpMaterialPreviewCommand{});
+        // Clean up material preview via service (using 'this' as instanceId)
+        services::events::preview::CleanUpMaterialPreviewCommand cleanupCmd;
+        cleanupCmd.instanceId = this;
+        events::EventDispatcher::instance().execute(cleanupCmd);
     }
 
     void MaterialEditorWindow::initEditor() {
@@ -253,9 +254,11 @@ namespace windows {
     }
 
     void MaterialEditorWindow::initPreview() {
-        // Initialize material preview via PreviewService
-        events::EventDispatcher::instance().execute(
-            services::events::preview::InitMaterialPreviewCommand{});
+        // Initialize material preview via service (using 'this' as instanceId)
+        services::events::preview::InitMaterialPreviewCommand cmd;
+        cmd.instanceId = this;
+        events::EventDispatcher::instance().execute(cmd);
+
         previewCamera->updateMatrices();
         previewNeedsInit = false;
     }
@@ -315,7 +318,9 @@ namespace windows {
         }
 
         if (!pbrOutput) {
+            // Still set params even without PBR output (use defaults)
             services::events::preview::SetMaterialParamsCommand cmd;
+            cmd.instanceId = this;
             cmd.params = params;
             events::EventDispatcher::instance().execute(cmd);
             return;
@@ -431,12 +436,11 @@ namespace windows {
         params.materialPath = materialPath;
 
         // Pass material graph for dynamic evaluation (Time, Sin, Cos nodes)
-        // Using opaque handle to avoid Services depending on material types
-        // Pass address of the shared_ptr, not the raw pointer
         params.materialDataHandle = &materialData;
 
-        // Set material params via PreviewService
+        // Set material params via EventDispatcher
         services::events::preview::SetMaterialParamsCommand cmd;
+        cmd.instanceId = this;
         cmd.params = params;
         events::EventDispatcher::instance().execute(cmd);
     }
@@ -467,21 +471,26 @@ namespace windows {
             // Note: Preview material is updated only when Compile is clicked
             // (see compileMaterial())
 
-            // Update camera via PreviewService
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            // Update camera via service
             services::events::preview::UpdateMaterialCameraCommand cameraCmd;
+            cameraCmd.instanceId = this;
             cameraCmd.view = previewCamera->getViewMatrix();
             cameraCmd.projection = previewCamera->getProjectionMatrix();
             cameraCmd.cameraPos = previewCamera->getPosition();
             cameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
-            events::EventDispatcher::instance().execute(cameraCmd);
+            dispatcher.execute(cameraCmd);
 
-            // Render via PreviewService
-            auto textureHandle = events::EventDispatcher::instance().query(
-                services::events::preview::RenderMaterialPreviewQuery{});
+            // Render and get texture handle
+            services::events::preview::RenderMaterialPreviewQuery renderQuery;
+            renderQuery.instanceId = this;
+            auto textureHandle = dispatcher.query(renderQuery);
 
             // Check for shader compilation errors from the preview pipeline
-            auto shaderError = events::EventDispatcher::instance().query(
-                services::events::preview::GetMaterialShaderErrorQuery{});
+            services::events::preview::GetMaterialShaderErrorQuery errorQuery;
+            errorQuery.instanceId = this;
+            std::string shaderError = dispatcher.query(errorQuery);
             if (!shaderError.empty() && !showCompileError) {
                 showCompileError = true;
                 compileErrorMessage = "SPIR-V: " + shaderError;

@@ -20,11 +20,14 @@ namespace windows
 
     MeshPreviewWindow::~MeshPreviewWindow()
     {
-        // Unload mesh and clean up via PreviewService
-        events::EventDispatcher::instance().execute(
-            services::events::preview::UnloadPreviewMeshCommand{});
-        events::EventDispatcher::instance().execute(
-            services::events::preview::CleanUpMeshPreviewCommand{});
+        // Unload mesh and clean up via PreviewService (using 'this' as instanceId)
+        services::events::preview::UnloadPreviewMeshCommand unloadCmd;
+        unloadCmd.instanceId = this;
+        events::EventDispatcher::instance().execute(unloadCmd);
+
+        services::events::preview::CleanUpMeshPreviewCommand cleanupCmd;
+        cleanupCmd.instanceId = this;
+        events::EventDispatcher::instance().execute(cleanupCmd);
     }
 
     void MeshPreviewWindow::draw()
@@ -76,12 +79,14 @@ namespace windows
 
     void MeshPreviewWindow::initRenderer()
     {
-        // Initialize mesh preview via PreviewService
-        events::EventDispatcher::instance().execute(
-            services::events::preview::InitMeshPreviewCommand{});
+        // Initialize mesh preview via PreviewService (using 'this' as instanceId)
+        services::events::preview::InitMeshPreviewCommand initCmd;
+        initCmd.instanceId = this;
+        events::EventDispatcher::instance().execute(initCmd);
 
         // Load mesh via PreviewService
         services::events::preview::LoadPreviewMeshCommand loadCmd;
+        loadCmd.instanceId = this;
         loadCmd.meshPath = meshPath;
         auto result = events::EventDispatcher::instance().execute(loadCmd);
 
@@ -91,8 +96,9 @@ namespace windows
             camera->fitToBounds(meshBounds);
 
             // Get submesh info via PreviewService
-            subMeshes = events::EventDispatcher::instance().query(
-                services::events::preview::GetPreviewMeshSubMeshInfoQuery{});
+            services::events::preview::GetPreviewMeshSubMeshInfoQuery subMeshQuery;
+            subMeshQuery.instanceId = this;
+            subMeshes = events::EventDispatcher::instance().query(subMeshQuery);
         }
     }
 
@@ -114,24 +120,27 @@ namespace windows
         model = glm::rotate(model, glm::radians(meshRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
         model = glm::scale(model, glm::vec3(meshScale));
 
-        // Set mesh preview params via PreviewService
+        // Set mesh preview params via PreviewService (using 'this' as instanceId)
         services::MeshPreviewParams meshParams;
         meshParams.modelMatrix = model;
         meshParams.highlightedSubMesh = selectedSubMesh;
         services::events::preview::SetMeshPreviewParamsCommand meshCmd;
+        meshCmd.instanceId = this;
         meshCmd.params = meshParams;
         events::EventDispatcher::instance().execute(meshCmd);
 
         // Update camera via PreviewService
         services::events::preview::UpdateMeshCameraCommand cameraCmd;
+        cameraCmd.instanceId = this;
         cameraCmd.view = camera->getViewMatrix();
         cameraCmd.projection = camera->getProjectionMatrix();
         cameraCmd.cameraPos = camera->getPosition();
         events::EventDispatcher::instance().execute(cameraCmd);
 
         // Render via PreviewService
-        auto textureHandle = events::EventDispatcher::instance().query(
-            services::events::preview::RenderMeshPreviewQuery{});
+        services::events::preview::RenderMeshPreviewQuery renderQuery;
+        renderQuery.instanceId = this;
+        auto textureHandle = events::EventDispatcher::instance().query(renderQuery);
 
         if (textureHandle.imguiDescriptorSet)
         {

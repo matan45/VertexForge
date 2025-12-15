@@ -11,6 +11,9 @@ namespace services {
      *
      * This class delegates preview operations to an IPreviewProvider,
      * which is implemented by Core/Graphics adapters.
+     *
+     * Supports multiple instances via instanceId parameter - each instance
+     * gets its own independent preview (e.g., for multiple editor windows).
      */
     class PreviewServiceImpl : public IPreviewService {
     public:
@@ -27,29 +30,29 @@ namespace services {
         void registerEventHandlers();
 
         // === Material Preview (IPreviewService) ===
-        void initMaterialPreview() override;
-        void cleanUpMaterialPreview() override;
-        bool isMaterialPreviewReady() const override;
-        void setMaterialParams(const MaterialPreviewParams& params) override;
-        MaterialPreviewParams getMaterialParams() const override;
-        void updateMaterialCamera(const glm::mat4& view, const glm::mat4& projection,
+        void initMaterialPreview(void* instanceId) override;
+        void cleanUpMaterialPreview(void* instanceId) override;
+        bool isMaterialPreviewReady(void* instanceId) const override;
+        void setMaterialParams(void* instanceId, const MaterialPreviewParams& params) override;
+        MaterialPreviewParams getMaterialParams(void* instanceId) const override;
+        void updateMaterialCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
                                   const glm::vec3& cameraPos, float time = 0.0f) override;
-        ViewportTextureHandle renderMaterialPreview() override;
-        std::string getMaterialShaderError() const override;
+        ViewportTextureHandle renderMaterialPreview(void* instanceId) override;
+        std::string getMaterialShaderError(void* instanceId) const override;
 
         // === Mesh Preview (IPreviewService) ===
-        void initMeshPreview() override;
-        void cleanUpMeshPreview() override;
-        bool isMeshPreviewReady() const override;
-        bool loadPreviewMesh(const std::string& meshPath, math::AABB& outBounds) override;
-        void unloadPreviewMesh() override;
-        bool isPreviewMeshLoaded() const override;
-        std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo() const override;
-        math::AABB getPreviewMeshBounds() const override;
-        void setMeshPreviewParams(const MeshPreviewParams& params) override;
-        void updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
+        void initMeshPreview(void* instanceId) override;
+        void cleanUpMeshPreview(void* instanceId) override;
+        bool isMeshPreviewReady(void* instanceId) const override;
+        bool loadPreviewMesh(void* instanceId, const std::string& meshPath, math::AABB& outBounds) override;
+        void unloadPreviewMesh(void* instanceId) override;
+        bool isPreviewMeshLoaded(void* instanceId) const override;
+        std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(void* instanceId) const override;
+        math::AABB getPreviewMeshBounds(void* instanceId) const override;
+        void setMeshPreviewParams(void* instanceId, const MeshPreviewParams& params) override;
+        void updateMeshCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
                                const glm::vec3& cameraPos) override;
-        ViewportTextureHandle renderMeshPreview() override;
+        ViewportTextureHandle renderMeshPreview(void* instanceId) override;
 
     private:
         IPreviewProvider* provider;
