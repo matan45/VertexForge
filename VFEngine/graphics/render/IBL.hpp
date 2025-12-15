@@ -14,7 +14,6 @@ namespace core
 
 namespace render
 {
-    // Forward declarations for internal classes
     namespace ibl
     {
         class IrradianceGenerator;

@@ -14,67 +14,69 @@
 
 namespace controllers
 {
-    // Forward declaration for helper function
-    static std::optional<float> getInputFloat(
-        const material::ShaderGraph& graph,
-        uint32_t nodeId,
-        const std::string& pinName,
-        float time);
-
     // Recursively evaluate a float value from the graph (handles Time, Sin, Cos, etc.)
-    static std::optional<float> evaluateFloatValue(
+    std::optional<float> MaterialPreviewController::evaluateFloatValue(
         const material::ShaderGraph& graph,
         uint32_t nodeId,
-        const std::string& pinName,
         float time)
     {
         const auto* node = graph.findNode(nodeId);
         if (!node) return std::nullopt;
 
-        switch (node->type) {
-            case material::NodeType::ConstantScalar: {
+        switch (node->type)
+        {
+        case material::NodeType::ConstantScalar:
+            {
                 auto it = node->properties.find("value");
-                if (it != node->properties.end() && std::holds_alternative<float>(it->second)) {
+                if (it != node->properties.end() && std::holds_alternative<float>(it->second))
+                {
                     return std::get<float>(it->second);
                 }
                 return 0.0f;
             }
 
-            case material::NodeType::Time: {
+        case material::NodeType::Time:
+            {
                 return time;
             }
 
-            case material::NodeType::Sin: {
+        case material::NodeType::Sin:
+            {
                 auto inputVal = getInputFloat(graph, nodeId, "Value", time);
                 if (inputVal) return std::sin(*inputVal);
                 return 0.0f;
             }
 
-            case material::NodeType::Cos: {
+        case material::NodeType::Cos:
+            {
                 auto inputVal = getInputFloat(graph, nodeId, "Value", time);
                 if (inputVal) return std::cos(*inputVal);
                 return 0.0f;
             }
 
-            case material::NodeType::Multiply: {
+        case material::NodeType::Multiply:
+            {
                 auto a = getInputFloat(graph, nodeId, "A", time);
                 auto b = getInputFloat(graph, nodeId, "B", time);
                 return (a.value_or(1.0f)) * (b.value_or(1.0f));
             }
 
-            case material::NodeType::Add: {
+        case material::NodeType::Add:
+            {
                 auto a = getInputFloat(graph, nodeId, "A", time);
                 auto b = getInputFloat(graph, nodeId, "B", time);
                 return (a.value_or(0.0f)) + (b.value_or(0.0f));
             }
 
-            case material::NodeType::Subtract: {
+        case material::NodeType::Subtract:
+            {
                 auto a = getInputFloat(graph, nodeId, "A", time);
                 auto b = getInputFloat(graph, nodeId, "B", time);
                 return (a.value_or(0.0f)) - (b.value_or(0.0f));
             }
 
-            case material::NodeType::Clamp: {
+        case material::NodeType::Clamp:
+            {
                 auto val = getInputFloat(graph, nodeId, "Value", time);
                 auto minVal = getInputFloat(graph, nodeId, "Min", time);
                 auto maxVal = getInputFloat(graph, nodeId, "Max", time);
@@ -84,59 +86,68 @@ namespace controllers
                 return std::clamp(v, mn, mx);
             }
 
-            case material::NodeType::Saturate: {
+        case material::NodeType::Saturate:
+            {
                 auto val = getInputFloat(graph, nodeId, "Value", time);
                 return std::clamp(val.value_or(0.0f), 0.0f, 1.0f);
             }
 
-            case material::NodeType::Abs: {
+        case material::NodeType::Abs:
+            {
                 auto val = getInputFloat(graph, nodeId, "Value", time);
                 return std::abs(val.value_or(0.0f));
             }
 
-            case material::NodeType::OneMinus: {
+        case material::NodeType::OneMinus:
+            {
                 auto val = getInputFloat(graph, nodeId, "Value", time);
                 return 1.0f - val.value_or(0.0f);
             }
 
-            default:
-                break;
+        default:
+            break;
         }
 
         return std::nullopt;
     }
 
     // Get input float from a connected node
-    static std::optional<float> getInputFloat(
+    std::optional<float> MaterialPreviewController::getInputFloat(
         const material::ShaderGraph& graph,
         uint32_t nodeId,
         const std::string& pinName,
         float time)
     {
         // Find link connected to this node's input pin
-        for (const auto& link : graph.links) {
-            if (link.targetNodeId == nodeId && link.targetPin == pinName) {
+        for (const auto& link : graph.links)
+        {
+            if (link.targetNodeId == nodeId && link.targetPin == pinName)
+            {
                 // Recursively evaluate the source node
-                return evaluateFloatValue(graph, link.sourceNodeId, link.sourcePin, time);
+                return evaluateFloatValue(graph, link.sourceNodeId, time);
             }
         }
         return std::nullopt;
     }
 
     // Evaluate emission strength from the graph
-    static float evaluateEmissionStrength(const material::ShaderGraph& graph, float time)
+    float MaterialPreviewController::evaluateEmissionStrength(const material::ShaderGraph& graph, float time)
     {
         // Find PBR Output node
         const auto* outputNode = graph.findOutputNode();
-        if (!outputNode) {
+        if (!outputNode)
+        {
             return 0.0f;
         }
 
         // Find what's connected to EmissionStrength pin (not Emission - that's for color)
-        for (const auto& link : graph.links) {
-            if (link.targetNodeId == outputNode->id && link.targetPin == "EmissionStrength") {
-                auto val = evaluateFloatValue(graph, link.sourceNodeId, link.sourcePin, time);
-                if (val) {
+        for (const auto& link : graph.links)
+        {
+            if (link.targetNodeId == outputNode->id && link.targetPin == "EmissionStrength")
+            {
+                auto val = evaluateFloatValue(graph, link.sourceNodeId, time);
+                if (val)
+                {
                     return *val;
                 }
             }
@@ -146,7 +157,8 @@ namespace controllers
     }
 
     // GPU texture data for preview (internal implementation)
-    struct PreviewTextureGPU {
+    struct PreviewTextureGPU
+    {
         vk::Image image;
         vk::DeviceMemory memory;
         vk::ImageView imageView;
@@ -155,25 +167,28 @@ namespace controllers
     };
 
     // pImpl for texture management
-    struct MaterialPreviewController::TextureManagerImpl {
+    struct MaterialPreviewController::TextureManagerImpl
+    {
         static constexpr int MAX_TEXTURES = 8;
         std::unordered_map<std::string, PreviewTextureGPU> textureCache;
         std::array<std::string, MAX_TEXTURES> textureSlots;
         PreviewTextureGPU defaultTexture;
         bool texturesNeedUpdate = false;
 
-        TextureManagerImpl() {
-            for (auto& slot : textureSlots) {
+        TextureManagerImpl()
+        {
+            for (auto& slot : textureSlots)
+            {
                 slot.clear();
             }
         }
     };
 
     MaterialPreviewController::MaterialPreviewController()
-        : swapChain{ *core::VulkanContext::getSwapChain() }
-        , device{ *core::VulkanContext::getDevice() }
-        , offScreen{ std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain) }
-        , textureManager{ std::make_unique<TextureManagerImpl>() }
+        : swapChain{*core::VulkanContext::getSwapChain()}
+          , device{*core::VulkanContext::getDevice()}
+          , offScreen{std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain)}
+          , textureManager{std::make_unique<TextureManagerImpl>()}
     {
     }
 
@@ -189,7 +204,7 @@ namespace controllers
         const uint32_t width = 1;
         const uint32_t height = 1;
         const uint32_t imageSize = width * height * 4;
-        std::array<unsigned char, 4> whitePixel = { 255, 255, 255, 255 };
+        std::array<unsigned char, 4> whitePixel = {255, 255, 255, 255};
 
         // Create staging buffer
         vk::Buffer stagingBuffer;
@@ -237,12 +252,14 @@ namespace controllers
         region.imageSubresource.baseArrayLayer = 0;
         region.imageSubresource.layerCount = 1;
         region.imageExtent = vk::Extent3D(width, height, 1);
-        cmdCopy.get().copyBufferToImage(stagingBuffer, defaultTexture.image, vk::ImageLayout::eTransferDstOptimal, region);
+        cmdCopy.get().copyBufferToImage(stagingBuffer, defaultTexture.image, vk::ImageLayout::eTransferDstOptimal,
+                                        region);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdCopy);
 
         auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
         core::Utilities::transitionImageLayout(cmdB.get(), defaultTexture.image, vk::ImageLayout::eTransferDstOptimal,
-                                               vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor);
+                                               vk::ImageLayout::eShaderReadOnlyOptimal,
+                                               vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
 
         // Cleanup staging
@@ -275,15 +292,18 @@ namespace controllers
     {
         PreviewTextureGPU tex{};
 
-        if (path.empty()) {
+        if (path.empty())
+        {
             return tex;
         }
 
-        try {
+        try
+        {
             auto textureData = resource::ResourceManager::loadTextureAsync(path);
             auto texturePtr = textureData.get();
 
-            if (!texturePtr || texturePtr->textureData.empty()) {
+            if (!texturePtr || texturePtr->textureData.empty())
+            {
                 loggerWarning("Failed to load texture: {}", path);
                 return tex;
             }
@@ -297,7 +317,8 @@ namespace controllers
             core::BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
             bufferInfo.size = imageSize;
             bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                vk::MemoryPropertyFlagBits::eHostCoherent;
             core::Utilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
             // Copy data to staging buffer
@@ -325,7 +346,8 @@ namespace controllers
             // Transition to transfer dst
             auto cmdA = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
             core::Utilities::transitionImageLayout(cmdA.get(), tex.image, vk::ImageLayout::eUndefined,
-                                                   vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor);
+                                                   vk::ImageLayout::eTransferDstOptimal,
+                                                   vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
 
             // Copy buffer to image
@@ -343,7 +365,8 @@ namespace controllers
             // Transition to shader read
             auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
             core::Utilities::transitionImageLayout(cmdB.get(), tex.image, vk::ImageLayout::eTransferDstOptimal,
-                                                   vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor);
+                                                   vk::ImageLayout::eShaderReadOnlyOptimal,
+                                                   vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
 
             // Cleanup staging
@@ -370,7 +393,8 @@ namespace controllers
             tex.valid = true;
             loggerInfo("Loaded texture for preview: {}", path);
         }
-        catch (const std::exception& e) {
+        catch (const std::exception& e)
+        {
             loggerError("Exception loading texture {}: {}", path, e.what());
         }
 
@@ -441,8 +465,10 @@ namespace controllers
     {
         if (path.empty()) return -1;
 
-        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i) {
-            if (textureManager->textureSlots[i] == path) {
+        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i)
+        {
+            if (textureManager->textureSlots[i] == path)
+            {
                 return i;
             }
         }
@@ -457,9 +483,11 @@ namespace controllers
 
         // Inject material into mesh pipeline cache for custom shader support
         // Only inject when useCustomShader is true (after explicit compile)
-        if (params.useCustomShader && !params.materialPath.empty() && params.materialData) {
+        if (params.useCustomShader && !params.materialPath.empty() && params.materialData)
+        {
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
-            if (meshPipeline) {
+            if (meshPipeline)
+            {
                 meshPipeline->injectMaterialForPreview(params.materialPath, params.materialData);
             }
         }
@@ -474,20 +502,26 @@ namespace controllers
             params.emissionTexturePath
         };
 
-        for (const auto& path : texturePaths) {
-            if (!path.empty() && textureManager->textureCache.find(path) == textureManager->textureCache.end()) {
+        for (const auto& path : texturePaths)
+        {
+            if (!path.empty() && textureManager->textureCache.find(path) == textureManager->textureCache.end())
+            {
                 // Find free slot
                 int freeSlot = -1;
-                for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i) {
-                    if (textureManager->textureSlots[i].empty()) {
+                for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i)
+                {
+                    if (textureManager->textureSlots[i].empty())
+                    {
                         freeSlot = i;
                         break;
                     }
                 }
 
-                if (freeSlot >= 0) {
+                if (freeSlot >= 0)
+                {
                     auto tex = loadTextureFromFileImpl(device, path);
-                    if (tex.valid) {
+                    if (tex.valid)
+                    {
                         textureManager->textureCache[path] = std::move(tex);
                         textureManager->textureSlots[freeSlot] = path;
                         textureManager->texturesNeedUpdate = true;
@@ -497,17 +531,22 @@ namespace controllers
         }
 
         // Update bindings if needed
-        if (textureManager->texturesNeedUpdate && textureManager->defaultTexture.valid) {
+        if (textureManager->texturesNeedUpdate && textureManager->defaultTexture.valid)
+        {
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
-            if (meshPipeline) {
+            if (meshPipeline)
+            {
                 // Build arrays of image views and samplers
                 std::array<vk::ImageView, 8> imageViews;
                 std::array<vk::Sampler, 8> samplers;
 
-                for (int i = 0; i < 8; ++i) {
-                    if (!textureManager->textureSlots[i].empty()) {
+                for (int i = 0; i < 8; ++i)
+                {
+                    if (!textureManager->textureSlots[i].empty())
+                    {
                         auto it = textureManager->textureCache.find(textureManager->textureSlots[i]);
-                        if (it != textureManager->textureCache.end() && it->second.valid) {
+                        if (it != textureManager->textureCache.end() && it->second.valid)
+                        {
                             imageViews[i] = it->second.imageView;
                             samplers[i] = it->second.sampler;
                             continue;
@@ -537,13 +576,16 @@ namespace controllers
         }
 
         // Cleanup textures
-        if (textureManager) {
-            for (auto& [path, tex] : textureManager->textureCache) {
+        if (textureManager)
+        {
+            for (auto& [path, tex] : textureManager->textureCache)
+            {
                 destroyTextureImpl(device, tex);
             }
             textureManager->textureCache.clear();
 
-            for (auto& slot : textureManager->textureSlots) {
+            for (auto& slot : textureManager->textureSlots)
+            {
                 slot.clear();
             }
 
@@ -560,7 +602,7 @@ namespace controllers
     }
 
     void MaterialPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                                  const glm::vec3& cameraPos, float time)
+                                                 const glm::vec3& cameraPos, float time)
     {
         // Store time for dynamic graph evaluation
         currentTime = time;
@@ -590,7 +632,7 @@ namespace controllers
 
         render::mesh::MeshRenderData renderData;
         renderData.meshPath = SPHERE_MESH_ID;
-        renderData.modelMatrix = glm::mat4(1.0f);  // Sphere at origin
+        renderData.modelMatrix = glm::mat4(1.0f); // Sphere at origin
         renderData.albedo = materialParams.albedo;
         renderData.metallic = materialParams.metallic;
         renderData.roughness = materialParams.roughness;
@@ -602,10 +644,13 @@ namespace controllers
         renderData.defaultMaterialPath = materialParams.materialPath;
 
         // Dynamically evaluate emission from material graph if available
-        if (materialParams.materialData) {
+        if (materialParams.materialData)
+        {
             renderData.emission = evaluateEmissionStrength(
                 materialParams.materialData->graph, currentTime);
-        } else {
+        }
+        else
+        {
             renderData.emission = materialParams.emission;
         }
 
@@ -632,7 +677,8 @@ namespace controllers
         if (!initialized || !offScreen) return "";
 
         auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
-        if (meshPipeline) {
+        if (meshPipeline)
+        {
             return meshPipeline->getLastShaderCompilationError();
         }
         return "";

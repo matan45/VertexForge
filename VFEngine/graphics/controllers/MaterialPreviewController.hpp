@@ -4,8 +4,7 @@
 #include "material/MaterialTypes.hpp"
 #include <memory>
 #include <string>
-#include <array>
-#include <unordered_map>
+
 
 namespace core
 {
@@ -20,9 +19,10 @@ namespace imguiPass
 
 namespace controllers
 {
-    // PBR material parameters for preview
-    struct PreviewMaterialParams {
-        glm::vec4 albedo{ 0.8f, 0.8f, 0.8f, 1.0f };
+    
+    struct PreviewMaterialParams
+    {
+        glm::vec4 albedo{0.8f, 0.8f, 0.8f, 1.0f};
         float metallic = 0.0f;
         float roughness = 0.5f;
         float ao = 1.0f;
@@ -45,8 +45,7 @@ namespace controllers
         // Material graph for dynamic evaluation (Time, Sin, Cos nodes)
         std::shared_ptr<material::MaterialData> materialData;
     };
-
-    // Forward declaration for internal texture data (defined in cpp)
+    
     struct PreviewTextureGPU;
 
     class MaterialPreviewController
@@ -69,6 +68,10 @@ namespace controllers
         struct TextureManagerImpl;
         std::unique_ptr<TextureManagerImpl> textureManager;
 
+        static std::optional<float> evaluateFloatValue(const material::ShaderGraph& graph, uint32_t nodeId, float time);
+        static std::optional<float> getInputFloat(const material::ShaderGraph& graph, uint32_t nodeId, const std::string& pinName, float time);
+        static float evaluateEmissionStrength(const material::ShaderGraph& graph, float time);
+
     public:
         explicit MaterialPreviewController();
         ~MaterialPreviewController();
@@ -82,12 +85,10 @@ namespace controllers
 
         // Get texture slot index for a path (-1 if not loaded)
         int getTextureSlot(const std::string& path) const;
-
-        // Update camera (called each frame before render)
+        
         void updateCamera(const glm::mat4& view, const glm::mat4& projection,
-                         const glm::vec3& cameraPos, float time = 0.0f);
-
-        // Render preview and return ImGui-compatible texture handle
+                          const glm::vec3& cameraPos, float time = 0.0f);
+        
         void* render();
 
         // Get last shader compilation error (for UI display)

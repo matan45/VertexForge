@@ -1,7 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
 
-// Forward declarations
 struct GLFWwindow;
 
 namespace window {

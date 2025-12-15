@@ -111,8 +111,7 @@ namespace windows {
             materialData->needsRecompile = false;
             showCompileError = false;
             vfLogInfo("Material compiled successfully: {}", materialData->name);
-
-            // Update preview with custom shader enabled after successful compilation
+            
             updatePreviewMaterial(true);
         } else {
             showCompileError = true;
@@ -159,7 +158,7 @@ namespace windows {
 
                     // Preview panel (left)
                     ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, topSize.y), true);
-                    drawPreviewPanel(topSize.y);
+                    drawPreviewPanel();
                     ImGui::EndChild();
 
                     ImGui::SameLine();
@@ -168,7 +167,7 @@ namespace windows {
                     float graphWidth = topSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
                     ImGui::BeginChild("GraphPanel", ImVec2(graphWidth, topSize.y), true,
                                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-                    drawGraphPanel(graphWidth, topSize.y);
+                    drawGraphPanel();
                     ImGui::EndChild();
                 }
                 ImGui::EndChild();
@@ -434,7 +433,7 @@ namespace windows {
         previewController->setMaterialParams(params);
     }
 
-    void MaterialEditorWindow::drawPreviewPanel(float height) {
+    void MaterialEditorWindow::drawPreviewPanel() {
         ImGui::Text("Preview");
         ImGui::Separator();
 
@@ -501,7 +500,7 @@ namespace windows {
         }
     }
 
-    void MaterialEditorWindow::drawGraphPanel(float width, float height) {
+    void MaterialEditorWindow::drawGraphPanel() {
         if (graphEditor && materialData) {
             graphEditor->draw();
         } else {

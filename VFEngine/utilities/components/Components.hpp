@@ -8,8 +8,7 @@
 #include "../uuid/UUID.hpp"
 
 namespace components {
-
-	// Forward declarations for type list
+	
 	struct IBLComponent;
 	struct CameraComponent;
 	struct MeshComponent;

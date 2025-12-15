@@ -11,7 +11,6 @@ namespace fs = std::filesystem;
 
 namespace windows
 {
-    // Forward declarations
     class MeshPreviewWindow;
     class ImagePreviewWindow;
     class AudioPreviewWindow;

@@ -5,7 +5,6 @@
 #include <memory>
 #include <unordered_map>
 
-// Forward declarations
 namespace controllers {
     class OffScreen;
 }

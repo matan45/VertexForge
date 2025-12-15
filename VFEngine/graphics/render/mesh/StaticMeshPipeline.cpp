@@ -5,6 +5,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/Utilities.hpp"
+#include "../../core/TransferManager.hpp"
 #include "resource/MeshResource.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialManager.hpp"

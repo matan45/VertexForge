@@ -4,21 +4,25 @@
 #include <memory>
 #include <string>
 
-namespace editor {
+namespace editor
+{
     class OrbitCamera;
 }
 
-namespace editor::graph {
+namespace editor::graph
+{
     class ShaderGraphEditor;
 }
 
-namespace controllers {
+namespace controllers
+{
     class MaterialPreviewController;
 }
 
-namespace windows {
-
-    class MaterialEditorWindow : public controllers::imguiHandler::ImguiWindow {
+namespace windows
+{
+    class MaterialEditorWindow : public controllers::imguiHandler::ImguiWindow
+    {
     public:
         explicit MaterialEditorWindow(const std::string& materialPath);
         ~MaterialEditorWindow() override;
@@ -47,7 +51,7 @@ namespace windows {
 
         // Preview panel state
         float previewPanelWidth = 250.0f;
-        bool isDraggingPreview = false;  // Track if drag started in preview
+        bool isDraggingPreview = false; // Track if drag started in preview
 
         void initEditor();
         void loadMaterial();
@@ -56,8 +60,8 @@ namespace windows {
 
         void initPreview();
         void drawToolbar();
-        void drawPreviewPanel(float height);
-        void drawGraphPanel(float width, float height);
+        void drawPreviewPanel();
+        void drawGraphPanel();
         void drawParameterPanel();
         void drawPropertiesPanel();
 
@@ -66,5 +70,4 @@ namespace windows {
 
         void onGraphChanged();
     };
-
 }

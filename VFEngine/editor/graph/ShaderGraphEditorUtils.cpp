@@ -27,6 +27,7 @@ namespace editor::graph {
     }
 
     bool ShaderGraphEditor::canCreateLink(uint32_t startPinId, uint32_t endPinId) const {
+        
         const material::NodePin* startPin = findPin(startPinId);
         const material::NodePin* endPin = findPin(endPinId);
 
@@ -41,10 +42,11 @@ namespace editor::graph {
 
         material::PinType srcType = sourcePin->type;
         material::PinType dstType = targetPin->type;
-
+        
         // Same type is always compatible
         if (srcType == dstType) return true;
 
+        //TODO https://matan33214.atlassian.net/browse/VK-56
         // Texture2D can only connect to Texture2D
         if (srcType == material::PinType::Texture2D || dstType == material::PinType::Texture2D) {
             return false;

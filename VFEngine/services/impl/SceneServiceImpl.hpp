@@ -5,7 +5,6 @@
 #include <memory>
 #include <optional>
 
-// Forward declarations to avoid including scene headers
 namespace scene {
     class SceneGraphSystem;
 }

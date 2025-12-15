@@ -8,7 +8,6 @@
 #include <functional>
 #include <map>
 
-// Forward declarations
 struct ImDrawList;
 
 namespace ax::NodeEditor {
@@ -55,10 +54,9 @@ namespace editor::graph {
         // Context menu state
         bool showCreateNodeMenu = false;
         ImVec2 newNodePosition;
-        ImVec2 popupMousePos;  // Mouse position for popup placement
+        ImVec2 popupMousePos; 
         ax::NodeEditor::PinId newNodeLinkPin;
-
-        // Zoom control state (for button-triggered zoom)
+        
         int pendingZoomSteps = 0; 
 
         // ID mapping helpers - use offsets to prevent conflicts between node/pin/link IDs
@@ -73,8 +71,7 @@ namespace editor::graph {
         uint32_t fromEditorNodeId(ax::NodeEditor::NodeId id) const { return static_cast<uint32_t>(id.Get() - NODE_ID_OFFSET); }
         uint32_t fromEditorPinId(ax::NodeEditor::PinId id) const { return static_cast<uint32_t>(id.Get() - PIN_ID_OFFSET); }
         uint32_t fromEditorLinkId(ax::NodeEditor::LinkId id) const { return static_cast<uint32_t>(id.Get() - LINK_ID_OFFSET); }
-
-        // Drawing functions (in ShaderGraphEditorDraw.cpp)
+        
         void drawNode(material::ShaderNode& node);
         void drawLinks();
         void drawZoomControls(ImVec2 canvasPos, ImVec2 canvasSize, float currentZoom);
