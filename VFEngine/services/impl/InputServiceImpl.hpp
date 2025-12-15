@@ -15,11 +15,9 @@ namespace services {
     public:
         explicit InputServiceImpl(window::Window* window);
         ~InputServiceImpl() override;
-
-        // Register all command and query handlers with the EventDispatcher
+        
         void registerEventHandlers();
-
-        // Keyboard State
+        
         bool isKeyDown(int keyCode) const override;
         bool isKeyReleased(int keyCode) const override;
 

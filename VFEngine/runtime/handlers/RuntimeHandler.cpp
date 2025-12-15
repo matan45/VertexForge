@@ -3,27 +3,10 @@
 #include "impl/SceneServiceImpl.hpp"
 #include "impl/RenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
-#include "providers/IEditorTextureProvider.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/ApplicationEvents.hpp"
 
 namespace handlers {
-
-    /**
-     * @brief Null implementation of IEditorTextureProvider for Runtime.
-     *
-     * Runtime doesn't need editor texture loading, so this provides a no-op implementation.
-     */
-    class NullEditorTextureProvider : public services::IEditorTextureProvider {
-    public:
-        services::EditorTextureData loadTexture(std::string_view) override {
-            return services::EditorTextureData{};
-        }
-
-        services::EditorTextureData loadHdrTexture(std::string_view) override {
-            return services::EditorTextureData{};
-        }
-
-        void releaseTexture(void*) override {}
-    };
 
     RuntimeHandler::RuntimeHandler()
         : bootstrap(std::make_unique<core::RuntimeBootstrap>()) {}
@@ -36,6 +19,16 @@ namespace handlers {
 
         // Initialize services with providers from bootstrap
         initializeServices();
+
+        // Set up frame callback to update services each frame
+        bootstrap->setFrameCallback([this]() {
+            if (inputService) {
+                inputService->update();
+            }
+        });
+
+        // Subscribe to window events from Services
+        setupEventSubscriptions();
     }
 
     void RuntimeHandler::run() const {
@@ -43,6 +36,9 @@ namespace handlers {
     }
 
     void RuntimeHandler::cleanUp() {
+        // Unsubscribe from events before cleanup
+        cleanupEventSubscriptions();
+
         // Reset services before graphics cleanup to release Vulkan resources
         renderService.reset();
         sceneService.reset();
@@ -62,10 +58,8 @@ namespace handlers {
         // Get shared instances from the bootstrap
         auto sceneGraphSystem = bootstrap->getSceneGraphSystem();
 
-        // Create null texture provider for Runtime (no editor textures needed)
-        static NullEditorTextureProvider nullTextureProvider;
-
         // Create service implementations using providers from bootstrap
+        // nullTextureProvider is a member - ensures proper lifetime management
         auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
         auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(
             bootstrap->getOffScreenProvider(),
@@ -81,6 +75,47 @@ namespace handlers {
         sceneServiceImpl->registerEventHandlers();
         renderServiceImpl->registerEventHandlers();
         inputServiceImpl->registerEventHandlers();
+    }
+
+    void RuntimeHandler::setupEventSubscriptions()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Subscribe to window resize events
+        resizeSubscription = dispatcher.subscribe<events::application::WindowResizedNotification>(
+            [this](const events::application::WindowResizedNotification&) {
+                bootstrap->triggerResize();
+            });
+
+        // Subscribe to window minimize events (pause game when minimized)
+        minimizeSubscription = dispatcher.subscribe<events::application::WindowMinimizedNotification>(
+            [](const events::application::WindowMinimizedNotification&) {
+                // Could pause game loop or reduce update frequency here
+            });
+
+        // Subscribe to window restore events
+        restoreSubscription = dispatcher.subscribe<events::application::WindowRestoredNotification>(
+            [](const events::application::WindowRestoredNotification&) {
+                // Could resume game loop here
+            });
+    }
+
+    void RuntimeHandler::cleanupEventSubscriptions()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (resizeSubscription.isValid()) {
+            dispatcher.unsubscribe(resizeSubscription);
+            resizeSubscription = {};
+        }
+        if (minimizeSubscription.isValid()) {
+            dispatcher.unsubscribe(minimizeSubscription);
+            minimizeSubscription = {};
+        }
+        if (restoreSubscription.isValid()) {
+            dispatcher.unsubscribe(restoreSubscription);
+            restoreSubscription = {};
+        }
     }
 
 }

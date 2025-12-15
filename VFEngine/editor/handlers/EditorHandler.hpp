@@ -6,8 +6,8 @@
 #include "interfaces/ISceneService.hpp"
 #include "interfaces/IRenderService.hpp"
 #include "interfaces/IInputService.hpp"
-#include "interfaces/IResourceService.hpp"
 #include "interfaces/IPreviewService.hpp"
+#include "events/EventTypes.hpp"
 
 // Forward declaration for EditorBootstrap
 namespace core {
@@ -28,8 +28,13 @@ namespace handlers {
 		std::shared_ptr<services::ISceneService> sceneService;
 		std::shared_ptr<services::IRenderService> renderService;
 		std::shared_ptr<services::IInputService> inputService;
-		std::shared_ptr<services::IResourceService> resourceService;
 		std::shared_ptr<services::IPreviewService> previewService;
+
+		// Event subscription tokens
+		events::SubscriptionToken resizeSubscription;
+		events::SubscriptionToken minimizeSubscription;
+		events::SubscriptionToken restoreSubscription;
+		events::SubscriptionToken focusSubscription;
 
 	public:
 		explicit EditorHandler();
@@ -38,8 +43,10 @@ namespace handlers {
 		void init();
 		void run() const;
 		void cleanUp();
-	
+
 	private:
 		void initializeServices();
+		void setupEventSubscriptions();
+		void cleanupEventSubscriptions();
 	};
 }

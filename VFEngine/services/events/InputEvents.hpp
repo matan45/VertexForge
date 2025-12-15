@@ -6,15 +6,7 @@
 namespace events::input {
 
     // ============================================
-    // COMMANDS - Operations that affect input/window state
-    // ============================================
-
-    struct CloseApplicationCommand : ICommand<> {
-        std::string_view getName() const override { return "CloseApplication"; }
-    };
-
-    // ============================================
-    // QUERIES - Read-only operations
+    // QUERIES - Input state read-only operations
     // ============================================
 
     struct IsKeyDownQuery : IQuery<bool> {
@@ -63,10 +55,6 @@ namespace events::input {
         int button;
 
         std::string_view getName() const override { return "MouseButtonReleased"; }
-    };
-
-    struct ApplicationCloseRequestedNotification : INotification {
-        std::string_view getName() const override { return "ApplicationCloseRequested"; }
     };
 
 }

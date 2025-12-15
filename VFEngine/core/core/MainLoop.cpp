@@ -36,9 +36,9 @@ namespace core {
 
 			engineTime::Timer::update();
 
-			if (mainWindow->isWindowResized()) {
-				renderController->reSize();
-				mainWindow->resetResizeFlag();
+			// Call frame callback (updates services, publishes events)
+			if (frameCallback) {
+				frameCallback();
 			}
 
 			scene::LevelHandler::update();
@@ -49,6 +49,11 @@ namespace core {
 
 			renderController->render();
 		}
+	}
+
+	void MainLoop::triggerResize()
+	{
+		renderController->reSize();
 	}
 
 	void MainLoop::cleanUp() const

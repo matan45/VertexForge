@@ -4,20 +4,28 @@
 
 namespace window {
 
+	// Static registry definition
+	std::unordered_map<GLFWwindow*, InputController*> InputController::controllerRegistry;
+
 	// Static callback function for GLFW scroll events
 	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-		auto* controller = static_cast<InputController*>(glfwGetWindowUserPointer(window));
+		auto* controller = InputController::getControllerForWindow(window);
 		if (controller) {
 			controller->onScroll(xoffset, yoffset);
 		}
+	}
+
+	InputController* InputController::getControllerForWindow(GLFWwindow* window) {
+		auto it = controllerRegistry.find(window);
+		return (it != controllerRegistry.end()) ? it->second : nullptr;
 	}
 
 	InputController::InputController(Window* window)
 		: window(window)
 		, glfwWindow(window ? window->getWindowPtr() : nullptr) {
 		if (glfwWindow) {
-			// Store this pointer for callback access
-			glfwSetWindowUserPointer(glfwWindow, this);
+			// Register in static map (doesn't conflict with Window's user pointer)
+			controllerRegistry[glfwWindow] = this;
 			// Register scroll callback
 			glfwSetScrollCallback(glfwWindow, scrollCallback);
 		}
@@ -27,7 +35,8 @@ namespace window {
 		if (glfwWindow) {
 			// Clear the scroll callback
 			glfwSetScrollCallback(glfwWindow, nullptr);
-			glfwSetWindowUserPointer(glfwWindow, nullptr);
+			// Remove from registry
+			controllerRegistry.erase(glfwWindow);
 		}
 	}
 
@@ -105,6 +114,47 @@ namespace window {
 		if (glfwWindow) {
 			glfwSetWindowShouldClose(glfwWindow, GLFW_TRUE);
 		}
+	}
+
+	// Window state delegation methods
+	bool InputController::isWindowResized() const {
+		return window ? window->isWindowResized() : false;
+	}
+
+	void InputController::resetResizeFlag() {
+		if (window) window->resetResizeFlag();
+	}
+
+	bool InputController::isWindowMinimized() const {
+		return window ? window->isWindowMinimized() : false;
+	}
+
+	bool InputController::hasMinimizeStateChanged() const {
+		return window ? window->hasMinimizeStateChanged() : false;
+	}
+
+	void InputController::resetMinimizeStateChanged() {
+		if (window) window->resetMinimizeStateChanged();
+	}
+
+	bool InputController::isWindowFocused() const {
+		return window ? window->isWindowFocused() : true;
+	}
+
+	bool InputController::hasFocusStateChanged() const {
+		return window ? window->hasFocusStateChanged() : false;
+	}
+
+	void InputController::resetFocusStateChanged() {
+		if (window) window->resetFocusStateChanged();
+	}
+
+	uint32_t InputController::getWindowWidth() const {
+		return window ? window->getWidth() : 0;
+	}
+
+	uint32_t InputController::getWindowHeight() const {
+		return window ? window->getHeight() : 0;
 	}
 
 }

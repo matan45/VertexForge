@@ -4,55 +4,74 @@
 #include "../adapters/OffScreenAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 
-namespace core {
-
+namespace core
+{
     RuntimeBootstrap::RuntimeBootstrap()
         : coreInterface(std::make_unique<::controllers::CoreInterface>())
-        , offScreen(std::make_unique<::controllers::OffScreen>()) {}
+          , offScreen(std::make_unique<::controllers::OffScreen>())
+    {
+    }
 
     RuntimeBootstrap::~RuntimeBootstrap() = default;
 
-    void RuntimeBootstrap::init() {
-        // Initialize core systems
+    void RuntimeBootstrap::init()
+    {
         coreInterface->init();
 
-        // Create adapters that implement provider interfaces
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());
 
-        // Initialize offscreen rendering
         offScreen->init();
     }
 
-    void RuntimeBootstrap::run() const {
+    void RuntimeBootstrap::run() const
+    {
         coreInterface->run();
     }
 
-    void RuntimeBootstrap::cleanUp() {
-        // Clean up in reverse order of initialization
-        if (offScreen) {
+    void RuntimeBootstrap::cleanUp()
+    {
+        if (offScreen)
+        {
             offScreen->cleanUp();
         }
 
-        // Reset adapters
         offScreenAdapter.reset();
 
-        // Clean up core
-        if (coreInterface) {
+        if (coreInterface)
+        {
             coreInterface->cleanUp();
         }
     }
 
-    services::IOffScreenProvider* RuntimeBootstrap::getOffScreenProvider() {
+    services::IOffScreenProvider* RuntimeBootstrap::getOffScreenProvider()
+    {
         return offScreenAdapter.get();
     }
 
-    window::Window* RuntimeBootstrap::getWindow() {
+    window::Window* RuntimeBootstrap::getWindow()
+    {
         return coreInterface ? coreInterface->getWindow() : nullptr;
     }
 
-    std::shared_ptr<scene::SceneGraphSystem> RuntimeBootstrap::getSceneGraphSystem() {
+    std::shared_ptr<scene::SceneGraphSystem> RuntimeBootstrap::getSceneGraphSystem()
+    {
         auto level = scene::LevelHandler::getInstance();
         return level ? level->getSceneGraphSystem() : nullptr;
     }
 
+    void RuntimeBootstrap::setFrameCallback(std::function<void()> callback)
+    {
+        if (coreInterface)
+        {
+            coreInterface->setFrameCallback(std::move(callback));
+        }
+    }
+
+    void RuntimeBootstrap::triggerResize()
+    {
+        if (coreInterface)
+        {
+            coreInterface->triggerResize();
+        }
+    }
 }

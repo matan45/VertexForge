@@ -11,12 +11,18 @@ namespace window {
 	{
 	private:
 		GLFWwindow* window{ nullptr };
-		bool isResized{ false }; // Non-static resize flag
+		bool isResized{ false };
+		bool isMinimized{ false };
+		bool isFocused{ true };
+		bool minimizeStateChanged{ false };
+		bool focusStateChanged{ false };
 		int width{ 800 };
 		int height{ 600 };
 
 
 		static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+		static void windowIconifyCallback(GLFWwindow* window, int iconified);
+		static void windowFocusCallback(GLFWwindow* window, int focused);
 
 	public:
 		explicit Window() = default;
@@ -29,8 +35,20 @@ namespace window {
 		void closeWindow();
 		void pollEvents() const;
 		bool shouldClose() const;
+
+		// Resize state
 		bool isWindowResized() const { return isResized; }
 		void resetResizeFlag() { isResized = false; }
+
+		// Minimize state
+		bool isWindowMinimized() const { return isMinimized; }
+		bool hasMinimizeStateChanged() const { return minimizeStateChanged; }
+		void resetMinimizeStateChanged() { minimizeStateChanged = false; }
+
+		// Focus state
+		bool isWindowFocused() const { return isFocused; }
+		bool hasFocusStateChanged() const { return focusStateChanged; }
+		void resetFocusStateChanged() { focusStateChanged = false; }
 
 		uint32_t getWidth() const { return width; }
 		uint32_t getHeight() const { return height; }

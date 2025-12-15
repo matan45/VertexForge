@@ -1,32 +1,32 @@
 #include "PreviewAdapter.hpp"
 #include "../../graphics/controllers/MaterialPreviewController.hpp"
 #include "../../graphics/controllers/MeshPreviewController.hpp"
+#include "print/Logger.hpp"
 
 namespace core {
 
     PreviewAdapter::PreviewAdapter() = default;
 
-    PreviewAdapter::~PreviewAdapter() {
-        // Clean up all material controllers
-        for (auto& [id, controller] : materialControllers) {
-            if (controller) {
-                controller->cleanUp();
-            }
+    PreviewAdapter::~PreviewAdapter() noexcept {
+        
+        try {
+            materialControllers.clear();
+        } catch (const std::exception& e) {
+            loggerError("Exception during material controller cleanup: {}", e.what());
+        } catch (...) {
+            loggerError("Unknown exception during material controller cleanup");
         }
-        materialControllers.clear();
 
-        // Clean up all mesh controllers
-        for (auto& [id, controller] : meshControllers) {
-            if (controller) {
-                controller->cleanUp();
-            }
+        try {
+            meshControllers.clear();
+        } catch (const std::exception& e) {
+            loggerError("Exception during mesh controller cleanup: {}", e.what());
+        } catch (...) {
+            loggerError("Unknown exception during mesh controller cleanup");
         }
-        meshControllers.clear();
     }
-
-    // === Helper Methods ===
-
-    ::controllers::MaterialPreviewController* PreviewAdapter::getMaterialController(void* instanceId) {
+    
+    controllers::MaterialPreviewController* PreviewAdapter::getMaterialController(void* instanceId) {
         auto it = materialControllers.find(instanceId);
         if (it != materialControllers.end()) {
             return it->second.get();
@@ -34,7 +34,7 @@ namespace core {
         return nullptr;
     }
 
-    ::controllers::MaterialPreviewController* PreviewAdapter::getMaterialControllerConst(void* instanceId) const {
+    controllers::MaterialPreviewController* PreviewAdapter::getMaterialControllerConst(void* instanceId) const {
         auto it = materialControllers.find(instanceId);
         if (it != materialControllers.end()) {
             return it->second.get();
@@ -42,7 +42,7 @@ namespace core {
         return nullptr;
     }
 
-    ::controllers::MeshPreviewController* PreviewAdapter::getMeshController(void* instanceId) {
+    controllers::MeshPreviewController* PreviewAdapter::getMeshController(void* instanceId) {
         auto it = meshControllers.find(instanceId);
         if (it != meshControllers.end()) {
             return it->second.get();
@@ -50,7 +50,7 @@ namespace core {
         return nullptr;
     }
 
-    ::controllers::MeshPreviewController* PreviewAdapter::getMeshControllerConst(void* instanceId) const {
+    controllers::MeshPreviewController* PreviewAdapter::getMeshControllerConst(void* instanceId) const {
         auto it = meshControllers.find(instanceId);
         if (it != meshControllers.end()) {
             return it->second.get();
@@ -89,7 +89,7 @@ namespace core {
         if (!controller) return;
 
         // Convert service DTO to controller params
-        ::controllers::PreviewMaterialParams controllerParams;
+        controllers::PreviewMaterialParams controllerParams;
         controllerParams.albedo = params.albedo;
         controllerParams.metallic = params.metallic;
         controllerParams.roughness = params.roughness;
@@ -132,8 +132,6 @@ namespace core {
         result.emissionTexturePath = controllerParams.emissionTexturePath;
         result.materialPath = controllerParams.materialPath;
         result.useCustomShader = controllerParams.useCustomShader;
-        // Note: materialDataHandle is not copied back - it's write-only from service perspective
-
         return result;
     }
 
@@ -154,9 +152,7 @@ namespace core {
         auto* controller = getMaterialControllerConst(instanceId);
         return controller ? controller->getLastShaderCompilationError() : "";
     }
-
-    // === Mesh Preview ===
-
+    
     void PreviewAdapter::initMeshPreview(void* instanceId) {
         // Create a new controller for this instance if it doesn't exist
         auto& controller = meshControllers[instanceId];

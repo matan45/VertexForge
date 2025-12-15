@@ -5,9 +5,12 @@
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/ResourceEvents.hpp"
-#include "events/InputEvents.hpp"
+#include "events/ApplicationEvents.hpp"
 #include "string/StringUtil.hpp"
+#include "Import.hpp"
+#include "config/Config.hpp"
 #include <imgui.h>
+#include <thread>
 
 namespace windows
 {
@@ -130,9 +133,50 @@ namespace windows
 
 			if (ImGui::Button("Continue"))
 			{
-				events::resource::ImportFilesCommand cmd;
-				cmd.files = requests;
-				dispatcher.execute(cmd);
+				// Convert to Import controller format
+				std::vector<importConfig::ImportFiles> importFiles;
+				std::vector<std::string> filePaths;
+				for (const auto& req : requests) {
+					importConfig::ImportConfig config;
+					config.isImageFlipVertically = req.flipVertically;
+					importFiles.emplace_back(req.path, config);
+					filePaths.push_back(req.path);
+				}
+
+				// Publish start notification
+				events::resource::ImportStartedNotification startNotif;
+				startNotif.files = filePaths;
+				dispatcher.publish(startNotif);
+
+				// Run import in background thread to not block UI
+				std::thread([importFiles = std::move(importFiles)]() {
+					auto& dispatcher = events::EventDispatcher::instance();
+
+					// Progress callback publishes notifications
+					auto progressCallback = [&dispatcher](std::string_view currentFile,
+					                                       uint32_t /*fileIndex*/,
+					                                       uint32_t /*totalFiles*/,
+					                                       float fileProgress) {
+						events::resource::ImportProgressNotification progressNotif;
+						progressNotif.currentFile = std::string(currentFile);
+						progressNotif.progress = fileProgress;
+						dispatcher.publish(progressNotif);
+					};
+
+					auto result = controllers::Import::importFiles(importFiles, progressCallback);
+
+					// Publish completion notification
+					events::resource::ImportCompletedNotification completeNotif;
+					for (const auto& fileResult : result.fileResults) {
+						services::ImportResult res;
+						res.sourcePath = fileResult.sourcePath;
+						res.success = fileResult.success;
+						res.errorMessage = fileResult.errorMessage;
+						completeNotif.results.push_back(res);
+					}
+					dispatcher.publish(completeNotif);
+				}).detach();
+
 				ImGui::CloseCurrentPopup();
 				openModal = false;
 			}
@@ -190,7 +234,7 @@ namespace windows
 			}
 			else if (ImGui::MenuItem("Exit"))
 			{
-				events::input::CloseApplicationCommand cmd;
+				events::application::CloseCommand cmd;
 				events::EventDispatcher::instance().execute(cmd);
 			}
 			ImGui::EndMenu();

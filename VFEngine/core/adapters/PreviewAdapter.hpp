@@ -3,26 +3,23 @@
 #include <memory>
 #include <unordered_map>
 
-namespace controllers {
+namespace controllers
+{
     class MaterialPreviewController;
     class MeshPreviewController;
 }
 
-namespace core {
+namespace core
+{
+    class PreviewAdapter : public services::IPreviewProvider
+    {
+    private:
+        std::unordered_map<void*, std::unique_ptr<::controllers::MaterialPreviewController>> materialControllers;
+        std::unordered_map<void*, std::unique_ptr<::controllers::MeshPreviewController>> meshControllers;
 
-    /**
-     * @brief Adapter that implements IPreviewProvider by wrapping preview controllers.
-     *
-     * This class bridges the Services layer with the Graphics layer's preview controllers,
-     * allowing Services to provide preview functionality without direct dependencies on Graphics.
-     *
-     * Supports multiple instances via instanceId parameter - each instance gets its own
-     * independent controller (e.g., for multiple editor windows).
-     */
-    class PreviewAdapter : public services::IPreviewProvider {
     public:
         PreviewAdapter();
-        ~PreviewAdapter() override;
+        ~PreviewAdapter() noexcept override;
 
         // === Material Preview (IPreviewProvider) ===
         void initMaterialPreview(void* instanceId) override;
@@ -46,19 +43,13 @@ namespace core {
         math::AABB getPreviewMeshBounds(void* instanceId) const override;
         void setMeshPreviewParams(void* instanceId, const services::MeshPreviewParams& params) override;
         void updateMeshCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
-                               const glm::vec3& cameraPos) override;
+                              const glm::vec3& cameraPos) override;
         void* renderMeshPreview(void* instanceId) override;
 
     private:
-        // Maps instanceId -> controller for multi-instance support
-        std::unordered_map<void*, std::unique_ptr<::controllers::MaterialPreviewController>> materialControllers;
-        std::unordered_map<void*, std::unique_ptr<::controllers::MeshPreviewController>> meshControllers;
-
-        // Helper methods to get or create controllers
-        ::controllers::MaterialPreviewController* getMaterialController(void* instanceId);
-        ::controllers::MaterialPreviewController* getMaterialControllerConst(void* instanceId) const;
-        ::controllers::MeshPreviewController* getMeshController(void* instanceId);
-        ::controllers::MeshPreviewController* getMeshControllerConst(void* instanceId) const;
+        controllers::MaterialPreviewController* getMaterialController(void* instanceId);
+        controllers::MaterialPreviewController* getMaterialControllerConst(void* instanceId) const;
+        controllers::MeshPreviewController* getMeshController(void* instanceId);
+        controllers::MeshPreviewController* getMeshControllerConst(void* instanceId) const;
     };
-
 }

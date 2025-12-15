@@ -1,9 +1,11 @@
 #include "InputServiceImpl.hpp"
 #include "../../Window/controllers/InputController.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/ApplicationEvents.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cstdint>
 
 namespace services {
 
@@ -111,8 +113,39 @@ namespace services {
     }
 
     void InputServiceImpl::update() {
-        if (inputController) {
-            inputController->update();
+        if (!inputController) return;
+
+        inputController->update();
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Check for window resize
+        if (inputController->isWindowResized()) {
+            events::application::WindowResizedNotification notification;
+            notification.width = inputController->getWindowWidth();
+            notification.height = inputController->getWindowHeight();
+            dispatcher.publish(notification);
+            inputController->resetResizeFlag();
+        }
+
+        // Check for minimize state changes
+        if (inputController->hasMinimizeStateChanged()) {
+            if (inputController->isWindowMinimized()) {
+                events::application::WindowMinimizedNotification notification;
+                dispatcher.publish(notification);
+            } else {
+                events::application::WindowRestoredNotification notification;
+                dispatcher.publish(notification);
+            }
+            inputController->resetMinimizeStateChanged();
+        }
+
+        // Check for focus state changes
+        if (inputController->hasFocusStateChanged()) {
+            events::application::WindowFocusedNotification notification;
+            notification.focused = inputController->isWindowFocused();
+            dispatcher.publish(notification);
+            inputController->resetFocusStateChanged();
         }
     }
 
@@ -127,7 +160,7 @@ namespace services {
         }
 
         // Publish notification
-        events::input::ApplicationCloseRequestedNotification notification;
+        events::application::CloseRequestedNotification notification;
         events::EventDispatcher::instance().publish(notification);
     }
 
@@ -135,8 +168,8 @@ namespace services {
         auto& dispatcher = events::EventDispatcher::instance();
 
         // Command handlers
-        dispatcher.registerCommandHandler<events::input::CloseApplicationCommand>(
-            [this](const events::input::CloseApplicationCommand&) {
+        dispatcher.registerCommandHandler<events::application::CloseCommand>(
+            [this](const events::application::CloseCommand&) {
                 requestClose();
             });
 

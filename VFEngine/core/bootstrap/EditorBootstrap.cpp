@@ -6,67 +6,88 @@
 #include "../adapters/PreviewAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 
-namespace core {
-
+namespace core
+{
     EditorBootstrap::EditorBootstrap()
         : coreInterface(std::make_unique<::controllers::CoreInterface>())
-        , offScreen(std::make_unique<::controllers::OffScreen>()) {}
+          , offScreen(std::make_unique<::controllers::OffScreen>())
+    {
+    }
 
     EditorBootstrap::~EditorBootstrap() = default;
 
-    void EditorBootstrap::init() {
-        // Initialize core systems
+    void EditorBootstrap::init()
+    {
         coreInterface->init();
-
-        // Create adapters that implement provider interfaces
+        
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());
         textureAdapter = std::make_unique<EditorTextureAdapter>();
         previewAdapter = std::make_unique<PreviewAdapter>();
-
-        // Initialize offscreen rendering
+        
         offScreen->init();
     }
 
-    void EditorBootstrap::run() const {
+    void EditorBootstrap::run() const
+    {
         coreInterface->run();
     }
 
-    void EditorBootstrap::cleanUp() {
-        // Clean up in reverse order of initialization
-        if (offScreen) {
+    void EditorBootstrap::cleanUp()
+    {
+        if (offScreen)
+        {
             offScreen->cleanUp();
         }
-
-        // Reset adapters
+        
         previewAdapter.reset();
         textureAdapter.reset();
         offScreenAdapter.reset();
-
-        // Clean up core
-        if (coreInterface) {
+        
+        if (coreInterface)
+        {
             coreInterface->cleanUp();
         }
     }
 
-    services::IOffScreenProvider* EditorBootstrap::getOffScreenProvider() {
+    services::IOffScreenProvider* EditorBootstrap::getOffScreenProvider()
+    {
         return offScreenAdapter.get();
     }
 
-    services::IEditorTextureProvider* EditorBootstrap::getEditorTextureProvider() {
+    services::IEditorTextureProvider* EditorBootstrap::getEditorTextureProvider()
+    {
         return textureAdapter.get();
     }
 
-    services::IPreviewProvider* EditorBootstrap::getPreviewProvider() {
+    services::IPreviewProvider* EditorBootstrap::getPreviewProvider()
+    {
         return previewAdapter.get();
     }
 
-    window::Window* EditorBootstrap::getWindow() {
+    window::Window* EditorBootstrap::getWindow()
+    {
         return coreInterface ? coreInterface->getWindow() : nullptr;
     }
 
-    std::shared_ptr<scene::SceneGraphSystem> EditorBootstrap::getSceneGraphSystem() {
+    std::shared_ptr<scene::SceneGraphSystem> EditorBootstrap::getSceneGraphSystem()
+    {
         auto level = scene::LevelHandler::getInstance();
         return level ? level->getSceneGraphSystem() : nullptr;
     }
 
+    void EditorBootstrap::setFrameCallback(std::function<void()> callback)
+    {
+        if (coreInterface)
+        {
+            coreInterface->setFrameCallback(std::move(callback));
+        }
+    }
+
+    void EditorBootstrap::triggerResize()
+    {
+        if (coreInterface)
+        {
+            coreInterface->triggerResize();
+        }
+    }
 }

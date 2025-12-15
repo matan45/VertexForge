@@ -1,5 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <unordered_map>
+#include <cstdint>
 
 struct GLFWwindow;
 
@@ -25,6 +27,18 @@ namespace window {
 		glm::vec2 getMouseDelta() const;
 		glm::vec2 getScrollDelta() const;
 
+		// Window State (delegates to Window)
+		bool isWindowResized() const;
+		void resetResizeFlag();
+		bool isWindowMinimized() const;
+		bool hasMinimizeStateChanged() const;
+		void resetMinimizeStateChanged();
+		bool isWindowFocused() const;
+		bool hasFocusStateChanged() const;
+		void resetFocusStateChanged();
+		uint32_t getWindowWidth() const;
+		uint32_t getWindowHeight() const;
+
 		// Frame update - must be called once per frame to track deltas
 		void update();
 
@@ -37,6 +51,9 @@ namespace window {
 		// GLFW callback handler (called internally by scroll callback)
 		void onScroll(double xoffset, double yoffset);
 
+		// Static lookup for scroll callback (avoids conflicting with Window's user pointer)
+		static InputController* getControllerForWindow(GLFWwindow* window);
+
 	private:
 		Window* window;
 		GLFWwindow* glfwWindow;
@@ -48,6 +65,9 @@ namespace window {
 
 		// Scroll delta tracking (accumulated between frames)
 		glm::vec2 scrollDelta{ 0.0f };
+
+		// Static registry for scroll callback lookup
+		static std::unordered_map<GLFWwindow*, InputController*> controllerRegistry;
 	};
 
 }

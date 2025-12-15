@@ -92,6 +92,7 @@
   <ItemGroup>
     <ClInclude Include="data\DTOs.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />
+    <ClInclude Include="events\ApplicationEvents.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
     <ClInclude Include="events\InputEvents.hpp" />
@@ -103,7 +104,6 @@
     <ClInclude Include="impl\InputServiceImpl.hpp" />
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
     <ClInclude Include="impl\RenderServiceImpl.hpp" />
-    <ClInclude Include="impl\ResourceServiceImpl.hpp" />
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
     <ClInclude Include="interfaces\IAnimationService.hpp" />
     <ClInclude Include="interfaces\IAudioService.hpp" />
@@ -111,7 +111,6 @@
     <ClInclude Include="interfaces\IPhysicsService.hpp" />
     <ClInclude Include="interfaces\IPreviewService.hpp" />
     <ClInclude Include="interfaces\IRenderService.hpp" />
-    <ClInclude Include="interfaces\IResourceService.hpp" />
     <ClInclude Include="interfaces\ISceneService.hpp" />
     <ClInclude Include="interfaces\IScriptingService.hpp" />
     <ClInclude Include="providers\IEditorTextureProvider.hpp" />
@@ -123,7 +122,6 @@
     <ClCompile Include="impl\InputServiceImpl.cpp" />
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />
     <ClCompile Include="impl\RenderServiceImpl.cpp" />
-    <ClCompile Include="impl\ResourceServiceImpl.cpp" />
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
   </ItemGroup>
   <ItemGroup>

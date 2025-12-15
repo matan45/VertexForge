@@ -3,10 +3,10 @@
 #include "impl/SceneServiceImpl.hpp"
 #include "impl/RenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
-#include "impl/ResourceServiceImpl.hpp"
 #include "impl/PreviewServiceImpl.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/ApplicationEvents.hpp"
 #include "Import.hpp"
-#include "config/Config.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace handlers {
@@ -24,8 +24,21 @@ namespace handlers {
 		// Initialize core systems via bootstrap
 		bootstrap->init();
 
+		// Initialize Import controller (Editor calls Import directly)
+		controllers::Import::initialize();
+
 		// Initialize services with providers from bootstrap
 		initializeServices();
+
+		// Set up frame callback to update services each frame
+		bootstrap->setFrameCallback([this]() {
+			if (inputService) {
+				inputService->update();
+			}
+		});
+
+		// Subscribe to window events from Services
+		setupEventSubscriptions();
 
 		windowImguiHandler->init();
 	}
@@ -37,6 +50,9 @@ namespace handlers {
 
 	void EditorHandler::cleanUp()
 	{
+		// Unsubscribe from events before cleanup
+		cleanupEventSubscriptions();
+
 		windowImguiHandler->cleanUp();
 
 		// Reset services before graphics cleanup to release Vulkan resources
@@ -44,7 +60,6 @@ namespace handlers {
 		renderService.reset();
 		sceneService.reset();
 		inputService.reset();
-		resourceService.reset();
 
 		// Clean up via bootstrap
 		bootstrap->cleanUp();
@@ -76,55 +91,56 @@ namespace handlers {
 		renderServiceImpl->registerEventHandlers();
 		inputServiceImpl->registerEventHandlers();
 		previewServiceImpl->registerEventHandlers();
+	}
 
-		// Create resource service with import delegate
-		auto resourceServiceImpl = std::make_shared<services::ResourceServiceImpl>();
+	void EditorHandler::setupEventSubscriptions()
+	{
+		auto& dispatcher = events::EventDispatcher::instance();
 
-		// Set up import delegate to bridge to Import controller
-		services::ImportDelegate importDelegate;
-		importDelegate.initialize = []() {
-			controllers::Import::initialize();
-		};
-		importDelegate.importFiles = [](const std::vector<services::ImportFileRequest>& files,
-		                                services::ImportProgressCallback progressCallback) -> services::ImportResultData {
-			std::vector<importConfig::ImportFiles> importFiles;
-			for (const auto& file : files) {
-				importConfig::ImportConfig config;
-				config.isImageFlipVertically = file.flipVertically;
-				importFiles.emplace_back(file.path, config);
-			}
-			// Convert progress callback to Import's callback type
-			controllers::ImportProgressCallback importProgressCallback = nullptr;
-			if (progressCallback) {
-				importProgressCallback = [progressCallback](std::string_view currentFile,
-				                                             uint32_t fileIndex,
-				                                             uint32_t totalFiles,
-				                                             float fileProgress) {
-					progressCallback(currentFile, fileIndex, totalFiles, fileProgress);
-				};
-			}
-			auto controllerResult = controllers::Import::importFiles(importFiles, importProgressCallback);
+		// Subscribe to window resize events
+		resizeSubscription = dispatcher.subscribe<events::application::WindowResizedNotification>(
+			[this](const events::application::WindowResizedNotification&) {
+				bootstrap->triggerResize();
+			});
 
-			// Convert controller result to service result
-			services::ImportResultData result;
-			result.successCount = controllerResult.successCount;
-			result.failureCount = controllerResult.failureCount;
-			for (const auto& fileResult : controllerResult.fileResults) {
-				services::ImportFileResultData serviceFileResult;
-				serviceFileResult.sourcePath = fileResult.sourcePath;
-				serviceFileResult.fileName = fileResult.fileName;
-				serviceFileResult.success = fileResult.success;
-				serviceFileResult.errorMessage = fileResult.errorMessage;
-				result.fileResults.push_back(std::move(serviceFileResult));
-			}
-			return result;
-		};
-		importDelegate.setLocation = [](const std::string& path) {
-			controllers::Import::setLocation(path);
-		};
+		// Subscribe to window minimize events (pause rendering when minimized)
+		minimizeSubscription = dispatcher.subscribe<events::application::WindowMinimizedNotification>(
+			[](const events::application::WindowMinimizedNotification&) {
+				// Could pause rendering or other expensive operations here
+			});
 
-		resourceServiceImpl->setImportDelegate(importDelegate);
-		resourceServiceImpl->registerEventHandlers();
-		resourceService = resourceServiceImpl;
+		// Subscribe to window restore events
+		restoreSubscription = dispatcher.subscribe<events::application::WindowRestoredNotification>(
+			[](const events::application::WindowRestoredNotification&) {
+				// Could resume rendering or other operations here
+			});
+
+		// Subscribe to window focus events
+		focusSubscription = dispatcher.subscribe<events::application::WindowFocusedNotification>(
+			[](const events::application::WindowFocusedNotification&) {
+				// Could handle focus changes (e.g., pause input when unfocused)
+			});
+	}
+
+	void EditorHandler::cleanupEventSubscriptions()
+	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
+		if (resizeSubscription.isValid()) {
+			dispatcher.unsubscribe(resizeSubscription);
+			resizeSubscription = {};
+		}
+		if (minimizeSubscription.isValid()) {
+			dispatcher.unsubscribe(minimizeSubscription);
+			minimizeSubscription = {};
+		}
+		if (restoreSubscription.isValid()) {
+			dispatcher.unsubscribe(restoreSubscription);
+			restoreSubscription = {};
+		}
+		if (focusSubscription.isValid()) {
+			dispatcher.unsubscribe(focusSubscription);
+			focusSubscription = {};
+		}
 	}
 }

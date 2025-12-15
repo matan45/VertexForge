@@ -5,7 +5,6 @@
 namespace core {
 
     EditorTextureAdapter::~EditorTextureAdapter() {
-        // Clean up any remaining textures
         loadedTextures.clear();
     }
 

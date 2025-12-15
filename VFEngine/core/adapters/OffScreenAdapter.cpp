@@ -3,7 +3,7 @@
 
 namespace core {
 
-    OffScreenAdapter::OffScreenAdapter(::controllers::OffScreen* offScreen)
+    OffScreenAdapter::OffScreenAdapter(controllers::OffScreen* offScreen)
         : offScreen(offScreen) {}
 
     void OffScreenAdapter::init() {

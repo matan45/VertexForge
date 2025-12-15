@@ -38,7 +38,7 @@ namespace services {
          * @brief Check if material preview is ready for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual bool isMaterialPreviewReady(void* instanceId) const = 0;
+        [[nodiscard]] virtual bool isMaterialPreviewReady(void* instanceId) const = 0;
 
         /**
          * @brief Set material preview parameters for a specific instance.
@@ -51,7 +51,7 @@ namespace services {
          * @brief Get current material preview parameters for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual MaterialPreviewParams getMaterialParams(void* instanceId) const = 0;
+        [[nodiscard]] virtual MaterialPreviewParams getMaterialParams(void* instanceId) const = 0;
 
         /**
          * @brief Update material preview camera for a specific instance.
@@ -64,13 +64,13 @@ namespace services {
          * @brief Render material preview and return the texture handle for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual ViewportTextureHandle renderMaterialPreview(void* instanceId) = 0;
+        [[nodiscard]] virtual ViewportTextureHandle renderMaterialPreview(void* instanceId) = 0;
 
         /**
          * @brief Get the last shader compilation error message for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual std::string getMaterialShaderError(void* instanceId) const = 0;
+        [[nodiscard]] virtual std::string getMaterialShaderError(void* instanceId) const = 0;
 
         // === Mesh Preview ===
 
@@ -90,7 +90,7 @@ namespace services {
          * @brief Check if mesh preview is ready for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual bool isMeshPreviewReady(void* instanceId) const = 0;
+        [[nodiscard]] virtual bool isMeshPreviewReady(void* instanceId) const = 0;
 
         /**
          * @brief Load a mesh for preview.
@@ -99,7 +99,7 @@ namespace services {
          * @param outBounds Output parameter for mesh bounding box
          * @return true if mesh loaded successfully
          */
-        virtual bool loadPreviewMesh(void* instanceId, const std::string& meshPath, math::AABB& outBounds) = 0;
+        [[nodiscard]] virtual bool loadPreviewMesh(void* instanceId, const std::string& meshPath, math::AABB& outBounds) = 0;
 
         /**
          * @brief Unload the current preview mesh for a specific instance.
@@ -111,19 +111,19 @@ namespace services {
          * @brief Check if a mesh is currently loaded for preview.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual bool isPreviewMeshLoaded(void* instanceId) const = 0;
+        [[nodiscard]] virtual bool isPreviewMeshLoaded(void* instanceId) const = 0;
 
         /**
          * @brief Get submesh information for the loaded mesh.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(void* instanceId) const = 0;
+        [[nodiscard]] virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(void* instanceId) const = 0;
 
         /**
          * @brief Get the bounding box of the loaded preview mesh.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual math::AABB getPreviewMeshBounds(void* instanceId) const = 0;
+        [[nodiscard]] virtual math::AABB getPreviewMeshBounds(void* instanceId) const = 0;
 
         /**
          * @brief Set mesh preview parameters for a specific instance.
@@ -143,7 +143,7 @@ namespace services {
          * @brief Render mesh preview and return the texture handle for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual ViewportTextureHandle renderMeshPreview(void* instanceId) = 0;
+        [[nodiscard]] virtual ViewportTextureHandle renderMeshPreview(void* instanceId) = 0;
     };
 
 }

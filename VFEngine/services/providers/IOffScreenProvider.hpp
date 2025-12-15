@@ -6,13 +6,7 @@
 
 namespace services {
 
-    /**
-     * @brief Provider interface for viewport/offscreen rendering operations.
-     *
-     * This interface abstracts the Core module's OffScreen controller,
-     * allowing Services to use rendering functionality without depending on Core.
-     * Core implements this interface via an adapter class.
-     */
+  
     class IOffScreenProvider {
     public:
         virtual ~IOffScreenProvider() = default;

@@ -9,7 +9,7 @@
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
-#include "events/ResourceEvents.hpp"
+#include "Import.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include <IconsFontAwesome6.h>
 #include <algorithm>
@@ -60,9 +60,7 @@ namespace windows
 		}
 		
 		if (!importLocationSet) {
-			events::resource::SetImportLocationCommand cmd;
-			cmd.path = currentPath.string();
-			dispatcher.execute(cmd);
+			controllers::Import::setLocation(currentPath.string());
 			importLocationSet = true;
 		}
 		
@@ -683,8 +681,8 @@ namespace windows
 				// Use a tree node for directories
 				if (ImGui::TreeNode(StringUtil::wstringToUtf8(entry.path().filename().wstring()).c_str()))
 				{
-					// If the directory is selected, navigate to it in the content browser.
-					if (ImGui::IsItemClicked())
+					// Double-click to navigate to the directory in the content browser
+					if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 					{
 						navigateTo(entry.path());
 					}
@@ -717,11 +715,7 @@ namespace windows
 		if (fs::exists(path) && fs::is_directory(path))
 		{
 			currentPath = path;
-
-			events::resource::SetImportLocationCommand cmd;
-			cmd.path = currentPath.string();
-			events::EventDispatcher::instance().execute(cmd);
-
+			controllers::Import::setLocation(currentPath.string());
 			loadDirectory(currentPath);
 		}
 	}
