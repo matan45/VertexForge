@@ -7,9 +7,6 @@
 [submodule "dependencies/ImGuizmo"]
 	path = dependencies/ImGuizmo
 	url = https://github.com/CedricGuillemet/ImGuizmo.git
-[submodule "dependencies/imgui-node-editor"]
-	path = dependencies/imgui-node-editor
-	url = https://github.com/thedmd/imgui-node-editor.git
 [submodule "dependencies/assimp"]
 	path = dependencies/assimp
 	url = https://github.com/assimp/assimp.git
@@ -31,9 +28,6 @@
 [submodule "dependencies/tinyexr"]
 	path = dependencies/tinyexr
 	url = https://github.com/syoyo/tinyexr.git
-[submodule "dependencies/ImGuiColorTextEdit"]
-	path = dependencies/ImGuiColorTextEdit
-	url = https://github.com/BalazsJako/ImGuiColorTextEdit.git
 [submodule "dependencies/glm"]
 	path = dependencies/glm
 	url = https://github.com/g-truc/glm.git

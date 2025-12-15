@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <sstream>
 #include <vector>
+#include <mutex>
 
 
 #define vfLogInfo(...) util::infoLogEditor(__VA_ARGS__)
@@ -34,11 +35,15 @@ namespace util {
 		return oss.str();
 	}
 
+	// Mutex for thread-safe access to imguiConsoleBuffer
+	inline std::mutex imguiConsoleBufferMutex;
+
 	// Buffer to store log messages for ImGui console
 	inline std::vector<std::string> imguiConsoleBuffer;
 
-	// Append log message to ImGui buffer
+	// Append log message to ImGui buffer (thread-safe)
 	inline void appendToImGuiConsoleEditor(const std::string& message) {
+		std::lock_guard<std::mutex> lock(imguiConsoleBufferMutex);
 		imguiConsoleBuffer.push_back(message);
 	}
 

@@ -38,6 +38,7 @@ namespace windows {
 			meshCameraCmd.viewMatrix = editorCamera->getViewMatrix();
 			meshCameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();
 			meshCameraCmd.cameraPosition = editorCamera->position;
+			meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
 			dispatcher.execute(meshCameraCmd);
 
 			// Get viewport texture through event system

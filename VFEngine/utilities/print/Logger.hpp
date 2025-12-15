@@ -6,7 +6,6 @@
 
 #include "spdlog/spdlog.h"
 #include "spdlog/fmt/bundled/core.h"  // fmt library used by spdlog
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>  // Vulkan header (for vk::ArrayWrapper1D)
 
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)

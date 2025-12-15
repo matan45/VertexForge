@@ -109,6 +109,7 @@ namespace events::render {
         glm::mat4 viewMatrix;
         glm::mat4 projectionMatrix;
         glm::vec3 cameraPosition;
+        float time = 0.0f;  // Animation time in seconds
 
         std::string_view getName() const override { return "UpdateMeshCamera"; }
     };

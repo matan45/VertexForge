@@ -219,7 +219,7 @@ namespace services {
 
         dispatcher.registerCommandHandler<events::render::UpdateMeshCameraCommand>(
             [this](const events::render::UpdateMeshCameraCommand& cmd) {
-                updateMeshCamera(cmd.viewMatrix, cmd.projectionMatrix, cmd.cameraPosition);
+                updateMeshCamera(cmd.viewMatrix, cmd.projectionMatrix, cmd.cameraPosition, cmd.time);
             });
 
         // Mesh query handlers
@@ -258,9 +258,9 @@ namespace services {
     }
 
     void RenderServiceImpl::updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
-                                             const glm::vec3& cameraPos) {
+                                             const glm::vec3& cameraPos, float time) {
         if (offScreen) {
-            offScreen->meshUpdateCamera(view, projection, cameraPos);
+            offScreen->meshUpdateCamera(view, projection, cameraPos, time);
         }
     }
 

@@ -2,7 +2,10 @@
 
 #include "MeshTypes.hpp"
 #include "../ibl/IBLTypes.hpp"
+#include "material/MaterialTypes.hpp"
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <vector>
 #include <string_view>
 #include <unordered_map>
@@ -12,7 +15,6 @@ namespace core
     class Device;
     class SwapChain;
     class Shader;
-    class TransferManager;
     struct OffscreenResources;
 }
 
@@ -23,12 +25,19 @@ namespace resource
 
 namespace render::mesh
 {
+    class MaterialShaderCache;
+    class MeshGPUCache;
+    class MaterialTextureCache;
+}
+
+namespace render::mesh
+{
     class StaticMeshPipeline
     {
     public:
         explicit StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
                            core::OffscreenResources& offscreenResources);
-        ~StaticMeshPipeline() = default;
+        ~StaticMeshPipeline();
         
         void init(const ibl::ImageData& irradianceMap,
                   const ibl::ImageData& prefilterMap,
@@ -48,15 +57,38 @@ namespace render::mesh
         vk::RenderPass getRenderPass() const { return renderPass; }
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
-        
+
+        // Clear cached material to force reload (called when materials are saved)
+        void invalidateMaterialCache(const std::string& materialPath = "");
+
+        // Inject a material into the cache (for preview with unsaved changes)
+        void injectMaterialForPreview(const std::string& materialPath,
+                                      std::shared_ptr<material::MaterialData> materialData);
+
+        // Get last shader compilation error (for UI display)
+        std::string getLastShaderCompilationError() const;
+
+        // Texture descriptor set (set 1)
+        vk::DescriptorSetLayout getTextureDescriptorSetLayout() const { return textureDescriptorSetLayout; }
+        vk::DescriptorSet getTextureDescriptorSet() const { return textureDescriptorSet; }
+        bool hasTextureDescriptors() const { return textureDescriptorsInitialized; }
+
+        // Update texture descriptors for material preview (8 texture slots)
+        void updateTextureDescriptors(
+            const std::array<vk::ImageView, 8>& imageViews,
+            const std::array<vk::Sampler, 8>& samplers);
+
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                             const glm::vec3& cameraPos) const;
+                             const glm::vec3& cameraPos, float time = 0.0f) const;
 
         
         vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
         
         std::string loadMesh(std::string_view meshPath);
-        
+
+        // Upload procedural mesh data directly (bypasses file loading)
+        std::string uploadMesh(const std::string& meshId, const resource::MeshesData& meshData);
+
         void unloadMesh(const std::string& meshId);
         
         void unloadAllMeshes();
@@ -86,8 +118,10 @@ namespace render::mesh
 
         // Vulkan resources
         vk::RenderPass renderPass;
-        vk::Pipeline graphicsPipeline;
-        vk::PipelineLayout pipelineLayout;
+        vk::Pipeline graphicsPipeline;           // Opaque pipeline
+        vk::Pipeline translucentPipeline;        // Translucent pipeline (alpha blending)
+        vk::Pipeline maskedPipeline;             // Masked pipeline (alpha testing)
+        vk::PipelineLayout pipelineLayout;       // Shared layout for all pipelines
 
         // Wireframe pipeline for AABB debug rendering
         vk::Pipeline wireframePipeline;
@@ -95,12 +129,25 @@ namespace render::mesh
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSet;
+
+        // Texture descriptor set (set 1) for material textures
+        vk::DescriptorSetLayout textureDescriptorSetLayout;
+        vk::DescriptorPool textureDescriptorPool;
+        vk::DescriptorSet textureDescriptorSet;
+        bool textureDescriptorsInitialized = false;
+
         std::vector<vk::Framebuffer> framebuffers;
         
         vk::UniqueCommandPool commandPool;
 
-        // Async transfer manager for non-blocking buffer uploads
-        std::unique_ptr<core::TransferManager> transferManager;
+        // Mesh GPU cache for loading/unloading mesh buffers
+        std::unique_ptr<MeshGPUCache> meshCache;
+
+        // Material texture cache for loading/managing material textures
+        std::unique_ptr<MaterialTextureCache> textureCache;
+
+        // Material shader cache for per-material compiled shaders and pipelines
+        std::unique_ptr<MaterialShaderCache> materialShaderCache;
 
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
@@ -111,12 +158,21 @@ namespace render::mesh
         vk::Buffer aabbIndexBuffer;
         vk::DeviceMemory aabbIndexBufferMemory;
 
-        // Current camera matrices for AABB rendering
+        // Current camera matrices for AABB rendering and translucent sorting
         mutable glm::mat4 currentView{1.0f};
         mutable glm::mat4 currentProjection{1.0f};
+        mutable glm::vec3 currentCameraPos{0.0f};
+        mutable float currentTime{0.0f};
 
-        // Loaded meshes (key = mesh path)
-        std::unordered_map<std::string, MeshGPUData> loadedMeshes;
+        // Cache for loaded materials to prevent reloading every frame
+        mutable std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> materialCache;
+        mutable std::shared_mutex materialCacheMutex;  // Allows concurrent reads
+
+        // Flag to indicate cache should be invalidated (set by external notification)
+        mutable bool materialCacheInvalidated = false;
+
+        // Prepare textures for frame rendering
+        void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
 
         // Default IBL textures (used when no IBL is set)
         bool usingDefaultTextures = false;
@@ -138,5 +194,10 @@ namespace render::mesh
         void createFramebuffers();
         void createWireframePipeline();
         void createAABBBuffers();
+
+        // Texture descriptor set methods (set 1)
+        void createTextureDescriptorSetLayout();
+        void createTextureDescriptorPool();
+        void initializeDefaultTextureDescriptors();
     };
 }

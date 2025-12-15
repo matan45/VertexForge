@@ -34,11 +34,13 @@ namespace resource
 		uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
 		uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
 
-		// Validate the version
-		if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+		// Validate the version (allow backward compatibility with 0.0.1 for texture format)
+		bool versionOk = (majorVersion == Version::major && minorVersion == Version::minor &&
+		                  (patchVersion == Version::patch || patchVersion == 1));
+		if (!versionOk)
 		{
 			vfLogError("Incompatible file version: {}.{}.{}", majorVersion, minorVersion, patchVersion);
-			return {}; // Return an empty HDRData on version mismatch
+			return {}; // Return an empty TextureData on version mismatch
 		}
 
 		// Read texture dimensions (endian-safe)
@@ -88,8 +90,10 @@ namespace resource
 		uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
 		uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
 
-		// Validate the version
-		if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+		// Validate the version (allow backward compatibility with 0.0.1 for texture format)
+		bool versionOk = (majorVersion == Version::major && minorVersion == Version::minor &&
+		                  (patchVersion == Version::patch || patchVersion == 1));
+		if (!versionOk)
 		{
 			vfLogError("Incompatible file version: {}.{}.{}", majorVersion, minorVersion, patchVersion);
 			return {};

@@ -7,6 +7,7 @@ workspace "VertexForge"
    -- Enable UTF-8 support for all C++ projects (required by spdlog/fmt)
    filter "language:C++"
       buildoptions { "/utf-8" }
+      defines { "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1" }
    filter {}
 
 -- Check if the Vulkan SDK environment variable is set
@@ -31,7 +32,6 @@ project "Editor"
    includedirs {
 	  "dependencies/imgui",
 	  "dependencies/ImGuizmo",
-	  "dependencies/ImGuiColorTextEdit",
 	  "dependencies/imgui-node-editor",
 	  "dependencies/spdlog/include",
 	  "dependencies/glm",
@@ -46,7 +46,8 @@ project "Editor"
    links {
       "Core",                           -- Link Core project
 	  "Import",
-	  "Services"                        -- Link Services project
+	  "Services",                       -- Link Services project
+	  "imgui"                           -- For imgui-node-editor in ShaderGraphEditor
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -136,11 +137,11 @@ project "Import"
       defines { "NDEBUG" }
       optimize "On"
       libdirs { "dependencies/assimp/lib/Release" }
-      links { "assimp-vc145-mt.lib" }  -- Assimp Release library
+      links { "assimp-vc143-mt.lib" }  -- Assimp Release library
 
       -- Copy the DLL to the output directory after the build
       postbuildcommands {
-         "{COPY} ../../dependencies/assimp/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/Release/x64/"
+         "{COPY} ../../dependencies/assimp/bin/Release/assimp-vc143-mt.dll ../../bin/Editor/Release/x64/"
       }
 
 
@@ -377,10 +378,10 @@ project "imgui"
       "dependencies/imgui/backends/imgui_impl_glfw.*",  -- Only Vulkan part
       "dependencies/ImGuizmo/*.h",
       "dependencies/ImGuizmo/*.cpp",
+      -- imgui-node-editor v0.9.3 flat structure
       "dependencies/imgui-node-editor/*.h",
-      "dependencies/ImGuiColorTextEdit/*.h",
-      "dependencies/ImGuiColorTextEdit/*.cpp",
-      "dependencies/imgui-node-editor/*.cpp"
+      "dependencies/imgui-node-editor/*.cpp",
+      "dependencies/imgui-node-editor/*.inl"
    }
 
    -- Exclude folders: misc and examples
@@ -389,18 +390,16 @@ project "imgui"
       "dependencies/imgui/examples/**",
       "dependencies/ImGuizmo/examples/**",
       "dependencies/ImGuizmo/vcpkg-example/**",
-      "dependencies/imgui-node-editor/external/**",
-      "dependencies/imgui-node-editor/misc/**",
       "dependencies/imgui-node-editor/examples/**",
+      "dependencies/imgui-node-editor/external/**"
    }
 
    includedirs {
       "dependencies/imgui",                       -- Core ImGui headers
       "dependencies/imgui/backends",              -- Vulkan backend headers
-      "dependencies/ImGuizmo",              
-      "dependencies/imgui-node-editor", 
-	  "dependencies/glfw/include",	  
-	  "dependencies/ImGuiColorTextEdit/*.h",	  
+      "dependencies/ImGuizmo",
+      "dependencies/imgui-node-editor",           -- imgui-node-editor v0.9.3 headers
+	  "dependencies/glfw/include",
       vulkanLibPath.."/Include"                   -- Vulkan SDK headers
    }
    

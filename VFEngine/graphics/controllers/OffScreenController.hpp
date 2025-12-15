@@ -5,6 +5,9 @@
 #include <string_view>
 #include <string>
 #include <vector>
+#include <cstdint>
+
+namespace events { struct SubscriptionToken; }
 
 namespace core
 {
@@ -26,6 +29,7 @@ namespace controllers
         core::Device& device;
         std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
         math::Frustum currentFrustum;  // Current camera frustum for culling
+        std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;  // Subscription token for material saved notification
 
     public:
         explicit OffScreenController();
@@ -43,7 +47,7 @@ namespace controllers
         std::string meshLoad(std::string_view meshPath);
         void meshUnload(const std::string& meshId);
         void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                              const glm::vec3& cameraPos);
+                              const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
 

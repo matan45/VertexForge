@@ -55,7 +55,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
@@ -76,7 +76,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -99,6 +99,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="controllers\Graphics.hpp" />
+    <ClInclude Include="controllers\MaterialPreviewController.hpp" />
     <ClInclude Include="controllers\MeshPreviewController.hpp" />
     <ClInclude Include="controllers\OffScreenController.hpp" />
     <ClInclude Include="controllers\RenderController.hpp" />
@@ -110,6 +111,7 @@
     <ClInclude Include="core\Shader.hpp" />
     <ClInclude Include="core\SwapChain.hpp" />
     <ClInclude Include="core\Texture.hpp" />
+    <ClInclude Include="core\TransferManager.hpp" />
     <ClInclude Include="core\Utilities.hpp" />
     <ClInclude Include="core\VulkanContext.hpp" />
     <ClInclude Include="imguiPass\ImguiRender.hpp" />
@@ -122,11 +124,16 @@
     <ClInclude Include="render\ibl\IrradianceGenerator.hpp" />
     <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
     <ClInclude Include="render\ibl\SkyboxRenderer.hpp" />
+    <ClInclude Include="render\material\MaterialPipeline.hpp" />
+    <ClInclude Include="render\mesh\MaterialShaderCache.hpp" />
+    <ClInclude Include="render\mesh\MaterialTextureCache.hpp" />
+    <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Graphics.cpp" />
+    <ClCompile Include="controllers\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\MeshPreviewController.cpp" />
     <ClCompile Include="controllers\OffScreenController.cpp" />
     <ClCompile Include="controllers\RenderController.cpp" />
@@ -137,6 +144,7 @@
     <ClCompile Include="core\Shader.cpp" />
     <ClCompile Include="core\SwapChain.cpp" />
     <ClCompile Include="core\Texture.cpp" />
+    <ClCompile Include="core\TransferManager.cpp" />
     <ClCompile Include="core\Utilities.cpp" />
     <ClCompile Include="core\VulkanContext.cpp" />
     <ClCompile Include="imguiPass\ImguiRender.cpp" />
@@ -148,6 +156,10 @@
     <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
+    <ClCompile Include="render\material\MaterialPipeline.cpp" />
+    <ClCompile Include="render\mesh\MaterialShaderCache.cpp" />
+    <ClCompile Include="render\mesh\MaterialTextureCache.cpp" />
+    <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -155,6 +167,9 @@
     <None Include="..\..\resources\shaders\ibl\equirectangular_convolution.glsl" />
     <None Include="..\..\resources\shaders\ibl\prefilter.glsl" />
     <None Include="..\..\resources\shaders\ibl\skybox.glsl" />
+    <None Include="..\..\resources\shaders\material\material_fragment_footer.glsl" />
+    <None Include="..\..\resources\shaders\material\material_fragment_header.glsl" />
+    <None Include="..\..\resources\shaders\material\material_vertex.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
     <None Include="..\..\resources\shaders\mesh\wireframe.glsl" />
   </ItemGroup>

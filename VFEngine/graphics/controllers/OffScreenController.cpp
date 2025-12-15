@@ -7,6 +7,9 @@
 #include "../render/mesh/MeshTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "../../services/events/EventDispatcher.hpp"
+#include "../../services/events/EventTypes.hpp"
+#include "../../services/events/MaterialEvents.hpp"
 
 namespace controllers
 {
@@ -17,11 +20,27 @@ namespace controllers
     {
     }
 
-    OffScreenController::~OffScreenController() = default;
+    OffScreenController::~OffScreenController()
+    {
+        // Unsubscribe from material notifications
+        if (materialSavedSubscription && materialSavedSubscription->isValid()) {
+            events::EventDispatcher::instance().unsubscribe(*materialSavedSubscription);
+        }
+    }
 
     void OffScreenController::init()
     {
         offScreen->init();
+
+        // Subscribe to material saved notifications to invalidate cache
+        auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
+            [this](const events::material::MaterialFileSavedNotification& notification) {
+                auto* renderHandler = offScreen->getRenderPassHandler();
+                if (renderHandler && renderHandler->isMeshPipelineInitialized()) {
+                    renderHandler->getMeshPipeline()->invalidateMaterialCache(notification.materialPath);
+                }
+            });
+        materialSavedSubscription = std::make_unique<events::SubscriptionToken>(token);
     }
 
     void OffScreenController::cleanUp() const
@@ -87,12 +106,12 @@ namespace controllers
     }
 
     void OffScreenController::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                               const glm::vec3& cameraPos)
+                                               const glm::vec3& cameraPos, float time)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (renderHandler->isMeshPipelineInitialized())
         {
-            renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos);
+            renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
         }
 
         // Update frustum for culling
@@ -163,13 +182,31 @@ namespace controllers
             render::mesh::MeshRenderData renderData;
             renderData.meshPath = meshComp.meshPath;
             renderData.modelMatrix = worldTransform.worldMatrix;
-            // Default PBR values - could be extended with MaterialComponent in the future
+
+            // Default PBR values (used if no material assigned)
             renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
             renderData.metallic = 0.0f;
             renderData.roughness = 0.5f;
             renderData.ao = 1.0f;
             renderData.emission = 0.0f;
             renderData.showBoundingBox = meshComp.showBoundingBox;
+
+            // Check for MaterialComponent and populate material assignments
+            if (registry.all_of<components::MaterialComponent>(entity))
+            {
+                const auto& materialComp = registry.get<components::MaterialComponent>(entity);
+
+                // Set default material path
+                renderData.defaultMaterialPath = materialComp.defaultMaterial;
+
+                // Copy per-submesh material assignments
+                for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                {
+                    render::mesh::SubMeshMaterialInfo matInfo;
+                    matInfo.materialPath = materialPath;
+                    renderData.submeshMaterials[submeshName] = matInfo;
+                }
+            }
 
             meshDrawList.push_back(renderData);
         }

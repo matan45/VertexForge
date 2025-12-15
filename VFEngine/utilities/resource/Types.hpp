@@ -35,7 +35,7 @@ namespace resource
     struct TextureData
     {
         FileType headerFileType = FileType::TEXTURE;
-        Version version{}; // Default initialize
+        Version version{};
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t numbersOfChannels = 0;
@@ -45,7 +45,7 @@ namespace resource
     struct HDRData
     {
         FileType headerFileType = FileType::HDR;
-        Version version{}; // Default initialize
+        Version version{};
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t numbersOfChannels = 0;
@@ -61,6 +61,7 @@ namespace resource
 
     struct MeshData
     {
+        std::string name; 
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
     };
@@ -68,16 +69,16 @@ namespace resource
 
     struct Bone
     {
-        std::string name; // Name of the bone
+        std::string name;
         glm::mat4 offsetMatrix; // Inverse Bind Pose Matrix (Bone's offset matrix)
-        std::vector<std::pair<uint32_t, float>> weights; // Vertex index and weight pairs
+        std::vector<std::pair<uint32_t, float>> weights;
     };
 
     struct Keyframe
     {
         float time;
         glm::vec3 position;
-        glm::quat rotation; // Quaternions (w, x, y, z)
+        glm::quat rotation;
         glm::vec3 scale;
     };
 
@@ -92,7 +93,7 @@ namespace resource
     struct AnimationData
     {
         FileType headerFileType = FileType::ANIMATION;
-        Version version{}; // Default initialize
+        Version version{};
         float duration = 0.0f;
         float ticksPerSecond = 0.0f;
         uint32_t numBones = 0;
@@ -103,7 +104,7 @@ namespace resource
     struct AudioData
     {
         FileType headerFileType = FileType::AUDIO;
-        Version version{}; // Default initialize
+        Version version{};
         uint32_t totalDurationInSeconds = 0;
         uint32_t channels = 0;
         uint32_t sampleRate = 0;

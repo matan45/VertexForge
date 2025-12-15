@@ -11,12 +11,12 @@ namespace fs = std::filesystem;
 
 namespace windows
 {
-    // Forward declarations
     class MeshPreviewWindow;
     class ImagePreviewWindow;
     class AudioPreviewWindow;
+    class MaterialEditorWindow;
 
-    enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Other };
+    enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Material, Other };
 
     struct Asset
     {
@@ -36,6 +36,13 @@ namespace windows
         std::string newFolderName;
         bool showCreateFolderModal = false;
 
+        std::string newMaterialName;
+        bool showCreateMaterialModal = false;
+
+        std::string renameFileName;
+        bool showRenameFileModal = false;
+        bool showDeleteConfirmModal = false;
+
         fs::path selectedFile;
         AssetType selectedType;
         bool showFileWindow = false;
@@ -50,6 +57,7 @@ namespace windows
         services::EditorTextureHandle animationIcon;
         services::EditorTextureHandle hdrIcon;
         services::EditorTextureHandle sceneIcon;
+        services::EditorTextureHandle materialIcon;
 
         bool navigateFolder = false;
         bool iconsLoaded = false;
@@ -59,6 +67,7 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<MeshPreviewWindow>> openMeshPreviews;
         std::unordered_map<std::string, std::weak_ptr<ImagePreviewWindow>> openImagePreviews;
         std::unordered_map<std::string, std::weak_ptr<AudioPreviewWindow>> openAudioPreviews;
+        std::unordered_map<std::string, std::weak_ptr<MaterialEditorWindow>> openMaterialEditors;
 
         static constexpr float THUMBNAIL_SIZE = 64.0f;
         static constexpr float PADDING = 16.0f;
@@ -81,6 +90,9 @@ namespace windows
 
         void createNewFolder(const std::string& folderName);
         void createNewFolderModel();
+        void createNewMaterialModal();
+        void renameFileModal();
+        void deleteFileConfirmModal();
         void handleCreateFiles();
 
         void drawFolderTree(const fs::path& path);

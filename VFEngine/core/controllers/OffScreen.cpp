@@ -50,9 +50,9 @@ namespace controllers {
 	}
 
 	void OffScreen::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-	                                 const glm::vec3& cameraPos)
+	                                 const glm::vec3& cameraPos, float time)
 	{
-		offScreenController->meshUpdateCamera(view, projection, cameraPos);
+		offScreenController->meshUpdateCamera(view, projection, cameraPos, time);
 	}
 
 	bool OffScreen::isMeshLoaded(const std::string& meshPath) const

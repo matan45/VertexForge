@@ -36,7 +36,7 @@ namespace core {
 		shaderModules.clear();
 	}
 
-	std::vector<uint32_t> Shader::compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName) const
+	std::vector<uint32_t> Shader::compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName)
 	{
 		shaderc_shader_kind kind;
 
@@ -51,6 +51,8 @@ namespace core {
 		case eTessellationEvaluation: kind = shaderc_tess_evaluation_shader; break;
 		default:
 			loggerError("Unsupported shader stage");
+			lastCompilationError = "Unsupported shader stage";
+			return {};
 		}
 
 		shaderc::Compiler compiler;
@@ -63,8 +65,9 @@ namespace core {
 
 		// Check for compilation errors
 		if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-			std::string errorMsg = result.GetErrorMessage();
-			loggerError("Shader compilation failed for {}: {}", shaderName, errorMsg);
+			lastCompilationError = result.GetErrorMessage();
+			loggerError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
+			return {};
 		}
 
 		// Return the compiled SPIR-V code
@@ -110,6 +113,136 @@ namespace core {
 			loggerError("Unsupported ShaderType.");
 			return vk::ShaderStageFlagBits();
 		}
+	}
+
+	bool Shader::compileFromSource(std::string_view source, std::string_view shaderName)
+	{
+		// Parse the source to find #type directives
+		auto shaders = parseShaderSource(source);
+		if (shaders.empty()) {
+			loggerError("No shader types found in source: {}", shaderName);
+			return false;
+		}
+
+		bool success = true;
+		for (const auto& shader : shaders) {
+			vk::ShaderStageFlagBits stage = shaderTypeToVulkanStage(shader.type);
+			std::vector<uint32_t> spirvCode = compileShaderToSPIRV(shader.source, stage, shaderName);
+			if (spirvCode.empty()) {
+				success = false;
+				continue;
+			}
+			createShaderModule(spirvCode, stage);
+		}
+
+		return success;
+	}
+
+	bool Shader::compileFromSources(std::string_view vertexSource, std::string_view fragmentSource,
+	                               std::string_view shaderName)
+	{
+		// Clear any previous error
+		lastCompilationError.clear();
+		bool success = true;
+
+		// Compile vertex shader
+		if (!vertexSource.empty()) {
+			// Extract actual source (skip #type directive if present)
+			std::string vsSource(vertexSource);
+			size_t typePos = vsSource.find("#type");
+			if (typePos != std::string::npos) {
+				size_t lineEnd = vsSource.find('\n', typePos);
+				if (lineEnd != std::string::npos) {
+					vsSource = vsSource.substr(lineEnd + 1);
+				}
+			}
+
+			std::vector<uint32_t> spirvCode = compileShaderToSPIRV(vsSource, vk::ShaderStageFlagBits::eVertex, shaderName);
+			if (spirvCode.empty()) {
+				success = false;
+			} else {
+				createShaderModule(spirvCode, vk::ShaderStageFlagBits::eVertex);
+			}
+		}
+
+		// Compile fragment shader
+		if (!fragmentSource.empty()) {
+			// Extract actual source (skip #type directive if present)
+			std::string fsSource(fragmentSource);
+			size_t typePos = fsSource.find("#type");
+			if (typePos != std::string::npos) {
+				size_t lineEnd = fsSource.find('\n', typePos);
+				if (lineEnd != std::string::npos) {
+					fsSource = fsSource.substr(lineEnd + 1);
+				}
+			}
+
+			std::vector<uint32_t> spirvCode = compileShaderToSPIRV(fsSource, vk::ShaderStageFlagBits::eFragment, shaderName);
+			if (spirvCode.empty()) {
+				success = false;
+			} else {
+				createShaderModule(spirvCode, vk::ShaderStageFlagBits::eFragment);
+			}
+		}
+
+		return success;
+	}
+
+	std::vector<Shader::ShaderSource> Shader::parseShaderSource(std::string_view source) const
+	{
+		std::vector<ShaderSource> result;
+
+		std::string sourceStr(source);
+		size_t pos = 0;
+
+		while (pos < sourceStr.size()) {
+			// Find next #type directive
+			size_t typeStart = sourceStr.find("#type", pos);
+			if (typeStart == std::string::npos) break;
+
+			// Find end of line
+			size_t lineEnd = sourceStr.find('\n', typeStart);
+			if (lineEnd == std::string::npos) lineEnd = sourceStr.size();
+
+			// Extract type string
+			std::string typeLine = sourceStr.substr(typeStart + 5, lineEnd - typeStart - 5);
+			// Trim whitespace
+			size_t start = typeLine.find_first_not_of(" \t\r");
+			size_t end = typeLine.find_last_not_of(" \t\r");
+			if (start != std::string::npos && end != std::string::npos) {
+				typeLine = typeLine.substr(start, end - start + 1);
+			}
+
+			// Determine shader type
+			resource::ShaderType shaderType = resource::ShaderType::UNKNOWN;
+			if (typeLine == "VERTEX" || typeLine == "vertex") {
+				shaderType = resource::ShaderType::VERTEX;
+			} else if (typeLine == "FRAGMENT" || typeLine == "fragment") {
+				shaderType = resource::ShaderType::FRAGMENT;
+			} else if (typeLine == "COMPUTE" || typeLine == "compute") {
+				shaderType = resource::ShaderType::COMPUTE;
+			} else if (typeLine == "GEOMETRY" || typeLine == "geometry") {
+				shaderType = resource::ShaderType::GEOMETRY;
+			}
+
+			if (shaderType != resource::ShaderType::UNKNOWN) {
+				// Find the source until next #type or end
+				size_t sourceStart = lineEnd + 1;
+				size_t nextType = sourceStr.find("#type", sourceStart);
+				size_t sourceEnd = (nextType != std::string::npos) ? nextType : sourceStr.size();
+
+				ShaderSource ss;
+				ss.type = shaderType;
+				ss.source = sourceStr.substr(sourceStart, sourceEnd - sourceStart);
+				result.push_back(ss);
+
+				pos = sourceEnd;
+			} else {
+				pos = lineEnd + 1;
+			}
+		}
+
+		return result;
 	}
 
 }

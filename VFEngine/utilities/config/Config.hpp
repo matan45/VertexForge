@@ -6,7 +6,7 @@ struct Version
 {
     static constexpr  uint32_t major = 0;
     static constexpr uint32_t minor = 0;
-    static constexpr uint32_t patch = 1;
+    static constexpr uint32_t patch = 2;  // v0.0.2: Added submesh names to vfMesh format
 };
 
 struct FileExtension

@@ -7,10 +7,12 @@ namespace windows {
 	void ConsoleLog::draw()
 	{
 		if (ImGui::Begin("Console")) {
-			if (ImGui::Button("clear"))
+			if (ImGui::Button("clear")) {
+				std::lock_guard<std::mutex> lock(util::imguiConsoleBufferMutex);
 				util::imguiConsoleBuffer.clear();
+			}
 
-			
+
 			ImGui::SameLine();
 			ImGui::Text("FPS: %.2f", engineTime::Timer::getFPS());
 			ImGui::SameLine();
@@ -22,13 +24,18 @@ namespace windows {
 
 			ImGui::PushStyleColor(ImGuiCol_Text, { 0, 255, 0 ,255 });
 
-			// Display all messages from the buffer
-			for (const auto& logEntry : util::imguiConsoleBuffer) {
+			// Display all messages from the buffer (thread-safe copy)
+			std::vector<std::string> bufferCopy;
+			{
+				std::lock_guard<std::mutex> lock(util::imguiConsoleBufferMutex);
+				bufferCopy = util::imguiConsoleBuffer;
+			}
+			for (const auto& logEntry : bufferCopy) {
 				ImGui::TextUnformatted(logEntry.c_str());
 			}
 
 			ImGui::PopStyleColor();
-			
+
 
 			// Scroll to the bottom to show the latest log entry
 			if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())

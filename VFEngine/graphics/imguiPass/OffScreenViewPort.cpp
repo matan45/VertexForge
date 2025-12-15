@@ -30,17 +30,34 @@ namespace imguiPass {
 		createSampler();
 		createOffscreenResources();
 
+		// Create per-frame fences for command buffer synchronization
+		vk::FenceCreateInfo fenceInfo{ vk::FenceCreateFlagBits::eSignaled };
+		inFlightFences.resize(swapChain.getImageCount());
+		for (auto& fence : inFlightFences) {
+			fence = device.getLogicalDevice().createFence(fenceInfo);
+		}
+
 		renderPassHandler = std::make_unique<render::RenderPassHandler>(device, swapChain, offscreenResources);
 		renderPassHandler->init();
 	}
 
 	vk::DescriptorSet OffScreenViewPort::render()
 	{
+		uint32_t imageIndex = core::RenderManager::getImageIndex();
+
+		// Wait for the previous frame using this command buffer to complete
+		vk::Result result = device.getLogicalDevice().waitForFences(
+			1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+		if (result != vk::Result::eSuccess) {
+			// Log error but continue
+		}
+		result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
+		(void)result;  // Suppress unused warning
 
 		// Get the command buffer for this frame
-		vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(core::RenderManager::getImageIndex());
+		vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
 
-		// Reset the command buffer for reuse
+		// Reset the command buffer for reuse (now safe after fence wait)
 		commandBuffer.reset();
 
 		// Begin recording commands for the acquired image
@@ -52,25 +69,35 @@ namespace imguiPass {
 		// End command buffer recording
 		commandBuffer.end();
 
-		// Submit the command buffer to the compute queue
+		// Submit the command buffer with fence for synchronization
 		vk::SubmitInfo submitInfo(
 			0, nullptr, nullptr,
 			1, &commandBuffer,
 			0, nullptr
 		);
-		device.getGraphicsQueue().submit(submitInfo, nullptr);
+		device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+
+		// Wait for completion before returning (needed for ImGui to sample the image)
 		device.getGraphicsQueue().waitIdle();
 
 		// Return the descriptor set for ImGui rendering
-		return offscreenResources.colorImages[core::RenderManager::getImageIndex()].descriptorSet;
+		return offscreenResources.colorImages[imageIndex].descriptorSet;
 	}
 
-	void OffScreenViewPort::cleanUp() const
+	void OffScreenViewPort::cleanUp()
 	{
 		device.getLogicalDevice().waitIdle();
 
 		renderPassHandler->cleanUp();
 		commandPool->cleanUp();
+
+		// Destroy fences
+		for (auto& fence : inFlightFences) {
+			if (fence) {
+				device.getLogicalDevice().destroyFence(fence);
+			}
+		}
+		inFlightFences.clear();
 
 		for (auto const& resources : offscreenResources.colorImages) {
 			if (resources.descriptorSet) {

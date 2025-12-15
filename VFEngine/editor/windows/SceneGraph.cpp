@@ -2,13 +2,18 @@
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
+#include "events/MaterialEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "print/EditorLogger.hpp"
+#include "resource/MeshResource.hpp"
 #include <imgui.h>
 #include <fstream>
 
 namespace windows
 {
+    // Static member definition
+    std::unordered_map<std::string, std::vector<std::string>> SceneGraph::submeshNameCache;
+
     SceneGraph::SceneGraph()
     {
         subscribeToEvents();
@@ -32,6 +37,7 @@ namespace windows
     void SceneGraph::onSceneCleared()
     {
         selectedHandle = services::EntityHandle::invalid();
+        submeshNameCache.clear();  // Clear cached submesh names
     }
 
     void SceneGraph::draw()
@@ -438,6 +444,191 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
             }
+        }
+
+        // ========== MATERIAL COMPONENT ==========
+        // Only show if entity has a mesh
+        if (hasMesh)
+        {
+            // Query mesh data for the material section
+            events::scene::GetMeshDataQuery meshDataQuery;
+            meshDataQuery.entity = handle;
+            auto meshDataOpt = dispatcher.query(meshDataQuery);
+
+            if (!meshDataOpt.has_value() || meshDataOpt->meshPath.empty())
+            {
+                // No mesh data or no path - skip material section
+            }
+            else
+            {
+            events::material::HasMaterialComponentQuery hasMaterialQuery;
+            hasMaterialQuery.entity = handle;
+            bool hasMaterial = dispatcher.query(hasMaterialQuery);
+
+            // Auto-add MaterialComponent if entity has mesh but no material
+            if (!hasMaterial)
+            {
+                events::material::AddMaterialComponentCommand addMatCmd;
+                addMatCmd.entity = handle;
+                dispatcher.execute(addMatCmd);
+                hasMaterial = true;
+            }
+
+            if (hasMaterial)
+            {
+                events::material::GetMaterialDataQuery matQuery;
+                matQuery.entity = handle;
+                auto matOpt = dispatcher.query(matQuery);
+
+                if (matOpt.has_value())
+                {
+                    ImGui::PushID("MaterialComponent");
+
+                    pushComponentHeaderStyle();
+                    bool isMatOpen = ImGui::CollapsingHeader("##MaterialHeader", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+
+                    ImGui::SameLine();
+                    ImGui::Text("Materials");
+                    popComponentHeaderStyle();
+
+                    if (isMatOpen)
+                    {
+                        ImGui::Indent(10.0f);
+
+                        // Default Material
+                        ImGui::Text("Default Material:");
+                        std::string defaultMatDisplay = matOpt->defaultMaterial.empty() ? "(None)" : matOpt->defaultMaterial;
+                        if (defaultMatDisplay.length() > 35)
+                        {
+                            defaultMatDisplay = "..." + defaultMatDisplay.substr(defaultMatDisplay.length() - 32);
+                        }
+                        ImGui::TextDisabled("%s", defaultMatDisplay.c_str());
+                        ImGui::SameLine();
+                        if (ImGui::Button("Browse##DefaultMat"))
+                        {
+                            nfd::FileDialog fileDialog;
+                            std::string path = fileDialog.openFileDialog({{L"VF Material (*.vfMat)", L"*.vfMat"}});
+                            if (!path.empty())
+                            {
+                                events::material::SetDefaultMaterialCommand cmd;
+                                cmd.entity = handle;
+                                cmd.materialPath = path;
+                                dispatcher.execute(cmd);
+                            }
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Clear##DefaultMat"))
+                        {
+                            events::material::SetDefaultMaterialCommand cmd;
+                            cmd.entity = handle;
+                            cmd.materialPath = "";
+                            dispatcher.execute(cmd);
+                        }
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+                        ImGui::Spacing();
+
+                        // Collapsible submesh materials section
+                        if (ImGui::CollapsingHeader("Submesh Materials", ImGuiTreeNodeFlags_DefaultOpen))
+                        {
+                            ImGui::Indent(10.0f);
+
+                            // Check cache first
+                            const std::string& meshPath = meshDataOpt->meshPath;
+                            auto cacheIt = submeshNameCache.find(meshPath);
+                            if (cacheIt == submeshNameCache.end())
+                            {
+                                // Load and cache submesh names
+                                try
+                                {
+                                    resource::MeshesData meshData = resource::MeshResource::loadMesh(meshPath);
+                                    std::vector<std::string> names;
+                                    for (size_t i = 0; i < meshData.meshes.size(); ++i)
+                                    {
+                                        const auto& submesh = meshData.meshes[i];
+                                        names.push_back(submesh.name.empty() ? "Submesh_" + std::to_string(i) : submesh.name);
+                                    }
+                                    cacheIt = submeshNameCache.emplace(meshPath, std::move(names)).first;
+                                }
+                                catch (const std::exception& e)
+                                {
+                                    ImGui::TextDisabled("Failed to load mesh: %s", e.what());
+                                    cacheIt = submeshNameCache.emplace(meshPath, std::vector<std::string>{}).first;
+                                }
+                            }
+
+                            const auto& submeshNames = cacheIt->second;
+                            if (submeshNames.empty())
+                            {
+                                ImGui::TextDisabled("No submeshes found");
+                            }
+                            else
+                            {
+                                for (size_t i = 0; i < submeshNames.size(); ++i)
+                            {
+                                const std::string& submeshName = submeshNames[i];
+
+                                ImGui::PushID(static_cast<int>(i));
+
+                                // Get current material for this submesh
+                                auto it = matOpt->subMeshMaterials.find(submeshName);
+                                std::string currentMat = (it != matOpt->subMeshMaterials.end()) ? it->second : "";
+
+                                // Display submesh name
+                                ImGui::BulletText("%s", submeshName.c_str());
+                                ImGui::Indent(20.0f);
+
+                                // Show current material
+                                std::string matDisplay = currentMat.empty() ? "(Default)" : currentMat;
+                                if (matDisplay.length() > 30)
+                                {
+                                    matDisplay = "..." + matDisplay.substr(matDisplay.length() - 27);
+                                }
+                                ImGui::TextDisabled("%s", matDisplay.c_str());
+
+                                ImGui::SameLine();
+                                std::string browseId = "Browse##submesh" + std::to_string(i);
+                                if (ImGui::Button(browseId.c_str()))
+                                {
+                                    nfd::FileDialog fileDialog;
+                                    std::string path = fileDialog.openFileDialog({{L"VF Material (*.vfMat)", L"*.vfMat"}});
+                                    if (!path.empty())
+                                    {
+                                        events::material::SetSubMeshMaterialCommand cmd;
+                                        cmd.entity = handle;
+                                        cmd.submeshName = submeshName;
+                                        cmd.materialPath = path;
+                                        dispatcher.execute(cmd);
+                                    }
+                                }
+
+                                ImGui::SameLine();
+                                std::string clearId = "Clear##submesh" + std::to_string(i);
+                                if (ImGui::Button(clearId.c_str()))
+                                {
+                                    events::material::SetSubMeshMaterialCommand cmd;
+                                    cmd.entity = handle;
+                                    cmd.submeshName = submeshName;
+                                    cmd.materialPath = "";  // Clear = use default
+                                    dispatcher.execute(cmd);
+                                }
+
+                                ImGui::Unindent(20.0f);
+                                ImGui::PopID();
+                            }
+                            }
+
+                            ImGui::Unindent(10.0f);
+                        } // end CollapsingHeader
+
+                        ImGui::Unindent(10.0f);
+                    }
+
+                    ImGui::PopID();
+                }
+            }
+            } // end else (meshDataOpt has value)
         }
 
         ImGui::Spacing();

@@ -46,6 +46,9 @@ namespace core {
 	}
 
 	void CommandPool::recreate() {
+		// Clear old command buffers before allocating new ones
+		// (The unique handles will properly free them)
+		commandBuffers.clear();
 		allocateCommandBuffers();
 	}
 

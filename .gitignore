@@ -419,3 +419,6 @@ FodyWeavers.xsd
 /dataSources.local.xml
 /resources/shaders/ibl/Arches_E_PineTree_3k.hdr
 /VFEngine/.idea/.idea.VertexForge/.idea
+
+# ImGui editor config
+**/imgui.ini

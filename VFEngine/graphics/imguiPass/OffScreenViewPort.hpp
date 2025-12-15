@@ -29,13 +29,16 @@ namespace imguiPass
         vk::Sampler sampler;
         core::OffscreenResources offscreenResources;
 
+        // Per-frame fences to ensure command buffers aren't reused while in flight
+        std::vector<vk::Fence> inFlightFences;
+
     public:
         explicit OffScreenViewPort(core::Device& device, core::SwapChain& swapChain);
         ~OffScreenViewPort();
 
         void init();
         vk::DescriptorSet render();
-        void cleanUp() const;
+        void cleanUp();
         render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
 
     private:

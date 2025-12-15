@@ -42,6 +42,16 @@ namespace resource {
 		for (uint32_t meshIdx = 0; meshIdx < result.numberOfMeshes; ++meshIdx) {
 			auto& meshData = result.meshes[meshIdx];
 
+			// Read submesh name
+			uint32_t nameLength = endian::readLE<uint32_t>(inFile);
+			if (nameLength > 0 && nameLength < 1024) {  // Sanity check
+				meshData.name.resize(nameLength);
+				inFile.read(meshData.name.data(), nameLength);
+			} else if (nameLength == 0) {
+				// Generate default name if empty
+				meshData.name = "SubMesh_" + std::to_string(meshIdx);
+			}
+
 			// Read vertex count
 			uint32_t vertexCount = endian::readLE<uint32_t>(inFile);
 

@@ -74,6 +74,14 @@ namespace types {
 	{
 		constexpr size_t verticesPerChunk = chunkSize / sizeof(resource::Vertex);  // ~8K vertices per chunk
 
+		// Write submesh name (from aiMesh->mName)
+		std::string meshName = assimpMesh->mName.C_Str();
+		uint32_t nameLength = static_cast<uint32_t>(meshName.length());
+		resource::endian::writeLE<uint32_t>(outFile, nameLength);
+		if (nameLength > 0) {
+			outFile.write(meshName.data(), nameLength);
+		}
+
 		// Write vertex count
 		resource::endian::writeLE<uint32_t>(outFile, assimpMesh->mNumVertices);
 

@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
+#include <map>
 #include <optional>
 
 namespace services {
@@ -39,6 +40,13 @@ namespace services {
     struct MeshData {
         std::string meshPath;
         bool showBoundingBox = false;
+    };
+
+    // Material component data
+    struct MaterialData {
+        std::string defaultMaterial;  // .vfMat path for unmapped submeshes
+        std::map<std::string, std::string> subMeshMaterials;  // submesh NAME -> .vfMat path
+        std::map<std::string, float> parameterOverrides;  // Runtime parameter tweaks
     };
 
     // Submesh information for mesh preview

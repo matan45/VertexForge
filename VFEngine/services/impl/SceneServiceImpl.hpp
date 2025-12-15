@@ -5,7 +5,6 @@
 #include <memory>
 #include <optional>
 
-// Forward declarations to avoid including scene headers
 namespace scene {
     class SceneGraphSystem;
 }
@@ -82,6 +81,17 @@ namespace services {
         bool addMeshComponent(EntityHandle entity) override;
         bool removeMeshComponent(EntityHandle entity) override;
         bool hasMeshComponent(EntityHandle entity) const override;
+
+        // Material Operations
+        bool addMaterialComponent(EntityHandle entity) override;
+        bool removeMaterialComponent(EntityHandle entity) override;
+        bool hasMaterialComponent(EntityHandle entity) const override;
+        std::optional<MaterialData> getMaterialData(EntityHandle entity) const override;
+        bool setMaterialData(EntityHandle entity, const MaterialData& material) override;
+        bool setDefaultMaterial(EntityHandle entity, const std::string& materialPath) override;
+        bool setSubMeshMaterial(EntityHandle entity, const std::string& submeshName, const std::string& materialPath) override;
+        std::string getSubMeshMaterial(EntityHandle entity, const std::string& submeshName) const override;
+        std::map<std::string, std::string> getAllSubMeshMaterials(EntityHandle entity) const override;
 
         // Hierarchy - Children
         std::vector<EntityHandle> getChildren(EntityHandle entity) const override;
