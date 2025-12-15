@@ -48,6 +48,7 @@ namespace render::material {
         vk::DescriptorSet descriptorSet;
         size_t pipelineHash = 0;  // Links to which compiled pipeline to use
         bool needsUpdate = true;
+        uint64_t lastUsedFrame = 0;  // Frame number when last used (for cleanup)
     };
 
     class MaterialPipeline {
@@ -88,8 +89,28 @@ namespace render::material {
         // Get default material pipeline (for fallback)
         const CompiledMaterialPipeline* getDefaultPipeline() const;
 
-        // Remove unused material instances
-        void cleanupUnusedInstances();
+        // Mark material instance as used this frame (call during rendering)
+        void markInstanceUsed(const std::string& instanceId);
+
+        // Advance frame counter (call once per frame)
+        void advanceFrame();
+
+        // Remove a specific material instance
+        // Returns true if removed, false if not found
+        bool removeMaterialInstance(const std::string& instanceId);
+
+        // Remove unused material instances (those not used for maxUnusedFrames)
+        // Call periodically (e.g., once per second or when memory pressure detected)
+        // maxUnusedFrames: instances not used for this many frames will be removed
+        void cleanupUnusedInstances(uint64_t maxUnusedFrames = 300);
+
+        // Remove pipelines no longer referenced by any material instance
+        // Call after cleanupUnusedInstances() to free orphaned pipeline resources
+        void cleanupOrphanedPipelines();
+
+        // Get current resource counts (for diagnostics)
+        size_t getInstanceCount() const;
+        size_t getPipelineCount() const;
 
         // Get material descriptor set layout
         vk::DescriptorSetLayout getMaterialDescriptorSetLayout() const { return materialDescriptorSetLayout; }
@@ -113,6 +134,9 @@ namespace render::material {
 
         // Default material for fallback
         size_t defaultPipelineHash = 0;
+
+        // Frame counter for tracking material usage
+        uint64_t currentFrame = 0;
 
         // Helpers
         void createMaterialDescriptorSetLayout();

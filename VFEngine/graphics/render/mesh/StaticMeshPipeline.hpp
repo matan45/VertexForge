@@ -4,6 +4,8 @@
 #include "../ibl/IBLTypes.hpp"
 #include "material/MaterialTypes.hpp"
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <vector>
 #include <string_view>
 #include <unordered_map>
@@ -164,6 +166,7 @@ namespace render::mesh
 
         // Cache for loaded materials to prevent reloading every frame
         mutable std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> materialCache;
+        mutable std::shared_mutex materialCacheMutex;  // Allows concurrent reads
 
         // Flag to indicate cache should be invalidated (set by external notification)
         mutable bool materialCacheInvalidated = false;

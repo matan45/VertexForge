@@ -1324,7 +1324,10 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUp()
     {
         // Clear material cache
-        materialCache.clear();
+        {
+            std::unique_lock<std::shared_mutex> lock(materialCacheMutex);
+            materialCache.clear();
+        }
 
         // Clean up material shader cache (per-material compiled pipelines)
         if (materialShaderCache) {
@@ -1358,6 +1361,7 @@ namespace render::mesh
 
     void StaticMeshPipeline::invalidateMaterialCache(const std::string& materialPath)
     {
+        std::unique_lock<std::shared_mutex> lock(materialCacheMutex);
         if (materialPath.empty()) {
             // Mark cache for full invalidation
             materialCacheInvalidated = true;
@@ -1382,8 +1386,11 @@ namespace render::mesh
             return;
         }
 
-        // Inject/update the material in the cache
-        materialCache[materialPath] = materialData;
+        {
+            std::unique_lock<std::shared_mutex> lock(materialCacheMutex);
+            // Inject/update the material in the cache
+            materialCache[materialPath] = materialData;
+        }
 
         // If the material has custom shaders, invalidate the shader cache to force recompilation
         // This ensures that if the shader code changed, it gets recompiled
@@ -1454,6 +1461,9 @@ namespace render::mesh
 
         // Prepare textures for this frame (load, assign slots, update descriptor set)
         prepareTexturesForFrame(meshDrawList);
+
+        // Acquire shared lock for reading material cache during rendering
+        std::shared_lock<std::shared_mutex> cacheLock(materialCacheMutex);
 
         vk::RenderPassBeginInfo renderPassInfo{};
         renderPassInfo.renderPass = renderPass;
@@ -1948,6 +1958,9 @@ namespace render::mesh
             // This allows external texture management (e.g., MaterialPreviewController)
             return;
         }
+
+        // Acquire exclusive lock for material cache operations
+        std::unique_lock<std::shared_mutex> cacheLock(materialCacheMutex);
 
         // Check if cache needs to be invalidated (material was saved externally)
         if (materialCacheInvalidated) {

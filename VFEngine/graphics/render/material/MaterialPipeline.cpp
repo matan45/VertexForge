@@ -6,6 +6,7 @@
 #include "print/Logger.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include <functional>
+#include <unordered_set>
 
 namespace render::material {
 
@@ -114,6 +115,7 @@ namespace render::material {
         MaterialInstance instance;
         instance.materialPath = materialPath;
         instance.pipelineHash = computeShaderHash(material.cachedVertexShader, material.cachedFragmentShader);
+        instance.lastUsedFrame = currentFrame;
 
         // Create UBO and descriptor set
         createMaterialUBO(instance);
@@ -192,6 +194,9 @@ namespace render::material {
     void MaterialPipeline::bindMaterial(const vk::CommandBuffer& commandBuffer,
                                        const std::string& instanceId,
                                        vk::DescriptorSet globalDescriptorSet) const {
+        // Mark instance as used (non-const cast for tracking only)
+        const_cast<MaterialPipeline*>(this)->markInstanceUsed(instanceId);
+
         const MaterialInstance* instance = getMaterialInstance(instanceId);
         if (!instance) {
             loggerError("Cannot bind material - instance not found: {}", instanceId);
@@ -232,9 +237,148 @@ namespace render::material {
         return getCompiledPipeline(defaultPipelineHash);
     }
 
-    void MaterialPipeline::cleanupUnusedInstances() {
-        // This would be called periodically to remove instances no longer in use
-        // For now, we keep all instances - implement reference counting later if needed
+    void MaterialPipeline::markInstanceUsed(const std::string& instanceId) {
+        std::lock_guard<std::mutex> lock(instanceMutex);
+
+        auto it = materialInstances.find(instanceId);
+        if (it != materialInstances.end()) {
+            it->second.lastUsedFrame = currentFrame;
+        }
+    }
+
+    void MaterialPipeline::advanceFrame() {
+        ++currentFrame;
+    }
+
+    bool MaterialPipeline::removeMaterialInstance(const std::string& instanceId) {
+        std::lock_guard<std::mutex> lock(instanceMutex);
+
+        auto it = materialInstances.find(instanceId);
+        if (it == materialInstances.end()) {
+            return false;
+        }
+
+        auto& instance = it->second;
+        auto& logicalDevice = device.getLogicalDevice();
+
+        // Free descriptor set back to pool
+        if (instance.descriptorSet) {
+            logicalDevice.freeDescriptorSets(descriptorPool, instance.descriptorSet);
+        }
+
+        // Destroy UBO resources
+        if (instance.parameterUBO) {
+            logicalDevice.destroyBuffer(instance.parameterUBO);
+        }
+        if (instance.parameterUBOMemory) {
+            logicalDevice.freeMemory(instance.parameterUBOMemory);
+        }
+
+        materialInstances.erase(it);
+        return true;
+    }
+
+    void MaterialPipeline::cleanupUnusedInstances(uint64_t maxUnusedFrames) {
+        std::lock_guard<std::mutex> lock(instanceMutex);
+
+        if (currentFrame < maxUnusedFrames) {
+            return;  // Not enough frames have passed yet
+        }
+
+        uint64_t cutoffFrame = currentFrame - maxUnusedFrames;
+        auto& logicalDevice = device.getLogicalDevice();
+
+        // Collect instances to remove
+        std::vector<std::string> toRemove;
+        for (const auto& [path, instance] : materialInstances) {
+            if (instance.lastUsedFrame < cutoffFrame) {
+                toRemove.push_back(path);
+            }
+        }
+
+        // Remove stale instances
+        for (const auto& path : toRemove) {
+            auto it = materialInstances.find(path);
+            if (it != materialInstances.end()) {
+                auto& instance = it->second;
+
+                // Free descriptor set back to pool
+                if (instance.descriptorSet) {
+                    logicalDevice.freeDescriptorSets(descriptorPool, instance.descriptorSet);
+                }
+
+                // Destroy UBO resources
+                if (instance.parameterUBO) {
+                    logicalDevice.destroyBuffer(instance.parameterUBO);
+                }
+                if (instance.parameterUBOMemory) {
+                    logicalDevice.freeMemory(instance.parameterUBOMemory);
+                }
+
+                materialInstances.erase(it);
+            }
+        }
+
+        if (!toRemove.empty()) {
+            loggerInfo("MaterialPipeline: Cleaned up {} unused material instances", toRemove.size());
+        }
+    }
+
+    void MaterialPipeline::cleanupOrphanedPipelines() {
+        std::lock_guard<std::mutex> pLock(pipelineMutex);
+        std::lock_guard<std::mutex> iLock(instanceMutex);
+
+        // Build set of pipeline hashes still in use
+        std::unordered_set<size_t> usedHashes;
+        for (const auto& [path, instance] : materialInstances) {
+            usedHashes.insert(instance.pipelineHash);
+        }
+
+        // Always keep the default pipeline
+        usedHashes.insert(defaultPipelineHash);
+
+        // Find orphaned pipelines
+        std::vector<size_t> toRemove;
+        for (const auto& [hash, pipeline] : compiledPipelines) {
+            if (usedHashes.find(hash) == usedHashes.end()) {
+                toRemove.push_back(hash);
+            }
+        }
+
+        // Remove orphaned pipelines
+        auto& logicalDevice = device.getLogicalDevice();
+        for (size_t hash : toRemove) {
+            auto it = compiledPipelines.find(hash);
+            if (it != compiledPipelines.end()) {
+                auto& pipeline = it->second;
+
+                if (pipeline.pipeline) {
+                    logicalDevice.destroyPipeline(pipeline.pipeline);
+                }
+                if (pipeline.pipelineLayout) {
+                    logicalDevice.destroyPipelineLayout(pipeline.pipelineLayout);
+                }
+                if (pipeline.shader) {
+                    pipeline.shader->cleanUp();
+                }
+
+                compiledPipelines.erase(it);
+            }
+        }
+
+        if (!toRemove.empty()) {
+            loggerInfo("MaterialPipeline: Cleaned up {} orphaned pipelines", toRemove.size());
+        }
+    }
+
+    size_t MaterialPipeline::getInstanceCount() const {
+        std::lock_guard<std::mutex> lock(instanceMutex);
+        return materialInstances.size();
+    }
+
+    size_t MaterialPipeline::getPipelineCount() const {
+        std::lock_guard<std::mutex> lock(pipelineMutex);
+        return compiledPipelines.size();
     }
 
     void MaterialPipeline::createMaterialDescriptorSetLayout() {

@@ -3,6 +3,7 @@
 #include "print/EditorLogger.hpp"
 #include <queue>
 #include <set>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string_view>
@@ -18,6 +19,9 @@ namespace editor::graph {
     static constexpr std::string_view VERTEX_TEMPLATE_PATH = "../../resources/shaders/material/material_vertex.glsl";
     static constexpr std::string_view FRAGMENT_HEADER_PATH = "../../resources/shaders/material/material_fragment_header.glsl";
     static constexpr std::string_view FRAGMENT_FOOTER_PATH = "../../resources/shaders/material/material_fragment_footer.glsl";
+
+    // Allowed base directory for shader files (relative to executable)
+    static constexpr std::string_view ALLOWED_SHADER_DIR = "../../resources/shaders";
 
     // Static member initialization
     std::string ShaderGraphCompiler::s_vertexTemplate;
@@ -71,7 +75,29 @@ namespace editor::graph {
     }
 
     std::string ShaderGraphCompiler::readTextFile(std::string_view path) {
+        namespace fs = std::filesystem;
         std::string pathStr(path);
+
+        // Validate path is within allowed shader directory to prevent path traversal attacks
+        try {
+            fs::path requestedPath = fs::weakly_canonical(pathStr);
+            fs::path allowedDir = fs::weakly_canonical(std::string(ALLOWED_SHADER_DIR));
+
+            // Check that the requested path starts with the allowed directory
+            auto [reqIt, allowIt] = std::mismatch(
+                requestedPath.begin(), requestedPath.end(),
+                allowedDir.begin(), allowedDir.end()
+            );
+
+            if (allowIt != allowedDir.end()) {
+                vfLogError("Path traversal attempt detected, path outside allowed directory: {}", pathStr);
+                return "";
+            }
+        } catch (const fs::filesystem_error& e) {
+            vfLogError("Path validation failed: {}", e.what());
+            return "";
+        }
+
         std::ifstream file(pathStr);
         if (!file.is_open()) {
             return "";
