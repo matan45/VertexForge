@@ -1,6 +1,7 @@
 #include "EditorTextureAdapter.hpp"
 #include "../controllers/EditorTextureController.hpp"
 #include "../controllers/texture/EditorTexture.hpp"
+#include "print/Logger.hpp"
 
 namespace core {
 
@@ -49,7 +50,18 @@ namespace core {
     }
 
     void EditorTextureAdapter::releaseTexture(void* descriptorSet) {
-        loadedTextures.erase(descriptorSet);
+        if (descriptorSet == nullptr) {
+            loggerWarning("EditorTextureAdapter::releaseTexture called with null descriptor");
+            return;
+        }
+
+        auto it = loadedTextures.find(descriptorSet);
+        if (it == loadedTextures.end()) {
+            loggerWarning("EditorTextureAdapter::releaseTexture called with unknown descriptor {:p}", descriptorSet);
+            return;
+        }
+
+        loadedTextures.erase(it);
     }
 
 }

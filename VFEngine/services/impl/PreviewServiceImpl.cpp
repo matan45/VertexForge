@@ -120,86 +120,86 @@ namespace services {
     // === Material Preview ===
     // Note: provider is guaranteed non-null by constructor assertion
 
-    void PreviewServiceImpl::initMaterialPreview(void* instanceId) {
+    void PreviewServiceImpl::initMaterialPreview(PreviewInstanceId instanceId) {
         provider->initMaterialPreview(instanceId);
     }
 
-    void PreviewServiceImpl::cleanUpMaterialPreview(void* instanceId) {
+    void PreviewServiceImpl::cleanUpMaterialPreview(PreviewInstanceId instanceId) {
         provider->cleanUpMaterialPreview(instanceId);
     }
 
-    bool PreviewServiceImpl::isMaterialPreviewReady(void* instanceId) const {
+    bool PreviewServiceImpl::isMaterialPreviewReady(PreviewInstanceId instanceId) const {
         return provider->isMaterialPreviewInitialized(instanceId);
     }
 
-    void PreviewServiceImpl::setMaterialParams(void* instanceId, const MaterialPreviewParams& params) {
+    void PreviewServiceImpl::setMaterialParams(PreviewInstanceId instanceId, const MaterialPreviewParams& params) {
         provider->setMaterialParams(instanceId, params);
     }
 
-    MaterialPreviewParams PreviewServiceImpl::getMaterialParams(void* instanceId) const {
+    MaterialPreviewParams PreviewServiceImpl::getMaterialParams(PreviewInstanceId instanceId) const {
         return provider->getMaterialParams(instanceId);
     }
 
-    void PreviewServiceImpl::updateMaterialCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
+    void PreviewServiceImpl::updateMaterialCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                                    const glm::vec3& cameraPos, float time) {
         provider->updateMaterialCamera(instanceId, view, projection, cameraPos, time);
     }
 
-    ViewportTextureHandle PreviewServiceImpl::renderMaterialPreview(void* instanceId) {
+    ViewportTextureHandle PreviewServiceImpl::renderMaterialPreview(PreviewInstanceId instanceId) {
         ViewportTextureHandle handle;
         handle.imguiDescriptorSet = provider->renderMaterialPreview(instanceId);
         return handle;
     }
 
-    std::string PreviewServiceImpl::getMaterialShaderError(void* instanceId) const {
+    std::string PreviewServiceImpl::getMaterialShaderError(PreviewInstanceId instanceId) const {
         return provider->getMaterialShaderError(instanceId);
     }
 
     // === Mesh Preview ===
     // Note: provider is guaranteed non-null by constructor assertion
 
-    void PreviewServiceImpl::initMeshPreview(void* instanceId) {
+    void PreviewServiceImpl::initMeshPreview(PreviewInstanceId instanceId) {
         provider->initMeshPreview(instanceId);
     }
 
-    void PreviewServiceImpl::cleanUpMeshPreview(void* instanceId) {
+    void PreviewServiceImpl::cleanUpMeshPreview(PreviewInstanceId instanceId) {
         provider->cleanUpMeshPreview(instanceId);
     }
 
-    bool PreviewServiceImpl::isMeshPreviewReady(void* instanceId) const {
+    bool PreviewServiceImpl::isMeshPreviewReady(PreviewInstanceId instanceId) const {
         return provider->isMeshPreviewInitialized(instanceId);
     }
 
-    bool PreviewServiceImpl::loadPreviewMesh(void* instanceId, const std::string& meshPath, math::AABB& outBounds) {
+    bool PreviewServiceImpl::loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath, math::AABB& outBounds) {
         return provider->loadPreviewMesh(instanceId, meshPath, outBounds);
     }
 
-    void PreviewServiceImpl::unloadPreviewMesh(void* instanceId) {
+    void PreviewServiceImpl::unloadPreviewMesh(PreviewInstanceId instanceId) {
         provider->unloadPreviewMesh(instanceId);
     }
 
-    bool PreviewServiceImpl::isPreviewMeshLoaded(void* instanceId) const {
+    bool PreviewServiceImpl::isPreviewMeshLoaded(PreviewInstanceId instanceId) const {
         return provider->isPreviewMeshLoaded(instanceId);
     }
 
-    std::vector<SubMeshInfo> PreviewServiceImpl::getPreviewMeshSubMeshInfo(void* instanceId) const {
+    std::vector<SubMeshInfo> PreviewServiceImpl::getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const {
         return provider->getPreviewMeshSubMeshInfo(instanceId);
     }
 
-    math::AABB PreviewServiceImpl::getPreviewMeshBounds(void* instanceId) const {
+    math::AABB PreviewServiceImpl::getPreviewMeshBounds(PreviewInstanceId instanceId) const {
         return provider->getPreviewMeshBounds(instanceId);
     }
 
-    void PreviewServiceImpl::setMeshPreviewParams(void* instanceId, const MeshPreviewParams& params) {
+    void PreviewServiceImpl::setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) {
         provider->setMeshPreviewParams(instanceId, params);
     }
 
-    void PreviewServiceImpl::updateMeshCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
+    void PreviewServiceImpl::updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                                const glm::vec3& cameraPos) {
         provider->updateMeshCamera(instanceId, view, projection, cameraPos);
     }
 
-    ViewportTextureHandle PreviewServiceImpl::renderMeshPreview(void* instanceId) {
+    ViewportTextureHandle PreviewServiceImpl::renderMeshPreview(PreviewInstanceId instanceId) {
         ViewportTextureHandle handle;
         handle.imguiDescriptorSet = provider->renderMeshPreview(instanceId);
         return handle;

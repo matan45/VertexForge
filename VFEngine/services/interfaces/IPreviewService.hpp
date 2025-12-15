@@ -26,51 +26,51 @@ namespace services {
          * @brief Initialize the material preview renderer for a specific instance.
          * @param instanceId Unique identifier for this preview instance (e.g., window pointer)
          */
-        virtual void initMaterialPreview(void* instanceId) = 0;
+        virtual void initMaterialPreview(PreviewInstanceId instanceId) = 0;
 
         /**
          * @brief Clean up the material preview renderer for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual void cleanUpMaterialPreview(void* instanceId) = 0;
+        virtual void cleanUpMaterialPreview(PreviewInstanceId instanceId) = 0;
 
         /**
          * @brief Check if material preview is ready for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual bool isMaterialPreviewReady(void* instanceId) const = 0;
+        [[nodiscard]] virtual bool isMaterialPreviewReady(PreviewInstanceId instanceId) const = 0;
 
         /**
          * @brief Set material preview parameters for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          * @param params Material parameters
          */
-        virtual void setMaterialParams(void* instanceId, const MaterialPreviewParams& params) = 0;
+        virtual void setMaterialParams(PreviewInstanceId instanceId, const MaterialPreviewParams& params) = 0;
 
         /**
          * @brief Get current material preview parameters for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual MaterialPreviewParams getMaterialParams(void* instanceId) const = 0;
+        [[nodiscard]] virtual MaterialPreviewParams getMaterialParams(PreviewInstanceId instanceId) const = 0;
 
         /**
          * @brief Update material preview camera for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual void updateMaterialCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
+        virtual void updateMaterialCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                           const glm::vec3& cameraPos, float time = 0.0f) = 0;
 
         /**
          * @brief Render material preview and return the texture handle for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual ViewportTextureHandle renderMaterialPreview(void* instanceId) = 0;
+        [[nodiscard]] virtual ViewportTextureHandle renderMaterialPreview(PreviewInstanceId instanceId) = 0;
 
         /**
          * @brief Get the last shader compilation error message for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual std::string getMaterialShaderError(void* instanceId) const = 0;
+        [[nodiscard]] virtual std::string getMaterialShaderError(PreviewInstanceId instanceId) const = 0;
 
         // === Mesh Preview ===
 
@@ -78,19 +78,19 @@ namespace services {
          * @brief Initialize the mesh preview renderer for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual void initMeshPreview(void* instanceId) = 0;
+        virtual void initMeshPreview(PreviewInstanceId instanceId) = 0;
 
         /**
          * @brief Clean up the mesh preview renderer for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual void cleanUpMeshPreview(void* instanceId) = 0;
+        virtual void cleanUpMeshPreview(PreviewInstanceId instanceId) = 0;
 
         /**
          * @brief Check if mesh preview is ready for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual bool isMeshPreviewReady(void* instanceId) const = 0;
+        [[nodiscard]] virtual bool isMeshPreviewReady(PreviewInstanceId instanceId) const = 0;
 
         /**
          * @brief Load a mesh for preview.
@@ -99,51 +99,51 @@ namespace services {
          * @param outBounds Output parameter for mesh bounding box
          * @return true if mesh loaded successfully
          */
-        [[nodiscard]] virtual bool loadPreviewMesh(void* instanceId, const std::string& meshPath, math::AABB& outBounds) = 0;
+        [[nodiscard]] virtual bool loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath, math::AABB& outBounds) = 0;
 
         /**
          * @brief Unload the current preview mesh for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual void unloadPreviewMesh(void* instanceId) = 0;
+        virtual void unloadPreviewMesh(PreviewInstanceId instanceId) = 0;
 
         /**
          * @brief Check if a mesh is currently loaded for preview.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual bool isPreviewMeshLoaded(void* instanceId) const = 0;
+        [[nodiscard]] virtual bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const = 0;
 
         /**
          * @brief Get submesh information for the loaded mesh.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(void* instanceId) const = 0;
+        [[nodiscard]] virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const = 0;
 
         /**
          * @brief Get the bounding box of the loaded preview mesh.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual math::AABB getPreviewMeshBounds(void* instanceId) const = 0;
+        [[nodiscard]] virtual math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const = 0;
 
         /**
          * @brief Set mesh preview parameters for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          * @param params Mesh preview parameters
          */
-        virtual void setMeshPreviewParams(void* instanceId, const MeshPreviewParams& params) = 0;
+        virtual void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) = 0;
 
         /**
          * @brief Update mesh preview camera for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        virtual void updateMeshCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
+        virtual void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                        const glm::vec3& cameraPos) = 0;
 
         /**
          * @brief Render mesh preview and return the texture handle for a specific instance.
          * @param instanceId Unique identifier for this preview instance
          */
-        [[nodiscard]] virtual ViewportTextureHandle renderMeshPreview(void* instanceId) = 0;
+        [[nodiscard]] virtual ViewportTextureHandle renderMeshPreview(PreviewInstanceId instanceId) = 0;
     };
 
 }

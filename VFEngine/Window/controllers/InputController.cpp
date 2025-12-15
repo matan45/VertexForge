@@ -4,9 +4,6 @@
 
 namespace window {
 
-	// Static registry definition
-	std::unordered_map<GLFWwindow*, InputController*> InputController::controllerRegistry;
-
 	// Static callback function for GLFW scroll events
 	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
 		auto* controller = InputController::getControllerForWindow(window);

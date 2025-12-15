@@ -40,7 +40,7 @@ namespace windows {
         }
         // Clean up material preview via service (using 'this' as instanceId)
         services::events::preview::CleanUpMaterialPreviewCommand cleanupCmd;
-        cleanupCmd.instanceId = this;
+        cleanupCmd.instanceId = services::PreviewInstanceId(this);
         events::EventDispatcher::instance().execute(cleanupCmd);
     }
 
@@ -256,7 +256,7 @@ namespace windows {
     void MaterialEditorWindow::initPreview() {
         // Initialize material preview via service (using 'this' as instanceId)
         services::events::preview::InitMaterialPreviewCommand cmd;
-        cmd.instanceId = this;
+        cmd.instanceId = services::PreviewInstanceId(this);
         events::EventDispatcher::instance().execute(cmd);
 
         previewCamera->updateMatrices();
@@ -320,7 +320,7 @@ namespace windows {
         if (!pbrOutput) {
             // Still set params even without PBR output (use defaults)
             services::events::preview::SetMaterialParamsCommand cmd;
-            cmd.instanceId = this;
+            cmd.instanceId = services::PreviewInstanceId(this);
             cmd.params = params;
             events::EventDispatcher::instance().execute(cmd);
             return;
@@ -436,11 +436,11 @@ namespace windows {
         params.materialPath = materialPath;
 
         // Pass material graph for dynamic evaluation (Time, Sin, Cos nodes)
-        params.materialDataHandle = &materialData;
+        params.materialDataHandle = materialData;
 
         // Set material params via EventDispatcher
         services::events::preview::SetMaterialParamsCommand cmd;
-        cmd.instanceId = this;
+        cmd.instanceId = services::PreviewInstanceId(this);
         cmd.params = params;
         events::EventDispatcher::instance().execute(cmd);
     }
@@ -475,7 +475,7 @@ namespace windows {
 
             // Update camera via service
             services::events::preview::UpdateMaterialCameraCommand cameraCmd;
-            cameraCmd.instanceId = this;
+            cameraCmd.instanceId = services::PreviewInstanceId(this);
             cameraCmd.view = previewCamera->getViewMatrix();
             cameraCmd.projection = previewCamera->getProjectionMatrix();
             cameraCmd.cameraPos = previewCamera->getPosition();
@@ -484,12 +484,12 @@ namespace windows {
 
             // Render and get texture handle
             services::events::preview::RenderMaterialPreviewQuery renderQuery;
-            renderQuery.instanceId = this;
+            renderQuery.instanceId = services::PreviewInstanceId(this);
             auto textureHandle = dispatcher.query(renderQuery);
 
             // Check for shader compilation errors from the preview pipeline
             services::events::preview::GetMaterialShaderErrorQuery errorQuery;
-            errorQuery.instanceId = this;
+            errorQuery.instanceId = services::PreviewInstanceId(this);
             std::string shaderError = dispatcher.query(errorQuery);
             if (!shaderError.empty() && !showCompileError) {
                 showCompileError = true;

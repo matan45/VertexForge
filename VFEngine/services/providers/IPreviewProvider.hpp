@@ -1,9 +1,11 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <math/Frustum.hpp>
-#include "../data/DTOs.hpp" 
+#include "../data/DTOs.hpp"
+#include "PreviewInstanceId.hpp"
 #include <string>
 #include <vector>
+#include <any>
 
 namespace services {
 
@@ -26,9 +28,10 @@ namespace services {
         
         bool useCustomShader = false;
 
-        // Opaque handle to material data for dynamic evaluation
-        // The provider implementation knows how to interpret this
-        void* materialDataHandle = nullptr;
+        // Type-safe handle to material data for dynamic shader evaluation (Time, Sin, Cos nodes).
+        // Expected type: std::shared_ptr<material::MaterialData>
+        // Usage: params.materialDataHandle = myMaterialDataSharedPtr;
+        std::any materialDataHandle;
     };
 
     
@@ -43,48 +46,48 @@ namespace services {
         virtual ~IPreviewProvider() = default;
 
         // === Material Preview ===
-        
-        virtual void initMaterialPreview(void* instanceId) = 0;
-        
-        virtual void cleanUpMaterialPreview(void* instanceId) = 0;
-        
-        virtual bool isMaterialPreviewInitialized(void* instanceId) const = 0;
-        
-        virtual void setMaterialParams(void* instanceId, const MaterialPreviewParams& params) = 0;
-        
-        virtual MaterialPreviewParams getMaterialParams(void* instanceId) const = 0;
-        
-        virtual void updateMaterialCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
+
+        virtual void initMaterialPreview(PreviewInstanceId instanceId) = 0;
+
+        virtual void cleanUpMaterialPreview(PreviewInstanceId instanceId) = 0;
+
+        virtual bool isMaterialPreviewInitialized(PreviewInstanceId instanceId) const = 0;
+
+        virtual void setMaterialParams(PreviewInstanceId instanceId, const MaterialPreviewParams& params) = 0;
+
+        virtual MaterialPreviewParams getMaterialParams(PreviewInstanceId instanceId) const = 0;
+
+        virtual void updateMaterialCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                           const glm::vec3& cameraPos, float time = 0.0f) = 0;
-        
-        virtual void* renderMaterialPreview(void* instanceId) = 0;
-        
-        virtual std::string getMaterialShaderError(void* instanceId) const = 0;
+
+        virtual void* renderMaterialPreview(PreviewInstanceId instanceId) = 0;
+
+        virtual std::string getMaterialShaderError(PreviewInstanceId instanceId) const = 0;
 
         // === Mesh Preview ===
-        
-        virtual void initMeshPreview(void* instanceId) = 0;
-        
-        virtual void cleanUpMeshPreview(void* instanceId) = 0;
-        
-        virtual bool isMeshPreviewInitialized(void* instanceId) const = 0;
-        
-        virtual bool loadPreviewMesh(void* instanceId, const std::string& meshPath, math::AABB& outBounds) = 0;
-        
-        virtual void unloadPreviewMesh(void* instanceId) = 0;
-        
-        virtual bool isPreviewMeshLoaded(void* instanceId) const = 0;
-        
-        virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(void* instanceId) const = 0;
-        
-        virtual math::AABB getPreviewMeshBounds(void* instanceId) const = 0;
-        
-        virtual void setMeshPreviewParams(void* instanceId, const MeshPreviewParams& params) = 0;
-        
-        virtual void updateMeshCamera(void* instanceId, const glm::mat4& view, const glm::mat4& projection,
+
+        virtual void initMeshPreview(PreviewInstanceId instanceId) = 0;
+
+        virtual void cleanUpMeshPreview(PreviewInstanceId instanceId) = 0;
+
+        virtual bool isMeshPreviewInitialized(PreviewInstanceId instanceId) const = 0;
+
+        virtual bool loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath, math::AABB& outBounds) = 0;
+
+        virtual void unloadPreviewMesh(PreviewInstanceId instanceId) = 0;
+
+        virtual bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const = 0;
+
+        virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const = 0;
+
+        virtual math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const = 0;
+
+        virtual void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) = 0;
+
+        virtual void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                        const glm::vec3& cameraPos) = 0;
-        
-        virtual void* renderMeshPreview(void* instanceId) = 0;
+
+        virtual void* renderMeshPreview(PreviewInstanceId instanceId) = 0;
     };
 
 }

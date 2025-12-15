@@ -66,8 +66,10 @@ namespace window {
 		// Scroll delta tracking (accumulated between frames)
 		glm::vec2 scrollDelta{ 0.0f };
 
-		// Static registry for scroll callback lookup
-		static std::unordered_map<GLFWwindow*, InputController*> controllerRegistry;
+		// Static registry mapping GLFW windows to InputController instances.
+		// Thread Safety: Only accessed from main thread where GLFW callbacks execute.
+		// GLFW requires all window operations on the main thread, so no synchronization needed.
+		inline static std::unordered_map<GLFWwindow*, InputController*> controllerRegistry;
 	};
 
 }
