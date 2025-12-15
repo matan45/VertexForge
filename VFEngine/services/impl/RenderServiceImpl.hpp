@@ -2,22 +2,22 @@
 #include "../interfaces/IRenderService.hpp"
 #include "../events/RenderEvents.hpp"
 #include "../events/SceneEvents.hpp"
+#include "../providers/IOffScreenProvider.hpp"
+#include "../providers/IEditorTextureProvider.hpp"
 #include <memory>
 #include <unordered_map>
-
-namespace controllers {
-    class OffScreen;
-}
-
-namespace dto {
-    class EditorTexture;
-}
 
 namespace services {
 
     class RenderServiceImpl : public IRenderService {
     public:
-        explicit RenderServiceImpl(controllers::OffScreen* offScreen);
+        /**
+         * @brief Construct RenderServiceImpl with provider interfaces.
+         * @param offScreenProvider Provider for viewport/offscreen rendering (required)
+         * @param textureProvider Provider for editor texture loading (required)
+         */
+        explicit RenderServiceImpl(IOffScreenProvider* offScreenProvider,
+                                   IEditorTextureProvider* textureProvider);
         ~RenderServiceImpl() override;
 
         // Register all command and query handlers with the EventDispatcher
@@ -54,14 +54,15 @@ namespace services {
         void prepareFrameMeshes();
 
     private:
-        controllers::OffScreen* offScreen;
+        IOffScreenProvider* offScreenProvider;
+        IEditorTextureProvider* textureProvider;
         std::optional<std::string> currentIBLPath;
         uint32_t viewportWidth = 0;
         uint32_t viewportHeight = 0;
         uint64_t frameCounter = 0;
 
-        // Track loaded editor textures for cleanup
-        std::unordered_map<void*, std::unique_ptr<dto::EditorTexture>> loadedTextures;
+        // Track loaded editor textures by descriptor set for cleanup
+        std::unordered_map<void*, EditorTextureHandle> loadedTextures;
 
         // Subscription token for mesh preloading
         events::SubscriptionToken meshDataChangedToken;

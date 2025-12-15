@@ -1,37 +1,38 @@
 #include "EditorHandler.hpp"
+#include "EditorBootstrap.hpp"
 #include "impl/SceneServiceImpl.hpp"
 #include "impl/RenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
 #include "impl/ResourceServiceImpl.hpp"
-#include "scene/LevelHandler.hpp"
+#include "impl/PreviewServiceImpl.hpp"
 #include "Import.hpp"
 #include "config/Config.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace handlers {
 	EditorHandler::EditorHandler()
-		: coreInterface{ std::make_unique<controllers::CoreInterface>() }
-		, offScreenInterface{ std::make_unique<controllers::OffScreen>() }
+		: bootstrap{ std::make_unique<core::EditorBootstrap>() }
 		, windowImguiHandler{ std::make_unique<WindowImguiHandler>() }
 	{
 	}
 
 	EditorHandler::~EditorHandler() = default;
-	
+
 
 	void EditorHandler::init()
 	{
-		
-		coreInterface->init();
+		// Initialize core systems via bootstrap
+		bootstrap->init();
+
+		// Initialize services with providers from bootstrap
 		initializeServices();
-		
+
 		windowImguiHandler->init();
-		offScreenInterface->init();
 	}
 
 	void EditorHandler::run() const
 	{
-		coreInterface->run();
+		bootstrap->run();
 	}
 
 	void EditorHandler::cleanUp()
@@ -39,34 +40,42 @@ namespace handlers {
 		windowImguiHandler->cleanUp();
 
 		// Reset services before graphics cleanup to release Vulkan resources
+		previewService.reset();
 		renderService.reset();
 		sceneService.reset();
 		inputService.reset();
 		resourceService.reset();
 
-		offScreenInterface->cleanUp();
-		coreInterface->cleanUp();
+		// Clean up via bootstrap
+		bootstrap->cleanUp();
 	}
 
 	void EditorHandler::initializeServices()
 	{
-		// Get shared instances from the level/core
-		auto level = scene::LevelHandler::getInstance();
-		auto sceneGraphSystem = level->getSceneGraphSystem();
+		// Get shared instances from the bootstrap
+		auto sceneGraphSystem = bootstrap->getSceneGraphSystem();
 
-		// Create service implementations
+		// Create service implementations using providers from bootstrap
 		auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
-		auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(offScreenInterface.get());
-		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(coreInterface->getWindow());
+		auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(
+			bootstrap->getOffScreenProvider(),
+			bootstrap->getEditorTextureProvider()
+		);
+		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
+		auto previewServiceImpl = std::make_shared<services::PreviewServiceImpl>(
+			bootstrap->getPreviewProvider()
+		);
 
 		sceneService = sceneServiceImpl;
 		renderService = renderServiceImpl;
 		inputService = inputServiceImpl;
+		previewService = previewServiceImpl;
 
 		// Register event handlers for command/query pattern
 		sceneServiceImpl->registerEventHandlers();
 		renderServiceImpl->registerEventHandlers();
 		inputServiceImpl->registerEventHandlers();
+		previewServiceImpl->registerEventHandlers();
 
 		// Create resource service with import delegate
 		auto resourceServiceImpl = std::make_shared<services::ResourceServiceImpl>();

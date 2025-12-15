@@ -1,22 +1,26 @@
 #pragma once
 #include <memory>
-#include "CoreInterface.hpp"
 #include "WindowImguiHandler.hpp"
-#include "OffScreen.hpp"
 
 // Service includes
 #include "interfaces/ISceneService.hpp"
 #include "interfaces/IRenderService.hpp"
 #include "interfaces/IInputService.hpp"
 #include "interfaces/IResourceService.hpp"
+#include "interfaces/IPreviewService.hpp"
+
+// Forward declaration for EditorBootstrap
+namespace core {
+	class EditorBootstrap;
+}
 
 namespace handlers {
 
 	class EditorHandler
 	{
 	private:
-		std::unique_ptr<controllers::CoreInterface> coreInterface;
-		std::unique_ptr<controllers::OffScreen> offScreenInterface;
+		// Bootstrap encapsulates Core/Graphics initialization and provides service adapters
+		std::unique_ptr<core::EditorBootstrap> bootstrap;
 
 		std::unique_ptr<WindowImguiHandler> windowImguiHandler;
 
@@ -25,6 +29,7 @@ namespace handlers {
 		std::shared_ptr<services::IRenderService> renderService;
 		std::shared_ptr<services::IInputService> inputService;
 		std::shared_ptr<services::IResourceService> resourceService;
+		std::shared_ptr<services::IPreviewService> previewService;
 
 	public:
 		explicit EditorHandler();

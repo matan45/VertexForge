@@ -604,10 +604,19 @@ namespace controllers
     void MaterialPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
                                                  const glm::vec3& cameraPos, float time)
     {
+        if (!initialized || !offScreen)
+        {
+            return;
+        }
+
         // Store time for dynamic graph evaluation
         currentTime = time;
 
         auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+        {
+            return;
+        }
 
         if (renderHandler->isMeshPipelineInitialized())
         {

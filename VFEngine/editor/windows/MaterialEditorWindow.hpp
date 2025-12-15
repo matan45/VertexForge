@@ -14,11 +14,6 @@ namespace editor::graph
     class ShaderGraphEditor;
 }
 
-namespace controllers
-{
-    class MaterialPreviewController;
-}
-
 namespace windows
 {
     class MaterialEditorWindow : public controllers::imguiHandler::ImguiWindow
@@ -38,8 +33,7 @@ namespace windows
         std::shared_ptr<material::MaterialData> materialData;
         std::unique_ptr<editor::graph::ShaderGraphEditor> graphEditor;
 
-        // Preview rendering
-        std::unique_ptr<controllers::MaterialPreviewController> previewController;
+        // Preview rendering (uses PreviewService via EventDispatcher)
         std::unique_ptr<editor::OrbitCamera> previewCamera;
         bool previewNeedsInit = true;
 

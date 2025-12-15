@@ -1,8 +1,9 @@
 #include "MeshPreviewWindow.hpp"
 #include "../camera/OrbitCamera.hpp"
-#include "../../graphics/controllers/MeshPreviewController.hpp"
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/PreviewEvents.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <filesystem>
 
@@ -11,7 +12,6 @@ namespace windows
     MeshPreviewWindow::MeshPreviewWindow(const std::string& meshFilePath)
         : meshPath(meshFilePath)
         , camera(std::make_unique<editor::OrbitCamera>())
-        , controller(std::make_unique<controllers::MeshPreviewController>())
     {
         // Extract filename for window title
         std::filesystem::path path(meshFilePath);
@@ -20,10 +20,11 @@ namespace windows
 
     MeshPreviewWindow::~MeshPreviewWindow()
     {
-        if (controller)
-        {
-            controller->cleanUp();
-        }
+        // Unload mesh and clean up via PreviewService
+        events::EventDispatcher::instance().execute(
+            services::events::preview::UnloadPreviewMeshCommand{});
+        events::EventDispatcher::instance().execute(
+            services::events::preview::CleanUpMeshPreviewCommand{});
     }
 
     void MeshPreviewWindow::draw()
@@ -75,13 +76,23 @@ namespace windows
 
     void MeshPreviewWindow::initRenderer()
     {
-        controller->init();
+        // Initialize mesh preview via PreviewService
+        events::EventDispatcher::instance().execute(
+            services::events::preview::InitMeshPreviewCommand{});
 
-        math::AABB bounds;
-        if (controller->loadMesh(meshPath, bounds))
+        // Load mesh via PreviewService
+        services::events::preview::LoadPreviewMeshCommand loadCmd;
+        loadCmd.meshPath = meshPath;
+        auto result = events::EventDispatcher::instance().execute(loadCmd);
+
+        if (result.success)
         {
-            camera->fitToBounds(bounds);
-            subMeshes = controller->getSubMeshInfo();
+            meshBounds = result.bounds;
+            camera->fitToBounds(meshBounds);
+
+            // Get submesh info via PreviewService
+            subMeshes = events::EventDispatcher::instance().query(
+                services::events::preview::GetPreviewMeshSubMeshInfoQuery{});
         }
     }
 
@@ -102,21 +113,29 @@ namespace windows
         model = glm::rotate(model, glm::radians(meshRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
         model = glm::scale(model, glm::vec3(meshScale));
-        controller->setModelMatrix(model);
 
-        // Update camera matrices in the controller
-        controller->updateCamera(
-            camera->getViewMatrix(),
-            camera->getProjectionMatrix(),
-            camera->getPosition()
-        );
+        // Set mesh preview params via PreviewService
+        services::MeshPreviewParams meshParams;
+        meshParams.modelMatrix = model;
+        meshParams.highlightedSubMesh = selectedSubMesh;
+        services::events::preview::SetMeshPreviewParamsCommand meshCmd;
+        meshCmd.params = meshParams;
+        events::EventDispatcher::instance().execute(meshCmd);
 
-        // Render and display
-        void* texture = controller->render();
-        if (texture)
+        // Update camera via PreviewService
+        services::events::preview::UpdateMeshCameraCommand cameraCmd;
+        cameraCmd.view = camera->getViewMatrix();
+        cameraCmd.projection = camera->getProjectionMatrix();
+        cameraCmd.cameraPos = camera->getPosition();
+        events::EventDispatcher::instance().execute(cameraCmd);
+
+        // Render via PreviewService
+        auto textureHandle = events::EventDispatcher::instance().query(
+            services::events::preview::RenderMeshPreviewQuery{});
+
+        if (textureHandle.imguiDescriptorSet)
         {
-            ImGui::Image(texture, ImVec2(width, height));
-
+            ImGui::Image(textureHandle.imguiDescriptorSet, ImVec2(width, height));
         }
     }
 
@@ -136,7 +155,7 @@ namespace windows
         if (ImGui::Selectable("All Submeshes", allSelected))
         {
             selectedSubMesh = -1;
-            controller->setHighlightedSubMesh(-1);
+            // Highlight is updated via SetMeshPreviewParamsCommand in drawViewport
         }
 
         ImGui::Separator();
@@ -150,7 +169,7 @@ namespace windows
             if (ImGui::Selectable(info.name.c_str(), isSelected))
             {
                 selectedSubMesh = static_cast<int>(i);
-                controller->setHighlightedSubMesh(selectedSubMesh);
+                // Highlight is updated via SetMeshPreviewParamsCommand in drawViewport
             }
 
             // Show tooltip with details
@@ -245,8 +264,8 @@ namespace windows
             // Fit camera button
             if (ImGui::Button("Fit Camera", ImVec2(-1, 0)))
             {
-                math::AABB bounds = controller->getMeshBounds();
-                camera->fitToBounds(bounds);
+                // Use cached bounds from when mesh was loaded
+                camera->fitToBounds(meshBounds);
             }
         }
         

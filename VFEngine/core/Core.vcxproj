@@ -90,6 +90,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="adapters\EditorTextureAdapter.hpp" />
+    <ClInclude Include="adapters\OffScreenAdapter.hpp" />
+    <ClInclude Include="adapters\PreviewAdapter.hpp" />
+    <ClInclude Include="bootstrap\EditorBootstrap.hpp" />
+    <ClInclude Include="bootstrap\RuntimeBootstrap.hpp" />
     <ClInclude Include="controllers\CoreInterface.hpp" />
     <ClInclude Include="controllers\EditorTextureController.hpp" />
     <ClInclude Include="controllers\OffScreen.hpp" />
@@ -101,6 +106,11 @@
     <ClInclude Include="handlers\WindowHandler.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="adapters\EditorTextureAdapter.cpp" />
+    <ClCompile Include="adapters\OffScreenAdapter.cpp" />
+    <ClCompile Include="adapters\PreviewAdapter.cpp" />
+    <ClCompile Include="bootstrap\EditorBootstrap.cpp" />
+    <ClCompile Include="bootstrap\RuntimeBootstrap.cpp" />
     <ClCompile Include="controllers\CoreInterface.cpp" />
     <ClCompile Include="controllers\EditorTextureController.cpp" />
     <ClCompile Include="controllers\OffScreen.cpp" />

@@ -3,7 +3,6 @@
 #include "../graph/ShaderGraphCompiler.hpp"
 #include "../graph/nodes/ShaderNode.hpp"
 #include "../camera/OrbitCamera.hpp"
-#include "../../graphics/controllers/MaterialPreviewController.hpp"
 #include <material/MaterialManager.hpp>
 #include <material/MaterialAsset.hpp>
 #include <nfd/FileDialog.hpp>
@@ -11,6 +10,7 @@
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/MaterialEvents.hpp"
+#include "events/PreviewEvents.hpp"
 #include "time/Timer.hpp"
 #include <filesystem>
 #include <algorithm>
@@ -20,7 +20,6 @@ namespace windows {
     MaterialEditorWindow::MaterialEditorWindow(const std::string& materialPath)
         : materialPath(materialPath)
         , graphEditor(std::make_unique<editor::graph::ShaderGraphEditor>())
-        , previewController(std::make_unique<controllers::MaterialPreviewController>())
         , previewCamera(std::make_unique<editor::OrbitCamera>())
     {
         std::filesystem::path path(materialPath);
@@ -39,9 +38,9 @@ namespace windows {
         if (graphEditor) {
             graphEditor->cleanUp();
         }
-        if (previewController) {
-            previewController->cleanUp();
-        }
+        // Clean up material preview via PreviewService
+        events::EventDispatcher::instance().execute(
+            services::events::preview::CleanUpMaterialPreviewCommand{});
     }
 
     void MaterialEditorWindow::initEditor() {
@@ -254,7 +253,9 @@ namespace windows {
     }
 
     void MaterialEditorWindow::initPreview() {
-        previewController->init();
+        // Initialize material preview via PreviewService
+        events::EventDispatcher::instance().execute(
+            services::events::preview::InitMaterialPreviewCommand{});
         previewCamera->updateMatrices();
         previewNeedsInit = false;
     }
@@ -301,7 +302,7 @@ namespace windows {
     void MaterialEditorWindow::updatePreviewMaterial(bool useCustomShader) {
         if (!materialData) return;
 
-        controllers::PreviewMaterialParams params;
+        services::MaterialPreviewParams params;
         params.useCustomShader = useCustomShader;
 
         // Find PBR Output node
@@ -314,7 +315,9 @@ namespace windows {
         }
 
         if (!pbrOutput) {
-            previewController->setMaterialParams(params);
+            services::events::preview::SetMaterialParamsCommand cmd;
+            cmd.params = params;
+            events::EventDispatcher::instance().execute(cmd);
             return;
         }
 
@@ -428,9 +431,14 @@ namespace windows {
         params.materialPath = materialPath;
 
         // Pass material graph for dynamic evaluation (Time, Sin, Cos nodes)
-        params.materialData = materialData;
+        // Using opaque handle to avoid Services depending on material types
+        // Pass address of the shared_ptr, not the raw pointer
+        params.materialDataHandle = &materialData;
 
-        previewController->setMaterialParams(params);
+        // Set material params via PreviewService
+        services::events::preview::SetMaterialParamsCommand cmd;
+        cmd.params = params;
+        events::EventDispatcher::instance().execute(cmd);
     }
 
     void MaterialEditorWindow::drawPreviewPanel() {
@@ -459,27 +467,29 @@ namespace windows {
             // Note: Preview material is updated only when Compile is clicked
             // (see compileMaterial())
 
-            // Update camera in controller
-            previewController->updateCamera(
-                previewCamera->getViewMatrix(),
-                previewCamera->getProjectionMatrix(),
-                previewCamera->getPosition(),
-                static_cast<float>(engineTime::Timer::getElapsedTime())
-            );
+            // Update camera via PreviewService
+            services::events::preview::UpdateMaterialCameraCommand cameraCmd;
+            cameraCmd.view = previewCamera->getViewMatrix();
+            cameraCmd.projection = previewCamera->getProjectionMatrix();
+            cameraCmd.cameraPos = previewCamera->getPosition();
+            cameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
+            events::EventDispatcher::instance().execute(cameraCmd);
 
-            // Render and display
-            void* texture = previewController->render();
+            // Render via PreviewService
+            auto textureHandle = events::EventDispatcher::instance().query(
+                services::events::preview::RenderMaterialPreviewQuery{});
 
             // Check for shader compilation errors from the preview pipeline
-            std::string shaderError = previewController->getLastShaderCompilationError();
+            auto shaderError = events::EventDispatcher::instance().query(
+                services::events::preview::GetMaterialShaderErrorQuery{});
             if (!shaderError.empty() && !showCompileError) {
                 showCompileError = true;
                 compileErrorMessage = "SPIR-V: " + shaderError;
             }
 
-            if (texture) {
+            if (textureHandle.imguiDescriptorSet) {
                 ImVec2 size(viewportSize - 16, viewportSize - 16);
-                ImGui::Image(texture, size);
+                ImGui::Image(textureHandle.imguiDescriptorSet, size);
             } else {
                 ImGui::TextDisabled("Initializing preview...");
             }

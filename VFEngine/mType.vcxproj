@@ -1,0 +1,717 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{7490E30F-E0A4-0BC1-A926-AF2015FA07F2}</ProjectGuid>
+    <IgnoreWarnCompileDuplicatedFilename>true</IgnoreWarnCompileDuplicatedFilename>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>mType</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\bin\mType\Debug\x64\</OutDir>
+    <IntDir>obj\x64\Debug\mType\</IntDir>
+    <TargetName>mType</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\bin\mType\Release\x64\</OutDir>
+    <IntDir>obj\x64\Release\mType\</IntDir>
+    <TargetName>mType</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;MTYPE_SIMD_ENABLED;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\dependencies\mtype\mType;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Optimization>Full</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 /arch:AVX2 %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\dependencies\mtype\mType\ast\ASTNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\ASTVisitor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\AccessModifier.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\GenericType.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\GenericTypeParameter.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\GenericTypeSubstitutionContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\NodeClassesDeclaration.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\VisibilityModifier.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\annotations\AnnotationNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\ClassNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\ConstructorNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\FieldNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\InterfaceNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\MemberAccessNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\MethodCallNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\MethodNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\NewNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\SuperConstructorCallNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\SuperMemberAccessNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\SuperMemberAssignmentNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\SuperMethodCallNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\classes\ThisConstructorCallNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\ArrayCreationNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\ArrayLiteralNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\AwaitExpression.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\BinaryExpNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\BoolNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\CastExpression.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\FloatNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\IndexAccessNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\InstanceOfExpression.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\IntegerNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\LambdaInterfaceInvocationNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\LambdaNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\NullNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\StringNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\TernaryExpNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\UnaryExpNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\expressions\VariableNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\functions\FunctionCallNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\functions\FunctionNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\functions\ReturnNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\AssignmentNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\BlockNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\BreakNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\CaseNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\CatchNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\ContinueNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\DefaultCaseNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\DoWhileNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\ForEachNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\ForNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\IfNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\ImportNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\IndexAssignmentNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\MemberAssignmentNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\ProgramNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\SwitchNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\ThrowNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\TryNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\WhileNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\utils\ASTNodeUtils.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\utils\GenericTypeConversionUtils.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\CircularDependencyConfig.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\CircularDependencyDetector.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\CircularDependencyException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\DependencyPatternAnalyzer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\DependencyScope.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\DependencyType.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\DependencyTypeUtils.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\DepthLimitException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\circularDependency\TrueCyclicException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\constants\ExceptionConstants.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\constants\ExecutionMode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\constants\LambdaConstants.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\debugger\DebugContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\debugger\DebugHookHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\debugger\DebugProtocol.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\debugger\DebuggerConstants.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\debugger\VMVariableInspector.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\debugger\VariableInspector.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\Environment.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\EnvironmentBuilder.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\manager\Scope.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\manager\ScopeManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\manager\VariableManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\ClassRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\ExportRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\FunctionRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\InheritanceTracker.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\NativeRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\Registry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\BuiltinFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\HashCodeFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\IndexOfFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ParsePrimitiveFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\PrintFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\SqrtFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\StrLengthFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\SubstringFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ToLowerCaseFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ToUpperCaseFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ValuePrinter.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\AbstractClassException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\AccessViolationException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\AmbiguousCallException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\ArgumentException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\ArrayCreationException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\ClassNotFoundException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\DuplicateDeclarationException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\DuplicateSignatureException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\EnvironmentException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\FieldNotFoundException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\FileException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\FinalModificationException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\InheritanceException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\MethodNotFoundException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\NoMatchingOverloadException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\NullPointerException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\ObjectException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\ParseException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\ReturnException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\RuntimeException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\ScriptException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\SourceLocation.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\TypeConversionException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\TypeException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\TypeResolutionException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\UndefinedException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\errors\UserException.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\gc\CycleDetector.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\gc\GC.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\gc\GCConfig.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\gc\GCCoordinator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\gc\GCStats.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\gc\GCTracker.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\gc\SuspectBuffer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\gc\WriteBarrier.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\lexer\BracketBalancer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\lexer\Lexer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\lexer\SourceLocationTracker.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\lexer\TokenFactory.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\OptimizationConfig.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\OptimizationPassManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\OptimizationResult.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\Optimizer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\base\ASTTransformer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\base\OptimizationContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\base\OptimizationPass.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\ConstantFoldingPass.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\DeadCodeEliminationPass.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\UnusedDeclarationEliminationPass.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\ClassParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\ExpressionParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\InterfaceParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\LambdaParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\ParseContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\Parser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\ParserConstants.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\ParserContextState.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\ParserValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\StatementParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\TokenStream.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\TypeParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\TypeRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\class\ClassDeclarationParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\class\ConstructorParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\class\FieldParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\class\GenericParameterParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\class\MethodParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\class\ObjectCreationParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\core\BaseParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\core\IParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\expression\ArgumentParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\expression\BinaryOperatorParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\expression\CastParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\expression\LiteralParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\expression\PostfixOperatorParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\expression\UnaryOperatorParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\interface\InterfaceMethodSignatureParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\statement\AssignmentStatementParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\statement\ControlFlowParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\statement\DeclarationParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\statement\ExceptionParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\statement\FunctionParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\statement\ImportParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\statement\LoopParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\AccessModifierParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\AnnotationParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\AsyncValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\NameValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\ParameterParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\ParserUtils.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\QualifiedNameParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\StatementTypeDetector.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\VisibilityParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\reflection\ReflectionHandle.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\reflection\ReflectionNatives.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtime\EventLoop.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\Definition.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\global\ArrayOperationsNative.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\global\FunctionDefinition.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\global\VariableDefinition.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\klass\ClassDefinition.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\klass\ConstructorDefinition.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\klass\FieldDefinition.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\klass\InterfaceDefinition.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\klass\InterfaceRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\klass\MethodDefinition.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\klass\ObjectInstance.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\runtimeTypes\klass\SignatureUtils.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\BytecodeExecutionStrategy.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\BytecodeExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\BytecodeService.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\ExecutionStrategy.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\FileReader.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\ImportManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\ImportResolver.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\NativeFunctionRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\OptimizationService.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\ScriptAPI.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\services\ScriptInterpreter.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\token\Token.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\token\TokenType.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\types\ReifiedTypeRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\types\TypeConstraintValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\types\TypeConversionBridge.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\types\TypeConversionUtils.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\types\TypeRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\types\TypeSubstitutionService.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\types\UnifiedType.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\validation\AnnotationValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\ArrayPool.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\AsyncPromiseValue.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\CapturedVariable.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\FlatMultiArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\IMultiDimensionalArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\IntegerCache.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\InternedString.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\MultiArrayBase.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\NativeArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\ParameterType.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\ParameterTypeConverter.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\PromiseValue.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\SparseMultiArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\StringPool.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\ValueType.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\ValueTypeUtils.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\arrays\ArrayFactory.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\arrays\base\IArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\arrays\object\FlatMultiObjectArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\arrays\object\ObjectArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\arrays\object\ObjectArrayBase.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\arrays\primitive\PrimitiveArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\arrays\string\StringArray.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\operations\ArrayOperations.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\simd\SIMDConfig.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\simd\SIMDOperations.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\simd\SIMDOperationsImpl.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\simd\SIMDPolicies.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\simd\detection\CPUFeatures.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\MethodSignature.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\bytecode\BytecodeIOHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\bytecode\BytecodeProgram.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\bytecode\ExceptionTable.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\bytecode\OpCode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\BytecodeCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\ImportHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\control\ExceptionContextManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\control\LoopContextManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\control\SwitchContextManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\emission\BytecodeEmitter.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\optimization\PrimitiveMethodOptimizer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\overload\OverloadResolutionHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\overload\OverloadResolver.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\registration\ClassInheritanceValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\registration\ClassRegistrar.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\registration\FunctionRegistrar.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\registration\InterfaceRegistrar.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\ExpectedTypeContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\GenericPatternAnalyzer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\TypeInferenceEngine.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\types\TypeValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\validation\CompileTimeValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\validation\FieldInitializationValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\validation\ReturnPathValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\variables\FunctionFrameManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\variables\GlobalVariableRegistry.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\variables\VariableTracker.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\ArrayCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\ClassCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\CompilerContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\ControlFlowCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\ExpressionCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\FunctionCallHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\FunctionCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\LiteralCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\MethodCompilerHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\ParameterValidator.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\StatementCompiler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\compiler\visitors\TryStatementHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\OptimizationPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\PeepholeOptimizer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\analysis\ControlFlowAnalyzer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\analysis\DataFlowAnalyzer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\analysis\JumpTargetTracker.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\AbstractClassPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\AlgebraicSimplificationPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\ConstantFoldingPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\DeadCodePattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\JumpThreadingPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\LoadStoreOptimizationPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\NullSequencePattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\PatternSafetyHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\StackOptimizationPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\StrengthReductionPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\TypeSpecializationPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\VirtualMachine.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\context\ExecutionContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ArithmeticExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ArrayExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\BitwiseExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ComparisonExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ControlFlowExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ExceptionExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\FunctionExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\LambdaExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\LogicalExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ObjectExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ObjectInstanceHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\PrimitiveMethodExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\StackOperationsExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\TypeExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\VariableExecutor.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\optimization\LoopOptimizer.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\stack\StackManager.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ArrayBoundsChecker.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ErrorLocationHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ExceptionHandler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\validation\AccessValidator.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\dependencies\mtype\mType\ast\ASTNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\AccessModifier.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\GenericType.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\GenericTypeParameter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\GenericTypeSubstitutionContext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\VisibilityModifier.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\annotations\AnnotationNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\ClassNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\ConstructorNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\FieldNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\InterfaceNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\MemberAccessNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\MethodCallNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\MethodNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\NewNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\SuperConstructorCallNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\SuperMemberAccessNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\SuperMemberAssignmentNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\SuperMethodCallNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\classes\ThisConstructorCallNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\ArrayCreationNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\ArrayLiteralNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\AwaitExpression.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\BinaryExpNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\BoolNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\CastExpression.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\FloatNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\IndexAccessNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\InstanceOfExpression.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\IntegerNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\LambdaInterfaceInvocationNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\LambdaNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\NullNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\StringNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\TernaryExpNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\UnaryExpNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\expressions\VariableNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\functions\FunctionCallNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\functions\FunctionNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\functions\ReturnNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\AssignmentNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\BlockNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\BreakNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\CaseNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\CatchNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\ContinueNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\DefaultCaseNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\DoWhileNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\ForEachNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\ForNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\IfNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\ImportNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\IndexAssignmentNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\MemberAssignmentNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\ProgramNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\SwitchNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\ThrowNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\TryNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\WhileNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\utils\GenericTypeConversionUtils.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\circularDependency\CircularDependencyDetector.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\circularDependency\DependencyPatternAnalyzer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\circularDependency\DependencyTypeUtils.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugContext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugHookHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\debugger\DebugProtocol.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\debugger\VMVariableInspector.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\debugger\VariableInspector.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\Environment.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\EnvironmentBuilder.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\manager\Scope.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\manager\ScopeManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\manager\VariableManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\ClassRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\ExportRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\FunctionRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\InheritanceTracker.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\NativeRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\HashCodeFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\IndexOfFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ParsePrimitiveFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\PrintFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\SqrtFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\StrLengthFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\SubstringFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ToLowerCaseFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ToUpperCaseFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ValuePrinter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\errors\AccessViolationException.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\errors\UserException.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\gc\CycleDetector.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\gc\GC.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\gc\GCCoordinator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\gc\GCTracker.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\gc\SuspectBuffer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\gc\WriteBarrier.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\lexer\BracketBalancer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\lexer\Lexer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\lexer\SourceLocationTracker.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\lexer\TokenFactory.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\OptimizationConfig.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\OptimizationPassManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\OptimizationResult.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\Optimizer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\base\ASTTransformer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\base\OptimizationContext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\base\OptimizationPass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\ConstantFoldingPass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\DeadCodeEliminationPass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\UnusedDeclarationEliminationPass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\ClassParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\ExpressionParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\InterfaceParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\LambdaParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\ParseContext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\Parser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\ParserValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\StatementParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\TokenStream.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\TypeParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\TypeRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\class\ClassDeclarationParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\class\ConstructorParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\class\FieldParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\class\GenericParameterParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\class\MethodParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\class\ObjectCreationParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\core\BaseParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\expression\ArgumentParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\expression\BinaryOperatorParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\expression\CastParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\expression\LiteralParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\expression\PostfixOperatorParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\expression\UnaryOperatorParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\interface\InterfaceMethodSignatureParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\statement\AssignmentStatementParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\statement\ControlFlowParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\statement\DeclarationParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\statement\ExceptionParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\statement\FunctionParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\statement\ImportParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\statement\LoopParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\AccessModifierParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\AnnotationParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\AsyncValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\NameValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\ParameterParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\ParserUtils.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\QualifiedNameParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\StatementTypeDetector.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\VisibilityParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionHandle.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionNatives.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtime\EventLoop.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\Definition.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\global\ArrayOperationsNative.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\global\FunctionDefinition.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\global\VariableDefinition.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\klass\ClassDefinition.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\klass\ConstructorDefinition.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\klass\FieldDefinition.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\klass\InterfaceDefinition.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\klass\InterfaceRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\klass\MethodDefinition.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\klass\ObjectInstance.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\klass\SignatureUtils.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\BytecodeExecutionStrategy.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\BytecodeExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\BytecodeService.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\FileReader.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\ImportManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\ImportResolver.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\NativeFunctionRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\OptimizationService.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\ScriptAPI.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\services\ScriptInterpreter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\types\ReifiedTypeRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\types\TypeConstraintValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\types\TypeConversionBridge.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\types\TypeConversionUtils.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\types\TypeRegistry.cpp">
+      <ObjectFileName>$(IntDir)\TypeRegistry1.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\mtype\mType\types\TypeSubstitutionService.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\types\UnifiedType.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\validation\AnnotationValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\AsyncPromiseValue.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\IntegerCache.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\InternedString.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\StringPool.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\ValueTypeUtils.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\arrays\ArrayFactory.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\arrays\object\FlatMultiObjectArray.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\arrays\object\ObjectArray.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\arrays\object\ObjectArrayBase.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\operations\ArrayOperations.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\simd\SIMDOperations.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\value\simd\detection\CPUFeatures.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\MethodSignature.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\bytecode\BytecodeIOHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\bytecode\BytecodeProgram.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\bytecode\ExceptionTable.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\BytecodeCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\ImportHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\control\ExceptionContextManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\control\LoopContextManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\control\SwitchContextManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\emission\BytecodeEmitter.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\optimization\PrimitiveMethodOptimizer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\overload\OverloadResolutionHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\overload\OverloadResolver.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\registration\ClassInheritanceValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\registration\ClassRegistrar.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\registration\FunctionRegistrar.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\registration\InterfaceRegistrar.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\ExpectedTypeContext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\GenericPatternAnalyzer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\TypeInferenceEngine.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\types\TypeValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\validation\CompileTimeValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\validation\FieldInitializationValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\validation\ReturnPathValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\variables\FunctionFrameManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\variables\GlobalVariableRegistry.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\variables\VariableTracker.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ArrayCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ClassCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ControlFlowCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ExpressionCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\FunctionCallHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\FunctionCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\LiteralCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\MethodCompilerHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ParameterValidator.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\StatementCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\TryStatementHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\OptimizationPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\PeepholeOptimizer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\analysis\ControlFlowAnalyzer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\analysis\DataFlowAnalyzer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\analysis\JumpTargetTracker.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\AbstractClassPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\AlgebraicSimplificationPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\ConstantFoldingPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\DeadCodePattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\JumpThreadingPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\LoadStoreOptimizationPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\NullSequencePattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\PatternSafetyHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\StackOptimizationPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\StrengthReductionPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\TypeSpecializationPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\VirtualMachine.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\context\ExecutionContext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ArithmeticExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ArrayExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\BitwiseExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ComparisonExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ControlFlowExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ExceptionExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\FunctionExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\LambdaExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\LogicalExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ObjectExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ObjectInstanceHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\PrimitiveMethodExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\StackOperationsExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\TypeExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\VariableExecutor.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\optimization\LoopOptimizer.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\stack\StackManager.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\utils\ExceptionHandler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\validation\AccessValidator.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

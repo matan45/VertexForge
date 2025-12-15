@@ -220,12 +220,20 @@ namespace core {
 		vk::PhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
 
+		// Enable Vulkan 1.3 features
+		vk::PhysicalDeviceVulkan13Features vulkan13Features{};
+		vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
+		vulkan13Features.dynamicRendering = VK_TRUE;
+		vulkan13Features.synchronization2 = VK_TRUE;
+		vulkan13Features.maintenance4 = VK_TRUE;
+
 		vk::DeviceCreateInfo createInfo{};
 		createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		createInfo.pQueueCreateInfos = queueCreateInfos.data();
 		createInfo.pEnabledFeatures = &deviceFeatures;
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+		createInfo.pNext = &vulkan13Features;
 
 		// Note: Device-level validation layers are deprecated in modern Vulkan.
 		// Validation layers are now set only at the instance level.

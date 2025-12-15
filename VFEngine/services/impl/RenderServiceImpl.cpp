@@ -1,18 +1,17 @@
 #include "RenderServiceImpl.hpp"
-#include "../../core/controllers/OffScreen.hpp"
-#include "../../core/controllers/EditorTextureController.hpp"
-#include "../../core/controllers/texture/EditorTexture.hpp"
 #include "../events/EventDispatcher.hpp"
 
 namespace services {
 
-    RenderServiceImpl::RenderServiceImpl(controllers::OffScreen* offScreen)
-        : offScreen(offScreen) {}
+    RenderServiceImpl::RenderServiceImpl(IOffScreenProvider* offScreenProvider,
+                                         IEditorTextureProvider* textureProvider)
+        : offScreenProvider(offScreenProvider)
+        , textureProvider(textureProvider) {}
 
     RenderServiceImpl::~RenderServiceImpl() = default;
 
     ViewportTextureHandle RenderServiceImpl::getViewportTexture() {
-        if (!offScreen) {
+        if (!offScreenProvider) {
             return ViewportTextureHandle{};
         }
 
@@ -21,7 +20,7 @@ namespace services {
         // Prepare mesh draw list from ECS entities before rendering
         prepareFrameMeshes();
 
-        void* descriptorSet = offScreen->render();
+        void* descriptorSet = offScreenProvider->render();
 
         ViewportTextureHandle handle;
         handle.imguiDescriptorSet = descriptorSet;
@@ -52,17 +51,17 @@ namespace services {
     }
 
     bool RenderServiceImpl::setIBL(const std::string& hdrPath) {
-        if (!offScreen) {
+        if (!offScreenProvider) {
             return false;
         }
 
         // Remove existing IBL before adding new one
         if (currentIBLPath.has_value()) {
-            offScreen->iblRemove();
+            offScreenProvider->iblRemove();
         }
 
         // Initialize IBL - camera matrices will be set separately via updateIBLCamera
-        offScreen->iblSet(hdrPath);
+        offScreenProvider->iblSet(hdrPath);
         currentIBLPath = hdrPath;
 
         // Publish IBL changed notification
@@ -74,19 +73,19 @@ namespace services {
     }
 
     void RenderServiceImpl::updateIBLCamera(const glm::mat4& view, const glm::mat4& projection) {
-        if (!offScreen || !currentIBLPath.has_value()) {
+        if (!offScreenProvider || !currentIBLPath.has_value()) {
             return;
         }
 
-        offScreen->iblSetCameraMatrices(view, projection);
+        offScreenProvider->iblSetCameraMatrices(view, projection);
     }
 
     void RenderServiceImpl::removeIBL() {
-        if (!offScreen) {
+        if (!offScreenProvider) {
             return;
         }
 
-        offScreen->iblRemove();
+        offScreenProvider->iblRemove();
         currentIBLPath = std::nullopt;
 
         // Publish IBL changed notification
@@ -104,47 +103,58 @@ namespace services {
     }
 
     EditorTextureHandle RenderServiceImpl::loadEditorTexture(const std::string& path) {
-        auto texture = controllers::EditorTextureController::loadTexture(path);
+        if (!textureProvider) {
+            return EditorTextureHandle{};
+        }
 
-        if (!texture) {
+        auto textureData = textureProvider->loadTexture(path);
+
+        if (!textureData.valid) {
             return EditorTextureHandle{};
         }
 
         EditorTextureHandle handle;
-        handle.imguiDescriptorSet = texture->getDescriptorSet();
-        handle.width = static_cast<uint32_t>(texture->getWidth());
-        handle.height = static_cast<uint32_t>(texture->getHeight());
+        handle.imguiDescriptorSet = textureData.descriptorSet;
+        handle.width = static_cast<uint32_t>(textureData.width);
+        handle.height = static_cast<uint32_t>(textureData.height);
 
         // Track for cleanup
-        loadedTextures[handle.imguiDescriptorSet] = std::move(texture);
+        loadedTextures[handle.imguiDescriptorSet] = handle;
 
         return handle;
     }
 
     EditorTextureHandle RenderServiceImpl::loadEditorHDRTexture(const std::string& path) {
-        auto texture = controllers::EditorTextureController::loadHdrTexture(path);
+        if (!textureProvider) {
+            return EditorTextureHandle{};
+        }
 
-        if (!texture) {
+        auto textureData = textureProvider->loadHdrTexture(path);
+
+        if (!textureData.valid) {
             return EditorTextureHandle{};
         }
 
         EditorTextureHandle handle;
-        handle.imguiDescriptorSet = texture->getDescriptorSet();
-        handle.width = static_cast<uint32_t>(texture->getWidth());
-        handle.height = static_cast<uint32_t>(texture->getHeight());
+        handle.imguiDescriptorSet = textureData.descriptorSet;
+        handle.width = static_cast<uint32_t>(textureData.width);
+        handle.height = static_cast<uint32_t>(textureData.height);
 
         // Track for cleanup
-        loadedTextures[handle.imguiDescriptorSet] = std::move(texture);
+        loadedTextures[handle.imguiDescriptorSet] = handle;
 
         return handle;
     }
 
     void RenderServiceImpl::releaseEditorTexture(const EditorTextureHandle& handle) {
-        loadedTextures.erase(handle.imguiDescriptorSet);
+        if (textureProvider && loadedTextures.count(handle.imguiDescriptorSet)) {
+            textureProvider->releaseTexture(handle.imguiDescriptorSet);
+            loadedTextures.erase(handle.imguiDescriptorSet);
+        }
     }
 
     bool RenderServiceImpl::isReady() const {
-        return offScreen != nullptr;
+        return offScreenProvider != nullptr;
     }
 
     uint64_t RenderServiceImpl::getFrameNumber() const {
@@ -245,39 +255,39 @@ namespace services {
 
     // Mesh Operations
     std::string RenderServiceImpl::loadMesh(const std::string& meshPath) {
-        if (!offScreen) {
+        if (!offScreenProvider) {
             return "";
         }
-        return offScreen->meshLoad(meshPath);
+        return offScreenProvider->meshLoad(meshPath);
     }
 
     void RenderServiceImpl::unloadMesh(const std::string& meshId) {
-        if (offScreen) {
-            offScreen->meshUnload(meshId);
+        if (offScreenProvider) {
+            offScreenProvider->meshUnload(meshId);
         }
     }
 
     void RenderServiceImpl::updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
                                              const glm::vec3& cameraPos, float time) {
-        if (offScreen) {
-            offScreen->meshUpdateCamera(view, projection, cameraPos, time);
+        if (offScreenProvider) {
+            offScreenProvider->meshUpdateCamera(view, projection, cameraPos, time);
         }
     }
 
     bool RenderServiceImpl::isMeshLoaded(const std::string& meshPath) const {
-        return offScreen && offScreen->isMeshLoaded(meshPath);
+        return offScreenProvider && offScreenProvider->isMeshLoaded(meshPath);
     }
 
     std::vector<std::string> RenderServiceImpl::getLoadedMeshes() const {
-        if (!offScreen) {
+        if (!offScreenProvider) {
             return {};
         }
-        return offScreen->getLoadedMeshes();
+        return offScreenProvider->getLoadedMeshes();
     }
 
     void RenderServiceImpl::prepareFrameMeshes() {
-        if (offScreen) {
-            offScreen->prepareFrameMeshes();
+        if (offScreenProvider) {
+            offScreenProvider->prepareFrameMeshes();
         }
     }
 
