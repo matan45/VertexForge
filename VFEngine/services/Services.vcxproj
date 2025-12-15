@@ -116,6 +116,7 @@
     <ClInclude Include="providers\IEditorTextureProvider.hpp" />
     <ClInclude Include="providers\IOffScreenProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
+    <ClInclude Include="providers\PreviewInstanceId.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="events\EventDispatcher.cpp" />
