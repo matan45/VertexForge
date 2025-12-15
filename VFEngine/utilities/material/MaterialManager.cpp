@@ -95,30 +95,31 @@ namespace material {
             return false;
         }
 
-        std::lock_guard<std::mutex> lock(cacheMutex);
+        bool shouldNotify = false;
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex);
 
-        auto it = materialCache.find(pathStr);
-        if (it != materialCache.end()) {
-            if (auto existing = it->second.lock()) {
-                // Update existing material in place
-                *existing = std::move(*newData);
-                existing->needsRecompile = true;
-
-                // Notify callbacks (without lock to avoid deadlock)
-                // Note: We copy callbacks while holding lock, then release
-                auto callbacks = changeCallbacks;
-                lock.~lock_guard();  // Release lock before callbacks
-
-                for (const auto& callback : callbacks) {
-                    callback(pathStr);
+            auto it = materialCache.find(pathStr);
+            if (it != materialCache.end()) {
+                if (auto existing = it->second.lock()) {
+                    // Update existing material in place
+                    *existing = std::move(*newData);
+                    existing->needsRecompile = true;
+                    shouldNotify = true;
                 }
-                return true;
+            }
+
+            if (!shouldNotify) {
+                // Material wasn't loaded, just load it fresh
+                auto material = std::make_shared<MaterialData>(std::move(*newData));
+                materialCache[pathStr] = material;
             }
         }
 
-        // Material wasn't loaded, just load it fresh
-        auto material = std::make_shared<MaterialData>(std::move(*newData));
-        materialCache[pathStr] = material;
+        // Notify callbacks outside lock to avoid deadlock
+        if (shouldNotify) {
+            notifyMaterialChanged(pathStr);
+        }
 
         return true;
     }

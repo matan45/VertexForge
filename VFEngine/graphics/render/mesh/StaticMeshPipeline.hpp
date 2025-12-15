@@ -13,7 +13,6 @@ namespace core
     class Device;
     class SwapChain;
     class Shader;
-    class TransferManager;
     struct OffscreenResources;
 }
 
@@ -25,6 +24,8 @@ namespace resource
 namespace render::mesh
 {
     class MaterialShaderCache;
+    class MeshGPUCache;
+    class MaterialTextureCache;
 }
 
 namespace render::mesh
@@ -137,8 +138,11 @@ namespace render::mesh
         
         vk::UniqueCommandPool commandPool;
 
-        // Async transfer manager for non-blocking buffer uploads
-        std::unique_ptr<core::TransferManager> transferManager;
+        // Mesh GPU cache for loading/unloading mesh buffers
+        std::unique_ptr<MeshGPUCache> meshCache;
+
+        // Material texture cache for loading/managing material textures
+        std::unique_ptr<MaterialTextureCache> textureCache;
 
         // Material shader cache for per-material compiled shaders and pipelines
         std::unique_ptr<MaterialShaderCache> materialShaderCache;
@@ -158,40 +162,13 @@ namespace render::mesh
         mutable glm::vec3 currentCameraPos{0.0f};
         mutable float currentTime{0.0f};
 
-        // Loaded meshes (key = mesh path)
-        std::unordered_map<std::string, MeshGPUData> loadedMeshes;
-
         // Cache for loaded materials to prevent reloading every frame
         mutable std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> materialCache;
 
         // Flag to indicate cache should be invalidated (set by external notification)
         mutable bool materialCacheInvalidated = false;
 
-        // GPU texture data for material textures
-        struct MaterialTextureGPU {
-            vk::Image image;
-            vk::DeviceMemory memory;
-            vk::ImageView view;
-            vk::Sampler sampler;
-            int slotIndex = -1;  // Slot in u_Textures[8], -1 = not assigned
-        };
-
-        // Texture cache (path -> GPU texture)
-        mutable std::unordered_map<std::string, MaterialTextureGPU> textureCache;
-
-        // Default 1x1 white texture for empty slots
-        MaterialTextureGPU defaultTexture;
-        bool defaultTextureCreated = false;
-
-        // Currently bound textures (slot index -> path), max 8
-        mutable std::array<std::string, 8> boundTexturePaths;
-        mutable int nextTextureSlot = 0;
-
-        // Texture loading methods
-        void createDefaultTexture();
-        void cleanupTextures();
-        bool loadTexture(const std::string& path) const;
-        int getTextureSlot(const std::string& path) const;
+        // Prepare textures for frame rendering
         void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
 
         // Default IBL textures (used when no IBL is set)

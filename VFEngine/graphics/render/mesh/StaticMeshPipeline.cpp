@@ -1,11 +1,12 @@
 #include "StaticMeshPipeline.hpp"
+#include "MeshGPUCache.hpp"
+#include "MaterialTextureCache.hpp"
 #include "MaterialShaderCache.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/Utilities.hpp"
-#include "../../core/TransferManager.hpp"
 #include "resource/MeshResource.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialManager.hpp"
@@ -377,14 +378,12 @@ namespace render::mesh
         commandPoolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
         commandPool = device.getLogicalDevice().createCommandPoolUnique(commandPoolInfo);
 
-        // Create async transfer manager - uses dedicated transfer queue if available
-        uint32_t transferQueueFamily = device.getQueueFamilyIndices().transferFamily.value();
-        transferManager = std::make_unique<core::TransferManager>(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            device.getTransferQueue(),
-            transferQueueFamily
-        );
+        // Create mesh GPU cache for mesh buffer management
+        meshCache = std::make_unique<MeshGPUCache>(device);
+
+        // Create material texture cache for texture GPU resources
+        textureCache = std::make_unique<MaterialTextureCache>(device);
+        textureCache->init(commandPool.get());
 
         // Create material shader cache for per-material pipeline compilation
         materialShaderCache = std::make_unique<MaterialShaderCache>(device);
@@ -983,19 +982,8 @@ namespace render::mesh
 
     void StaticMeshPipeline::initializeDefaultTextureDescriptors()
     {
-        // Create default 1x1 white texture if not already created
-        if (!defaultTextureCreated) {
-            createDefaultTexture();
-        }
-
         // Initialize texture descriptor set with all default textures
-        std::array<vk::ImageView, 8> imageViews;
-        std::array<vk::Sampler, 8> samplers;
-        for (int i = 0; i < 8; ++i) {
-            imageViews[i] = defaultTexture.view;
-            samplers[i] = defaultTexture.sampler;
-        }
-        updateTextureDescriptors(imageViews, samplers);
+        updateTextureDescriptors(textureCache->getImageViews(), textureCache->getSamplers());
     }
 
     void StaticMeshPipeline::updateTextureDescriptors(
@@ -1335,11 +1323,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::cleanUp()
     {
-        // Wait for any pending transfers before cleanup
-        if (transferManager) {
-            transferManager->waitAll();
-        }
-
         // Clear material cache
         materialCache.clear();
 
@@ -1349,16 +1332,19 @@ namespace render::mesh
         }
 
         // Clean up material textures
-        cleanupTextures();
+        if (textureCache) {
+            textureCache->cleanUp();
+        }
 
-        // Unload all meshes first
+        // Unload all meshes (meshCache will wait for pending transfers)
         unloadAllMeshes();
 
         // Clean up pipeline/descriptor resources
         cleanUpForReinit();
 
-        // Reset transfer manager (must happen before command pool reset)
-        transferManager.reset();
+        // Reset caches (must happen before command pool reset)
+        textureCache.reset();
+        meshCache.reset();
 
         // Reset command pool (automatic cleanup via UniqueCommandPool)
         commandPool.reset();
@@ -1418,347 +1404,42 @@ namespace render::mesh
 
     std::string StaticMeshPipeline::loadMesh(std::string_view meshPath)
     {
-        std::string pathStr(meshPath);
-
-        if (loadedMeshes.contains(pathStr))
-        {
-            return pathStr;
-        }
-
-        auto meshFuture = resource::ResourceManager::loadMeshAsync(meshPath);
-        auto meshesDataPtr = meshFuture.get();
-
-        if (!meshesDataPtr || meshesDataPtr->meshes.empty())
-        {
-            loggerError("Failed to load mesh from: {}", meshPath);
-            return "";
-        }
-
-        MeshGPUData gpuData{};
-
-        uint32_t totalVertices = 0;
-        uint32_t totalIndices = 0;
-
-        // Initialize bounding box with first vertex we find
-        bool boundingBoxInitialized = false;
-
-        // Upload all submeshes to GPU
-        for (const auto& meshData : meshesDataPtr->meshes)
-        {
-            if (meshData.vertices.empty())
-            {
-                loggerWarning("Skipping empty submesh in: {}", meshPath);
-                continue;
-            }
-
-            SubMeshGPUData subMesh{};
-            subMesh.name = meshData.name;  // Store submesh name for material assignment
-
-            // Compute per-submesh bounding box
-            bool subMeshBBInitialized = false;
-            for (const auto& vertex : meshData.vertices)
-            {
-                if (!subMeshBBInitialized)
-                {
-                    subMesh.boundingBox.min = vertex.position;
-                    subMesh.boundingBox.max = vertex.position;
-                    subMeshBBInitialized = true;
-                }
-                else
-                {
-                    subMesh.boundingBox.expand(vertex.position);
-                }
-
-                // Also expand the combined mesh bounding box
-                if (!boundingBoxInitialized)
-                {
-                    gpuData.boundingBox.min = vertex.position;
-                    gpuData.boundingBox.max = vertex.position;
-                    boundingBoxInitialized = true;
-                }
-                else
-                {
-                    gpuData.boundingBox.expand(vertex.position);
-                }
-            }
-            subMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
-            subMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
-
-            // Create vertex buffer (device local for best performance)
-            vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * meshData.vertices.size();
-
-            core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-            vertexBufferRequest.size = vertexBufferSize;
-            vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-            vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(vertexBufferRequest, subMesh.vertexBuffer, subMesh.vertexBufferMemory);
-
-            // Copy vertex data to GPU using async transfer (non-blocking)
-            transferManager->copyToBufferAsync(
-                subMesh.vertexBuffer,
-                meshData.vertices.data(),
-                vertexBufferSize
-            );
-
-            // Create index buffer if indices exist
-            if (!meshData.indices.empty())
-            {
-                vk::DeviceSize indexBufferSize = sizeof(uint32_t) * meshData.indices.size();
-
-                core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-                indexBufferRequest.size = indexBufferSize;
-                indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-                indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::Utilities::createBuffer(indexBufferRequest, subMesh.indexBuffer, subMesh.indexBufferMemory);
-
-                // Copy index data to GPU using async transfer (non-blocking)
-                transferManager->copyToBufferAsync(
-                    subMesh.indexBuffer,
-                    meshData.indices.data(),
-                    indexBufferSize
-                );
-            }
-
-            totalVertices += subMesh.vertexCount;
-            totalIndices += subMesh.indexCount;
-            gpuData.subMeshes.push_back(subMesh);
-        }
-
-        if (gpuData.subMeshes.empty())
-        {
-            loggerError("Mesh has no valid submeshes: {}", meshPath);
-            return "";
-        }
-
-        // Wait for all async transfers to complete before the mesh can be used
-        // This is still faster than synchronous transfers because:
-        // 1. Multiple submeshes are uploaded in parallel
-        // 2. Uses dedicated transfer queue (if available) without blocking graphics
-        transferManager->waitAll();
-
-        loadedMeshes[pathStr] = std::move(gpuData);
-        loggerInfo("Loaded mesh: {} ({} submeshes, {} total vertices, {} total indices)",
-                   meshPath, loadedMeshes[pathStr].subMeshes.size(), totalVertices, totalIndices);
-
-        return pathStr;
+        return meshCache->loadMesh(meshPath);
     }
 
     std::string StaticMeshPipeline::uploadMesh(const std::string& meshId, const resource::MeshesData& meshesData)
     {
-        if (loadedMeshes.contains(meshId))
-        {
-            return meshId;  // Already loaded
-        }
-
-        if (meshesData.meshes.empty())
-        {
-            loggerError("Cannot upload empty mesh data for: {}", meshId);
-            return "";
-        }
-
-        MeshGPUData gpuData{};
-
-        uint32_t totalVertices = 0;
-        uint32_t totalIndices = 0;
-
-        // Initialize bounding box with first vertex we find
-        bool boundingBoxInitialized = false;
-
-        // Upload all submeshes to GPU
-        for (const auto& meshData : meshesData.meshes)
-        {
-            if (meshData.vertices.empty())
-            {
-                loggerWarning("Skipping empty submesh in procedural mesh: {}", meshId);
-                continue;
-            }
-
-            SubMeshGPUData subMesh{};
-            subMesh.name = meshData.name;
-
-            // Compute per-submesh bounding box
-            bool subMeshBBInitialized = false;
-            for (const auto& vertex : meshData.vertices)
-            {
-                if (!subMeshBBInitialized)
-                {
-                    subMesh.boundingBox.min = vertex.position;
-                    subMesh.boundingBox.max = vertex.position;
-                    subMeshBBInitialized = true;
-                }
-                else
-                {
-                    subMesh.boundingBox.expand(vertex.position);
-                }
-
-                // Also expand the combined mesh bounding box
-                if (!boundingBoxInitialized)
-                {
-                    gpuData.boundingBox.min = vertex.position;
-                    gpuData.boundingBox.max = vertex.position;
-                    boundingBoxInitialized = true;
-                }
-                else
-                {
-                    gpuData.boundingBox.expand(vertex.position);
-                }
-            }
-            subMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
-            subMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
-
-            // Create vertex buffer (device local for best performance)
-            vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * meshData.vertices.size();
-
-            core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-            vertexBufferRequest.size = vertexBufferSize;
-            vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-            vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(vertexBufferRequest, subMesh.vertexBuffer, subMesh.vertexBufferMemory);
-
-            // Copy vertex data to GPU using async transfer
-            transferManager->copyToBufferAsync(
-                subMesh.vertexBuffer,
-                meshData.vertices.data(),
-                vertexBufferSize
-            );
-
-            // Create index buffer if indices exist
-            if (!meshData.indices.empty())
-            {
-                vk::DeviceSize indexBufferSize = sizeof(uint32_t) * meshData.indices.size();
-
-                core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-                indexBufferRequest.size = indexBufferSize;
-                indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-                indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::Utilities::createBuffer(indexBufferRequest, subMesh.indexBuffer, subMesh.indexBufferMemory);
-
-                // Copy index data to GPU using async transfer
-                transferManager->copyToBufferAsync(
-                    subMesh.indexBuffer,
-                    meshData.indices.data(),
-                    indexBufferSize
-                );
-            }
-
-            totalVertices += subMesh.vertexCount;
-            totalIndices += subMesh.indexCount;
-            gpuData.subMeshes.push_back(subMesh);
-        }
-
-        if (gpuData.subMeshes.empty())
-        {
-            loggerError("Procedural mesh has no valid submeshes: {}", meshId);
-            return "";
-        }
-
-        // Wait for all async transfers to complete
-        transferManager->waitAll();
-
-        loadedMeshes[meshId] = std::move(gpuData);
-        loggerInfo("Uploaded procedural mesh: {} ({} submeshes, {} vertices, {} indices)",
-                   meshId, loadedMeshes[meshId].subMeshes.size(), totalVertices, totalIndices);
-
-        return meshId;
+        return meshCache->uploadMesh(meshId, meshesData);
     }
 
     void StaticMeshPipeline::unloadMesh(const std::string& meshId)
     {
-        auto it = loadedMeshes.find(meshId);
-        if (it == loadedMeshes.end())
-        {
-            return;
-        }
-
-        const auto& gpuData = it->second;
-
-        // Wait for device to finish using the buffers
-        device.getLogicalDevice().waitIdle();
-
-        // Destroy all submesh buffers
-        for (const auto& subMesh : gpuData.subMeshes)
-        {
-            if (subMesh.vertexBuffer)
-            {
-                device.getLogicalDevice().destroyBuffer(subMesh.vertexBuffer);
-                device.getLogicalDevice().freeMemory(subMesh.vertexBufferMemory);
-            }
-            if (subMesh.indexBuffer)
-            {
-                device.getLogicalDevice().destroyBuffer(subMesh.indexBuffer);
-                device.getLogicalDevice().freeMemory(subMesh.indexBufferMemory);
-            }
-        }
-
-        loadedMeshes.erase(it);
-        loggerInfo("Unloaded mesh: {}", meshId);
+        meshCache->unloadMesh(meshId);
     }
 
     void StaticMeshPipeline::unloadAllMeshes()
     {
-        if (loadedMeshes.empty())
-        {
-            return;
-        }
-
-        // Wait for device to finish
-        device.getLogicalDevice().waitIdle();
-
-        for (auto& [path, gpuData] : loadedMeshes)
-        {
-            for (const auto& subMesh : gpuData.subMeshes)
-            {
-                if (subMesh.vertexBuffer)
-                {
-                    device.getLogicalDevice().destroyBuffer(subMesh.vertexBuffer);
-                    device.getLogicalDevice().freeMemory(subMesh.vertexBufferMemory);
-                }
-                if (subMesh.indexBuffer)
-                {
-                    device.getLogicalDevice().destroyBuffer(subMesh.indexBuffer);
-                    device.getLogicalDevice().freeMemory(subMesh.indexBufferMemory);
-                }
-            }
-        }
-
-        loadedMeshes.clear();
-        loggerInfo("Unloaded all meshes");
+        meshCache->unloadAllMeshes();
     }
 
     const MeshGPUData* StaticMeshPipeline::getMesh(const std::string& meshId) const
     {
-        auto it = loadedMeshes.find(meshId);
-        if (it != loadedMeshes.end())
-        {
-            return &it->second;
-        }
-        return nullptr;
+        return meshCache->getMesh(meshId);
     }
 
     bool StaticMeshPipeline::isMeshLoaded(const std::string& meshId) const
     {
-        return loadedMeshes.contains(meshId);
+        return meshCache->isMeshLoaded(meshId);
     }
 
     const math::AABB* StaticMeshPipeline::getMeshBoundingBox(const std::string& meshId) const
     {
-        auto it = loadedMeshes.find(meshId);
-        if (it == loadedMeshes.end())
-        {
-            return nullptr;
-        }
-        return &it->second.boundingBox;
+        return meshCache->getMeshBoundingBox(meshId);
     }
 
     std::vector<std::string> StaticMeshPipeline::getLoadedMeshIds() const
     {
-        std::vector<std::string> ids;
-        ids.reserve(loadedMeshes.size());
-        for (const auto& [path, _] : loadedMeshes)
-        {
-            ids.push_back(path);
-        }
-        return ids;
+        return meshCache->getLoadedMeshIds();
     }
 
     void StaticMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
@@ -1865,7 +1546,7 @@ namespace render::mesh
             // Get texture slot indices from loaded textures
             auto getTexIdx = [this, &meshData](const std::string& texPath, float fallbackIdx) -> float {
                 if (!texPath.empty()) {
-                    return static_cast<float>(getTextureSlot(texPath));
+                    return static_cast<float>(textureCache->getTextureSlot(texPath));
                 }
                 return fallbackIdx;
             };
@@ -2250,336 +1931,8 @@ namespace render::mesh
         );
     }
 
-    void StaticMeshPipeline::createDefaultTexture()
-    {
-        if (defaultTextureCreated) return;
-
-        // Create a 1x1 white texture for empty slots
-        const uint32_t size = 1;
-        std::array<uint8_t, 4> pixels = {255, 255, 255, 255};  // RGBA white
-
-        vk::ImageCreateInfo imageInfo{};
-        imageInfo.imageType = vk::ImageType::e2D;
-        imageInfo.extent = vk::Extent3D{size, size, 1};
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = vk::Format::eR8G8B8A8Unorm;
-        imageInfo.tiling = vk::ImageTiling::eOptimal;
-        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-        imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-        imageInfo.samples = vk::SampleCountFlagBits::e1;
-        imageInfo.sharingMode = vk::SharingMode::eExclusive;
-
-        defaultTexture.image = device.getLogicalDevice().createImage(imageInfo);
-
-        vk::MemoryRequirements memReqs = device.getLogicalDevice().getImageMemoryRequirements(defaultTexture.image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
-            memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        defaultTexture.memory = device.getLogicalDevice().allocateMemory(allocInfo);
-        device.getLogicalDevice().bindImageMemory(defaultTexture.image, defaultTexture.memory, 0);
-
-        // Create staging buffer and copy
-        vk::DeviceSize imageSize = sizeof(pixels);
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-
-        core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-        stagingRequest.size = imageSize;
-        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-        void* data;
-        [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        memcpy(data, pixels.data(), static_cast<size_t>(imageSize));
-        device.getLogicalDevice().unmapMemory(stagingMemory);
-
-        // Transition and copy
-        vk::CommandBufferAllocateInfo cmdAllocInfo{};
-        cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
-        cmdAllocInfo.commandPool = commandPool.get();
-        cmdAllocInfo.commandBufferCount = 1;
-        auto cmdBuffers = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo);
-        vk::CommandBuffer cmd = cmdBuffers[0];
-
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd.begin(beginInfo);
-
-        vk::ImageMemoryBarrier barrier{};
-        barrier.oldLayout = vk::ImageLayout::eUndefined;
-        barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = defaultTexture.image;
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-        barrier.srcAccessMask = {};
-        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
-            {}, nullptr, nullptr, barrier);
-
-        vk::BufferImageCopy copyRegion{};
-        copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        copyRegion.imageSubresource.mipLevel = 0;
-        copyRegion.imageSubresource.baseArrayLayer = 0;
-        copyRegion.imageSubresource.layerCount = 1;
-        copyRegion.imageExtent = vk::Extent3D{size, size, 1};
-        cmd.copyBufferToImage(stagingBuffer, defaultTexture.image, vk::ImageLayout::eTransferDstOptimal, copyRegion);
-
-        barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
-            {}, nullptr, nullptr, barrier);
-
-        cmd.end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
-
-        device.getLogicalDevice().freeCommandBuffers(commandPool.get(), cmd);
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
-
-        // Create image view
-        vk::ImageViewCreateInfo viewInfo{};
-        viewInfo.image = defaultTexture.image;
-        viewInfo.viewType = vk::ImageViewType::e2D;
-        viewInfo.format = vk::Format::eR8G8B8A8Unorm;
-        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-        defaultTexture.view = device.getLogicalDevice().createImageView(viewInfo);
-
-        // Create sampler
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 1.0f;
-        defaultTexture.sampler = device.getLogicalDevice().createSampler(samplerInfo);
-
-        defaultTextureCreated = true;
-        loggerInfo("Created default 1x1 white texture for material slots");
-    }
-
-    void StaticMeshPipeline::cleanupTextures()
-    {
-        // Cleanup cached textures
-        for (auto& [path, tex] : textureCache) {
-            if (tex.sampler) device.getLogicalDevice().destroySampler(tex.sampler);
-            if (tex.view) device.getLogicalDevice().destroyImageView(tex.view);
-            if (tex.image) device.getLogicalDevice().destroyImage(tex.image);
-            if (tex.memory) device.getLogicalDevice().freeMemory(tex.memory);
-        }
-        textureCache.clear();
-
-        // Cleanup default texture
-        if (defaultTextureCreated) {
-            if (defaultTexture.sampler) device.getLogicalDevice().destroySampler(defaultTexture.sampler);
-            if (defaultTexture.view) device.getLogicalDevice().destroyImageView(defaultTexture.view);
-            if (defaultTexture.image) device.getLogicalDevice().destroyImage(defaultTexture.image);
-            if (defaultTexture.memory) device.getLogicalDevice().freeMemory(defaultTexture.memory);
-            defaultTexture = {};
-            defaultTextureCreated = false;
-        }
-
-        // Reset slot assignments
-        boundTexturePaths.fill("");
-        nextTextureSlot = 0;
-    }
-
-    bool StaticMeshPipeline::loadTexture(const std::string& path) const
-    {
-        if (path.empty()) return false;
-        if (textureCache.contains(path)) return true;  // Already loaded
-
-        // Load texture from .vfImage file
-        auto textureFuture = resource::ResourceManager::loadTextureAsync(path);
-        auto textureData = textureFuture.get();
-
-        if (!textureData || textureData->textureData.empty()) {
-            loggerWarning("Failed to load texture: {}", path);
-            return false;
-        }
-
-        MaterialTextureGPU tex{};
-
-        // Create image
-        vk::ImageCreateInfo imageInfo{};
-        imageInfo.imageType = vk::ImageType::e2D;
-        imageInfo.extent = vk::Extent3D{textureData->width, textureData->height, 1};
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = vk::Format::eR8G8B8A8Unorm;
-        imageInfo.tiling = vk::ImageTiling::eOptimal;
-        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-        imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-        imageInfo.samples = vk::SampleCountFlagBits::e1;
-        imageInfo.sharingMode = vk::SharingMode::eExclusive;
-
-        tex.image = device.getLogicalDevice().createImage(imageInfo);
-
-        vk::MemoryRequirements memReqs = device.getLogicalDevice().getImageMemoryRequirements(tex.image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
-            memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        tex.memory = device.getLogicalDevice().allocateMemory(allocInfo);
-        device.getLogicalDevice().bindImageMemory(tex.image, tex.memory, 0);
-
-        // Create staging buffer and copy
-        vk::DeviceSize imageSize = textureData->textureData.size();
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-
-        core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-        stagingRequest.size = imageSize;
-        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-        void* data;
-        [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        memcpy(data, textureData->textureData.data(), static_cast<size_t>(imageSize));
-        device.getLogicalDevice().unmapMemory(stagingMemory);
-
-        // Transition and copy
-        vk::CommandBufferAllocateInfo cmdAllocInfo{};
-        cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
-        cmdAllocInfo.commandPool = commandPool.get();
-        cmdAllocInfo.commandBufferCount = 1;
-        auto cmdBuffers = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo);
-        vk::CommandBuffer cmd = cmdBuffers[0];
-
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd.begin(beginInfo);
-
-        vk::ImageMemoryBarrier barrier{};
-        barrier.oldLayout = vk::ImageLayout::eUndefined;
-        barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = tex.image;
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-        barrier.srcAccessMask = {};
-        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
-            {}, nullptr, nullptr, barrier);
-
-        vk::BufferImageCopy copyRegion{};
-        copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        copyRegion.imageSubresource.mipLevel = 0;
-        copyRegion.imageSubresource.baseArrayLayer = 0;
-        copyRegion.imageSubresource.layerCount = 1;
-        copyRegion.imageExtent = vk::Extent3D{textureData->width, textureData->height, 1};
-        cmd.copyBufferToImage(stagingBuffer, tex.image, vk::ImageLayout::eTransferDstOptimal, copyRegion);
-
-        barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
-            {}, nullptr, nullptr, barrier);
-
-        cmd.end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
-
-        device.getLogicalDevice().freeCommandBuffers(commandPool.get(), cmd);
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
-
-        // Create image view
-        vk::ImageViewCreateInfo viewInfo{};
-        viewInfo.image = tex.image;
-        viewInfo.viewType = vk::ImageViewType::e2D;
-        viewInfo.format = vk::Format::eR8G8B8A8Unorm;
-        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-        tex.view = device.getLogicalDevice().createImageView(viewInfo);
-
-        // Create sampler
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.anisotropyEnable = VK_TRUE;
-        samplerInfo.maxAnisotropy = 16.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 1.0f;
-        tex.sampler = device.getLogicalDevice().createSampler(samplerInfo);
-
-        textureCache[path] = tex;
-        loggerInfo("Loaded material texture: {} ({}x{})", path, textureData->width, textureData->height);
-        return true;
-    }
-
-    int StaticMeshPipeline::getTextureSlot(const std::string& path) const
-    {
-        if (path.empty()) return -1;
-
-        auto it = textureCache.find(path);
-        if (it == textureCache.end()) return -1;
-
-        // If already assigned a slot, return it
-        if (it->second.slotIndex >= 0) return it->second.slotIndex;
-
-        // Assign a new slot if available
-        if (nextTextureSlot >= 8) {
-            loggerWarning("Exceeded maximum 8 texture slots, texture not bound: {}", path);
-            return -1;
-        }
-
-        it->second.slotIndex = nextTextureSlot;
-        boundTexturePaths[nextTextureSlot] = path;
-        nextTextureSlot++;
-
-        return it->second.slotIndex;
-    }
-
     void StaticMeshPipeline::prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const
     {
-        if (!defaultTextureCreated) {
-            const_cast<StaticMeshPipeline*>(this)->createDefaultTexture();
-        }
-
         // Check if any meshes have materials. If not (e.g., material preview),
         // skip texture preparation to preserve externally-bound textures
         bool hasMaterials = false;
@@ -2603,13 +1956,7 @@ namespace render::mesh
         }
 
         // Reset slot assignments for this frame
-        boundTexturePaths.fill("");
-        nextTextureSlot = 0;
-
-        // Reset all cached texture slots
-        for (auto& [path, tex] : textureCache) {
-            tex.slotIndex = -1;
-        }
+        textureCache->resetSlotAssignments();
 
         // Collect and load all unique textures from materials
         for (const auto& meshData : meshDrawList) {
@@ -2635,28 +1982,28 @@ namespace render::mesh
 
                     // Load textures if paths are specified
                     if (!pbr.albedoTexturePath.empty()) {
-                        loadTexture(pbr.albedoTexturePath);
-                        getTextureSlot(pbr.albedoTexturePath);
+                        textureCache->loadTexture(pbr.albedoTexturePath);
+                        textureCache->getTextureSlot(pbr.albedoTexturePath);
                     }
                     if (!pbr.metallicTexturePath.empty()) {
-                        loadTexture(pbr.metallicTexturePath);
-                        getTextureSlot(pbr.metallicTexturePath);
+                        textureCache->loadTexture(pbr.metallicTexturePath);
+                        textureCache->getTextureSlot(pbr.metallicTexturePath);
                     }
                     if (!pbr.roughnessTexturePath.empty()) {
-                        loadTexture(pbr.roughnessTexturePath);
-                        getTextureSlot(pbr.roughnessTexturePath);
+                        textureCache->loadTexture(pbr.roughnessTexturePath);
+                        textureCache->getTextureSlot(pbr.roughnessTexturePath);
                     }
                     if (!pbr.aoTexturePath.empty()) {
-                        loadTexture(pbr.aoTexturePath);
-                        getTextureSlot(pbr.aoTexturePath);
+                        textureCache->loadTexture(pbr.aoTexturePath);
+                        textureCache->getTextureSlot(pbr.aoTexturePath);
                     }
                     if (!pbr.normalTexturePath.empty()) {
-                        loadTexture(pbr.normalTexturePath);
-                        getTextureSlot(pbr.normalTexturePath);
+                        textureCache->loadTexture(pbr.normalTexturePath);
+                        textureCache->getTextureSlot(pbr.normalTexturePath);
                     }
                     if (!pbr.emissionTexturePath.empty()) {
-                        loadTexture(pbr.emissionTexturePath);
-                        getTextureSlot(pbr.emissionTexturePath);
+                        textureCache->loadTexture(pbr.emissionTexturePath);
+                        textureCache->getTextureSlot(pbr.emissionTexturePath);
                     }
                 }
             }
@@ -2680,28 +2027,28 @@ namespace render::mesh
                         ExtractedPBRValues pbr = extractPBRFromMaterial(*matData);
 
                         if (!pbr.albedoTexturePath.empty()) {
-                            loadTexture(pbr.albedoTexturePath);
-                            getTextureSlot(pbr.albedoTexturePath);
+                            textureCache->loadTexture(pbr.albedoTexturePath);
+                            textureCache->getTextureSlot(pbr.albedoTexturePath);
                         }
                         if (!pbr.metallicTexturePath.empty()) {
-                            loadTexture(pbr.metallicTexturePath);
-                            getTextureSlot(pbr.metallicTexturePath);
+                            textureCache->loadTexture(pbr.metallicTexturePath);
+                            textureCache->getTextureSlot(pbr.metallicTexturePath);
                         }
                         if (!pbr.roughnessTexturePath.empty()) {
-                            loadTexture(pbr.roughnessTexturePath);
-                            getTextureSlot(pbr.roughnessTexturePath);
+                            textureCache->loadTexture(pbr.roughnessTexturePath);
+                            textureCache->getTextureSlot(pbr.roughnessTexturePath);
                         }
                         if (!pbr.aoTexturePath.empty()) {
-                            loadTexture(pbr.aoTexturePath);
-                            getTextureSlot(pbr.aoTexturePath);
+                            textureCache->loadTexture(pbr.aoTexturePath);
+                            textureCache->getTextureSlot(pbr.aoTexturePath);
                         }
                         if (!pbr.normalTexturePath.empty()) {
-                            loadTexture(pbr.normalTexturePath);
-                            getTextureSlot(pbr.normalTexturePath);
+                            textureCache->loadTexture(pbr.normalTexturePath);
+                            textureCache->getTextureSlot(pbr.normalTexturePath);
                         }
                         if (!pbr.emissionTexturePath.empty()) {
-                            loadTexture(pbr.emissionTexturePath);
-                            getTextureSlot(pbr.emissionTexturePath);
+                            textureCache->loadTexture(pbr.emissionTexturePath);
+                            textureCache->getTextureSlot(pbr.emissionTexturePath);
                         }
                     }
                 }
@@ -2709,23 +2056,9 @@ namespace render::mesh
         }
 
         // Update texture descriptor set with bound textures
-        std::array<vk::ImageView, 8> imageViews;
-        std::array<vk::Sampler, 8> samplers;
-
-        for (int i = 0; i < 8; ++i) {
-            if (!boundTexturePaths[i].empty()) {
-                auto it = textureCache.find(boundTexturePaths[i]);
-                if (it != textureCache.end()) {
-                    imageViews[i] = it->second.view;
-                    samplers[i] = it->second.sampler;
-                    continue;
-                }
-            }
-            // Use default texture for empty slots
-            imageViews[i] = defaultTexture.view;
-            samplers[i] = defaultTexture.sampler;
-        }
-
-        const_cast<StaticMeshPipeline*>(this)->updateTextureDescriptors(imageViews, samplers);
+        const_cast<StaticMeshPipeline*>(this)->updateTextureDescriptors(
+            textureCache->getImageViews(),
+            textureCache->getSamplers()
+        );
     }
 }

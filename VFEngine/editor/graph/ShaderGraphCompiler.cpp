@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <string_view>
+#include <format>
 
 namespace editor::graph {
 
@@ -293,21 +294,13 @@ namespace editor::graph {
                         return std::visit([](auto&& arg) -> std::string {
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, float>) {
-                                char buffer[32];
-                                snprintf(buffer, sizeof(buffer), "%.6f", arg);
-                                return buffer;
+                                return std::format("{:.6f}", arg);
                             } else if constexpr (std::is_same_v<T, glm::vec2>) {
-                                char buffer[64];
-                                snprintf(buffer, sizeof(buffer), "vec2(%.6f, %.6f)", arg.x, arg.y);
-                                return buffer;
+                                return std::format("vec2({:.6f}, {:.6f})", arg.x, arg.y);
                             } else if constexpr (std::is_same_v<T, glm::vec3>) {
-                                char buffer[96];
-                                snprintf(buffer, sizeof(buffer), "vec3(%.6f, %.6f, %.6f)", arg.x, arg.y, arg.z);
-                                return buffer;
+                                return std::format("vec3({:.6f}, {:.6f}, {:.6f})", arg.x, arg.y, arg.z);
                             } else if constexpr (std::is_same_v<T, glm::vec4>) {
-                                char buffer[128];
-                                snprintf(buffer, sizeof(buffer), "vec4(%.6f, %.6f, %.6f, %.6f)", arg.x, arg.y, arg.z, arg.w);
-                                return buffer;
+                                return std::format("vec4({:.6f}, {:.6f}, {:.6f}, {:.6f})", arg.x, arg.y, arg.z, arg.w);
                             }
                             return "0.0";
                         }, *pin.defaultValue);
