@@ -1,9 +1,11 @@
 #include "InputServiceImpl.hpp"
 #include "../../Window/controllers/InputController.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/ApplicationEvents.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cstdint>
 
 namespace services {
 
@@ -111,9 +113,9 @@ namespace services {
     }
 
     void InputServiceImpl::update() {
-        if (inputController) {
-            inputController->update();
-        }
+        if (!inputController) return;
+
+        inputController->update();
     }
 
     bool InputServiceImpl::isInputCapturedByUI() const {
@@ -121,24 +123,8 @@ namespace services {
         return io.WantCaptureKeyboard || io.WantCaptureMouse;
     }
 
-    void InputServiceImpl::requestClose() {
-        if (inputController) {
-            inputController->requestClose();
-        }
-
-        // Publish notification
-        events::input::ApplicationCloseRequestedNotification notification;
-        events::EventDispatcher::instance().publish(notification);
-    }
-
     void InputServiceImpl::registerEventHandlers() {
         auto& dispatcher = events::EventDispatcher::instance();
-
-        // Command handlers
-        dispatcher.registerCommandHandler<events::input::CloseApplicationCommand>(
-            [this](const events::input::CloseApplicationCommand&) {
-                requestClose();
-            });
 
         // Query handlers
         dispatcher.registerQueryHandler<events::input::IsKeyDownQuery>(

@@ -1,14 +1,30 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <unordered_map>
 
 struct GLFWwindow;
 
 namespace window {
 	class Window;
 
-	// Input controller - Window layer API for input handling
-	// Contains all GLFW-specific input logic
+	
 	class InputController {
+	private:
+		Window* window;
+		GLFWwindow* glfwWindow;
+
+		// Mouse delta tracking
+		glm::vec2 lastMousePos{ 0.0f };
+		glm::vec2 mouseDelta{ 0.0f };
+		bool firstMouseUpdate{ true };
+
+		// Scroll delta tracking (accumulated between frames)
+		glm::vec2 scrollDelta{ 0.0f };
+
+		// Static registry mapping GLFW windows to InputController instances.
+		// Thread Safety: Only accessed from main thread where GLFW callbacks execute.
+		// GLFW requires all window operations on the main thread, so no synchronization needed.
+		inline static std::unordered_map<GLFWwindow*, InputController*> controllerRegistry;
 	public:
 		explicit InputController(Window* window);
 		~InputController();
@@ -27,27 +43,13 @@ namespace window {
 
 		// Frame update - must be called once per frame to track deltas
 		void update();
-
-		// Application Control
-		void requestClose();
-
-		// Access to underlying window
+		
 		Window* getWindow() const { return window; }
 
 		// GLFW callback handler (called internally by scroll callback)
 		void onScroll(double xoffset, double yoffset);
-
-	private:
-		Window* window;
-		GLFWwindow* glfwWindow;
-
-		// Mouse delta tracking
-		glm::vec2 lastMousePos{ 0.0f };
-		glm::vec2 mouseDelta{ 0.0f };
-		bool firstMouseUpdate{ true };
-
-		// Scroll delta tracking (accumulated between frames)
-		glm::vec2 scrollDelta{ 0.0f };
+		
+		static InputController* getControllerForWindow(GLFWwindow* window);
 	};
 
 }

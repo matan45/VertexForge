@@ -36,4 +36,14 @@ namespace controllers {
 		return mainLoop->getWindow();
 	}
 
+	void CoreInterface::setFrameCallback(std::function<void()> callback)
+	{
+		mainLoop->setFrameCallback(std::move(callback));
+	}
+
+	void CoreInterface::triggerResize()
+	{
+		mainLoop->triggerResize();
+	}
+
 };

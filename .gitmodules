@@ -40,3 +40,6 @@
 [submodule "dependencies/json"]
 	path = dependencies/json
 	url = https://github.com/nlohmann/json.git
+[submodule "dependencies/mType"]
+	path = dependencies/mType
+	url = https://github.com/matan45/mType.git

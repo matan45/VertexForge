@@ -19,7 +19,8 @@ end
 -- Group for Engine Projects
 group "Engine"
 
--- Project 1: Editor
+-- Project 1: Editor (ImGui-based editor application)
+-- Editor accesses engine through Services APIs and EditorBootstrap
 project "Editor"
    kind "ConsoleApp"
    language "C++"
@@ -28,7 +29,7 @@ project "Editor"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
    files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp","resources/editor/**.vfImage" }
-   
+
    includedirs {
 	  "dependencies/imgui",
 	  "dependencies/ImGuizmo",
@@ -37,10 +38,11 @@ project "Editor"
 	  "dependencies/glm",
 	  "dependencies/entt/single_include",
 	  "VFEngine/utilities",
-	  "VFEngine/core/controllers",
+	  "VFEngine/core/bootstrap",          -- For EditorBootstrap
+	  "VFEngine/core/controllers",        -- For ImguiWindow base class
 	  "dependencies/IconFontCppHeaders",
 	  "VFEngine/import/controllers",
-	  "VFEngine/services"               -- Services layer interfaces
+	  "VFEngine/services"                 -- Services layer interfaces
    }
 
    links {
@@ -190,7 +192,7 @@ project "Graphics"
       optimize "On"
       links { "shaderc_shared.lib" }
 
--- Project 4: Runtime (Moved after Core and Graphics)
+-- Project 4: Runtime (Standalone game runtime - NO Editor/Import dependencies)
 project "Runtime"
    kind "ConsoleApp"
    language "C++"
@@ -201,11 +203,16 @@ project "Runtime"
    files { "VFEngine/runtime/**.hpp", "VFEngine/runtime/**.cpp" }
 
    includedirs {
-      "VFEngine/core/controllers",
-      "VFEngine/graphics/controllers"
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "VFEngine/utilities",
+      "VFEngine/services",              -- Services interfaces only
+      "VFEngine/core/bootstrap"         -- For RuntimeBootstrap
+      -- NOTE: NO VFEngine/core/controllers, NO VFEngine/graphics/controllers
    }
 
-   links { "Core"}  -- Link against Core and Graphics
+   links { "Services", "Core" }  -- Core linked for RuntimeBootstrap, not direct access
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -244,6 +251,7 @@ project "Utilities"
 
 
 -- Project: Services (Event System, Service Interfaces, Service Implementations)
+-- Services provides the abstraction layer - NO direct Core dependencies
 project "Services"
    kind "StaticLib"
    language "C++"
@@ -257,16 +265,16 @@ project "Services"
       "dependencies/spdlog/include",
       "dependencies/glm",
       "dependencies/entt/single_include",
-      "dependencies/glfw/include",
+      "dependencies/glfw/include",        -- For Window types in InputService
       "dependencies/imgui",
       "dependencies/json/single_include",
       "VFEngine/utilities",
-      "VFEngine/core/controllers",
-      "VFEngine/Window",
+      "VFEngine/window/controllers",      -- For Window types in InputService
       vulkanLibPath.."/Include"
+      -- NOTE: NO VFEngine/core/controllers - Services uses provider interfaces
    }
 
-   links { "Utilities", "Window" }  -- Import is Editor-level, not Services dependency
+   links { "Utilities", "Window" }  -- Window needed for InputServiceImpl
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -444,6 +452,45 @@ project "jolt"
       defines { "NDEBUG" }
       optimize "On"
 
+
+-- Project: mType (Scripting language interpreter)
+project "mType"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/mtype/mType/**.hpp",
+      "dependencies/mtype/mType/**.cpp"
+   }
+
+   -- Exclude main entry point and tests (for standalone executable)
+   removefiles {
+      "dependencies/mtype/mType/run/**",
+      "dependencies/mtype/mType/tests/**"
+   }
+
+   includedirs {
+      "dependencies/mtype/mType"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "MTYPE_SIMD_ENABLED" }
+
+   -- Platform-specific SIMD configurations
+   filter "system:windows"
+      systemversion "latest"
+
+   filter { "system:windows", "configurations:Release" }
+      buildoptions { "/arch:AVX2" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
 
 
 -- Project: assimp and softal need to build with cmake...

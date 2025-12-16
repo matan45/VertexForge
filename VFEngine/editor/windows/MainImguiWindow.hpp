@@ -38,12 +38,11 @@ namespace windows
 		events::SubscriptionToken sceneClearedToken;
 
 	public:
-		MainImguiWindow();
+		explicit MainImguiWindow();
 		~MainImguiWindow() override;
 
 		void draw() override;
-
-		// Set reference to editor camera (called by ViewPort or editor initialization)
+		
 		void setEditorCamera(editor::EditorCamera* camera) { editorCameraRef = camera; }
 
 	private:

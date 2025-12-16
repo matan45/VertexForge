@@ -3,31 +3,33 @@
 #include <GLFW/glfw3.h>
 
 namespace window {
-
-	// Static callback function for GLFW scroll events
+	
 	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-		auto* controller = static_cast<InputController*>(glfwGetWindowUserPointer(window));
+		auto* controller = InputController::getControllerForWindow(window);
 		if (controller) {
 			controller->onScroll(xoffset, yoffset);
 		}
+	}
+
+	InputController* InputController::getControllerForWindow(GLFWwindow* window) {
+		auto it = controllerRegistry.find(window);
+		return (it != controllerRegistry.end()) ? it->second : nullptr;
 	}
 
 	InputController::InputController(Window* window)
 		: window(window)
 		, glfwWindow(window ? window->getWindowPtr() : nullptr) {
 		if (glfwWindow) {
-			// Store this pointer for callback access
-			glfwSetWindowUserPointer(glfwWindow, this);
-			// Register scroll callback
+			// Register in static map (doesn't conflict with Window's user pointer)
+			controllerRegistry[glfwWindow] = this;
 			glfwSetScrollCallback(glfwWindow, scrollCallback);
 		}
 	}
 
 	InputController::~InputController() {
 		if (glfwWindow) {
-			// Clear the scroll callback
 			glfwSetScrollCallback(glfwWindow, nullptr);
-			glfwSetWindowUserPointer(glfwWindow, nullptr);
+			controllerRegistry.erase(glfwWindow);
 		}
 	}
 
@@ -99,12 +101,6 @@ namespace window {
 		// Accumulate scroll delta (can have multiple scroll events per frame)
 		scrollDelta.x += static_cast<float>(xoffset);
 		scrollDelta.y += static_cast<float>(yoffset);
-	}
-
-	void InputController::requestClose() {
-		if (glfwWindow) {
-			glfwSetWindowShouldClose(glfwWindow, GLFW_TRUE);
-		}
 	}
 
 }

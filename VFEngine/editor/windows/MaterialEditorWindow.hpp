@@ -14,32 +14,16 @@ namespace editor::graph
     class ShaderGraphEditor;
 }
 
-namespace controllers
-{
-    class MaterialPreviewController;
-}
-
 namespace windows
 {
     class MaterialEditorWindow : public controllers::imguiHandler::ImguiWindow
     {
-    public:
-        explicit MaterialEditorWindow(const std::string& materialPath);
-        ~MaterialEditorWindow() override;
-
-        void draw() override;
-        bool shouldClose() const override { return !isOpen; }
-
-        const std::string& getMaterialPath() const { return materialPath; }
-
     private:
         std::string materialPath;
         std::string windowTitle;
         std::shared_ptr<material::MaterialData> materialData;
         std::unique_ptr<editor::graph::ShaderGraphEditor> graphEditor;
-
-        // Preview rendering
-        std::unique_ptr<controllers::MaterialPreviewController> previewController;
+        // Preview rendering - uses 'this' pointer as instanceId for service calls
         std::unique_ptr<editor::OrbitCamera> previewCamera;
         bool previewNeedsInit = true;
 
@@ -53,6 +37,16 @@ namespace windows
         float previewPanelWidth = 250.0f;
         bool isDraggingPreview = false; // Track if drag started in preview
 
+    public:
+        explicit MaterialEditorWindow(const std::string& materialPath);
+        ~MaterialEditorWindow() override;
+
+        void draw() override;
+        bool shouldClose() const override { return !isOpen; }
+
+        const std::string& getMaterialPath() const { return materialPath; }
+
+    private:
         void initEditor();
         void loadMaterial();
         void saveMaterial();

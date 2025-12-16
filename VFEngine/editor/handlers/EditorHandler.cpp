@@ -1,121 +1,143 @@
 #include "EditorHandler.hpp"
+#include "EditorBootstrap.hpp"
 #include "impl/SceneServiceImpl.hpp"
-#include "impl/RenderServiceImpl.hpp"
+#include "impl/EditorRenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
-#include "impl/ResourceServiceImpl.hpp"
-#include "scene/LevelHandler.hpp"
+#include "impl/WindowStateServiceImpl.hpp"
+#include "impl/PreviewServiceImpl.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/ApplicationEvents.hpp"
 #include "Import.hpp"
-#include "config/Config.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace handlers {
 	EditorHandler::EditorHandler()
-		: coreInterface{ std::make_unique<controllers::CoreInterface>() }
-		, offScreenInterface{ std::make_unique<controllers::OffScreen>() }
+		: bootstrap{ std::make_unique<core::EditorBootstrap>() }
 		, windowImguiHandler{ std::make_unique<WindowImguiHandler>() }
 	{
 	}
 
 	EditorHandler::~EditorHandler() = default;
-	
+
 
 	void EditorHandler::init()
 	{
+		bootstrap->init();
 		
-		coreInterface->init();
+		controllers::Import::initialize();
+
+		// Initialize services with providers from bootstrap
 		initializeServices();
-		
+
+		// Set up frame callback to update services each frame
+		bootstrap->setFrameCallback([this]() {
+			if (inputService) {
+				inputService->update();
+			}
+			if (windowStateService) {
+				windowStateService->update();
+			}
+		});
+
+		// Subscribe to window events from Services
+		setupEventSubscriptions();
+
 		windowImguiHandler->init();
-		offScreenInterface->init();
 	}
 
 	void EditorHandler::run() const
 	{
-		coreInterface->run();
+		bootstrap->run();
 	}
 
 	void EditorHandler::cleanUp()
 	{
+		// Unsubscribe from events before cleanup
+		cleanupEventSubscriptions();
+
 		windowImguiHandler->cleanUp();
 
 		// Reset services before graphics cleanup to release Vulkan resources
+		previewService.reset();
 		renderService.reset();
 		sceneService.reset();
+		windowStateService.reset();
 		inputService.reset();
-		resourceService.reset();
-
-		offScreenInterface->cleanUp();
-		coreInterface->cleanUp();
+		
+		bootstrap->cleanUp();
 	}
 
 	void EditorHandler::initializeServices()
 	{
-		// Get shared instances from the level/core
-		auto level = scene::LevelHandler::getInstance();
-		auto sceneGraphSystem = level->getSceneGraphSystem();
-
-		// Create service implementations
-		auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
-		auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(offScreenInterface.get());
-		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(coreInterface->getWindow());
-
-		sceneService = sceneServiceImpl;
-		renderService = renderServiceImpl;
-		inputService = inputServiceImpl;
+		// Create service implementations using providers from bootstrap
+		sceneService = std::make_shared<services::SceneServiceImpl>(bootstrap->getSceneGraphSystem());
+		renderService = std::make_shared<services::EditorRenderServiceImpl>(
+			bootstrap->getOffScreenProvider(),
+			bootstrap->getEditorTextureProvider()
+		);
+		inputService = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
+		windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());
+		previewService = std::make_shared<services::PreviewServiceImpl>(
+			bootstrap->getMaterialPreviewProvider(),
+			bootstrap->getMeshPreviewProvider()
+		);
 
 		// Register event handlers for command/query pattern
-		sceneServiceImpl->registerEventHandlers();
-		renderServiceImpl->registerEventHandlers();
-		inputServiceImpl->registerEventHandlers();
+		sceneService->registerEventHandlers();
+		renderService->registerEventHandlers();
+		inputService->registerEventHandlers();
+		windowStateService->registerEventHandlers();
+		previewService->registerEventHandlers();
+	}
 
-		// Create resource service with import delegate
-		auto resourceServiceImpl = std::make_shared<services::ResourceServiceImpl>();
+	void EditorHandler::setupEventSubscriptions()
+	{
+		auto& dispatcher = events::EventDispatcher::instance();
 
-		// Set up import delegate to bridge to Import controller
-		services::ImportDelegate importDelegate;
-		importDelegate.initialize = []() {
-			controllers::Import::initialize();
-		};
-		importDelegate.importFiles = [](const std::vector<services::ImportFileRequest>& files,
-		                                services::ImportProgressCallback progressCallback) -> services::ImportResultData {
-			std::vector<importConfig::ImportFiles> importFiles;
-			for (const auto& file : files) {
-				importConfig::ImportConfig config;
-				config.isImageFlipVertically = file.flipVertically;
-				importFiles.emplace_back(file.path, config);
-			}
-			// Convert progress callback to Import's callback type
-			controllers::ImportProgressCallback importProgressCallback = nullptr;
-			if (progressCallback) {
-				importProgressCallback = [progressCallback](std::string_view currentFile,
-				                                             uint32_t fileIndex,
-				                                             uint32_t totalFiles,
-				                                             float fileProgress) {
-					progressCallback(currentFile, fileIndex, totalFiles, fileProgress);
-				};
-			}
-			auto controllerResult = controllers::Import::importFiles(importFiles, importProgressCallback);
+		// Subscribe to window resize events
+		resizeSubscription = dispatcher.subscribe<events::application::WindowResizedNotification>(
+			[this](const events::application::WindowResizedNotification&) {
+				bootstrap->triggerResize();
+			});
 
-			// Convert controller result to service result
-			services::ImportResultData result;
-			result.successCount = controllerResult.successCount;
-			result.failureCount = controllerResult.failureCount;
-			for (const auto& fileResult : controllerResult.fileResults) {
-				services::ImportFileResultData serviceFileResult;
-				serviceFileResult.sourcePath = fileResult.sourcePath;
-				serviceFileResult.fileName = fileResult.fileName;
-				serviceFileResult.success = fileResult.success;
-				serviceFileResult.errorMessage = fileResult.errorMessage;
-				result.fileResults.push_back(std::move(serviceFileResult));
-			}
-			return result;
-		};
-		importDelegate.setLocation = [](const std::string& path) {
-			controllers::Import::setLocation(path);
-		};
+		// Subscribe to window minimize events (pause rendering when minimized)
+		minimizeSubscription = dispatcher.subscribe<events::application::WindowMinimizedNotification>(
+			[](const events::application::WindowMinimizedNotification&) {
+				// Could pause rendering or other expensive operations here
+			});
 
-		resourceServiceImpl->setImportDelegate(importDelegate);
-		resourceServiceImpl->registerEventHandlers();
-		resourceService = resourceServiceImpl;
+		// Subscribe to window restore events
+		restoreSubscription = dispatcher.subscribe<events::application::WindowRestoredNotification>(
+			[](const events::application::WindowRestoredNotification&) {
+				// Could resume rendering or other operations here
+			});
+
+		// Subscribe to window focus events
+		focusSubscription = dispatcher.subscribe<events::application::WindowFocusedNotification>(
+			[](const events::application::WindowFocusedNotification&) {
+				// Could handle focus changes (e.g., pause input when unfocused)
+			});
+	}
+
+	void EditorHandler::cleanupEventSubscriptions()
+	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
+		if (resizeSubscription.isValid()) {
+			dispatcher.unsubscribe(resizeSubscription);
+			resizeSubscription = {};
+		}
+		if (minimizeSubscription.isValid()) {
+			dispatcher.unsubscribe(minimizeSubscription);
+			minimizeSubscription = {};
+		}
+		if (restoreSubscription.isValid()) {
+			dispatcher.unsubscribe(restoreSubscription);
+			restoreSubscription = {};
+		}
+		if (focusSubscription.isValid()) {
+			dispatcher.unsubscribe(focusSubscription);
+			focusSubscription = {};
+		}
 	}
 }

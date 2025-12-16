@@ -6,11 +6,13 @@
 
 namespace services {
 
-    // Render service interface - abstracts rendering operations
-    // Presentation layer uses this instead of direct OffScreen/TextureController access
+    // Base render service interface - shared between Editor and Runtime
     class IRenderService {
     public:
         virtual ~IRenderService() = default;
+
+        // Register CQRS event handlers
+        virtual void registerEventHandlers() = 0;
 
         // ============================================
         // Viewport Rendering
@@ -43,19 +45,6 @@ namespace services {
 
         // Get current IBL path (if any)
         virtual std::optional<std::string> getIBLPath() const = 0;
-
-        // ============================================
-        // Editor Textures (for UI icons, previews)
-        // ============================================
-
-        // Load a texture for editor UI (icons, previews)
-        virtual EditorTextureHandle loadEditorTexture(const std::string& path) = 0;
-
-        // Load an HDR texture for editor UI (IBL preview)
-        virtual EditorTextureHandle loadEditorHDRTexture(const std::string& path) = 0;
-
-        // Release an editor texture
-        virtual void releaseEditorTexture(const EditorTextureHandle& handle) = 0;
 
         // ============================================
         // Render State

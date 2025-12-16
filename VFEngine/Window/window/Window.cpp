@@ -22,6 +22,8 @@ namespace window {
 
 		glfwSetWindowUserPointer(window, this); // Set the user pointer to access the class
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+		glfwSetWindowIconifyCallback(window, windowIconifyCallback);
+		glfwSetWindowFocusCallback(window, windowFocusCallback);
 
 		setWindowIcon("../../resources/editor/window-icon.vfImage");
 	}
@@ -32,6 +34,20 @@ namespace window {
 		userWindow->width = width;
 		userWindow->height = height;
 		userWindow->isResized = true;
+	}
+
+	void Window::windowIconifyCallback(GLFWwindow* window, int iconified)
+	{
+		auto userWindow = static_cast<Window*>(glfwGetWindowUserPointer(window));
+		userWindow->isMinimized = (iconified == GLFW_TRUE);
+		userWindow->minimizeStateChanged = true;
+	}
+
+	void Window::windowFocusCallback(GLFWwindow* window, int focused)
+	{
+		auto userWindow = static_cast<Window*>(glfwGetWindowUserPointer(window));
+		userWindow->isFocused = (focused == GLFW_TRUE);
+		userWindow->focusStateChanged = true;
 	}
 
 	vk::SurfaceKHR Window::createWindowSurface(const vk::UniqueInstance& instance) const
@@ -71,8 +87,8 @@ namespace window {
 		auto dataPtr = iconData.get();
 		// Create GLFWimage and assign the loaded image data
 		GLFWimage icon;
-		icon.width = dataPtr->width;
-		icon.height = dataPtr->height;
+		icon.width = static_cast<int>(dataPtr->width);
+		icon.height = static_cast<int>(dataPtr->height);
 		icon.pixels = dataPtr->textureData.data();
 
 		// Set the icon for the GLFW window

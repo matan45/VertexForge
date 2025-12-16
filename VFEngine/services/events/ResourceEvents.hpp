@@ -7,43 +7,9 @@
 namespace events::resource {
 
     // ============================================
-    // COMMANDS - Operations that trigger resource operations
-    // ============================================
-
-    struct ImportFilesCommand : ICommand<> {
-        std::vector<services::ImportFileRequest> files;
-
-        std::string_view getName() const override { return "ImportFiles"; }
-    };
-
-    struct SetImportLocationCommand : ICommand<> {
-        std::string path;
-
-        std::string_view getName() const override { return "SetImportLocation"; }
-    };
-
-    struct CancelImportCommand : ICommand<> {
-        std::string_view getName() const override { return "CancelImport"; }
-    };
-
-    // ============================================
-    // QUERIES - Read-only operations
-    // ============================================
-
-    struct GetImportLocationQuery : IQuery<std::string> {
-        std::string_view getName() const override { return "GetImportLocation"; }
-    };
-
-    struct IsImportingQuery : IQuery<bool> {
-        std::string_view getName() const override { return "IsImporting"; }
-    };
-
-    struct GetImportProgressQuery : IQuery<float> {
-        std::string_view getName() const override { return "GetImportProgress"; }
-    };
-
-    // ============================================
-    // NOTIFICATIONS - State change broadcasts
+    // NOTIFICATIONS - Import state broadcasts (pub/sub)
+    // Editor calls Import directly; these notifications allow
+    // decoupled UI components (e.g., ImportProgressWindow) to react.
     // ============================================
 
     struct ImportStartedNotification : INotification {
@@ -63,12 +29,6 @@ namespace events::resource {
         std::vector<services::ImportResult> results;
 
         std::string_view getName() const override { return "ImportCompleted"; }
-    };
-
-    struct ImportLocationChangedNotification : INotification {
-        std::string newLocation;
-
-        std::string_view getName() const override { return "ImportLocationChanged"; }
     };
 
 }

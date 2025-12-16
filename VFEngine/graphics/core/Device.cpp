@@ -227,9 +227,6 @@ namespace core {
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
-		// Note: Device-level validation layers are deprecated in modern Vulkan.
-		// Validation layers are now set only at the instance level.
-
 		try {
 			logicalDevice = physicalDevice.createDeviceUnique(createInfo);
 			// Initialize dispatcher with device for device-level functions

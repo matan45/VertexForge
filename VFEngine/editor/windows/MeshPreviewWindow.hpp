@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/DTOs.hpp"
+#include <math/Frustum.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -11,11 +12,6 @@ namespace editor
     class OrbitCamera;
 }
 
-namespace controllers
-{
-    class MeshPreviewController;
-}
-
 namespace windows
 {
     class MeshPreviewWindow : public controllers::imguiHandler::ImguiWindow
@@ -24,8 +20,9 @@ namespace windows
         std::string meshPath;
         std::string windowTitle;
         std::unique_ptr<editor::OrbitCamera> camera;
-        std::unique_ptr<controllers::MeshPreviewController> controller;
-        
+
+        // Mesh preview is handled via PreviewService (EventDispatcher)
+        math::AABB meshBounds;  // Cached bounds for camera fitting
         std::vector<services::SubMeshInfo> subMeshes;
         int selectedSubMesh = -1;  // -1 = all submeshes
         

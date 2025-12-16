@@ -1,8 +1,9 @@
 #include "MeshPreviewWindow.hpp"
 #include "../camera/OrbitCamera.hpp"
-#include "../../graphics/controllers/MeshPreviewController.hpp"
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/PreviewEvents.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <filesystem>
 
@@ -11,19 +12,20 @@ namespace windows
     MeshPreviewWindow::MeshPreviewWindow(const std::string& meshFilePath)
         : meshPath(meshFilePath)
         , camera(std::make_unique<editor::OrbitCamera>())
-        , controller(std::make_unique<controllers::MeshPreviewController>())
     {
-        // Extract filename for window title
         std::filesystem::path path(meshFilePath);
         windowTitle = "Mesh Preview: " + path.filename().string();
     }
 
     MeshPreviewWindow::~MeshPreviewWindow()
     {
-        if (controller)
-        {
-            controller->cleanUp();
-        }
+        services::events::preview::UnloadPreviewMeshCommand unloadCmd;
+        unloadCmd.instanceId = services::PreviewInstanceId(this);
+        events::EventDispatcher::instance().execute(unloadCmd);
+
+        services::events::preview::CleanUpMeshPreviewCommand cleanupCmd;
+        cleanupCmd.instanceId = services::PreviewInstanceId(this);
+        events::EventDispatcher::instance().execute(cleanupCmd);
     }
 
     void MeshPreviewWindow::draw()
@@ -75,13 +77,26 @@ namespace windows
 
     void MeshPreviewWindow::initRenderer()
     {
-        controller->init();
+        // Initialize mesh preview via PreviewService (using 'this' as instanceId)
+        services::events::preview::InitMeshPreviewCommand initCmd;
+        initCmd.instanceId = services::PreviewInstanceId(this);
+        events::EventDispatcher::instance().execute(initCmd);
 
-        math::AABB bounds;
-        if (controller->loadMesh(meshPath, bounds))
+        // Load mesh via PreviewService
+        services::events::preview::LoadPreviewMeshCommand loadCmd;
+        loadCmd.instanceId = services::PreviewInstanceId(this);
+        loadCmd.meshPath = meshPath;
+        auto result = events::EventDispatcher::instance().execute(loadCmd);
+
+        if (result.success)
         {
-            camera->fitToBounds(bounds);
-            subMeshes = controller->getSubMeshInfo();
+            meshBounds = result.bounds;
+            camera->fitToBounds(meshBounds);
+
+            // Get submesh info via PreviewService
+            services::events::preview::GetPreviewMeshSubMeshInfoQuery subMeshQuery;
+            subMeshQuery.instanceId = services::PreviewInstanceId(this);
+            subMeshes = events::EventDispatcher::instance().query(subMeshQuery);
         }
     }
 
@@ -91,32 +106,38 @@ namespace windows
         {
             return;
         }
-
-        // Update camera aspect ratio
         camera->setAspectRatio(width / height);
-
-        // Build model matrix from position, rotation, and scale (TRS order)
+        
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, meshPosition);
         model = glm::rotate(model, glm::radians(meshRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
         model = glm::scale(model, glm::vec3(meshScale));
-        controller->setModelMatrix(model);
+        
+        services::MeshPreviewParams meshParams;
+        meshParams.modelMatrix = model;
+        meshParams.highlightedSubMesh = selectedSubMesh;
+        services::events::preview::SetMeshPreviewParamsCommand meshCmd;
+        meshCmd.instanceId = services::PreviewInstanceId(this);
+        meshCmd.params = meshParams;
+        events::EventDispatcher::instance().execute(meshCmd);
+        
+        services::events::preview::UpdateMeshCameraCommand cameraCmd;
+        cameraCmd.instanceId = services::PreviewInstanceId(this);
+        cameraCmd.view = camera->getViewMatrix();
+        cameraCmd.projection = camera->getProjectionMatrix();
+        cameraCmd.cameraPos = camera->getPosition();
+        events::EventDispatcher::instance().execute(cameraCmd);
 
-        // Update camera matrices in the controller
-        controller->updateCamera(
-            camera->getViewMatrix(),
-            camera->getProjectionMatrix(),
-            camera->getPosition()
-        );
+        // Render via PreviewService
+        services::events::preview::RenderMeshPreviewQuery renderQuery;
+        renderQuery.instanceId = services::PreviewInstanceId(this);
+        auto textureHandle = events::EventDispatcher::instance().query(renderQuery);
 
-        // Render and display
-        void* texture = controller->render();
-        if (texture)
+        if (textureHandle.imguiDescriptorSet)
         {
-            ImGui::Image(texture, ImVec2(width, height));
-
+            ImGui::Image(textureHandle.imguiDescriptorSet, ImVec2(width, height));
         }
     }
 
@@ -136,7 +157,7 @@ namespace windows
         if (ImGui::Selectable("All Submeshes", allSelected))
         {
             selectedSubMesh = -1;
-            controller->setHighlightedSubMesh(-1);
+            // Highlight is updated via SetMeshPreviewParamsCommand in drawViewport
         }
 
         ImGui::Separator();
@@ -150,7 +171,7 @@ namespace windows
             if (ImGui::Selectable(info.name.c_str(), isSelected))
             {
                 selectedSubMesh = static_cast<int>(i);
-                controller->setHighlightedSubMesh(selectedSubMesh);
+                // Highlight is updated via SetMeshPreviewParamsCommand in drawViewport
             }
 
             // Show tooltip with details
@@ -182,13 +203,11 @@ namespace windows
 
         ImGui::Separator();
         ImGui::Spacing();
-
-        // Transform controls
+        
         if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
-
-            // Position
+            
             ImGui::Text("Pos X");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -205,8 +224,7 @@ namespace windows
             ImGui::DragFloat("##PosZ", &meshPosition.z, 0.1f, -1000.0f, 1000.0f, "%.2f");
 
             ImGui::Spacing();
-
-            // Rotation
+            
             ImGui::Text("Rot X");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -223,8 +241,7 @@ namespace windows
             ImGui::SliderFloat("##RotZ", &meshRotation.z, -180.0f, 180.0f, "%.0f");
 
             ImGui::Spacing();
-
-            // Scale
+            
             ImGui::Text("Scale");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -241,12 +258,11 @@ namespace windows
                 meshRotation = glm::vec3(0.0f);
                 meshScale = 1.0f;
             }
-
-            // Fit camera button
+            
             if (ImGui::Button("Fit Camera", ImVec2(-1, 0)))
             {
-                math::AABB bounds = controller->getMeshBounds();
-                camera->fitToBounds(bounds);
+                // Use cached bounds from when mesh was loaded
+                camera->fitToBounds(meshBounds);
             }
         }
         

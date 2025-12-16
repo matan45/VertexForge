@@ -7,10 +7,7 @@
 #include <optional>
 
 namespace services {
-
-    // Data Transfer Objects (DTOs) for cross-layer communication
-    // These are value types that can be safely passed between layers
-    // without creating dependencies on internal implementations
+    
 
     struct TransformData {
         glm::vec3 position{ 0.0f, 0.0f, 0.0f };
@@ -42,14 +39,13 @@ namespace services {
         bool showBoundingBox = false;
     };
 
-    // Material component data
+    
     struct MaterialData {
         std::string defaultMaterial;  // .vfMat path for unmapped submeshes
         std::map<std::string, std::string> subMeshMaterials;  // submesh NAME -> .vfMat path
         std::map<std::string, float> parameterOverrides;  // Runtime parameter tweaks
     };
-
-    // Submesh information for mesh preview
+    
     struct SubMeshInfo {
         std::string name;
         uint32_t vertexCount = 0;
@@ -86,8 +82,7 @@ namespace services {
             return nullptr;
         }
     };
-
-    // Viewport rendering result
+    
     struct ViewportTextureHandle {
         void* imguiDescriptorSet = nullptr;
         uint32_t width = 0;
@@ -95,17 +90,14 @@ namespace services {
 
         bool isValid() const { return imguiDescriptorSet != nullptr; }
     };
-
-    // Resource import request
+    
     struct ImportFileRequest {
         std::string path;
         bool flipVertically = false;
     };
-
-    // Resource import result
+    
     struct ImportResult {
         std::string sourcePath;
-        std::string outputPath;
         bool success = false;
         std::string errorMessage;
     };
@@ -118,8 +110,7 @@ namespace services {
 
         bool isValid() const { return imguiDescriptorSet != nullptr; }
     };
-
-    // Camera input/movement
+    
     struct CameraMovement {
         glm::vec3 deltaPosition{ 0.0f };
         glm::vec2 deltaRotation{ 0.0f };  // yaw, pitch

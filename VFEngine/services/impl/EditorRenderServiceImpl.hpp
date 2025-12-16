@@ -1,41 +1,43 @@
 #pragma once
-#include "../interfaces/IRenderService.hpp"
+#include "../interfaces/IEditorRenderService.hpp"
 #include "../events/RenderEvents.hpp"
 #include "../events/SceneEvents.hpp"
+#include "../providers/IOffScreenProvider.hpp"
+#include "../providers/IEditorTextureProvider.hpp"
 #include <memory>
 #include <unordered_map>
 
-namespace controllers {
-    class OffScreen;
-}
-
-namespace dto {
-    class EditorTexture;
-}
-
 namespace services {
+    
+    class EditorRenderServiceImpl : public IEditorRenderService {
+    private:
+        IOffScreenProvider* offScreenProvider;
+        IEditorTextureProvider* textureProvider;
+        std::optional<std::string> currentIBLPath;
+        uint32_t viewportWidth = 0;
+        uint32_t viewportHeight = 0;
+        uint64_t frameCounter = 0;
 
-    class RenderServiceImpl : public IRenderService {
+        std::unordered_map<void*, EditorTextureHandle> loadedTextures;
+        events::SubscriptionToken meshDataChangedToken;
+
     public:
-        explicit RenderServiceImpl(controllers::OffScreen* offScreen);
-        ~RenderServiceImpl() override;
+        explicit EditorRenderServiceImpl(IOffScreenProvider* offScreenProvider,
+                                         IEditorTextureProvider* textureProvider);
+        ~EditorRenderServiceImpl() override = default;
 
-        // Register all command and query handlers with the EventDispatcher
-        void registerEventHandlers();
-
-        // Viewport Rendering
+        void registerEventHandlers() override;
+        
         ViewportTextureHandle getViewportTexture() override;
         void resizeViewport(uint32_t width, uint32_t height) override;
         void getViewportSize(uint32_t& width, uint32_t& height) const override;
-
-        // IBL (Image-Based Lighting)
+        
         bool setIBL(const std::string& hdrPath) override;
         void updateIBLCamera(const glm::mat4& view, const glm::mat4& projection) override;
         void removeIBL() override;
         bool hasIBL() const override;
         std::optional<std::string> getIBLPath() const override;
-
-        // Editor Textures
+        
         EditorTextureHandle loadEditorTexture(const std::string& path) override;
         EditorTextureHandle loadEditorHDRTexture(const std::string& path) override;
         void releaseEditorTexture(const EditorTextureHandle& handle) override;
@@ -44,7 +46,8 @@ namespace services {
         bool isReady() const override;
         uint64_t getFrameNumber() const override;
 
-        // Mesh Operations
+    private:
+        
         std::string loadMesh(const std::string& meshPath);
         void unloadMesh(const std::string& meshId);
         void updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
@@ -52,19 +55,6 @@ namespace services {
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
         void prepareFrameMeshes();
-
-    private:
-        controllers::OffScreen* offScreen;
-        std::optional<std::string> currentIBLPath;
-        uint32_t viewportWidth = 0;
-        uint32_t viewportHeight = 0;
-        uint64_t frameCounter = 0;
-
-        // Track loaded editor textures for cleanup
-        std::unordered_map<void*, std::unique_ptr<dto::EditorTexture>> loadedTextures;
-
-        // Subscription token for mesh preloading
-        events::SubscriptionToken meshDataChangedToken;
     };
 
 }

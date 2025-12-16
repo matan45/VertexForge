@@ -10,6 +10,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/ResourceEvents.hpp"
+#include "Import.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include <IconsFontAwesome6.h>
 #include <algorithm>
@@ -22,6 +23,24 @@ namespace windows
 		// Just load directory without setting import location
 		if (fs::exists(currentPath) && fs::is_directory(currentPath)) {
 			loadDirectory(currentPath);
+		}
+
+		// Subscribe to import completion to auto-refresh
+		auto& dispatcher = events::EventDispatcher::instance();
+		importCompletedToken = dispatcher.subscribe<events::resource::ImportCompletedNotification>(
+			[this](const events::resource::ImportCompletedNotification&) {
+				// Refresh current directory after import completes
+				if (fs::exists(currentPath) && fs::is_directory(currentPath)) {
+					loadDirectory(currentPath);
+				}
+			});
+	}
+
+	ContentBrowser::~ContentBrowser()
+	{
+		auto& dispatcher = events::EventDispatcher::instance();
+		if (importCompletedToken.isValid()) {
+			dispatcher.unsubscribe(importCompletedToken);
 		}
 	}
 
@@ -60,9 +79,7 @@ namespace windows
 		}
 		
 		if (!importLocationSet) {
-			events::resource::SetImportLocationCommand cmd;
-			cmd.path = currentPath.string();
-			dispatcher.execute(cmd);
+			controllers::Import::setLocation(currentPath.string());
 			importLocationSet = true;
 		}
 		
@@ -159,6 +176,13 @@ namespace windows
 				}
 			}
 			ImGui::PopStyleColor();
+
+			// Handle deferred navigation after loop completes (avoids iterator invalidation)
+			if (!pendingNavigation.empty())
+			{
+				navigateTo(pendingNavigation);
+				pendingNavigation.clear();
+			}
 		}
 
 		ImGui::Columns(1);
@@ -326,18 +350,13 @@ namespace windows
 					if (ImGui::ImageButton(folderName.c_str(), folderIcon.imguiDescriptorSet,
 						ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE)))
 					{
-						navigateFolder = true;
+						// Defer navigation until after the loop to avoid iterator invalidation
+						pendingNavigation = asset.path;
 					}
 				}
 
 				ImGui::TextWrapped("%s", folderName.c_str());
 				ImGui::EndGroup();
-
-				if (navigateFolder)
-				{
-					navigateFolder = false;
-					navigateTo(asset.path);
-				}
 			}
 			else
 			{
@@ -678,13 +697,12 @@ namespace windows
 		{
 			if (entry.is_directory())
 			{
-				ImGui::Text(ICON_FA_FOLDER ""); // Add folder icon before the name
-				ImGui::SameLine(); // Place the folder name next to the icon
+				ImGui::Text(ICON_FA_FOLDER ""); 
+				ImGui::SameLine();
 				// Use a tree node for directories
 				if (ImGui::TreeNode(StringUtil::wstringToUtf8(entry.path().filename().wstring()).c_str()))
 				{
-					// If the directory is selected, navigate to it in the content browser.
-					if (ImGui::IsItemClicked())
+					if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 					{
 						navigateTo(entry.path());
 					}
@@ -692,7 +710,7 @@ namespace windows
 					// Recursively draw child directories
 					drawFolderTree(entry.path());
 
-					ImGui::TreePop(); // Close the tree node.
+					ImGui::TreePop();
 				}
 			}
 		}
@@ -717,11 +735,7 @@ namespace windows
 		if (fs::exists(path) && fs::is_directory(path))
 		{
 			currentPath = path;
-
-			events::resource::SetImportLocationCommand cmd;
-			cmd.path = currentPath.string();
-			events::EventDispatcher::instance().execute(cmd);
-
+			controllers::Import::setLocation(currentPath.string());
 			loadDirectory(currentPath);
 		}
 	}
