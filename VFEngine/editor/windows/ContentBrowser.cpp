@@ -737,6 +737,8 @@ namespace windows
 			currentPath = path;
 			controllers::Import::setLocation(currentPath.string());
 			loadDirectory(currentPath);
+			selectedFile.clear();
+			selectedType = AssetType::Other;
 		}
 	}
 }
