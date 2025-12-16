@@ -3,8 +3,7 @@
 #include <glm/glm.hpp>
 
 namespace serialization {
-
-    // GLM vec3 serialization - stored as array [x, y, z]
+    
     inline void to_json(nlohmann::json& j, const glm::vec3& v) {
         j = nlohmann::json::array({ v.x, v.y, v.z });
     }
