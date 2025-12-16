@@ -4,6 +4,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
+#include <iostream>
 
 namespace render::ibl
 {
@@ -16,12 +17,14 @@ namespace render::ibl
 
     void IrradianceGenerator::generate(const core::Texture& hdrTexture, const vk::CommandPool& commandPool)
     {
+        std::cout << "[DEBUG IrradianceGen] Starting generate..." << std::endl;
+
         // Image and Sampler Create
         core::ImageInfoRequest cubeMapImageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         cubeMapImageRequest.format = vk::Format::eR16G16B16A16Sfloat;
         cubeMapImageRequest.layers = 6;
-        cubeMapImageRequest.width = CUBE_MAP_SIZE;
-        cubeMapImageRequest.height = CUBE_MAP_SIZE;
+        cubeMapImageRequest.width = IRRADIANCE_MAP_SIZE;
+        cubeMapImageRequest.height = IRRADIANCE_MAP_SIZE;
         cubeMapImageRequest.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled |
             vk::ImageUsageFlagBits::eColorAttachment;
         cubeMapImageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
@@ -33,6 +36,7 @@ namespace render::ibl
         cubeMapImageViewRequest.layerCount = 6;
         cubeMapImageViewRequest.imageType = vk::ImageViewType::eCube;
         core::Utilities::createImageView(cubeMapImageViewRequest, imageIrradianceCube.imageView);
+        std::cout << "[DEBUG IrradianceGen] Cubemap created at " << IRRADIANCE_MAP_SIZE << "x" << IRRADIANCE_MAP_SIZE << std::endl;
 
         vk::SamplerCreateInfo samplerInfo;
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -227,14 +231,14 @@ namespace render::ibl
         vk::Viewport viewport;
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = static_cast<float>(CUBE_MAP_SIZE);
-        viewport.height = static_cast<float>(CUBE_MAP_SIZE);
+        viewport.width = static_cast<float>(IRRADIANCE_MAP_SIZE);
+        viewport.height = static_cast<float>(IRRADIANCE_MAP_SIZE);
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
 
         vk::Rect2D scissor;
         scissor.offset = vk::Offset2D(0, 0);
-        scissor.extent = vk::Extent2D(CUBE_MAP_SIZE, CUBE_MAP_SIZE);
+        scissor.extent = vk::Extent2D(IRRADIANCE_MAP_SIZE, IRRADIANCE_MAP_SIZE);
 
         vk::PipelineViewportStateCreateInfo viewportState;
         viewportState.viewportCount = 1;
@@ -284,14 +288,15 @@ namespace render::ibl
         pipelineInfo.subpass = 0;
 
         vk::Pipeline graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
+        std::cout << "[DEBUG IrradianceGen] Pipeline created, starting face rendering..." << std::endl;
 
         // ImageHelper
         OffScreenHelper imageHelper;
 
         core::ImageInfoRequest imageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         imageRequest.format = vk::Format::eR16G16B16A16Sfloat;
-        imageRequest.width = CUBE_MAP_SIZE;
-        imageRequest.height = CUBE_MAP_SIZE;
+        imageRequest.width = IRRADIANCE_MAP_SIZE;
+        imageRequest.height = IRRADIANCE_MAP_SIZE;
         imageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc;
         core::Utilities::createImage(imageRequest, imageHelper.image, imageHelper.memory);
 
@@ -304,8 +309,8 @@ namespace render::ibl
         framebufferInfo.renderPass = renderPass;
         framebufferInfo.attachmentCount = 1;
         framebufferInfo.pAttachments = &imageHelper.view;
-        framebufferInfo.width = CUBE_MAP_SIZE;
-        framebufferInfo.height = CUBE_MAP_SIZE;
+        framebufferInfo.width = IRRADIANCE_MAP_SIZE;
+        framebufferInfo.height = IRRADIANCE_MAP_SIZE;
         framebufferInfo.layers = 1;
 
         imageHelper.framebuffer = device.getLogicalDevice().createFramebuffer(framebufferInfo);
@@ -338,13 +343,15 @@ namespace render::ibl
         vk::RenderPassBeginInfo renderPassBeginInfo{};
         renderPassBeginInfo.renderPass = renderPass;
         renderPassBeginInfo.framebuffer = imageHelper.framebuffer;
-        renderPassBeginInfo.renderArea = vk::Rect2D({0, 0}, {CUBE_MAP_SIZE, CUBE_MAP_SIZE});
+        renderPassBeginInfo.renderArea = vk::Rect2D({0, 0}, {IRRADIANCE_MAP_SIZE, IRRADIANCE_MAP_SIZE});
         renderPassBeginInfo.clearValueCount = 1;
         renderPassBeginInfo.pClearValues = &clearColor;
 
         // DRAW COMMAND - render each face separately to ensure uniform buffer is correct
         for (uint32_t face = 0; face < 6; ++face)
         {
+            std::cout << "[DEBUG IrradianceGen] Rendering face " << face << "..." << std::endl;
+
             // Update uniform buffer with this face's view matrix
             updateUniformBuffer(CameraViewMatrix::captureViews[face], CameraViewMatrix::captureProjection,
                 uboUniformBufferMemory);
@@ -405,14 +412,17 @@ namespace render::ibl
                 vk::ImageAspectFlagBits::eColor);
 
             // Submit and wait for this face to complete before moving to next
+            std::cout << "[DEBUG IrradianceGen] Submitting face " << face << " command buffer..." << std::endl;
             vk::Fence faceFence = device.getLogicalDevice().createFence({});
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), faceCommandBuffer, faceFence);
 
+            std::cout << "[DEBUG IrradianceGen] Waiting for face " << face << " fence..." << std::endl;
             if (vk::Result result = device.getLogicalDevice().waitForFences(faceFence, VK_TRUE, UINT64_MAX); result !=
                 vk::Result::eSuccess)
             {
                 loggerError("Failed to wait for Fence IBL face {}:", face);
             }
+            std::cout << "[DEBUG IrradianceGen] Face " << face << " completed." << std::endl;
             device.getLogicalDevice().destroyFence(faceFence);
         }
 

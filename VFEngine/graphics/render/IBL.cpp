@@ -7,6 +7,7 @@
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Texture.hpp"
+#include <iostream>
 
 namespace render
 {
@@ -39,19 +40,38 @@ namespace render
 
     void IBL::init(std::string_view path)
     {
+        std::cout << "[DEBUG IBL] Starting init with path: " << path << std::endl;
+
         hdrTexture = std::make_shared<core::Texture>(device);
-        hdrTexture->loadHDRFromFile(path, vk::Format::eR32G32B32Sfloat, false);
+        hdrTexture->loadHDRFromFile(path, vk::Format::eR32G32B32A32Sfloat, false);
+        std::cout << "[DEBUG IBL] HDR texture loaded" << std::endl;
 
         // Generate environment cubemap (sharp, for skybox and prefilter input)
+        std::cout << "[DEBUG IBL] Generating environment cubemap..." << std::endl;
         envCubemapGen->generate(*hdrTexture, commandPool.get());
+        std::cout << "[DEBUG IBL] Environment cubemap generated" << std::endl;
+
         // Generate irradiance map (convolved/blurry, for diffuse IBL)
+        std::cout << "[DEBUG IBL] Generating irradiance map..." << std::endl;
         irradianceGen->generate(*hdrTexture, commandPool.get());
+        std::cout << "[DEBUG IBL] Irradiance map generated" << std::endl;
+
+        std::cout << "[DEBUG IBL] Generating BRDF LUT..." << std::endl;
         brdfLUTGen->generate(commandPool.get());
+        std::cout << "[DEBUG IBL] BRDF LUT generated" << std::endl;
+
         // Prefilter uses environment cubemap (not irradiance)
+        std::cout << "[DEBUG IBL] Generating prefiltered env map..." << std::endl;
         prefilteredGen->generate(envCubemapGen->getImageData(), commandPool.get());
+        std::cout << "[DEBUG IBL] Prefiltered env map generated" << std::endl;
+
         // Skybox uses environment cubemap (sharp)
+        std::cout << "[DEBUG IBL] Initializing skybox renderer..." << std::endl;
         skyboxRenderer->init(envCubemapGen->getImageData());
+        std::cout << "[DEBUG IBL] Skybox renderer initialized" << std::endl;
+
         iblInitialized = true;
+        std::cout << "[DEBUG IBL] Init complete!" << std::endl;
     }
 
     void IBL::recreate()

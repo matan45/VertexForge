@@ -11,6 +11,8 @@
 namespace render::ibl
 {
     static constexpr uint32_t CUBE_MAP_SIZE = 512;
+    // Irradiance maps are low-frequency and don't need high resolution
+    static constexpr uint32_t IRRADIANCE_MAP_SIZE = 32;
 
     struct ImageData
     {

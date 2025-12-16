@@ -3,6 +3,7 @@
 #include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
+#include <vector>
 
 namespace core
 {
@@ -34,12 +35,29 @@ namespace core
     {
         auto textureData = resource::ResourceManager::loadHDRAsync(filePath);
         auto texturePtr = textureData.get();
-        vk::DeviceSize imageSize = texturePtr->width * texturePtr->height * texturePtr->numbersOfChannels * sizeof(
-            float);
+
+        if (!texturePtr || texturePtr->width == 0 || texturePtr->height == 0 || texturePtr->textureData.empty())
+        {
+            loggerError("Failed to load HDR texture from: {}", filePath);
+            return;
+        }
 
         imageData.height = texturePtr->height;
         imageData.width = texturePtr->width;
-        imageData.numbersOfChannels = texturePtr->numbersOfChannels;
+
+        // Convert 3-channel RGB to 4-channel RGBA (RGB32F not supported on most GPUs)
+        const uint32_t pixelCount = texturePtr->width * texturePtr->height;
+        std::vector<float> rgba4Data(pixelCount * 4);
+        const float* srcData = texturePtr->textureData.data();
+        for (uint32_t i = 0; i < pixelCount; ++i)
+        {
+            rgba4Data[i * 4 + 0] = srcData[i * 3 + 0];
+            rgba4Data[i * 4 + 1] = srcData[i * 3 + 1];
+            rgba4Data[i * 4 + 2] = srcData[i * 3 + 2];
+            rgba4Data[i * 4 + 3] = 1.0f;
+        }
+        imageData.numbersOfChannels = 4;
+        vk::DeviceSize imageSize = pixelCount * 4 * sizeof(float);
 
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingBufferMemory;
@@ -55,16 +73,16 @@ namespace core
             result != vk::Result::eSuccess)
         {
             loggerError("failed to map memory");
+            return;
         }
-        memcpy(data, texturePtr->textureData.data(), imageSize);
+        memcpy(data, rgba4Data.data(), imageSize);
         device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-
 
         ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageInfo.width = texturePtr->width;
         imageInfo.height = texturePtr->height;
-        imageInfo.format = format;
-        imageInfo.tiling = vk::ImageTiling::eLinear;
+        imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         Utilities::createImage(imageInfo, image, imageMemory);
@@ -90,7 +108,7 @@ namespace core
         createSampler();
 
         core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), image);
-        imageDepthRequest.format = format;
+        imageDepthRequest.format = vk::Format::eR32G32B32A32Sfloat;
         Utilities::createImageView(imageDepthRequest, imageView);
         if (isEditor)
         {
