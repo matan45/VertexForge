@@ -14,17 +14,15 @@ namespace editor::graph {
 
             // PBR material inputs with sensible defaults
             addInputPin("Albedo", material::PinType::Vec3, glm::vec3(0.8f, 0.8f, 0.8f));
-            addInputPin("Normal", material::PinType::Vec3, glm::vec3(0.0f, 0.0f, 1.0f));  // Tangent space default
+            addInputPin("Normal", material::PinType::Vec3, glm::vec3(0.5f, 0.5f, 1.0f));  // Default normal in texture space [0,1]
             addInputPin("Metallic", material::PinType::Float, 0.0f);
             addInputPin("Roughness", material::PinType::Float, 0.5f);
             addInputPin("AO", material::PinType::Float, 1.0f);
             addInputPin("Emission", material::PinType::Vec3, glm::vec3(0.0f));
-            addInputPin("EmissionStrength", material::PinType::Float, 0.0f);
+            addInputPin("EmissionStrength", material::PinType::Float, 1.0f);
             addInputPin("Opacity", material::PinType::Float, 1.0f);
-            addInputPin("IBLDiffuse", material::PinType::Float, 1.0f);    // IBL diffuse intensity
-            addInputPin("IBLSpecular", material::PinType::Float, 0.5f);   // IBL specular/reflection intensity
-
-            // No output pins - this is a terminal node
+            addInputPin("Diffuse", material::PinType::Float, 1.0f);
+            addInputPin("Specular", material::PinType::Float, 0.5f);
         }
 
         std::string generateCode(const std::string& outputVarPrefix,
@@ -51,7 +49,7 @@ namespace editor::graph {
 
             // Get input values or use defaults
             std::string albedo = inputVarNames.count("Albedo") ? inputVarNames.at("Albedo") : "vec3(0.8, 0.8, 0.8)";
-            std::string normal = inputVarNames.count("Normal") ? inputVarNames.at("Normal") : "vec3(0.0, 0.0, 1.0)";
+            std::string normal = inputVarNames.count("Normal") ? inputVarNames.at("Normal") : "vec3(0.5, 0.5, 1.0)";
             std::string metallic = inputVarNames.count("Metallic") ? toFloat(inputVarNames.at("Metallic"), "0.0") : "0.0";
             std::string roughness = inputVarNames.count("Roughness") ? toFloat(inputVarNames.at("Roughness"), "0.5") : "0.5";
             std::string ao = inputVarNames.count("AO") ? toFloat(inputVarNames.at("AO"), "1.0") : "1.0";
@@ -68,7 +66,8 @@ namespace editor::graph {
             code += "    float mat_metallic = clamp(" + metallic + ", 0.0, 1.0);\n";
             code += "    float mat_roughness = clamp(" + roughness + ", 0.04, 1.0);\n";  // Min roughness to avoid divide by zero
             code += "    float mat_ao = clamp(" + ao + ", 0.0, 1.0);\n";
-            code += "    vec3 mat_emission = " + emission + " * " + emissionStrength + ";\n";
+            code += "    vec3 mat_emissionColor = " + emission + ";\n";
+            code += "    float mat_emissionStrength = " + emissionStrength + ";\n";
             code += "    float mat_opacity = clamp(" + opacity + ", 0.0, 1.0);\n";
             code += "    float mat_iblDiffuse = clamp(" + iblDiffuse + ", 0.0, 2.0);\n";
             code += "    float mat_iblSpecular = clamp(" + iblSpecular + ", 0.0, 2.0);\n";
@@ -91,7 +90,8 @@ namespace editor::graph {
         static std::string getMetallicVar() { return "mat_metallic"; }
         static std::string getRoughnessVar() { return "mat_roughness"; }
         static std::string getAOVar() { return "mat_ao"; }
-        static std::string getEmissionVar() { return "mat_emission"; }
+        static std::string getEmissionColorVar() { return "mat_emissionColor"; }
+        static std::string getEmissionStrengthVar() { return "mat_emissionStrength"; }
         static std::string getOpacityVar() { return "mat_opacity"; }
         static std::string getIBLDiffuseVar() { return "mat_iblDiffuse"; }
         static std::string getIBLSpecularVar() { return "mat_iblSpecular"; }
