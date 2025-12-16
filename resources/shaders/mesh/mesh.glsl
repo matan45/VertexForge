@@ -147,7 +147,8 @@ void main() {
     float alpha = pc.albedo.a;
     if (pc.albedoTexIdx >= 0.0) {
         vec4 albedoSample = texture(u_Textures[int(pc.albedoTexIdx)], fragTexCoord);
-        albedo = albedoSample.rgb;
+        // Convert from sRGB to linear space for PBR calculations
+        albedo = pow(albedoSample.rgb, vec3(2.2));
         alpha = albedoSample.a;
     }
 
@@ -173,11 +174,27 @@ void main() {
         ao = texture(u_Textures[int(pc.aoTexIdx)], fragTexCoord).r;
     }
 
-    // Normal mapping
+    // Normal mapping using derivative-based TBN construction
     if (pc.normalTexIdx >= 0.0) {
         vec3 tangentNormal = texture(u_Textures[int(pc.normalTexIdx)], fragTexCoord).rgb * 2.0 - 1.0;
-        // Simple normal perturbation (proper TBN would require tangent/bitangent)
-        N = normalize(N + tangentNormal * 0.5);
+
+        // Construct TBN matrix from screen-space derivatives
+        vec3 pos_dx = dFdx(fragWorldPos);
+        vec3 pos_dy = dFdy(fragWorldPos);
+        vec2 uv_dx = dFdx(fragTexCoord);
+        vec2 uv_dy = dFdy(fragTexCoord);
+
+        // Calculate tangent and bitangent
+        vec3 T = normalize(pos_dx * uv_dy.y - pos_dy * uv_dx.y);
+        vec3 B = normalize(pos_dy * uv_dx.x - pos_dx * uv_dy.x);
+
+        // Ensure orthogonal TBN
+        T = normalize(T - N * dot(N, T));
+        B = cross(N, T);
+
+        // Transform normal from tangent space to world space
+        mat3 TBN = mat3(T, B, N);
+        N = normalize(TBN * tangentNormal);
     }
 
     vec3 R = reflect(-V, N);
@@ -208,7 +225,8 @@ void main() {
     // Add emission
     vec3 emissive = vec3(0.0);
     if (pc.emissionTexIdx >= 0.0) {
-        emissive = texture(u_Textures[int(pc.emissionTexIdx)], fragTexCoord).rgb;
+        // Convert emission from sRGB to linear
+        emissive = pow(texture(u_Textures[int(pc.emissionTexIdx)], fragTexCoord).rgb, vec3(2.2));
     } else {
         emissive = albedo * pc.emission;
     }

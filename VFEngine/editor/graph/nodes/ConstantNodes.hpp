@@ -1,5 +1,6 @@
 #pragma once
 #include "ShaderNode.hpp"
+#include <algorithm>
 
 namespace editor::graph {
 
@@ -266,8 +267,9 @@ namespace editor::graph {
                 }
             }
 
-            // Get texture index from properties
+            // Get texture index from properties (clamped to valid range 0-5)
             int texIndex = static_cast<int>(getPropertyValue<float>("textureIndex", 0.0f));
+            texIndex = std::clamp(texIndex, 0, 5);  // Max 6 textures per material (indices 0-5)
 
             std::string code;
             // Sample the texture - uses texture array indexed by textureIndex

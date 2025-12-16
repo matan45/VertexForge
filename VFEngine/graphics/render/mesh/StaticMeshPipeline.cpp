@@ -1051,16 +1051,6 @@ namespace render::mesh
         device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
     }
 
-    void StaticMeshPipeline::updateTextureDescriptors(
-        const std::array<vk::ImageView, 16>& imageViews,
-        const std::array<vk::Sampler, 16>& samplers)
-    {
-        // Legacy method - kept for backward compatibility but no longer used
-        // Per-material descriptor sets are now managed by MaterialTextureCache
-        (void)imageViews;
-        (void)samplers;
-    }
-
     void StaticMeshPipeline::createPipelineLayout()
     {
         // Push constant range for MeshPushConstants
@@ -1292,6 +1282,12 @@ namespace render::mesh
         if (descriptorSetLayout)
             device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
 
+        // Reset MaterialTextureCache descriptor resources before destroying layout
+        // (they share the same layout, so must be freed first)
+        if (textureCache) {
+            textureCache->resetDescriptorResources();
+        }
+
         // Clean up texture descriptor set (set 1)
         if (textureDescriptorPool)
         {
@@ -1409,12 +1405,17 @@ namespace render::mesh
             if (materialShaderCache) {
                 materialShaderCache->invalidateAll();
             }
+            // Note: Full texture cache invalidation not implemented (would need to clear all descriptor sets)
         } else {
             // Clear specific material immediately
             materialCache.erase(materialPath);
             // Also invalidate the compiled shader for this material
             if (materialShaderCache) {
                 materialShaderCache->invalidate(materialPath);
+            }
+            // Invalidate the per-material texture descriptor set
+            if (textureCache) {
+                textureCache->invalidateMaterialDescriptorSet(materialPath);
             }
         }
     }
@@ -2042,10 +2043,8 @@ namespace render::mesh
             materialCacheInvalidated = false;
         }
 
-        // Reset slot assignments for this frame
-        textureCache->resetSlotAssignments();
-
-        // Collect and load all unique textures from materials
+        // Load all unique materials and textures into cache
+        // Per-material descriptor sets are created on-demand in recordCommandBuffer
         for (const auto& meshData : meshDrawList) {
             // Get materials for this mesh
             std::string materialPath = meshData.defaultMaterialPath;
@@ -2070,27 +2069,21 @@ namespace render::mesh
                     // Load textures if paths are specified
                     if (!pbr.albedoTexturePath.empty()) {
                         textureCache->loadTexture(pbr.albedoTexturePath);
-                        textureCache->getTextureSlot(pbr.albedoTexturePath);
                     }
                     if (!pbr.metallicTexturePath.empty()) {
                         textureCache->loadTexture(pbr.metallicTexturePath);
-                        textureCache->getTextureSlot(pbr.metallicTexturePath);
                     }
                     if (!pbr.roughnessTexturePath.empty()) {
                         textureCache->loadTexture(pbr.roughnessTexturePath);
-                        textureCache->getTextureSlot(pbr.roughnessTexturePath);
                     }
                     if (!pbr.aoTexturePath.empty()) {
                         textureCache->loadTexture(pbr.aoTexturePath);
-                        textureCache->getTextureSlot(pbr.aoTexturePath);
                     }
                     if (!pbr.normalTexturePath.empty()) {
                         textureCache->loadTexture(pbr.normalTexturePath);
-                        textureCache->getTextureSlot(pbr.normalTexturePath);
                     }
                     if (!pbr.emissionTexturePath.empty()) {
                         textureCache->loadTexture(pbr.emissionTexturePath);
-                        textureCache->getTextureSlot(pbr.emissionTexturePath);
                     }
                 }
             }
@@ -2115,37 +2108,25 @@ namespace render::mesh
 
                         if (!pbr.albedoTexturePath.empty()) {
                             textureCache->loadTexture(pbr.albedoTexturePath);
-                            textureCache->getTextureSlot(pbr.albedoTexturePath);
                         }
                         if (!pbr.metallicTexturePath.empty()) {
                             textureCache->loadTexture(pbr.metallicTexturePath);
-                            textureCache->getTextureSlot(pbr.metallicTexturePath);
                         }
                         if (!pbr.roughnessTexturePath.empty()) {
                             textureCache->loadTexture(pbr.roughnessTexturePath);
-                            textureCache->getTextureSlot(pbr.roughnessTexturePath);
                         }
                         if (!pbr.aoTexturePath.empty()) {
                             textureCache->loadTexture(pbr.aoTexturePath);
-                            textureCache->getTextureSlot(pbr.aoTexturePath);
                         }
                         if (!pbr.normalTexturePath.empty()) {
                             textureCache->loadTexture(pbr.normalTexturePath);
-                            textureCache->getTextureSlot(pbr.normalTexturePath);
                         }
                         if (!pbr.emissionTexturePath.empty()) {
                             textureCache->loadTexture(pbr.emissionTexturePath);
-                            textureCache->getTextureSlot(pbr.emissionTexturePath);
                         }
                     }
                 }
             }
         }
-
-        // Update texture descriptor set with bound textures
-        const_cast<StaticMeshPipeline*>(this)->updateTextureDescriptors(
-            textureCache->getImageViews(),
-            textureCache->getSamplers()
-        );
     }
 }

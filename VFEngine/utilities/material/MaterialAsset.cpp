@@ -590,6 +590,39 @@ namespace material {
                     material.cachedVertexShader = j["cachedShader"].value("vertexCode", "");
                     material.cachedFragmentShader = j["cachedShader"].value("fragmentCode", "");
                     material.needsRecompile = material.cachedFragmentShader.empty();
+
+                    // Check for outdated shaders using old texture array size (> 6 textures)
+                    // Current system uses 6 textures per material (indices 0-5)
+                    if (!material.needsRecompile && !material.cachedFragmentShader.empty()) {
+                        bool isOutdated = false;
+
+                        // Check for old array declaration (u_Textures[8] or higher)
+                        for (int size = 7; size <= 16; ++size) {
+                            std::string declPattern = "u_Textures[" + std::to_string(size) + "]";
+                            if (material.cachedFragmentShader.find(declPattern) != std::string::npos) {
+                                isOutdated = true;
+                                break;
+                            }
+                        }
+
+                        // Also check for array access beyond index 5 (u_Textures[6], etc.)
+                        if (!isOutdated) {
+                            for (int i = 6; i < 16; ++i) {
+                                std::string accessPattern = "u_Textures[" + std::to_string(i) + "]";
+                                if (material.cachedFragmentShader.find(accessPattern) != std::string::npos) {
+                                    isOutdated = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (isOutdated) {
+                            logWarningLimited("Material has outdated cached shader (uses > 6 textures), marking for recompile");
+                            material.needsRecompile = true;
+                            material.cachedVertexShader.clear();
+                            material.cachedFragmentShader.clear();
+                        }
+                    }
                 } else {
                     logWarningLimited("'cachedShader' field is not an object, ignoring cached shaders");
                 }

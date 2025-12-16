@@ -78,11 +78,6 @@ namespace render::mesh
             const std::array<vk::ImageView, 6>& imageViews,
             const std::array<vk::Sampler, 6>& samplers);
 
-        // Legacy method for texture descriptor update (kept for backward compatibility)
-        void updateTextureDescriptors(
-            const std::array<vk::ImageView, 16>& imageViews,
-            const std::array<vk::Sampler, 16>& samplers);
-
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;
 

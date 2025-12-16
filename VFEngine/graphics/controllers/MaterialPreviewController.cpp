@@ -499,7 +499,8 @@ namespace controllers
             }
         }
 
-        // Load textures and assign slots
+        // Load textures and assign to FIXED slots matching the main pipeline:
+        // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
         std::array<std::string, 6> texturePaths = {
             params.albedoTexturePath,
             params.metallicTexturePath,
@@ -509,31 +510,29 @@ namespace controllers
             params.emissionTexturePath
         };
 
-        for (const auto& path : texturePaths)
+        // Clear previous slot assignments and assign textures to fixed slots
+        for (int i = 0; i < 6; ++i)
         {
-            if (!path.empty() && textureManager->textureCache.find(path) == textureManager->textureCache.end())
-            {
-                // Find free slot
-                int freeSlot = -1;
-                for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i)
-                {
-                    if (textureManager->textureSlots[i].empty())
-                    {
-                        freeSlot = i;
-                        break;
-                    }
-                }
+            textureManager->textureSlots[i].clear();
+        }
 
-                if (freeSlot >= 0)
+        for (int i = 0; i < 6; ++i)
+        {
+            const std::string& path = texturePaths[i];
+            if (!path.empty())
+            {
+                // Load texture if not already in cache
+                if (textureManager->textureCache.find(path) == textureManager->textureCache.end())
                 {
                     auto tex = loadTextureFromFileImpl(device, path);
                     if (tex.valid)
                     {
                         textureManager->textureCache[path] = std::move(tex);
-                        textureManager->textureSlots[freeSlot] = path;
                         textureManager->texturesNeedUpdate = true;
                     }
                 }
+                // Always assign to fixed slot regardless of cache status
+                textureManager->textureSlots[i] = path;
             }
         }
 
@@ -671,13 +670,15 @@ namespace controllers
             renderData.emission = materialParams.emission;
         }
 
-        // Set texture indices based on loaded textures
-        renderData.albedoTexIdx = static_cast<float>(getTextureSlot(materialParams.albedoTexturePath));
-        renderData.metallicTexIdx = static_cast<float>(getTextureSlot(materialParams.metallicTexturePath));
-        renderData.roughnessTexIdx = static_cast<float>(getTextureSlot(materialParams.roughnessTexturePath));
-        renderData.aoTexIdx = static_cast<float>(getTextureSlot(materialParams.aoTexturePath));
-        renderData.normalTexIdx = static_cast<float>(getTextureSlot(materialParams.normalTexturePath));
-        renderData.emissionTexIdx = static_cast<float>(getTextureSlot(materialParams.emissionTexturePath));
+        // Set texture indices using FIXED slots matching the main pipeline:
+        // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
+        // Use -1.0f if no texture, otherwise use fixed slot index
+        renderData.albedoTexIdx = materialParams.albedoTexturePath.empty() ? -1.0f : 0.0f;
+        renderData.metallicTexIdx = materialParams.metallicTexturePath.empty() ? -1.0f : 1.0f;
+        renderData.roughnessTexIdx = materialParams.roughnessTexturePath.empty() ? -1.0f : 2.0f;
+        renderData.aoTexIdx = materialParams.aoTexturePath.empty() ? -1.0f : 3.0f;
+        renderData.normalTexIdx = materialParams.normalTexturePath.empty() ? -1.0f : 4.0f;
+        renderData.emissionTexIdx = materialParams.emissionTexturePath.empty() ? -1.0f : 5.0f;
 
         meshDrawList.push_back(renderData);
 

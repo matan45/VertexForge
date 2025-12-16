@@ -43,6 +43,10 @@ namespace render::mesh
         // Initialize descriptor resources (call after pipeline creates layout)
         void initDescriptorResources(vk::DescriptorSetLayout layout);
 
+        // Reset descriptor resources only (call when layout is recreated)
+        // This frees descriptor sets but keeps textures loaded
+        void resetDescriptorResources();
+
         // Cleanup all GPU resources
         void cleanUp();
 
@@ -72,14 +76,6 @@ namespace render::mesh
         vk::ImageView getViewForPath(const std::string& path) const;
         vk::Sampler getSamplerForPath(const std::string& path) const;
 
-        // Legacy methods for backward compatibility (global texture array)
-        int getTextureSlot(const std::string& path);
-        void resetSlotAssignments();
-        vk::ImageView getViewForSlot(int slot) const;
-        vk::Sampler getSamplerForSlot(int slot) const;
-        std::array<vk::ImageView, 16> getImageViews() const;
-        std::array<vk::Sampler, 16> getSamplers() const;
-
     private:
         core::Device& device;
         vk::CommandPool commandPool;
@@ -89,7 +85,6 @@ namespace render::mesh
             vk::DeviceMemory memory;
             vk::ImageView view;
             vk::Sampler sampler;
-            int slotIndex = -1;  // Legacy: slot in global array
         };
 
         // Texture cache (path -> GPU texture)
@@ -107,10 +102,6 @@ namespace render::mesh
 
         // Cache of material path -> descriptor set
         std::unordered_map<std::string, vk::DescriptorSet> materialDescriptorSets;
-
-        // Legacy: Currently bound textures (slot index -> path), max 16
-        std::array<std::string, 16> boundTexturePaths;
-        int nextTextureSlot = 0;
 
         void createDefaultTexture();
         void createDescriptorPool();
