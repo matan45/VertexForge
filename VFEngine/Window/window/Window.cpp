@@ -87,8 +87,8 @@ namespace window {
 		auto dataPtr = iconData.get();
 		// Create GLFWimage and assign the loaded image data
 		GLFWimage icon;
-		icon.width = dataPtr->width;
-		icon.height = dataPtr->height;
+		icon.width = static_cast<int>(dataPtr->width);
+		icon.height = static_cast<int>(dataPtr->height);
 		icon.pixels = dataPtr->textureData.data();
 
 		// Set the icon for the GLFW window

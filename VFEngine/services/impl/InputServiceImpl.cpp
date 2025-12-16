@@ -116,37 +116,6 @@ namespace services {
         if (!inputController) return;
 
         inputController->update();
-
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        // Check for window resize
-        if (inputController->isWindowResized()) {
-            events::application::WindowResizedNotification notification;
-            notification.width = inputController->getWindowWidth();
-            notification.height = inputController->getWindowHeight();
-            dispatcher.publish(notification);
-            inputController->resetResizeFlag();
-        }
-
-        // Check for minimize state changes
-        if (inputController->hasMinimizeStateChanged()) {
-            if (inputController->isWindowMinimized()) {
-                events::application::WindowMinimizedNotification notification;
-                dispatcher.publish(notification);
-            } else {
-                events::application::WindowRestoredNotification notification;
-                dispatcher.publish(notification);
-            }
-            inputController->resetMinimizeStateChanged();
-        }
-
-        // Check for focus state changes
-        if (inputController->hasFocusStateChanged()) {
-            events::application::WindowFocusedNotification notification;
-            notification.focused = inputController->isWindowFocused();
-            dispatcher.publish(notification);
-            inputController->resetFocusStateChanged();
-        }
     }
 
     bool InputServiceImpl::isInputCapturedByUI() const {
@@ -154,24 +123,8 @@ namespace services {
         return io.WantCaptureKeyboard || io.WantCaptureMouse;
     }
 
-    void InputServiceImpl::requestClose() {
-        if (inputController) {
-            inputController->requestClose();
-        }
-
-        // Publish notification
-        events::application::CloseRequestedNotification notification;
-        events::EventDispatcher::instance().publish(notification);
-    }
-
     void InputServiceImpl::registerEventHandlers() {
         auto& dispatcher = events::EventDispatcher::instance();
-
-        // Command handlers
-        dispatcher.registerCommandHandler<events::application::CloseCommand>(
-            [this](const events::application::CloseCommand&) {
-                requestClose();
-            });
 
         // Query handlers
         dispatcher.registerQueryHandler<events::input::IsKeyDownQuery>(

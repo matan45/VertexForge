@@ -31,6 +31,9 @@ namespace services {
     public:
         virtual ~IInputService() = default;
 
+        // Register CQRS event handlers
+        virtual void registerEventHandlers() = 0;
+
         // ============================================
         // Keyboard State
         // ============================================
@@ -82,12 +85,6 @@ namespace services {
         // Check if input is currently captured by ImGui
         virtual bool isInputCapturedByUI() const = 0;
 
-        // ============================================
-        // Application Control
-        // ============================================
-
-        // Request the application to close
-        virtual void requestClose() = 0;
     };
 
 }

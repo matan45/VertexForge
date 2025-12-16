@@ -3,7 +3,6 @@
 #include "EndianUtils.hpp"
 
 #include <fstream>
-#include <bit>  // For std::bit_cast
 
 namespace resource {
 
@@ -60,18 +59,12 @@ namespace resource {
 		audioData.channels = endian::readLE<uint32_t>(inFile);
 		audioData.frames = endian::readLE<uint32_t>(inFile);
 		audioData.totalDurationInSeconds = endian::readLE<uint32_t>(inFile);
-
-		// Read the size of the raw audio data (endian-safe)
+		
 		uint32_t dataSize = endian::readLE<uint32_t>(inFile);
 		
 		// Validate data size
 		if (dataSize == 0) {
 			vfLogError("Audio file has zero data size: {}", path);
-			return {};
-		}
-		
-		if (dataSize > 400 * 1024 * 1024) { // 400MB limit for audio data
-			vfLogError("Audio data size {} exceeds maximum limit", dataSize);
 			return {};
 		}
 		
@@ -84,10 +77,7 @@ namespace resource {
 			}
 		}
 
-		size_t bytesRemaining = dataSize;
-
 		audioData.data.reserve(dataSize / sizeof(short));  // Reserve space for the entire buffer
-		size_t currentOffset = 0;
 
 		// Read audio data in chunks (endian-safe)
 		size_t totalSamples = dataSize / sizeof(short);

@@ -16,7 +16,7 @@ namespace services {
         explicit InputServiceImpl(window::Window* window);
         ~InputServiceImpl() override;
         
-        void registerEventHandlers();
+        void registerEventHandlers() override;
         
         bool isKeyDown(int keyCode) const override;
         bool isKeyReleased(int keyCode) const override;
@@ -39,11 +39,8 @@ namespace services {
         void update() override;
         bool isInputCapturedByUI() const override;
 
-        // Application Control
-        void requestClose() override;
-
     private:
-       std::unique_ptr<window::InputController> inputController;  // Non-owning pointer to Window library
+       std::unique_ptr<window::InputController> inputController;
     };
 
 }

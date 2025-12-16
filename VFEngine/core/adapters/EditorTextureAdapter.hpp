@@ -15,8 +15,7 @@ namespace core
     public:
         explicit EditorTextureAdapter() = default;
         ~EditorTextureAdapter() override;
-
-        // IEditorTextureProvider implementation
+        
         services::EditorTextureData loadTexture(std::string_view path) override;
         services::EditorTextureData loadHdrTexture(std::string_view path) override;
         void releaseTexture(void* descriptorSet) override;

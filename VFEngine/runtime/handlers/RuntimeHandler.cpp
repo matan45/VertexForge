@@ -1,8 +1,9 @@
 #include "RuntimeHandler.hpp"
 #include "RuntimeBootstrap.hpp"
 #include "impl/SceneServiceImpl.hpp"
-#include "impl/RenderServiceImpl.hpp"
+#include "impl/RuntimeRenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
+#include "impl/WindowStateServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
 
@@ -14,20 +15,19 @@ namespace handlers {
     RuntimeHandler::~RuntimeHandler() = default;
 
     void RuntimeHandler::init() {
-        // Initialize core systems via bootstrap
         bootstrap->init();
-
-        // Initialize services with providers from bootstrap
+        
         initializeServices();
-
-        // Set up frame callback to update services each frame
+        
         bootstrap->setFrameCallback([this]() {
             if (inputService) {
                 inputService->update();
             }
+            if (windowStateService) {
+                windowStateService->update();
+            }
         });
-
-        // Subscribe to window events from Services
+        
         setupEventSubscriptions();
     }
 
@@ -36,45 +36,37 @@ namespace handlers {
     }
 
     void RuntimeHandler::cleanUp() {
-        // Unsubscribe from events before cleanup
         cleanupEventSubscriptions();
-
-        // Reset services before graphics cleanup to release Vulkan resources
+        
         renderService.reset();
         sceneService.reset();
+        windowStateService.reset();
         inputService.reset();
 
         // Clean up via bootstrap
         bootstrap->cleanUp();
     }
 
-    bool RuntimeHandler::loadScene(const std::string& scenePath) {
-        // TODO: Implement scene loading
+    bool RuntimeHandler::loadProject(const std::string& projectPath) {
+        // TODO: Implement project file
         // This will load a serialized scene file and populate the ECS
         return false;
     }
 
     void RuntimeHandler::initializeServices() {
-        // Get shared instances from the bootstrap
-        auto sceneGraphSystem = bootstrap->getSceneGraphSystem();
-
         // Create service implementations using providers from bootstrap
-        // nullTextureProvider is a member - ensures proper lifetime management
-        auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
-        auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(
-            bootstrap->getOffScreenProvider(),
-            &nullTextureProvider
+        sceneService = std::make_shared<services::SceneServiceImpl>(bootstrap->getSceneGraphSystem());
+        renderService = std::make_shared<services::RuntimeRenderServiceImpl>(
+            bootstrap->getOffScreenProvider()
         );
-        auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
-
-        sceneService = sceneServiceImpl;
-        renderService = renderServiceImpl;
-        inputService = inputServiceImpl;
+        inputService = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
+        windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());
 
         // Register event handlers for command/query pattern
-        sceneServiceImpl->registerEventHandlers();
-        renderServiceImpl->registerEventHandlers();
-        inputServiceImpl->registerEventHandlers();
+        sceneService->registerEventHandlers();
+        renderService->registerEventHandlers();
+        inputService->registerEventHandlers();
+        windowStateService->registerEventHandlers();
     }
 
     void RuntimeHandler::setupEventSubscriptions()

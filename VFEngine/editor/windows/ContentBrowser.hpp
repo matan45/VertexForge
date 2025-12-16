@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "imgui.h"
 #include "data/DTOs.hpp"
+#include "events/EventTypes.hpp"
 
 #include <string>
 #include <filesystem>
@@ -59,9 +60,12 @@ namespace windows
         services::EditorTextureHandle sceneIcon;
         services::EditorTextureHandle materialIcon;
 
-        bool navigateFolder = false;
+        std::string pendingNavigation;  // Deferred navigation to avoid iterator invalidation
         bool iconsLoaded = false;
         bool importLocationSet = false;
+
+        // Event subscription for auto-refresh after import
+        events::SubscriptionToken importCompletedToken;
 
         // Track open preview windows (key = file path)
         std::unordered_map<std::string, std::weak_ptr<MeshPreviewWindow>> openMeshPreviews;
@@ -74,7 +78,7 @@ namespace windows
 
     public:
         ContentBrowser();
-        ~ContentBrowser() override = default;
+        ~ContentBrowser() override;
 
         void draw() override;
 

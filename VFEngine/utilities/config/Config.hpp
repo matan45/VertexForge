@@ -28,7 +28,7 @@ namespace importConfig
 
     struct ImportFiles
     {
-        std::string_view path;
+        std::string path;  // Must own the string - views dangle when source is destroyed
         ImportConfig config;
 
         explicit ImportFiles(std::string_view path, const ImportConfig& config):

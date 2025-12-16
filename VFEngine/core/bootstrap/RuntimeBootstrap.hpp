@@ -32,8 +32,7 @@ namespace core
     private:
         std::unique_ptr<::controllers::CoreInterface> coreInterface;
         std::unique_ptr<::controllers::OffScreen> offScreen;
-
-        // Adapters that implement provider interfaces
+        
         std::unique_ptr<OffScreenAdapter> offScreenAdapter;
     public:
        explicit RuntimeBootstrap();

@@ -34,7 +34,7 @@ namespace services {
         ~SceneServiceImpl() override = default;
 
         // Register all command and query handlers with the EventDispatcher
-        void registerEventHandlers();
+        void registerEventHandlers() override;
 
         // Entity Lifecycle
         EntityHandle createEntity(const std::string& name,

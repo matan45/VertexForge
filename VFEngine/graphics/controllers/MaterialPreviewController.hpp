@@ -19,6 +19,7 @@ namespace imguiPass
 
 namespace controllers
 {
+    struct PreviewTextureGPU;
     
     struct PreviewMaterialParams
     {
@@ -45,8 +46,6 @@ namespace controllers
         // Material graph for dynamic evaluation (Time, Sin, Cos nodes)
         std::shared_ptr<material::MaterialData> materialData;
     };
-    
-    struct PreviewTextureGPU;
 
     class MaterialPreviewController
     {
@@ -68,18 +67,13 @@ namespace controllers
         struct TextureManagerImpl;
         std::unique_ptr<TextureManagerImpl> textureManager;
 
-        static std::optional<float> evaluateFloatValue(const material::ShaderGraph& graph, uint32_t nodeId, float time);
-        static std::optional<float> getInputFloat(const material::ShaderGraph& graph, uint32_t nodeId, const std::string& pinName, float time);
-        static float evaluateEmissionStrength(const material::ShaderGraph& graph, float time);
-
     public:
         explicit MaterialPreviewController();
         ~MaterialPreviewController();
 
         void init();
         void cleanUp();
-
-        // Update material parameters for preview
+        
         void setMaterialParams(const PreviewMaterialParams& params);
         const PreviewMaterialParams& getMaterialParams() const { return materialParams; }
 
@@ -95,5 +89,10 @@ namespace controllers
         std::string getLastShaderCompilationError() const;
 
         bool isInitialized() const { return initialized; }
+
+    private:
+        static std::optional<float> evaluateFloatValue(const material::ShaderGraph& graph, uint32_t nodeId, float time);
+        static std::optional<float> getInputFloat(const material::ShaderGraph& graph, uint32_t nodeId, const std::string& pinName, float time);
+        static float evaluateEmissionStrength(const material::ShaderGraph& graph, float time);
     };
 }

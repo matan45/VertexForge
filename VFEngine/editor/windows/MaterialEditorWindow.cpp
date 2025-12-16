@@ -448,8 +448,7 @@ namespace windows {
     void MaterialEditorWindow::drawPreviewPanel() {
         ImGui::Text("Preview");
         ImGui::Separator();
-
-        // Initialize preview on first draw
+        
         if (previewNeedsInit) {
             initPreview();
         }
@@ -464,12 +463,8 @@ namespace windows {
         {
             // Update camera aspect ratio
             previewCamera->setAspectRatio(1.0f);  // Square
-
-            // Handle mouse input for orbit
+            
             handlePreviewInput();
-
-            // Note: Preview material is updated only when Compile is clicked
-            // (see compileMaterial())
 
             auto& dispatcher = events::EventDispatcher::instance();
 
@@ -506,8 +501,7 @@ namespace windows {
         ImGui::EndChild();
 
         ImGui::Spacing();
-
-        // Quick material settings
+        
         if (materialData) {
             ImGui::Text("Blend Mode");
             const char* blendModes[] = { "Opaque", "Masked", "Translucent" };
@@ -616,8 +610,7 @@ namespace windows {
             ImGui::TextDisabled("Select a node to edit properties");
             return;
         }
-
-        // Find selected node
+        
         material::ShaderNode* selectedNode = materialData->graph.findNode(selectedId);
         if (!selectedNode) {
             ImGui::TextDisabled("Node not found");

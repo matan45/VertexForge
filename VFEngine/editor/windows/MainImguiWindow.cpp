@@ -142,8 +142,7 @@ namespace windows
 					importFiles.emplace_back(req.path, config);
 					filePaths.push_back(req.path);
 				}
-
-				// Publish start notification
+				
 				events::resource::ImportStartedNotification startNotif;
 				startNotif.files = filePaths;
 				dispatcher.publish(startNotif);
@@ -151,8 +150,7 @@ namespace windows
 				// Run import in background thread to not block UI
 				std::thread([importFiles = std::move(importFiles)]() {
 					auto& dispatcher = events::EventDispatcher::instance();
-
-					// Progress callback publishes notifications
+					
 					auto progressCallback = [&dispatcher](std::string_view currentFile,
 					                                       uint32_t /*fileIndex*/,
 					                                       uint32_t /*totalFiles*/,
@@ -164,8 +162,7 @@ namespace windows
 					};
 
 					auto result = controllers::Import::importFiles(importFiles, progressCallback);
-
-					// Publish completion notification
+					
 					events::resource::ImportCompletedNotification completeNotif;
 					for (const auto& fileResult : result.fileResults) {
 						services::ImportResult res;

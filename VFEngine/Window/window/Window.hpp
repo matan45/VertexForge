@@ -35,17 +35,14 @@ namespace window {
 		void closeWindow();
 		void pollEvents() const;
 		bool shouldClose() const;
-
-		// Resize state
+		
 		bool isWindowResized() const { return isResized; }
 		void resetResizeFlag() { isResized = false; }
-
-		// Minimize state
+		
 		bool isWindowMinimized() const { return isMinimized; }
 		bool hasMinimizeStateChanged() const { return minimizeStateChanged; }
 		void resetMinimizeStateChanged() { minimizeStateChanged = false; }
-
-		// Focus state
+		
 		bool isWindowFocused() const { return isFocused; }
 		bool hasFocusStateChanged() const { return focusStateChanged; }
 		void resetFocusStateChanged() { focusStateChanged = false; }

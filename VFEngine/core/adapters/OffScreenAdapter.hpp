@@ -16,8 +16,7 @@ namespace core
     public:
         explicit OffScreenAdapter(controllers::OffScreen* offScreen);
         ~OffScreenAdapter() override = default;
-
-        // IOffScreenProvider implementation
+        
         void init() override;
         void cleanUp() override;
         void* render() override;

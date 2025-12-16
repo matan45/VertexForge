@@ -2,14 +2,13 @@
 #include <memory>
 #include "WindowImguiHandler.hpp"
 
-// Service includes
 #include "interfaces/ISceneService.hpp"
-#include "interfaces/IRenderService.hpp"
+#include "interfaces/IEditorRenderService.hpp"
 #include "interfaces/IInputService.hpp"
+#include "interfaces/IWindowStateService.hpp"
 #include "interfaces/IPreviewService.hpp"
 #include "events/EventTypes.hpp"
 
-// Forward declaration for EditorBootstrap
 namespace core {
 	class EditorBootstrap;
 }
@@ -23,14 +22,13 @@ namespace handlers {
 		std::unique_ptr<core::EditorBootstrap> bootstrap;
 
 		std::unique_ptr<WindowImguiHandler> windowImguiHandler;
-
-		// Service implementations (stored to keep them alive)
+		
 		std::shared_ptr<services::ISceneService> sceneService;
-		std::shared_ptr<services::IRenderService> renderService;
+		std::shared_ptr<services::IEditorRenderService> renderService;
 		std::shared_ptr<services::IInputService> inputService;
+		std::shared_ptr<services::IWindowStateService> windowStateService;
 		std::shared_ptr<services::IPreviewService> previewService;
-
-		// Event subscription tokens
+		
 		events::SubscriptionToken resizeSubscription;
 		events::SubscriptionToken minimizeSubscription;
 		events::SubscriptionToken restoreSubscription;

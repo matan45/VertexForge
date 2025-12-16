@@ -3,7 +3,8 @@
 #include "../controllers/OffScreen.hpp"
 #include "../adapters/OffScreenAdapter.hpp"
 #include "../adapters/EditorTextureAdapter.hpp"
-#include "../adapters/PreviewAdapter.hpp"
+#include "../adapters/MaterialPreviewAdapter.hpp"
+#include "../adapters/MeshPreviewAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 
 namespace core
@@ -19,11 +20,12 @@ namespace core
     void EditorBootstrap::init()
     {
         coreInterface->init();
-        
+
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());
         textureAdapter = std::make_unique<EditorTextureAdapter>();
-        previewAdapter = std::make_unique<PreviewAdapter>();
-        
+        materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
+        meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
+
         offScreen->init();
     }
 
@@ -38,11 +40,12 @@ namespace core
         {
             offScreen->cleanUp();
         }
-        
-        previewAdapter.reset();
+
+        meshPreviewAdapter.reset();
+        materialPreviewAdapter.reset();
         textureAdapter.reset();
         offScreenAdapter.reset();
-        
+
         if (coreInterface)
         {
             coreInterface->cleanUp();
@@ -59,9 +62,14 @@ namespace core
         return textureAdapter.get();
     }
 
-    services::IPreviewProvider* EditorBootstrap::getPreviewProvider()
+    services::IMaterialPreviewProvider* EditorBootstrap::getMaterialPreviewProvider()
     {
-        return previewAdapter.get();
+        return materialPreviewAdapter.get();
+    }
+
+    services::IMeshPreviewProvider* EditorBootstrap::getMeshPreviewProvider()
+    {
+        return meshPreviewAdapter.get();
     }
 
     window::Window* EditorBootstrap::getWindow()

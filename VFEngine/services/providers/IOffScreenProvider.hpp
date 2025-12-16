@@ -14,16 +14,13 @@ namespace services {
         // Lifecycle
         virtual void init() = 0;
         virtual void cleanUp() = 0;
-
-        // Rendering
+        
         virtual void* render() = 0;
-
-        // IBL (Image-Based Lighting) API
+        
         virtual void iblSet(std::string_view iblPath) = 0;
         virtual void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection) = 0;
         virtual void iblRemove() = 0;
-
-        // Mesh API
+        
         virtual std::string meshLoad(std::string_view meshPath) = 0;
         virtual void meshUnload(const std::string& meshId) = 0;
         virtual void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,

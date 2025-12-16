@@ -20,6 +20,9 @@ namespace services {
     public:
         virtual ~IPreviewService() = default;
 
+        // Register CQRS event handlers
+        virtual void registerEventHandlers() = 0;
+
         // === Material Preview ===
 
         /**

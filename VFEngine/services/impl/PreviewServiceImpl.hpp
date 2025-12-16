@@ -4,34 +4,37 @@
 
 namespace services {
 
-    class IPreviewProvider;
+    class IMaterialPreviewProvider;
+    class IMeshPreviewProvider;
 
     /**
      * @brief Implementation of IPreviewService using provider abstraction.
      *
-     * This class delegates preview operations to an IPreviewProvider,
-     * which is implemented by Core/Graphics adapters.
+     * This class delegates preview operations to separate providers:
+     * - IMaterialPreviewProvider for material previews
+     * - IMeshPreviewProvider for mesh previews
      *
      * Supports multiple instances via instanceId parameter - each instance
      * gets its own independent preview (e.g., for multiple editor windows).
      *
-     * @note Provider must not be null - this is enforced via assertion.
+     * @note Providers must not be null - this is enforced via assertion.
      *       A null provider indicates a programming error during bootstrap.
      */
     class PreviewServiceImpl : public IPreviewService {
     public:
         /**
-         * @brief Construct with preview provider.
-         * @param provider Provider for preview operations (must not be null)
-         * @pre provider != nullptr
+         * @brief Construct with separate preview providers.
+         * @param materialProvider Provider for material preview operations (must not be null)
+         * @param meshProvider Provider for mesh preview operations (must not be null)
+         * @pre materialProvider != nullptr && meshProvider != nullptr
          */
-        explicit PreviewServiceImpl(IPreviewProvider* provider);
+        explicit PreviewServiceImpl(IMaterialPreviewProvider* materialProvider, IMeshPreviewProvider* meshProvider);
         ~PreviewServiceImpl() override;
 
         /**
          * @brief Register event handlers for CQRS pattern.
          */
-        void registerEventHandlers();
+        void registerEventHandlers() override;
 
         // === Material Preview (IPreviewService) ===
         void initMaterialPreview(PreviewInstanceId instanceId) override;
@@ -59,7 +62,8 @@ namespace services {
         [[nodiscard]] ViewportTextureHandle renderMeshPreview(PreviewInstanceId instanceId) override;
 
     private:
-        IPreviewProvider* provider;
+        IMaterialPreviewProvider* materialProvider;
+        IMeshPreviewProvider* meshProvider;
     };
 
 }

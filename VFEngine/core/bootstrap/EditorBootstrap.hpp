@@ -6,7 +6,8 @@ namespace services
 {
     class IOffScreenProvider;
     class IEditorTextureProvider;
-    class IPreviewProvider;
+    class IMaterialPreviewProvider;
+    class IMeshPreviewProvider;
 }
 
 namespace window
@@ -29,7 +30,8 @@ namespace core
 {
     class OffScreenAdapter;
     class EditorTextureAdapter;
-    class PreviewAdapter;
+    class MaterialPreviewAdapter;
+    class MeshPreviewAdapter;
 
     class EditorBootstrap
     {
@@ -39,7 +41,8 @@ namespace core
 
         std::unique_ptr<OffScreenAdapter> offScreenAdapter;
         std::unique_ptr<EditorTextureAdapter> textureAdapter;
-        std::unique_ptr<PreviewAdapter> previewAdapter;
+        std::unique_ptr<MaterialPreviewAdapter> materialPreviewAdapter;
+        std::unique_ptr<MeshPreviewAdapter> meshPreviewAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -60,7 +63,9 @@ namespace core
 
         services::IEditorTextureProvider* getEditorTextureProvider();
 
-        services::IPreviewProvider* getPreviewProvider();
+        services::IMaterialPreviewProvider* getMaterialPreviewProvider();
+
+        services::IMeshPreviewProvider* getMeshPreviewProvider();
 
         // === Other Accessors ===
 

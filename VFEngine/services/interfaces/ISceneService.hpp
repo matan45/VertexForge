@@ -13,6 +13,9 @@ namespace services {
     public:
         virtual ~ISceneService() = default;
 
+        // Register CQRS event handlers
+        virtual void registerEventHandlers() = 0;
+
         // ============================================
         // Entity Lifecycle
         // ============================================

@@ -101,29 +101,37 @@
     <ClInclude Include="events\RenderEvents.hpp" />
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
+    <ClInclude Include="impl\EditorRenderServiceImpl.hpp" />
     <ClInclude Include="impl\InputServiceImpl.hpp" />
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
-    <ClInclude Include="impl\RenderServiceImpl.hpp" />
+    <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
+    <ClInclude Include="impl\WindowStateServiceImpl.hpp" />
     <ClInclude Include="interfaces\IAnimationService.hpp" />
     <ClInclude Include="interfaces\IAudioService.hpp" />
+    <ClInclude Include="interfaces\IEditorRenderService.hpp" />
     <ClInclude Include="interfaces\IInputService.hpp" />
     <ClInclude Include="interfaces\IPhysicsService.hpp" />
     <ClInclude Include="interfaces\IPreviewService.hpp" />
     <ClInclude Include="interfaces\IRenderService.hpp" />
     <ClInclude Include="interfaces\ISceneService.hpp" />
     <ClInclude Include="interfaces\IScriptingService.hpp" />
+    <ClInclude Include="interfaces\IWindowStateService.hpp" />
     <ClInclude Include="providers\IEditorTextureProvider.hpp" />
+    <ClInclude Include="providers\IMaterialPreviewProvider.hpp" />
+    <ClInclude Include="providers\IMeshPreviewProvider.hpp" />
     <ClInclude Include="providers\IOffScreenProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="events\EventDispatcher.cpp" />
+    <ClCompile Include="impl\EditorRenderServiceImpl.cpp" />
     <ClCompile Include="impl\InputServiceImpl.cpp" />
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />
-    <ClCompile Include="impl\RenderServiceImpl.cpp" />
+    <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
+    <ClCompile Include="impl\WindowStateServiceImpl.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

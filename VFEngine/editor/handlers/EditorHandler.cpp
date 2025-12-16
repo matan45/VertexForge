@@ -1,8 +1,9 @@
 #include "EditorHandler.hpp"
 #include "EditorBootstrap.hpp"
 #include "impl/SceneServiceImpl.hpp"
-#include "impl/RenderServiceImpl.hpp"
+#include "impl/EditorRenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
+#include "impl/WindowStateServiceImpl.hpp"
 #include "impl/PreviewServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
@@ -21,10 +22,8 @@ namespace handlers {
 
 	void EditorHandler::init()
 	{
-		// Initialize core systems via bootstrap
 		bootstrap->init();
-
-		// Initialize Import controller (Editor calls Import directly)
+		
 		controllers::Import::initialize();
 
 		// Initialize services with providers from bootstrap
@@ -34,6 +33,9 @@ namespace handlers {
 		bootstrap->setFrameCallback([this]() {
 			if (inputService) {
 				inputService->update();
+			}
+			if (windowStateService) {
+				windowStateService->update();
 			}
 		});
 
@@ -59,38 +61,33 @@ namespace handlers {
 		previewService.reset();
 		renderService.reset();
 		sceneService.reset();
+		windowStateService.reset();
 		inputService.reset();
-
-		// Clean up via bootstrap
+		
 		bootstrap->cleanUp();
 	}
 
 	void EditorHandler::initializeServices()
 	{
-		// Get shared instances from the bootstrap
-		auto sceneGraphSystem = bootstrap->getSceneGraphSystem();
-
 		// Create service implementations using providers from bootstrap
-		auto sceneServiceImpl = std::make_shared<services::SceneServiceImpl>(sceneGraphSystem);
-		auto renderServiceImpl = std::make_shared<services::RenderServiceImpl>(
+		sceneService = std::make_shared<services::SceneServiceImpl>(bootstrap->getSceneGraphSystem());
+		renderService = std::make_shared<services::EditorRenderServiceImpl>(
 			bootstrap->getOffScreenProvider(),
 			bootstrap->getEditorTextureProvider()
 		);
-		auto inputServiceImpl = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
-		auto previewServiceImpl = std::make_shared<services::PreviewServiceImpl>(
-			bootstrap->getPreviewProvider()
+		inputService = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
+		windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());
+		previewService = std::make_shared<services::PreviewServiceImpl>(
+			bootstrap->getMaterialPreviewProvider(),
+			bootstrap->getMeshPreviewProvider()
 		);
 
-		sceneService = sceneServiceImpl;
-		renderService = renderServiceImpl;
-		inputService = inputServiceImpl;
-		previewService = previewServiceImpl;
-
 		// Register event handlers for command/query pattern
-		sceneServiceImpl->registerEventHandlers();
-		renderServiceImpl->registerEventHandlers();
-		inputServiceImpl->registerEventHandlers();
-		previewServiceImpl->registerEventHandlers();
+		sceneService->registerEventHandlers();
+		renderService->registerEventHandlers();
+		inputService->registerEventHandlers();
+		windowStateService->registerEventHandlers();
+		previewService->registerEventHandlers();
 	}
 
 	void EditorHandler::setupEventSubscriptions()

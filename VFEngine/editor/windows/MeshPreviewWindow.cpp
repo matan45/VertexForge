@@ -13,14 +13,12 @@ namespace windows
         : meshPath(meshFilePath)
         , camera(std::make_unique<editor::OrbitCamera>())
     {
-        // Extract filename for window title
         std::filesystem::path path(meshFilePath);
         windowTitle = "Mesh Preview: " + path.filename().string();
     }
 
     MeshPreviewWindow::~MeshPreviewWindow()
     {
-        // Unload mesh and clean up via PreviewService (using 'this' as instanceId)
         services::events::preview::UnloadPreviewMeshCommand unloadCmd;
         unloadCmd.instanceId = services::PreviewInstanceId(this);
         events::EventDispatcher::instance().execute(unloadCmd);
@@ -108,19 +106,15 @@ namespace windows
         {
             return;
         }
-
-        // Update camera aspect ratio
         camera->setAspectRatio(width / height);
-
-        // Build model matrix from position, rotation, and scale (TRS order)
+        
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, meshPosition);
         model = glm::rotate(model, glm::radians(meshRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
         model = glm::scale(model, glm::vec3(meshScale));
-
-        // Set mesh preview params via PreviewService (using 'this' as instanceId)
+        
         services::MeshPreviewParams meshParams;
         meshParams.modelMatrix = model;
         meshParams.highlightedSubMesh = selectedSubMesh;
@@ -128,8 +122,7 @@ namespace windows
         meshCmd.instanceId = services::PreviewInstanceId(this);
         meshCmd.params = meshParams;
         events::EventDispatcher::instance().execute(meshCmd);
-
-        // Update camera via PreviewService
+        
         services::events::preview::UpdateMeshCameraCommand cameraCmd;
         cameraCmd.instanceId = services::PreviewInstanceId(this);
         cameraCmd.view = camera->getViewMatrix();
@@ -210,13 +203,11 @@ namespace windows
 
         ImGui::Separator();
         ImGui::Spacing();
-
-        // Transform controls
+        
         if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
-
-            // Position
+            
             ImGui::Text("Pos X");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -233,8 +224,7 @@ namespace windows
             ImGui::DragFloat("##PosZ", &meshPosition.z, 0.1f, -1000.0f, 1000.0f, "%.2f");
 
             ImGui::Spacing();
-
-            // Rotation
+            
             ImGui::Text("Rot X");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -251,8 +241,7 @@ namespace windows
             ImGui::SliderFloat("##RotZ", &meshRotation.z, -180.0f, 180.0f, "%.0f");
 
             ImGui::Spacing();
-
-            // Scale
+            
             ImGui::Text("Scale");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -269,8 +258,7 @@ namespace windows
                 meshRotation = glm::vec3(0.0f);
                 meshScale = 1.0f;
             }
-
-            // Fit camera button
+            
             if (ImGui::Button("Fit Camera", ImVec2(-1, 0)))
             {
                 // Use cached bounds from when mesh was loaded
