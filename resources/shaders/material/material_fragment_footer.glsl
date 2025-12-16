@@ -20,12 +20,12 @@
 
     // Diffuse IBL
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * albedo_linear;
+    vec3 diffuse = irradiance * albedo_linear * mat_iblDiffuse;
 
     // Specular IBL
     vec3 prefilteredColor = textureLod(prefilterMap, R, mat_roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), mat_roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * mat_iblSpecular;
 
     // Combine
     vec3 ambient = (kD * diffuse + specular) * mat_ao;

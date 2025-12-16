@@ -52,6 +52,8 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
         uint8_t blendMode = 0;  // 0=Opaque, 1=Masked, 2=Translucent
+        float iblDiffuse = 1.0f;   // IBL diffuse intensity
+        float iblSpecular = 0.5f;  // IBL specular intensity
     };
 
     struct MeshRenderData
@@ -104,7 +106,7 @@ namespace render::mesh
     };
 
     // Push constants - matches mesh.glsl push_constant block
-    // Total size: 64 (mat4) + 16 (vec4) + 4*4 + 4*7 = 124 bytes (under 128 limit)
+    // Total size: 64 (mat4) + 16 (vec4) + 4*4 + 4*9 = 132 bytes (under 256 limit, most GPUs support this)
     struct MeshPushConstants
     {
         glm::mat4 model;      // 64 bytes
@@ -123,6 +125,8 @@ namespace render::mesh
         float normalTexIdx;      // 4 bytes
         float emissionTexIdx;    // 4 bytes
         float blendMode;         // 4 bytes (0=Opaque, 1=Masked, 2=Translucent)
+        float iblDiffuse;        // 4 bytes - IBL diffuse intensity
+        float iblSpecular;       // 4 bytes - IBL specular intensity
     };
 
     // Vertex input helper matching resource::Vertex (32 bytes)

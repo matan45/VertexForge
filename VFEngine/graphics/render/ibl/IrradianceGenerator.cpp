@@ -4,7 +4,6 @@
 #include "../../core/Texture.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
-#include <iostream>
 
 namespace render::ibl
 {
@@ -17,8 +16,6 @@ namespace render::ibl
 
     void IrradianceGenerator::generate(const core::Texture& hdrTexture, const vk::CommandPool& commandPool)
     {
-        std::cout << "[DEBUG IrradianceGen] Starting generate..." << std::endl;
-
         // Image and Sampler Create
         core::ImageInfoRequest cubeMapImageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         cubeMapImageRequest.format = vk::Format::eR16G16B16A16Sfloat;
@@ -36,7 +33,6 @@ namespace render::ibl
         cubeMapImageViewRequest.layerCount = 6;
         cubeMapImageViewRequest.imageType = vk::ImageViewType::eCube;
         core::Utilities::createImageView(cubeMapImageViewRequest, imageIrradianceCube.imageView);
-        std::cout << "[DEBUG IrradianceGen] Cubemap created at " << IRRADIANCE_MAP_SIZE << "x" << IRRADIANCE_MAP_SIZE << std::endl;
 
         vk::SamplerCreateInfo samplerInfo;
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -288,7 +284,6 @@ namespace render::ibl
         pipelineInfo.subpass = 0;
 
         vk::Pipeline graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
-        std::cout << "[DEBUG IrradianceGen] Pipeline created, starting face rendering..." << std::endl;
 
         // ImageHelper
         OffScreenHelper imageHelper;
@@ -350,8 +345,6 @@ namespace render::ibl
         // DRAW COMMAND - render each face separately to ensure uniform buffer is correct
         for (uint32_t face = 0; face < 6; ++face)
         {
-            std::cout << "[DEBUG IrradianceGen] Rendering face " << face << "..." << std::endl;
-
             // Update uniform buffer with this face's view matrix
             updateUniformBuffer(CameraViewMatrix::captureViews[face], CameraViewMatrix::captureProjection,
                 uboUniformBufferMemory);
@@ -412,17 +405,14 @@ namespace render::ibl
                 vk::ImageAspectFlagBits::eColor);
 
             // Submit and wait for this face to complete before moving to next
-            std::cout << "[DEBUG IrradianceGen] Submitting face " << face << " command buffer..." << std::endl;
             vk::Fence faceFence = device.getLogicalDevice().createFence({});
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), faceCommandBuffer, faceFence);
 
-            std::cout << "[DEBUG IrradianceGen] Waiting for face " << face << " fence..." << std::endl;
             if (vk::Result result = device.getLogicalDevice().waitForFences(faceFence, VK_TRUE, UINT64_MAX); result !=
                 vk::Result::eSuccess)
             {
                 loggerError("Failed to wait for Fence IBL face {}:", face);
             }
-            std::cout << "[DEBUG IrradianceGen] Face " << face << " completed." << std::endl;
             device.getLogicalDevice().destroyFence(faceFence);
         }
 

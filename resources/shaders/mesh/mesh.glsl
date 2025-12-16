@@ -31,6 +31,9 @@ layout(push_constant) uniform PushConstants {
     float aoTexIdx;
     float normalTexIdx;
     float emissionTexIdx;
+    float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
+    float iblDiffuse;
+    float iblSpecular;
 } pc;
 
 void main() {
@@ -87,6 +90,8 @@ layout(push_constant) uniform PushConstants {
     float normalTexIdx;
     float emissionTexIdx;
     float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
+    float iblDiffuse;
+    float iblSpecular;
 } pc;
 
 const float PI = 3.14159265359;
@@ -212,12 +217,12 @@ void main() {
 
     // Diffuse IBL (irradiance)
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * albedo;
+    vec3 diffuse = irradiance * albedo * pc.iblDiffuse;
 
     // Specular IBL (prefiltered environment + BRDF)
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * pc.iblSpecular;
 
     // Combine ambient
     vec3 ambient = (kD * diffuse + specular) * ao;

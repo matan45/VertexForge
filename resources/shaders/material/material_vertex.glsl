@@ -18,6 +18,20 @@ layout(set = 0, binding = 0) uniform CameraUBO {
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
+    vec4 albedo;
+    float metallic;
+    float roughness;
+    float ao;
+    float emission;
+    float albedoTexIdx;
+    float metallicTexIdx;
+    float roughnessTexIdx;
+    float aoTexIdx;
+    float normalTexIdx;
+    float emissionTexIdx;
+    float blendMode;
+    float iblDiffuse;
+    float iblSpecular;
 } pc;
 
 void main() {

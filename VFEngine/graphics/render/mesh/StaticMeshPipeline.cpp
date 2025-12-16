@@ -27,6 +27,8 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
         material::BlendMode blendMode = material::BlendMode::Opaque;
+        float iblDiffuse = 1.0f;    // IBL diffuse intensity
+        float iblSpecular = 0.5f;   // IBL specular intensity
 
         // Texture paths (empty = use scalar value)
         std::string albedoTexturePath;
@@ -267,6 +269,20 @@ namespace render::mesh
         if (auto val = getConnectedValue(matData.graph, outputNode->id, "Opacity")) {
             if (std::holds_alternative<float>(*val)) {
                 pbr.albedo.a = std::get<float>(*val);
+            }
+        }
+
+        // Try to get IBL Diffuse intensity
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLDiffuse")) {
+            if (std::holds_alternative<float>(*val)) {
+                pbr.iblDiffuse = std::get<float>(*val);
+            }
+        }
+
+        // Try to get IBL Specular intensity
+        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLSpecular")) {
+            if (std::holds_alternative<float>(*val)) {
+                pbr.iblSpecular = std::get<float>(*val);
             }
         }
 
@@ -1642,6 +1658,10 @@ namespace render::mesh
             pushConstants.aoTexIdx = pbrValues.aoTexturePath.empty() ? -1.0f : 3.0f;
             pushConstants.normalTexIdx = pbrValues.normalTexturePath.empty() ? -1.0f : 4.0f;
             pushConstants.emissionTexIdx = pbrValues.emissionTexturePath.empty() ? -1.0f : 5.0f;
+
+            // Set IBL intensity values
+            pushConstants.iblDiffuse = pbrValues.iblDiffuse;
+            pushConstants.iblSpecular = pbrValues.iblSpecular;
 
             // Highlight selected submesh with different color and emission
             if (meshData.highlightedSubMesh >= 0 &&

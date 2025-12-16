@@ -21,6 +21,8 @@ namespace editor::graph {
             addInputPin("Emission", material::PinType::Vec3, glm::vec3(0.0f));
             addInputPin("EmissionStrength", material::PinType::Float, 0.0f);
             addInputPin("Opacity", material::PinType::Float, 1.0f);
+            addInputPin("IBLDiffuse", material::PinType::Float, 1.0f);    // IBL diffuse intensity
+            addInputPin("IBLSpecular", material::PinType::Float, 0.5f);   // IBL specular/reflection intensity
 
             // No output pins - this is a terminal node
         }
@@ -56,6 +58,8 @@ namespace editor::graph {
             std::string emission = inputVarNames.count("Emission") ? inputVarNames.at("Emission") : "vec3(0.0)";
             std::string emissionStrength = inputVarNames.count("EmissionStrength") ? inputVarNames.at("EmissionStrength") : "0.0";
             std::string opacity = inputVarNames.count("Opacity") ? inputVarNames.at("Opacity") : "1.0";
+            std::string iblDiffuse = inputVarNames.count("IBLDiffuse") ? toFloat(inputVarNames.at("IBLDiffuse"), "1.0") : "1.0";
+            std::string iblSpecular = inputVarNames.count("IBLSpecular") ? toFloat(inputVarNames.at("IBLSpecular"), "0.5") : "0.5";
 
             // Assign to material output variables (these will be used by the PBR lighting code)
             code += "    // Material properties from shader graph\n";
@@ -66,6 +70,8 @@ namespace editor::graph {
             code += "    float mat_ao = clamp(" + ao + ", 0.0, 1.0);\n";
             code += "    vec3 mat_emission = " + emission + " * " + emissionStrength + ";\n";
             code += "    float mat_opacity = clamp(" + opacity + ", 0.0, 1.0);\n";
+            code += "    float mat_iblDiffuse = clamp(" + iblDiffuse + ", 0.0, 2.0);\n";
+            code += "    float mat_iblSpecular = clamp(" + iblSpecular + ", 0.0, 2.0);\n";
 
             return code;
         }
@@ -87,6 +93,8 @@ namespace editor::graph {
         static std::string getAOVar() { return "mat_ao"; }
         static std::string getEmissionVar() { return "mat_emission"; }
         static std::string getOpacityVar() { return "mat_opacity"; }
+        static std::string getIBLDiffuseVar() { return "mat_iblDiffuse"; }
+        static std::string getIBLSpecularVar() { return "mat_iblSpecular"; }
     };
 
 }
