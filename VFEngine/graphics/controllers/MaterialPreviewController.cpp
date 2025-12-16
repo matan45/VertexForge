@@ -530,6 +530,10 @@ namespace controllers
                         textureManager->textureCache[path] = std::move(tex);
                         textureManager->texturesNeedUpdate = true;
                     }
+                    else
+                    {
+                        vfLogWarning("Failed to load texture for slot {}: {}", i, path);
+                    }
                 }
                 // Always assign to fixed slot regardless of cache status
                 textureManager->textureSlots[i] = path;

@@ -21,8 +21,8 @@ namespace editor::graph {
             addInputPin("Emission", material::PinType::Vec3, glm::vec3(0.0f));
             addInputPin("EmissionStrength", material::PinType::Float, 1.0f);
             addInputPin("Opacity", material::PinType::Float, 1.0f);
-            addInputPin("Diffuse", material::PinType::Float, 1.0f);
-            addInputPin("Specular", material::PinType::Float, 0.5f);
+            addInputPin("IBLDiffuse", material::PinType::Float, 1.0f);
+            addInputPin("IBLSpecular", material::PinType::Float, 0.5f);   // IBL specular/reflection intensity
         }
 
         std::string generateCode(const std::string& outputVarPrefix,

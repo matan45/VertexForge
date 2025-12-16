@@ -52,8 +52,8 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
         uint8_t blendMode = 0;  // 0=Opaque, 1=Masked, 2=Translucent
-        float iblDiffuse = 1.0f;   // IBL diffuse intensity
-        float iblSpecular = 0.5f;  // IBL specular intensity
+        float iblDiffuse = 1.0f;
+        float iblSpecular = 0.5f;
     };
 
     struct MeshRenderData

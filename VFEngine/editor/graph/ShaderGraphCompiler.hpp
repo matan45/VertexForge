@@ -2,7 +2,7 @@
 #include "material/MaterialTypes.hpp"
 #include <string>
 #include <string_view>
-#include <optional>
+
 
 namespace editor::graph {
     
@@ -11,6 +11,15 @@ namespace editor::graph {
         std::string vertexShader;
         std::string fragmentShader;
         std::string errorMessage;
+    };
+
+    static const std::map<std::string, int> pbrPinToIndex = {
+        {"Albedo", 0},
+        {"Metallic", 1},
+        {"Roughness", 2},
+        {"AO", 3},
+        {"Normal", 4},
+        {"Emission", 5}
     };
 
     

@@ -252,27 +252,20 @@ namespace editor::graph {
     }
 
     int ShaderGraphCompiler::determinePBRTextureIndex(const material::ShaderGraph& graph, uint32_t nodeId) {
-        // PBR output pin to texture index mapping
-        // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
-        static const std::map<std::string, int> pbrPinToIndex = {
-            {"Albedo", 0},
-            {"Metallic", 1},
-            {"Roughness", 2},
-            {"AO", 3},
-            {"Normal", 4},
-            {"Emission", 5}
-        };
-
-        // BFS to find which PBR output this node connects to
+        // BFS to find which PBR output this node connects to.
+        // Assumes the graph is a DAG (cycles are detected earlier in topologicalSort).
+        // Iteration limit prevents runaway traversal on malformed graphs.
         std::set<uint32_t> visited;
         std::queue<uint32_t> toVisit;
         toVisit.push(nodeId);
 
-        while (!toVisit.empty()) {
+        size_t iterations = 0;
+        while (!toVisit.empty() && iterations < MAX_NODES) {
+            ++iterations;
             uint32_t currentId = toVisit.front();
             toVisit.pop();
 
-            if (visited.count(currentId)) continue;
+            if (visited.contains(currentId)) continue;
             visited.insert(currentId);
 
             // Find all links where this node is the source

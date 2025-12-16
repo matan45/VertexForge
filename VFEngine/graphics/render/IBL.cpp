@@ -40,7 +40,7 @@ namespace render
     void IBL::init(std::string_view path)
     {
         hdrTexture = std::make_shared<core::Texture>(device);
-        hdrTexture->loadHDRFromFile(path, vk::Format::eR32G32B32A32Sfloat, false);
+        hdrTexture->loadHDRFromFile(path, false);
 
         // Generate environment cubemap (sharp, for skybox and prefilter input)
         envCubemapGen->generate(*hdrTexture, commandPool.get());

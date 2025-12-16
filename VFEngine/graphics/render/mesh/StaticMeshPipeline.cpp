@@ -27,8 +27,8 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
         material::BlendMode blendMode = material::BlendMode::Opaque;
-        float iblDiffuse = 1.0f;    // IBL diffuse intensity
-        float iblSpecular = 0.5f;   // IBL specular intensity
+        float iblDiffuse = 1.0f;
+        float iblSpecular = 0.5f;
 
         // Texture paths (empty = use scalar value)
         std::string albedoTexturePath;

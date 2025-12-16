@@ -31,7 +31,7 @@ namespace core
         device.getLogicalDevice().destroySampler(sampler);
     }
 
-    void Texture::loadHDRFromFile(std::string_view filePath, vk::Format format, bool isEditor)
+    void Texture::loadHDRFromFile(std::string_view filePath, bool isEditor)
     {
         auto textureData = resource::ResourceManager::loadHDRAsync(filePath);
         auto texturePtr = textureData.get();
@@ -47,6 +47,13 @@ namespace core
 
         // Convert 3-channel RGB to 4-channel RGBA (RGB32F not supported on most GPUs)
         const uint32_t pixelCount = texturePtr->width * texturePtr->height;
+        const size_t expectedSize = static_cast<size_t>(pixelCount) * 3;
+        if (texturePtr->textureData.size() < expectedSize)
+        {
+            loggerError("HDR texture data size mismatch: expected {}, got {}", expectedSize, texturePtr->textureData.size());
+            return;
+        }
+
         std::vector<float> rgba4Data(pixelCount * 4);
         const float* srcData = texturePtr->textureData.data();
         for (uint32_t i = 0; i < pixelCount; ++i)
@@ -73,6 +80,8 @@ namespace core
             result != vk::Result::eSuccess)
         {
             loggerError("failed to map memory");
+            device.getLogicalDevice().destroyBuffer(stagingBuffer);
+            device.getLogicalDevice().freeMemory(stagingBufferMemory);
             return;
         }
         memcpy(data, rgba4Data.data(), imageSize);
@@ -142,6 +151,9 @@ namespace core
             result != vk::Result::eSuccess)
         {
             loggerError("failed to map memory");
+            device.getLogicalDevice().destroyBuffer(stagingBuffer);
+            device.getLogicalDevice().freeMemory(stagingBufferMemory);
+            return;
         }
         memcpy(data, texturePtr->textureData.data(), imageSize);
         device.getLogicalDevice().unmapMemory(stagingBufferMemory);
