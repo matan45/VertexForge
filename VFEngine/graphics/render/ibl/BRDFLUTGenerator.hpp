@@ -12,6 +12,11 @@ namespace render::ibl
 {
     class BRDFLUTGenerator
     {
+    private:
+        core::Device& device;
+        ImageData brdfLUTImage{};
+        std::shared_ptr<core::Shader> brdfLUTShader;
+
     public:
         explicit BRDFLUTGenerator(core::Device& device);
         ~BRDFLUTGenerator() = default;
@@ -21,10 +26,5 @@ namespace render::ibl
         void cleanUpShader();
 
         const ImageData& getImageData() const { return brdfLUTImage; }
-
-    private:
-        core::Device& device;
-        ImageData brdfLUTImage{};
-        std::shared_ptr<core::Shader> brdfLUTShader;
     };
 }

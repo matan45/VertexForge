@@ -120,6 +120,7 @@
     <ClInclude Include="render\IBL.hpp" />
     <ClInclude Include="render\RenderPassHandler.hpp" />
     <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
+    <ClInclude Include="render\ibl\EnvironmentCubemapGenerator.hpp" />
     <ClInclude Include="render\ibl\IBLTypes.hpp" />
     <ClInclude Include="render\ibl\IrradianceGenerator.hpp" />
     <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
@@ -153,6 +154,7 @@
     <ClCompile Include="render\IBL.cpp" />
     <ClCompile Include="render\RenderPassHandler.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
+    <ClCompile Include="render\ibl\EnvironmentCubemapGenerator.cpp" />
     <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
@@ -165,6 +167,7 @@
   <ItemGroup>
     <None Include="..\..\resources\shaders\ibl\brdf.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_convolution.glsl" />
+    <None Include="..\..\resources\shaders\ibl\equirectangular_to_cubemap.glsl" />
     <None Include="..\..\resources\shaders\ibl\prefilter.glsl" />
     <None Include="..\..\resources\shaders\ibl\skybox.glsl" />
     <None Include="..\..\resources\shaders\material\material_fragment_footer.glsl" />

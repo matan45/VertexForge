@@ -21,8 +21,208 @@ namespace render::mesh
         commandPool = cmdPool;
     }
 
+    void MaterialTextureCache::initDescriptorResources(vk::DescriptorSetLayout layout)
+    {
+        if (descriptorPoolCreated) return;
+
+        descriptorSetLayout = layout;
+        createDescriptorPool();
+
+        // Ensure default texture is created for filling empty slots
+        if (!defaultTextureCreated) {
+            if (commandPool) {
+                createDefaultTexture();
+            } else {
+                loggerWarning("MaterialTextureCache: commandPool not set, cannot create default texture");
+            }
+        }
+    }
+
+    void MaterialTextureCache::createDescriptorPool()
+    {
+        // Pool for per-material descriptor sets
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.type = vk::DescriptorType::eCombinedImageSampler;
+        poolSize.descriptorCount = MAX_MATERIAL_DESCRIPTOR_SETS * MAX_MATERIAL_TEXTURES;
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.maxSets = MAX_MATERIAL_DESCRIPTOR_SETS;
+
+        descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
+        descriptorPoolCreated = true;
+        loggerInfo("Created material descriptor pool (max {} materials)", MAX_MATERIAL_DESCRIPTOR_SETS);
+    }
+
+    vk::DescriptorSet MaterialTextureCache::allocateDescriptorSet()
+    {
+        if (!descriptorPoolCreated || !descriptorSetLayout) {
+            loggerError("Cannot allocate descriptor set: pool or layout not initialized");
+            return nullptr;
+        }
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptorSetLayout;
+
+        auto sets = device.getLogicalDevice().allocateDescriptorSets(allocInfo);
+        return sets[0];
+    }
+
+    void MaterialTextureCache::updateMaterialDescriptorSet(vk::DescriptorSet set, const MaterialTexturePaths& textures)
+    {
+        // Ensure default texture exists
+        if (!defaultTextureCreated && commandPool) {
+            createDefaultTexture();
+        }
+
+        // Safety check - if default texture still not created, we can't proceed
+        if (!defaultTextureCreated || !defaultTexture.view || !defaultTexture.sampler) {
+            loggerError("Cannot update material descriptor set: default texture not available");
+            return;
+        }
+
+        // Build image info array for the 6 texture slots
+        std::array<vk::DescriptorImageInfo, MAX_MATERIAL_TEXTURES> imageInfos;
+
+        // Helper to get view/sampler for a texture path
+        auto getViewSampler = [this](const std::string& path) -> std::pair<vk::ImageView, vk::Sampler> {
+            if (path.empty()) {
+                return {defaultTexture.view, defaultTexture.sampler};
+            }
+            auto it = textureCache.find(path);
+            if (it != textureCache.end()) {
+                return {it->second.view, it->second.sampler};
+            }
+            return {defaultTexture.view, defaultTexture.sampler};
+        };
+
+        // Slot 0: albedo
+        auto [albedoView, albedoSampler] = getViewSampler(textures.albedo);
+        imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfos[0].imageView = albedoView;
+        imageInfos[0].sampler = albedoSampler;
+
+        // Slot 1: metallic
+        auto [metallicView, metallicSampler] = getViewSampler(textures.metallic);
+        imageInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfos[1].imageView = metallicView;
+        imageInfos[1].sampler = metallicSampler;
+
+        // Slot 2: roughness
+        auto [roughnessView, roughnessSampler] = getViewSampler(textures.roughness);
+        imageInfos[2].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfos[2].imageView = roughnessView;
+        imageInfos[2].sampler = roughnessSampler;
+
+        // Slot 3: ao
+        auto [aoView, aoSampler] = getViewSampler(textures.ao);
+        imageInfos[3].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfos[3].imageView = aoView;
+        imageInfos[3].sampler = aoSampler;
+
+        // Slot 4: normal
+        auto [normalView, normalSampler] = getViewSampler(textures.normal);
+        imageInfos[4].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfos[4].imageView = normalView;
+        imageInfos[4].sampler = normalSampler;
+
+        // Slot 5: emission
+        auto [emissionView, emissionSampler] = getViewSampler(textures.emission);
+        imageInfos[5].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfos[5].imageView = emissionView;
+        imageInfos[5].sampler = emissionSampler;
+
+        vk::WriteDescriptorSet writeSet{};
+        writeSet.dstSet = set;
+        writeSet.dstBinding = 0;
+        writeSet.dstArrayElement = 0;
+        writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        writeSet.descriptorCount = MAX_MATERIAL_TEXTURES;
+        writeSet.pImageInfo = imageInfos.data();
+
+        device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
+    }
+
+    vk::DescriptorSet MaterialTextureCache::getOrCreateMaterialDescriptorSet(
+        const std::string& materialPath,
+        const MaterialTexturePaths& textures)
+    {
+        if (!descriptorPoolCreated) {
+            loggerWarning("Descriptor pool not initialized, cannot create material descriptor set");
+            return nullptr;
+        }
+
+        // Check cache first
+        auto it = materialDescriptorSets.find(materialPath);
+        if (it != materialDescriptorSets.end()) {
+            return it->second;
+        }
+
+        // Allocate and update new descriptor set
+        vk::DescriptorSet set = allocateDescriptorSet();
+        if (!set) {
+            loggerError("Failed to allocate descriptor set for material: {}", materialPath);
+            return nullptr;
+        }
+
+        updateMaterialDescriptorSet(set, textures);
+        materialDescriptorSets[materialPath] = set;
+
+        loggerInfo("Created descriptor set for material: {}", materialPath);
+        return set;
+    }
+
+    void MaterialTextureCache::invalidateMaterialDescriptorSet(const std::string& materialPath)
+    {
+        auto it = materialDescriptorSets.find(materialPath);
+        if (it != materialDescriptorSets.end()) {
+            if (descriptorPool && it->second) {
+                device.getLogicalDevice().freeDescriptorSets(descriptorPool, it->second);
+            }
+            materialDescriptorSets.erase(it);
+            loggerInfo("Invalidated descriptor set for material: {}", materialPath);
+        }
+    }
+
+    vk::ImageView MaterialTextureCache::getViewForPath(const std::string& path) const
+    {
+        if (path.empty()) return defaultTexture.view;
+        auto it = textureCache.find(path);
+        if (it != textureCache.end()) {
+            return it->second.view;
+        }
+        return defaultTexture.view;
+    }
+
+    vk::Sampler MaterialTextureCache::getSamplerForPath(const std::string& path) const
+    {
+        if (path.empty()) return defaultTexture.sampler;
+        auto it = textureCache.find(path);
+        if (it != textureCache.end()) {
+            return it->second.sampler;
+        }
+        return defaultTexture.sampler;
+    }
+
     void MaterialTextureCache::cleanUp()
     {
+        // Cleanup per-material descriptor sets
+        if (descriptorPoolCreated && descriptorPool) {
+            for (auto& [path, set] : materialDescriptorSets) {
+                if (set) {
+                    device.getLogicalDevice().freeDescriptorSets(descriptorPool, set);
+                }
+            }
+            materialDescriptorSets.clear();
+            device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
+            descriptorPool = nullptr;
+            descriptorPoolCreated = false;
+        }
+
         // Cleanup cached textures
         for (auto& [path, tex] : textureCache) {
             if (tex.sampler) device.getLogicalDevice().destroySampler(tex.sampler);
@@ -338,8 +538,8 @@ namespace render::mesh
         if (it->second.slotIndex >= 0) return it->second.slotIndex;
 
         // Assign a new slot if available
-        if (nextTextureSlot >= 8) {
-            loggerWarning("Exceeded maximum 8 texture slots, texture not bound: {}", path);
+        if (nextTextureSlot >= 16) {
+            loggerWarning("Exceeded maximum 16 texture slots, texture not bound: {}", path);
             return -1;
         }
 
@@ -363,7 +563,7 @@ namespace render::mesh
 
     vk::ImageView MaterialTextureCache::getViewForSlot(int slot) const
     {
-        if (slot < 0 || slot >= 8) return defaultTexture.view;
+        if (slot < 0 || slot >= 16) return defaultTexture.view;
 
         const std::string& path = boundTexturePaths[slot];
         if (path.empty()) return defaultTexture.view;
@@ -377,7 +577,7 @@ namespace render::mesh
 
     vk::Sampler MaterialTextureCache::getSamplerForSlot(int slot) const
     {
-        if (slot < 0 || slot >= 8) return defaultTexture.sampler;
+        if (slot < 0 || slot >= 16) return defaultTexture.sampler;
 
         const std::string& path = boundTexturePaths[slot];
         if (path.empty()) return defaultTexture.sampler;
@@ -389,29 +589,29 @@ namespace render::mesh
         return defaultTexture.sampler;
     }
 
-    std::array<vk::ImageView, 8> MaterialTextureCache::getImageViews() const
+    std::array<vk::ImageView, 16> MaterialTextureCache::getImageViews() const
     {
         // Ensure default texture exists before returning views
         if (!defaultTextureCreated) {
             const_cast<MaterialTextureCache*>(this)->createDefaultTexture();
         }
 
-        std::array<vk::ImageView, 8> views;
-        for (int i = 0; i < 8; ++i) {
+        std::array<vk::ImageView, 16> views;
+        for (int i = 0; i < 16; ++i) {
             views[i] = getViewForSlot(i);
         }
         return views;
     }
 
-    std::array<vk::Sampler, 8> MaterialTextureCache::getSamplers() const
+    std::array<vk::Sampler, 16> MaterialTextureCache::getSamplers() const
     {
         // Ensure default texture exists before returning samplers
         if (!defaultTextureCreated) {
             const_cast<MaterialTextureCache*>(this)->createDefaultTexture();
         }
 
-        std::array<vk::Sampler, 8> samplers;
-        for (int i = 0; i < 8; ++i) {
+        std::array<vk::Sampler, 16> samplers;
+        for (int i = 0; i < 16; ++i) {
             samplers[i] = getSamplerForSlot(i);
         }
         return samplers;

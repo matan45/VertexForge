@@ -66,7 +66,7 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
 
-        // Texture indices (-1.0 = no texture, 0-7 = index in u_Textures[8])
+        // Texture indices (-1.0 = no texture, fixed per-material: 0=albedo, 1=metallic, etc.)
         float albedoTexIdx = -1.0f;
         float metallicTexIdx = -1.0f;
         float roughnessTexIdx = -1.0f;
@@ -114,7 +114,8 @@ namespace render::mesh
         float ao;             // 4 bytes
         float emission;       // 4 bytes
 
-        // Texture indices: -1.0 = no texture, >= 0 = index in u_Textures[8]
+        // Texture indices: -1.0 = no texture, fixed per-material:
+        // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
         float albedoTexIdx;      // 4 bytes
         float metallicTexIdx;    // 4 bytes
         float roughnessTexIdx;   // 4 bytes

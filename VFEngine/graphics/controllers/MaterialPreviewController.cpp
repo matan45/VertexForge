@@ -169,7 +169,8 @@ namespace controllers
     // pImpl for texture management
     struct MaterialPreviewController::TextureManagerImpl
     {
-        static constexpr int MAX_TEXTURES = 8;
+        // 6 texture slots per material: albedo, metallic, roughness, ao, normal, emission
+        static constexpr int MAX_TEXTURES = 6;
         std::unordered_map<std::string, PreviewTextureGPU> textureCache;
         std::array<std::string, MAX_TEXTURES> textureSlots;
         PreviewTextureGPU defaultTexture;
@@ -542,11 +543,11 @@ namespace controllers
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
             if (meshPipeline)
             {
-                // Build arrays of image views and samplers
-                std::array<vk::ImageView, 8> imageViews;
-                std::array<vk::Sampler, 8> samplers;
+                // Build arrays of image views and samplers (6 per material)
+                std::array<vk::ImageView, 6> imageViews;
+                std::array<vk::Sampler, 6> samplers;
 
-                for (int i = 0; i < 8; ++i)
+                for (int i = 0; i < 6; ++i)
                 {
                     if (!textureManager->textureSlots[i].empty())
                     {
@@ -563,7 +564,7 @@ namespace controllers
                     samplers[i] = textureManager->defaultTexture.sampler;
                 }
 
-                meshPipeline->updateTextureDescriptors(imageViews, samplers);
+                meshPipeline->updatePreviewTextureDescriptors(imageViews, samplers);
                 textureManager->texturesNeedUpdate = false;
             }
         }

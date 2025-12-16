@@ -124,6 +124,13 @@ namespace material {
         return true;
     }
 
+    void MaterialManager::invalidateCache(std::string_view path) {
+        std::string pathStr(path);
+
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        materialCache.erase(pathStr);
+    }
+
     bool MaterialManager::saveMaterial(std::string_view path, const MaterialData& material) {
         // Save to disk
         if (!MaterialAsset::save(path, material)) {

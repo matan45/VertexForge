@@ -950,11 +950,12 @@ namespace render::mesh
 
     void StaticMeshPipeline::createTextureDescriptorSetLayout()
     {
-        // Set 1, Binding 0: Array of 8 material textures
+        // Set 1, Binding 0: Array of 6 material textures per material
+        // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
         vk::DescriptorSetLayoutBinding textureBinding{};
         textureBinding.binding = 0;
         textureBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        textureBinding.descriptorCount = 8;  // Array of 8 textures
+        textureBinding.descriptorCount = MaterialTextureCache::MAX_MATERIAL_TEXTURES;  // 6 textures per material
         textureBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
         textureBinding.pImmutableSamplers = nullptr;
 
@@ -967,9 +968,10 @@ namespace render::mesh
 
     void StaticMeshPipeline::createTextureDescriptorPool()
     {
+        // Legacy pool for backward compatibility - per-material pool is managed by MaterialTextureCache
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = 8;  // 8 textures
+        poolSize.descriptorCount = MaterialTextureCache::MAX_MATERIAL_TEXTURES;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -982,15 +984,17 @@ namespace render::mesh
 
     void StaticMeshPipeline::initializeDefaultTextureDescriptors()
     {
-        // Initialize texture descriptor set with all default textures
-        updateTextureDescriptors(textureCache->getImageViews(), textureCache->getSamplers());
-    }
+        // Initialize MaterialTextureCache's descriptor resources with our layout
+        textureCache->initDescriptorResources(textureDescriptorSetLayout);
 
-    void StaticMeshPipeline::updateTextureDescriptors(
-        const std::array<vk::ImageView, 8>& imageViews,
-        const std::array<vk::Sampler, 8>& samplers)
-    {
-        // Allocate descriptor set if not already allocated
+        // Ensure default texture is available before updating descriptors
+        if (!textureCache->hasDefaultTexture()) {
+            loggerWarning("Default texture not available, skipping default descriptor set creation");
+            textureDescriptorsInitialized = false;
+            return;
+        }
+
+        // Create a default descriptor set for meshes without materials
         if (!textureDescriptorSet)
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
@@ -998,11 +1002,38 @@ namespace render::mesh
             allocInfo.descriptorSetCount = 1;
             allocInfo.pSetLayouts = &textureDescriptorSetLayout;
             textureDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-        }
 
-        // Update all 8 texture bindings
-        std::array<vk::DescriptorImageInfo, 8> imageInfos;
-        for (int i = 0; i < 8; ++i)
+            // Fill with default textures
+            std::array<vk::DescriptorImageInfo, MaterialTextureCache::MAX_MATERIAL_TEXTURES> imageInfos;
+            for (int i = 0; i < MaterialTextureCache::MAX_MATERIAL_TEXTURES; ++i)
+            {
+                imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                imageInfos[i].imageView = textureCache->getDefaultView();
+                imageInfos[i].sampler = textureCache->getDefaultSampler();
+            }
+
+            vk::WriteDescriptorSet writeSet{};
+            writeSet.dstSet = textureDescriptorSet;
+            writeSet.dstBinding = 0;
+            writeSet.dstArrayElement = 0;
+            writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writeSet.descriptorCount = MaterialTextureCache::MAX_MATERIAL_TEXTURES;
+            writeSet.pImageInfo = imageInfos.data();
+
+            device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
+        }
+        textureDescriptorsInitialized = true;
+    }
+
+    void StaticMeshPipeline::updatePreviewTextureDescriptors(
+        const std::array<vk::ImageView, 6>& imageViews,
+        const std::array<vk::Sampler, 6>& samplers)
+    {
+        // Update the default descriptor set for preview rendering
+        if (!textureDescriptorSet) return;
+
+        std::array<vk::DescriptorImageInfo, MaterialTextureCache::MAX_MATERIAL_TEXTURES> imageInfos;
+        for (int i = 0; i < MaterialTextureCache::MAX_MATERIAL_TEXTURES; ++i)
         {
             imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
             imageInfos[i].imageView = imageViews[i];
@@ -1014,11 +1045,20 @@ namespace render::mesh
         writeSet.dstBinding = 0;
         writeSet.dstArrayElement = 0;
         writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writeSet.descriptorCount = 8;
+        writeSet.descriptorCount = MaterialTextureCache::MAX_MATERIAL_TEXTURES;
         writeSet.pImageInfo = imageInfos.data();
 
         device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
-        textureDescriptorsInitialized = true;
+    }
+
+    void StaticMeshPipeline::updateTextureDescriptors(
+        const std::array<vk::ImageView, 16>& imageViews,
+        const std::array<vk::Sampler, 16>& samplers)
+    {
+        // Legacy method - kept for backward compatibility but no longer used
+        // Per-material descriptor sets are now managed by MaterialTextureCache
+        (void)imageViews;
+        (void)samplers;
     }
 
     void StaticMeshPipeline::createPipelineLayout()
@@ -1480,16 +1520,20 @@ namespace render::mesh
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        // Bind descriptor sets (shared across all pipelines)
+        // Bind descriptor set 0 (camera/IBL) - shared across all materials
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                          pipelineLayout, 0, descriptorSet, nullptr);
 
-        // Bind texture descriptor set (set 1) if available
+        // Bind default texture descriptor set (set 1) as fallback
+        // Per-material descriptor sets will be bound before each submesh
         if (textureDescriptorsInitialized && textureDescriptorSet)
         {
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                              pipelineLayout, 1, textureDescriptorSet, nullptr);
         }
+
+        // Track currently bound material descriptor set to avoid redundant binds
+        vk::DescriptorSet currentMaterialDescriptorSet = textureDescriptorSet;
 
         // Helper lambda to render a submesh with the correct pipeline
         auto renderSubmesh = [&](const MeshRenderData& meshData, const SubMeshGPUData& subMesh,
@@ -1545,6 +1589,41 @@ namespace render::mesh
                 currentPipeline = targetPipeline;
             }
 
+            // Get or create per-material descriptor set if material has textures
+            vk::DescriptorSet materialDescSet = nullptr;
+            bool hasAnyTexture = !pbrValues.albedoTexturePath.empty() ||
+                                 !pbrValues.metallicTexturePath.empty() ||
+                                 !pbrValues.roughnessTexturePath.empty() ||
+                                 !pbrValues.aoTexturePath.empty() ||
+                                 !pbrValues.normalTexturePath.empty() ||
+                                 !pbrValues.emissionTexturePath.empty();
+
+            if (hasAnyTexture && !pbrValues.materialPath.empty()) {
+                // Build texture paths for this material
+                MaterialTexturePaths texPaths;
+                texPaths.albedo = pbrValues.albedoTexturePath;
+                texPaths.metallic = pbrValues.metallicTexturePath;
+                texPaths.roughness = pbrValues.roughnessTexturePath;
+                texPaths.ao = pbrValues.aoTexturePath;
+                texPaths.normal = pbrValues.normalTexturePath;
+                texPaths.emission = pbrValues.emissionTexturePath;
+
+                materialDescSet = textureCache->getOrCreateMaterialDescriptorSet(
+                    pbrValues.materialPath, texPaths);
+            }
+
+            // Bind material descriptor set if different from current
+            if (materialDescSet && materialDescSet != currentMaterialDescriptorSet) {
+                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                                 pipelineLayout, 1, materialDescSet, nullptr);
+                currentMaterialDescriptorSet = materialDescSet;
+            } else if (!materialDescSet && currentMaterialDescriptorSet != textureDescriptorSet) {
+                // Bind default if no material textures
+                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                                 pipelineLayout, 1, textureDescriptorSet, nullptr);
+                currentMaterialDescriptorSet = textureDescriptorSet;
+            }
+
             // Setup push constants with transform and material properties
             MeshPushConstants pushConstants{};
             pushConstants.model = meshData.modelMatrix;
@@ -1553,20 +1632,15 @@ namespace render::mesh
             pushConstants.ao = pbrValues.ao;
             pushConstants.blendMode = static_cast<float>(pbrValues.blendMode);
 
-            // Get texture slot indices from loaded textures
-            auto getTexIdx = [this, &meshData](const std::string& texPath, float fallbackIdx) -> float {
-                if (!texPath.empty()) {
-                    return static_cast<float>(textureCache->getTextureSlot(texPath));
-                }
-                return fallbackIdx;
-            };
-
-            pushConstants.albedoTexIdx = getTexIdx(pbrValues.albedoTexturePath, meshData.albedoTexIdx);
-            pushConstants.metallicTexIdx = getTexIdx(pbrValues.metallicTexturePath, meshData.metallicTexIdx);
-            pushConstants.roughnessTexIdx = getTexIdx(pbrValues.roughnessTexturePath, meshData.roughnessTexIdx);
-            pushConstants.aoTexIdx = getTexIdx(pbrValues.aoTexturePath, meshData.aoTexIdx);
-            pushConstants.normalTexIdx = getTexIdx(pbrValues.normalTexturePath, meshData.normalTexIdx);
-            pushConstants.emissionTexIdx = getTexIdx(pbrValues.emissionTexturePath, meshData.emissionTexIdx);
+            // With per-material descriptor sets, texture indices are fixed:
+            // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
+            // Use -1.0 if no texture, otherwise use fixed index
+            pushConstants.albedoTexIdx = pbrValues.albedoTexturePath.empty() ? -1.0f : 0.0f;
+            pushConstants.metallicTexIdx = pbrValues.metallicTexturePath.empty() ? -1.0f : 1.0f;
+            pushConstants.roughnessTexIdx = pbrValues.roughnessTexturePath.empty() ? -1.0f : 2.0f;
+            pushConstants.aoTexIdx = pbrValues.aoTexturePath.empty() ? -1.0f : 3.0f;
+            pushConstants.normalTexIdx = pbrValues.normalTexturePath.empty() ? -1.0f : 4.0f;
+            pushConstants.emissionTexIdx = pbrValues.emissionTexturePath.empty() ? -1.0f : 5.0f;
 
             // Highlight selected submesh with different color and emission
             if (meshData.highlightedSubMesh >= 0 &&

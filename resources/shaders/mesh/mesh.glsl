@@ -23,7 +23,8 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
-    // Texture indices: < 0 = no texture, >= 0 = index in u_Textures[8]
+    // Texture indices: < 0 = no texture, fixed indices per material:
+    // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
     float albedoTexIdx;
     float metallicTexIdx;
     float roughnessTexIdx;
@@ -66,8 +67,9 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Set 1: Material textures (8 slots)
-layout(set = 1, binding = 0) uniform sampler2D u_Textures[8];
+// Set 1: Material textures (6 per material)
+// Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
+layout(set = 1, binding = 0) uniform sampler2D u_Textures[6];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -76,7 +78,8 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
-    // Texture indices: < 0 = no texture, >= 0 = index in u_Textures[8]
+    // Texture indices: < 0 = no texture, fixed indices per material:
+    // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
     float albedoTexIdx;
     float metallicTexIdx;
     float roughnessTexIdx;

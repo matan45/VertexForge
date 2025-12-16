@@ -13,9 +13,23 @@ namespace core
 
 namespace render::mesh
 {
+    // Texture paths for a material (used for per-material descriptor sets)
+    struct MaterialTexturePaths
+    {
+        std::string albedo;
+        std::string metallic;
+        std::string roughness;
+        std::string ao;
+        std::string normal;
+        std::string emission;
+    };
+
     class MaterialTextureCache
     {
     public:
+        // Max textures per material (matches shader u_Textures[6])
+        static constexpr int MAX_MATERIAL_TEXTURES = 6;
+
         explicit MaterialTextureCache(core::Device& device);
         ~MaterialTextureCache();
 
@@ -26,32 +40,45 @@ namespace render::mesh
         // Initialize with command pool for GPU uploads
         void init(vk::CommandPool commandPool);
 
+        // Initialize descriptor resources (call after pipeline creates layout)
+        void initDescriptorResources(vk::DescriptorSetLayout layout);
+
         // Cleanup all GPU resources
         void cleanUp();
 
         // Load a texture from file path, returns true if successful
         bool loadTexture(const std::string& path);
 
-        // Get texture slot assignment for a path (-1 if not loaded/assigned)
-        int getTextureSlot(const std::string& path);
+        // Get or create a per-material descriptor set
+        // Returns the descriptor set for this material, or nullptr if failed
+        vk::DescriptorSet getOrCreateMaterialDescriptorSet(
+            const std::string& materialPath,
+            const MaterialTexturePaths& textures);
 
-        // Reset slot assignments for a new frame (call before assigning slots)
-        void resetSlotAssignments();
+        // Invalidate a material's descriptor set (call when material changes)
+        void invalidateMaterialDescriptorSet(const std::string& materialPath);
 
         // Get default 1x1 white texture view/sampler
         vk::ImageView getDefaultView() const { return defaultTexture.view; }
         vk::Sampler getDefaultSampler() const { return defaultTexture.sampler; }
 
-        // Get texture view/sampler by slot index
-        vk::ImageView getViewForSlot(int slot) const;
-        vk::Sampler getSamplerForSlot(int slot) const;
-
-        // Build arrays for descriptor set update
-        std::array<vk::ImageView, 8> getImageViews() const;
-        std::array<vk::Sampler, 8> getSamplers() const;
-
         // Check if default texture is created
         bool hasDefaultTexture() const { return defaultTextureCreated; }
+
+        // Check if descriptor resources are initialized
+        bool hasDescriptorResources() const { return descriptorPoolCreated; }
+
+        // Get texture view/sampler by path (for building descriptor sets)
+        vk::ImageView getViewForPath(const std::string& path) const;
+        vk::Sampler getSamplerForPath(const std::string& path) const;
+
+        // Legacy methods for backward compatibility (global texture array)
+        int getTextureSlot(const std::string& path);
+        void resetSlotAssignments();
+        vk::ImageView getViewForSlot(int slot) const;
+        vk::Sampler getSamplerForSlot(int slot) const;
+        std::array<vk::ImageView, 16> getImageViews() const;
+        std::array<vk::Sampler, 16> getSamplers() const;
 
     private:
         core::Device& device;
@@ -62,7 +89,7 @@ namespace render::mesh
             vk::DeviceMemory memory;
             vk::ImageView view;
             vk::Sampler sampler;
-            int slotIndex = -1;  // Slot in u_Textures[8], -1 = not assigned
+            int slotIndex = -1;  // Legacy: slot in global array
         };
 
         // Texture cache (path -> GPU texture)
@@ -72,10 +99,22 @@ namespace render::mesh
         TextureGPU defaultTexture{};
         bool defaultTextureCreated = false;
 
-        // Currently bound textures (slot index -> path), max 8
-        std::array<std::string, 8> boundTexturePaths;
+        // Per-material descriptor sets
+        vk::DescriptorSetLayout descriptorSetLayout;
+        vk::DescriptorPool descriptorPool;
+        bool descriptorPoolCreated = false;
+        static constexpr int MAX_MATERIAL_DESCRIPTOR_SETS = 256;  // Max materials
+
+        // Cache of material path -> descriptor set
+        std::unordered_map<std::string, vk::DescriptorSet> materialDescriptorSets;
+
+        // Legacy: Currently bound textures (slot index -> path), max 16
+        std::array<std::string, 16> boundTexturePaths;
         int nextTextureSlot = 0;
 
         void createDefaultTexture();
+        void createDescriptorPool();
+        vk::DescriptorSet allocateDescriptorSet();
+        void updateMaterialDescriptorSet(vk::DescriptorSet set, const MaterialTexturePaths& textures);
     };
 }

@@ -15,14 +15,14 @@
     vec3 kD = 1.0 - kS;
     kD *= 1.0 - mat_metallic;
 
-    // Diffuse IBL
+    // Diffuse IBL (reduced intensity - irradiance map not properly convolved yet)
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * mat_albedo;
+    vec3 diffuse = irradiance * mat_albedo * 0.3;
 
-    // Specular IBL
+    // Specular IBL (reduced intensity)
     vec3 prefilteredColor = textureLod(prefilterMap, R, mat_roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), mat_roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * 0.5;
 
     // Combine
     vec3 ambient = (kD * diffuse + specular) * mat_ao;

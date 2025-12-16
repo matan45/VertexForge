@@ -1,4 +1,5 @@
 #include "IBL.hpp"
+#include "ibl/EnvironmentCubemapGenerator.hpp"
 #include "ibl/IrradianceGenerator.hpp"
 #include "ibl/BRDFLUTGenerator.hpp"
 #include "ibl/PrefilteredEnvGenerator.hpp"
@@ -22,6 +23,7 @@ namespace render
         commandPool = device.getLogicalDevice().createCommandPoolUnique(commandPoolInfo);
 
         // Create sub-components
+        envCubemapGen = std::make_unique<ibl::EnvironmentCubemapGenerator>(device);
         irradianceGen = std::make_unique<ibl::IrradianceGenerator>(device);
         brdfLUTGen = std::make_unique<ibl::BRDFLUTGenerator>(device);
         prefilteredGen = std::make_unique<ibl::PrefilteredEnvGenerator>(device);
@@ -40,10 +42,15 @@ namespace render
         hdrTexture = std::make_shared<core::Texture>(device);
         hdrTexture->loadHDRFromFile(path, vk::Format::eR32G32B32Sfloat, false);
 
+        // Generate environment cubemap (sharp, for skybox and prefilter input)
+        envCubemapGen->generate(*hdrTexture, commandPool.get());
+        // Generate irradiance map (convolved/blurry, for diffuse IBL)
         irradianceGen->generate(*hdrTexture, commandPool.get());
         brdfLUTGen->generate(commandPool.get());
-        prefilteredGen->generate(irradianceGen->getImageData(), commandPool.get());
-        skyboxRenderer->init(irradianceGen->getImageData());
+        // Prefilter uses environment cubemap (not irradiance)
+        prefilteredGen->generate(envCubemapGen->getImageData(), commandPool.get());
+        // Skybox uses environment cubemap (sharp)
+        skyboxRenderer->init(envCubemapGen->getImageData());
         iblInitialized = true;
     }
 
@@ -66,6 +73,7 @@ namespace render
             hdrTexture.reset();
 
             skyboxRenderer->cleanUp();
+            envCubemapGen->cleanUp();
             irradianceGen->cleanUp();
             brdfLUTGen->cleanUp();
             prefilteredGen->cleanUp();
@@ -77,6 +85,7 @@ namespace render
         device.getLogicalDevice().waitIdle();
 
         skyboxRenderer->cleanUpShader();
+        envCubemapGen->cleanUpShader();
         irradianceGen->cleanUpShader();
         brdfLUTGen->cleanUpShader();
         prefilteredGen->cleanUpShader();

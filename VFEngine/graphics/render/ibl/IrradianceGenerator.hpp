@@ -13,6 +13,11 @@ namespace render::ibl
 {
     class IrradianceGenerator
     {
+    private:
+        core::Device& device;
+        ImageData imageIrradianceCube{};
+        std::shared_ptr<core::Shader> shaderIrradianceCube;
+
     public:
         explicit IrradianceGenerator(core::Device& device);
         ~IrradianceGenerator() = default;
@@ -24,10 +29,6 @@ namespace render::ibl
         const ImageData& getImageData() const { return imageIrradianceCube; }
 
     private:
-        core::Device& device;
-        ImageData imageIrradianceCube{};
-        std::shared_ptr<core::Shader> shaderIrradianceCube;
-
         void updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix,
                                  const vk::DeviceMemory& uniformBufferMemory) const;
     };

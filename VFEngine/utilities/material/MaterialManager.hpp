@@ -33,6 +33,9 @@ namespace material {
         // Reload a material from disk (for hot-reload)
         bool reloadMaterial(std::string_view path);
 
+        // Invalidate cache entry (forces reload on next loadMaterial call)
+        void invalidateCache(std::string_view path);
+
         // Save material to disk and update cache
         bool saveMaterial(std::string_view path, const MaterialData& material);
 

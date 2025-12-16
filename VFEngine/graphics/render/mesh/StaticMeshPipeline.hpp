@@ -73,10 +73,15 @@ namespace render::mesh
         vk::DescriptorSet getTextureDescriptorSet() const { return textureDescriptorSet; }
         bool hasTextureDescriptors() const { return textureDescriptorsInitialized; }
 
-        // Update texture descriptors for material preview (8 texture slots)
+        // Update the default descriptor set with 6 textures (for preview rendering)
+        void updatePreviewTextureDescriptors(
+            const std::array<vk::ImageView, 6>& imageViews,
+            const std::array<vk::Sampler, 6>& samplers);
+
+        // Legacy method for texture descriptor update (kept for backward compatibility)
         void updateTextureDescriptors(
-            const std::array<vk::ImageView, 8>& imageViews,
-            const std::array<vk::Sampler, 8>& samplers);
+            const std::array<vk::ImageView, 16>& imageViews,
+            const std::array<vk::Sampler, 16>& samplers);
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;
