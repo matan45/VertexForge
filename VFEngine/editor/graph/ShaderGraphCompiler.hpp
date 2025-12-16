@@ -48,6 +48,10 @@ namespace editor::graph {
                                           const std::string& pinName,
                                           const std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars);
 
+        // Determine texture index for a TextureSample node based on which PBR output it connects to
+        // Returns: 0=Albedo, 1=Metallic, 2=Roughness, 3=AO, 4=Normal, 5=Emission, -1=unknown
+        static int determinePBRTextureIndex(const material::ShaderGraph& graph, uint32_t nodeId);
+
         // Cached shader templates
         static std::string s_vertexTemplate;
         static std::string s_fragmentHeader;

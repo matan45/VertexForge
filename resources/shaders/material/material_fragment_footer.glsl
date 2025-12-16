@@ -1,4 +1,7 @@
 
+    // Convert albedo from sRGB to linear space for PBR calculations
+    vec3 albedo_linear = pow(mat_albedo, vec3(2.2));
+
     // PBR Lighting
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
@@ -6,7 +9,7 @@
 
     // Calculate F0
     vec3 F0 = vec3(0.04);
-    F0 = mix(F0, mat_albedo, mat_metallic);
+    F0 = mix(F0, albedo_linear, mat_metallic);
 
     // IBL Ambient Lighting
     vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, mat_roughness);
@@ -15,14 +18,14 @@
     vec3 kD = 1.0 - kS;
     kD *= 1.0 - mat_metallic;
 
-    // Diffuse IBL (reduced intensity - irradiance map not properly convolved yet)
+    // Diffuse IBL
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * mat_albedo * 0.3;
+    vec3 diffuse = irradiance * albedo_linear;
 
-    // Specular IBL (reduced intensity)
+    // Specular IBL
     vec3 prefilteredColor = textureLod(prefilterMap, R, mat_roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), mat_roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * 0.5;
+    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
 
     // Combine
     vec3 ambient = (kD * diffuse + specular) * mat_ao;

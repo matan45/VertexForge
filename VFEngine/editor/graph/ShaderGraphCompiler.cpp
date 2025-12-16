@@ -251,6 +251,51 @@ namespace editor::graph {
         return result;
     }
 
+    int ShaderGraphCompiler::determinePBRTextureIndex(const material::ShaderGraph& graph, uint32_t nodeId) {
+        // PBR output pin to texture index mapping
+        // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
+        static const std::map<std::string, int> pbrPinToIndex = {
+            {"Albedo", 0},
+            {"Metallic", 1},
+            {"Roughness", 2},
+            {"AO", 3},
+            {"Normal", 4},
+            {"Emission", 5}
+        };
+
+        // BFS to find which PBR output this node connects to
+        std::set<uint32_t> visited;
+        std::queue<uint32_t> toVisit;
+        toVisit.push(nodeId);
+
+        while (!toVisit.empty()) {
+            uint32_t currentId = toVisit.front();
+            toVisit.pop();
+
+            if (visited.count(currentId)) continue;
+            visited.insert(currentId);
+
+            // Find all links where this node is the source
+            for (const auto& link : graph.links) {
+                if (link.sourceNodeId == currentId) {
+                    // Check if target is PBR output node
+                    const material::ShaderNode* targetNode = graph.findNode(link.targetNodeId);
+                    if (targetNode && targetNode->type == material::NodeType::PBROutput) {
+                        // Found connection to PBR output - return the index for this pin
+                        auto it = pbrPinToIndex.find(link.targetPin);
+                        if (it != pbrPinToIndex.end()) {
+                            return it->second;
+                        }
+                    }
+                    // Continue searching through this node
+                    toVisit.push(link.targetNodeId);
+                }
+            }
+        }
+
+        return -1; // Not connected to PBR output
+    }
+
     std::string ShaderGraphCompiler::generateNodeCode(const material::ShaderGraph& graph,
                                                       uint32_t nodeId,
                                                       std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars) {
@@ -258,8 +303,20 @@ namespace editor::graph {
         const material::ShaderNode* nodeData = graph.findNode(nodeId);
         if (!nodeData) return "";
 
-        // Create runtime node
-        auto node = ShaderNodeFactory::createNodeFromData(*nodeData);
+        // Create a mutable copy of node data for TextureSample nodes
+        // so we can set the correct texture index based on PBR connection
+        material::ShaderNode modifiedNodeData = *nodeData;
+
+        // For TextureSample nodes, determine correct texture index based on PBR connection
+        if (nodeData->type == material::NodeType::TextureSample) {
+            int pbrIndex = determinePBRTextureIndex(graph, nodeId);
+            if (pbrIndex >= 0) {
+                modifiedNodeData.properties["textureIndex"] = static_cast<float>(pbrIndex);
+            }
+        }
+
+        // Create runtime node from (potentially modified) data
+        auto node = ShaderNodeFactory::createNodeFromData(modifiedNodeData);
         if (!node) return "";
 
         // Build input variable map
