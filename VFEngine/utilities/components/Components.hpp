@@ -4,7 +4,6 @@
 #include <string>
 #include <map>
 #include <optional>
-#include <entt/entt.hpp>
 #include "../uuid/UUID.hpp"
 
 namespace components {
@@ -13,10 +12,11 @@ namespace components {
 	struct CameraComponent;
 	struct MeshComponent;
 	struct MaterialComponent;
+	struct BillboardComponent;
 
 	// Type list of optional components that can be removed during cleanup
 	// Add new optional component types here when they are created
-	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent>;
+	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent, BillboardComponent>;
 
 	struct WorldTransformComponent
 	{
@@ -68,8 +68,7 @@ namespace components {
 			scale = newScale;
 			isDirty = true;
 		}
-
-		// Compute transformation matrix without setting isDirty
+		
 		glm::mat4 GetMatrix() const {
 			auto transform = glm::mat4(1.0f);
 			transform = glm::translate(transform, position);
@@ -91,15 +90,13 @@ namespace components {
 		float nearPlane = 0.1f;
 		float farPlane = 1000.0f;
 		float aspectRatio = 1.778f; // Typically screen width / height
-
-		// Default constructor - initializes projection matrix with default values
+		
 		CameraComponent() {
 			updateProjectionMatrix();
 			// Initialize view matrix looking down -Z axis
 			viewMatrix = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		}
-
-		// Update the projection matrix based on the current settings
+		
 		void updateProjectionMatrix()
 		{
 			if (isPerspective) {
@@ -189,6 +186,49 @@ namespace components {
 				return it->second;
 			}
 			return std::nullopt;
+		}
+	};
+
+	
+	enum class BillboardSizeMode : uint8_t {
+		ScreenSpace,  // Constant on-screen size regardless of distance
+		WorldSpace    // Size scales with distance
+	};
+
+	
+	enum class BillboardIconType : uint8_t {
+		Custom = 0,   
+		Light,       
+		Camera,      
+		AudioSource, 
+		Particle     
+	};
+
+	struct BillboardComponent {
+		BillboardIconType iconType = BillboardIconType::Custom;
+		uint32_t atlasIndex = 0;
+		
+		BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
+		glm::vec2 size{ 32.0f, 32.0f };  // Pixels (screen-space) or world units
+		
+		glm::vec4 colorTint{ 1.0f, 1.0f, 1.0f, 1.0f };  // RGBA
+
+		
+		bool editorOnly = true;   // Only render in editor
+		bool selectable = true;   // Allow entity selection via click
+		
+		uint32_t getEffectiveAtlasIndex() const {
+			if (iconType == BillboardIconType::Custom) {
+				return atlasIndex;
+			}
+			// Explicit mapping - decoupled from enum order
+			switch (iconType) {
+			case BillboardIconType::Light:       return 0;
+			case BillboardIconType::Camera:      return 1;
+			case BillboardIconType::AudioSource: return 2;
+			case BillboardIconType::Particle:    return 3;
+			default:                             return atlasIndex;
+			}
 		}
 	};
 

@@ -82,6 +82,10 @@ namespace serialization {
 			componentsJson["material"] = serializeMaterial(entity.getComponent<components::MaterialComponent>());
 		}
 
+		if (entity.hasComponent<components::BillboardComponent>()) {
+			componentsJson["billboard"] = serializeBillboard(entity.getComponent<components::BillboardComponent>());
+		}
+
 		entityJson["components"] = componentsJson;
 
 		// Serialize children recursively
@@ -194,6 +198,66 @@ namespace serialization {
 		}
 	}
 
+	// Billboard enum conversion helpers
+	static std::string billboardSizeModeToString(components::BillboardSizeMode mode) {
+		switch (mode) {
+		case components::BillboardSizeMode::WorldSpace: return "worldSpace";
+		default: return "screenSpace";
+		}
+	}
+
+	static components::BillboardSizeMode stringToBillboardSizeMode(const std::string& str) {
+		if (str == "worldSpace") return components::BillboardSizeMode::WorldSpace;
+		return components::BillboardSizeMode::ScreenSpace;
+	}
+
+	static std::string billboardIconTypeToString(components::BillboardIconType type) {
+		switch (type) {
+		case components::BillboardIconType::Light: return "light";
+		case components::BillboardIconType::Camera: return "camera";
+		case components::BillboardIconType::AudioSource: return "audioSource";
+		case components::BillboardIconType::Particle: return "particle";
+		default: return "custom";
+		}
+	}
+
+	static components::BillboardIconType stringToBillboardIconType(const std::string& str) {
+		if (str == "light") return components::BillboardIconType::Light;
+		if (str == "camera") return components::BillboardIconType::Camera;
+		if (str == "audioSource") return components::BillboardIconType::AudioSource;
+		if (str == "particle") return components::BillboardIconType::Particle;
+		return components::BillboardIconType::Custom;
+	}
+
+	json SceneSerialization::serializeBillboard(const components::BillboardComponent& billboard) {
+		json j;
+		j["iconType"] = billboardIconTypeToString(billboard.iconType);
+		j["atlasIndex"] = billboard.atlasIndex;
+		j["sizeMode"] = billboardSizeModeToString(billboard.sizeMode);
+		j["size"] = json::array({ billboard.size.x, billboard.size.y });
+		j["colorTint"] = json::array({ billboard.colorTint.r, billboard.colorTint.g, billboard.colorTint.b, billboard.colorTint.a });
+		j["editorOnly"] = billboard.editorOnly;
+		j["selectable"] = billboard.selectable;
+		return j;
+	}
+
+	void SceneSerialization::deserializeBillboard(const json& j, components::BillboardComponent& billboard) {
+		billboard.iconType = stringToBillboardIconType(j.value("iconType", "custom"));
+		billboard.atlasIndex = j.value("atlasIndex", 0u);
+		billboard.sizeMode = stringToBillboardSizeMode(j.value("sizeMode", "screenSpace"));
+		if (j.contains("size") && j["size"].is_array() && j["size"].size() >= 2) {
+			billboard.size = glm::vec2(j["size"][0].get<float>(), j["size"][1].get<float>());
+		}
+		if (j.contains("colorTint") && j["colorTint"].is_array() && j["colorTint"].size() >= 4) {
+			billboard.colorTint = glm::vec4(
+				j["colorTint"][0].get<float>(), j["colorTint"][1].get<float>(),
+				j["colorTint"][2].get<float>(), j["colorTint"][3].get<float>()
+			);
+		}
+		billboard.editorOnly = j.value("editorOnly", true);
+		billboard.selectable = j.value("selectable", true);
+	}
+
 	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
 		for (const auto& childJson : childrenJson) {
@@ -256,10 +320,15 @@ namespace serialization {
 		if (entityJson.contains("components")) {
 			const auto& componentsJson = entityJson["components"];
 
-			// Camera component
+			// Camera component (auto-adds billboard if not explicitly defined)
 			if (componentsJson.contains("camera")) {
 				auto& camera = entity.addOrReplaceComponent<components::CameraComponent>();
 				deserializeCamera(componentsJson["camera"], camera);
+				// Auto-add camera billboard if no billboard component is defined
+				if (!componentsJson.contains("billboard")) {
+					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+					billboard.iconType = components::BillboardIconType::Camera;
+				}
 			}
 
 			// IBL component
@@ -278,6 +347,11 @@ namespace serialization {
 			if (componentsJson.contains("material")) {
 				auto& matComp = entity.addOrReplaceComponent<components::MaterialComponent>();
 				deserializeMaterial(componentsJson["material"], matComp);
+			}
+
+			if (componentsJson.contains("billboard")) {
+				auto& billboardComp = entity.addOrReplaceComponent<components::BillboardComponent>();
+				deserializeBillboard(componentsJson["billboard"], billboardComp);
 			}
 		}
 
