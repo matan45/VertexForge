@@ -130,6 +130,14 @@ namespace scene {
 			return uuid::UUID::invalid();
 		}
 
+		// Add camera component with billboard icon
+		components::CameraComponent& addCameraComponent() {
+			auto& camera = addOrReplaceComponent<components::CameraComponent>();
+			auto& billboard = addOrReplaceComponent<components::BillboardComponent>();
+			billboard.iconType = components::BillboardIconType::Camera;
+			return camera;
+		}
+
 		// Add a child entity
 		void addChildren(Entity& child) {
 			// Add to the current entity's ChildrenComponent

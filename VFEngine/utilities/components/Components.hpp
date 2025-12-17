@@ -4,7 +4,6 @@
 #include <string>
 #include <map>
 #include <optional>
-#include <entt/entt.hpp>
 #include "../uuid/UUID.hpp"
 
 namespace components {
@@ -69,8 +68,7 @@ namespace components {
 			scale = newScale;
 			isDirty = true;
 		}
-
-		// Compute transformation matrix without setting isDirty
+		
 		glm::mat4 GetMatrix() const {
 			auto transform = glm::mat4(1.0f);
 			transform = glm::translate(transform, position);
@@ -92,15 +90,13 @@ namespace components {
 		float nearPlane = 0.1f;
 		float farPlane = 1000.0f;
 		float aspectRatio = 1.778f; // Typically screen width / height
-
-		// Default constructor - initializes projection matrix with default values
+		
 		CameraComponent() {
 			updateProjectionMatrix();
 			// Initialize view matrix looking down -Z axis
 			viewMatrix = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		}
-
-		// Update the projection matrix based on the current settings
+		
 		void updateProjectionMatrix()
 		{
 			if (isPerspective) {
@@ -193,36 +189,34 @@ namespace components {
 		}
 	};
 
-	// Billboard sizing mode
+	
 	enum class BillboardSizeMode : uint8_t {
 		ScreenSpace,  // Constant on-screen size regardless of distance
 		WorldSpace    // Size scales with distance
 	};
 
-	// Predefined icon types for common entity types
+	
 	enum class BillboardIconType : uint8_t {
-		Custom = 0,   // Use atlasIndex for custom icon
-		Light,        // Light icon
-		Camera,       // Camera icon
-		AudioSource,  // Speaker/audio icon
-		Particle      // Particle emitter icon
+		Custom = 0,   
+		Light,       
+		Camera,      
+		AudioSource, 
+		Particle     
 	};
 
 	struct BillboardComponent {
 		BillboardIconType iconType = BillboardIconType::Custom;
 		uint32_t atlasIndex = 0;
-		// Sizing
+		
 		BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
 		glm::vec2 size{ 32.0f, 32.0f };  // Pixels (screen-space) or world units
-
-		// Appearance
+		
 		glm::vec4 colorTint{ 1.0f, 1.0f, 1.0f, 1.0f };  // RGBA
 
-		// Flags
+		
 		bool editorOnly = true;   // Only render in editor
 		bool selectable = true;   // Allow entity selection via click
-
-		// Get effective atlas index (resolves iconType to atlas position)
+		
 		uint32_t getEffectiveAtlasIndex() const {
 			return (iconType == BillboardIconType::Custom)
 				? atlasIndex

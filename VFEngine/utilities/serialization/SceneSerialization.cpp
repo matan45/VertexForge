@@ -317,10 +317,15 @@ namespace serialization {
 		if (entityJson.contains("components")) {
 			const auto& componentsJson = entityJson["components"];
 
-			// Camera component
+			// Camera component (auto-adds billboard if not explicitly defined)
 			if (componentsJson.contains("camera")) {
 				auto& camera = entity.addOrReplaceComponent<components::CameraComponent>();
 				deserializeCamera(componentsJson["camera"], camera);
+				// Auto-add camera billboard if no billboard component is defined
+				if (!componentsJson.contains("billboard")) {
+					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+					billboard.iconType = components::BillboardIconType::Camera;
+				}
 			}
 
 			// IBL component
