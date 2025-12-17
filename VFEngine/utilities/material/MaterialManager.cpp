@@ -1,88 +1,13 @@
 #include "MaterialManager.hpp"
 #include "MaterialAsset.hpp"
 #include "../print/EditorLogger.hpp"
-#include <algorithm>
+#include "../resource/ResourceManager.hpp"
 
 namespace material {
 
     MaterialManager& MaterialManager::instance() {
         static MaterialManager instance;
         return instance;
-    }
-
-    std::shared_ptr<MaterialData> MaterialManager::loadMaterial(std::string_view path) {
-        std::string pathStr(path);
-
-        std::lock_guard<std::mutex> lock(cacheMutex);
-
-        // Check cache first
-        auto it = materialCache.find(pathStr);
-        if (it != materialCache.end()) {
-            // Try to get existing material from weak_ptr
-            if (auto existing = it->second.lock()) {
-                return existing;
-            }
-            // Weak pointer expired, remove from cache
-            materialCache.erase(it);
-        }
-
-        // Load from disk
-        auto materialData = MaterialAsset::load(path);
-        if (!materialData) {
-            vfLogError("Failed to load material: {}", path);
-            return nullptr;
-        }
-
-        // Create shared_ptr and cache weak_ptr
-        auto material = std::make_shared<MaterialData>(std::move(*materialData));
-        materialCache[pathStr] = material;
-
-        return material;
-    }
-
-    std::future<std::shared_ptr<MaterialData>> MaterialManager::loadMaterialAsync(std::string_view path) {
-        std::string pathStr(path);
-
-        // Check cache first (with lock)
-        {
-            std::lock_guard<std::mutex> lock(cacheMutex);
-            auto it = materialCache.find(pathStr);
-            if (it != materialCache.end()) {
-                if (auto existing = it->second.lock()) {
-                    return makeReadyFuture(existing);
-                }
-                materialCache.erase(it);
-            }
-        }
-
-        // Load asynchronously
-        return std::async(std::launch::async, [this, pathStr]() {
-            return loadMaterial(pathStr);
-        });
-    }
-
-    std::shared_ptr<MaterialData> MaterialManager::getMaterial(std::string_view path) const {
-        std::string pathStr(path);
-
-        std::lock_guard<std::mutex> lock(cacheMutex);
-
-        auto it = materialCache.find(pathStr);
-        if (it != materialCache.end()) {
-            return it->second.lock();
-        }
-        return nullptr;
-    }
-
-    bool MaterialManager::isMaterialLoaded(std::string_view path) const {
-        std::string pathStr(path);
-
-        std::lock_guard<std::mutex> lock(cacheMutex);
-
-        auto it = materialCache.find(pathStr);
-        if (it != materialCache.end()) {
-            return !it->second.expired();
-        }
-        return false;
     }
 
     bool MaterialManager::reloadMaterial(std::string_view path) {
@@ -95,40 +20,20 @@ namespace material {
             return false;
         }
 
-        bool shouldNotify = false;
-        {
-            std::lock_guard<std::mutex> lock(cacheMutex);
-
-            auto it = materialCache.find(pathStr);
-            if (it != materialCache.end()) {
-                if (auto existing = it->second.lock()) {
-                    // Update existing material in place
-                    *existing = std::move(*newData);
-                    existing->needsRecompile = true;
-                    shouldNotify = true;
-                }
-            }
-
-            if (!shouldNotify) {
-                // Material wasn't loaded, just load it fresh
-                auto material = std::make_shared<MaterialData>(std::move(*newData));
-                materialCache[pathStr] = material;
-            }
+        // Try to update existing cached material in-place
+        auto existing = resource::ResourceManager::getMaterial(path);
+        if (existing) {
+            *existing = std::move(*newData);
+            existing->needsRecompile = true;
+        } else {
+            // Not in cache, invalidate and let next load get fresh data
+            resource::ResourceManager::invalidateMaterialCache(path);
         }
 
-        // Notify callbacks outside lock to avoid deadlock
-        if (shouldNotify) {
-            notifyMaterialChanged(pathStr);
-        }
+        // Notify callbacks
+        notifyMaterialChanged(pathStr);
 
         return true;
-    }
-
-    void MaterialManager::invalidateCache(std::string_view path) {
-        std::string pathStr(path);
-
-        std::lock_guard<std::mutex> lock(cacheMutex);
-        materialCache.erase(pathStr);
     }
 
     bool MaterialManager::saveMaterial(std::string_view path, const MaterialData& material) {
@@ -140,16 +45,11 @@ namespace material {
 
         std::string pathStr(path);
 
-        // Update cache
-        {
-            std::lock_guard<std::mutex> lock(cacheMutex);
-            auto it = materialCache.find(pathStr);
-            if (it != materialCache.end()) {
-                if (auto existing = it->second.lock()) {
-                    *existing = material;
-                    existing->needsRecompile = true;
-                }
-            }
+        // Update cached material if it exists
+        auto existing = resource::ResourceManager::getMaterial(path);
+        if (existing) {
+            *existing = material;
+            existing->needsRecompile = true;
         }
 
         // Notify callbacks
@@ -168,51 +68,18 @@ namespace material {
                 vfLogError("Failed to save new material: {}", savePath);
                 return nullptr;
             }
-
-            // Cache it
-            std::string pathStr(savePath);
-            std::lock_guard<std::mutex> lock(cacheMutex);
-            materialCache[pathStr] = material;
         }
 
         return material;
     }
 
-    void MaterialManager::unloadUnusedMaterials() {
-        std::lock_guard<std::mutex> lock(cacheMutex);
-
-        // Remove expired weak_ptrs
-        for (auto it = materialCache.begin(); it != materialCache.end();) {
-            if (it->second.expired()) {
-                it = materialCache.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-
-    std::vector<std::string> MaterialManager::getLoadedMaterialPaths() const {
-        std::lock_guard<std::mutex> lock(cacheMutex);
-
-        std::vector<std::string> paths;
-        paths.reserve(materialCache.size());
-
-        for (const auto& [path, weakPtr] : materialCache) {
-            if (!weakPtr.expired()) {
-                paths.push_back(path);
-            }
-        }
-
-        return paths;
-    }
-
     void MaterialManager::registerChangeCallback(MaterialChangedCallback callback) {
-        std::lock_guard<std::mutex> lock(cacheMutex);
+        std::lock_guard<std::mutex> lock(callbackMutex);
         changeCallbacks.push_back(std::move(callback));
     }
 
     void MaterialManager::clearCallbacks() {
-        std::lock_guard<std::mutex> lock(cacheMutex);
+        std::lock_guard<std::mutex> lock(callbackMutex);
         changeCallbacks.clear();
     }
 
@@ -226,7 +93,7 @@ namespace material {
     void MaterialManager::notifyMaterialChanged(const std::string& path) {
         std::vector<MaterialChangedCallback> callbacks;
         {
-            std::lock_guard<std::mutex> lock(cacheMutex);
+            std::lock_guard<std::mutex> lock(callbackMutex);
             callbacks = changeCallbacks;
         }
 

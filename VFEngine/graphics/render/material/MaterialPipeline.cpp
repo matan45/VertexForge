@@ -513,11 +513,11 @@ namespace render::material {
     }
 
     vk::PipelineLayout MaterialPipeline::createPipelineLayout() const {
-        // Push constant for material parameters (using same struct as mesh pipeline)
+        // Push constant for material parameters
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(mesh::MeshPushConstants);  // Full material push constants
+        pushConstantRange.size = sizeof(mesh::MeshPushConstants);
 
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
             globalDescriptorLayout,

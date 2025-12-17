@@ -29,8 +29,7 @@ namespace render::mesh
         if (!descriptorPoolCreated) {
             createDescriptorPool();
         }
-
-        // Ensure default texture is created for filling empty slots
+        
         if (!defaultTextureCreated) {
             if (commandPool) {
                 createDefaultTexture();
@@ -86,8 +85,7 @@ namespace render::mesh
             loggerError("Cannot update material descriptor set: default texture not available");
             return;
         }
-
-        // Build image info array for the 6 texture slots
+        
         std::array<vk::DescriptorImageInfo, MAX_MATERIAL_TEXTURES> imageInfos;
 
         // Helper to get view/sampler for a texture path
@@ -101,38 +99,32 @@ namespace render::mesh
             }
             return {defaultTexture.view, defaultTexture.sampler};
         };
-
-        // Slot 0: albedo
+        
         auto [albedoView, albedoSampler] = getViewSampler(textures.albedo);
         imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfos[0].imageView = albedoView;
         imageInfos[0].sampler = albedoSampler;
-
-        // Slot 1: metallic
+        
         auto [metallicView, metallicSampler] = getViewSampler(textures.metallic);
         imageInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfos[1].imageView = metallicView;
         imageInfos[1].sampler = metallicSampler;
-
-        // Slot 2: roughness
+        
         auto [roughnessView, roughnessSampler] = getViewSampler(textures.roughness);
         imageInfos[2].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfos[2].imageView = roughnessView;
         imageInfos[2].sampler = roughnessSampler;
-
-        // Slot 3: ao
+        
         auto [aoView, aoSampler] = getViewSampler(textures.ao);
         imageInfos[3].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfos[3].imageView = aoView;
         imageInfos[3].sampler = aoSampler;
-
-        // Slot 4: normal
+        
         auto [normalView, normalSampler] = getViewSampler(textures.normal);
         imageInfos[4].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfos[4].imageView = normalView;
         imageInfos[4].sampler = normalSampler;
-
-        // Slot 5: emission
+        
         auto [emissionView, emissionSampler] = getViewSampler(textures.emission);
         imageInfos[5].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         imageInfos[5].imageView = emissionView;
@@ -201,7 +193,6 @@ namespace render::mesh
 
     void MaterialTextureCache::resetDescriptorResources()
     {
-        // Free all material descriptor sets
         if (descriptorPoolCreated && descriptorPool) {
             for (auto& [path, set] : materialDescriptorSets) {
                 if (set) {
@@ -209,8 +200,7 @@ namespace render::mesh
                 }
             }
             materialDescriptorSets.clear();
-
-            // Destroy the pool
+            
             device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
             descriptorPool = nullptr;
         }

@@ -22,7 +22,7 @@ namespace editor::graph {
             addInputPin("EmissionStrength", material::PinType::Float, 1.0f);
             addInputPin("Opacity", material::PinType::Float, 1.0f);
             addInputPin("IBLDiffuse", material::PinType::Float, 1.0f);
-            addInputPin("IBLSpecular", material::PinType::Float, 0.5f);   // IBL specular/reflection intensity
+            addInputPin("IBLSpecular", material::PinType::Float, 0.5f);
         }
 
         std::string generateCode(const std::string& outputVarPrefix,

@@ -3,6 +3,7 @@
 #include "MeshTypes.hpp"
 #include "../ibl/IBLTypes.hpp"
 #include "material/MaterialTypes.hpp"
+#include <array>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -28,6 +29,7 @@ namespace render::mesh
     class MaterialShaderCache;
     class MeshGPUCache;
     class MaterialTextureCache;
+    class DefaultIBLTextureFactory;
 }
 
 namespace render::mesh
@@ -35,6 +37,9 @@ namespace render::mesh
     class StaticMeshPipeline
     {
     public:
+        // Max textures per material (must match MaterialTextureCache::MAX_MATERIAL_TEXTURES)
+        static constexpr int MAX_MATERIAL_TEXTURES = 6;
+
         explicit StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
                            core::OffscreenResources& offscreenResources);
         ~StaticMeshPipeline();
@@ -73,10 +78,10 @@ namespace render::mesh
         vk::DescriptorSet getTextureDescriptorSet() const { return textureDescriptorSet; }
         bool hasTextureDescriptors() const { return textureDescriptorsInitialized; }
 
-        // Update the default descriptor set with 6 textures (for preview rendering)
+        // Update the default descriptor set with material textures (for preview rendering)
         void updatePreviewTextureDescriptors(
-            const std::array<vk::ImageView, 6>& imageViews,
-            const std::array<vk::Sampler, 6>& samplers);
+            const std::array<vk::ImageView, MAX_MATERIAL_TEXTURES>& imageViews,
+            const std::array<vk::Sampler, MAX_MATERIAL_TEXTURES>& samplers);
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;
@@ -176,12 +181,9 @@ namespace render::mesh
 
         // Default IBL textures (used when no IBL is set)
         bool usingDefaultTextures = false;
-        ibl::ImageData defaultIrradiance{};
-        ibl::ImageData defaultPrefilter{};
-        ibl::ImageData defaultBrdfLUT{};
-        
+        std::unique_ptr<DefaultIBLTextureFactory> defaultIBLFactory;
+
         void loadShaders();
-        void createDefaultIBLTextures();
         void createRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();

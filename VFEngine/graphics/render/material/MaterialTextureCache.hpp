@@ -1,9 +1,6 @@
 #pragma once
-
 #include <vulkan/vulkan.hpp>
-#include <memory>
 #include <string>
-#include <array>
 #include <unordered_map>
 
 namespace core
@@ -13,7 +10,6 @@ namespace core
 
 namespace render::mesh
 {
-    // Texture paths for a material (used for per-material descriptor sets)
     struct MaterialTexturePaths
     {
         std::string albedo;
@@ -26,56 +22,6 @@ namespace render::mesh
 
     class MaterialTextureCache
     {
-    public:
-        // Max textures per material (matches shader u_Textures[6])
-        static constexpr int MAX_MATERIAL_TEXTURES = 6;
-
-        explicit MaterialTextureCache(core::Device& device);
-        ~MaterialTextureCache();
-
-        // Non-copyable
-        MaterialTextureCache(const MaterialTextureCache&) = delete;
-        MaterialTextureCache& operator=(const MaterialTextureCache&) = delete;
-
-        // Initialize with command pool for GPU uploads
-        void init(vk::CommandPool commandPool);
-
-        // Initialize descriptor resources (call after pipeline creates layout)
-        void initDescriptorResources(vk::DescriptorSetLayout layout);
-
-        // Reset descriptor resources only (call when layout is recreated)
-        // This frees descriptor sets but keeps textures loaded
-        void resetDescriptorResources();
-
-        // Cleanup all GPU resources
-        void cleanUp();
-
-        // Load a texture from file path, returns true if successful
-        bool loadTexture(const std::string& path);
-
-        // Get or create a per-material descriptor set
-        // Returns the descriptor set for this material, or nullptr if failed
-        vk::DescriptorSet getOrCreateMaterialDescriptorSet(
-            const std::string& materialPath,
-            const MaterialTexturePaths& textures);
-
-        // Invalidate a material's descriptor set (call when material changes)
-        void invalidateMaterialDescriptorSet(const std::string& materialPath);
-
-        // Get default 1x1 white texture view/sampler
-        vk::ImageView getDefaultView() const { return defaultTexture.view; }
-        vk::Sampler getDefaultSampler() const { return defaultTexture.sampler; }
-
-        // Check if default texture is created
-        bool hasDefaultTexture() const { return defaultTextureCreated; }
-
-        // Check if descriptor resources are initialized
-        bool hasDescriptorResources() const { return descriptorPoolCreated; }
-
-        // Get texture view/sampler by path (for building descriptor sets)
-        vk::ImageView getViewForPath(const std::string& path) const;
-        vk::Sampler getSamplerForPath(const std::string& path) const;
-
     private:
         core::Device& device;
         vk::CommandPool commandPool;
@@ -98,11 +44,48 @@ namespace render::mesh
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         bool descriptorPoolCreated = false;
-        static constexpr int MAX_MATERIAL_DESCRIPTOR_SETS = 256;  // Max materials
+        static constexpr int MAX_MATERIAL_DESCRIPTOR_SETS = 256;
 
         // Cache of material path -> descriptor set
         std::unordered_map<std::string, vk::DescriptorSet> materialDescriptorSets;
 
+    public:
+        static constexpr int MAX_MATERIAL_TEXTURES = 6;
+
+        explicit MaterialTextureCache(core::Device& device);
+        ~MaterialTextureCache();
+
+        // Non-copyable
+        MaterialTextureCache(const MaterialTextureCache&) = delete;
+        MaterialTextureCache& operator=(const MaterialTextureCache&) = delete;
+        
+        void init(vk::CommandPool commandPool);
+        void initDescriptorResources(vk::DescriptorSetLayout layout);
+        
+        void resetDescriptorResources();
+        
+        void cleanUp();
+        
+        bool loadTexture(const std::string& path);
+        
+        vk::DescriptorSet getOrCreateMaterialDescriptorSet(
+            const std::string& materialPath,
+            const MaterialTexturePaths& textures);
+        
+        void invalidateMaterialDescriptorSet(const std::string& materialPath);
+
+        // Get default 1x1 white texture view/sampler
+        vk::ImageView getDefaultView() const { return defaultTexture.view; }
+        vk::Sampler getDefaultSampler() const { return defaultTexture.sampler; }
+        
+        bool hasDefaultTexture() const { return defaultTextureCreated; }
+        bool hasDescriptorResources() const { return descriptorPoolCreated; }
+
+        // Get texture view/sampler by path (for building descriptor sets)
+        vk::ImageView getViewForPath(const std::string& path) const;
+        vk::Sampler getSamplerForPath(const std::string& path) const;
+
+    private:
         void createDefaultTexture();
         void createDescriptorPool();
         vk::DescriptorSet allocateDescriptorSet();

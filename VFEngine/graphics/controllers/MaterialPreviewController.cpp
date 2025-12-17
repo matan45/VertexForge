@@ -498,9 +498,7 @@ namespace controllers
                 meshPipeline->injectMaterialForPreview(params.materialPath, params.materialData);
             }
         }
-
-        // Load textures and assign to FIXED slots matching the main pipeline:
-        // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
+        
         std::array<std::string, 6> texturePaths = {
             params.albedoTexturePath,
             params.metallicTexturePath,
@@ -674,9 +672,7 @@ namespace controllers
             renderData.emission = materialParams.emission;
         }
 
-        // Set texture indices using FIXED slots matching the main pipeline:
-        // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
-        // Use -1.0f if no texture, otherwise use fixed slot index
+        
         renderData.albedoTexIdx = materialParams.albedoTexturePath.empty() ? -1.0f : 0.0f;
         renderData.metallicTexIdx = materialParams.metallicTexturePath.empty() ? -1.0f : 1.0f;
         renderData.roughnessTexIdx = materialParams.roughnessTexturePath.empty() ? -1.0f : 2.0f;

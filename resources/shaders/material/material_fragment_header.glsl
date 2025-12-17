@@ -22,25 +22,6 @@ layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
 layout(set = 1, binding = 0) uniform sampler2D u_Textures[6];
 
-// Push constants for material parameters
-layout(push_constant) uniform PushConstants {
-    mat4 model;
-    vec4 albedo;
-    float metallic;
-    float roughness;
-    float ao;
-    float emission;
-    float albedoTexIdx;
-    float metallicTexIdx;
-    float roughnessTexIdx;
-    float aoTexIdx;
-    float normalTexIdx;
-    float emissionTexIdx;
-    float blendMode;
-    float iblDiffuse;
-    float iblSpecular;
-} pc;
-
 const float PI = 3.14159265359;
 const float MAX_REFLECTION_LOD = 4.0;
 

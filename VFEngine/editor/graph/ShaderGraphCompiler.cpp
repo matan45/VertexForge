@@ -252,9 +252,6 @@ namespace editor::graph {
     }
 
     int ShaderGraphCompiler::determinePBRTextureIndex(const material::ShaderGraph& graph, uint32_t nodeId) {
-        // BFS to find which PBR output this node connects to.
-        // Assumes the graph is a DAG (cycles are detected earlier in topologicalSort).
-        // Iteration limit prevents runaway traversal on malformed graphs.
         std::set<uint32_t> visited;
         std::queue<uint32_t> toVisit;
         toVisit.push(nodeId);
@@ -292,7 +289,6 @@ namespace editor::graph {
     std::string ShaderGraphCompiler::generateNodeCode(const material::ShaderGraph& graph,
                                                       uint32_t nodeId,
                                                       std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars) {
-        // Find the node
         const material::ShaderNode* nodeData = graph.findNode(nodeId);
         if (!nodeData) return "";
 
@@ -307,18 +303,15 @@ namespace editor::graph {
                 modifiedNodeData.properties["textureIndex"] = static_cast<float>(pbrIndex);
             }
         }
-
-        // Create runtime node from (potentially modified) data
+        
         auto node = ShaderNodeFactory::createNodeFromData(modifiedNodeData);
         if (!node) return "";
-
-        // Build input variable map
+        
         std::map<std::string, std::string> inputVarNames;
         for (const auto& pin : node->getInputPins()) {
             inputVarNames[pin.name] = getInputVarName(graph, nodeId, pin.name, nodeOutputVars);
         }
-
-        // Generate code
+        
         std::string prefix = "node_" + std::to_string(nodeId) + "_";
         std::string code = "    " + node->generateCode(prefix, inputVarNames);
 

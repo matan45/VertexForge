@@ -1,7 +1,9 @@
 #include "StaticMeshPipeline.hpp"
 #include "MeshGPUCache.hpp"
-#include "MaterialTextureCache.hpp"
-#include "MaterialShaderCache.hpp"
+#include "../material/MaterialTextureCache.hpp"
+#include "../material/MaterialShaderCache.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
+#include "DefaultIBLTextureFactory.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -18,372 +20,6 @@
 
 namespace render::mesh
 {
-    // Helper struct to hold extracted PBR values from a material
-    struct ExtractedPBRValues
-    {
-        glm::vec4 albedo{ 1.0f, 1.0f, 1.0f, 1.0f };
-        float metallic = 0.0f;
-        float roughness = 0.5f;
-        float ao = 1.0f;
-        float emission = 0.0f;
-        material::BlendMode blendMode = material::BlendMode::Opaque;
-        float iblDiffuse = 1.0f;
-        float iblSpecular = 0.5f;
-
-        // Texture paths (empty = use scalar value)
-        std::string albedoTexturePath;
-        std::string metallicTexturePath;
-        std::string roughnessTexturePath;
-        std::string aoTexturePath;
-        std::string normalTexturePath;
-        std::string emissionTexturePath;
-
-        // Material path for shader cache lookup
-        std::string materialPath;
-    };
-
-    // Forward declaration for recursive evaluation
-    static std::optional<float> evaluateFloatValue(
-        const material::ShaderGraph& graph,
-        uint32_t nodeId,
-        const std::string& pinName,
-        float time);
-
-    // Helper to get the input value for a node's pin (recursively evaluates connected nodes)
-    static std::optional<float> getInputFloat(
-        const material::ShaderGraph& graph,
-        uint32_t nodeId,
-        const std::string& pinName,
-        float time)
-    {
-        for (const auto& link : graph.links) {
-            if (link.targetNodeId == nodeId && link.targetPin == pinName) {
-                return evaluateFloatValue(graph, link.sourceNodeId, link.sourcePin, time);
-            }
-        }
-        return std::nullopt;
-    }
-
-    // Evaluate a node and return its float output value
-    static std::optional<float> evaluateFloatValue(
-        const material::ShaderGraph& graph,
-        uint32_t nodeId,
-        const std::string& pinName,
-        float time)
-    {
-        const auto* node = graph.findNode(nodeId);
-        if (!node) return std::nullopt;
-
-        switch (node->type) {
-            case material::NodeType::ConstantScalar: {
-                auto it = node->properties.find("value");
-                if (it != node->properties.end() && std::holds_alternative<float>(it->second)) {
-                    return std::get<float>(it->second);
-                }
-                break;
-            }
-            case material::NodeType::Time: {
-                return time;
-            }
-            case material::NodeType::Sin: {
-                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
-                if (inputVal) {
-                    return std::sin(*inputVal);
-                }
-                return 0.0f;
-            }
-            case material::NodeType::Cos: {
-                auto inputVal = getInputFloat(graph, nodeId, "Value", time);
-                if (inputVal) {
-                    return std::cos(*inputVal);
-                }
-                return 0.0f;
-            }
-            case material::NodeType::Multiply: {
-                auto a = getInputFloat(graph, nodeId, "A", time);
-                auto b = getInputFloat(graph, nodeId, "B", time);
-                float aVal = a.value_or(1.0f);
-                float bVal = b.value_or(1.0f);
-                return aVal * bVal;
-            }
-            case material::NodeType::Add: {
-                auto a = getInputFloat(graph, nodeId, "A", time);
-                auto b = getInputFloat(graph, nodeId, "B", time);
-                float aVal = a.value_or(0.0f);
-                float bVal = b.value_or(0.0f);
-                return aVal + bVal;
-            }
-            default:
-                break;
-        }
-        return std::nullopt;
-    }
-
-    // Helper to get value from a node connected to a specific pin (static values only)
-    static std::optional<material::NodeProperty> getConnectedValue(
-        const material::ShaderGraph& graph,
-        uint32_t targetNodeId,
-        const std::string& targetPinName)
-    {
-        // Find link to this pin
-        for (const auto& link : graph.links) {
-            if (link.targetNodeId == targetNodeId && link.targetPin == targetPinName) {
-                // Found a connection - get the source node
-                const auto* sourceNode = graph.findNode(link.sourceNodeId);
-                if (!sourceNode) continue;
-
-                // Check if it's a constant node and get its value
-                switch (sourceNode->type) {
-                    case material::NodeType::ConstantScalar: {
-                        auto it = sourceNode->properties.find("value");
-                        if (it != sourceNode->properties.end()) {
-                            return it->second;
-                        }
-                        break;
-                    }
-                    case material::NodeType::ConstantVec2:
-                    case material::NodeType::ConstantVec3:
-                    case material::NodeType::ConstantColor: {
-                        auto it = sourceNode->properties.find("value");
-                        if (it != sourceNode->properties.end()) {
-                            return it->second;
-                        }
-                        break;
-                    }
-                    default:
-                        break;
-                }
-            }
-        }
-        return std::nullopt;
-    }
-
-    // Helper to evaluate EmissionStrength dynamically (supports Time, Sin, Cos nodes)
-    static float evaluateEmissionStrength(
-        const material::ShaderGraph& graph,
-        uint32_t outputNodeId,
-        float time)
-    {
-        for (const auto& link : graph.links) {
-            if (link.targetNodeId == outputNodeId && link.targetPin == "EmissionStrength") {
-                auto val = evaluateFloatValue(graph, link.sourceNodeId, link.sourcePin, time);
-                if (val) {
-                    return *val;
-                }
-            }
-        }
-        return 0.0f;
-    }
-
-    // Helper to get texture path from a TextureSample node connected to a specific pin
-    static std::string getConnectedTexturePath(
-        const material::ShaderGraph& graph,
-        uint32_t targetNodeId,
-        const std::string& targetPinName)
-    {
-        for (const auto& link : graph.links) {
-            if (link.targetNodeId == targetNodeId && link.targetPin == targetPinName) {
-                const auto* sourceNode = graph.findNode(link.sourceNodeId);
-                if (!sourceNode) continue;
-
-                if (sourceNode->type == material::NodeType::TextureSample) {
-                    auto it = sourceNode->properties.find("texturePath");
-                    if (it != sourceNode->properties.end() &&
-                        std::holds_alternative<std::string>(it->second)) {
-                        return std::get<std::string>(it->second);
-                    }
-                }
-            }
-        }
-        return "";
-    }
-
-    // Extract PBR values from a loaded MaterialData by traversing the shader graph
-    static ExtractedPBRValues extractPBRFromMaterial(const material::MaterialData& matData)
-    {
-        ExtractedPBRValues pbr;
-
-        // Find PBR Output node
-        const auto* outputNode = matData.graph.findOutputNode();
-        if (!outputNode) {
-            return pbr;  // Return defaults if no output node
-        }
-
-        // Try to get Albedo from connected node
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Albedo")) {
-            if (std::holds_alternative<glm::vec4>(*val)) {
-                pbr.albedo = std::get<glm::vec4>(*val);
-            } else if (std::holds_alternative<glm::vec3>(*val)) {
-                glm::vec3 rgb = std::get<glm::vec3>(*val);
-                pbr.albedo = glm::vec4(rgb, 1.0f);
-            }
-        }
-
-        // Try to get Metallic
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Metallic")) {
-            if (std::holds_alternative<float>(*val)) {
-                pbr.metallic = std::get<float>(*val);
-            }
-        }
-
-        // Try to get Roughness
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Roughness")) {
-            if (std::holds_alternative<float>(*val)) {
-                pbr.roughness = std::get<float>(*val);
-            }
-        }
-
-        // Try to get AO
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "AO")) {
-            if (std::holds_alternative<float>(*val)) {
-                pbr.ao = std::get<float>(*val);
-            }
-        }
-
-        // Try to get Emission (Vec3) and EmissionStrength (Float)
-        float emissionStrength = 0.0f;
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "EmissionStrength")) {
-            if (std::holds_alternative<float>(*val)) {
-                emissionStrength = std::get<float>(*val);
-            }
-        }
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Emission")) {
-            if (std::holds_alternative<float>(*val)) {
-                // Single float emission value
-                pbr.emission = std::get<float>(*val) * emissionStrength;
-            } else if (std::holds_alternative<glm::vec3>(*val)) {
-                // Vec3 emission - use luminance approximation
-                glm::vec3 emissionColor = std::get<glm::vec3>(*val);
-                pbr.emission = (emissionColor.r * 0.299f + emissionColor.g * 0.587f + emissionColor.b * 0.114f) * emissionStrength;
-            } else if (std::holds_alternative<glm::vec4>(*val)) {
-                // Vec4 emission - use luminance approximation
-                glm::vec4 emissionColor = std::get<glm::vec4>(*val);
-                pbr.emission = (emissionColor.r * 0.299f + emissionColor.g * 0.587f + emissionColor.b * 0.114f) * emissionStrength;
-            }
-        } else if (emissionStrength > 0.0f) {
-            // No emission color connected but strength is set - use white emission
-            pbr.emission = emissionStrength;
-        }
-
-        // Try to get Opacity
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "Opacity")) {
-            if (std::holds_alternative<float>(*val)) {
-                pbr.albedo.a = std::get<float>(*val);
-            }
-        }
-
-        // Try to get IBL Diffuse intensity
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLDiffuse")) {
-            if (std::holds_alternative<float>(*val)) {
-                pbr.iblDiffuse = std::get<float>(*val);
-            }
-        }
-
-        // Try to get IBL Specular intensity
-        if (auto val = getConnectedValue(matData.graph, outputNode->id, "IBLSpecular")) {
-            if (std::holds_alternative<float>(*val)) {
-                pbr.iblSpecular = std::get<float>(*val);
-            }
-        }
-
-        // Also check exposed parameters as fallback
-        auto findParam = [&matData](const std::string& name) -> const material::MaterialParameter* {
-            auto it = matData.parameters.find(name);
-            return (it != matData.parameters.end()) ? &it->second : nullptr;
-        };
-
-        // Fallback to parameters if graph values not found
-        if (pbr.albedo == glm::vec4(1.0f)) {
-            if (const auto* param = findParam("Albedo")) {
-                if (std::holds_alternative<glm::vec4>(param->value)) {
-                    pbr.albedo = std::get<glm::vec4>(param->value);
-                }
-            } else if (const auto* param = findParam("BaseColor")) {
-                if (std::holds_alternative<glm::vec4>(param->value)) {
-                    pbr.albedo = std::get<glm::vec4>(param->value);
-                }
-            }
-        }
-
-        // Extract texture paths from connected TextureSample nodes
-        pbr.albedoTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Albedo");
-        pbr.metallicTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Metallic");
-        pbr.roughnessTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Roughness");
-        pbr.aoTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "AO");
-        pbr.normalTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Normal");
-        pbr.emissionTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Emission");
-
-        // Get blend mode from material
-        pbr.blendMode = matData.blendMode;
-
-        return pbr;
-    }
-
-    // Get PBR values for a submesh, checking material assignments in order:
-    // 1. Per-submesh material override
-    // 2. Default material for the mesh
-    // 3. Fallback defaults from MeshRenderData
-    static ExtractedPBRValues getPBRForSubmesh(
-        const MeshRenderData& meshData,
-        const std::string& submeshName,
-        std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& matCache,
-        float time = 0.0f)
-    {
-        ExtractedPBRValues pbr;
-        pbr.albedo = meshData.albedo;
-        pbr.metallic = meshData.metallic;
-        pbr.roughness = meshData.roughness;
-        pbr.ao = meshData.ao;
-        pbr.emission = meshData.emission;
-
-        std::string materialPath;
-
-        // Check for per-submesh material override
-        const auto* submeshMat = meshData.getMaterialForSubmesh(submeshName);
-        if (submeshMat && !submeshMat->materialPath.empty()) {
-            materialPath = submeshMat->materialPath;
-        }
-        // Fall back to default material
-        else if (!meshData.defaultMaterialPath.empty()) {
-            materialPath = meshData.defaultMaterialPath;
-        }
-
-        // Load and extract PBR values from the material (using cache)
-        if (!materialPath.empty()) {
-            std::shared_ptr<material::MaterialData> matData;
-
-            // Check cache first
-            auto cacheIt = matCache.find(materialPath);
-            if (cacheIt != matCache.end() && cacheIt->second) {
-                matData = cacheIt->second;
-                pbr = extractPBRFromMaterial(*matData);
-            } else {
-                // Load and cache the material
-                matData = material::MaterialManager::instance().loadMaterial(materialPath);
-                if (matData) {
-                    matCache[materialPath] = matData;
-                    pbr = extractPBRFromMaterial(*matData);
-                }
-            }
-
-            // Evaluate dynamic emission strength (Time, Sin, Cos nodes)
-            if (matData) {
-                const auto* outputNode = matData->graph.findOutputNode();
-                if (outputNode) {
-                    float dynamicEmission = evaluateEmissionStrength(matData->graph, outputNode->id, time);
-                    if (dynamicEmission != 0.0f) {
-                        pbr.emission = dynamicEmission;
-                    }
-                }
-            }
-
-            // Store material path for shader cache lookup
-            pbr.materialPath = materialPath;
-        }
-
-        return pbr;
-    }
-
     StaticMeshPipeline::StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
                                            core::OffscreenResources& offscreenResources)
         : device{device}, swapChain{swapChain}, offscreenResources{offscreenResources}
@@ -437,8 +73,14 @@ namespace render::mesh
         createDescriptorPool();
         createTextureDescriptorPool();       // Set 1 pool
         createCameraUBO();
-        createDefaultIBLTextures();
-        createDescriptorSet(defaultIrradiance, defaultPrefilter, defaultBrdfLUT);
+
+        // Create default IBL textures using the factory
+        defaultIBLFactory = std::make_unique<DefaultIBLTextureFactory>(device);
+        defaultIBLFactory->createDefaultTextures(commandPool.get());
+
+        createDescriptorSet(defaultIBLFactory->getIrradiance(),
+                           defaultIBLFactory->getPrefilter(),
+                           defaultIBLFactory->getBrdfLUT());
         createPipelineLayout();
         createGraphicsPipeline();
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
@@ -456,307 +98,6 @@ namespace render::mesh
 
         wireframeShader = std::make_shared<core::Shader>(device);
         wireframeShader->readShader("../../resources/shaders/mesh/wireframe.glsl");
-    }
-
-    void StaticMeshPipeline::createDefaultIBLTextures()
-    {
-        // Create simple 1x1 cubemap textures with neutral values for fallback PBR lighting
-        const uint32_t size = 1;
-        const uint32_t mipLevels = 1;
-        
-        // Face order: +X, -X, +Y (top), -Y (bottom), +Z, -Z
-        auto createCubemap = [&](ibl::ImageData& imageData, const std::array<std::array<float, 4>, 6>& faceColors) {
-            // Create image
-            vk::ImageCreateInfo imageInfo{};
-            imageInfo.imageType = vk::ImageType::e2D;
-            imageInfo.extent = vk::Extent3D{size, size, 1};
-            imageInfo.mipLevels = mipLevels;
-            imageInfo.arrayLayers = 6;  // Cubemap
-            imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
-            imageInfo.tiling = vk::ImageTiling::eOptimal;
-            imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-            imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-            imageInfo.samples = vk::SampleCountFlagBits::e1;
-            imageInfo.sharingMode = vk::SharingMode::eExclusive;
-            imageInfo.flags = vk::ImageCreateFlagBits::eCubeCompatible;
-
-            imageData.image = device.getLogicalDevice().createImage(imageInfo);
-
-            // Allocate memory
-            vk::MemoryRequirements memRequirements = device.getLogicalDevice().getImageMemoryRequirements(imageData.image);
-            vk::MemoryAllocateInfo allocInfo{};
-            allocInfo.allocationSize = memRequirements.size;
-            allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
-                memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-            imageData.imageMemory = device.getLogicalDevice().allocateMemory(allocInfo);
-            device.getLogicalDevice().bindImageMemory(imageData.image, imageData.imageMemory, 0);
-
-            // Create staging buffer with color data for all 6 faces
-            std::vector<float> pixels(6 * 4);  // 6 faces * 4 components (RGBA)
-            for (int i = 0; i < 6; i++) {
-                pixels[i * 4 + 0] = faceColors[i][0];
-                pixels[i * 4 + 1] = faceColors[i][1];
-                pixels[i * 4 + 2] = faceColors[i][2];
-                pixels[i * 4 + 3] = faceColors[i][3];
-            }
-
-            vk::DeviceSize imageSize = pixels.size() * sizeof(float);
-            vk::Buffer stagingBuffer;
-            vk::DeviceMemory stagingMemory;
-
-            core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-            stagingRequest.size = imageSize;
-            stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-            void* data;
-            [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-            memcpy(data, pixels.data(), imageSize);
-            device.getLogicalDevice().unmapMemory(stagingMemory);
-
-            // Transition image layout and copy data
-            vk::CommandBufferAllocateInfo cmdAllocInfo{};
-            cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
-            cmdAllocInfo.commandPool = commandPool.get();
-            cmdAllocInfo.commandBufferCount = 1;
-            auto cmdBuffers = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo);
-            vk::CommandBuffer cmd = cmdBuffers[0];
-
-            vk::CommandBufferBeginInfo beginInfo{};
-            beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-            cmd.begin(beginInfo);
-
-            // Transition to transfer destination
-            vk::ImageMemoryBarrier barrier{};
-            barrier.oldLayout = vk::ImageLayout::eUndefined;
-            barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = imageData.image;
-            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-            barrier.subresourceRange.baseMipLevel = 0;
-            barrier.subresourceRange.levelCount = mipLevels;
-            barrier.subresourceRange.baseArrayLayer = 0;
-            barrier.subresourceRange.layerCount = 6;
-            barrier.srcAccessMask = {};
-            barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-
-            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
-                {}, nullptr, nullptr, barrier);
-
-            // Copy buffer to image (all 6 faces)
-            std::vector<vk::BufferImageCopy> copyRegions(6);
-            for (uint32_t face = 0; face < 6; face++) {
-                copyRegions[face].bufferOffset = face * 4 * sizeof(float);
-                copyRegions[face].bufferRowLength = 0;
-                copyRegions[face].bufferImageHeight = 0;
-                copyRegions[face].imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-                copyRegions[face].imageSubresource.mipLevel = 0;
-                copyRegions[face].imageSubresource.baseArrayLayer = face;
-                copyRegions[face].imageSubresource.layerCount = 1;
-                copyRegions[face].imageOffset = vk::Offset3D{0, 0, 0};
-                copyRegions[face].imageExtent = vk::Extent3D{size, size, 1};
-            }
-            cmd.copyBufferToImage(stagingBuffer, imageData.image, vk::ImageLayout::eTransferDstOptimal, copyRegions);
-
-            // Transition to shader read
-            barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
-                {}, nullptr, nullptr, barrier);
-
-            cmd.end();
-
-            vk::SubmitInfo submitInfo{};
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &cmd;
-            device.getGraphicsQueue().submit(submitInfo);
-            device.getGraphicsQueue().waitIdle();
-
-            device.getLogicalDevice().freeCommandBuffers(commandPool.get(), cmd);
-            device.getLogicalDevice().destroyBuffer(stagingBuffer);
-            device.getLogicalDevice().freeMemory(stagingMemory);
-
-            // Create image view
-            vk::ImageViewCreateInfo viewInfo{};
-            viewInfo.image = imageData.image;
-            viewInfo.viewType = vk::ImageViewType::eCube;
-            viewInfo.format = vk::Format::eR32G32B32A32Sfloat;
-            viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-            viewInfo.subresourceRange.baseMipLevel = 0;
-            viewInfo.subresourceRange.levelCount = mipLevels;
-            viewInfo.subresourceRange.baseArrayLayer = 0;
-            viewInfo.subresourceRange.layerCount = 6;
-            imageData.imageView = device.getLogicalDevice().createImageView(viewInfo);
-
-            // Create sampler - use nearest filtering for 1x1 cubemap to prevent face blending
-            vk::SamplerCreateInfo samplerInfo{};
-            samplerInfo.magFilter = vk::Filter::eNearest;
-            samplerInfo.minFilter = vk::Filter::eNearest;
-            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
-            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.mipLodBias = 0.0f;
-            samplerInfo.maxAnisotropy = 1.0f;
-            samplerInfo.minLod = 0.0f;
-            samplerInfo.maxLod = static_cast<float>(mipLevels);
-            samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
-            imageData.sampler = device.getLogicalDevice().createSampler(samplerInfo);
-        };
-
-        // Create 2D texture for BRDF LUT (not a cubemap)
-        auto create2DTexture = [&](ibl::ImageData& imageData) {
-            vk::ImageCreateInfo imageInfo{};
-            imageInfo.imageType = vk::ImageType::e2D;
-            imageInfo.extent = vk::Extent3D{size, size, 1};
-            imageInfo.mipLevels = 1;
-            imageInfo.arrayLayers = 1;
-            imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
-            imageInfo.tiling = vk::ImageTiling::eOptimal;
-            imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-            imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-            imageInfo.samples = vk::SampleCountFlagBits::e1;
-            imageInfo.sharingMode = vk::SharingMode::eExclusive;
-
-            imageData.image = device.getLogicalDevice().createImage(imageInfo);
-
-            vk::MemoryRequirements memRequirements = device.getLogicalDevice().getImageMemoryRequirements(imageData.image);
-            vk::MemoryAllocateInfo allocInfo{};
-            allocInfo.allocationSize = memRequirements.size;
-            allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
-                memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-            imageData.imageMemory = device.getLogicalDevice().allocateMemory(allocInfo);
-            device.getLogicalDevice().bindImageMemory(imageData.image, imageData.imageMemory, 0);
-
-            // Default BRDF LUT value: (scale=1.0, bias=0.0) for specular = prefilteredColor * F
-            std::array<float, 4> pixel = {1.0f, 0.0f, 0.0f, 1.0f};
-            vk::DeviceSize imageSize = sizeof(pixel);
-            vk::Buffer stagingBuffer;
-            vk::DeviceMemory stagingMemory;
-
-            core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-            stagingRequest.size = imageSize;
-            stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-            void* data;
-            [[maybe_unused]] auto mapResult2 = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-            memcpy(data, pixel.data(), imageSize);
-            device.getLogicalDevice().unmapMemory(stagingMemory);
-
-            vk::CommandBufferAllocateInfo cmdAllocInfo{};
-            cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
-            cmdAllocInfo.commandPool = commandPool.get();
-            cmdAllocInfo.commandBufferCount = 1;
-            auto cmdBuffers = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo);
-            vk::CommandBuffer cmd = cmdBuffers[0];
-
-            vk::CommandBufferBeginInfo beginInfo{};
-            beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-            cmd.begin(beginInfo);
-
-            vk::ImageMemoryBarrier barrier{};
-            barrier.oldLayout = vk::ImageLayout::eUndefined;
-            barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = imageData.image;
-            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-            barrier.subresourceRange.baseMipLevel = 0;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.baseArrayLayer = 0;
-            barrier.subresourceRange.layerCount = 1;
-            barrier.srcAccessMask = {};
-            barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-
-            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
-                {}, nullptr, nullptr, barrier);
-
-            vk::BufferImageCopy copyRegion{};
-            copyRegion.bufferOffset = 0;
-            copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            copyRegion.imageSubresource.mipLevel = 0;
-            copyRegion.imageSubresource.baseArrayLayer = 0;
-            copyRegion.imageSubresource.layerCount = 1;
-            copyRegion.imageExtent = vk::Extent3D{size, size, 1};
-            cmd.copyBufferToImage(stagingBuffer, imageData.image, vk::ImageLayout::eTransferDstOptimal, copyRegion);
-
-            barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
-                {}, nullptr, nullptr, barrier);
-
-            cmd.end();
-
-            vk::SubmitInfo submitInfo{};
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &cmd;
-            device.getGraphicsQueue().submit(submitInfo);
-            device.getGraphicsQueue().waitIdle();
-
-            device.getLogicalDevice().freeCommandBuffers(commandPool.get(), cmd);
-            device.getLogicalDevice().destroyBuffer(stagingBuffer);
-            device.getLogicalDevice().freeMemory(stagingMemory);
-
-            vk::ImageViewCreateInfo viewInfo{};
-            viewInfo.image = imageData.image;
-            viewInfo.viewType = vk::ImageViewType::e2D;
-            viewInfo.format = vk::Format::eR32G32B32A32Sfloat;
-            viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-            viewInfo.subresourceRange.baseMipLevel = 0;
-            viewInfo.subresourceRange.levelCount = 1;
-            viewInfo.subresourceRange.baseArrayLayer = 0;
-            viewInfo.subresourceRange.layerCount = 1;
-            imageData.imageView = device.getLogicalDevice().createImageView(viewInfo);
-
-            vk::SamplerCreateInfo samplerInfo{};
-            samplerInfo.magFilter = vk::Filter::eLinear;
-            samplerInfo.minFilter = vk::Filter::eLinear;
-            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.mipLodBias = 0.0f;
-            samplerInfo.maxAnisotropy = 1.0f;
-            samplerInfo.minLod = 0.0f;
-            samplerInfo.maxLod = 1.0f;
-            samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
-            imageData.sampler = device.getLogicalDevice().createSampler(samplerInfo);
-        };
-
-        // Completely uniform IBL for smooth shading - no cubemap face boundaries visible
-        // All faces identical to eliminate any banding from face transitions
-        std::array<std::array<float, 4>, 6> studioIrradiance = {{
-            {0.8f, 0.8f, 0.85f, 1.0f},   // +X
-            {0.8f, 0.8f, 0.85f, 1.0f},   // -X
-            {0.8f, 0.8f, 0.85f, 1.0f},   // +Y
-            {0.8f, 0.8f, 0.85f, 1.0f},   // -Y
-            {0.8f, 0.8f, 0.85f, 1.0f},   // +Z
-            {0.8f, 0.8f, 0.85f, 1.0f}    // -Z
-        }};
-
-        std::array<std::array<float, 4>, 6> studioPrefilter = {{
-            {0.6f, 0.6f, 0.65f, 1.0f},   // +X
-            {0.6f, 0.6f, 0.65f, 1.0f},   // -X
-            {0.6f, 0.6f, 0.65f, 1.0f},   // +Y
-            {0.6f, 0.6f, 0.65f, 1.0f},   // -Y
-            {0.6f, 0.6f, 0.65f, 1.0f},   // +Z
-            {0.6f, 0.6f, 0.65f, 1.0f}    // -Z
-        }};
-
-        // Irradiance: studio ambient lighting
-        createCubemap(defaultIrradiance, studioIrradiance);
-        // Prefilter: studio reflections
-        createCubemap(defaultPrefilter, studioPrefilter);
-        // BRDF LUT: 2D texture
-        create2DTexture(defaultBrdfLUT);
     }
 
     void StaticMeshPipeline::recreate()
@@ -1042,8 +383,8 @@ namespace render::mesh
     }
 
     void StaticMeshPipeline::updatePreviewTextureDescriptors(
-        const std::array<vk::ImageView, 6>& imageViews,
-        const std::array<vk::Sampler, 6>& samplers)
+        const std::array<vk::ImageView, MAX_MATERIAL_TEXTURES>& imageViews,
+        const std::array<vk::Sampler, MAX_MATERIAL_TEXTURES>& samplers)
     {
         // Update the default descriptor set for preview rendering
         if (!textureDescriptorSet) return;
@@ -1356,19 +697,10 @@ namespace render::mesh
         descriptorSetLayout = nullptr;
 
         // Clean up default textures if we created them
-        if (usingDefaultTextures)
+        if (usingDefaultTextures && defaultIBLFactory)
         {
-            auto cleanupImageData = [&](ibl::ImageData& imageData) {
-                if (imageData.sampler) device.getLogicalDevice().destroySampler(imageData.sampler);
-                if (imageData.imageView) device.getLogicalDevice().destroyImageView(imageData.imageView);
-                if (imageData.image) device.getLogicalDevice().destroyImage(imageData.image);
-                if (imageData.imageMemory) device.getLogicalDevice().freeMemory(imageData.imageMemory);
-                imageData = {};
-            };
-
-            cleanupImageData(defaultIrradiance);
-            cleanupImageData(defaultPrefilter);
-            cleanupImageData(defaultBrdfLUT);
+            defaultIBLFactory->cleanup();
+            defaultIBLFactory.reset();
             usingDefaultTextures = false;
         }
     }
@@ -1557,7 +889,7 @@ namespace render::mesh
                                  size_t subMeshIndex, material::BlendMode targetBlendMode,
                                  vk::Pipeline& currentPipeline) {
             // Get PBR values from assigned material (or fallback to mesh defaults)
-            ExtractedPBRValues pbrValues = getPBRForSubmesh(meshData, subMesh.name, materialCache, currentTime);
+            ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(meshData, subMesh.name, materialCache, currentTime);
 
             // Skip if blend mode doesn't match current pass
             if (pbrValues.blendMode != targetBlendMode) return;
@@ -1753,7 +1085,7 @@ namespace render::mesh
                     !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix)) continue;
 
                 // Check if this submesh is translucent
-                ExtractedPBRValues pbrValues = getPBRForSubmesh(meshData, subMesh.name, materialCache, currentTime);
+                ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(meshData, subMesh.name, materialCache, currentTime);
                 if (pbrValues.blendMode != material::BlendMode::Translucent) continue;
 
                 // Calculate world-space center of submesh AABB
@@ -2077,14 +1409,14 @@ namespace render::mesh
                 if (cacheIt != materialCache.end() && cacheIt->second) {
                     matData = cacheIt->second;
                 } else {
-                    matData = material::MaterialManager::instance().loadMaterial(materialPath);
+                    matData = resource::ResourceManager::loadMaterial(materialPath);
                     if (matData) {
                         materialCache[materialPath] = matData;
                     }
                 }
 
                 if (matData) {
-                    ExtractedPBRValues pbr = extractPBRFromMaterial(*matData);
+                    ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
 
                     // Load textures if paths are specified
                     if (!pbr.albedoTexturePath.empty()) {
@@ -2117,14 +1449,14 @@ namespace render::mesh
                     if (cacheIt != materialCache.end() && cacheIt->second) {
                         matData = cacheIt->second;
                     } else {
-                        matData = material::MaterialManager::instance().loadMaterial(matInfo.materialPath);
+                        matData = resource::ResourceManager::loadMaterial(matInfo.materialPath);
                         if (matData) {
                             materialCache[matInfo.materialPath] = matData;
                         }
                     }
 
                     if (matData) {
-                        ExtractedPBRValues pbr = extractPBRFromMaterial(*matData);
+                        ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
 
                         if (!pbr.albedoTexturePath.empty()) {
                             textureCache->loadTexture(pbr.albedoTexturePath);

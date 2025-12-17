@@ -44,26 +44,17 @@ namespace core
 
         imageData.height = texturePtr->height;
         imageData.width = texturePtr->width;
+        imageData.numbersOfChannels = texturePtr->numbersOfChannels;
 
-        // Convert 3-channel RGB to 4-channel RGBA (RGB32F not supported on most GPUs)
+        // HDR data is now stored as RGBA32F at import time
         const uint32_t pixelCount = texturePtr->width * texturePtr->height;
-        const size_t expectedSize = static_cast<size_t>(pixelCount) * 3;
+        const size_t expectedSize = static_cast<size_t>(pixelCount) * 4;
         if (texturePtr->textureData.size() < expectedSize)
         {
             loggerError("HDR texture data size mismatch: expected {}, got {}", expectedSize, texturePtr->textureData.size());
             return;
         }
 
-        std::vector<float> rgba4Data(pixelCount * 4);
-        const float* srcData = texturePtr->textureData.data();
-        for (uint32_t i = 0; i < pixelCount; ++i)
-        {
-            rgba4Data[i * 4 + 0] = srcData[i * 3 + 0];
-            rgba4Data[i * 4 + 1] = srcData[i * 3 + 1];
-            rgba4Data[i * 4 + 2] = srcData[i * 3 + 2];
-            rgba4Data[i * 4 + 3] = 1.0f;
-        }
-        imageData.numbersOfChannels = 4;
         vk::DeviceSize imageSize = pixelCount * 4 * sizeof(float);
 
         vk::Buffer stagingBuffer;
@@ -84,7 +75,7 @@ namespace core
             device.getLogicalDevice().freeMemory(stagingBufferMemory);
             return;
         }
-        memcpy(data, rgba4Data.data(), imageSize);
+        memcpy(data, texturePtr->textureData.data(), imageSize);
         device.getLogicalDevice().unmapMemory(stagingBufferMemory);
 
         ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());

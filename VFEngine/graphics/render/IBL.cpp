@@ -41,19 +41,13 @@ namespace render
     {
         hdrTexture = std::make_shared<core::Texture>(device);
         hdrTexture->loadHDRFromFile(path, false);
-
-        // Generate environment cubemap (sharp, for skybox and prefilter input)
+        
         envCubemapGen->generate(*hdrTexture, commandPool.get());
-
-        // Generate irradiance map (convolved/blurry, for diffuse IBL)
         irradianceGen->generate(*hdrTexture, commandPool.get());
 
         brdfLUTGen->generate(commandPool.get());
-
-        // Prefilter uses environment cubemap (not irradiance)
+        
         prefilteredGen->generate(envCubemapGen->getImageData(), commandPool.get());
-
-        // Skybox uses environment cubemap (sharp)
         skyboxRenderer->init(envCubemapGen->getImageData());
 
         iblInitialized = true;

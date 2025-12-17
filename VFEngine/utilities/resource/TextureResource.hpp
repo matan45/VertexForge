@@ -14,18 +14,10 @@ namespace resource
         static HDRData loadHDR(std::string_view path);
     };
 
-    struct RGBE
-    {
-        uint8_t r, g, b, e; // Red, Green, Blue, Exponent
-    };
-
     class HDRReader
     {
     public:
-        static void readHDR(std::ifstream& file, int width, int height, std::vector<float>& pixels);
-
-    private:
-        static void decodeRGBE(const RGBE& rgbe, float& r, float& g, float& b);
+        static void readHDR(std::ifstream& file, int width, int height, int channels, std::vector<float>& pixels);
     };
 
     struct TGAImage {

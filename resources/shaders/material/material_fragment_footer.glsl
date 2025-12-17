@@ -6,8 +6,6 @@
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
-    // Apply normal mapping if mat_normalTS differs from default (0,0,1)
-    // Normal map values from texture are in [0,1], need to convert to [-1,1]
     vec3 tangentNormal = mat_normalTS * 2.0 - 1.0;
 
     // Only apply if it's not the default normal (pointing up in tangent space)
@@ -33,11 +31,9 @@
 
     vec3 R = reflect(-V, N);
 
-    // Calculate F0
     vec3 F0 = vec3(0.04);
     F0 = mix(F0, albedo_linear, mat_metallic);
 
-    // IBL Ambient Lighting
     vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, mat_roughness);
 
     vec3 kS = F;
@@ -61,10 +57,8 @@
 
     vec3 color = ambient + emission_linear;
 
-    // HDR tonemapping (Reinhard)
     color = color / (color + vec3(1.0));
 
-    // Gamma correction
     color = pow(color, vec3(1.0/2.2));
 
     outColor = vec4(color, mat_opacity);

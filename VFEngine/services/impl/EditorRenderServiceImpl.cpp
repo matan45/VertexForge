@@ -1,5 +1,7 @@
 #include "EditorRenderServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "print/EditorLogger.hpp"
+#include <filesystem>
 
 namespace services
 {
@@ -56,6 +58,12 @@ namespace services
     {
         if (!offScreenProvider)
         {
+            return false;
+        }
+        
+        if (!std::filesystem::exists(hdrPath))
+        {
+            vfLogError("IBL file not found: {}", hdrPath);
             return false;
         }
 
