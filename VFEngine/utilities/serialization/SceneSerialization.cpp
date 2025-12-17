@@ -249,7 +249,10 @@ namespace serialization {
 			billboard.size = glm::vec2(j["size"][0].get<float>(), j["size"][1].get<float>());
 		}
 		if (j.contains("colorTint") && j["colorTint"].is_array() && j["colorTint"].size() >= 4) {
-			billboard.colorTint = glm::vec4(j["colorTint"][0], j["colorTint"][1], j["colorTint"][2], j["colorTint"][3]);
+			billboard.colorTint = glm::vec4(
+				j["colorTint"][0].get<float>(), j["colorTint"][1].get<float>(),
+				j["colorTint"][2].get<float>(), j["colorTint"][3].get<float>()
+			);
 		}
 		billboard.editorOnly = j.value("editorOnly", true);
 		billboard.selectable = j.value("selectable", true);
