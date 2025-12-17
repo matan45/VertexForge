@@ -16,6 +16,7 @@ namespace render
 {
     namespace ibl
     {
+        class EnvironmentCubemapGenerator;
         class IrradianceGenerator;
         class BRDFLUTGenerator;
         class PrefilteredEnvGenerator;
@@ -68,6 +69,7 @@ namespace render
         bool isDisplay = false;
         bool iblInitialized = false;
 
+        std::unique_ptr<ibl::EnvironmentCubemapGenerator> envCubemapGen;
         std::unique_ptr<ibl::IrradianceGenerator> irradianceGen;
         std::unique_ptr<ibl::BRDFLUTGenerator> brdfLUTGen;
         std::unique_ptr<ibl::PrefilteredEnvGenerator> prefilteredGen;

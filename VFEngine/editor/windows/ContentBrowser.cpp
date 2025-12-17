@@ -347,8 +347,9 @@ namespace windows
 				ImGui::BeginGroup();
 				std::string folderName = asset.name;
 				if (folderIcon.isValid()) {
-					if (ImGui::ImageButton(folderName.c_str(), folderIcon.imguiDescriptorSet,
-						ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE)))
+					ImGui::ImageButton(folderName.c_str(), folderIcon.imguiDescriptorSet,
+						ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
+					if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 					{
 						// Defer navigation until after the loop to avoid iterator invalidation
 						pendingNavigation = asset.path;
@@ -737,6 +738,8 @@ namespace windows
 			currentPath = path;
 			controllers::Import::setLocation(currentPath.string());
 			loadDirectory(currentPath);
+			selectedFile.clear();
+			selectedType = AssetType::Other;
 		}
 	}
 }

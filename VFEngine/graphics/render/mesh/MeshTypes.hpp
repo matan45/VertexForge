@@ -52,6 +52,8 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
         uint8_t blendMode = 0;  // 0=Opaque, 1=Masked, 2=Translucent
+        float iblDiffuse = 1.0f;
+        float iblSpecular = 0.5f;
     };
 
     struct MeshRenderData
@@ -66,7 +68,7 @@ namespace render::mesh
         float ao = 1.0f;
         float emission = 0.0f;
 
-        // Texture indices (-1.0 = no texture, 0-7 = index in u_Textures[8])
+        // Texture indices (-1.0 = no texture, fixed per-material: 0=albedo, 1=metallic, etc.)
         float albedoTexIdx = -1.0f;
         float metallicTexIdx = -1.0f;
         float roughnessTexIdx = -1.0f;
@@ -104,7 +106,7 @@ namespace render::mesh
     };
 
     // Push constants - matches mesh.glsl push_constant block
-    // Total size: 64 (mat4) + 16 (vec4) + 4*4 + 4*7 = 124 bytes (under 128 limit)
+    // Total size: 64 (mat4) + 16 (vec4) + 4*4 + 4*9 = 132 bytes (under 256 limit, most GPUs support this)
     struct MeshPushConstants
     {
         glm::mat4 model;      // 64 bytes
@@ -114,7 +116,8 @@ namespace render::mesh
         float ao;             // 4 bytes
         float emission;       // 4 bytes
 
-        // Texture indices: -1.0 = no texture, >= 0 = index in u_Textures[8]
+        // Texture indices: -1.0 = no texture, fixed per-material:
+        // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
         float albedoTexIdx;      // 4 bytes
         float metallicTexIdx;    // 4 bytes
         float roughnessTexIdx;   // 4 bytes
@@ -122,6 +125,8 @@ namespace render::mesh
         float normalTexIdx;      // 4 bytes
         float emissionTexIdx;    // 4 bytes
         float blendMode;         // 4 bytes (0=Opaque, 1=Masked, 2=Translucent)
+        float iblDiffuse;        // 4 bytes - IBL diffuse intensity
+        float iblSpecular;       // 4 bytes - IBL specular intensity
     };
 
     // Vertex input helper matching resource::Vertex (32 bytes)

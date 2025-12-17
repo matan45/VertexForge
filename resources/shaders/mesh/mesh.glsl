@@ -23,13 +23,17 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
-    // Texture indices: < 0 = no texture, >= 0 = index in u_Textures[8]
+    // Texture indices: < 0 = no texture, fixed indices per material:
+    // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
     float albedoTexIdx;
     float metallicTexIdx;
     float roughnessTexIdx;
     float aoTexIdx;
     float normalTexIdx;
     float emissionTexIdx;
+    float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
+    float iblDiffuse;
+    float iblSpecular;
 } pc;
 
 void main() {
@@ -66,8 +70,9 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Set 1: Material textures (8 slots)
-layout(set = 1, binding = 0) uniform sampler2D u_Textures[8];
+// Set 1: Material textures (6 per material)
+// Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
+layout(set = 1, binding = 0) uniform sampler2D u_Textures[6];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -76,7 +81,8 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
-    // Texture indices: < 0 = no texture, >= 0 = index in u_Textures[8]
+    // Texture indices: < 0 = no texture, fixed indices per material:
+    // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
     float albedoTexIdx;
     float metallicTexIdx;
     float roughnessTexIdx;
@@ -84,6 +90,8 @@ layout(push_constant) uniform PushConstants {
     float normalTexIdx;
     float emissionTexIdx;
     float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
+    float iblDiffuse;
+    float iblSpecular;
 } pc;
 
 const float PI = 3.14159265359;
@@ -144,7 +152,8 @@ void main() {
     float alpha = pc.albedo.a;
     if (pc.albedoTexIdx >= 0.0) {
         vec4 albedoSample = texture(u_Textures[int(pc.albedoTexIdx)], fragTexCoord);
-        albedo = albedoSample.rgb;
+        // Convert from sRGB to linear space for PBR calculations
+        albedo = pow(albedoSample.rgb, vec3(2.2));
         alpha = albedoSample.a;
     }
 
@@ -170,11 +179,27 @@ void main() {
         ao = texture(u_Textures[int(pc.aoTexIdx)], fragTexCoord).r;
     }
 
-    // Normal mapping
+    // Normal mapping using derivative-based TBN construction
     if (pc.normalTexIdx >= 0.0) {
         vec3 tangentNormal = texture(u_Textures[int(pc.normalTexIdx)], fragTexCoord).rgb * 2.0 - 1.0;
-        // Simple normal perturbation (proper TBN would require tangent/bitangent)
-        N = normalize(N + tangentNormal * 0.5);
+
+        // Construct TBN matrix from screen-space derivatives
+        vec3 pos_dx = dFdx(fragWorldPos);
+        vec3 pos_dy = dFdy(fragWorldPos);
+        vec2 uv_dx = dFdx(fragTexCoord);
+        vec2 uv_dy = dFdy(fragTexCoord);
+
+        // Calculate tangent and bitangent
+        vec3 T = normalize(pos_dx * uv_dy.y - pos_dy * uv_dx.y);
+        vec3 B = normalize(pos_dy * uv_dx.x - pos_dx * uv_dy.x);
+
+        // Ensure orthogonal TBN
+        T = normalize(T - N * dot(N, T));
+        B = cross(N, T);
+
+        // Transform normal from tangent space to world space
+        mat3 TBN = mat3(T, B, N);
+        N = normalize(TBN * tangentNormal);
     }
 
     vec3 R = reflect(-V, N);
@@ -192,12 +217,12 @@ void main() {
 
     // Diffuse IBL (irradiance)
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * albedo;
+    vec3 diffuse = irradiance * albedo * pc.iblDiffuse;
 
     // Specular IBL (prefiltered environment + BRDF)
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * pc.iblSpecular;
 
     // Combine ambient
     vec3 ambient = (kD * diffuse + specular) * ao;
@@ -205,7 +230,8 @@ void main() {
     // Add emission
     vec3 emissive = vec3(0.0);
     if (pc.emissionTexIdx >= 0.0) {
-        emissive = texture(u_Textures[int(pc.emissionTexIdx)], fragTexCoord).rgb;
+        // Convert emission from sRGB to linear
+        emissive = pow(texture(u_Textures[int(pc.emissionTexIdx)], fragTexCoord).rgb, vec3(2.2));
     } else {
         emissive = albedo * pc.emission;
     }

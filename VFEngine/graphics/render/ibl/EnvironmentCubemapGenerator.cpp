@@ -1,4 +1,4 @@
-#include "IrradianceGenerator.hpp"
+#include "EnvironmentCubemapGenerator.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/Texture.hpp"
@@ -7,32 +7,34 @@
 
 namespace render::ibl
 {
-    IrradianceGenerator::IrradianceGenerator(core::Device& device)
+    static constexpr uint32_t ENV_CUBE_MAP_SIZE = 1024;
+
+    EnvironmentCubemapGenerator::EnvironmentCubemapGenerator(core::Device& device)
         : device{device}
     {
-        shaderIrradianceCube = std::make_shared<core::Shader>(device);
-        shaderIrradianceCube->readShader("../../resources/shaders/ibl/equirectangular_convolution.glsl");
+        shaderEnvCubemap = std::make_shared<core::Shader>(device);
+        shaderEnvCubemap->readShader("../../resources/shaders/ibl/equirectangular_to_cubemap.glsl");
     }
 
-    void IrradianceGenerator::generate(const core::Texture& hdrTexture, const vk::CommandPool& commandPool)
+    void EnvironmentCubemapGenerator::generate(const core::Texture& hdrTexture, const vk::CommandPool& commandPool)
     {
         // Image and Sampler Create
         core::ImageInfoRequest cubeMapImageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         cubeMapImageRequest.format = vk::Format::eR16G16B16A16Sfloat;
         cubeMapImageRequest.layers = 6;
-        cubeMapImageRequest.width = IRRADIANCE_MAP_SIZE;
-        cubeMapImageRequest.height = IRRADIANCE_MAP_SIZE;
+        cubeMapImageRequest.width = ENV_CUBE_MAP_SIZE;
+        cubeMapImageRequest.height = ENV_CUBE_MAP_SIZE;
         cubeMapImageRequest.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled |
             vk::ImageUsageFlagBits::eColorAttachment;
         cubeMapImageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
-        core::Utilities::createImage(cubeMapImageRequest, imageIrradianceCube.image,
-            imageIrradianceCube.imageMemory);
+        core::Utilities::createImage(cubeMapImageRequest, imageEnvCubemap.image,
+            imageEnvCubemap.imageMemory);
 
-        core::ImageViewInfoRequest cubeMapImageViewRequest(device.getLogicalDevice(), imageIrradianceCube.image);
+        core::ImageViewInfoRequest cubeMapImageViewRequest(device.getLogicalDevice(), imageEnvCubemap.image);
         cubeMapImageViewRequest.format = vk::Format::eR16G16B16A16Sfloat;
         cubeMapImageViewRequest.layerCount = 6;
         cubeMapImageViewRequest.imageType = vk::ImageViewType::eCube;
-        core::Utilities::createImageView(cubeMapImageViewRequest, imageIrradianceCube.imageView);
+        core::Utilities::createImageView(cubeMapImageViewRequest, imageEnvCubemap.imageView);
 
         vk::SamplerCreateInfo samplerInfo;
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -45,7 +47,7 @@ namespace render::ibl
         samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
-        imageIrradianceCube.sampler = device.getLogicalDevice().createSampler(samplerInfo);
+        imageEnvCubemap.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
         // SET UP RENDER PASS
         vk::AttachmentDescription colorAttachment;
@@ -227,14 +229,14 @@ namespace render::ibl
         vk::Viewport viewport;
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = static_cast<float>(IRRADIANCE_MAP_SIZE);
-        viewport.height = static_cast<float>(IRRADIANCE_MAP_SIZE);
+        viewport.width = static_cast<float>(ENV_CUBE_MAP_SIZE);
+        viewport.height = static_cast<float>(ENV_CUBE_MAP_SIZE);
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
 
         vk::Rect2D scissor;
         scissor.offset = vk::Offset2D(0, 0);
-        scissor.extent = vk::Extent2D(IRRADIANCE_MAP_SIZE, IRRADIANCE_MAP_SIZE);
+        scissor.extent = vk::Extent2D(ENV_CUBE_MAP_SIZE, ENV_CUBE_MAP_SIZE);
 
         vk::PipelineViewportStateCreateInfo viewportState;
         viewportState.viewportCount = 1;
@@ -271,8 +273,8 @@ namespace render::ibl
         vk::PipelineLayout pipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
 
         vk::GraphicsPipelineCreateInfo pipelineInfo;
-        pipelineInfo.stageCount = static_cast<uint32_t>(shaderIrradianceCube->getShaderStages().size());
-        pipelineInfo.pStages = shaderIrradianceCube->getShaderStages().data();
+        pipelineInfo.stageCount = static_cast<uint32_t>(shaderEnvCubemap->getShaderStages().size());
+        pipelineInfo.pStages = shaderEnvCubemap->getShaderStages().data();
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssembly;
         pipelineInfo.pViewportState = &viewportState;
@@ -290,8 +292,8 @@ namespace render::ibl
 
         core::ImageInfoRequest imageRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         imageRequest.format = vk::Format::eR16G16B16A16Sfloat;
-        imageRequest.width = IRRADIANCE_MAP_SIZE;
-        imageRequest.height = IRRADIANCE_MAP_SIZE;
+        imageRequest.width = ENV_CUBE_MAP_SIZE;
+        imageRequest.height = ENV_CUBE_MAP_SIZE;
         imageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc;
         core::Utilities::createImage(imageRequest, imageHelper.image, imageHelper.memory);
 
@@ -304,8 +306,8 @@ namespace render::ibl
         framebufferInfo.renderPass = renderPass;
         framebufferInfo.attachmentCount = 1;
         framebufferInfo.pAttachments = &imageHelper.view;
-        framebufferInfo.width = IRRADIANCE_MAP_SIZE;
-        framebufferInfo.height = IRRADIANCE_MAP_SIZE;
+        framebufferInfo.width = ENV_CUBE_MAP_SIZE;
+        framebufferInfo.height = ENV_CUBE_MAP_SIZE;
         framebufferInfo.layers = 1;
 
         imageHelper.framebuffer = device.getLogicalDevice().createFramebuffer(framebufferInfo);
@@ -325,7 +327,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer commandBufferInitCubeImage = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(commandBufferInitCubeImage.get(), imageIrradianceCube.image,
+        core::Utilities::transitionImageLayout(commandBufferInitCubeImage.get(), imageEnvCubemap.image,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor, 6);
@@ -338,7 +340,7 @@ namespace render::ibl
         vk::RenderPassBeginInfo renderPassBeginInfo{};
         renderPassBeginInfo.renderPass = renderPass;
         renderPassBeginInfo.framebuffer = imageHelper.framebuffer;
-        renderPassBeginInfo.renderArea = vk::Rect2D({0, 0}, {IRRADIANCE_MAP_SIZE, IRRADIANCE_MAP_SIZE});
+        renderPassBeginInfo.renderArea = vk::Rect2D({0, 0}, {ENV_CUBE_MAP_SIZE, ENV_CUBE_MAP_SIZE});
         renderPassBeginInfo.clearValueCount = 1;
         renderPassBeginInfo.pClearValues = &clearColor;
 
@@ -395,7 +397,7 @@ namespace render::ibl
 
             // Copy the image from the framebuffer to the cube map face
             faceCommandBuffer.get().copyImage(imageHelper.image, vk::ImageLayout::eTransferSrcOptimal,
-                imageIrradianceCube.image,
+                imageEnvCubemap.image,
                 vk::ImageLayout::eTransferDstOptimal, 1, &copyRegion);
 
             // Transition the image back to color attachment layout for the next face
@@ -420,7 +422,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer commandBufferEndTransition = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(commandBufferEndTransition.get(), imageIrradianceCube.image,
+        core::Utilities::transitionImageLayout(commandBufferEndTransition.get(), imageEnvCubemap.image,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor, 6);
@@ -446,7 +448,7 @@ namespace render::ibl
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
     }
 
-    void IrradianceGenerator::updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix,
+    void EnvironmentCubemapGenerator::updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix,
         const vk::DeviceMemory& uniformBufferMemory) const
     {
         UniformBufferObject ubo;
@@ -462,16 +464,16 @@ namespace render::ibl
         }
     }
 
-    void IrradianceGenerator::cleanUp()
+    void EnvironmentCubemapGenerator::cleanUp()
     {
-        device.getLogicalDevice().destroyImage(imageIrradianceCube.image);
-        device.getLogicalDevice().destroyImageView(imageIrradianceCube.imageView);
-        device.getLogicalDevice().destroySampler(imageIrradianceCube.sampler);
-        device.getLogicalDevice().freeMemory(imageIrradianceCube.imageMemory);
+        device.getLogicalDevice().destroyImage(imageEnvCubemap.image);
+        device.getLogicalDevice().destroyImageView(imageEnvCubemap.imageView);
+        device.getLogicalDevice().destroySampler(imageEnvCubemap.sampler);
+        device.getLogicalDevice().freeMemory(imageEnvCubemap.imageMemory);
     }
 
-    void IrradianceGenerator::cleanUpShader()
+    void EnvironmentCubemapGenerator::cleanUpShader()
     {
-        shaderIrradianceCube->cleanUp();
+        shaderEnvCubemap->cleanUp();
     }
 }

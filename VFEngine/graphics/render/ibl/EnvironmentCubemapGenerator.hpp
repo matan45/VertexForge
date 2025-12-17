@@ -6,26 +6,27 @@ namespace core
 {
     class Device;
     class Shader;
+    class Texture;
 }
 
 namespace render::ibl
 {
-    class PrefilteredEnvGenerator
+    class EnvironmentCubemapGenerator
     {
     private:
         core::Device& device;
-        ImageData prefilterImage{};
-        std::shared_ptr<core::Shader> prefilterShader;
-
+        ImageData imageEnvCubemap{};
+        std::shared_ptr<core::Shader> shaderEnvCubemap;
+        
     public:
-        explicit PrefilteredEnvGenerator(core::Device& device);
-        ~PrefilteredEnvGenerator() = default;
+        explicit EnvironmentCubemapGenerator(core::Device& device);
+        ~EnvironmentCubemapGenerator() = default;
 
-        void generate(const ImageData& irradianceCube, const vk::CommandPool& commandPool);
+        void generate(const core::Texture& hdrTexture, const vk::CommandPool& commandPool);
         void cleanUp();
         void cleanUpShader();
 
-        const ImageData& getImageData() const { return prefilterImage; }
+        const ImageData& getImageData() const { return imageEnvCubemap; }
 
     private:
         void updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix,

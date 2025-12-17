@@ -5,6 +5,7 @@
 #include "../camera/OrbitCamera.hpp"
 #include <material/MaterialManager.hpp>
 #include <material/MaterialAsset.hpp>
+#include <resource/ResourceManager.hpp>
 #include <nfd/FileDialog.hpp>
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
@@ -59,8 +60,8 @@ namespace windows {
     }
 
     void MaterialEditorWindow::loadMaterial() {
-        // Try to load from MaterialManager cache first
-        materialData = material::MaterialManager::instance().loadMaterial(materialPath);
+        // Try to load from ResourceManager
+        materialData = resource::ResourceManager::loadMaterial(materialPath);
 
         if (!materialData) {
             // Create a new material if it doesn't exist

@@ -1,5 +1,5 @@
 #include "MaterialShaderCache.hpp"
-#include "MeshTypes.hpp"
+#include "../mesh/MeshTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "material/MaterialTypes.hpp"

@@ -2,7 +2,7 @@
 #include "material/MaterialTypes.hpp"
 #include <string>
 #include <string_view>
-#include <optional>
+
 
 namespace editor::graph {
     
@@ -13,24 +13,36 @@ namespace editor::graph {
         std::string errorMessage;
     };
 
+    static const std::map<std::string, int> pbrPinToIndex = {
+        {"Albedo", 0},
+        {"Metallic", 1},
+        {"Roughness", 2},
+        {"AO", 3},
+        {"Normal", 4},
+        {"Emission", 5}
+    };
+
     
     class ShaderGraphCompiler {
+    private:
+        // Cached shader templates
+        static std::string s_vertexTemplate;
+        static std::string s_fragmentHeader;
+        static std::string s_fragmentFooter;
+        static bool s_templatesLoaded;
     public:
-        // Compile a material's shader graph to GLSL
+        
         static CompilationResult compile(const material::MaterialData& material);
-
-        // Compile just a shader graph (without material wrapper)
+        
         static CompilationResult compileGraph(const material::ShaderGraph& graph);
-
-        // Reload shader templates from disk (call after editing template files)
+        
         static void reloadTemplates();
 
     private:
         static std::string generateVertexShader();
         
         static std::string generateFragmentShader(const material::ShaderGraph& graph);
-
-        // Load shader templates from files (caches them for subsequent calls)
+        
         static bool loadTemplates();
         
         static std::string readTextFile(std::string_view path);
@@ -48,11 +60,9 @@ namespace editor::graph {
                                           const std::string& pinName,
                                           const std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars);
 
-        // Cached shader templates
-        static std::string s_vertexTemplate;
-        static std::string s_fragmentHeader;
-        static std::string s_fragmentFooter;
-        static bool s_templatesLoaded;
+        
+        static int determinePBRTextureIndex(const material::ShaderGraph& graph, uint32_t nodeId);
+        
     };
 
 }

@@ -7,6 +7,7 @@
 #include "../render/mesh/MeshTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "resource/ResourceManager.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/events/MaterialEvents.hpp"
@@ -31,10 +32,13 @@ namespace controllers
     void OffScreenController::init()
     {
         offScreen->init();
-
-        // Subscribe to material saved notifications to invalidate cache
+        
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
             [this](const events::material::MaterialFileSavedNotification& notification) {
+
+                resource::ResourceManager::invalidateMaterialCache(notification.materialPath);
+
+                // Invalidate GPU shader/pipeline cache
                 auto* renderHandler = offScreen->getRenderPassHandler();
                 if (renderHandler && renderHandler->isMeshPipelineInitialized()) {
                     renderHandler->getMeshPipeline()->invalidateMaterialCache(notification.materialPath);

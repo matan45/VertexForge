@@ -251,24 +251,67 @@ namespace editor::graph {
         return result;
     }
 
+    int ShaderGraphCompiler::determinePBRTextureIndex(const material::ShaderGraph& graph, uint32_t nodeId) {
+        std::set<uint32_t> visited;
+        std::queue<uint32_t> toVisit;
+        toVisit.push(nodeId);
+
+        size_t iterations = 0;
+        while (!toVisit.empty() && iterations < MAX_NODES) {
+            ++iterations;
+            uint32_t currentId = toVisit.front();
+            toVisit.pop();
+
+            if (visited.contains(currentId)) continue;
+            visited.insert(currentId);
+
+            // Find all links where this node is the source
+            for (const auto& link : graph.links) {
+                if (link.sourceNodeId == currentId) {
+                    // Check if target is PBR output node
+                    const material::ShaderNode* targetNode = graph.findNode(link.targetNodeId);
+                    if (targetNode && targetNode->type == material::NodeType::PBROutput) {
+                        // Found connection to PBR output - return the index for this pin
+                        auto it = pbrPinToIndex.find(link.targetPin);
+                        if (it != pbrPinToIndex.end()) {
+                            return it->second;
+                        }
+                    }
+                    // Continue searching through this node
+                    toVisit.push(link.targetNodeId);
+                }
+            }
+        }
+
+        return -1; // Not connected to PBR output
+    }
+
     std::string ShaderGraphCompiler::generateNodeCode(const material::ShaderGraph& graph,
                                                       uint32_t nodeId,
                                                       std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars) {
-        // Find the node
         const material::ShaderNode* nodeData = graph.findNode(nodeId);
         if (!nodeData) return "";
 
-        // Create runtime node
-        auto node = ShaderNodeFactory::createNodeFromData(*nodeData);
-        if (!node) return "";
+        // Create a mutable copy of node data for TextureSample nodes
+        // so we can set the correct texture index based on PBR connection
+        material::ShaderNode modifiedNodeData = *nodeData;
 
-        // Build input variable map
+        // For TextureSample nodes, determine correct texture index based on PBR connection
+        if (nodeData->type == material::NodeType::TextureSample) {
+            int pbrIndex = determinePBRTextureIndex(graph, nodeId);
+            if (pbrIndex >= 0) {
+                modifiedNodeData.properties["textureIndex"] = static_cast<float>(pbrIndex);
+            }
+        }
+        
+        auto node = ShaderNodeFactory::createNodeFromData(modifiedNodeData);
+        if (!node) return "";
+        
         std::map<std::string, std::string> inputVarNames;
         for (const auto& pin : node->getInputPins()) {
             inputVarNames[pin.name] = getInputVarName(graph, nodeId, pin.name, nodeOutputVars);
         }
-
-        // Generate code
+        
         std::string prefix = "node_" + std::to_string(nodeId) + "_";
         std::string code = "    " + node->generateCode(prefix, inputVarNames);
 

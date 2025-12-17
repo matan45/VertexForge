@@ -1,9 +1,9 @@
 #pragma once
 #include "ShaderNode.hpp"
+#include <algorithm>
 
 namespace editor::graph {
-
-    // Constant scalar (float) node
+    
     class ConstantScalarNode : public ShaderNodeBase {
     public:
         ConstantScalarNode() {
@@ -29,8 +29,7 @@ namespace editor::graph {
             return "float";
         }
     };
-
-    // Constant vec2 node
+    
     class ConstantVec2Node : public ShaderNodeBase {
     public:
         ConstantVec2Node() {
@@ -65,8 +64,7 @@ namespace editor::graph {
             return "vec2";
         }
     };
-
-    // Constant vec3 node
+    
     class ConstantVec3Node : public ShaderNodeBase {
     public:
         ConstantVec3Node() {
@@ -104,8 +102,7 @@ namespace editor::graph {
             return "vec3";
         }
     };
-
-    // Constant color (vec4 with RGBA) node
+    
     class ConstantColorNode : public ShaderNodeBase {
     public:
         ConstantColorNode() {
@@ -150,8 +147,7 @@ namespace editor::graph {
             return "vec4";
         }
     };
-
-    // Vertex UV coordinate input
+    
     class VertexUVNode : public ShaderNodeBase {
     public:
         VertexUVNode() {
@@ -184,8 +180,7 @@ namespace editor::graph {
             return "vec2";
         }
     };
-
-    // Vertex normal input
+    
     class VertexNormalNode : public ShaderNodeBase {
     public:
         VertexNormalNode() {
@@ -235,14 +230,14 @@ namespace editor::graph {
         }
     };
 
-    // Texture sampler node - samples a texture at UV coordinates
+    
     class TextureSampleNode : public ShaderNodeBase {
     public:
         TextureSampleNode() {
             type = material::NodeType::TextureSample;
             name = "Texture Sample";
-            properties["texturePath"] = std::string("");  // Path to .vfImage file
-            properties["textureIndex"] = 0.0f;  // Index in texture array (for shader binding)
+            properties["texturePath"] = std::string(""); 
+            properties["textureIndex"] = 0.0f; 
 
             addInputPin("UV", material::PinType::Vec2, glm::vec2(0.0f));  // Default uses vertex UV
             addOutputPin("RGBA", material::PinType::Vec4);
@@ -265,9 +260,9 @@ namespace editor::graph {
                     uvVar = uv;
                 }
             }
-
-            // Get texture index from properties
+            
             int texIndex = static_cast<int>(getPropertyValue<float>("textureIndex", 0.0f));
+            texIndex = std::clamp(texIndex, 0, 5);  // Max 6 textures per material (indices 0-5)
 
             std::string code;
             // Sample the texture - uses texture array indexed by textureIndex

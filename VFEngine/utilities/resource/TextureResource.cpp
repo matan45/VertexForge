@@ -104,83 +104,22 @@ namespace resource
 		hdrData.height = endian::readLE<uint32_t>(inFile);
 		hdrData.numbersOfChannels = endian::readLE<uint32_t>(inFile);
 
-		HDRReader::readHDR(inFile, hdrData.width, hdrData.height, hdrData.textureData);
+		HDRReader::readHDR(inFile, hdrData.width, hdrData.height, hdrData.numbersOfChannels, hdrData.textureData);
 
 		inFile.close();
 
 		return hdrData;
 	}
 
-	void HDRReader::readHDR(std::ifstream& file, int width, int height, std::vector<float>& pixels)
+	void HDRReader::readHDR(std::ifstream& file, int width, int height, int channels, std::vector<float>& pixels)
 	{
-		pixels.resize(width * height * 3);
+		size_t pixelCount = static_cast<size_t>(width) * height * channels;
+		pixels.resize(pixelCount);
 
-		// Read pixel data
-		for (int y = 0; y < height; ++y)
+		// Read raw float data
+		for (size_t i = 0; i < pixelCount; ++i)
 		{
-			// Read and validate scanline header
-			uint8_t scanlineHeader[4];
-			file.read(reinterpret_cast<char*>(scanlineHeader), 4);
-			if (scanlineHeader[0] != 2 || scanlineHeader[1] != 2 ||
-				(scanlineHeader[2] << 8 | scanlineHeader[3]) != width)
-			{
-				vfLogError("Invalid or unsupported scanline header in HDR file.");
-				return;
-			}
-
-			std::vector<uint8_t> scanline(width * 4);
-			for (int channel = 0; channel < 4; ++channel)
-			{
-				int x = 0;
-				while (x < width)
-				{
-					uint8_t count = file.get();
-					if (count > 128)
-					{
-						// RLE-encoded run
-						count -= 128;
-						uint8_t value = file.get();
-						for (int i = 0; i < count; ++i)
-						{
-							scanline[x * 4 + channel] = value;
-							++x;
-						}
-					}
-					else
-					{
-						// Raw data
-						for (int i = 0; i < count; ++i)
-						{
-							scanline[x * 4 + channel] = file.get();
-							++x;
-						}
-					}
-				}
-			}
-
-			// Decode RGBE data
-			for (int x = 0; x < width; ++x)
-			{
-				const RGBE& rgbe = *reinterpret_cast<const RGBE*>(&scanline[x * 4]);
-				decodeRGBE(rgbe, pixels[(y * width + x) * 3 + 0],
-					pixels[(y * width + x) * 3 + 1],
-					pixels[(y * width + x) * 3 + 2]);
-			}
-		}
-	}
-
-	void HDRReader::decodeRGBE(const RGBE& rgbe, float& r, float& g, float& b)
-	{
-		if (rgbe.e == 0)
-		{
-			r = g = b = 0.0f;
-		}
-		else
-		{
-			float scale = std::ldexp(1.0f, rgbe.e - 128 - 8); // 2^(e - 128) / 256
-			r = rgbe.r * scale;
-			g = rgbe.g * scale;
-			b = rgbe.b * scale;
+			pixels[i] = endian::readLE<float>(file);
 		}
 	}
 

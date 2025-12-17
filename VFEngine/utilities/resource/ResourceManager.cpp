@@ -2,6 +2,7 @@
 #include "TextureResource.hpp"
 #include "AudioResource.hpp"
 #include "MeshResource.hpp"
+#include "../material/MaterialAsset.hpp"
 #include <bit>
 #include <algorithm>
 #include <cctype>
@@ -38,6 +39,7 @@ namespace resource
         std::erase_if(audioCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(meshCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });
+        std::erase_if(materialCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
     FileType ResourceManager::readHeaderFile(const fs::path& filePath)
@@ -170,7 +172,70 @@ namespace resource
         audioCache.clear();
         meshCache.clear();
         shaderCache.clear();
+        materialCache.clear();
 
         vfLogInfo("All resource caches cleared");
+    }
+
+    std::future<std::shared_ptr<material::MaterialData>> ResourceManager::loadMaterialAsync(std::string_view path)
+    {
+        return loadResourceAsync<material::MaterialData>(
+            path,
+            materialCache,
+            [](std::string_view p) {
+                auto result = material::MaterialAsset::load(p);
+                if (!result) {
+                    throw std::runtime_error("Failed to load material");
+                }
+                return std::move(*result);
+            });
+    }
+
+    std::shared_ptr<material::MaterialData> ResourceManager::loadMaterial(std::string_view path)
+    {
+        // Check cache first
+        {
+            std::scoped_lock lock(cacheMutex);
+            auto it = materialCache.find(std::string(path));
+            if (it != materialCache.end()) {
+                if (auto existing = it->second.lock()) {
+                    return existing;
+                }
+                // Expired, will be loaded below
+            }
+        }
+
+        // Load synchronously
+        auto result = material::MaterialAsset::load(path);
+        if (!result) {
+            vfLogError("Failed to load material: {}", path);
+            return nullptr;
+        }
+
+        auto material = std::make_shared<material::MaterialData>(std::move(*result));
+
+        // Cache it
+        {
+            std::scoped_lock lock(cacheMutex);
+            materialCache[std::string(path)] = material;
+        }
+
+        return material;
+    }
+
+    std::shared_ptr<material::MaterialData> ResourceManager::getMaterial(std::string_view path)
+    {
+        std::scoped_lock lock(cacheMutex);
+        auto it = materialCache.find(std::string(path));
+        if (it != materialCache.end()) {
+            return it->second.lock();
+        }
+        return nullptr;
+    }
+
+    void ResourceManager::invalidateMaterialCache(std::string_view path)
+    {
+        std::scoped_lock lock(cacheMutex);
+        materialCache.erase(std::string(path));
     }
 }

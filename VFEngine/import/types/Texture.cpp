@@ -117,8 +117,10 @@ namespace types
 
 			hdrData.width = static_cast<uint32_t>(width);
 			hdrData.height = static_cast<uint32_t>(height);
-			hdrData.numbersOfChannels = channels;
-			hdrData.textureData = std::vector<float>(imageData, imageData + (static_cast<ptrdiff_t>(width) * height * channels));
+			hdrData.numbersOfChannels = 4;  // Always store as RGBA
+
+			// Convert to 4 channels (RGBA) for GPU compatibility
+			hdrData.textureData = convertToRGBA32F(imageData, width, height, channels);
 
 			// Report 70% - data copied, saving to file
 			if (progressCallback) progressCallback(0.7f);
@@ -178,11 +180,14 @@ namespace types
 			int width;
 			int height;
 
+			// LoadEXR always returns RGBA (4 channels)
 			int result = LoadEXR(&out, &width, &height, filePath.c_str(), &exrError);
 			if (result != TINYEXR_SUCCESS)
 			{
 				vfLogError("Failed to load EXR image: {}", exrError);
 				FreeEXRErrorMessage(exrError);
+				FreeEXRImage(&exrImage);
+				FreeEXRHeader(&exrHeader);
 				return;
 			}
 
@@ -194,12 +199,13 @@ namespace types
 				flipImageVertically(out, width, height);
 			}
 
-			int channels = exrImage.num_channels < 4 ? exrImage.num_channels : 4;
-
 			hdrData.width = static_cast<uint32_t>(width);
 			hdrData.height = static_cast<uint32_t>(height);
-			hdrData.numbersOfChannels = static_cast<uint32_t>(channels);
-			hdrData.textureData = convertFromEXRToHDR(out, width, height);
+			hdrData.numbersOfChannels = 4;  // Always store as RGBA
+
+			// LoadEXR returns RGBA, copy directly
+			size_t pixelCount = static_cast<size_t>(width) * height;
+			hdrData.textureData = std::vector<float>(out, out + pixelCount * 4);
 
 			// Report 70% - conversion complete
 			if (progressCallback) progressCallback(0.7f);
@@ -270,8 +276,11 @@ namespace types
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.height);
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.numbersOfChannels);
 
-		HDRWriter::writeHDR(outFile, static_cast<int>(hdrData.width), static_cast<int>(hdrData.height),
-		                    static_cast<int>(hdrData.numbersOfChannels), hdrData.textureData);
+		// Write raw float data (RGBA32F)
+		for (float value : hdrData.textureData)
+		{
+			resource::endian::writeLE<float>(outFile, value);
+		}
 
 		outFile.close();
 	}
@@ -316,34 +325,48 @@ namespace types
 		}
 	}
 
-	std::vector<float> Texture::convertFromEXRToHDR(const float* data, int width, int height) const
+	std::vector<float> Texture::convertToRGBA32F(const float* data, int width, int height, int channels) const
 	{
-		std::vector<float> result(static_cast<size_t>(width) * height * 3); // RGB needs 3 floats per pixel
-		for (int y = 0; y < height; ++y)
+		size_t pixelCount = static_cast<size_t>(width) * height;
+		std::vector<float> result(pixelCount * 4);
+
+		for (size_t i = 0; i < pixelCount; ++i)
 		{
-			for (int x = 0; x < width; ++x)
+			float r = 0.0f, g = 0.0f, b = 0.0f, a = 1.0f;
+
+			if (channels == 1)
 			{
-				const int index = (y * width + x) * 4; // EXR data has 4 channels (RGBA)
-				float r = data[index];
-				float g = data[index + 1];
-				float b = data[index + 2];
-
-				// Normalize RGB values to [0, 1]
-				float maxValue = std::max({ r, g, b, 1e-6f }); // Avoid division by zero
-				if (maxValue > 1.0f)
-				{
-					r /= maxValue;
-					g /= maxValue;
-					b /= maxValue;
-				}
-
-				// Store normalized values in result
-				int resultIndex = (y * width + x) * 3;
-				result[resultIndex] = r;
-				result[resultIndex + 1] = g;
-				result[resultIndex + 2] = b;
+				// Grayscale -> RGBA
+				r = g = b = data[i];
 			}
+			else if (channels == 2)
+			{
+				// Grayscale + Alpha -> RGBA
+				r = g = b = data[i * 2];
+				a = data[i * 2 + 1];
+			}
+			else if (channels == 3)
+			{
+				// RGB -> RGBA
+				r = data[i * 3];
+				g = data[i * 3 + 1];
+				b = data[i * 3 + 2];
+			}
+			else if (channels >= 4)
+			{
+				// Already RGBA
+				r = data[i * 4];
+				g = data[i * 4 + 1];
+				b = data[i * 4 + 2];
+				a = data[i * 4 + 3];
+			}
+
+			result[i * 4 + 0] = r;
+			result[i * 4 + 1] = g;
+			result[i * 4 + 2] = b;
+			result[i * 4 + 3] = a;
 		}
+
 		return result;
 	}
 
@@ -370,85 +393,6 @@ namespace types
 		}
 
 		delete[] tempRow;
-	}
-
-	void HDRWriter::writeHDR(std::ofstream& file, int width, int height, int numbersOfChannels,
-		const std::vector<float>& pixels)
-	{
-		if (pixels.size() != static_cast<size_t>(width) * height * numbersOfChannels)
-		{
-			vfLogError("Pixel data size does not match image dimensions!");
-			return;
-		}
-		for (int y = 0; y < height; ++y)
-		{
-			// Write scanline header
-			uint8_t scanlineHeader[4] = { 2, 2, (uint8_t)(width >> 8), (uint8_t)(width & 0xFF) };
-			file.write(reinterpret_cast<char*>(scanlineHeader), 4);
-
-			for (int channel = 0; channel < 4; ++channel)
-			{
-				int x = 0;
-				while (x < width)
-				{
-					int runLength = 1;
-					while (x + runLength < width && runLength < 127 &&
-						getChannel(pixels, width, y, x, channel) ==
-						getChannel(pixels, width, y, x + runLength, channel))
-					{
-						runLength++;
-					}
-
-					if (runLength > 1)
-					{
-						// RLE
-						uint8_t value = getChannel(pixels, width, y, x, channel);
-						file.put(static_cast<char>(128 + runLength));
-						file.put(static_cast<char>(value));
-					}
-					else
-					{
-						// Raw data
-						uint8_t value = getChannel(pixels, width, y, x, channel);
-						file.put(static_cast<char>(1));
-						file.put(static_cast<char>(value));
-					}
-					x += runLength;
-				}
-			}
-		}
-	}
-
-	uint8_t HDRWriter::getChannel(const std::vector<float>& pixels, int width, int y, int x, int channel)
-	{
-		float r = pixels[(y * width + x) * 3 + 0];
-		float g = pixels[(y * width + x) * 3 + 1];
-		float b = pixels[(y * width + x) * 3 + 2];
-
-		switch (channel)
-		{
-		case 0: return encodeRGBE(r, g, b).r; // Red
-		case 1: return encodeRGBE(r, g, b).g; // Green
-		case 2: return encodeRGBE(r, g, b).b; // Blue
-		case 3: return encodeRGBE(r, g, b).e; // Exponent
-		default: return 0;
-		}
-	}
-
-	RGBE HDRWriter::encodeRGBE(float r, float g, float b)
-	{
-		float maxColor = std::max(r, std::max(g, b));
-		if (maxColor < 1e-5f) return { 0, 0, 0, 0 };
-
-		int e;
-		float scale = std::frexp(maxColor, &e) * 256.0f / maxColor;
-
-		return {
-			(uint8_t)(r * scale),
-			(uint8_t)(g * scale),
-			(uint8_t)(b * scale),
-			(uint8_t)(e + 128)
-		};
 	}
 
 	void TGAWriter::writeTGA(std::ofstream& file,const std::vector<unsigned char>& pixelData)

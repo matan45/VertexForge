@@ -219,8 +219,12 @@ namespace core {
 
 		vk::PhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
+		
+		vk::PhysicalDeviceVulkan13Features vulkan13Features{};
+		vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
 
 		vk::DeviceCreateInfo createInfo{};
+		createInfo.pNext = &vulkan13Features;
 		createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		createInfo.pQueueCreateInfos = queueCreateInfos.data();
 		createInfo.pEnabledFeatures = &deviceFeatures;

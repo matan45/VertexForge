@@ -35,7 +35,7 @@ namespace core {
 		~Texture();
 
 		void loadTextureFromFile(std::string_view filePath, vk::Format format = vk::Format::eR8G8B8A8Srgb, bool isEditor = true);
-		void loadHDRFromFile(std::string_view filePath, vk::Format format = vk::Format::eR32G32B32Sfloat, bool isEditor = true);
+		void loadHDRFromFile(std::string_view filePath, bool isEditor = true);
 		const vk::DescriptorSet& getDescriptorSet() const { return descriptorSet; }
 		const vk::ImageView& getImageView() const { return imageView; }
 		const vk::Sampler& getSampler() const { return sampler; }
