@@ -1,5 +1,4 @@
 #include "MaterialPreviewController.hpp"
-#include "../core/VulkanContext.hpp"
 #include "../core/Device.hpp"
 #include "../core/Utilities.hpp"
 #include "../imguiPass/OffScreenViewPort.hpp"
@@ -155,35 +154,6 @@ namespace controllers
 
         return 0.0f;
     }
-
-    // GPU texture data for preview (internal implementation)
-    struct PreviewTextureGPU
-    {
-        vk::Image image;
-        vk::DeviceMemory memory;
-        vk::ImageView imageView;
-        vk::Sampler sampler;
-        bool valid = false;
-    };
-
-    // pImpl for texture management
-    struct MaterialPreviewController::TextureManagerImpl
-    {
-        // 6 texture slots per material: albedo, metallic, roughness, ao, normal, emission
-        static constexpr int MAX_TEXTURES = 6;
-        std::unordered_map<std::string, PreviewTextureGPU> textureCache;
-        std::array<std::string, MAX_TEXTURES> textureSlots;
-        PreviewTextureGPU defaultTexture;
-        bool texturesNeedUpdate = false;
-
-        TextureManagerImpl()
-        {
-            for (auto& slot : textureSlots)
-            {
-                slot.clear();
-            }
-        }
-    };
 
     MaterialPreviewController::MaterialPreviewController()
         : swapChain{*core::VulkanContext::getSwapChain()}
@@ -498,7 +468,7 @@ namespace controllers
                 meshPipeline->injectMaterialForPreview(params.materialPath, params.materialData);
             }
         }
-        
+
         std::array<std::string, 6> texturePaths = {
             params.albedoTexturePath,
             params.metallicTexturePath,
@@ -672,7 +642,7 @@ namespace controllers
             renderData.emission = materialParams.emission;
         }
 
-        
+
         renderData.albedoTexIdx = materialParams.albedoTexturePath.empty() ? -1.0f : 0.0f;
         renderData.metallicTexIdx = materialParams.metallicTexturePath.empty() ? -1.0f : 1.0f;
         renderData.roughnessTexIdx = materialParams.roughnessTexturePath.empty() ? -1.0f : 2.0f;
