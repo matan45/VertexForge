@@ -41,6 +41,7 @@ namespace services {
         Mesh,
         Light,
         Material,
+        Billboard,
         // Add more as needed
     };
 

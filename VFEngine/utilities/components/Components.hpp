@@ -13,10 +13,11 @@ namespace components {
 	struct CameraComponent;
 	struct MeshComponent;
 	struct MaterialComponent;
+	struct BillboardComponent;
 
 	// Type list of optional components that can be removed during cleanup
 	// Add new optional component types here when they are created
-	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent>;
+	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent, BillboardComponent>;
 
 	struct WorldTransformComponent
 	{
@@ -189,6 +190,43 @@ namespace components {
 				return it->second;
 			}
 			return std::nullopt;
+		}
+	};
+
+	// Billboard sizing mode
+	enum class BillboardSizeMode : uint8_t {
+		ScreenSpace,  // Constant on-screen size regardless of distance
+		WorldSpace    // Size scales with distance
+	};
+
+	// Predefined icon types for common entity types
+	enum class BillboardIconType : uint8_t {
+		Custom = 0,   // Use atlasIndex for custom icon
+		Light,        // Light icon
+		Camera,       // Camera icon
+		AudioSource,  // Speaker/audio icon
+		Particle      // Particle emitter icon
+	};
+
+	struct BillboardComponent {
+		BillboardIconType iconType = BillboardIconType::Custom;
+		uint32_t atlasIndex = 0;
+		// Sizing
+		BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
+		glm::vec2 size{ 32.0f, 32.0f };  // Pixels (screen-space) or world units
+
+		// Appearance
+		glm::vec4 colorTint{ 1.0f, 1.0f, 1.0f, 1.0f };  // RGBA
+
+		// Flags
+		bool editorOnly = true;   // Only render in editor
+		bool selectable = true;   // Allow entity selection via click
+
+		// Get effective atlas index (resolves iconType to atlas position)
+		uint32_t getEffectiveAtlasIndex() const {
+			return (iconType == BillboardIconType::Custom)
+				? atlasIndex
+				: static_cast<uint32_t>(iconType);
 		}
 	};
 
