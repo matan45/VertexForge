@@ -19,6 +19,21 @@ namespace windows
 
     enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Material, Other };
 
+    // Icon indices in the atlas (4x4 grid layout)
+    enum class AtlasIcon : uint32_t
+    {
+        Animation = 0,
+        Texture = 1,    // image
+        Glsl = 2,
+        Mesh = 3,
+        Material = 4,
+        Folder = 5,
+        Scene = 6,
+        Hdr = 7,
+        Audio = 8,
+        File = 9        // other
+    };
+
     struct Asset
     {
         std::string name;
@@ -48,17 +63,9 @@ namespace windows
         AssetType selectedType;
         bool showFileWindow = false;
 
-        // Service-based icons
-        services::EditorTextureHandle fileIcon;
-        services::EditorTextureHandle folderIcon;
-        services::EditorTextureHandle textureIcon;
-        services::EditorTextureHandle audioIcon;
-        services::EditorTextureHandle meshIcon;
-        services::EditorTextureHandle glslIcon;
-        services::EditorTextureHandle animationIcon;
-        services::EditorTextureHandle hdrIcon;
-        services::EditorTextureHandle sceneIcon;
-        services::EditorTextureHandle materialIcon;
+        // Icon atlas texture
+        services::EditorTextureHandle iconAtlas;
+        static constexpr uint32_t ATLAS_GRID_SIZE = 4;  // 4x4 grid
 
         std::string pendingNavigation;  // Deferred navigation to avoid iterator invalidation
         bool iconsLoaded = false;
@@ -83,8 +90,11 @@ namespace windows
         void draw() override;
 
     private:
-        void loadIcons();
+        void loadIconAtlas();
         void navigateTo(const fs::path& path);
+
+        // Get UV coordinates for an icon in the atlas
+        static std::pair<ImVec2, ImVec2> getAtlasUV(AtlasIcon icon);
 
         void loadDirectory(const fs::path& path);
 
