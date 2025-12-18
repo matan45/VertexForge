@@ -80,7 +80,7 @@ namespace render
         //(called when IBL is set/changed)
         void reinitMeshPipelineWithIBL();
         
-        void setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes);
+        void setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
 
         // Billboard pipeline methods

@@ -181,6 +181,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
+    <None Include="..\..\resources\shaders\debug\aabbWireframe.glsl" />
+    <None Include="..\..\resources\shaders\debug\wireframe.glsl" />
     <None Include="..\..\resources\shaders\ibl\brdf.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_convolution.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_to_cubemap.glsl" />
@@ -190,7 +192,6 @@
     <None Include="..\..\resources\shaders\material\material_fragment_header.glsl" />
     <None Include="..\..\resources\shaders\material\material_vertex.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
-    <None Include="..\..\resources\shaders\mesh\wireframe.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">

@@ -1,11 +1,13 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
+#include "../../services/providers/IOffScreenProvider.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <optional>
 
 namespace events { struct SubscriptionToken; }
 
@@ -51,6 +53,7 @@ namespace controllers
                               const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
+        std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 
         // Called each frame to prepare mesh render list from ECS entities
         void prepareFrameMeshes();

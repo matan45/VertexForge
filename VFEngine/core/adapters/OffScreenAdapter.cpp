@@ -65,6 +65,10 @@ namespace core {
         return offScreen ? offScreen->getLoadedMeshes() : std::vector<std::string>{};
     }
 
+    std::optional<services::MeshBounds> OffScreenAdapter::getMeshBoundingBox(const std::string& meshPath) const {
+        return offScreen ? offScreen->getMeshBoundingBox(meshPath) : std::nullopt;
+    }
+
     void OffScreenAdapter::prepareFrameMeshes() {
         if (offScreen) {
             offScreen->prepareFrameMeshes();

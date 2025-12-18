@@ -279,6 +279,12 @@ namespace services
                 return getLoadedMeshes();
             });
 
+        dispatcher.registerQueryHandler<events::render::GetMeshBoundingBoxQuery>(
+            [this](const events::render::GetMeshBoundingBoxQuery& q)
+            {
+                return getMeshBoundingBox(q.meshPath);
+            });
+
         // Billboard visibility command/query handlers
         dispatcher.registerCommandHandler<events::render::SetShowBillboardIconsCommand>(
             [this](const events::render::SetShowBillboardIconsCommand& cmd)
@@ -349,6 +355,23 @@ namespace services
             return {};
         }
         return offScreenProvider->getLoadedMeshes();
+    }
+
+    std::optional<MeshBoundingBox> EditorRenderServiceImpl::getMeshBoundingBox(const std::string& meshPath) const
+    {
+        if (!offScreenProvider)
+        {
+            return std::nullopt;
+        }
+        auto bounds = offScreenProvider->getMeshBoundingBox(meshPath);
+        if (!bounds)
+        {
+            return std::nullopt;
+        }
+        MeshBoundingBox result;
+        result.min = bounds->min;
+        result.max = bounds->max;
+        return result;
     }
 
     void EditorRenderServiceImpl::prepareFrameMeshes()

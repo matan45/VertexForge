@@ -128,6 +128,12 @@ namespace events::render {
         std::string_view getName() const override { return "GetLoadedMeshes"; }
     };
 
+    struct GetMeshBoundingBoxQuery : IQuery<std::optional<services::MeshBoundingBox>> {
+        std::string meshPath;
+
+        std::string_view getName() const override { return "GetMeshBoundingBox"; }
+    };
+
     // ============================================
     // BILLBOARD COMMANDS - Billboard icon visibility
     // ============================================

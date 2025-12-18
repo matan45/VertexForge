@@ -156,6 +156,26 @@ namespace controllers
         return meshPipeline->getLoadedMeshIds();
     }
 
+    std::optional<services::MeshBounds> OffScreenController::getMeshBoundingBox(const std::string& meshPath) const
+    {
+        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        if (!meshPipeline)
+        {
+            return std::nullopt;
+        }
+
+        const math::AABB* aabb = meshPipeline->getMeshBoundingBox(meshPath);
+        if (!aabb)
+        {
+            return std::nullopt;
+        }
+
+        services::MeshBounds bounds;
+        bounds.min = aabb->min;
+        bounds.max = aabb->max;
+        return bounds;
+    }
+
     void OffScreenController::prepareFrameMeshes()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();

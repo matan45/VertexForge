@@ -2,9 +2,21 @@
 #include <glm/glm.hpp>
 #include <array>
 #include <cmath>
+#include <limits>
+#include <optional>
 
 namespace math
 {
+    // Ray for intersection tests
+    struct Ray
+    {
+        glm::vec3 origin{0.0f};
+        glm::vec3 direction{0.0f, 0.0f, -1.0f};
+
+        Ray() = default;
+        Ray(const glm::vec3& o, const glm::vec3& d) : origin(o), direction(glm::normalize(d)) {}
+    };
+
     // Axis-Aligned Bounding Box
     struct AABB
     {
@@ -59,6 +71,44 @@ namespace math
             );
 
             return AABB(newCenter - newExtents, newCenter + newExtents);
+        }
+
+        // Ray-AABB intersection test (slab method)
+        // Returns distance along ray if hit, std::nullopt if no intersection
+        std::optional<float> intersectRay(const Ray& ray) const
+        {
+            float tmin = 0.0f;
+            float tmax = std::numeric_limits<float>::max();
+
+            for (int i = 0; i < 3; ++i)
+            {
+                if (std::abs(ray.direction[i]) < 1e-8f)
+                {
+                    // Ray is parallel to slab, check if origin is within slab
+                    if (ray.origin[i] < min[i] || ray.origin[i] > max[i])
+                    {
+                        return std::nullopt;
+                    }
+                }
+                else
+                {
+                    float invD = 1.0f / ray.direction[i];
+                    float t1 = (min[i] - ray.origin[i]) * invD;
+                    float t2 = (max[i] - ray.origin[i]) * invD;
+
+                    if (t1 > t2) std::swap(t1, t2);
+
+                    tmin = std::max(tmin, t1);
+                    tmax = std::min(tmax, t2);
+
+                    if (tmin > tmax)
+                    {
+                        return std::nullopt;
+                    }
+                }
+            }
+
+            return tmin;
         }
     };
 

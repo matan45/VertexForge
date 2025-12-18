@@ -41,6 +41,11 @@ namespace services {
         bool showBoundingBox = false;
     };
 
+    struct MeshBoundingBox {
+        glm::vec3 min{0.0f};
+        glm::vec3 max{0.0f};
+    };
+
     
     struct MaterialData {
         std::string defaultMaterial;  // .vfMat path for unmapped submeshes

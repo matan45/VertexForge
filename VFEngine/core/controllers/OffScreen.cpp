@@ -65,6 +65,11 @@ namespace controllers {
 		return offScreenController->getLoadedMeshes();
 	}
 
+	std::optional<services::MeshBounds> OffScreen::getMeshBoundingBox(const std::string& meshPath) const
+	{
+		return offScreenController->getMeshBoundingBox(meshPath);
+	}
+
 	void OffScreen::prepareFrameMeshes()
 	{
 		offScreenController->prepareFrameMeshes();
