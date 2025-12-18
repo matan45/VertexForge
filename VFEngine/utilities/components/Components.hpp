@@ -211,7 +211,7 @@ namespace components {
 		uint32_t atlasIndex = 0;
 		
 		BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
-		glm::vec2 size{ 32.0f, 32.0f };  // Pixels (screen-space) or world units
+		glm::vec2 size{ 64.0f, 64.0f };  // Pixels (screen-space) or world units
 		
 		glm::vec4 colorTint{ 1.0f, 1.0f, 1.0f, 1.0f };  // RGBA
 

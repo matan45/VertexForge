@@ -3,6 +3,7 @@
 #include "../core/SwapChain.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
+#include "DebugRenderer.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "mesh/MeshTypes.hpp"
 #include "billboard/BillboardPipeline.hpp"
@@ -15,6 +16,7 @@ namespace render {
 		, iblRenderer{ std::make_unique<IBL>(device, swapChain, offscreenResources) }
 		, meshPipeline{ std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources) }
 		, billboardPipeline{ std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources) }
+		, debugRenderer{ std::make_unique<DebugRenderer>(device, swapChain) }
 	{
 	}
 
@@ -107,6 +109,37 @@ namespace render {
 		}
 	}
 
+	void RenderPassHandler::initDebugRenderer()
+	{
+		if (debugRendererInitialized)
+		{
+			return;
+		}
+
+		// Debug renderer needs mesh pipeline's render pass for proper depth testing
+		if (!meshPipelineInitialized)
+		{
+			return;
+		}
+
+		debugRenderer->init(meshPipeline->getRenderPass());
+		debugRendererInitialized = true;
+	}
+
+	void RenderPassHandler::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
+	{
+		if (debugRenderer)
+		{
+			debugRenderer->setCameraFrustumDrawList(std::move(frustums));
+		}
+	}
+
+	void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
+	{
+		currentView = view;
+		currentProjection = projection;
+	}
+
 	void RenderPassHandler::recreate() const
 	{
 		iblRenderer->recreate();
@@ -115,6 +148,11 @@ namespace render {
 		if (meshPipelineInitialized)
 		{
 			meshPipeline->recreate();
+		}
+
+		if (debugRendererInitialized)
+		{
+			debugRenderer->recreate(meshPipeline->getRenderPass());
 		}
 
 		if (billboardPipelineInitialized)
@@ -128,6 +166,12 @@ namespace render {
 		if (billboardPipelineInitialized)
 		{
 			billboardPipeline->cleanUp();
+		}
+
+		if (debugRendererInitialized)
+		{
+			debugRenderer->cleanUp();
+			debugRenderer->cleanUpShaders();
 		}
 
 		if (meshPipelineInitialized)
@@ -151,9 +195,16 @@ namespace render {
 		clearColor->recordCommandBuffer(commandBuffer, imageIndex);
 		iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
-		if (meshPipelineInitialized && !currentMeshDrawList.empty())
+		// Determine if we need to run the mesh render pass (for meshes or debug rendering)
+		bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
+		bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems);
+
+		if (needsMeshPass)
 		{
-			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum);
+			// Pass debug renderer to mesh pipeline so it can render inside the same render pass
+			render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
+			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
+				debugRendererPtr, currentView, currentProjection);
 		}
 
 		// Billboard rendering (after mesh pass for proper depth testing)

@@ -119,7 +119,16 @@ namespace controllers
         if (renderHandler->isMeshPipelineInitialized())
         {
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
+
+            // Initialize debug renderer if not already done (requires mesh pipeline render pass)
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
         }
+
+        // Update debug renderer camera matrices
+        renderHandler->setDebugCameraMatrices(view, projection);
 
         // Update billboard camera if pipeline is initialized
         if (renderHandler->isBillboardPipelineInitialized())
@@ -276,12 +285,6 @@ namespace controllers
     void OffScreenController::prepareFrameCameraFrustums()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        auto* meshPipeline = renderHandler->getMeshPipeline();
-
-        if (!meshPipeline)
-        {
-            return;
-        }
 
         std::vector<render::mesh::CameraFrustumRenderData> frustumDrawList;
 
@@ -301,7 +304,6 @@ namespace controllers
             }
 
             render::mesh::CameraFrustumRenderData renderData;
-            renderData.viewMatrix = cameraComp.viewMatrix;
             renderData.projectionMatrix = cameraComp.projectionMatrix;
             renderData.worldMatrix = worldTransform.worldMatrix;
             renderData.showFrustum = cameraComp.showFrustum;
@@ -309,7 +311,20 @@ namespace controllers
             frustumDrawList.push_back(renderData);
         }
 
-        meshPipeline->setCameraFrustumDrawList(std::move(frustumDrawList));
+        // If we have frustums to render, ensure mesh pipeline and debug renderer are initialized
+        if (!frustumDrawList.empty())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+
+        renderHandler->setCameraFrustumDrawList(std::move(frustumDrawList));
     }
 
     bool OffScreenController::loadBillboardAtlas(const std::string& atlasPath)

@@ -297,8 +297,11 @@ namespace render::mesh
                 continue;
             }
 
-            // Compute inverse view-projection for this camera
-            glm::mat4 viewProj = camera.projectionMatrix * camera.viewMatrix;
+            // Compute frustum using the entity's world transform and projection
+            // The worldMatrix represents where the camera entity IS in the scene
+            // We need to compute the view matrix from the world matrix (view = inverse(world))
+            glm::mat4 cameraViewFromWorld = glm::inverse(camera.worldMatrix);
+            glm::mat4 viewProj = camera.projectionMatrix * cameraViewFromWorld;
             glm::mat4 inverseViewProj = glm::inverse(viewProj);
 
             // Get frustum corners in world space

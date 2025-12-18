@@ -95,6 +95,7 @@ namespace windows
 			handleFileMenu();
 			handleSettingsMenu();
 			handleAddMenu();
+			handleDebug();
 			ImGui::EndMainMenuBar();
 		}
 	}
@@ -285,7 +286,21 @@ namespace windows
 
 	void MainImguiWindow::handleDebug()
 	{
-		if (ImGui::BeginMenu("File")){}
+		if (ImGui::BeginMenu("Debug"))
+		{
+			// Billboard Icons toggle
+			events::render::GetShowBillboardIconsQuery query;
+			bool showBillboards = events::EventDispatcher::instance().query(query);
+
+			if (ImGui::MenuItem("Show Billboard Icons", nullptr, showBillboards))
+			{
+				events::render::SetShowBillboardIconsCommand cmd;
+				cmd.show = !showBillboards;
+				events::EventDispatcher::instance().execute(cmd);
+			}
+
+			ImGui::EndMenu();
+		}
 	}
 
 	void MainImguiWindow::iblWindow()

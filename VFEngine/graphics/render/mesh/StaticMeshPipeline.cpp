@@ -1,6 +1,5 @@
 #include "StaticMeshPipeline.hpp"
 #include "MeshGPUCache.hpp"
-#include "FrustumDebugRenderer.hpp"
 #include "MaterialCacheManager.hpp"
 #include "../DebugRenderer.hpp"
 #include "../material/MaterialTextureCache.hpp"
@@ -37,9 +36,6 @@ namespace render::mesh
         // Create material shader cache for per-material pipeline compilation
         materialShaderCache = std::make_unique<MaterialShaderCache>(device);
 
-        // Create debug renderer (AABB, frustum, etc.)
-        debugRenderer = std::make_unique<render::DebugRenderer>(device, swapChain);
-
         // Create material cache manager and link related caches
         materialCacheManager = std::make_unique<MaterialCacheManager>();
         materialCacheManager->setShaderCache(materialShaderCache.get());
@@ -65,7 +61,6 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
-        debugRenderer->init(renderPass);
     }
 
     void StaticMeshPipeline::initWithDefaults()
@@ -90,7 +85,6 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
-        debugRenderer->init(renderPass);
         usingDefaultTextures = true;
     }
 
@@ -115,8 +109,6 @@ namespace render::mesh
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
-
-        debugRenderer->recreate(renderPass);
     }
 
     void StaticMeshPipeline::createRenderPass()
@@ -604,14 +596,6 @@ namespace render::mesh
         }
     }
 
-    void StaticMeshPipeline::setCameraFrustumDrawList(std::vector<CameraFrustumRenderData>&& frustums) const
-    {
-        if (debugRenderer)
-        {
-            debugRenderer->setCameraFrustumDrawList(std::move(frustums));
-        }
-    }
-
     void StaticMeshPipeline::cleanUpForReinit()
     {
         // Clean up pipeline/descriptor resources but preserve loaded meshes and command pool
@@ -671,12 +655,6 @@ namespace render::mesh
         }
         textureDescriptorsInitialized = false;
 
-        // Clean up debug renderer
-        if (debugRenderer)
-        {
-            debugRenderer->cleanUp();
-        }
-
         renderPass = nullptr;
         graphicsPipeline = nullptr;
         pipelineLayout = nullptr;
@@ -725,9 +703,6 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUpShader()
     {
         meshShader->cleanUp();
-        if (debugRenderer) {
-            debugRenderer->cleanUpShaders();
-        }
     }
 
     void StaticMeshPipeline::invalidateMaterialCache(const std::string& materialPath)
@@ -796,15 +771,23 @@ namespace render::mesh
     void StaticMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                                   uint32_t imageIndex,
                                                   const std::vector<MeshRenderData>& meshDrawList,
-                                                  const math::Frustum* frustum) const
+                                                  const math::Frustum* frustum,
+                                                  render::DebugRenderer* debugRenderer,
+                                                  const glm::mat4& debugView,
+                                                  const glm::mat4& debugProjection) const
     {
-        if (meshDrawList.empty())
+        // Check if we have anything to render (meshes or debug items)
+        bool hasDebugItems = debugRenderer && debugRenderer->hasItemsToRender();
+        if (meshDrawList.empty() && !hasDebugItems)
         {
             return;
         }
 
         // Prepare textures for this frame (load, assign slots, update descriptor set)
-        prepareTexturesForFrame(meshDrawList);
+        if (!meshDrawList.empty())
+        {
+            prepareTexturesForFrame(meshDrawList);
+        }
 
         // Acquire shared lock for reading material cache during rendering
         auto cacheLock = materialCacheManager->acquireSharedLock();
@@ -1070,9 +1053,9 @@ namespace render::mesh
         }
 
         // Render all debug visualizations (AABB, frustums, etc.)
-        if (debugRenderer)
+        if (debugRenderer && debugRenderer->hasItemsToRender())
         {
-            debugRenderer->render(commandBuffer, meshDrawList, currentView, currentProjection,
+            debugRenderer->render(commandBuffer, meshDrawList, debugView, debugProjection,
                 [this](const std::string& meshId) { return getMesh(meshId); });
         }
 

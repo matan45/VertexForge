@@ -17,7 +17,6 @@ namespace render::mesh
     // Data needed to render a camera frustum
     struct CameraFrustumRenderData
     {
-        glm::mat4 viewMatrix;
         glm::mat4 projectionMatrix;
         glm::mat4 worldMatrix;  // Camera entity's world transform
         bool showFrustum = false;

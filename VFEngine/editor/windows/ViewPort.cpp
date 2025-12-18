@@ -21,19 +21,6 @@ namespace windows {
 		auto& dispatcher = events::EventDispatcher::instance();
 
 		if (ImGui::Begin("ViewPort")) {
-			// Right-click context menu for viewport settings
-			if (ImGui::BeginPopupContextWindow("ViewportContextMenu")) {
-				events::render::GetShowBillboardIconsQuery query;
-				bool showBillboards = dispatcher.query(query);
-
-				if (ImGui::Checkbox("Show Billboard Icons", &showBillboards)) {
-					events::render::SetShowBillboardIconsCommand cmd;
-					cmd.show = showBillboards;
-					dispatcher.execute(cmd);
-				}
-				ImGui::EndPopup();
-			}
-
 			// Handle camera input when viewport is focused or hovered
 			if (ImGui::IsWindowFocused() || ImGui::IsWindowHovered()) {
 				handleCameraInput();

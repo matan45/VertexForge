@@ -62,5 +62,8 @@ namespace render
                     const std::function<const mesh::MeshGPUData*(const std::string&)>& getMeshFunc) const;
 
         bool isInitialized() const { return initialized; }
+
+        // Check if there are any debug items to render (frustums, etc.)
+        bool hasItemsToRender() const { return !cameraFrustumDrawList.empty(); }
     };
 }

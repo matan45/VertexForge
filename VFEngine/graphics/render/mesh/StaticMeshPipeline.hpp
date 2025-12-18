@@ -35,7 +35,6 @@ namespace render::mesh
     class MeshGPUCache;
     class MaterialTextureCache;
     class DefaultIBLTextureFactory;
-    struct CameraFrustumRenderData;
     class MaterialCacheManager;
 }
 
@@ -81,9 +80,6 @@ namespace render::mesh
 
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
-
-        // Debug renderer (AABB wireframes, camera frustums, etc.)
-        std::unique_ptr<render::DebugRenderer> debugRenderer;
 
         // Current camera matrices for AABB rendering and translucent sorting
         mutable glm::mat4 currentView{1.0f};
@@ -151,10 +147,6 @@ namespace render::mesh
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;
 
-        // Set camera frustum draw list for debug rendering
-        void setCameraFrustumDrawList(std::vector<CameraFrustumRenderData>&& frustums) const;
-
-
         vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
 
         std::string loadMesh(std::string_view meshPath);
@@ -178,7 +170,10 @@ namespace render::mesh
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                  uint32_t imageIndex,
                                  const std::vector<MeshRenderData>& meshDrawList,
-                                 const math::Frustum* frustum) const;
+                                 const math::Frustum* frustum,
+                                 render::DebugRenderer* debugRenderer = nullptr,
+                                 const glm::mat4& debugView = glm::mat4(1.0f),
+                                 const glm::mat4& debugProjection = glm::mat4(1.0f)) const;
 
     private:
         void loadShaders();
