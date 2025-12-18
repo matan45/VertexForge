@@ -84,7 +84,7 @@ namespace render {
 
 	void RenderPassHandler::setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes)
 	{
-		currentMeshDrawList = std::move(meshes);
+		currentMeshDrawList = meshes;
 	}
 
 	void RenderPassHandler::initBillboardPipeline()

@@ -59,6 +59,14 @@ namespace windows
 	std::pair<ImVec2, ImVec2> ContentBrowser::getAtlasUV(AtlasIcon icon)
 	{
 		uint32_t index = static_cast<uint32_t>(icon);
+		constexpr uint32_t maxIndex = ATLAS_GRID_SIZE * ATLAS_GRID_SIZE;
+
+		// Bounds check - fallback to File icon if out of range
+		if (index >= maxIndex)
+		{
+			index = static_cast<uint32_t>(AtlasIcon::File);
+		}
+
 		float gridSize = static_cast<float>(ATLAS_GRID_SIZE);
 		float tileSize = 1.0f / gridSize;
 

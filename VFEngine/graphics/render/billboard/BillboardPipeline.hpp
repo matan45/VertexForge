@@ -82,7 +82,7 @@ namespace render::billboard
         vk::Buffer instanceBuffer;
         vk::DeviceMemory instanceBufferMemory;
         uint32_t maxInstances = 1024;
-        mutable uint32_t currentInstanceCount = 0;
+        uint32_t currentInstanceCount = 0;
 
         // Atlas texture (using core::Texture for file loading)
         std::unique_ptr<core::Texture> atlasTexture;
@@ -94,7 +94,7 @@ namespace render::billboard
         vk::Sampler defaultAtlasSampler;
 
         // Billboard list for current frame
-        mutable std::vector<BillboardRenderData> currentBillboards;
+        std::vector<BillboardRenderData> currentBillboards;
 
         // Private methods
         void loadShader();
@@ -110,6 +110,6 @@ namespace render::billboard
         void createInstanceBuffer();
         void createDefaultAtlas();
 
-        void updateInstanceBuffer() const;
+        void updateInstanceBuffer();
     };
 }

@@ -355,53 +355,66 @@ namespace render::billboard
         vk::DeviceMemory stagingMemory;
         core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
 
-        // Copy data to staging buffer
-        void* data;
-        vk::Result mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        if (mapResult == vk::Result::eSuccess)
+        // RAII cleanup for staging resources
+        auto cleanupStaging = [&]() {
+            if (stagingBuffer) device.getLogicalDevice().destroyBuffer(stagingBuffer);
+            if (stagingMemory) device.getLogicalDevice().freeMemory(stagingMemory);
+        };
+
+        try
         {
-            std::memcpy(data, atlasData.data(), imageSize);
-            device.getLogicalDevice().unmapMemory(stagingMemory);
+            // Copy data to staging buffer
+            void* data;
+            vk::Result mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+            if (mapResult == vk::Result::eSuccess)
+            {
+                std::memcpy(data, atlasData.data(), imageSize);
+                device.getLogicalDevice().unmapMemory(stagingMemory);
+            }
+
+            // Create command pool for transfer
+            vk::CommandPoolCreateInfo poolInfo{};
+            poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
+            poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
+            auto commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
+
+            // Transition and copy
+            auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
+
+            // Transition to transfer dst
+            core::Utilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            // Copy buffer to image
+            vk::BufferImageCopy region{};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = 1;
+            region.imageOffset = vk::Offset3D{0, 0, 0};
+            region.imageExtent = vk::Extent3D{atlasSize, atlasSize, 1};
+
+            cmd->copyBufferToImage(stagingBuffer, defaultAtlasImage, vk::ImageLayout::eTransferDstOptimal, region);
+
+            // Transition to shader read
+            core::Utilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
+                vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+
+            // Cleanup staging
+            cleanupStaging();
         }
-
-        // Create command pool for transfer
-        vk::CommandPoolCreateInfo poolInfo{};
-        poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-        poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        auto commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
-
-        // Transition and copy
-        auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-
-        // Transition to transfer dst
-        core::Utilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
-            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        // Copy buffer to image
-        vk::BufferImageCopy region{};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
-        region.imageOffset = vk::Offset3D{0, 0, 0};
-        region.imageExtent = vk::Extent3D{atlasSize, atlasSize, 1};
-
-        cmd->copyBufferToImage(stagingBuffer, defaultAtlasImage, vk::ImageLayout::eTransferDstOptimal, region);
-
-        // Transition to shader read
-        core::Utilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
-            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
-
-        // Cleanup staging
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
+        catch (...)
+        {
+            cleanupStaging();
+            throw;
+        }
     }
 
     void BillboardPipeline::createDescriptorSet()
@@ -727,9 +740,10 @@ namespace render::billboard
     void BillboardPipeline::setBillboardList(const std::vector<BillboardRenderData>& billboards)
     {
         currentBillboards = billboards;
+        updateInstanceBuffer();
     }
 
-    void BillboardPipeline::updateInstanceBuffer() const
+    void BillboardPipeline::updateInstanceBuffer()
     {
         if (currentBillboards.empty())
         {
@@ -765,15 +779,7 @@ namespace render::billboard
     void BillboardPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                                  uint32_t imageIndex) const
     {
-        if (!initialized || currentBillboards.empty())
-        {
-            return;
-        }
-
-        // Update instance buffer with current billboards
-        updateInstanceBuffer();
-
-        if (currentInstanceCount == 0)
+        if (!initialized || currentInstanceCount == 0)
         {
             return;
         }
