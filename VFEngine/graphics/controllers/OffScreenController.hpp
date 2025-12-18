@@ -58,6 +58,9 @@ namespace controllers
         // Called each frame to prepare billboard render list from ECS entities
         void prepareFrameBillboards();
 
+        // Called each frame to prepare camera frustum debug render list
+        void prepareFrameCameraFrustums();
+
         // Billboard visibility toggle
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
         bool getShowBillboardIcons() const { return showBillboardIcons; }

@@ -335,6 +335,8 @@ namespace services {
         data.farPlane = comp.farPlane;
         data.aspectRatio = comp.aspectRatio;
         data.isPerspective = comp.isPerspective;
+        data.isPrimary = comp.isPrimary;
+        data.showFrustum = comp.showFrustum;
         data.orthoSize = comp.orthoSize;
 
         return data;
@@ -357,13 +359,38 @@ namespace services {
         comp.farPlane = camera.farPlane;
         comp.aspectRatio = camera.aspectRatio;
         comp.isPerspective = camera.isPerspective;
+        comp.showFrustum = camera.showFrustum;
         comp.orthoSize = camera.orthoSize;
+
+        // If setting this camera as primary, clear isPrimary from all other cameras
+        if (camera.isPrimary && !comp.isPrimary) {
+            auto view = registry.view<components::CameraComponent>();
+            for (auto otherEntity : view) {
+                if (otherEntity != internal::fromHandle(entity)) {
+                    auto& otherComp = view.get<components::CameraComponent>(otherEntity);
+                    otherComp.isPrimary = false;
+                }
+            }
+        }
+        comp.isPrimary = camera.isPrimary;
         comp.updateProjectionMatrix();
 
         return true;
     }
 
     std::optional<EntityHandle> SceneServiceImpl::getPrimaryCamera() const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::CameraComponent>();
+
+        // Find camera with isPrimary = true
+        for (auto entity : view) {
+            const auto& comp = view.get<components::CameraComponent>(entity);
+            if (comp.isPrimary) {
+                return internal::toHandle(entity);
+            }
+        }
+
+        // Fallback to first camera if no primary is set
         auto cameras = getEntitiesWithComponent(ComponentTypeId::Camera);
         if (cameras.empty()) {
             return std::nullopt;

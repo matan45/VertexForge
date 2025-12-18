@@ -70,6 +70,11 @@ namespace controllers {
 		offScreenController->prepareFrameMeshes();
 	}
 
+	void OffScreen::prepareFrameCameraFrustums()
+	{
+		offScreenController->prepareFrameCameraFrustums();
+	}
+
 	void OffScreen::prepareFrameBillboards()
 	{
 		offScreenController->prepareFrameBillboards();

@@ -260,6 +260,8 @@ namespace windows
                     changed |= ImGui::DragFloat("Far Plane", &camera.farPlane, 0.1f, camera.nearPlane + 0.1f, 10000.0f);
                     changed |= ImGui::DragFloat("Aspect Ratio", &camera.aspectRatio, 0.01f, 0.1f, 10.0f);
                     changed |= ImGui::Checkbox("Perspective", &camera.isPerspective);
+                    changed |= ImGui::Checkbox("Primary Camera", &camera.isPrimary);
+                    changed |= ImGui::Checkbox("Show Frustum", &camera.showFrustum);
 
                     if (!camera.isPerspective)
                     {

@@ -36,6 +36,7 @@ namespace controllers {
 		bool isMeshLoaded(const std::string& meshPath) const;
 		std::vector<std::string> getLoadedMeshes() const;
 		void prepareFrameMeshes();
+		void prepareFrameCameraFrustums();
 
 		// Billboard API
 		void prepareFrameBillboards();

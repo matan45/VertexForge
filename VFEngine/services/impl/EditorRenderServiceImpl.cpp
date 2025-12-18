@@ -22,6 +22,7 @@ namespace services
         frameCounter++;
         prepareFrameMeshes();
         prepareFrameBillboards();
+        prepareFrameCameraFrustums();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -363,6 +364,14 @@ namespace services
         if (offScreenProvider)
         {
             offScreenProvider->prepareFrameBillboards();
+        }
+    }
+
+    void EditorRenderServiceImpl::prepareFrameCameraFrustums()
+    {
+        if (offScreenProvider)
+        {
+            offScreenProvider->prepareFrameCameraFrustums();
         }
     }
 }

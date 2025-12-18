@@ -1,7 +1,8 @@
 #include "StaticMeshPipeline.hpp"
 #include "MeshGPUCache.hpp"
-#include "AABBDebugRenderer.hpp"
+#include "FrustumDebugRenderer.hpp"
 #include "MaterialCacheManager.hpp"
+#include "../DebugRenderer.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialShaderCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
@@ -36,8 +37,8 @@ namespace render::mesh
         // Create material shader cache for per-material pipeline compilation
         materialShaderCache = std::make_unique<MaterialShaderCache>(device);
 
-        // Create AABB debug renderer
-        aabbRenderer = std::make_unique<AABBDebugRenderer>(device, swapChain);
+        // Create debug renderer (AABB, frustum, etc.)
+        debugRenderer = std::make_unique<render::DebugRenderer>(device, swapChain);
 
         // Create material cache manager and link related caches
         materialCacheManager = std::make_unique<MaterialCacheManager>();
@@ -64,7 +65,7 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
-        aabbRenderer->init(renderPass);
+        debugRenderer->init(renderPass);
     }
 
     void StaticMeshPipeline::initWithDefaults()
@@ -89,7 +90,7 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
-        aabbRenderer->init(renderPass);
+        debugRenderer->init(renderPass);
         usingDefaultTextures = true;
     }
 
@@ -115,7 +116,7 @@ namespace render::mesh
         createGraphicsPipeline();
         createFramebuffers();
 
-        aabbRenderer->recreate(renderPass);
+        debugRenderer->recreate(renderPass);
     }
 
     void StaticMeshPipeline::createRenderPass()
@@ -603,6 +604,14 @@ namespace render::mesh
         }
     }
 
+    void StaticMeshPipeline::setCameraFrustumDrawList(std::vector<CameraFrustumRenderData>&& frustums) const
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setCameraFrustumDrawList(std::move(frustums));
+        }
+    }
+
     void StaticMeshPipeline::cleanUpForReinit()
     {
         // Clean up pipeline/descriptor resources but preserve loaded meshes and command pool
@@ -662,10 +671,10 @@ namespace render::mesh
         }
         textureDescriptorsInitialized = false;
 
-        // Clean up AABB debug renderer
-        if (aabbRenderer)
+        // Clean up debug renderer
+        if (debugRenderer)
         {
-            aabbRenderer->cleanUp();
+            debugRenderer->cleanUp();
         }
 
         renderPass = nullptr;
@@ -716,8 +725,8 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUpShader()
     {
         meshShader->cleanUp();
-        if (aabbRenderer) {
-            aabbRenderer->cleanUpShader();
+        if (debugRenderer) {
+            debugRenderer->cleanUpShaders();
         }
     }
 
@@ -1060,10 +1069,10 @@ namespace render::mesh
                           material::BlendMode::Translucent, currentPipeline);
         }
 
-        // Render AABB wireframes for meshes with showBoundingBox enabled
-        if (aabbRenderer)
+        // Render all debug visualizations (AABB, frustums, etc.)
+        if (debugRenderer)
         {
-            aabbRenderer->render(commandBuffer, meshDrawList, currentView, currentProjection,
+            debugRenderer->render(commandBuffer, meshDrawList, currentView, currentProjection,
                 [this](const std::string& meshId) { return getMesh(meshId); });
         }
 

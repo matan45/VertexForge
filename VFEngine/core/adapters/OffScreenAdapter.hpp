@@ -34,6 +34,7 @@ namespace core
         bool isMeshLoaded(const std::string& meshPath) const override;
         std::vector<std::string> getLoadedMeshes() const override;
         void prepareFrameMeshes() override;
+        void prepareFrameCameraFrustums() override;
 
         // Billboard API
         void prepareFrameBillboards() override;

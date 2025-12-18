@@ -28,6 +28,7 @@ namespace services {
         virtual bool isMeshLoaded(const std::string& meshPath) const = 0;
         virtual std::vector<std::string> getLoadedMeshes() const = 0;
         virtual void prepareFrameMeshes() = 0;
+        virtual void prepareFrameCameraFrustums() = 0;
 
         // Billboard API
         virtual void prepareFrameBillboards() = 0;

@@ -56,6 +56,7 @@ namespace services {
         std::vector<std::string> getLoadedMeshes() const;
         void prepareFrameMeshes();
         void prepareFrameBillboards();
+        void prepareFrameCameraFrustums();
     };
 
 }

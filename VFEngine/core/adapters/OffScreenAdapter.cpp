@@ -71,6 +71,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameCameraFrustums() {
+        if (offScreen) {
+            offScreen->prepareFrameCameraFrustums();
+        }
+    }
+
     void OffScreenAdapter::prepareFrameBillboards() {
         if (offScreen) {
             offScreen->prepareFrameBillboards();

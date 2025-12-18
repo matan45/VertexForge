@@ -7,6 +7,7 @@
 #include "../render/mesh/MeshTypes.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
 #include "../render/billboard/BillboardTypes.hpp"
+#include "../render/mesh/FrustumDebugRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
@@ -270,6 +271,45 @@ namespace controllers
         }
 
         renderHandler->setBillboardDrawList(std::move(billboardDrawList));
+    }
+
+    void OffScreenController::prepareFrameCameraFrustums()
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* meshPipeline = renderHandler->getMeshPipeline();
+
+        if (!meshPipeline)
+        {
+            return;
+        }
+
+        std::vector<render::mesh::CameraFrustumRenderData> frustumDrawList;
+
+        // Iterate all entities with CameraComponent and WorldTransformComponent
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::CameraComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& cameraComp = view.get<components::CameraComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            // Skip cameras without frustum visualization enabled
+            if (!cameraComp.showFrustum)
+            {
+                continue;
+            }
+
+            render::mesh::CameraFrustumRenderData renderData;
+            renderData.viewMatrix = cameraComp.viewMatrix;
+            renderData.projectionMatrix = cameraComp.projectionMatrix;
+            renderData.worldMatrix = worldTransform.worldMatrix;
+            renderData.showFrustum = cameraComp.showFrustum;
+
+            frustumDrawList.push_back(renderData);
+        }
+
+        meshPipeline->setCameraFrustumDrawList(std::move(frustumDrawList));
     }
 
     bool OffScreenController::loadBillboardAtlas(const std::string& atlasPath)

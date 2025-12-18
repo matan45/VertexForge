@@ -27,6 +27,8 @@ namespace services {
         float farPlane = 1000.0f;
         float aspectRatio = 16.0f / 9.0f;
         bool isPerspective = true;
+        bool isPrimary = false;
+        bool showFrustum = false;
         float orthoSize = 10.0f;
     };
 
