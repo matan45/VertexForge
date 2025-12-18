@@ -10,6 +10,7 @@ namespace core {
 		uint32_t width;
 		uint32_t height;
 		uint32_t numbersOfChannels;
+		uint32_t mipLevels = 1;
 	};
 
 	class Texture
@@ -42,8 +43,8 @@ namespace core {
 		const ImageData& getImageData() const { return imageData; }
 
 	private:
-		void createSampler();
-		void copyBufferToImage(vk::Buffer buffer, uint32_t width, uint32_t height);
+		void createSampler(uint32_t mipLevels);
+		void copyBufferToImage(vk::Buffer buffer, uint32_t width, uint32_t height, uint32_t mipLevel = 0);
 	};
 }
 

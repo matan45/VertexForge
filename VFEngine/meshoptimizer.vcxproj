@@ -11,10 +11,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{2EB4837C-1AEB-840D-C3D7-6A10AFED000F}</ProjectGuid>
+    <ProjectGuid>{75046AD2-E1C4-E508-AAFF-2E86167F2AE5}</ProjectGuid>
     <IgnoreWarnCompileDuplicatedFilename>true</IgnoreWarnCompileDuplicatedFilename>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>Core</RootNamespace>
+    <RootNamespace>meshoptimizer</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -40,15 +40,15 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(ProjectDir)..\..\bin\Core\Debug\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
-    <TargetName>Core</TargetName>
+    <OutDir>$(ProjectDir)..\bin\meshoptimizer\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\meshoptimizer\</IntDir>
+    <TargetName>meshoptimizer</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(ProjectDir)..\..\bin\Core\Release\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
-    <TargetName>Core</TargetName>
+    <OutDir>$(ProjectDir)..\bin\meshoptimizer\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\meshoptimizer\</IntDir>
+    <TargetName>meshoptimizer</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -56,11 +56,11 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\dependencies\meshoptimizer\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <Link>
@@ -73,14 +73,14 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;C:\VulkanSDK\1.4.328.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\dependencies\meshoptimizer\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
       <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <Link>
@@ -90,42 +90,25 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="adapters\EditorTextureAdapter.hpp" />
-    <ClInclude Include="adapters\MaterialPreviewAdapter.hpp" />
-    <ClInclude Include="adapters\MeshPreviewAdapter.hpp" />
-    <ClInclude Include="adapters\OffScreenAdapter.hpp" />
-    <ClInclude Include="bootstrap\EditorBootstrap.hpp" />
-    <ClInclude Include="bootstrap\RuntimeBootstrap.hpp" />
-    <ClInclude Include="controllers\CoreInterface.hpp" />
-    <ClInclude Include="controllers\EditorTextureController.hpp" />
-    <ClInclude Include="controllers\OffScreen.hpp" />
-    <ClInclude Include="controllers\imguiHandler\ImguiWindow.hpp" />
-    <ClInclude Include="controllers\imguiHandler\ImguiWindowHandler.hpp" />
-    <ClInclude Include="controllers\texture\EditorTexture.hpp" />
-    <ClInclude Include="core\MainLoop.hpp" />
-    <ClInclude Include="handlers\GraphicesHandler.hpp" />
-    <ClInclude Include="handlers\WindowHandler.hpp" />
+    <ClInclude Include="..\dependencies\meshoptimizer\src\meshoptimizer.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="adapters\EditorTextureAdapter.cpp" />
-    <ClCompile Include="adapters\MaterialPreviewAdapter.cpp" />
-    <ClCompile Include="adapters\MeshPreviewAdapter.cpp" />
-    <ClCompile Include="adapters\OffScreenAdapter.cpp" />
-    <ClCompile Include="bootstrap\EditorBootstrap.cpp" />
-    <ClCompile Include="bootstrap\RuntimeBootstrap.cpp" />
-    <ClCompile Include="controllers\CoreInterface.cpp" />
-    <ClCompile Include="controllers\EditorTextureController.cpp" />
-    <ClCompile Include="controllers\OffScreen.cpp" />
-    <ClCompile Include="controllers\imguiHandler\ImguiWindowHandler.cpp" />
-    <ClCompile Include="controllers\texture\EditorTexture.cpp" />
-    <ClCompile Include="core\MainLoop.cpp" />
-    <ClCompile Include="handlers\GraphicesHandler.cpp" />
-    <ClCompile Include="handlers\WindowHandler.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\graphics\Graphics.vcxproj">
-      <Project>{1653CE33-0220-293F-2B39-17E717655ECD}</Project>
-    </ProjectReference>
+    <ClCompile Include="..\dependencies\meshoptimizer\src\allocator.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\clusterizer.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\indexanalyzer.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\indexcodec.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\indexgenerator.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\overdrawoptimizer.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\partition.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\quantization.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\rasterizer.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\simplifier.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\spatialorder.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\stripifier.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\vcacheoptimizer.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\vertexcodec.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\vertexfilter.cpp" />
+    <ClCompile Include="..\dependencies\meshoptimizer\src\vfetchoptimizer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

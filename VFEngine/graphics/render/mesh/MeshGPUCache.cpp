@@ -26,6 +26,73 @@ namespace render::mesh
         unloadAllMeshes();
     }
 
+    // Helper function to upload a single LOD level to GPU
+    void MeshGPUCache::uploadLODLevel(LODGPUBuffers& lodBuffers, const resource::LODLevel& lodLevel)
+    {
+        if (lodLevel.vertices.empty()) {
+            return;
+        }
+
+        lodBuffers.vertexCount = static_cast<uint32_t>(lodLevel.vertices.size());
+        lodBuffers.indexCount = static_cast<uint32_t>(lodLevel.indices.size());
+
+        // Create vertex buffer (device local for best performance)
+        vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * lodLevel.vertices.size();
+
+        core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+        vertexBufferRequest.size = vertexBufferSize;
+        vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::Utilities::createBuffer(vertexBufferRequest, lodBuffers.vertexBuffer, lodBuffers.vertexBufferMemory);
+
+        // Copy vertex data to GPU using async transfer (non-blocking)
+        transferManager->copyToBufferAsync(
+            lodBuffers.vertexBuffer,
+            lodLevel.vertices.data(),
+            vertexBufferSize
+        );
+
+        // Create index buffer if indices exist
+        if (!lodLevel.indices.empty())
+        {
+            vk::DeviceSize indexBufferSize = sizeof(uint32_t) * lodLevel.indices.size();
+
+            core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            indexBufferRequest.size = indexBufferSize;
+            indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::Utilities::createBuffer(indexBufferRequest, lodBuffers.indexBuffer, lodBuffers.indexBufferMemory);
+
+            // Copy index data to GPU using async transfer (non-blocking)
+            transferManager->copyToBufferAsync(
+                lodBuffers.indexBuffer,
+                lodLevel.indices.data(),
+                indexBufferSize
+            );
+        }
+    }
+
+    // Helper function to destroy LOD buffers
+    void MeshGPUCache::destroyLODBuffers(LODGPUBuffers& lodBuffers)
+    {
+        if (lodBuffers.vertexBuffer)
+        {
+            device.getLogicalDevice().destroyBuffer(lodBuffers.vertexBuffer);
+            device.getLogicalDevice().freeMemory(lodBuffers.vertexBufferMemory);
+            lodBuffers.vertexBuffer = nullptr;
+            lodBuffers.vertexBufferMemory = nullptr;
+        }
+        if (lodBuffers.indexBuffer)
+        {
+            device.getLogicalDevice().destroyBuffer(lodBuffers.indexBuffer);
+            device.getLogicalDevice().freeMemory(lodBuffers.indexBufferMemory);
+            lodBuffers.indexBuffer = nullptr;
+            lodBuffers.indexBufferMemory = nullptr;
+        }
+        lodBuffers.vertexCount = 0;
+        lodBuffers.indexCount = 0;
+    }
+
     std::string MeshGPUCache::loadMesh(std::string_view meshPath)
     {
         std::string pathStr(meshPath);
@@ -48,6 +115,7 @@ namespace render::mesh
 
         uint32_t totalVertices = 0;
         uint32_t totalIndices = 0;
+        uint32_t totalLODBuffers = 0;
 
         // Initialize bounding box with first vertex we find
         bool boundingBoxInitialized = false;
@@ -55,18 +123,19 @@ namespace render::mesh
         // Upload all submeshes to GPU
         for (const auto& meshData : meshesDataPtr->meshes)
         {
-            if (meshData.vertices.empty())
+            if (meshData.lodLevels.empty() || meshData.lodLevels[0].vertices.empty())
             {
                 loggerWarning("Skipping empty submesh in: {}", meshPath);
                 continue;
             }
 
             SubMeshGPUData subMesh{};
-            subMesh.name = meshData.name;  // Store submesh name for material assignment
+            subMesh.name = meshData.name;
 
-            // Compute per-submesh bounding box
+            // Compute per-submesh bounding box from LOD0 vertices
+            const auto& lod0 = meshData.lodLevels[0];
             bool subMeshBBInitialized = false;
-            for (const auto& vertex : meshData.vertices)
+            for (const auto& vertex : lod0.vertices)
             {
                 if (!subMeshBBInitialized)
                 {
@@ -91,47 +160,27 @@ namespace render::mesh
                     gpuData.boundingBox.expand(vertex.position);
                 }
             }
-            subMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
-            subMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
-            // Create vertex buffer (device local for best performance)
-            vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * meshData.vertices.size();
-
-            core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-            vertexBufferRequest.size = vertexBufferSize;
-            vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-            vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(vertexBufferRequest, subMesh.vertexBuffer, subMesh.vertexBufferMemory);
-
-            // Copy vertex data to GPU using async transfer (non-blocking)
-            transferManager->copyToBufferAsync(
-                subMesh.vertexBuffer,
-                meshData.vertices.data(),
-                vertexBufferSize
-            );
-
-            // Create index buffer if indices exist
-            if (!meshData.indices.empty())
+            // Upload all LOD levels
+            uint32_t lodCount = static_cast<uint32_t>(std::min(meshData.lodLevels.size(),
+                                                               static_cast<size_t>(resource::LOD_LEVEL_COUNT)));
+            for (uint32_t lod = 0; lod < lodCount; ++lod)
             {
-                vk::DeviceSize indexBufferSize = sizeof(uint32_t) * meshData.indices.size();
-
-                core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-                indexBufferRequest.size = indexBufferSize;
-                indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-                indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::Utilities::createBuffer(indexBufferRequest, subMesh.indexBuffer, subMesh.indexBufferMemory);
-
-                // Copy index data to GPU using async transfer (non-blocking)
-                transferManager->copyToBufferAsync(
-                    subMesh.indexBuffer,
-                    meshData.indices.data(),
-                    indexBufferSize
-                );
+                uploadLODLevel(subMesh.lodLevels[lod], meshData.lodLevels[lod]);
+                totalLODBuffers++;
             }
 
-            totalVertices += subMesh.vertexCount;
-            totalIndices += subMesh.indexCount;
-            gpuData.subMeshes.push_back(subMesh);
+            // If fewer than 4 LOD levels were provided, duplicate the last one
+            for (uint32_t lod = lodCount; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            {
+                uploadLODLevel(subMesh.lodLevels[lod], meshData.lodLevels[lodCount - 1]);
+                totalLODBuffers++;
+            }
+
+            // Track totals from LOD0
+            totalVertices += subMesh.lodLevels[0].vertexCount;
+            totalIndices += subMesh.lodLevels[0].indexCount;
+            gpuData.subMeshes.push_back(std::move(subMesh));
         }
 
         if (gpuData.subMeshes.empty())
@@ -141,14 +190,11 @@ namespace render::mesh
         }
 
         // Wait for all async transfers to complete before the mesh can be used
-        // This is still faster than synchronous transfers because:
-        // 1. Multiple submeshes are uploaded in parallel
-        // 2. Uses dedicated transfer queue (if available) without blocking graphics
         transferManager->waitAll();
 
         loadedMeshes[pathStr] = std::move(gpuData);
-        loggerInfo("Loaded mesh: {} ({} submeshes, {} total vertices, {} total indices)",
-                   meshPath, loadedMeshes[pathStr].subMeshes.size(), totalVertices, totalIndices);
+        loggerInfo("Loaded mesh: {} ({} submeshes, {} LOD buffers, {} vertices LOD0, {} indices LOD0)",
+                   meshPath, loadedMeshes[pathStr].subMeshes.size(), totalLODBuffers, totalVertices, totalIndices);
 
         return pathStr;
     }
@@ -157,7 +203,7 @@ namespace render::mesh
     {
         if (loadedMeshes.contains(meshId))
         {
-            return meshId;  // Already loaded
+            return meshId;
         }
 
         if (meshesData.meshes.empty())
@@ -171,13 +217,11 @@ namespace render::mesh
         uint32_t totalVertices = 0;
         uint32_t totalIndices = 0;
 
-        // Initialize bounding box with first vertex we find
         bool boundingBoxInitialized = false;
 
-        // Upload all submeshes to GPU
         for (const auto& meshData : meshesData.meshes)
         {
-            if (meshData.vertices.empty())
+            if (meshData.lodLevels.empty() || meshData.lodLevels[0].vertices.empty())
             {
                 loggerWarning("Skipping empty submesh in procedural mesh: {}", meshId);
                 continue;
@@ -186,9 +230,10 @@ namespace render::mesh
             SubMeshGPUData subMesh{};
             subMesh.name = meshData.name;
 
-            // Compute per-submesh bounding box
+            // Compute per-submesh bounding box from LOD0 vertices
+            const auto& lod0 = meshData.lodLevels[0];
             bool subMeshBBInitialized = false;
-            for (const auto& vertex : meshData.vertices)
+            for (const auto& vertex : lod0.vertices)
             {
                 if (!subMeshBBInitialized)
                 {
@@ -201,7 +246,6 @@ namespace render::mesh
                     subMesh.boundingBox.expand(vertex.position);
                 }
 
-                // Also expand the combined mesh bounding box
                 if (!boundingBoxInitialized)
                 {
                     gpuData.boundingBox.min = vertex.position;
@@ -213,47 +257,24 @@ namespace render::mesh
                     gpuData.boundingBox.expand(vertex.position);
                 }
             }
-            subMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
-            subMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
-            // Create vertex buffer (device local for best performance)
-            vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * meshData.vertices.size();
-
-            core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-            vertexBufferRequest.size = vertexBufferSize;
-            vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-            vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(vertexBufferRequest, subMesh.vertexBuffer, subMesh.vertexBufferMemory);
-
-            // Copy vertex data to GPU using async transfer
-            transferManager->copyToBufferAsync(
-                subMesh.vertexBuffer,
-                meshData.vertices.data(),
-                vertexBufferSize
-            );
-
-            // Create index buffer if indices exist
-            if (!meshData.indices.empty())
+            // Upload all LOD levels
+            uint32_t lodCount = static_cast<uint32_t>(std::min(meshData.lodLevels.size(),
+                                                               static_cast<size_t>(resource::LOD_LEVEL_COUNT)));
+            for (uint32_t lod = 0; lod < lodCount; ++lod)
             {
-                vk::DeviceSize indexBufferSize = sizeof(uint32_t) * meshData.indices.size();
-
-                core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-                indexBufferRequest.size = indexBufferSize;
-                indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-                indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::Utilities::createBuffer(indexBufferRequest, subMesh.indexBuffer, subMesh.indexBufferMemory);
-
-                // Copy index data to GPU using async transfer
-                transferManager->copyToBufferAsync(
-                    subMesh.indexBuffer,
-                    meshData.indices.data(),
-                    indexBufferSize
-                );
+                uploadLODLevel(subMesh.lodLevels[lod], meshData.lodLevels[lod]);
             }
 
-            totalVertices += subMesh.vertexCount;
-            totalIndices += subMesh.indexCount;
-            gpuData.subMeshes.push_back(subMesh);
+            // If fewer than 4 LOD levels, duplicate the last one
+            for (uint32_t lod = lodCount; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            {
+                uploadLODLevel(subMesh.lodLevels[lod], meshData.lodLevels[lodCount - 1]);
+            }
+
+            totalVertices += subMesh.lodLevels[0].vertexCount;
+            totalIndices += subMesh.lodLevels[0].indexCount;
+            gpuData.subMeshes.push_back(std::move(subMesh));
         }
 
         if (gpuData.subMeshes.empty())
@@ -262,7 +283,6 @@ namespace render::mesh
             return "";
         }
 
-        // Wait for all async transfers to complete
         transferManager->waitAll();
 
         loadedMeshes[meshId] = std::move(gpuData);
@@ -285,18 +305,12 @@ namespace render::mesh
         // Wait for device to finish using the buffers
         device.getLogicalDevice().waitIdle();
 
-        // Destroy all submesh buffers
-        for (const auto& subMesh : gpuData.subMeshes)
+        // Destroy all submesh LOD buffers
+        for (auto& subMesh : it->second.subMeshes)
         {
-            if (subMesh.vertexBuffer)
+            for (auto& lodBuffers : subMesh.lodLevels)
             {
-                device.getLogicalDevice().destroyBuffer(subMesh.vertexBuffer);
-                device.getLogicalDevice().freeMemory(subMesh.vertexBufferMemory);
-            }
-            if (subMesh.indexBuffer)
-            {
-                device.getLogicalDevice().destroyBuffer(subMesh.indexBuffer);
-                device.getLogicalDevice().freeMemory(subMesh.indexBufferMemory);
+                destroyLODBuffers(lodBuffers);
             }
         }
 
@@ -316,17 +330,11 @@ namespace render::mesh
 
         for (auto& [path, gpuData] : loadedMeshes)
         {
-            for (const auto& subMesh : gpuData.subMeshes)
+            for (auto& subMesh : gpuData.subMeshes)
             {
-                if (subMesh.vertexBuffer)
+                for (auto& lodBuffers : subMesh.lodLevels)
                 {
-                    device.getLogicalDevice().destroyBuffer(subMesh.vertexBuffer);
-                    device.getLogicalDevice().freeMemory(subMesh.vertexBufferMemory);
-                }
-                if (subMesh.indexBuffer)
-                {
-                    device.getLogicalDevice().destroyBuffer(subMesh.indexBuffer);
-                    device.getLogicalDevice().freeMemory(subMesh.indexBufferMemory);
+                    destroyLODBuffers(lodBuffers);
                 }
             }
         }

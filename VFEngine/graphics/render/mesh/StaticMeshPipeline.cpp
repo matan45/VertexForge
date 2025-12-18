@@ -959,20 +959,27 @@ namespace render::mesh
                 vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                 0, sizeof(MeshPushConstants), &pushConstants);
 
-            // Bind vertex buffer
-            vk::Buffer vertexBuffers[] = {subMesh.vertexBuffer};
+            // Select LOD level based on screen-space size
+            uint32_t lodLevel = selectLODLevel(meshData, subMesh);
+            const auto& lodBuffers = subMesh.getLOD(lodLevel);
+
+            // Skip if LOD buffers are not valid
+            if (!lodBuffers.isValid()) return;
+
+            // Bind vertex buffer from selected LOD
+            vk::Buffer vertexBuffers[] = {lodBuffers.vertexBuffer};
             vk::DeviceSize offsets[] = {0};
             commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
             // Draw with indices if available, otherwise draw vertices directly
-            if (subMesh.indexCount > 0)
+            if (lodBuffers.indexCount > 0)
             {
-                commandBuffer.bindIndexBuffer(subMesh.indexBuffer, 0, vk::IndexType::eUint32);
-                commandBuffer.drawIndexed(subMesh.indexCount, 1, 0, 0, 0);
+                commandBuffer.bindIndexBuffer(lodBuffers.indexBuffer, 0, vk::IndexType::eUint32);
+                commandBuffer.drawIndexed(lodBuffers.indexCount, 1, 0, 0, 0);
             }
             else
             {
-                commandBuffer.draw(subMesh.vertexCount, 1, 0, 0);
+                commandBuffer.draw(lodBuffers.vertexCount, 1, 0, 0);
             }
         };
 
@@ -1068,6 +1075,49 @@ namespace render::mesh
         }
 
         commandBuffer.endRenderPass();
+    }
+
+    uint32_t StaticMeshPipeline::selectLODLevel(const MeshRenderData& meshData, const SubMeshGPUData& subMesh) const
+    {
+        // If LOD is disabled, always use LOD0
+        if (!meshData.enableLOD) {
+            return 0;
+        }
+
+        // If a specific LOD level is forced, use it
+        if (meshData.forceLODLevel >= 0 && meshData.forceLODLevel < static_cast<int>(resource::LOD_LEVEL_COUNT)) {
+            return static_cast<uint32_t>(meshData.forceLODLevel);
+        }
+
+        // Calculate world-space center of submesh AABB
+        glm::vec3 localCenter = subMesh.boundingBox.getCenter();
+        glm::vec4 worldCenter = meshData.modelMatrix * glm::vec4(localCenter, 1.0f);
+
+        // Get bounding radius (approximate as half the diagonal)
+        glm::vec3 extents = subMesh.boundingBox.getExtents();
+        float boundingRadius = glm::length(extents);
+
+        // Transform to clip space
+        glm::vec4 viewPos = currentView * worldCenter;
+        glm::vec4 clipPos = currentProjection * viewPos;
+
+        // Avoid division by zero for objects at or behind camera
+        float w = std::max(clipPos.w, 0.01f);
+
+        // Calculate screen-space size in pixels
+        // Project the bounding radius to screen space
+        float ndcRadius = boundingRadius / w;
+        float screenHeight = static_cast<float>(swapChain.getSwapchainExtent().height);
+        float screenPixels = ndcRadius * screenHeight;
+
+        // Apply LOD bias
+        screenPixels *= std::pow(2.0f, -meshData.lodBias);
+
+        // Select LOD level based on screen-space size thresholds
+        if (screenPixels > LOD_THRESHOLD_0) return 0;  // LOD0: Highest quality
+        if (screenPixels > LOD_THRESHOLD_1) return 1;  // LOD1: 50%
+        if (screenPixels > LOD_THRESHOLD_2) return 2;  // LOD2: 25%
+        return 3;                                       // LOD3: 12.5%
     }
 
     void StaticMeshPipeline::prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const

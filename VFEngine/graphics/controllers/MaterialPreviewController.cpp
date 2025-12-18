@@ -273,7 +273,7 @@ namespace controllers
             auto textureData = resource::ResourceManager::loadTextureAsync(path);
             auto texturePtr = textureData.get();
 
-            if (!texturePtr || texturePtr->textureData.empty())
+            if (!texturePtr || texturePtr->textureData().empty())
             {
                 loggerWarning("Failed to load texture: {}", path);
                 return tex;
@@ -295,7 +295,7 @@ namespace controllers
             // Copy data to staging buffer
             void* data;
             static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
-            memcpy(data, texturePtr->textureData.data(), imageSize);
+            memcpy(data, texturePtr->textureData().data(), imageSize);
             device.getLogicalDevice().unmapMemory(stagingBufferMemory);
 
             // Create image

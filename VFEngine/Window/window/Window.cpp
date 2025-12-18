@@ -89,7 +89,7 @@ namespace window {
 		GLFWimage icon;
 		icon.width = static_cast<int>(dataPtr->width);
 		icon.height = static_cast<int>(dataPtr->height);
-		icon.pixels = dataPtr->textureData.data();
+		icon.pixels = const_cast<unsigned char*>(dataPtr->textureData().data());
 
 		// Set the icon for the GLFW window
 		glfwSetWindowIcon(window, 1, &icon);

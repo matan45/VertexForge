@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
+#include "resource/Types.hpp"
 #include <array>
 #include <string>
 #include <unordered_map>
@@ -14,16 +15,29 @@ namespace render::mesh
     // Forward declare blend mode for use in render data
     using BlendMode = ::material::BlendMode;
 
-    struct SubMeshGPUData
+    // GPU buffers for a single LOD level
+    struct LODGPUBuffers
     {
-        std::string name;  // Submesh name for material assignment
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
         vk::Buffer indexBuffer;
         vk::DeviceMemory indexBufferMemory;
         uint32_t indexCount = 0;
         uint32_t vertexCount = 0;
-        math::AABB boundingBox;  // AABB for this submesh (local space)
+
+        bool isValid() const { return indexCount > 0 || vertexCount > 0; }
+    };
+
+    struct SubMeshGPUData
+    {
+        std::string name;  // Submesh name for material assignment
+        std::array<LODGPUBuffers, resource::LOD_LEVEL_COUNT> lodLevels;  // 4 LOD levels
+        math::AABB boundingBox;  // AABB for this submesh (local space, computed from LOD0)
+
+        // Get LOD buffers (clamps to valid range)
+        const LODGPUBuffers& getLOD(uint32_t level) const {
+            return lodLevels[std::min(level, resource::LOD_LEVEL_COUNT - 1)];
+        }
     };
 
     // GPU-side mesh data containing all submeshes from a .vfmesh file
@@ -82,6 +96,11 @@ namespace render::mesh
 
         bool showBoundingBox = false;                      // Debug: render AABB wireframe
         int highlightedSubMesh = -1;                       // -1 = none, otherwise index of submesh to highlight
+
+        // LOD configuration
+        float lodBias = 0.0f;                              // Shift LOD selection (+1 = lower quality, -1 = higher)
+        int forceLODLevel = -1;                            // Force specific LOD (-1 = automatic selection)
+        bool enableLOD = true;                             // Enable/disable LOD system
 
         // Get material info for a submesh by name
         const SubMeshMaterialInfo* getMaterialForSubmesh(const std::string& submeshName) const {

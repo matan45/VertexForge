@@ -55,6 +55,7 @@ namespace services {
         void unloadPreviewMesh(PreviewInstanceId instanceId) override;
         [[nodiscard]] bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const override;
         [[nodiscard]] std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const override;
+        [[nodiscard]] std::vector<LODInfo> getPreviewMeshLODInfo(PreviewInstanceId instanceId) const override;
         [[nodiscard]] math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const override;
         void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) override;
         void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,

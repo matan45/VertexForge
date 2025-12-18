@@ -32,24 +32,81 @@ namespace resource
         UNKNOWN
     };
 
+    // Mip level data - stores pixel data for a single mipmap level
+    struct MipLevelData
+    {
+        uint32_t width = 0;
+        uint32_t height = 0;
+        std::vector<unsigned char> data;  // RGBA pixel data for this mip level
+    };
+
+    // HDR mip level data - stores float pixel data for a single mipmap level
+    struct MipLevelDataHDR
+    {
+        uint32_t width = 0;
+        uint32_t height = 0;
+        std::vector<float> data;  // RGBA32F pixel data for this mip level
+    };
+
+    // Calculate number of mip levels for given dimensions
+    inline uint32_t calculateMipLevels(uint32_t width, uint32_t height)
+    {
+        uint32_t levels = 1;
+        while (width > 1 || height > 1)
+        {
+            width = std::max(1u, width / 2);
+            height = std::max(1u, height / 2);
+            levels++;
+        }
+        return levels;
+    }
+
     struct TextureData
     {
         FileType headerFileType = FileType::TEXTURE;
-        Version version{};
+        FileVersion version{};
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t numbersOfChannels = 0;
-        std::vector<unsigned char> textureData;
+        uint32_t mipLevels = 1;                  // Number of mip levels (1 = no mipmaps)
+        std::vector<MipLevelData> mipData;       // Mip chain (mipData[0] = base level)
+
+        // Legacy accessor for backward compatibility (returns base level data)
+        const std::vector<unsigned char>& textureData() const {
+            static std::vector<unsigned char> empty;
+            return mipData.empty() ? empty : mipData[0].data;
+        }
+
+        // Legacy setter for backward compatibility
+        void setTextureData(std::vector<unsigned char>&& data) {
+            mipData.clear();
+            mipData.push_back({width, height, std::move(data)});
+            mipLevels = 1;
+        }
     };
 
     struct HDRData
     {
         FileType headerFileType = FileType::HDR;
-        Version version{};
+        FileVersion version{};
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t numbersOfChannels = 0;
-        std::vector<float> textureData;
+        uint32_t mipLevels = 1;                    // Number of mip levels (1 = no mipmaps)
+        std::vector<MipLevelDataHDR> mipData;      // Mip chain (mipData[0] = base level)
+
+        // Legacy accessor for backward compatibility (returns base level data)
+        const std::vector<float>& textureData() const {
+            static std::vector<float> empty;
+            return mipData.empty() ? empty : mipData[0].data;
+        }
+
+        // Legacy setter for backward compatibility
+        void setTextureData(std::vector<float>&& data) {
+            mipData.clear();
+            mipData.push_back({width, height, std::move(data)});
+            mipLevels = 1;
+        }
     };
 
     struct Vertex
@@ -59,11 +116,30 @@ namespace resource
         glm::vec2 texCoords;
     };
 
-    struct MeshData
+    // LOD level data - stores vertices and indices for a single LOD level
+    struct LODLevel
     {
-        std::string name; 
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
+    };
+
+    // Number of LOD levels supported
+    constexpr uint32_t LOD_LEVEL_COUNT = 4;
+
+    struct MeshData
+    {
+        std::string name;
+        std::vector<LODLevel> lodLevels; // 4 LOD levels (LOD0=100%, LOD1=50%, LOD2=25%, LOD3=12.5%)
+
+        // Legacy accessors for backward compatibility (returns LOD0 data)
+        const std::vector<Vertex>& vertices() const {
+            static std::vector<Vertex> empty;
+            return lodLevels.empty() ? empty : lodLevels[0].vertices;
+        }
+        const std::vector<uint32_t>& indices() const {
+            static std::vector<uint32_t> empty;
+            return lodLevels.empty() ? empty : lodLevels[0].indices;
+        }
     };
     
 
@@ -93,7 +169,7 @@ namespace resource
     struct AnimationData
     {
         FileType headerFileType = FileType::ANIMATION;
-        Version version{};
+        FileVersion version{};
         float duration = 0.0f;
         float ticksPerSecond = 0.0f;
         uint32_t numBones = 0;
@@ -104,7 +180,7 @@ namespace resource
     struct AudioData
     {
         FileType headerFileType = FileType::AUDIO;
-        Version version{};
+        FileVersion version{};
         uint32_t totalDurationInSeconds = 0;
         uint32_t channels = 0;
         uint32_t sampleRate = 0;
@@ -115,7 +191,7 @@ namespace resource
     struct MeshesData
     {
         FileType headerFileType = FileType::MESH;
-        Version version{};
+        FileVersion version{};
         uint32_t numberOfMeshes = 0;
         std::vector<MeshData> meshes;
     };

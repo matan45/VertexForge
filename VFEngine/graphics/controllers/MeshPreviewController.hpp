@@ -31,6 +31,7 @@ namespace controllers
         math::Frustum currentFrustum;
         glm::mat4 modelMatrix{ 1.0f };
         int highlightedSubMesh = -1;  // -1 = none highlighted
+        int forceLODLevel = -1;       // -1 = auto, 0-3 = force specific LOD
         bool initialized = false;
 
     public:
@@ -43,11 +44,15 @@ namespace controllers
         
         bool loadMesh(const std::string& meshPath, math::AABB& outBounds);
         void unloadMesh();
-        
+
         std::vector<services::SubMeshInfo> getSubMeshInfo() const;
-        
+        std::vector<services::LODInfo> getLODInfo() const;
+
         void setHighlightedSubMesh(int index) { highlightedSubMesh = index; }
         int getHighlightedSubMesh() const { return highlightedSubMesh; }
+
+        void setForceLODLevel(int level) { forceLODLevel = level; }
+        int getForceLODLevel() const { return forceLODLevel; }
         
         void setModelMatrix(const glm::mat4& matrix) { modelMatrix = matrix; }
         

@@ -52,6 +52,14 @@ namespace services {
         uint32_t indexCount = 0;
     };
 
+    // LOD level information for mesh preview
+    struct LODInfo {
+        uint32_t lodLevel = 0;
+        uint32_t vertexCount = 0;
+        uint32_t indexCount = 0;
+        float reductionPercent = 100.0f;  // 100% for LOD0, 50% for LOD1, etc.
+    };
+
     struct EntityData {
         EntityHandle handle;
         std::string name;

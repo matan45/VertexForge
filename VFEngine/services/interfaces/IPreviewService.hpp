@@ -123,6 +123,12 @@ namespace services {
         [[nodiscard]] virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const = 0;
 
         /**
+         * @brief Get LOD level information for the loaded mesh.
+         * @param instanceId Unique identifier for this preview instance
+         */
+        [[nodiscard]] virtual std::vector<LODInfo> getPreviewMeshLODInfo(PreviewInstanceId instanceId) const = 0;
+
+        /**
          * @brief Get the bounding box of the loaded preview mesh.
          * @param instanceId Unique identifier for this preview instance
          */

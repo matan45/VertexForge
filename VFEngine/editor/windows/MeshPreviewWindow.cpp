@@ -97,6 +97,11 @@ namespace windows
             services::events::preview::GetPreviewMeshSubMeshInfoQuery subMeshQuery;
             subMeshQuery.instanceId = services::PreviewInstanceId(this);
             subMeshes = events::EventDispatcher::instance().query(subMeshQuery);
+
+            // Get LOD info via PreviewService
+            services::events::preview::GetPreviewMeshLODInfoQuery lodQuery;
+            lodQuery.instanceId = services::PreviewInstanceId(this);
+            lodLevels = events::EventDispatcher::instance().query(lodQuery);
         }
     }
 
@@ -118,6 +123,7 @@ namespace windows
         services::MeshPreviewParams meshParams;
         meshParams.modelMatrix = model;
         meshParams.highlightedSubMesh = selectedSubMesh;
+        meshParams.forceLODLevel = selectedLOD;
         services::events::preview::SetMeshPreviewParamsCommand meshCmd;
         meshCmd.instanceId = services::PreviewInstanceId(this);
         meshCmd.params = meshParams;
@@ -187,6 +193,43 @@ namespace windows
 
         ImGui::Separator();
 
+        // LOD Level Selection
+        if (!lodLevels.empty())
+        {
+            ImGui::Spacing();
+            ImGui::Text("LOD Level");
+
+            // Build combo items: "Auto" + LOD levels
+            const char* lodLabels[] = { "Auto", "LOD 0 (100%)", "LOD 1 (50%)", "LOD 2 (25%)", "LOD 3 (12.5%)" };
+            int currentLOD = selectedLOD + 1;  // -1 becomes 0 (Auto), 0 becomes 1 (LOD 0), etc.
+
+            float itemWidth = ImGui::GetContentRegionAvail().x;
+            ImGui::SetNextItemWidth(itemWidth);
+            if (ImGui::Combo("##LODLevel", &currentLOD, lodLabels, 5))
+            {
+                selectedLOD = currentLOD - 1;  // 0 becomes -1 (Auto), 1 becomes 0 (LOD 0), etc.
+            }
+
+            // Show current LOD info
+            int displayLOD = (selectedLOD >= 0) ? selectedLOD : 0;  // Show LOD0 info when auto
+            if (static_cast<size_t>(displayLOD) < lodLevels.size())
+            {
+                const auto& lodInfo = lodLevels[displayLOD];
+                if (selectedLOD < 0)
+                {
+                    ImGui::TextDisabled("Auto (showing LOD0):");
+                }
+                else
+                {
+                    ImGui::TextDisabled("LOD %d (%.1f%%):", lodInfo.lodLevel, lodInfo.reductionPercent);
+                }
+                ImGui::Text("  Vertices: %u", lodInfo.vertexCount);
+                ImGui::Text("  Triangles: %u", lodInfo.indexCount / 3);
+            }
+
+            ImGui::Separator();
+        }
+
         // Summary
         uint32_t totalVerts = 0;
         uint32_t totalIndices = 0;
@@ -196,14 +239,14 @@ namespace windows
             totalIndices += info.indexCount;
         }
 
-        ImGui::TextDisabled("Total:");
+        ImGui::TextDisabled("Total (LOD0):");
         ImGui::Text("  Submeshes: %zu", subMeshes.size());
         ImGui::Text("  Vertices: %u", totalVerts);
         ImGui::Text("  Triangles: %u", totalIndices / 3);
 
         ImGui::Separator();
         ImGui::Spacing();
-        
+
         if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;

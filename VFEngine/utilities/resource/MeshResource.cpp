@@ -6,6 +6,57 @@
 
 namespace resource {
 
+	// Helper function to read a single LOD level from file
+	static bool readLODLevel(std::ifstream& inFile, LODLevel& lodLevel, uint32_t meshIdx, uint32_t lodIdx,
+	                         uint32_t maxVertexCount, uint32_t maxIndexCount)
+	{
+		// Read vertex count
+		uint32_t vertexCount = endian::readLE<uint32_t>(inFile);
+
+		if (vertexCount > maxVertexCount) {
+			vfLogError("Vertex count {} exceeds maximum limit {} in mesh {} LOD {}",
+			           vertexCount, maxVertexCount, meshIdx, lodIdx);
+			return false;
+		}
+
+		// Read vertices
+		lodLevel.vertices.resize(vertexCount);
+		for (uint32_t v = 0; v < vertexCount; ++v) {
+			lodLevel.vertices[v].position.x = endian::readLE<float>(inFile);
+			lodLevel.vertices[v].position.y = endian::readLE<float>(inFile);
+			lodLevel.vertices[v].position.z = endian::readLE<float>(inFile);
+			lodLevel.vertices[v].normal.x = endian::readLE<float>(inFile);
+			lodLevel.vertices[v].normal.y = endian::readLE<float>(inFile);
+			lodLevel.vertices[v].normal.z = endian::readLE<float>(inFile);
+			lodLevel.vertices[v].texCoords.x = endian::readLE<float>(inFile);
+			lodLevel.vertices[v].texCoords.y = endian::readLE<float>(inFile);
+
+			if (inFile.fail()) {
+				vfLogError("Failed to read vertex {} of mesh {} LOD {}", v, meshIdx, lodIdx);
+				return false;
+			}
+		}
+
+		// Read index count
+		uint32_t indexCount = endian::readLE<uint32_t>(inFile);
+
+		if (indexCount > maxIndexCount) {
+			vfLogError("Index count {} exceeds maximum limit {} in mesh {} LOD {}",
+			           indexCount, maxIndexCount, meshIdx, lodIdx);
+			return false;
+		}
+
+		// Read indices
+		endian::readVectorLE<uint32_t>(inFile, lodLevel.indices, indexCount);
+
+		if (inFile.fail()) {
+			vfLogError("Failed to read indices of mesh {} LOD {}", meshIdx, lodIdx);
+			return false;
+		}
+
+		return true;
+	}
+
 	MeshesData MeshResource::loadMesh(std::string_view path)
 	{
 		MeshesData result;
@@ -25,7 +76,15 @@ namespace resource {
 		uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
 		uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
 
-		if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch) {
+		result.version.major = majorVersion;
+		result.version.minor = minorVersion;
+		result.version.patch = patchVersion;
+
+		// Determine format version
+		bool isLODFormat = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 3);
+		bool isLegacyFormat = (majorVersion == 0 && minorVersion == 0 && patchVersion == 2);
+
+		if (!isLODFormat && !isLegacyFormat) {
 			vfLogError("Incompatible mesh file version: {}.{}.{}", majorVersion, minorVersion, patchVersion);
 			return result;
 		}
@@ -44,58 +103,53 @@ namespace resource {
 
 			// Read submesh name
 			uint32_t nameLength = endian::readLE<uint32_t>(inFile);
-			if (nameLength > 0 && nameLength < 1024) {  // Sanity check
+			if (nameLength > 0 && nameLength < 1024) {
 				meshData.name.resize(nameLength);
 				inFile.read(meshData.name.data(), nameLength);
 			} else if (nameLength == 0) {
-				// Generate default name if empty
 				meshData.name = "SubMesh_" + std::to_string(meshIdx);
 			}
 
-			// Read vertex count
-			uint32_t vertexCount = endian::readLE<uint32_t>(inFile);
+			if (isLODFormat) {
+				// New format: Read LOD level count and all LOD levels
+				uint32_t lodLevelCount = endian::readLE<uint32_t>(inFile);
 
-			if (vertexCount > maxVertexCount) {
-				vfLogError("Vertex count {} exceeds maximum limit {} in mesh {}", vertexCount, maxVertexCount, meshIdx);
-				return result;
-			}
-
-			// Read vertices
-			meshData.vertices.resize(vertexCount);
-			for (uint32_t v = 0; v < vertexCount; ++v) {
-				meshData.vertices[v].position.x = endian::readLE<float>(inFile);
-				meshData.vertices[v].position.y = endian::readLE<float>(inFile);
-				meshData.vertices[v].position.z = endian::readLE<float>(inFile);
-				meshData.vertices[v].normal.x = endian::readLE<float>(inFile);
-				meshData.vertices[v].normal.y = endian::readLE<float>(inFile);
-				meshData.vertices[v].normal.z = endian::readLE<float>(inFile);
-				meshData.vertices[v].texCoords.x = endian::readLE<float>(inFile);
-				meshData.vertices[v].texCoords.y = endian::readLE<float>(inFile);
-
-				if (inFile.fail()) {
-					vfLogError("Failed to read vertex {} of mesh {}", v, meshIdx);
+				if (lodLevelCount == 0 || lodLevelCount > 8) {
+					vfLogError("Invalid LOD level count {} in mesh {}", lodLevelCount, meshIdx);
 					return result;
 				}
-			}
 
-			// Read index count
-			uint32_t indexCount = endian::readLE<uint32_t>(inFile);
+				meshData.lodLevels.resize(lodLevelCount);
 
-			if (indexCount > maxIndexCount) {
-				vfLogError("Index count {} exceeds maximum limit {} in mesh {}", indexCount, maxIndexCount, meshIdx);
-				return result;
-			}
+				for (uint32_t lodIdx = 0; lodIdx < lodLevelCount; ++lodIdx) {
+					if (!readLODLevel(inFile, meshData.lodLevels[lodIdx], meshIdx, lodIdx,
+					                  maxVertexCount, maxIndexCount)) {
+						return result;
+					}
+				}
+			} else {
+				// Legacy format: Read single vertex/index buffer as LOD0
+				meshData.lodLevels.resize(1);
+				if (!readLODLevel(inFile, meshData.lodLevels[0], meshIdx, 0,
+				                  maxVertexCount, maxIndexCount)) {
+					return result;
+				}
 
-			// Read indices
-			endian::readVectorLE<uint32_t>(inFile, meshData.indices, indexCount);
-
-			if (inFile.fail()) {
-				vfLogError("Failed to read indices of mesh {}", meshIdx);
-				return result;
+				// Fill remaining LOD levels with LOD0 data (no simplification for legacy files)
+				for (uint32_t lodIdx = 1; lodIdx < LOD_LEVEL_COUNT; ++lodIdx) {
+					meshData.lodLevels.push_back(meshData.lodLevels[0]);
+				}
 			}
 		}
 
-		vfLogInfo("Loaded mesh file with {} meshes: {}", result.numberOfMeshes, path);
+		if (isLODFormat) {
+			vfLogInfo("Loaded mesh file with {} meshes (LOD format v{}.{}.{}): {}",
+			          result.numberOfMeshes, majorVersion, minorVersion, patchVersion, path);
+		} else {
+			vfLogWarning("Loaded legacy mesh file with {} meshes (v{}.{}.{}). Consider reimporting for LOD support: {}",
+			             result.numberOfMeshes, majorVersion, minorVersion, patchVersion, path);
+		}
+
 		return result;
 	}
 }

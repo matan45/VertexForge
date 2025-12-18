@@ -412,7 +412,7 @@ namespace render::mesh
         auto textureFuture = resource::ResourceManager::loadTextureAsync(path);
         auto textureData = textureFuture.get();
 
-        if (!textureData || textureData->textureData.empty()) {
+        if (!textureData || textureData->textureData().empty()) {
             loggerWarning("Failed to load texture: {}", path);
             return false;
         }
@@ -443,7 +443,7 @@ namespace render::mesh
         device.getLogicalDevice().bindImageMemory(tex.image, tex.memory, 0);
 
         // Create staging buffer and copy
-        vk::DeviceSize imageSize = textureData->textureData.size();
+        vk::DeviceSize imageSize = textureData->textureData().size();
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingMemory;
 
@@ -455,7 +455,7 @@ namespace render::mesh
 
         void* data;
         [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        memcpy(data, textureData->textureData.data(), static_cast<size_t>(imageSize));
+        memcpy(data, textureData->textureData().data(), static_cast<size_t>(imageSize));
         device.getLogicalDevice().unmapMemory(stagingMemory);
 
         // Transition and copy

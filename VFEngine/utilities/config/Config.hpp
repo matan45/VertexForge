@@ -2,11 +2,20 @@
 #include <cstdint>
 #include <string>
 
+// Application version - static constants
 struct Version
 {
     static constexpr  uint32_t major = 0;
     static constexpr uint32_t minor = 0;
-    static constexpr uint32_t patch = 2;  // v0.0.2: Added submesh names to vfMesh format
+    static constexpr uint32_t patch = 3;  // v0.0.3: Added mesh LOD levels and texture mipmaps
+};
+
+// File version - instance members for storing version info read from files
+struct FileVersion
+{
+    uint32_t major = Version::major;
+    uint32_t minor = Version::minor;
+    uint32_t patch = Version::patch;
 };
 
 struct FileExtension

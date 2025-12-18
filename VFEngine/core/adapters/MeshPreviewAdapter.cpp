@@ -57,6 +57,12 @@ namespace core {
         return controller->getSubMeshInfo();
     }
 
+    std::vector<services::LODInfo> MeshPreviewAdapter::getPreviewMeshLODInfo(services::PreviewInstanceId instanceId) const {
+        auto* controller = getController(instanceId);
+        if (!controller) return {};
+        return controller->getLODInfo();
+    }
+
     math::AABB MeshPreviewAdapter::getPreviewMeshBounds(services::PreviewInstanceId instanceId) const {
         auto* controller = getController(instanceId);
         if (!controller) return math::AABB{};
@@ -68,6 +74,7 @@ namespace core {
         if (!controller) return;
         controller->setModelMatrix(params.modelMatrix);
         controller->setHighlightedSubMesh(params.highlightedSubMesh);
+        controller->setForceLODLevel(params.forceLODLevel);
     }
 
     void MeshPreviewAdapter::updateMeshCamera(services::PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,

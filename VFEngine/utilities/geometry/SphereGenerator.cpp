@@ -8,6 +8,10 @@ namespace geometry {
         resource::MeshData mesh;
         mesh.name = "PreviewSphere";
 
+        // Initialize with one LOD level (procedural geometry doesn't need LOD simplification)
+        mesh.lodLevels.resize(1);
+        auto& lod0 = mesh.lodLevels[0];
+
         const float radius = params.radius;
         const uint32_t latSegs = params.latitudeSegments;
         const uint32_t lonSegs = params.longitudeSegments;
@@ -41,7 +45,7 @@ namespace geometry {
                     static_cast<float>(lat) / static_cast<float>(latSegs)
                 );
 
-                mesh.vertices.push_back(vertex);
+                lod0.vertices.push_back(vertex);
             }
         }
 
@@ -59,16 +63,16 @@ namespace geometry {
 
                 if (lat != 0) {
                     // Upper-left triangle of quad: CCW from outside
-                    mesh.indices.push_back(topLeft);
-                    mesh.indices.push_back(bottomLeft);
-                    mesh.indices.push_back(topRight);
+                    lod0.indices.push_back(topLeft);
+                    lod0.indices.push_back(bottomLeft);
+                    lod0.indices.push_back(topRight);
                 }
 
                 if (lat != latSegs - 1) {
                     // Lower-right triangle of quad: CCW from outside
-                    mesh.indices.push_back(topRight);
-                    mesh.indices.push_back(bottomLeft);
-                    mesh.indices.push_back(bottomRight);
+                    lod0.indices.push_back(topRight);
+                    lod0.indices.push_back(bottomLeft);
+                    lod0.indices.push_back(bottomRight);
                 }
             }
         }

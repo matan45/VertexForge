@@ -16,6 +16,7 @@ namespace core
 namespace resource
 {
     struct MeshesData;
+    struct LODLevel;
 }
 
 namespace render::mesh
@@ -47,6 +48,10 @@ namespace render::mesh
         std::vector<std::string> getLoadedMeshIds() const;
 
     private:
+        // Helper functions for LOD buffer management
+        void uploadLODLevel(LODGPUBuffers& lodBuffers, const resource::LODLevel& lodLevel);
+        void destroyLODBuffers(LODGPUBuffers& lodBuffers);
+
         core::Device& device;
         std::unique_ptr<core::TransferManager> transferManager;
         std::unordered_map<std::string, MeshGPUData> loadedMeshes;

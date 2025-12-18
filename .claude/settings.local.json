@@ -8,7 +8,8 @@
       "mcp__mcp-atlassian__confluence_search",
       "mcp__mcp-atlassian__jira_get_all_projects",
       "mcp__mcp-atlassian__confluence_get_page",
-      "mcp__mcp-atlassian__jira_get_issue"
+      "mcp__mcp-atlassian__jira_get_issue",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

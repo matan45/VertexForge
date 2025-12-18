@@ -189,5 +189,14 @@ namespace render::mesh
         void createTextureDescriptorSetLayout();
         void createTextureDescriptorPool();
         void initializeDefaultTextureDescriptors();
+
+        // LOD selection based on screen-space size
+        uint32_t selectLODLevel(const MeshRenderData& meshData, const SubMeshGPUData& subMesh) const;
+
+        // Screen-space LOD thresholds (in pixels)
+        static constexpr float LOD_THRESHOLD_0 = 400.0f;  // LOD0 for objects > 400 pixels
+        static constexpr float LOD_THRESHOLD_1 = 200.0f;  // LOD1 for objects > 200 pixels
+        static constexpr float LOD_THRESHOLD_2 = 100.0f;  // LOD2 for objects > 100 pixels
+        // LOD3 for everything else
     };
 }
