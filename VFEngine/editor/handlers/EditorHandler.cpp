@@ -92,7 +92,7 @@ namespace handlers {
 
 		// Load billboard icon atlas for editor icons (camera, light, audio, particle)
 		events::render::LoadBillboardAtlasCommand atlasCmd;
-		atlasCmd.atlasPath = "../../resources/editor/billboard_icons.vfImage";
+		atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
 		events::EventDispatcher::instance().execute(atlasCmd);
 	}
 

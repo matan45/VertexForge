@@ -28,16 +28,10 @@ ATLAS_SIZE = TILE_SIZE * GRID_SIZE  # 256x256
 # Icon mapping: index -> filename (without extension)
 # Update these filenames to match your actual icon files
 ICON_FILES = {
-    0: "animation-file",      # animation
-    1: "texture-file",        # image/texture
-    2: "glsl-file",           # glsl
-    3: "mesh-file",           # mesh
-    4: "material-icon",       # material
-    5: "folder",              # folder
-    6: "scene",               # scene
-    7: "hdr-file",            # hdr
-    8: "audio-file",          # audio
-    9: "file",                # other/file
+    0: "light",      # animation
+    1: "camera",        # image/texture
+    2: "audio",           # glsl
+    3: "particles",           # mesh
 }
 
 def find_icon_file(base_name):

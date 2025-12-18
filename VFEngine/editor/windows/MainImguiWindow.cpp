@@ -283,6 +283,11 @@ namespace windows
 		}
 	}
 
+	void MainImguiWindow::handleDebug()
+	{
+		if (ImGui::BeginMenu("File")){}
+	}
+
 	void MainImguiWindow::iblWindow()
 	{
 		auto& dispatcher = events::EventDispatcher::instance();

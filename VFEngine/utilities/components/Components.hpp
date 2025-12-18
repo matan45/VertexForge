@@ -199,11 +199,11 @@ namespace components {
 
 	
 	enum class BillboardIconType : uint8_t {
-		Custom = 0,   
-		Light,       
+		Light = 0,       
 		Camera,      
 		AudioSource, 
-		Particle     
+		Particle,
+		Custom,   
 	};
 
 	struct BillboardComponent {
@@ -223,7 +223,7 @@ namespace components {
 			if (iconType == BillboardIconType::Custom) {
 				return atlasIndex;
 			}
-			// Explicit mapping - decoupled from enum order
+			
 			switch (iconType) {
 			case BillboardIconType::Light:       return 0;
 			case BillboardIconType::Camera:      return 1;
