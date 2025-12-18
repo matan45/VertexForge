@@ -21,6 +21,7 @@ namespace services
 
         frameCounter++;
         prepareFrameMeshes();
+        prepareFrameBillboards();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -277,6 +278,28 @@ namespace services
                 return getLoadedMeshes();
             });
 
+        // Billboard visibility command/query handlers
+        dispatcher.registerCommandHandler<events::render::SetShowBillboardIconsCommand>(
+            [this](const events::render::SetShowBillboardIconsCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowBillboardIcons(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowBillboardIconsQuery>(
+            [this](const events::render::GetShowBillboardIconsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowBillboardIcons() : true;
+            });
+
+        dispatcher.registerCommandHandler<events::render::LoadBillboardAtlasCommand>(
+            [this](const events::render::LoadBillboardAtlasCommand& cmd)
+            {
+                return offScreenProvider ? offScreenProvider->loadBillboardAtlas(cmd.atlasPath) : false;
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {
@@ -332,6 +355,14 @@ namespace services
         if (offScreenProvider)
         {
             offScreenProvider->prepareFrameMeshes();
+        }
+    }
+
+    void EditorRenderServiceImpl::prepareFrameBillboards()
+    {
+        if (offScreenProvider)
+        {
+            offScreenProvider->prepareFrameBillboards();
         }
     }
 }

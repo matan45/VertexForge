@@ -4,6 +4,7 @@
 #include <entt/entt.hpp>
 #include <memory>
 #include <optional>
+#include <cstdint>
 
 namespace scene {
     class SceneGraphSystem;
@@ -118,6 +119,10 @@ namespace services {
 
         // Recursive helper for scene hierarchy
         void collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const;
+
+        // Helper to auto-attach billboard component for editor visualization
+        // iconType: 0=Custom, 1=Light, 2=Camera, 3=AudioSource, 4=Particle
+        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }

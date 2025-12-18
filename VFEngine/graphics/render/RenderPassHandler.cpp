@@ -98,6 +98,15 @@ namespace render {
 		billboardPipelineInitialized = true;
 	}
 
+	void RenderPassHandler::setBillboardDrawList(std::vector<billboard::BillboardRenderData>&& billboards)
+	{
+		currentBillboardDrawList = std::move(billboards);
+		if (billboardPipelineInitialized && billboardPipeline)
+		{
+			billboardPipeline->setBillboardList(currentBillboardDrawList);
+		}
+	}
+
 	void RenderPassHandler::recreate() const
 	{
 		iblRenderer->recreate();

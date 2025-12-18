@@ -79,6 +79,7 @@ namespace render
         void initBillboardPipeline();
         billboard::BillboardPipeline* getBillboardPipeline() const { return billboardPipeline.get(); }
         bool isBillboardPipelineInitialized() const { return billboardPipelineInitialized; }
+        void setBillboardDrawList(std::vector<billboard::BillboardRenderData>&& billboards);
 
         void cleanUp() const;
 

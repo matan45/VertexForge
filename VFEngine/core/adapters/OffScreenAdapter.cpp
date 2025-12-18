@@ -71,4 +71,24 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameBillboards() {
+        if (offScreen) {
+            offScreen->prepareFrameBillboards();
+        }
+    }
+
+    void OffScreenAdapter::setShowBillboardIcons(bool show) {
+        if (offScreen) {
+            offScreen->setShowBillboardIcons(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowBillboardIcons() const {
+        return offScreen && offScreen->getShowBillboardIcons();
+    }
+
+    bool OffScreenAdapter::loadBillboardAtlas(const std::string& atlasPath) {
+        return offScreen && offScreen->loadBillboardAtlas(atlasPath);
+    }
+
 }

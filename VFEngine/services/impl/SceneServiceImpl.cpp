@@ -386,10 +386,27 @@ namespace services {
 
         if (!sceneEntity.hasComponent<components::CameraComponent>()) {
             sceneEntity.addComponent<components::CameraComponent>();
+            // Auto-attach billboard icon for editor visualization (2 = Camera icon type)
+            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Camera));
             return true;
         }
 
         return false;  // Already has camera
+    }
+
+    void SceneServiceImpl::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
+            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
+            billboard.iconType = static_cast<components::BillboardIconType>(iconType);
+            billboard.editorOnly = true;
+            billboard.selectable = true;
+        }
     }
 
     bool SceneServiceImpl::removeCameraComponent(EntityHandle entity) {

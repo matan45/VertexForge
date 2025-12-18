@@ -7,6 +7,7 @@
 #include "impl/PreviewServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
+#include "events/RenderEvents.hpp"
 #include "Import.hpp"
 #include "print/EditorLogger.hpp"
 
@@ -88,6 +89,11 @@ namespace handlers {
 		inputService->registerEventHandlers();
 		windowStateService->registerEventHandlers();
 		previewService->registerEventHandlers();
+
+		// Load billboard icon atlas for editor icons (camera, light, audio, particle)
+		events::render::LoadBillboardAtlasCommand atlasCmd;
+		atlasCmd.atlasPath = "../../resources/textures/editor/billboard_icons.png";
+		events::EventDispatcher::instance().execute(atlasCmd);
 	}
 
 	void EditorHandler::setupEventSubscriptions()

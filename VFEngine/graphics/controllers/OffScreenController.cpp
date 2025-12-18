@@ -5,6 +5,8 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
+#include "../render/billboard/BillboardPipeline.hpp"
+#include "../render/billboard/BillboardTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
@@ -118,6 +120,12 @@ namespace controllers
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
         }
 
+        // Update billboard camera if pipeline is initialized
+        if (renderHandler->isBillboardPipelineInitialized())
+        {
+            renderHandler->getBillboardPipeline()->updateCameraUBO(view, projection, cameraPos);
+        }
+
         // Update frustum for culling
         currentFrustum.extractFromMatrix(projection * view);
     }
@@ -217,6 +225,67 @@ namespace controllers
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
+    }
+
+    void OffScreenController::prepareFrameBillboards()
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+
+        // Lazy initialize billboard pipeline if needed
+        renderHandler->initBillboardPipeline();
+
+        if (!showBillboardIcons || !renderHandler->isBillboardPipelineInitialized())
+        {
+            renderHandler->setBillboardDrawList({});
+            return;
+        }
+
+        std::vector<render::billboard::BillboardRenderData> billboardDrawList;
+
+        // Iterate all entities with BillboardComponent and WorldTransformComponent
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::BillboardComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& billboard = view.get<components::BillboardComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            // Skip non-editor billboards in editor mode
+            if (!billboard.editorOnly)
+            {
+                continue;
+            }
+
+            render::billboard::BillboardRenderData renderData;
+            // Extract position from world matrix (translation column)
+            renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
+            renderData.atlasIndex = billboard.getEffectiveAtlasIndex();
+            renderData.size = billboard.size;
+            renderData.sizeMode = static_cast<uint32_t>(billboard.sizeMode);
+            renderData.entityId = static_cast<uint32_t>(entity);
+            renderData.colorTint = billboard.colorTint;
+
+            billboardDrawList.push_back(renderData);
+        }
+
+        renderHandler->setBillboardDrawList(std::move(billboardDrawList));
+    }
+
+    bool OffScreenController::loadBillboardAtlas(const std::string& atlasPath)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+
+        // Initialize billboard pipeline if not already done
+        renderHandler->initBillboardPipeline();
+
+        auto* billboardPipeline = renderHandler->getBillboardPipeline();
+        if (!billboardPipeline)
+        {
+            return false;
+        }
+
+        return billboardPipeline->loadAtlas(atlasPath);
     }
 
     void* OffScreenController::render()
