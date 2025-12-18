@@ -1,6 +1,7 @@
 #pragma once
 #include "../interfaces/ISceneService.hpp"
 #include "../events/SceneEvents.hpp"
+#include "../data/EntityConversion.hpp"
 #include <entt/entt.hpp>
 #include <memory>
 #include <optional>
@@ -11,23 +12,6 @@ namespace scene {
 }
 
 namespace services {
-
-    // Internal conversion functions between EntityHandle and entt::entity
-    namespace internal {
-        inline EntityHandle toHandle(entt::entity entity) {
-            return EntityHandle{ static_cast<uint64_t>(static_cast<uint32_t>(entity)) };
-        }
-
-        inline entt::entity fromHandle(EntityHandle handle) {
-            return static_cast<entt::entity>(static_cast<uint32_t>(handle.id));
-        }
-
-        inline bool isValidHandle(EntityHandle handle, entt::registry& registry) {
-            if (!handle.isValid()) return false;
-            auto entity = fromHandle(handle);
-            return registry.valid(entity);
-        }
-    }
 
     class SceneServiceImpl : public ISceneService {
     public:

@@ -7,6 +7,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "data/DTOs.hpp"
+#include "data/EntityConversion.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <limits>
 
@@ -179,8 +180,7 @@ namespace windows {
 			screenPos.y = (ndc.y * 0.5f + 0.5f) * viewportSize.y + viewportPos.y;
 
 			BillboardScreenHit hit;
-			// Convert entt::entity to EntityHandle
-			hit.entity = services::EntityHandle{ static_cast<uint64_t>(static_cast<uint32_t>(entity)) };
+			hit.entity = services::internal::toHandle(entity);
 			hit.screenCenter = screenPos;
 			hit.screenSize = billboard.size;  // Size is in screen pixels for ScreenSpace mode
 
@@ -204,7 +204,7 @@ namespace windows {
 				screenPos.y >= minBounds.y && screenPos.y <= maxBounds.y) {
 				// Validate entity still exists and has BillboardComponent (prevents race condition
 				// if entity was deleted or component removed between cache update and pick)
-				auto enttEntity = static_cast<entt::entity>(static_cast<uint32_t>(hit.entity.id));
+				auto enttEntity = services::internal::fromHandle(hit.entity);
 				if (registry.valid(enttEntity) &&
 					registry.all_of<components::BillboardComponent>(enttEntity)) {
 					return hit.entity;
@@ -245,7 +245,7 @@ namespace windows {
 			math::AABB worldAABB = localAABB.getTransformed(worldTransform.worldMatrix);
 
 			MeshPickData pickData;
-			pickData.entity = services::EntityHandle{ static_cast<uint64_t>(static_cast<uint32_t>(entity)) };
+			pickData.entity = services::internal::toHandle(entity);
 			pickData.worldAABB = worldAABB;
 			pickData.meshPath = meshComp.meshPath;
 
@@ -255,6 +255,10 @@ namespace windows {
 
 	math::Ray ViewPort::screenToWorldRay(glm::vec2 screenPos, glm::vec2 viewportPos, glm::vec2 viewportSize)
 	{
+		// Clamp screen position to viewport bounds to prevent unpredictable ray directions
+		screenPos.x = glm::clamp(screenPos.x, viewportPos.x, viewportPos.x + viewportSize.x);
+		screenPos.y = glm::clamp(screenPos.y, viewportPos.y, viewportPos.y + viewportSize.y);
+
 		// Convert screen position to normalized viewport coordinates [0, 1]
 		float normalizedX = (screenPos.x - viewportPos.x) / viewportSize.x;
 		float normalizedY = (screenPos.y - viewportPos.y) / viewportSize.y;
@@ -304,7 +308,7 @@ namespace windows {
 			auto hitDistance = meshData.worldAABB.intersectRay(ray);
 			if (hitDistance.has_value() && *hitDistance < closestDistance) {
 				// Validate entity still exists
-				auto enttEntity = static_cast<entt::entity>(static_cast<uint32_t>(meshData.entity.id));
+				auto enttEntity = services::internal::fromHandle(meshData.entity);
 				if (registry.valid(enttEntity) &&
 					registry.all_of<components::MeshComponent>(enttEntity)) {
 					closestDistance = *hitDistance;

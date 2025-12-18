@@ -87,6 +87,21 @@ namespace render {
 	void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes)
 	{
 		currentMeshDrawList = std::move(meshes);
+
+		// Check if any meshes have showBoundingBox enabled for debug rendering
+		if (debugRendererInitialized && debugRenderer)
+		{
+			bool hasBoundingBoxes = false;
+			for (const auto& mesh : currentMeshDrawList)
+			{
+				if (mesh.showBoundingBox)
+				{
+					hasBoundingBoxes = true;
+					break;
+				}
+			}
+			debugRenderer->setHasBoundingBoxes(hasBoundingBoxes);
+		}
 	}
 
 	void RenderPassHandler::initBillboardPipeline()

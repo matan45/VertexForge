@@ -82,7 +82,7 @@ namespace math
 
             for (int i = 0; i < 3; ++i)
             {
-                if (std::abs(ray.direction[i]) < 1e-8f)
+                if (std::abs(ray.direction[i]) < 1e-6f)
                 {
                     // Ray is parallel to slab, check if origin is within slab
                     if (ray.origin[i] < min[i] || ray.origin[i] > max[i])
