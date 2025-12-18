@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <unordered_map>
+#include <cfloat>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -113,11 +114,9 @@ namespace types {
 		LODMeshData result;
 		result.indices.resize(source.indices.size()); // Allocate max size initially
 
-		// Use meshoptimizer to simplify the mesh
-		// meshopt_simplify requires vertex positions as float array
-		float targetError = 0.01f; // Allow 1% error
-
-		size_t actualIndexCount = meshopt_simplify(
+		// Use meshoptimizer's sloppy simplification for guaranteed reduction
+		// This is more aggressive and will reach the target index count
+		size_t actualIndexCount = meshopt_simplifySloppy(
 			result.indices.data(),
 			source.indices.data(),
 			source.indices.size(),
@@ -125,13 +124,15 @@ namespace types {
 			source.vertices.size(),
 			sizeof(resource::Vertex),
 			targetIndexCount,
-			targetError
+			FLT_MAX,  // No error limit - allow maximum simplification
+			nullptr   // No result error output needed
 		);
 
 		result.indices.resize(actualIndexCount);
 
-		// If simplification didn't reduce much (mesh already simple), just keep original
-		if (actualIndexCount >= source.indices.size() * 0.95f) {
+		// If no simplification was possible at all, return original
+		if (actualIndexCount == source.indices.size()) {
+			vfLogWarning("  Simplification failed for ratio {:.1f}%, keeping original", targetRatio * 100.0f);
 			return source;
 		}
 

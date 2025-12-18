@@ -115,8 +115,17 @@ namespace services {
         void* imguiDescriptorSet = nullptr;
         uint32_t width = 0;
         uint32_t height = 0;
+        uint32_t mipLevels = 1;
+        std::vector<void*> mipDescriptorSets;  // One descriptor per mip level for preview
 
         bool isValid() const { return imguiDescriptorSet != nullptr; }
+
+        void* getMipDescriptor(uint32_t level) const {
+            if (level < mipDescriptorSets.size()) {
+                return mipDescriptorSets[level];
+            }
+            return imguiDescriptorSet;  // Fallback to main descriptor
+        }
     };
     
     struct CameraMovement {

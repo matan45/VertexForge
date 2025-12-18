@@ -134,6 +134,8 @@ namespace services
         handle.imguiDescriptorSet = textureData.descriptorSet;
         handle.width = static_cast<uint32_t>(textureData.width);
         handle.height = static_cast<uint32_t>(textureData.height);
+        handle.mipLevels = static_cast<uint32_t>(textureData.mipLevels);
+        handle.mipDescriptorSets = textureData.mipDescriptorSets;
 
         loadedTextures[handle.imguiDescriptorSet] = handle;
 
@@ -158,6 +160,8 @@ namespace services
         handle.imguiDescriptorSet = textureData.descriptorSet;
         handle.width = static_cast<uint32_t>(textureData.width);
         handle.height = static_cast<uint32_t>(textureData.height);
+        handle.mipLevels = static_cast<uint32_t>(textureData.mipLevels);
+        handle.mipDescriptorSets = textureData.mipDescriptorSets;
 
         loadedTextures[handle.imguiDescriptorSet] = handle;
 

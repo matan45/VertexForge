@@ -174,6 +174,8 @@ namespace windows
             const auto& info = subMeshes[i];
             bool isSelected = (selectedSubMesh == static_cast<int>(i));
 
+            // Use PushID to ensure unique widget IDs even if submesh names are duplicated
+            ImGui::PushID(static_cast<int>(i));
             if (ImGui::Selectable(info.name.c_str(), isSelected))
             {
                 selectedSubMesh = static_cast<int>(i);
@@ -189,6 +191,7 @@ namespace windows
                 ImGui::Text("Triangles: %u", info.indexCount / 3);
                 ImGui::EndTooltip();
             }
+            ImGui::PopID();
         }
 
         ImGui::Separator();

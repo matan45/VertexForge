@@ -111,7 +111,10 @@ namespace windows
         float offsetY = (availSize.y - imageSize.y) * 0.5f + panY;
 
         ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + offsetX, ImGui::GetCursorPosY() + offsetY));
-        ImGui::Image(imageHandle.imguiDescriptorSet, imageSize);
+
+        // Use selected mip level's descriptor if available
+        void* displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
+        ImGui::Image(displayDescriptor, imageSize);
 
         // Handle scroll to zoom
         if (ImGui::IsWindowHovered())
@@ -152,6 +155,64 @@ namespace windows
 
         ImGui::Separator();
         ImGui::Spacing();
+
+        // Mip Level selection (only for non-HDR textures with multiple mip levels)
+        if (!isHDR && imageHandle.isValid() && imageHandle.mipLevels > 1)
+        {
+            if (ImGui::CollapsingHeader("Mip Levels", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                float itemWidth = ImGui::GetContentRegionAvail().x;
+
+                // Build mip level labels with dimensions
+                std::vector<std::string> mipLabels;
+                mipLabels.reserve(imageHandle.mipLevels);
+
+                uint32_t mipWidth = imageHandle.width;
+                uint32_t mipHeight = imageHandle.height;
+
+                for (uint32_t i = 0; i < imageHandle.mipLevels; ++i)
+                {
+                    mipLabels.push_back("Mip " + std::to_string(i) + " (" +
+                                       std::to_string(mipWidth) + "x" +
+                                       std::to_string(mipHeight) + ")");
+                    mipWidth = std::max(1u, mipWidth / 2);
+                    mipHeight = std::max(1u, mipHeight / 2);
+                }
+
+                // Create combo from labels
+                ImGui::SetNextItemWidth(itemWidth);
+                if (ImGui::BeginCombo("##MipLevel", mipLabels[selectedMipLevel].c_str()))
+                {
+                    for (int i = 0; i < static_cast<int>(imageHandle.mipLevels); ++i)
+                    {
+                        bool isSelected = (selectedMipLevel == i);
+                        if (ImGui::Selectable(mipLabels[i].c_str(), isSelected))
+                        {
+                            selectedMipLevel = i;
+                        }
+                        if (isSelected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                // Show selected mip info
+                uint32_t selWidth = imageHandle.width >> selectedMipLevel;
+                uint32_t selHeight = imageHandle.height >> selectedMipLevel;
+                selWidth = std::max(1u, selWidth);
+                selHeight = std::max(1u, selHeight);
+
+                ImGui::TextDisabled("Selected: %dx%d", selWidth, selHeight);
+
+                float reductionPercent = 100.0f / static_cast<float>(1 << (selectedMipLevel * 2));
+                ImGui::TextDisabled("Size: %.1f%% of original", reductionPercent);
+            }
+
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
 
         // Zoom controls
         if (ImGui::CollapsingHeader("View", ImGuiTreeNodeFlags_DefaultOpen))

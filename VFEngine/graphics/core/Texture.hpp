@@ -29,6 +29,11 @@ namespace core {
 		vk::DescriptorSet descriptorSet;
 		vk::UniqueDescriptorPool descriptorPool;
 
+		// Per-mip level views and descriptors for preview
+		std::vector<vk::ImageView> mipImageViews;
+		std::vector<vk::Sampler> mipSamplers;
+		std::vector<vk::DescriptorSet> mipDescriptorSets;
+
 		bool isEditorTexture = false;
 
 	public:
@@ -41,10 +46,13 @@ namespace core {
 		const vk::ImageView& getImageView() const { return imageView; }
 		const vk::Sampler& getSampler() const { return sampler; }
 		const ImageData& getImageData() const { return imageData; }
+		const std::vector<vk::DescriptorSet>& getMipDescriptorSets() const { return mipDescriptorSets; }
 
 	private:
 		void createSampler(uint32_t mipLevels);
+		void createMipSampler(vk::Sampler& outSampler, uint32_t mipLevel);
 		void copyBufferToImage(vk::Buffer buffer, uint32_t width, uint32_t height, uint32_t mipLevel = 0);
+		void createPerMipViews(vk::Format format);
 	};
 }
 

@@ -25,6 +25,23 @@ namespace core
             ImGui_ImplVulkan_RemoveTexture(descriptorSet);
         }
 
+        // Clean up per-mip resources
+        for (auto& mipDesc : mipDescriptorSets) {
+            if (mipDesc) {
+                ImGui_ImplVulkan_RemoveTexture(mipDesc);
+            }
+        }
+        for (auto& mipView : mipImageViews) {
+            if (mipView) {
+                device.getLogicalDevice().destroyImageView(mipView);
+            }
+        }
+        for (auto& mipSamp : mipSamplers) {
+            if (mipSamp) {
+                device.getLogicalDevice().destroySampler(mipSamp);
+            }
+        }
+
         device.getLogicalDevice().destroyImageView(imageView);
         device.getLogicalDevice().destroyImage(image);
         device.getLogicalDevice().freeMemory(imageMemory);
@@ -161,6 +178,7 @@ namespace core
         {
             isEditorTexture = true;
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            // Note: No per-mip views for HDR - IBL system handles its own filtering
         }
     }
 
@@ -293,6 +311,7 @@ namespace core
         {
             isEditorTexture = true;
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            createPerMipViews(format);
         }
     }
 
@@ -342,5 +361,62 @@ namespace core
         );
 
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), command);
+    }
+
+    void Texture::createMipSampler(vk::Sampler& outSampler, uint32_t mipLevel)
+    {
+        using enum vk::SamplerAddressMode;
+        vk::SamplerCreateInfo samplerInfo;
+        samplerInfo.magFilter = vk::Filter::eNearest;  // No filtering for exact mip view
+        samplerInfo.minFilter = vk::Filter::eNearest;
+        samplerInfo.addressModeU = eRepeat;
+        samplerInfo.addressModeV = eRepeat;
+        samplerInfo.addressModeW = eRepeat;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+        samplerInfo.mipLodBias = 0.0f;
+        // Force this specific mip level only
+        samplerInfo.minLod = static_cast<float>(mipLevel);
+        samplerInfo.maxLod = static_cast<float>(mipLevel);
+
+        outSampler = device.getLogicalDevice().createSampler(samplerInfo);
+    }
+
+    void Texture::createPerMipViews(vk::Format format)
+    {
+        if (!isEditorTexture || imageData.mipLevels <= 1) {
+            return;  // Only create per-mip views for editor textures with multiple mips
+        }
+
+        mipImageViews.resize(imageData.mipLevels);
+        mipSamplers.resize(imageData.mipLevels);
+        mipDescriptorSets.resize(imageData.mipLevels);
+
+        for (uint32_t mip = 0; mip < imageData.mipLevels; ++mip) {
+            // Create image view for this single mip level
+            vk::ImageViewCreateInfo viewInfo{};
+            viewInfo.image = image;
+            viewInfo.viewType = vk::ImageViewType::e2D;
+            viewInfo.format = format;
+            viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+            viewInfo.subresourceRange.baseMipLevel = mip;
+            viewInfo.subresourceRange.levelCount = 1;  // Only this mip level
+            viewInfo.subresourceRange.baseArrayLayer = 0;
+            viewInfo.subresourceRange.layerCount = 1;
+
+            mipImageViews[mip] = device.getLogicalDevice().createImageView(viewInfo);
+
+            // Create sampler that forces this mip level
+            createMipSampler(mipSamplers[mip], mip);
+
+            // Create ImGui descriptor for this mip view
+            mipDescriptorSets[mip] = ImGui_ImplVulkan_AddTexture(
+                mipSamplers[mip],
+                mipImageViews[mip],
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            );
+        }
     }
 }

@@ -148,10 +148,10 @@ namespace types
 			// Report 50% - data converted
 			if (progressCallback) progressCallback(0.5f);
 
-			// Generate mipmap chain
-			generateMipmapsHDR(hdrData);
+			// HDR textures: only base level (IBL system handles its own filtering)
+			hdrData.mipLevels = 1;
 
-			// Report 70% - mipmaps generated
+			// Report 70%
 			if (progressCallback) progressCallback(0.7f);
 
 			saveToFileHDRWithMips(fileName, location, hdrData);
@@ -245,10 +245,10 @@ namespace types
 			// Report 50% - data stored
 			if (progressCallback) progressCallback(0.5f);
 
-			// Generate mipmap chain
-			generateMipmapsHDR(hdrData);
+			// HDR textures: only base level (IBL system handles its own filtering)
+			hdrData.mipLevels = 1;
 
-			// Report 70% - mipmaps generated
+			// Report 70%
 			if (progressCallback) progressCallback(0.7f);
 
 			saveToFileHDRWithMips(fileName, location, hdrData);

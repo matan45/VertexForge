@@ -21,6 +21,8 @@ namespace core {
         result.width = texture->getWidth();
         result.height = texture->getHeight();
         result.channels = texture->getNumbersOfChannels();
+        result.mipLevels = texture->getMipLevels();
+        result.mipDescriptorSets = texture->getMipDescriptorSets();
         result.valid = true;
 
         // Track for cleanup
@@ -41,6 +43,8 @@ namespace core {
         result.width = texture->getWidth();
         result.height = texture->getHeight();
         result.channels = texture->getNumbersOfChannels();
+        result.mipLevels = texture->getMipLevels();
+        result.mipDescriptorSets = texture->getMipDescriptorSets();
         result.valid = true;
 
         // Track for cleanup
