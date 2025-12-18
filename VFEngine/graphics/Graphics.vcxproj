@@ -131,7 +131,9 @@
     <ClInclude Include="render\material\MaterialPipeline.hpp" />
     <ClInclude Include="render\material\MaterialShaderCache.hpp" />
     <ClInclude Include="render\material\MaterialTextureCache.hpp" />
+    <ClInclude Include="render\mesh\AABBDebugRenderer.hpp" />
     <ClInclude Include="render\mesh\DefaultIBLTextureFactory.hpp" />
+    <ClInclude Include="render\mesh\MaterialCacheManager.hpp" />
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
@@ -167,7 +169,9 @@
     <ClCompile Include="render\material\MaterialPipeline.cpp" />
     <ClCompile Include="render\material\MaterialShaderCache.cpp" />
     <ClCompile Include="render\material\MaterialTextureCache.cpp" />
+    <ClCompile Include="render\mesh\AABBDebugRenderer.cpp" />
     <ClCompile Include="render\mesh\DefaultIBLTextureFactory.cpp" />
+    <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
   </ItemGroup>

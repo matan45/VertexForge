@@ -12,8 +12,7 @@ namespace material
 {
     using json = nlohmann::json;
     namespace fs = std::filesystem;
-
-    // Helper: Convert NodeType to string
+    
     static std::string nodeTypeToString(NodeType type)
     {
         switch (type)

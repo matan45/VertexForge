@@ -45,10 +45,11 @@ namespace render::mesh
         // 1. Per-submesh material override
         // 2. Default material for the mesh
         // 3. Fallback defaults from MeshRenderData
+        // Note: This function only reads from the cache. Materials must be loaded beforehand.
         static ExtractedPBRValues getPBRForSubmesh(
             const MeshRenderData& meshData,
             const std::string& submeshName,
-            std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& matCache,
+            const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& matCache,
             float time = 0.0f);
 
         // Evaluate dynamic emission strength (supports Time, Sin, Cos nodes)

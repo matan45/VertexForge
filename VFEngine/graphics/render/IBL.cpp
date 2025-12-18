@@ -16,12 +16,6 @@ namespace render
         , swapChain{swapChain}
         , offscreenResources{offscreenResources}
     {
-        // Create command pool
-        vk::CommandPoolCreateInfo commandPoolInfo;
-        commandPoolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-        commandPoolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        commandPool = device.getLogicalDevice().createCommandPoolUnique(commandPoolInfo);
-
         // Create sub-components
         envCubemapGen = std::make_unique<ibl::EnvironmentCubemapGenerator>(device);
         irradianceGen = std::make_unique<ibl::IrradianceGenerator>(device);
@@ -41,13 +35,13 @@ namespace render
     {
         hdrTexture = std::make_shared<core::Texture>(device);
         hdrTexture->loadHDRFromFile(path, false);
-        
-        envCubemapGen->generate(*hdrTexture, commandPool.get());
-        irradianceGen->generate(*hdrTexture, commandPool.get());
 
-        brdfLUTGen->generate(commandPool.get());
-        
-        prefilteredGen->generate(envCubemapGen->getImageData(), commandPool.get());
+        envCubemapGen->generate(*hdrTexture, device.getStagingCommandPool());
+        irradianceGen->generate(*hdrTexture, device.getStagingCommandPool());
+
+        brdfLUTGen->generate(device.getStagingCommandPool());
+
+        prefilteredGen->generate(envCubemapGen->getImageData(), device.getStagingCommandPool());
         skyboxRenderer->init(envCubemapGen->getImageData());
 
         iblInitialized = true;
@@ -89,7 +83,6 @@ namespace render
         brdfLUTGen->cleanUpShader();
         prefilteredGen->cleanUpShader();
 
-        commandPool.reset();
         remove();
     }
 

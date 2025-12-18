@@ -18,35 +18,6 @@ namespace render::billboard
 {
     class BillboardPipeline
     {
-    public:
-        explicit BillboardPipeline(core::Device& device, core::SwapChain& swapChain,
-                                   core::OffscreenResources& offscreenResources);
-        ~BillboardPipeline();
-
-        void init();
-        void recreate();
-        void cleanUp();
-
-        // Load atlas texture from file
-        bool loadAtlas(const std::string& atlasPath);
-
-        // Update camera UBO
-        void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                            const glm::vec3& cameraPos) const;
-
-        // Set billboards to render this frame
-        void setBillboardList(const std::vector<BillboardRenderData>& billboards);
-
-        // Record rendering commands
-        void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
-
-        // Check if pipeline is ready
-        bool isInitialized() const { return initialized; }
-
-        // Getters
-        vk::RenderPass getRenderPass() const { return renderPass; }
-        vk::Pipeline getGraphicsPipeline() const { return graphicsPipeline; }
-
     private:
         core::Device& device;
         core::SwapChain& swapChain;
@@ -54,11 +25,9 @@ namespace render::billboard
 
         bool initialized = false;
         bool atlasLoaded = false;
-
-        // Shader
+        
         std::shared_ptr<core::Shader> billboardShader;
-
-        // Vulkan resources
+        
         vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
@@ -67,8 +36,7 @@ namespace render::billboard
         vk::DescriptorSet descriptorSet;
 
         std::vector<vk::Framebuffer> framebuffers;
-
-        // Camera UBO
+        
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
 
@@ -83,20 +51,41 @@ namespace render::billboard
         vk::DeviceMemory instanceBufferMemory;
         uint32_t maxInstances = 1024;
         uint32_t currentInstanceCount = 0;
-
-        // Atlas texture (using core::Texture for file loading)
+        
         std::unique_ptr<core::Texture> atlasTexture;
-
-        // Default atlas (procedural fallback)
+        
         vk::Image defaultAtlasImage;
         vk::DeviceMemory defaultAtlasImageMemory;
         vk::ImageView defaultAtlasImageView;
         vk::Sampler defaultAtlasSampler;
-
-        // Billboard list for current frame
+        
         std::vector<BillboardRenderData> currentBillboards;
 
-        // Private methods
+    public:
+        explicit BillboardPipeline(core::Device& device, core::SwapChain& swapChain,
+                                   core::OffscreenResources& offscreenResources);
+        ~BillboardPipeline();
+
+        void init();
+        void recreate();
+        void cleanUp();
+        
+        bool loadAtlas(const std::string& atlasPath);
+        
+        void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
+                             const glm::vec3& cameraPos) const;
+        
+        void setBillboardList(const std::vector<BillboardRenderData>& billboards);
+        
+        void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        
+        bool isInitialized() const { return initialized; }
+        
+        vk::RenderPass getRenderPass() const { return renderPass; }
+        vk::Pipeline getGraphicsPipeline() const { return graphicsPipeline; }
+        
+    private:
+        
         void loadShader();
         void createRenderPass();
         void createDescriptorSetLayout();

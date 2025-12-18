@@ -272,7 +272,7 @@ namespace render::mesh
     ExtractedPBRValues MaterialPBRExtractor::getPBRForSubmesh(
         const MeshRenderData& meshData,
         const std::string& submeshName,
-        std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& matCache,
+        const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& matCache,
         float time)
     {
         ExtractedPBRValues pbr;
@@ -294,23 +294,18 @@ namespace render::mesh
             materialPath = meshData.defaultMaterialPath;
         }
 
-        // Load and extract PBR values from the material (using cache)
+        // Extract PBR values from the material (using pre-loaded cache)
+        // Note: Materials should be loaded beforehand via MaterialCacheManager
         if (!materialPath.empty()) {
             std::shared_ptr<material::MaterialData> matData;
 
-            // Check cache first
+            // Look up material in cache (read-only)
             auto cacheIt = matCache.find(materialPath);
             if (cacheIt != matCache.end() && cacheIt->second) {
                 matData = cacheIt->second;
                 pbr = extractPBRFromMaterial(*matData);
-            } else {
-                // Load and cache the material
-                matData = resource::ResourceManager::loadMaterial(materialPath);
-                if (matData) {
-                    matCache[materialPath] = matData;
-                    pbr = extractPBRFromMaterial(*matData);
-                }
             }
+            // If not in cache, use defaults (material wasn't pre-loaded)
 
             // Evaluate dynamic emission strength (Time, Sin, Cos nodes)
             if (matData) {

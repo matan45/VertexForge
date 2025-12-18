@@ -201,11 +201,9 @@ namespace resource
                 if (auto existing = it->second.lock()) {
                     return existing;
                 }
-                // Expired, will be loaded below
             }
         }
-
-        // Load synchronously
+        
         auto result = material::MaterialAsset::load(path);
         if (!result) {
             vfLogError("Failed to load material: {}", path);

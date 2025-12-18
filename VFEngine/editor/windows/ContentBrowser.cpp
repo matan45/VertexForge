@@ -81,18 +81,22 @@ namespace windows
 
 	void ContentBrowser::draw()
 	{
-		auto& dispatcher = events::EventDispatcher::instance();
-
-		// Lazy load icon atlas on first draw (after services are initialized)
 		if (!iconsLoaded) {
 			loadIconAtlas();
 		}
-		
+
 		if (!importLocationSet) {
 			controllers::Import::setLocation(currentPath.string());
 			importLocationSet = true;
 		}
-		
+
+		handleModals();
+		drawFolderStructurePanel();
+		drawContentPanel();
+	}
+
+	void ContentBrowser::handleModals()
+	{
 		if (showCreateFolderModal)
 		{
 			ImGui::OpenPopup("Create New Folder");
@@ -116,42 +120,24 @@ namespace windows
 			ImGui::OpenPopup("Delete File?");
 		}
 		deleteFileConfirmModal();
+	}
 
+	void ContentBrowser::drawFolderStructurePanel()
+	{
 		if (ImGui::Begin("Folder Structure", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
 		{
 			drawFolderTree(currentPath);
 		}
 		ImGui::End();
+	}
 
-
+	void ContentBrowser::drawContentPanel()
+	{
 		if (ImGui::Begin("Content Folder"))
 		{
-			if (ImGui::Button(ICON_FA_ARROW_LEFT))
-			{
-				auto parentPath = currentPath.parent_path();
-				navigateTo(parentPath);
-			}
-
-			ImGui::SameLine();
-			
-			ImGui::Text("Current Path: %s", StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
-			
-			ImGui::Text("Search:");
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(150.0f);
-			char searchBuffer[256];
-			std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer));
-			if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
-			{
-				searchQuery = std::string(searchBuffer);
-			}
+			drawToolbar();
 
 			ImGui::Separator();
-
-			float panelWidth = ImGui::GetContentRegionAvail().x;
-			float cellSize = PADDING + THUMBNAIL_SIZE;
-			int columnCount = std::max(1, static_cast<int>(panelWidth / cellSize));
-			ImGui::Columns(columnCount, "", false);
 
 			handleCreateFiles();
 
@@ -160,43 +146,76 @@ namespace windows
 				drawFileWindow();
 			}
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-
-			for (const auto& asset : assets)
-			{
-				if (matchesSearchQuery(asset))
-				{
-					bool isSelected = (selectedFile == fs::path(asset.path));
-					printFilesNames(asset, isSelected);
-
-					// Single click to select
-					if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-					{
-						selectedFile = asset.path;
-						selectedType = asset.type;
-						
-						// Double click to open preview (for non-folders, excluding scenes)
-						if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-							&& selectedType != AssetType::Scene
-							&& (selectedType != AssetType::Other || !fs::is_directory(asset.path)))
-						{
-							showFileWindow = true;
-						}
-					}
-				}
-			}
-			ImGui::PopStyleColor();
-
-			// Handle deferred navigation after loop completes (avoids iterator invalidation)
-			if (!pendingNavigation.empty())
-			{
-				navigateTo(pendingNavigation);
-				pendingNavigation.clear();
-			}
+			drawAssetGrid();
 		}
 
 		ImGui::Columns(1);
 		ImGui::End();
+	}
+
+	void ContentBrowser::drawToolbar()
+	{
+		if (ImGui::Button(ICON_FA_ARROW_LEFT))
+		{
+			auto parentPath = currentPath.parent_path();
+			navigateTo(parentPath);
+		}
+
+		ImGui::SameLine();
+
+		ImGui::Text("Current Path: %s", StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
+
+		ImGui::Text("Search:");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(150.0f);
+		char searchBuffer[256];
+		std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer));
+		if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
+		{
+			searchQuery = std::string(searchBuffer);
+		}
+	}
+
+	void ContentBrowser::drawAssetGrid()
+	{
+		float panelWidth = ImGui::GetContentRegionAvail().x;
+		float cellSize = PADDING + THUMBNAIL_SIZE;
+		int columnCount = std::max(1, static_cast<int>(panelWidth / cellSize));
+		ImGui::Columns(columnCount, "", false);
+
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
+		for (const auto& asset : assets)
+		{
+			if (matchesSearchQuery(asset))
+			{
+				bool isSelected = (selectedFile == fs::path(asset.path));
+				printFilesNames(asset, isSelected);
+
+				// Single click to select
+				if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+				{
+					selectedFile = asset.path;
+					selectedType = asset.type;
+
+					// Double click to open preview (for non-folders, excluding scenes)
+					if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
+						&& selectedType != AssetType::Scene
+						&& (selectedType != AssetType::Other || !fs::is_directory(asset.path)))
+					{
+						showFileWindow = true;
+					}
+				}
+			}
+		}
+		ImGui::PopStyleColor();
+
+		// Handle deferred navigation after loop completes (avoids iterator invalidation)
+		if (!pendingNavigation.empty())
+		{
+			navigateTo(pendingNavigation);
+			pendingNavigation.clear();
+		}
 	}
 
 	void ContentBrowser::loadDirectory(const fs::path& path)
@@ -289,8 +308,7 @@ namespace windows
 			ImGui::NextColumn();
 			return;
 		}
-
-		// Map asset type to atlas icon
+		
 		AtlasIcon icon = AtlasIcon::File;
 		bool isFolder = false;
 

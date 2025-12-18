@@ -38,10 +38,14 @@ namespace core {
 		createDebugMessenger();
 		pickPhysicalDevice();
 		createLogicalDevice();
+		createStagingCommandPool();
 	}
 
 	void Device::cleanUp()
 	{
+		// Reset staging command pool before device
+		stagingCommandPool.reset();
+
 		if (surface) {
 			instance->destroySurfaceKHR(surface);
 		}
@@ -255,6 +259,24 @@ namespace core {
 		}
 		catch (const vk::SystemError& err) {
 			loggerError("Failed to create logical device: {}", err.what());
+			throw;
+		}
+	}
+
+	void Device::createStagingCommandPool()
+	{
+		vk::CommandPoolCreateInfo poolInfo{};
+		poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
+		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsAndComputeFamily.value();
+
+		try {
+			stagingCommandPool = logicalDevice->createCommandPoolUnique(poolInfo);
+			if (debug) {
+				loggerInfo("Created shared staging command pool");
+			}
+		}
+		catch (const vk::SystemError& err) {
+			loggerError("Failed to create staging command pool: {}", err.what());
 			throw;
 		}
 	}

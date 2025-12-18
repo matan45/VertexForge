@@ -79,9 +79,6 @@ namespace render
         void initBillboardPipeline();
         billboard::BillboardPipeline* getBillboardPipeline() const { return billboardPipeline.get(); }
         bool isBillboardPipelineInitialized() const { return billboardPipelineInitialized; }
-        void setBillboardDrawList(const std::vector<billboard::BillboardRenderData>& billboards);
-        void updateBillboardCamera(const glm::mat4& view, const glm::mat4& projection,
-                                   const glm::vec3& cameraPos) const;
 
         void cleanUp() const;
 

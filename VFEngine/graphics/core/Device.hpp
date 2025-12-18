@@ -29,6 +29,9 @@ namespace core {
 
 		QueueFamilyIndices queueFamilyIndices{};
 
+		// Shared staging command pool for one-time transfer operations
+		vk::UniqueCommandPool stagingCommandPool;
+
 		const std::array<const char*, 1> validationLayers = { "VK_LAYER_KHRONOS_validation" };
 		const std::array<const char*, 1> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -38,6 +41,7 @@ namespace core {
 		void createDebugMessenger();
 		void pickPhysicalDevice();
 		void createLogicalDevice();
+		void createStagingCommandPool();
 		bool checkValidationLayerSupport() const;
 
 		bool isDeviceSuitable(const vk::PhysicalDevice& device) const;
@@ -59,6 +63,9 @@ namespace core {
 		const vk::Queue& getGraphicsQueue() const { return graphicsAndComputeQueue; }
 		const vk::Queue& getTransferQueue() const { return transferQueue; }
 		bool hasDedicatedTransferQueue() const { return queueFamilyIndices.hasDedicatedTransferQueue(); }
+
+		// Shared staging command pool for one-time transfer operations (texture uploads, buffer copies)
+		const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
 
 	};
 

@@ -18,8 +18,7 @@ namespace windows
     class MaterialEditorWindow;
 
     enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Material, Other };
-
-    // Icon indices in the atlas (4x4 grid layout)
+    
     enum class AtlasIcon : uint32_t
     {
         Animation = 0,
@@ -62,10 +61,9 @@ namespace windows
         fs::path selectedFile;
         AssetType selectedType;
         bool showFileWindow = false;
-
-        // Icon atlas texture
+        
         services::EditorTextureHandle iconAtlas;
-        static constexpr uint32_t ATLAS_GRID_SIZE = 4;  // 4x4 grid
+        static constexpr uint32_t ATLAS_GRID_SIZE = 4;
 
         std::string pendingNavigation;  // Deferred navigation to avoid iterator invalidation
         bool iconsLoaded = false;
@@ -92,8 +90,7 @@ namespace windows
     private:
         void loadIconAtlas();
         void navigateTo(const fs::path& path);
-
-        // Get UV coordinates for an icon in the atlas
+        
         static std::pair<ImVec2, ImVec2> getAtlasUV(AtlasIcon icon);
 
         void loadDirectory(const fs::path& path);
@@ -111,5 +108,11 @@ namespace windows
 
         void drawFolderTree(const fs::path& path);
         bool matchesSearchQuery(const Asset& asset) const;
+
+        void handleModals();
+        void drawFolderStructurePanel();
+        void drawContentPanel();
+        void drawToolbar();
+        void drawAssetGrid();
     };
 }

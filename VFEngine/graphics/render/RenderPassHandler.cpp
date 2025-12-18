@@ -98,24 +98,6 @@ namespace render {
 		billboardPipelineInitialized = true;
 	}
 
-	void RenderPassHandler::setBillboardDrawList(const std::vector<billboard::BillboardRenderData>& billboards)
-	{
-		currentBillboardDrawList = billboards;
-		if (billboardPipelineInitialized)
-		{
-			billboardPipeline->setBillboardList(currentBillboardDrawList);
-		}
-	}
-
-	void RenderPassHandler::updateBillboardCamera(const glm::mat4& view, const glm::mat4& projection,
-	                                              const glm::vec3& cameraPos) const
-	{
-		if (billboardPipelineInitialized)
-		{
-			billboardPipeline->updateCameraUBO(view, projection, cameraPos);
-		}
-	}
-
 	void RenderPassHandler::recreate() const
 	{
 		iblRenderer->recreate();

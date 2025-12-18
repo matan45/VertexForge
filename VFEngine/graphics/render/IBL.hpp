@@ -64,7 +64,6 @@ namespace render
         core::Device& device;
         core::SwapChain& swapChain;
         core::OffscreenResources& offscreenResources;
-        vk::UniqueCommandPool commandPool;
         std::shared_ptr<core::Texture> hdrTexture;
         bool isDisplay = false;
         bool iblInitialized = false;

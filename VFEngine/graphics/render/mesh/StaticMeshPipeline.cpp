@@ -1,5 +1,7 @@
 #include "StaticMeshPipeline.hpp"
 #include "MeshGPUCache.hpp"
+#include "AABBDebugRenderer.hpp"
+#include "MaterialCacheManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialShaderCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
@@ -24,21 +26,23 @@ namespace render::mesh
                                            core::OffscreenResources& offscreenResources)
         : device{device}, swapChain{swapChain}, offscreenResources{offscreenResources}
     {
-        // Create command pool for buffer upload operations
-        vk::CommandPoolCreateInfo commandPoolInfo;
-        commandPoolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-        commandPoolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        commandPool = device.getLogicalDevice().createCommandPoolUnique(commandPoolInfo);
-
         // Create mesh GPU cache for mesh buffer management
         meshCache = std::make_unique<MeshGPUCache>(device);
 
         // Create material texture cache for texture GPU resources
         textureCache = std::make_unique<MaterialTextureCache>(device);
-        textureCache->init(commandPool.get());
+        textureCache->init(device.getStagingCommandPool());
 
         // Create material shader cache for per-material pipeline compilation
         materialShaderCache = std::make_unique<MaterialShaderCache>(device);
+
+        // Create AABB debug renderer
+        aabbRenderer = std::make_unique<AABBDebugRenderer>(device, swapChain);
+
+        // Create material cache manager and link related caches
+        materialCacheManager = std::make_unique<MaterialCacheManager>();
+        materialCacheManager->setShaderCache(materialShaderCache.get());
+        materialCacheManager->setTextureCache(textureCache.get());
     }
 
     StaticMeshPipeline::~StaticMeshPipeline() = default;
@@ -60,8 +64,7 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
-        createWireframePipeline();
-        createAABBBuffers();
+        aabbRenderer->init(renderPass);
     }
 
     void StaticMeshPipeline::initWithDefaults()
@@ -76,7 +79,7 @@ namespace render::mesh
 
         // Create default IBL textures using the factory
         defaultIBLFactory = std::make_unique<DefaultIBLTextureFactory>(device);
-        defaultIBLFactory->createDefaultTextures(commandPool.get());
+        defaultIBLFactory->createDefaultTextures(device.getStagingCommandPool());
 
         createDescriptorSet(defaultIBLFactory->getIrradiance(),
                            defaultIBLFactory->getPrefilter(),
@@ -86,8 +89,7 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
-        createWireframePipeline();
-        createAABBBuffers();
+        aabbRenderer->init(renderPass);
         usingDefaultTextures = true;
     }
 
@@ -95,9 +97,6 @@ namespace render::mesh
     {
         meshShader = std::make_shared<core::Shader>(device);
         meshShader->readShader("../../resources/shaders/mesh/mesh.glsl");
-
-        wireframeShader = std::make_shared<core::Shader>(device);
-        wireframeShader->readShader("../../resources/shaders/mesh/wireframe.glsl");
     }
 
     void StaticMeshPipeline::recreate()
@@ -115,6 +114,8 @@ namespace render::mesh
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
+
+        aabbRenderer->recreate(renderPass);
     }
 
     void StaticMeshPipeline::createRenderPass()
@@ -661,32 +662,10 @@ namespace render::mesh
         }
         textureDescriptorsInitialized = false;
 
-        // Clean up wireframe pipeline
-        if (wireframePipeline)
+        // Clean up AABB debug renderer
+        if (aabbRenderer)
         {
-            device.getLogicalDevice().destroyPipeline(wireframePipeline);
-            wireframePipeline = nullptr;
-        }
-        if (wireframePipelineLayout)
-        {
-            device.getLogicalDevice().destroyPipelineLayout(wireframePipelineLayout);
-            wireframePipelineLayout = nullptr;
-        }
-
-        // Clean up AABB buffers
-        if (aabbVertexBuffer)
-        {
-            device.getLogicalDevice().destroyBuffer(aabbVertexBuffer);
-            device.getLogicalDevice().freeMemory(aabbVertexBufferMemory);
-            aabbVertexBuffer = nullptr;
-            aabbVertexBufferMemory = nullptr;
-        }
-        if (aabbIndexBuffer)
-        {
-            device.getLogicalDevice().destroyBuffer(aabbIndexBuffer);
-            device.getLogicalDevice().freeMemory(aabbIndexBufferMemory);
-            aabbIndexBuffer = nullptr;
-            aabbIndexBufferMemory = nullptr;
+            aabbRenderer->cleanUp();
         }
 
         renderPass = nullptr;
@@ -708,9 +687,8 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUp()
     {
         // Clear material cache
-        {
-            std::unique_lock<std::shared_mutex> lock(materialCacheMutex);
-            materialCache.clear();
+        if (materialCacheManager) {
+            materialCacheManager->clear();
         }
 
         // Clean up material shader cache (per-material compiled pipelines)
@@ -729,64 +707,32 @@ namespace render::mesh
         // Clean up pipeline/descriptor resources
         cleanUpForReinit();
 
-        // Reset caches (must happen before command pool reset)
+        // Reset caches
         textureCache.reset();
         meshCache.reset();
-
-        // Reset command pool (automatic cleanup via UniqueCommandPool)
-        commandPool.reset();
+        materialCacheManager.reset();
     }
 
     void StaticMeshPipeline::cleanUpShader()
     {
         meshShader->cleanUp();
-        wireframeShader->cleanUp();
+        if (aabbRenderer) {
+            aabbRenderer->cleanUpShader();
+        }
     }
 
     void StaticMeshPipeline::invalidateMaterialCache(const std::string& materialPath)
     {
-        std::unique_lock<std::shared_mutex> lock(materialCacheMutex);
-        if (materialPath.empty()) {
-            // Mark cache for full invalidation
-            materialCacheInvalidated = true;
-            // Also invalidate all compiled shaders
-            if (materialShaderCache) {
-                materialShaderCache->invalidateAll();
-            }
-            // Note: Full texture cache invalidation not implemented (would need to clear all descriptor sets)
-        } else {
-            // Clear specific material immediately
-            materialCache.erase(materialPath);
-            // Also invalidate the compiled shader for this material
-            if (materialShaderCache) {
-                materialShaderCache->invalidate(materialPath);
-            }
-            // Invalidate the per-material texture descriptor set
-            if (textureCache) {
-                textureCache->invalidateMaterialDescriptorSet(materialPath);
-            }
+        if (materialCacheManager) {
+            materialCacheManager->invalidate(materialPath);
         }
     }
 
     void StaticMeshPipeline::injectMaterialForPreview(const std::string& materialPath,
                                                        std::shared_ptr<material::MaterialData> materialData)
     {
-        if (materialPath.empty() || !materialData) {
-            return;
-        }
-
-        {
-            std::unique_lock<std::shared_mutex> lock(materialCacheMutex);
-            // Inject/update the material in the cache
-            materialCache[materialPath] = materialData;
-        }
-
-        // If the material has custom shaders, invalidate the shader cache to force recompilation
-        // This ensures that if the shader code changed, it gets recompiled
-        if (!materialData->cachedVertexShader.empty() && !materialData->cachedFragmentShader.empty()) {
-            if (materialShaderCache) {
-                materialShaderCache->invalidate(materialPath);
-            }
+        if (materialCacheManager) {
+            materialCacheManager->injectForPreview(materialPath, materialData);
         }
     }
 
@@ -852,7 +798,8 @@ namespace render::mesh
         prepareTexturesForFrame(meshDrawList);
 
         // Acquire shared lock for reading material cache during rendering
-        std::shared_lock<std::shared_mutex> cacheLock(materialCacheMutex);
+        auto cacheLock = materialCacheManager->acquireSharedLock();
+        const auto& materialCache = materialCacheManager->getCache();
 
         vk::RenderPassBeginInfo renderPassInfo{};
         renderPassInfo.renderPass = renderPass;
@@ -1114,258 +1061,13 @@ namespace render::mesh
         }
 
         // Render AABB wireframes for meshes with showBoundingBox enabled
-        if (wireframePipeline && aabbVertexBuffer)
+        if (aabbRenderer)
         {
-            commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, wireframePipeline);
-
-            vk::Buffer vertexBuffers[] = {aabbVertexBuffer};
-            vk::DeviceSize offsets[] = {0};
-            commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-            commandBuffer.bindIndexBuffer(aabbIndexBuffer, 0, vk::IndexType::eUint32);
-
-            for (const auto& meshData : meshDrawList)
-            {
-                if (!meshData.showBoundingBox)
-                {
-                    continue;
-                }
-
-                const MeshGPUData* gpuData = getMesh(meshData.meshPath);
-                if (!gpuData)
-                {
-                    continue;
-                }
-
-                // Render combined mesh AABB (green)
-                {
-                    const math::AABB& aabb = gpuData->boundingBox;
-                    glm::vec3 center = aabb.getCenter();
-                    glm::vec3 extents = aabb.getExtents();
-
-                    // Scale and translate unit cube [-1,1] to AABB bounds
-                    glm::mat4 aabbModel = meshData.modelMatrix;
-                    aabbModel = glm::translate(aabbModel, center);
-                    aabbModel = glm::scale(aabbModel, extents);
-
-                    // Calculate MVP
-                    glm::mat4 mvp = currentProjection * currentView * aabbModel;
-
-                    AABBPushConstants aabbPushConstants{};
-                    aabbPushConstants.mvp = mvp;
-                    aabbPushConstants.color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green wireframe
-
-                    commandBuffer.pushConstants(wireframePipelineLayout,
-                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                        0, sizeof(AABBPushConstants), &aabbPushConstants);
-
-                    // Draw unit cube wireframe (24 indices for 12 lines)
-                    commandBuffer.drawIndexed(24, 1, 0, 0, 0);
-                }
-
-                // Render per-submesh AABBs (yellow) - only if there are multiple submeshes
-                if (gpuData->subMeshes.size() > 1)
-                {
-                    for (const auto& subMesh : gpuData->subMeshes)
-                    {
-                        const math::AABB& aabb = subMesh.boundingBox;
-                        glm::vec3 center = aabb.getCenter();
-                        glm::vec3 extents = aabb.getExtents();
-
-                        // Scale and translate unit cube [-1,1] to AABB bounds
-                        glm::mat4 aabbModel = meshData.modelMatrix;
-                        aabbModel = glm::translate(aabbModel, center);
-                        aabbModel = glm::scale(aabbModel, extents);
-
-                        // Calculate MVP
-                        glm::mat4 mvp = currentProjection * currentView * aabbModel;
-
-                        AABBPushConstants aabbPushConstants{};
-                        aabbPushConstants.mvp = mvp;
-                        aabbPushConstants.color = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow wireframe
-
-                        commandBuffer.pushConstants(wireframePipelineLayout,
-                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                            0, sizeof(AABBPushConstants), &aabbPushConstants);
-
-                        // Draw unit cube wireframe (24 indices for 12 lines)
-                        commandBuffer.drawIndexed(24, 1, 0, 0, 0);
-                    }
-                }
-            }
+            aabbRenderer->render(commandBuffer, meshDrawList, currentView, currentProjection,
+                [this](const std::string& meshId) { return getMesh(meshId); });
         }
 
         commandBuffer.endRenderPass();
-    }
-
-    void StaticMeshPipeline::createWireframePipeline()
-    {
-        // Push constant range for MVP + color
-        vk::PushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(AABBPushConstants);
-
-        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.setLayoutCount = 0;  // No descriptor sets needed
-        pipelineLayoutInfo.pSetLayouts = nullptr;
-        pipelineLayoutInfo.pushConstantRangeCount = 1;
-        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-
-        wireframePipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
-
-        // Vertex input - simple vec3 positions
-        vk::VertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(glm::vec3);
-        bindingDescription.inputRate = vk::VertexInputRate::eVertex;
-
-        vk::VertexInputAttributeDescription attributeDescription{};
-        attributeDescription.binding = 0;
-        attributeDescription.location = 0;
-        attributeDescription.format = vk::Format::eR32G32B32Sfloat;
-        attributeDescription.offset = 0;
-
-        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.vertexAttributeDescriptionCount = 1;
-        vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
-
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.topology = vk::PrimitiveTopology::eLineList;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        vk::Viewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapChain.getSwapchainExtent().width);
-        viewport.height = static_cast<float>(swapChain.getSwapchainExtent().height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        vk::Rect2D scissor{};
-        scissor.offset = vk::Offset2D{0, 0};
-        scissor.extent = swapChain.getSwapchainExtent();
-
-        vk::PipelineViewportStateCreateInfo viewportState{};
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
-
-        vk::PipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = vk::PolygonMode::eFill;  // Use Fill - we're drawing lines via LineList topology
-        rasterizer.lineWidth = 1.0f;  // Must be 1.0 without wideLines feature
-        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
-        rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
-        rasterizer.depthBiasEnable = VK_FALSE;
-
-        vk::PipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_FALSE;  // Don't write depth for wireframe
-        depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
-        depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.stencilTestEnable = VK_FALSE;
-
-        vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-                                               vk::ColorComponentFlagBits::eG |
-                                               vk::ColorComponentFlagBits::eB |
-                                               vk::ColorComponentFlagBits::eA;
-        colorBlendAttachment.blendEnable = VK_FALSE;
-
-        vk::PipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.attachmentCount = 1;
-        colorBlending.pAttachments = &colorBlendAttachment;
-
-        vk::GraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.stageCount = static_cast<uint32_t>(wireframeShader->getShaderStages().size());
-        pipelineInfo.pStages = wireframeShader->getShaderStages().data();
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.layout = wireframePipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
-
-        auto result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess)
-        {
-            throw std::runtime_error("Failed to create wireframe graphics pipeline");
-        }
-        wireframePipeline = result.value;
-    }
-
-    void StaticMeshPipeline::createAABBBuffers()
-    {
-        // Unit cube vertices (8 corners, from -1 to 1)
-        std::vector<glm::vec3> vertices = {
-            {-1.0f, -1.0f, -1.0f},  // 0: back-bottom-left
-            { 1.0f, -1.0f, -1.0f},  // 1: back-bottom-right
-            { 1.0f,  1.0f, -1.0f},  // 2: back-top-right
-            {-1.0f,  1.0f, -1.0f},  // 3: back-top-left
-            {-1.0f, -1.0f,  1.0f},  // 4: front-bottom-left
-            { 1.0f, -1.0f,  1.0f},  // 5: front-bottom-right
-            { 1.0f,  1.0f,  1.0f},  // 6: front-top-right
-            {-1.0f,  1.0f,  1.0f},  // 7: front-top-left
-        };
-
-        // Line indices for 12 edges of the cube
-        std::vector<uint32_t> indices = {
-            // Back face edges
-            0, 1,  1, 2,  2, 3,  3, 0,
-            // Front face edges
-            4, 5,  5, 6,  6, 7,  7, 4,
-            // Connecting edges
-            0, 4,  1, 5,  2, 6,  3, 7
-        };
-
-        // Create vertex buffer
-        vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * vertices.size();
-        core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-        vertexRequest.size = vertexBufferSize;
-        vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-        vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createBuffer(vertexRequest, aabbVertexBuffer, aabbVertexBufferMemory);
-
-        core::Utilities::copyToBuffer(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            device.getGraphicsQueue(),
-            commandPool.get(),
-            aabbVertexBuffer,
-            vertices.data(),
-            vertexBufferSize
-        );
-
-        // Create index buffer
-        vk::DeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
-        core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
-        indexRequest.size = indexBufferSize;
-        indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-        indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createBuffer(indexRequest, aabbIndexBuffer, aabbIndexBufferMemory);
-
-        core::Utilities::copyToBuffer(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            device.getGraphicsQueue(),
-            commandPool.get(),
-            aabbIndexBuffer,
-            indices.data(),
-            indexBufferSize
-        );
     }
 
     void StaticMeshPipeline::prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const
@@ -1386,97 +1088,50 @@ namespace render::mesh
             return;
         }
 
-        // Acquire exclusive lock for material cache operations
-        std::unique_lock<std::shared_mutex> cacheLock(materialCacheMutex);
-
         // Check if cache needs to be invalidated (material was saved externally)
-        if (materialCacheInvalidated) {
-            materialCache.clear();
-            materialCacheInvalidated = false;
-        }
+        materialCacheManager->checkAndClearInvalidation();
+
+        // Helper lambda to load textures from a material
+        auto loadTexturesFromMaterial = [this](const std::shared_ptr<material::MaterialData>& matData) {
+            if (!matData) return;
+
+            ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
+
+            // Load textures if paths are specified
+            if (!pbr.albedoTexturePath.empty()) {
+                textureCache->loadTexture(pbr.albedoTexturePath);
+            }
+            if (!pbr.metallicTexturePath.empty()) {
+                textureCache->loadTexture(pbr.metallicTexturePath);
+            }
+            if (!pbr.roughnessTexturePath.empty()) {
+                textureCache->loadTexture(pbr.roughnessTexturePath);
+            }
+            if (!pbr.aoTexturePath.empty()) {
+                textureCache->loadTexture(pbr.aoTexturePath);
+            }
+            if (!pbr.normalTexturePath.empty()) {
+                textureCache->loadTexture(pbr.normalTexturePath);
+            }
+            if (!pbr.emissionTexturePath.empty()) {
+                textureCache->loadTexture(pbr.emissionTexturePath);
+            }
+        };
 
         // Load all unique materials and textures into cache
         // Per-material descriptor sets are created on-demand in recordCommandBuffer
         for (const auto& meshData : meshDrawList) {
-            // Get materials for this mesh
-            std::string materialPath = meshData.defaultMaterialPath;
-
-            // Load material and extract texture paths
-            if (!materialPath.empty()) {
-                auto cacheIt = materialCache.find(materialPath);
-                std::shared_ptr<material::MaterialData> matData;
-
-                if (cacheIt != materialCache.end() && cacheIt->second) {
-                    matData = cacheIt->second;
-                } else {
-                    matData = resource::ResourceManager::loadMaterial(materialPath);
-                    if (matData) {
-                        materialCache[materialPath] = matData;
-                    }
-                }
-
-                if (matData) {
-                    ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
-
-                    // Load textures if paths are specified
-                    if (!pbr.albedoTexturePath.empty()) {
-                        textureCache->loadTexture(pbr.albedoTexturePath);
-                    }
-                    if (!pbr.metallicTexturePath.empty()) {
-                        textureCache->loadTexture(pbr.metallicTexturePath);
-                    }
-                    if (!pbr.roughnessTexturePath.empty()) {
-                        textureCache->loadTexture(pbr.roughnessTexturePath);
-                    }
-                    if (!pbr.aoTexturePath.empty()) {
-                        textureCache->loadTexture(pbr.aoTexturePath);
-                    }
-                    if (!pbr.normalTexturePath.empty()) {
-                        textureCache->loadTexture(pbr.normalTexturePath);
-                    }
-                    if (!pbr.emissionTexturePath.empty()) {
-                        textureCache->loadTexture(pbr.emissionTexturePath);
-                    }
-                }
+            // Load default material and extract texture paths
+            if (!meshData.defaultMaterialPath.empty()) {
+                auto matData = materialCacheManager->getMaterial(meshData.defaultMaterialPath);
+                loadTexturesFromMaterial(matData);
             }
 
             // Also process per-submesh materials
             for (const auto& [submeshName, matInfo] : meshData.submeshMaterials) {
                 if (!matInfo.materialPath.empty()) {
-                    auto cacheIt = materialCache.find(matInfo.materialPath);
-                    std::shared_ptr<material::MaterialData> matData;
-
-                    if (cacheIt != materialCache.end() && cacheIt->second) {
-                        matData = cacheIt->second;
-                    } else {
-                        matData = resource::ResourceManager::loadMaterial(matInfo.materialPath);
-                        if (matData) {
-                            materialCache[matInfo.materialPath] = matData;
-                        }
-                    }
-
-                    if (matData) {
-                        ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
-
-                        if (!pbr.albedoTexturePath.empty()) {
-                            textureCache->loadTexture(pbr.albedoTexturePath);
-                        }
-                        if (!pbr.metallicTexturePath.empty()) {
-                            textureCache->loadTexture(pbr.metallicTexturePath);
-                        }
-                        if (!pbr.roughnessTexturePath.empty()) {
-                            textureCache->loadTexture(pbr.roughnessTexturePath);
-                        }
-                        if (!pbr.aoTexturePath.empty()) {
-                            textureCache->loadTexture(pbr.aoTexturePath);
-                        }
-                        if (!pbr.normalTexturePath.empty()) {
-                            textureCache->loadTexture(pbr.normalTexturePath);
-                        }
-                        if (!pbr.emissionTexturePath.empty()) {
-                            textureCache->loadTexture(pbr.emissionTexturePath);
-                        }
-                    }
+                    auto matData = materialCacheManager->getMaterial(matInfo.materialPath);
+                    loadTexturesFromMaterial(matData);
                 }
             }
         }

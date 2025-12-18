@@ -45,7 +45,6 @@ namespace render::billboard
 
     void BillboardPipeline::recreate()
     {
-        // Cleanup framebuffers and render pass for recreation
         for (auto& framebuffer : framebuffers)
         {
             device.getLogicalDevice().destroyFramebuffer(framebuffer);
@@ -61,19 +60,16 @@ namespace render::billboard
     void BillboardPipeline::cleanUp()
     {
         auto& dev = device.getLogicalDevice();
-
-        // Framebuffers
+        
         for (auto& framebuffer : framebuffers)
         {
             dev.destroyFramebuffer(framebuffer);
         }
         framebuffers.clear();
-
-        // Pipeline resources
+        
         if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
-
-        // Descriptor resources
+        
         if (descriptorPool)
         {
             if (descriptorSet)
@@ -81,11 +77,9 @@ namespace render::billboard
             dev.destroyDescriptorPool(descriptorPool);
         }
         if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
-
-        // Render pass
+        
         if (renderPass) dev.destroyRenderPass(renderPass);
-
-        // Buffers
+        
         if (cameraUBO)
         {
             dev.destroyBuffer(cameraUBO);
@@ -106,11 +100,9 @@ namespace render::billboard
             dev.destroyBuffer(instanceBuffer);
             dev.freeMemory(instanceBufferMemory);
         }
-
-        // Atlas texture (loaded from file)
+        
         atlasTexture.reset();
-
-        // Default atlas (procedural fallback)
+        
         if (defaultAtlasSampler) dev.destroySampler(defaultAtlasSampler);
         if (defaultAtlasImageView) dev.destroyImageView(defaultAtlasImageView);
         if (defaultAtlasImage)
@@ -118,8 +110,7 @@ namespace render::billboard
             dev.destroyImage(defaultAtlasImage);
             dev.freeMemory(defaultAtlasImageMemory);
         }
-
-        // Shader
+        
         if (billboardShader)
         {
             billboardShader->cleanUp();
@@ -132,7 +123,6 @@ namespace render::billboard
 
     void BillboardPipeline::createRenderPass()
     {
-        // Color attachment - load existing content (preserve mesh rendering)
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -146,8 +136,7 @@ namespace render::billboard
         vk::AttachmentReference colorAttachmentRef{};
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        // Depth attachment - load existing (read-only depth test)
+        
         vk::AttachmentDescription depthAttachment{};
         depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -233,12 +222,8 @@ namespace render::billboard
 
     void BillboardPipeline::createDefaultAtlas()
     {
-        // Create a simple 4x4 grid atlas (256x256) with placeholder colors
         constexpr uint32_t atlasSize = AtlasConfig::ATLAS_SIZE;
-        constexpr uint32_t tileSize = AtlasConfig::TILE_SIZE;
-        constexpr uint32_t gridSize = AtlasConfig::GRID_SIZE;
-
-        // Create image
+        
         core::ImageInfoRequest imageInfo(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
@@ -249,8 +234,7 @@ namespace render::billboard
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
         core::Utilities::createImage(imageInfo, defaultAtlasImage, defaultAtlasImageMemory);
-
-        // Create image view
+        
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),
             defaultAtlasImage,
@@ -276,73 +260,16 @@ namespace render::billboard
 
         defaultAtlasSampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-        // Generate placeholder atlas texture data
+        // Generate simple magenta placeholder (common "missing texture" color)
         std::vector<uint8_t> atlasData(atlasSize * atlasSize * 4);
-
-        // Define colors for each icon type (RGBA)
-        // Index 0: Light (yellow), 1: Camera (blue), 2: AudioSource (green), 3: Particle (magenta)
-        const uint8_t iconColors[16][4] = {
-            {255, 220, 50, 255},   // 0: Light - yellow
-            {50, 150, 255, 255},   // 1: Camera - blue
-            {50, 255, 100, 255},   // 2: AudioSource - green
-            {255, 100, 255, 255},  // 3: Particle - magenta
-            {200, 200, 200, 255},  // 4: Custom placeholder
-            {180, 180, 180, 255},  // 5
-            {160, 160, 160, 255},  // 6
-            {140, 140, 140, 255},  // 7
-            {120, 120, 120, 255},  // 8
-            {100, 100, 100, 255},  // 9
-            {80, 80, 80, 255},     // 10
-            {60, 60, 60, 255},     // 11
-            {40, 40, 40, 255},     // 12
-            {20, 20, 20, 255},     // 13
-            {10, 10, 10, 255},     // 14
-            {5, 5, 5, 255},        // 15
-        };
-
-        // Fill each tile with a solid color and a circular shape
-        for (uint32_t ty = 0; ty < gridSize; ++ty)
+        for (uint32_t i = 0; i < atlasSize * atlasSize; ++i)
         {
-            for (uint32_t tx = 0; tx < gridSize; ++tx)
-            {
-                uint32_t tileIndex = ty * gridSize + tx;
-                const uint8_t* color = iconColors[tileIndex];
-
-                for (uint32_t py = 0; py < tileSize; ++py)
-                {
-                    for (uint32_t px = 0; px < tileSize; ++px)
-                    {
-                        uint32_t x = tx * tileSize + px;
-                        uint32_t y = ty * tileSize + py;
-                        uint32_t idx = (y * atlasSize + x) * 4;
-
-                        // Create a circular icon shape
-                        float cx = static_cast<float>(px) - tileSize / 2.0f + 0.5f;
-                        float cy = static_cast<float>(py) - tileSize / 2.0f + 0.5f;
-                        float dist = std::sqrt(cx * cx + cy * cy);
-                        float radius = tileSize / 2.0f - 4.0f;
-
-                        if (dist < radius)
-                        {
-                            atlasData[idx + 0] = color[0];
-                            atlasData[idx + 1] = color[1];
-                            atlasData[idx + 2] = color[2];
-                            atlasData[idx + 3] = color[3];
-                        }
-                        else
-                        {
-                            // Transparent outside the circle
-                            atlasData[idx + 0] = 0;
-                            atlasData[idx + 1] = 0;
-                            atlasData[idx + 2] = 0;
-                            atlasData[idx + 3] = 0;
-                        }
-                    }
-                }
-            }
+            atlasData[i * 4 + 0] = 255;  // R
+            atlasData[i * 4 + 1] = 0;    // G
+            atlasData[i * 4 + 2] = 255;  // B
+            atlasData[i * 4 + 3] = 255;  // A
         }
-
-        // Create staging buffer and upload
+        
         vk::DeviceSize imageSize = atlasData.size();
 
         core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
@@ -354,8 +281,7 @@ namespace render::billboard
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingMemory;
         core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-        // RAII cleanup for staging resources
+        
         auto cleanupStaging = [&]() {
             if (stagingBuffer) device.getLogicalDevice().destroyBuffer(stagingBuffer);
             if (stagingMemory) device.getLogicalDevice().freeMemory(stagingMemory);
@@ -363,7 +289,6 @@ namespace render::billboard
 
         try
         {
-            // Copy data to staging buffer
             void* data;
             vk::Result mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
             if (mapResult == vk::Result::eSuccess)
@@ -371,22 +296,13 @@ namespace render::billboard
                 std::memcpy(data, atlasData.data(), imageSize);
                 device.getLogicalDevice().unmapMemory(stagingMemory);
             }
-
-            // Create command pool for transfer
-            vk::CommandPoolCreateInfo poolInfo{};
-            poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-            poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-            auto commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
-
-            // Transition and copy
-            auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-
-            // Transition to transfer dst
+            
+            auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), device.getStagingCommandPool());
+            
             core::Utilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
                 vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
                 vk::ImageAspectFlagBits::eColor);
-
-            // Copy buffer to image
+            
             vk::BufferImageCopy region{};
             region.bufferOffset = 0;
             region.bufferRowLength = 0;
@@ -399,15 +315,13 @@ namespace render::billboard
             region.imageExtent = vk::Extent3D{atlasSize, atlasSize, 1};
 
             cmd->copyBufferToImage(stagingBuffer, defaultAtlasImage, vk::ImageLayout::eTransferDstOptimal, region);
-
-            // Transition to shader read
+            
             core::Utilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
                 vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
 
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
-
-            // Cleanup staging
+            
             cleanupStaging();
         }
         catch (...)
@@ -468,7 +382,6 @@ namespace render::billboard
 
     void BillboardPipeline::createPipelineLayout()
     {
-        // Push constant range for BillboardPushConstants
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex;
         pushConstantRange.offset = 0;
@@ -502,13 +415,11 @@ namespace render::billboard
         vertexInputInfo.pVertexBindingDescriptions = bindings.data();
         vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(allAttribs.size());
         vertexInputInfo.pVertexAttributeDescriptions = allAttribs.data();
-
-        // Input assembly - triangle list for quad
+        
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        // Viewport and scissor
+        
         vk::Viewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -526,31 +437,27 @@ namespace render::billboard
         viewportState.pViewports = &viewport;
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
-
-        // Rasterizer - no culling for billboards (both sides visible)
+        
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = vk::PolygonMode::eFill;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = vk::CullModeFlagBits::eNone;  // No culling
+        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
         rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
         rasterizer.depthBiasEnable = VK_FALSE;
-
-        // Multisampling
+        
         vk::PipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-        // Depth testing - enabled but no write (read-only)
+        
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_FALSE;  // Don't write to depth buffer
+        depthStencil.depthWriteEnable = VK_FALSE; 
         depthStencil.depthCompareOp = vk::CompareOp::eLess;
         depthStencil.depthBoundsTestEnable = VK_FALSE;
         depthStencil.stencilTestEnable = VK_FALSE;
-
-        // Alpha blending
+        
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
                                               vk::ColorComponentFlagBits::eG |
@@ -568,8 +475,7 @@ namespace render::billboard
         colorBlending.logicOpEnable = VK_FALSE;
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
-
-        // Create pipeline
+        
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(billboardShader->getShaderStages().size());
         pipelineInfo.pStages = billboardShader->getShaderStages().data();
@@ -620,35 +526,27 @@ namespace render::billboard
         };
 
         std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-
-        // Create vertex buffer
+        
         vk::DeviceSize vertexBufferSize = sizeof(BillboardVertex) * vertices.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::Utilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferMemory);
-
-        // Create index buffer
+        
         vk::DeviceSize indexBufferSize = sizeof(uint16_t) * indices.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::Utilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferMemory);
-
-        // Create command pool for transfer
-        vk::CommandPoolCreateInfo poolInfo{};
-        poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-        poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        auto commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
-
+        
         // Upload vertex data
         core::Utilities::copyToBuffer(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),
-            commandPool.get(),
+            device.getStagingCommandPool(),
             quadVertexBuffer,
             vertices.data(),
             vertexBufferSize
@@ -659,7 +557,7 @@ namespace render::billboard
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),
-            commandPool.get(),
+            device.getStagingCommandPool(),
             quadIndexBuffer,
             indices.data(),
             indexBufferSize
