@@ -62,8 +62,6 @@ namespace imguiPass {
 		// Load Font Awesome font (ensure the path points to the Font Awesome .ttf file)
 		io.Fonts->AddFontFromFileTTF("../../resources/editor/fa-solid-900.ttf", 16.0f, &config, icons_ranges);
 
-		// Font texture is created automatically by the backend in newer ImGui versions
-
 		theme();
 	}
 

@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
 #include "material/MaterialTypes.hpp"
+#include "../core/VulkanContext.hpp"
 #include <memory>
 #include <string>
 
@@ -19,7 +20,32 @@ namespace imguiPass
 
 namespace controllers
 {
-    struct PreviewTextureGPU;
+    struct PreviewTextureGPU
+    {
+        vk::Image image;
+        vk::DeviceMemory memory;
+        vk::ImageView imageView;
+        vk::Sampler sampler;
+        bool valid = false;
+    };
+
+    struct TextureManagerImpl
+    {
+        // 6 texture slots per material: albedo, metallic, roughness, ao, normal, emission
+        static constexpr int MAX_TEXTURES = 6;
+        std::unordered_map<std::string, PreviewTextureGPU> textureCache;
+        std::array<std::string, MAX_TEXTURES> textureSlots;
+        PreviewTextureGPU defaultTexture;
+        bool texturesNeedUpdate = false;
+
+        explicit TextureManagerImpl()
+        {
+            for (auto& slot : textureSlots)
+            {
+                slot.clear();
+            }
+        }
+    };
     
     struct PreviewMaterialParams
     {
@@ -64,7 +90,6 @@ namespace controllers
         static constexpr const char* SPHERE_MESH_ID = "__material_preview_sphere__";
 
         // Texture management (implementation details hidden via pImpl pattern)
-        struct TextureManagerImpl;
         std::unique_ptr<TextureManagerImpl> textureManager;
 
     public:

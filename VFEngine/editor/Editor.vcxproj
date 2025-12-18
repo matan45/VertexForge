@@ -140,16 +140,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\editor\VertexForge-icon.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\animation-file.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\audio-file.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\file.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\folder.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\glsl-file.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\hdr-file.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\material-icon.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\mesh-file.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\scene.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\texture-file.vfImage" />
+    <None Include="..\..\resources\editor\contentBrowser\atlasIcons.vfImage" />
     <None Include="..\..\resources\editor\window-icon.vfImage" />
   </ItemGroup>
   <ItemGroup>

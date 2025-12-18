@@ -44,45 +44,59 @@ namespace windows
 		}
 	}
 
-	void ContentBrowser::loadIcons()
+	void ContentBrowser::loadIconAtlas()
 	{
 		auto& dispatcher = events::EventDispatcher::instance();
 
-		auto loadIcon = [&dispatcher](const std::string& path) {
-			events::render::LoadEditorTextureCommand cmd;
-			cmd.path = path;
-			cmd.isHDR = false;
-			return dispatcher.execute(cmd);
-		};
-
-		fileIcon = loadIcon("../../resources/editor/contentBrowser/file.vfImage");
-		folderIcon = loadIcon("../../resources/editor/contentBrowser/folder.vfImage");
-		textureIcon = loadIcon("../../resources/editor/contentBrowser/texture-file.vfImage");
-		audioIcon = loadIcon("../../resources/editor/contentBrowser/audio-file.vfImage");
-		meshIcon = loadIcon("../../resources/editor/contentBrowser/mesh-file.vfImage");
-		glslIcon = loadIcon("../../resources/editor/contentBrowser/glsl-file.vfImage");
-		animationIcon = loadIcon("../../resources/editor/contentBrowser/animation-file.vfImage");
-		hdrIcon = loadIcon("../../resources/editor/contentBrowser/hdr-file.vfImage");
-		sceneIcon = loadIcon("../../resources/editor/contentBrowser/scene.vfImage");
-		materialIcon = loadIcon("../../resources/editor/contentBrowser/material-icon.vfImage");
+		events::render::LoadEditorTextureCommand cmd;
+		cmd.path = "../../resources/editor/contentBrowser/atlasIcons.vfImage";
+		cmd.isHDR = false;
+		iconAtlas = dispatcher.execute(cmd);
 
 		iconsLoaded = true;
 	}
 
+	std::pair<ImVec2, ImVec2> ContentBrowser::getAtlasUV(AtlasIcon icon)
+	{
+		uint32_t index = static_cast<uint32_t>(icon);
+		constexpr uint32_t maxIndex = ATLAS_GRID_SIZE * ATLAS_GRID_SIZE;
+
+		// Bounds check - fallback to File icon if out of range
+		if (index >= maxIndex)
+		{
+			index = static_cast<uint32_t>(AtlasIcon::File);
+		}
+
+		float gridSize = static_cast<float>(ATLAS_GRID_SIZE);
+		float tileSize = 1.0f / gridSize;
+
+		float col = static_cast<float>(index % ATLAS_GRID_SIZE);
+		float row = static_cast<float>(index / ATLAS_GRID_SIZE);
+
+		ImVec2 uv0(col * tileSize, row * tileSize);
+		ImVec2 uv1((col + 1.0f) * tileSize, (row + 1.0f) * tileSize);
+
+		return {uv0, uv1};
+	}
+
 	void ContentBrowser::draw()
 	{
-		auto& dispatcher = events::EventDispatcher::instance();
-
-		// Lazy load icons on first draw (after services are initialized)
 		if (!iconsLoaded) {
-			loadIcons();
+			loadIconAtlas();
 		}
-		
+
 		if (!importLocationSet) {
 			controllers::Import::setLocation(currentPath.string());
 			importLocationSet = true;
 		}
-		
+
+		handleModals();
+		drawFolderStructurePanel();
+		drawContentPanel();
+	}
+
+	void ContentBrowser::handleModals()
+	{
 		if (showCreateFolderModal)
 		{
 			ImGui::OpenPopup("Create New Folder");
@@ -106,42 +120,24 @@ namespace windows
 			ImGui::OpenPopup("Delete File?");
 		}
 		deleteFileConfirmModal();
+	}
 
+	void ContentBrowser::drawFolderStructurePanel()
+	{
 		if (ImGui::Begin("Folder Structure", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
 		{
 			drawFolderTree(currentPath);
 		}
 		ImGui::End();
+	}
 
-
+	void ContentBrowser::drawContentPanel()
+	{
 		if (ImGui::Begin("Content Folder"))
 		{
-			if (ImGui::Button(ICON_FA_ARROW_LEFT))
-			{
-				auto parentPath = currentPath.parent_path();
-				navigateTo(parentPath);
-			}
-
-			ImGui::SameLine();
-			
-			ImGui::Text("Current Path: %s", StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
-			
-			ImGui::Text("Search:");
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(150.0f);
-			char searchBuffer[256];
-			std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer));
-			if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
-			{
-				searchQuery = std::string(searchBuffer);
-			}
+			drawToolbar();
 
 			ImGui::Separator();
-
-			float panelWidth = ImGui::GetContentRegionAvail().x;
-			float cellSize = PADDING + THUMBNAIL_SIZE;
-			int columnCount = std::max(1, static_cast<int>(panelWidth / cellSize));
-			ImGui::Columns(columnCount, "", false);
 
 			handleCreateFiles();
 
@@ -150,43 +146,76 @@ namespace windows
 				drawFileWindow();
 			}
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-
-			for (const auto& asset : assets)
-			{
-				if (matchesSearchQuery(asset))
-				{
-					bool isSelected = (selectedFile == fs::path(asset.path));
-					printFilesNames(asset, isSelected);
-
-					// Single click to select
-					if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-					{
-						selectedFile = asset.path;
-						selectedType = asset.type;
-						
-						// Double click to open preview (for non-folders, excluding scenes)
-						if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-							&& selectedType != AssetType::Scene
-							&& (selectedType != AssetType::Other || !fs::is_directory(asset.path)))
-						{
-							showFileWindow = true;
-						}
-					}
-				}
-			}
-			ImGui::PopStyleColor();
-
-			// Handle deferred navigation after loop completes (avoids iterator invalidation)
-			if (!pendingNavigation.empty())
-			{
-				navigateTo(pendingNavigation);
-				pendingNavigation.clear();
-			}
+			drawAssetGrid();
 		}
 
 		ImGui::Columns(1);
 		ImGui::End();
+	}
+
+	void ContentBrowser::drawToolbar()
+	{
+		if (ImGui::Button(ICON_FA_ARROW_LEFT))
+		{
+			auto parentPath = currentPath.parent_path();
+			navigateTo(parentPath);
+		}
+
+		ImGui::SameLine();
+
+		ImGui::Text("Current Path: %s", StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
+
+		ImGui::Text("Search:");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(150.0f);
+		char searchBuffer[256];
+		std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer));
+		if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
+		{
+			searchQuery = std::string(searchBuffer);
+		}
+	}
+
+	void ContentBrowser::drawAssetGrid()
+	{
+		float panelWidth = ImGui::GetContentRegionAvail().x;
+		float cellSize = PADDING + THUMBNAIL_SIZE;
+		int columnCount = std::max(1, static_cast<int>(panelWidth / cellSize));
+		ImGui::Columns(columnCount, "", false);
+
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
+		for (const auto& asset : assets)
+		{
+			if (matchesSearchQuery(asset))
+			{
+				bool isSelected = (selectedFile == fs::path(asset.path));
+				printFilesNames(asset, isSelected);
+
+				// Single click to select
+				if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+				{
+					selectedFile = asset.path;
+					selectedType = asset.type;
+
+					// Double click to open preview (for non-folders, excluding scenes)
+					if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
+						&& selectedType != AssetType::Scene
+						&& (selectedType != AssetType::Other || !fs::is_directory(asset.path)))
+					{
+						showFileWindow = true;
+					}
+				}
+			}
+		}
+		ImGui::PopStyleColor();
+
+		// Handle deferred navigation after loop completes (avoids iterator invalidation)
+		if (!pendingNavigation.empty())
+		{
+			navigateTo(pendingNavigation);
+			pendingNavigation.clear();
+		}
 	}
 
 	void ContentBrowser::loadDirectory(const fs::path& path)
@@ -274,101 +303,77 @@ namespace windows
 			);
 		}
 
+		if (!iconAtlas.isValid())
+		{
+			ImGui::NextColumn();
+			return;
+		}
+		
+		AtlasIcon icon = AtlasIcon::File;
+		bool isFolder = false;
+
 		switch (asset.type)
 		{
 			using enum windows::AssetType;
 		case Texture:
-			ImGui::BeginGroup();
-			if (textureIcon.isValid()) {
-				ImGui::Image(textureIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-			}
-			ImGui::TextWrapped("%s", asset.name.c_str());
-			ImGui::EndGroup();
+			icon = AtlasIcon::Texture;
 			break;
 		case HDR:
-			ImGui::BeginGroup();
-			if (hdrIcon.isValid()) {
-				ImGui::Image(hdrIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-			}
-			ImGui::TextWrapped("%s", asset.name.c_str());
-			ImGui::EndGroup();
+			icon = AtlasIcon::Hdr;
 			break;
 		case Scene:
-			ImGui::BeginGroup();
-			if (sceneIcon.isValid()) {
-				ImGui::Image(sceneIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-			}
-			ImGui::TextWrapped("%s", asset.name.c_str());
-			ImGui::EndGroup();
+			icon = AtlasIcon::Scene;
 			break;
 		case Model:
-			ImGui::BeginGroup();
-			if (meshIcon.isValid()) {
-				ImGui::Image(meshIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-			}
-			ImGui::TextWrapped("%s", asset.name.c_str());
-			ImGui::EndGroup();
+			icon = AtlasIcon::Mesh;
 			break;
 		case Audio:
-			ImGui::BeginGroup();
-			if (audioIcon.isValid()) {
-				ImGui::Image(audioIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-			}
-			ImGui::TextWrapped("%s", asset.name.c_str());
-			ImGui::EndGroup();
+			icon = AtlasIcon::Audio;
 			break;
 		case Animation:
-			ImGui::BeginGroup();
-			if (animationIcon.isValid()) {
-				ImGui::Image(animationIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-			}
-			ImGui::TextWrapped("%s", asset.name.c_str());
-			ImGui::EndGroup();
+			icon = AtlasIcon::Animation;
 			break;
 		case Shader:
-			ImGui::BeginGroup();
-			if (glslIcon.isValid()) {
-				ImGui::Image(glslIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-			}
-			ImGui::TextWrapped("%s", asset.name.c_str());
-			ImGui::EndGroup();
+			icon = AtlasIcon::Glsl;
 			break;
 		case Material:
-			ImGui::BeginGroup();
-			if (materialIcon.isValid()) {
-				ImGui::Image(materialIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-			}
-			ImGui::TextWrapped("%s", asset.name.c_str());
-			ImGui::EndGroup();
+			icon = AtlasIcon::Material;
 			break;
 		case Other:
 			if (fs::is_directory(asset.path))
 			{
-				ImGui::BeginGroup();
-				std::string folderName = asset.name;
-				if (folderIcon.isValid()) {
-					ImGui::ImageButton(folderName.c_str(), folderIcon.imguiDescriptorSet,
-						ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-					if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-					{
-						// Defer navigation until after the loop to avoid iterator invalidation
-						pendingNavigation = asset.path;
-					}
-				}
-
-				ImGui::TextWrapped("%s", folderName.c_str());
-				ImGui::EndGroup();
+				icon = AtlasIcon::Folder;
+				isFolder = true;
 			}
 			else
 			{
-				ImGui::BeginGroup();
-				if (fileIcon.isValid()) {
-					ImGui::Image(fileIcon.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE));
-				}
-				ImGui::Text("%s", asset.name.c_str());
-				ImGui::EndGroup();
+				icon = AtlasIcon::File;
 			}
 			break;
+		}
+
+		auto [uv0, uv1] = getAtlasUV(icon);
+
+		if (isFolder)
+		{
+			ImGui::BeginGroup();
+			std::string folderName = asset.name;
+			ImGui::ImageButton(folderName.c_str(), iconAtlas.imguiDescriptorSet,
+				ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
+			if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+			{
+				// Defer navigation until after the loop to avoid iterator invalidation
+				pendingNavigation = asset.path;
+			}
+			ImGui::TextWrapped("%s", folderName.c_str());
+			ImGui::EndGroup();
+		}
+		else
+		{
+			ImGui::BeginGroup();
+			ImGui::Image(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
+			ImGui::TextWrapped("%s", asset.name.c_str());
+			ImGui::EndGroup();
 		}
 
 		ImGui::NextColumn();

@@ -30,33 +30,93 @@ namespace render::mesh
     class MeshGPUCache;
     class MaterialTextureCache;
     class DefaultIBLTextureFactory;
+    class AABBDebugRenderer;
+    class MaterialCacheManager;
 }
 
 namespace render::mesh
 {
     class StaticMeshPipeline
     {
+    private:
+        core::Device& device;
+        core::SwapChain& swapChain;
+        core::OffscreenResources& offscreenResources;
+
+        // Shaders
+        std::shared_ptr<core::Shader> meshShader;
+
+        // Vulkan resources
+        vk::RenderPass renderPass;
+        vk::Pipeline graphicsPipeline; // Opaque pipeline
+        vk::Pipeline translucentPipeline; // Translucent pipeline (alpha blending)
+        vk::Pipeline maskedPipeline; // Masked pipeline (alpha testing)
+        vk::PipelineLayout pipelineLayout; // Shared layout for all pipelines
+
+        vk::DescriptorSetLayout descriptorSetLayout;
+        vk::DescriptorPool descriptorPool;
+        vk::DescriptorSet descriptorSet;
+
+        // Texture descriptor set (set 1) for material textures
+        vk::DescriptorSetLayout textureDescriptorSetLayout;
+        vk::DescriptorPool textureDescriptorPool;
+        vk::DescriptorSet textureDescriptorSet;
+        bool textureDescriptorsInitialized = false;
+
+        std::vector<vk::Framebuffer> framebuffers;
+
+        // Mesh GPU cache for loading/unloading mesh buffers
+        std::unique_ptr<MeshGPUCache> meshCache;
+
+        // Material texture cache for loading/managing material textures
+        std::unique_ptr<MaterialTextureCache> textureCache;
+
+        // Material shader cache for per-material compiled shaders and pipelines
+        std::unique_ptr<MaterialShaderCache> materialShaderCache;
+
+        vk::Buffer cameraUBO;
+        vk::DeviceMemory cameraUBOMemory;
+
+        // AABB debug renderer (wireframe bounding boxes)
+        std::unique_ptr<AABBDebugRenderer> aabbRenderer;
+
+        // Current camera matrices for AABB rendering and translucent sorting
+        mutable glm::mat4 currentView{1.0f};
+        mutable glm::mat4 currentProjection{1.0f};
+        mutable glm::vec3 currentCameraPos{0.0f};
+        mutable float currentTime{0.0f};
+
+        // Material cache manager (handles caching, invalidation, preview injection)
+        std::unique_ptr<MaterialCacheManager> materialCacheManager;
+
+        // Prepare textures for frame rendering
+        void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
+
+        // Default IBL textures (used when no IBL is set)
+        bool usingDefaultTextures = false;
+        std::unique_ptr<DefaultIBLTextureFactory> defaultIBLFactory;
+
     public:
         // Max textures per material (must match MaterialTextureCache::MAX_MATERIAL_TEXTURES)
         static constexpr int MAX_MATERIAL_TEXTURES = 6;
 
         explicit StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
-                           core::OffscreenResources& offscreenResources);
+                                    core::OffscreenResources& offscreenResources);
         ~StaticMeshPipeline();
-        
+
         void init(const ibl::ImageData& irradianceMap,
                   const ibl::ImageData& prefilterMap,
                   const ibl::ImageData& brdfLUT);
-        
+
         void initWithDefaults();
-        
+
         void recreate();
-        
+
         void cleanUp();
         void cleanUpShader();
-        
+
         void cleanUpForReinit();
-        
+
         vk::Pipeline getGraphicsPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
         vk::RenderPass getRenderPass() const { return renderPass; }
@@ -86,103 +146,33 @@ namespace render::mesh
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;
 
-        
+
         vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
-        
+
         std::string loadMesh(std::string_view meshPath);
 
         // Upload procedural mesh data directly (bypasses file loading)
         std::string uploadMesh(const std::string& meshId, const resource::MeshesData& meshData);
 
         void unloadMesh(const std::string& meshId);
-        
+
         void unloadAllMeshes();
-        
+
         const MeshGPUData* getMesh(const std::string& meshId) const;
 
         bool isMeshLoaded(const std::string& meshId) const;
 
         // Get bounding box of a loaded mesh (for frustum culling)
         const math::AABB* getMeshBoundingBox(const std::string& meshId) const;
-        
+
         std::vector<std::string> getLoadedMeshIds() const;
-        
+
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                  uint32_t imageIndex,
                                  const std::vector<MeshRenderData>& meshDrawList,
                                  const math::Frustum* frustum) const;
 
     private:
-        core::Device& device;
-        core::SwapChain& swapChain;
-        core::OffscreenResources& offscreenResources;
-
-        // Shaders
-        std::shared_ptr<core::Shader> meshShader;
-        std::shared_ptr<core::Shader> wireframeShader;
-
-        // Vulkan resources
-        vk::RenderPass renderPass;
-        vk::Pipeline graphicsPipeline;           // Opaque pipeline
-        vk::Pipeline translucentPipeline;        // Translucent pipeline (alpha blending)
-        vk::Pipeline maskedPipeline;             // Masked pipeline (alpha testing)
-        vk::PipelineLayout pipelineLayout;       // Shared layout for all pipelines
-
-        // Wireframe pipeline for AABB debug rendering
-        vk::Pipeline wireframePipeline;
-        vk::PipelineLayout wireframePipelineLayout;
-        vk::DescriptorSetLayout descriptorSetLayout;
-        vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet descriptorSet;
-
-        // Texture descriptor set (set 1) for material textures
-        vk::DescriptorSetLayout textureDescriptorSetLayout;
-        vk::DescriptorPool textureDescriptorPool;
-        vk::DescriptorSet textureDescriptorSet;
-        bool textureDescriptorsInitialized = false;
-
-        std::vector<vk::Framebuffer> framebuffers;
-        
-        vk::UniqueCommandPool commandPool;
-
-        // Mesh GPU cache for loading/unloading mesh buffers
-        std::unique_ptr<MeshGPUCache> meshCache;
-
-        // Material texture cache for loading/managing material textures
-        std::unique_ptr<MaterialTextureCache> textureCache;
-
-        // Material shader cache for per-material compiled shaders and pipelines
-        std::unique_ptr<MaterialShaderCache> materialShaderCache;
-
-        vk::Buffer cameraUBO;
-        vk::DeviceMemory cameraUBOMemory;
-
-        // AABB wireframe vertex/index buffers (unit cube, transformed via push constants)
-        vk::Buffer aabbVertexBuffer;
-        vk::DeviceMemory aabbVertexBufferMemory;
-        vk::Buffer aabbIndexBuffer;
-        vk::DeviceMemory aabbIndexBufferMemory;
-
-        // Current camera matrices for AABB rendering and translucent sorting
-        mutable glm::mat4 currentView{1.0f};
-        mutable glm::mat4 currentProjection{1.0f};
-        mutable glm::vec3 currentCameraPos{0.0f};
-        mutable float currentTime{0.0f};
-
-        // Cache for loaded materials to prevent reloading every frame
-        mutable std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> materialCache;
-        mutable std::shared_mutex materialCacheMutex;  // Allows concurrent reads
-
-        // Flag to indicate cache should be invalidated (set by external notification)
-        mutable bool materialCacheInvalidated = false;
-
-        // Prepare textures for frame rendering
-        void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
-
-        // Default IBL textures (used when no IBL is set)
-        bool usingDefaultTextures = false;
-        std::unique_ptr<DefaultIBLTextureFactory> defaultIBLFactory;
-
         void loadShaders();
         void createRenderPass();
         void createDescriptorSetLayout();
@@ -194,8 +184,6 @@ namespace render::mesh
         void createPipelineLayout();
         void createGraphicsPipeline();
         void createFramebuffers();
-        void createWireframePipeline();
-        void createAABBBuffers();
 
         // Texture descriptor set methods (set 1)
         void createTextureDescriptorSetLayout();
