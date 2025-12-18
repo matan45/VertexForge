@@ -22,6 +22,12 @@ namespace render
         struct MeshRenderData;
     }
 
+    namespace billboard
+    {
+        class BillboardPipeline;
+        struct BillboardRenderData;
+    }
+
     class RenderPassHandler
     {
     private:
@@ -31,6 +37,7 @@ namespace render
         std::unique_ptr<ClearColor> clearColor;
         std::unique_ptr<IBL> iblRenderer;
         std::unique_ptr<mesh::StaticMeshPipeline> meshPipeline;
+        std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
 
         core::OffscreenResources& offscreenResources;
 
@@ -38,6 +45,10 @@ namespace render
         bool meshPipelineInitialized = false;
         mutable std::vector<mesh::MeshRenderData> currentMeshDrawList;
         const math::Frustum* currentFrustum = nullptr;
+
+        // Billboard rendering state
+        bool billboardPipelineInitialized = false;
+        mutable std::vector<billboard::BillboardRenderData> currentBillboardDrawList;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -63,6 +74,14 @@ namespace render
         
         void setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
+
+        // Billboard pipeline methods
+        void initBillboardPipeline();
+        billboard::BillboardPipeline* getBillboardPipeline() const { return billboardPipeline.get(); }
+        bool isBillboardPipelineInitialized() const { return billboardPipelineInitialized; }
+        void setBillboardDrawList(const std::vector<billboard::BillboardRenderData>& billboards);
+        void updateBillboardCamera(const glm::mat4& view, const glm::mat4& projection,
+                                   const glm::vec3& cameraPos) const;
 
         void cleanUp() const;
 

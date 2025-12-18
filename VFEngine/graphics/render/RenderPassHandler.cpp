@@ -5,6 +5,8 @@
 #include "IBL.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "mesh/MeshTypes.hpp"
+#include "billboard/BillboardPipeline.hpp"
+#include "billboard/BillboardTypes.hpp"
 
 namespace render {
 	RenderPassHandler::RenderPassHandler(core::Device& device, core::SwapChain& swapChain, core::OffscreenResources& offscreenResources) : device{ device },
@@ -12,6 +14,7 @@ namespace render {
 		, clearColor{ std::make_unique<ClearColor>(device, swapChain, offscreenResources) }
 		, iblRenderer{ std::make_unique<IBL>(device, swapChain, offscreenResources) }
 		, meshPipeline{ std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources) }
+		, billboardPipeline{ std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources) }
 	{
 	}
 
@@ -84,6 +87,35 @@ namespace render {
 		currentMeshDrawList = std::move(meshes);
 	}
 
+	void RenderPassHandler::initBillboardPipeline()
+	{
+		if (billboardPipelineInitialized)
+		{
+			return;
+		}
+
+		billboardPipeline->init();
+		billboardPipelineInitialized = true;
+	}
+
+	void RenderPassHandler::setBillboardDrawList(const std::vector<billboard::BillboardRenderData>& billboards)
+	{
+		currentBillboardDrawList = billboards;
+		if (billboardPipelineInitialized)
+		{
+			billboardPipeline->setBillboardList(currentBillboardDrawList);
+		}
+	}
+
+	void RenderPassHandler::updateBillboardCamera(const glm::mat4& view, const glm::mat4& projection,
+	                                              const glm::vec3& cameraPos) const
+	{
+		if (billboardPipelineInitialized)
+		{
+			billboardPipeline->updateCameraUBO(view, projection, cameraPos);
+		}
+	}
+
 	void RenderPassHandler::recreate() const
 	{
 		iblRenderer->recreate();
@@ -93,10 +125,20 @@ namespace render {
 		{
 			meshPipeline->recreate();
 		}
+
+		if (billboardPipelineInitialized)
+		{
+			billboardPipeline->recreate();
+		}
 	}
 
 	void RenderPassHandler::cleanUp() const
 	{
+		if (billboardPipelineInitialized)
+		{
+			billboardPipeline->cleanUp();
+		}
+
 		if (meshPipelineInitialized)
 		{
 			meshPipeline->cleanUp();
@@ -117,10 +159,16 @@ namespace render {
 	{
 		clearColor->recordCommandBuffer(commandBuffer, imageIndex);
 		iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
-		
+
 		if (meshPipelineInitialized && !currentMeshDrawList.empty())
 		{
 			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum);
+		}
+
+		// Billboard rendering (after mesh pass for proper depth testing)
+		if (billboardPipelineInitialized && !currentBillboardDrawList.empty())
+		{
+			billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
 		}
 	}
 
