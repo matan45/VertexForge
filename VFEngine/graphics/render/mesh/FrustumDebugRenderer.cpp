@@ -3,7 +3,6 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/Utilities.hpp"
-#include <glm/gtc/matrix_inverse.hpp>
 
 namespace render::mesh
 {
@@ -77,7 +76,7 @@ namespace render::mesh
     void FrustumDebugRenderer::loadShader()
     {
         wireframeShader = std::make_shared<core::Shader>(device);
-        wireframeShader->readShader("../../resources/shaders/mesh/wireframe.glsl");
+        wireframeShader->readShader("../../resources/shaders/debug/wireframe.glsl");
     }
 
     void FrustumDebugRenderer::createPipeline(vk::RenderPass renderPass)
@@ -192,14 +191,38 @@ namespace render::mesh
 
     void FrustumDebugRenderer::createBuffers()
     {
-        // Create vertex buffer for 8 frustum corners (updated dynamically)
-        vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * 8;
+        // Static NDC corners for frustum (Vulkan: z = 0 near, z = 1 far)
+        // These never change - the shader transforms them using push constant matrices
+        std::vector<glm::vec3> ndcCorners = {
+            // Near plane (z = 0 in Vulkan)
+            {-1.0f, -1.0f, 0.0f},  // bottom-left
+            { 1.0f, -1.0f, 0.0f},  // bottom-right
+            { 1.0f,  1.0f, 0.0f},  // top-right
+            {-1.0f,  1.0f, 0.0f},  // top-left
+            // Far plane (z = 1 in Vulkan)
+            {-1.0f, -1.0f, 1.0f},  // bottom-left
+            { 1.0f, -1.0f, 1.0f},  // bottom-right
+            { 1.0f,  1.0f, 1.0f},  // top-right
+            {-1.0f,  1.0f, 1.0f},  // top-left
+        };
+
+        // Create static vertex buffer (device local for best performance)
+        vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * ndcCorners.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
-        vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
-        vertexRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                   vk::MemoryPropertyFlagBits::eHostCoherent;
+        vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::Utilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferMemory);
+
+        core::Utilities::copyToBuffer(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            device.getGraphicsQueue(),
+            device.getStagingCommandPool(),
+            vertexBuffer,
+            ndcCorners.data(),
+            vertexBufferSize
+        );
 
         // Line indices for 12 edges of the frustum
         // Near plane: 0-1-2-3, Far plane: 4-5-6-7
@@ -231,37 +254,6 @@ namespace render::mesh
         );
     }
 
-    std::vector<glm::vec3> FrustumDebugRenderer::computeFrustumCorners(const glm::mat4& inverseViewProj) const
-    {
-        // NDC corners of a unit cube (clip space frustum)
-        // Near plane z = -1, Far plane z = 1 (OpenGL convention)
-        // For Vulkan (z = 0 to 1), adjust accordingly
-        std::vector<glm::vec4> ndcCorners = {
-            // Near plane (z = 0 in Vulkan)
-            {-1.0f, -1.0f, 0.0f, 1.0f},  // bottom-left
-            { 1.0f, -1.0f, 0.0f, 1.0f},  // bottom-right
-            { 1.0f,  1.0f, 0.0f, 1.0f},  // top-right
-            {-1.0f,  1.0f, 0.0f, 1.0f},  // top-left
-            // Far plane (z = 1 in Vulkan)
-            {-1.0f, -1.0f, 1.0f, 1.0f},  // bottom-left
-            { 1.0f, -1.0f, 1.0f, 1.0f},  // bottom-right
-            { 1.0f,  1.0f, 1.0f, 1.0f},  // top-right
-            {-1.0f,  1.0f, 1.0f, 1.0f},  // top-left
-        };
-
-        std::vector<glm::vec3> worldCorners;
-        worldCorners.reserve(8);
-
-        for (const auto& ndc : ndcCorners)
-        {
-            glm::vec4 worldPos = inverseViewProj * ndc;
-            worldPos /= worldPos.w;  // Perspective divide
-            worldCorners.emplace_back(worldPos.x, worldPos.y, worldPos.z);
-        }
-
-        return worldCorners;
-    }
-
     void FrustumDebugRenderer::render(const vk::CommandBuffer& commandBuffer,
                                        const std::vector<CameraFrustumRenderData>& cameraDrawList,
                                        const glm::mat4& editorView,
@@ -290,6 +282,14 @@ namespace render::mesh
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, wireframePipeline);
         commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint32);
 
+        // Bind static vertex buffer once (NDC corners never change)
+        vk::Buffer vertexBuffers[] = {vertexBuffer};
+        vk::DeviceSize offsets[] = {0};
+        commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+        // Editor's view-projection for final clip-space transform
+        glm::mat4 editorViewProj = editorProjection * editorView;
+
         for (const auto& camera : cameraDrawList)
         {
             if (!camera.showFrustum)
@@ -297,36 +297,17 @@ namespace render::mesh
                 continue;
             }
 
-            // Compute frustum using the entity's world transform and projection
-            // The worldMatrix represents where the camera entity IS in the scene
-            // We need to compute the view matrix from the world matrix (view = inverse(world))
+            // Compute camera's inverse view-projection
+            // The worldMatrix is where the camera entity IS in the scene
+            // View matrix = inverse(worldMatrix), so viewProj = proj * inverse(world)
             glm::mat4 cameraViewFromWorld = glm::inverse(camera.worldMatrix);
-            glm::mat4 viewProj = camera.projectionMatrix * cameraViewFromWorld;
-            glm::mat4 inverseViewProj = glm::inverse(viewProj);
+            glm::mat4 cameraViewProj = camera.projectionMatrix * cameraViewFromWorld;
+            glm::mat4 cameraInverseViewProj = glm::inverse(cameraViewProj);
 
-            // Get frustum corners in world space
-            std::vector<glm::vec3> corners = computeFrustumCorners(inverseViewProj);
-
-            // Update vertex buffer with frustum corners
-            void* data;
-            vk::Result mapResult = device.getLogicalDevice().mapMemory(
-                vertexBufferMemory, 0, sizeof(glm::vec3) * 8, {}, &data);
-            if (mapResult == vk::Result::eSuccess)
-            {
-                std::memcpy(data, corners.data(), sizeof(glm::vec3) * 8);
-                device.getLogicalDevice().unmapMemory(vertexBufferMemory);
-            }
-
-            // Bind vertex buffer
-            vk::Buffer vertexBuffers[] = {vertexBuffer};
-            vk::DeviceSize offsets[] = {0};
-            commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-
-            // MVP = editor's view-projection * identity (corners already in world space)
-            glm::mat4 mvp = editorProjection * editorView;
-
+            // Push constants: shader transforms NDC -> World -> Clip
             FrustumPushConstants pushConstants{};
-            pushConstants.mvp = mvp;
+            pushConstants.viewProj = editorViewProj;           // Editor's VP for final transform
+            pushConstants.inverseViewProj = cameraInverseViewProj;  // Camera's inverse VP for NDC->World
             pushConstants.color = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);  // Cyan wireframe
 
             commandBuffer.pushConstants(wireframePipelineLayout,

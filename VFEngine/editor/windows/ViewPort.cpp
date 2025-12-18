@@ -176,6 +176,8 @@ namespace windows {
 
 	std::optional<services::EntityHandle> ViewPort::pickBillboardAt(glm::vec2 screenPos)
 	{
+		auto& registry = scene::EntityRegistry::getRegistry();
+
 		// Iterate in reverse order (last rendered = closest to camera for screen-space billboards)
 		for (auto it = cachedBillboardHits.rbegin(); it != cachedBillboardHits.rend(); ++it) {
 			const auto& hit = *it;
@@ -186,7 +188,13 @@ namespace windows {
 
 			if (screenPos.x >= minBounds.x && screenPos.x <= maxBounds.x &&
 				screenPos.y >= minBounds.y && screenPos.y <= maxBounds.y) {
-				return hit.entity;
+				// Validate entity still exists before returning (prevents race condition
+				// if entity was deleted between cache update and pick)
+				auto enttEntity = static_cast<entt::entity>(static_cast<uint32_t>(hit.entity.id));
+				if (registry.valid(enttEntity)) {
+					return hit.entity;
+				}
+				// Entity was deleted, skip and continue searching
 			}
 		}
 		return std::nullopt;

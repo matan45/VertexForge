@@ -23,9 +23,11 @@ namespace render::mesh
     };
 
     // Push constants for frustum wireframe rendering
+    // Total size: 64 + 64 + 16 = 144 bytes (within 256 byte limit of most GPUs)
     struct FrustumPushConstants
     {
-        glm::mat4 mvp;
+        glm::mat4 viewProj;          // Editor's view-projection matrix
+        glm::mat4 inverseViewProj;   // Camera's inverse view-projection
         glm::vec4 color;
     };
 
@@ -40,7 +42,7 @@ namespace render::mesh
         vk::Pipeline wireframePipeline;
         vk::PipelineLayout wireframePipelineLayout;
 
-        // Dynamic vertex buffer for frustum corners (updated each frame)
+        // Static vertex buffer with NDC corners (never changes)
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
         vk::Buffer indexBuffer;
@@ -68,8 +70,5 @@ namespace render::mesh
         void loadShader();
         void createPipeline(vk::RenderPass renderPass);
         void createBuffers();
-
-        // Compute frustum corners from inverse view-projection matrix
-        std::vector<glm::vec3> computeFrustumCorners(const glm::mat4& inverseViewProj) const;
     };
 }

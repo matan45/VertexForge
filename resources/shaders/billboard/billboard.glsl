@@ -7,12 +7,10 @@ layout(location = 1) in vec2 inTexCoord;   // UV coordinates
 layout(location = 2) in vec4 inWorldPosAndAtlas;  // xyz = world position, w = atlas index
 layout(location = 3) in vec2 inSize;              // Size in pixels (screen) or world units
 layout(location = 4) in uint inSizeMode;          // 0 = ScreenSpace, 1 = WorldSpace
-layout(location = 5) in uint inEntityId;          // Entity ID for picking
-layout(location = 6) in vec4 inColorTint;         // RGBA color tint
+layout(location = 5) in vec4 inColorTint;         // RGBA color tint
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColorTint;
-layout(location = 2) out flat uint fragEntityId;
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -70,9 +68,8 @@ void main() {
     vec2 tileSize = vec2(1.0 / gridSize);
     fragTexCoord = (vec2(tileU, tileV) + inTexCoord) * tileSize;
 
-    // Pass through color tint and entity ID
+    // Pass through color tint
     fragColorTint = inColorTint;
-    fragEntityId = inEntityId;
 }
 
 #type FRAGMENT
@@ -80,7 +77,7 @@ void main() {
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColorTint;
-layout(location = 2) in flat uint fragEntityId;
+// Note: entityId (location 2) is passed through for potential GPU picking but not used in color output
 
 layout(location = 0) out vec4 outColor;
 

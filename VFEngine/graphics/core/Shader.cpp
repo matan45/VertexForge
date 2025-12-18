@@ -1,6 +1,6 @@
 #include "Shader.hpp"
 #include "Device.hpp"
-#include "print/Logger.hpp"  
+#include "print/Logger.hpp"
 #include <filesystem>
 
 namespace core {
@@ -28,7 +28,6 @@ namespace core {
 			// Create Vulkan shader module
 			createShaderModule(spirvCode, stage);
 		}
-		
 	}
 
 	void Shader::cleanUp()

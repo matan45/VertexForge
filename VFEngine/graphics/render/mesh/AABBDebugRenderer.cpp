@@ -76,7 +76,7 @@ namespace render::mesh
     void AABBDebugRenderer::loadShader()
     {
         wireframeShader = std::make_shared<core::Shader>(device);
-        wireframeShader->readShader("../../resources/shaders/mesh/wireframe.glsl");
+        wireframeShader->readShader("../../resources/shaders/debug/aabbWireframe.glsl");
     }
 
     void AABBDebugRenderer::createPipeline(vk::RenderPass renderPass)
