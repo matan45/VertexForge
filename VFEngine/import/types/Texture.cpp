@@ -348,8 +348,10 @@ namespace types
 			return;
 		}
 
-		// Calculate number of mip levels
-		textureData.mipLevels = resource::calculateMipLevels(textureData.width, textureData.height);
+		// Calculate number of mip levels, capped at 5 (smaller mips have minimal value)
+		constexpr uint32_t maxMipLevels = 5;
+		uint32_t calculatedLevels = resource::calculateMipLevels(textureData.width, textureData.height);
+		textureData.mipLevels = std::min(calculatedLevels, maxMipLevels);
 
 		// Reserve space for all mip levels
 		textureData.mipData.reserve(textureData.mipLevels);
