@@ -34,6 +34,12 @@ namespace services {
     struct CullingDebugStats {
         std::vector<CameraCullingStats> cameraStats;
         CameraId activeCameraId = 0;
+
+        // BVH statistics
+        size_t staticBvhEntityCount = 0;
+        size_t dynamicBvhEntityCount = 0;
+        size_t staticBvhNodeCount = 0;
+        size_t dynamicBvhNodeCount = 0;
     };
 
     class IOffScreenProvider {

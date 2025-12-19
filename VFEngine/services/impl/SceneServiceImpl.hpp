@@ -80,6 +80,10 @@ namespace services {
         // Hierarchy - Children
         std::vector<EntityHandle> getChildren(EntityHandle entity) const override;
 
+        // Static Entity Operations
+        bool setEntityStatic(EntityHandle entity, bool isStatic) override;
+        bool isEntityStatic(EntityHandle entity) const override;
+
         // Selection State
         void setSelectedEntity(std::optional<EntityHandle> entity) override;
         std::optional<EntityHandle> getSelectedEntity() const override;

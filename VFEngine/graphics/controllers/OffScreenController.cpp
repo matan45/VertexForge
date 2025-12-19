@@ -15,6 +15,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/events/MaterialEvents.hpp"
+#include "../../services/events/SceneEvents.hpp"
 #include "print/Logger.hpp"
 
 namespace controllers
@@ -28,9 +29,18 @@ namespace controllers
 
     OffScreenController::~OffScreenController()
     {
-        // Unsubscribe from material notifications
+        // Unsubscribe from notifications
         if (materialSavedSubscription && materialSavedSubscription->isValid()) {
             events::EventDispatcher::instance().unsubscribe(*materialSavedSubscription);
+        }
+        if (meshDataChangedSubscription && meshDataChangedSubscription->isValid()) {
+            events::EventDispatcher::instance().unsubscribe(*meshDataChangedSubscription);
+        }
+        if (entityDeletedSubscription && entityDeletedSubscription->isValid()) {
+            events::EventDispatcher::instance().unsubscribe(*entityDeletedSubscription);
+        }
+        if (entityStaticChangedSubscription && entityStaticChangedSubscription->isValid()) {
+            events::EventDispatcher::instance().unsubscribe(*entityStaticChangedSubscription);
         }
     }
 
@@ -60,6 +70,48 @@ namespace controllers
                 }
             });
         materialSavedSubscription = std::make_unique<events::SubscriptionToken>(token);
+
+        // Subscribe to mesh data changes (mesh added/changed/removed on entity)
+        auto meshChangedToken = events::EventDispatcher::instance().subscribe<events::scene::MeshDataChangedNotification>(
+            [this](const events::scene::MeshDataChangedNotification& notification) {
+                // Check if entity is static or dynamic and mark appropriate tree
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = static_cast<entt::entity>(notification.entity.id);
+                if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity)) {
+                    const auto& transform = registry.get<components::TransformComponent>(entity);
+                    if (transform.isStatic) {
+                        sceneBVH.markStaticDirty();
+                    } else {
+                        sceneBVH.markDynamicDirty();
+                    }
+                } else {
+                    // Default to static if we can't determine
+                    sceneBVH.markStaticDirty();
+                }
+            });
+        meshDataChangedSubscription = std::make_unique<events::SubscriptionToken>(meshChangedToken);
+
+        // Subscribe to entity deleted notification to update BVH
+        auto deletedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityDeletedNotification>(
+            [this](const events::scene::EntityDeletedNotification& notification) {
+                // Mark appropriate BVH dirty based on which tree the entity was in
+                uint32_t entityId = static_cast<uint32_t>(notification.entity.id);
+                if (sceneBVH.isStaticEntity(entityId)) {
+                    sceneBVH.markStaticDirty();
+                } else {
+                    sceneBVH.markDynamicDirty();
+                }
+            });
+        entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(deletedToken);
+
+        // Subscribe to static flag changes to move entities between BVH trees
+        auto staticChangedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityStaticChangedNotification>(
+            [this](const events::scene::EntityStaticChangedNotification&) {
+                // Mark both trees dirty when entity moves between them
+                sceneBVH.markStaticDirty();
+                sceneBVH.markDynamicDirty();
+            });
+        entityStaticChangedSubscription = std::make_unique<events::SubscriptionToken>(staticChangedToken);
     }
 
     void OffScreenController::cleanUp() const
@@ -276,33 +328,44 @@ namespace controllers
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Check if any transforms are dirty - mark BVH dirty when entities move
-        // Use cooldown to avoid rebuilding every frame during continuous movement
-        static int bvhCooldown = 0;
+        // === Two-Level BVH Update Logic ===
+        // Static BVH: rebuilt only when static entities change (triggered by events)
+        // Dynamic BVH: rebuilt frequently when dynamic entities move
 
-        if (bvhCooldown > 0)
+        // Static BVH: rebuild if dirty (typically triggered by entity static flag changes)
+        if (sceneBVH.isStaticDirty() && frustumReady)
         {
-            --bvhCooldown;
+            sceneBVH.rebuildStaticBVH();
         }
-        else if (!sceneBVH.isDirty())
+
+        // Dynamic BVH: check for dirty transforms on dynamic entities only
+        static int dynamicBvhCooldown = 0;
+
+        if (dynamicBvhCooldown > 0)
         {
-            auto transformView = registry.view<components::TransformComponent, components::MeshComponent>();
-            for (auto entity : transformView)
+            --dynamicBvhCooldown;
+        }
+        else if (!sceneBVH.isDynamicDirty())
+        {
+            // Only check dynamic entities (TransformComponent.isStatic == false)
+            auto dynamicView = registry.view<components::TransformComponent, components::MeshComponent>();
+            for (auto entity : dynamicView)
             {
-                const auto& transform = transformView.get<components::TransformComponent>(entity);
-                if (transform.isDirty)
+                const auto& transform = dynamicView.get<components::TransformComponent>(entity);
+                // Only check dynamic entities for movement
+                if (!transform.isStatic && transform.isDirty)
                 {
-                    sceneBVH.markDirty();
+                    sceneBVH.markDynamicDirty();
                     break;
                 }
             }
         }
 
-        // Rebuild BVH only when marked dirty and frustum is ready
-        if (sceneBVH.isDirty() && frustumReady)
+        // Rebuild dynamic BVH with short cooldown (optimized for highly dynamic scenes)
+        if (sceneBVH.isDynamicDirty() && frustumReady)
         {
-            sceneBVH.rebuild();
-            bvhCooldown = 30;  // Wait ~0.5 sec before checking again
+            sceneBVH.rebuildDynamicBVH();
+            dynamicBvhCooldown = 5;  // Short cooldown for dynamic entities
         }
 
         // Use BVH for spatial culling if available
@@ -680,6 +743,12 @@ namespace controllers
 
             stats.cameraStats.push_back(camStats);
         }
+
+        // BVH statistics
+        stats.staticBvhEntityCount = sceneBVH.getStaticEntityCount();
+        stats.dynamicBvhEntityCount = sceneBVH.getDynamicEntityCount();
+        stats.staticBvhNodeCount = sceneBVH.getStaticNodeCount();
+        stats.dynamicBvhNodeCount = sceneBVH.getDynamicNodeCount();
 
         return stats;
     }

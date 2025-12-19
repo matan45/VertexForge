@@ -10,7 +10,7 @@ namespace scene
         static inline std::shared_ptr<Level> level = nullptr;
 
     public:
-        LevelHandler() = default;
+        explicit LevelHandler() = default;
         ~LevelHandler() = default;
 
         static std::shared_ptr<Level> getInstance();

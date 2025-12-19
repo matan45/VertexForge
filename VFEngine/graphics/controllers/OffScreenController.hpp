@@ -34,7 +34,10 @@ namespace controllers
         std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
         math::Frustum currentFrustum;  // Current camera frustum for culling
         scene::SceneBVH sceneBVH;      // BVH for spatial culling
-        std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;  // Subscription token for material saved notification
+        std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
+        std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
         bool showBillboardIcons = true; 
 
         // Occlusion culling state

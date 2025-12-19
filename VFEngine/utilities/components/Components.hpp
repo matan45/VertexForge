@@ -53,6 +53,7 @@ namespace components {
 		glm::vec3 rotation{ 0.0f }; // Euler angles
 		glm::vec3 scale{ 1.0f };
 		bool isDirty = true;
+		bool isStatic = true;  // Static entities are in a BVH that rebuilds infrequently
 
 		// Mark as dirty when transform changes
 		void setPosition(const glm::vec3& newPos) {
@@ -238,7 +239,7 @@ namespace components {
 			if (iconType == BillboardIconType::Custom) {
 				return atlasIndex;
 			}
-			
+
 			switch (iconType) {
 			case BillboardIconType::Light:       return 0;
 			case BillboardIconType::Camera:      return 1;

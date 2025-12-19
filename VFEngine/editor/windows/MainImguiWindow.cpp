@@ -537,6 +537,20 @@ namespace windows
 			ImGui::Text("Active Camera: %u", stats.activeCameraId);
 			ImGui::Separator();
 
+			// BVH Statistics
+			if (ImGui::CollapsingHeader("BVH Statistics", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				ImGui::Indent();
+				ImGui::Text("Static BVH:  %zu entities, %zu nodes",
+					stats.staticBvhEntityCount, stats.staticBvhNodeCount);
+				ImGui::Text("Dynamic BVH: %zu entities, %zu nodes",
+					stats.dynamicBvhEntityCount, stats.dynamicBvhNodeCount);
+				ImGui::Text("Total:       %zu entities",
+					stats.staticBvhEntityCount + stats.dynamicBvhEntityCount);
+				ImGui::Unindent();
+			}
+			ImGui::Separator();
+
 			if (stats.cameraStats.empty())
 			{
 				ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No cameras registered");

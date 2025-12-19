@@ -177,6 +177,16 @@ namespace services {
         virtual std::map<std::string, std::string> getAllSubMeshMaterials(EntityHandle entity) const = 0;
 
         // ============================================
+        // Static Entity Operations (BVH Optimization)
+        // ============================================
+
+        // Set entity static flag (affects BVH tree placement)
+        virtual bool setEntityStatic(EntityHandle entity, bool isStatic) = 0;
+
+        // Check if entity is marked as static
+        virtual bool isEntityStatic(EntityHandle entity) const = 0;
+
+        // ============================================
         // Selection State
         // ============================================
 

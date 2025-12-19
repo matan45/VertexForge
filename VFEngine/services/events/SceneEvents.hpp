@@ -103,6 +103,13 @@ namespace events::scene {
         std::string_view getName() const override { return "SetMeshData"; }
     };
 
+    struct SetEntityStaticCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        bool isStatic;
+
+        std::string_view getName() const override { return "SetEntityStatic"; }
+    };
+
     struct NewSceneCommand : ICommand<bool> {
         std::string_view getName() const override { return "NewScene"; }
     };
@@ -199,6 +206,12 @@ namespace events::scene {
         std::string_view getName() const override { return "GetMeshData"; }
     };
 
+    struct IsEntityStaticQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "IsEntityStatic"; }
+    };
+
     // ============================================
     // NOTIFICATIONS - State change broadcasts
     // ============================================
@@ -274,6 +287,13 @@ namespace events::scene {
         std::string meshPath;
 
         std::string_view getName() const override { return "MeshDataChanged"; }
+    };
+
+    struct EntityStaticChangedNotification : INotification {
+        services::EntityHandle entity;
+        bool isStatic;
+
+        std::string_view getName() const override { return "EntityStaticChanged"; }
     };
 
 }

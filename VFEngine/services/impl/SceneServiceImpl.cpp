@@ -580,6 +580,13 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::MeshComponent>()) {
             sceneEntity.removeComponent<components::MeshComponent>();
+
+            // Publish notification to update BVH
+            events::scene::MeshDataChangedNotification notification;
+            notification.entity = entity;
+            notification.meshPath = "";
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
 
@@ -759,6 +766,50 @@ namespace services {
         }
 
         return children;
+    }
+
+    bool SceneServiceImpl::setEntityStatic(EntityHandle entity, bool isStatic) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+        if (!registry.all_of<components::TransformComponent>(enttEntity)) {
+            return false;
+        }
+
+        auto& transform = registry.get<components::TransformComponent>(enttEntity);
+        bool wasStatic = transform.isStatic;
+
+        if (isStatic == wasStatic) {
+            return true;  // No change needed
+        }
+
+        transform.isStatic = isStatic;
+
+        // Publish notification
+        events::scene::EntityStaticChangedNotification notification;
+        notification.entity = entity;
+        notification.isStatic = isStatic;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    bool SceneServiceImpl::isEntityStatic(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return true;  // Default to static
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+        if (!registry.all_of<components::TransformComponent>(enttEntity)) {
+            return true;  // Default to static
+        }
+
+        const auto& transform = registry.get<components::TransformComponent>(enttEntity);
+        return transform.isStatic;
     }
 
     void SceneServiceImpl::setSelectedEntity(std::optional<EntityHandle> entity) {
@@ -1115,6 +1166,17 @@ namespace services {
         dispatcher.registerQueryHandler<events::scene::GetMeshDataQuery>(
             [this](const events::scene::GetMeshDataQuery& query) {
                 return getMeshData(query.entity);
+            });
+
+        // Static entity handlers
+        dispatcher.registerCommandHandler<events::scene::SetEntityStaticCommand>(
+            [this](const events::scene::SetEntityStaticCommand& cmd) {
+                return setEntityStatic(cmd.entity, cmd.isStatic);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::IsEntityStaticQuery>(
+            [this](const events::scene::IsEntityStaticQuery& query) {
+                return isEntityStatic(query.entity);
             });
 
         // Material command handlers
