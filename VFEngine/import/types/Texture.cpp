@@ -340,6 +340,7 @@ namespace types
 	}
 
 	// Generate mipmap chain for regular textures (RGBA8)
+	// Mips are generated until smallest dimension reaches 512 (no value in smaller mips)
 	void Texture::generateMipmaps(resource::TextureData& textureData) const
 	{
 		if (textureData.mipData.empty())
@@ -348,10 +349,26 @@ namespace types
 			return;
 		}
 
-		// Calculate number of mip levels, capped at 5 (smaller mips have minimal value)
-		constexpr uint32_t maxMipLevels = 5;
-		uint32_t calculatedLevels = resource::calculateMipLevels(textureData.width, textureData.height);
-		textureData.mipLevels = std::min(calculatedLevels, maxMipLevels);
+		// Calculate mip levels based on minimum dimension of 512
+		// Textures <= 512 get no additional mips
+		constexpr uint32_t minMipDimension = 512;
+		uint32_t minDimension = std::min(textureData.width, textureData.height);
+
+		if (minDimension <= minMipDimension)
+		{
+			// Texture is already small, no mips needed
+			textureData.mipLevels = 1;
+			return;
+		}
+
+		// Count how many times we can halve before reaching 512
+		textureData.mipLevels = 1;
+		uint32_t dim = minDimension;
+		while (dim > minMipDimension)
+		{
+			dim /= 2;
+			textureData.mipLevels++;
+		}
 
 		// Reserve space for all mip levels
 		textureData.mipData.reserve(textureData.mipLevels);
