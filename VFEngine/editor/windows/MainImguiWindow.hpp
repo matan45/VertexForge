@@ -52,6 +52,7 @@ namespace windows
 		void handleFileMenu();
 		void handleSettingsMenu();
 		void handleAddMenu();
+		void handleDebug();
 
 		void iblWindow();
 		void editorCameraWindow();

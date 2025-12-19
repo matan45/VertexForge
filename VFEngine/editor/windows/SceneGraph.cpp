@@ -44,6 +44,18 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
+        // Sync local selection with global selection (e.g., from viewport picking)
+        events::scene::GetSelectedEntityQuery selectedQuery;
+        auto globalSelected = dispatcher.query(selectedQuery);
+        selectedHandle = globalSelected.value_or(services::EntityHandle::invalid());
+
+        // Detect selection change and auto-expand to show selected entity
+        if (selectedHandle.id != lastSelectedHandle.id && selectedHandle.isValid())
+        {
+            expandToSelection(selectedHandle);
+        }
+        lastSelectedHandle = selectedHandle;
+
         if (ImGui::Begin("SceneGraph"))
         {
             // Query root entity through event system
@@ -122,6 +134,12 @@ namespace windows
         auto entityDataOpt = dispatcher.query(entityQuery);
 
         std::string entityName = entityDataOpt.has_value() ? entityDataOpt->name : "Unknown";
+        
+        if (expandedHandles.count(handle.id) > 0)
+        {
+            ImGui::SetNextItemOpen(true);
+            expandedHandles.erase(handle.id);  // Only expand once
+        }
 
         ImGuiTreeNodeFlags flags = (selectedHandle.id == handle.id) ? ImGuiTreeNodeFlags_Selected : 0;
         flags |= ImGuiTreeNodeFlags_OpenOnArrow;
@@ -260,6 +278,8 @@ namespace windows
                     changed |= ImGui::DragFloat("Far Plane", &camera.farPlane, 0.1f, camera.nearPlane + 0.1f, 10000.0f);
                     changed |= ImGui::DragFloat("Aspect Ratio", &camera.aspectRatio, 0.01f, 0.1f, 10.0f);
                     changed |= ImGui::Checkbox("Perspective", &camera.isPerspective);
+                    changed |= ImGui::Checkbox("Primary Camera", &camera.isPrimary);
+                    changed |= ImGui::Checkbox("Show Frustum", &camera.showFrustum);
 
                     if (!camera.isPerspective)
                     {
@@ -740,5 +760,34 @@ namespace windows
     {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
+    }
+
+    void SceneGraph::expandToSelection(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Clear previous expansion state
+        expandedHandles.clear();
+
+        // Walk up the parent chain and collect all ancestors
+        services::EntityHandle current = handle;
+        while (current.isValid())
+        {
+            events::scene::GetEntityQuery entityQuery;
+            entityQuery.entity = current;
+            auto entityDataOpt = dispatcher.query(entityQuery);
+
+            if (!entityDataOpt.has_value() || !entityDataOpt->parent.has_value())
+            {
+                break;  // Reached root or invalid entity
+            }
+
+            // Add parent to expand set
+            services::EntityHandle parentHandle = entityDataOpt->parent.value();
+            expandedHandles.insert(parentHandle.id);
+
+            // Move up to parent
+            current = parentHandle;
+        }
     }
 }

@@ -72,6 +72,10 @@ namespace core {
         return offScreen ? offScreen->getLoadedMeshes() : std::vector<std::string>{};
     }
 
+    std::optional<services::MeshBounds> OffScreenAdapter::getMeshBoundingBox(const std::string& meshPath) const {
+        return offScreen ? offScreen->getMeshBoundingBox(meshPath) : std::nullopt;
+    }
+
     void OffScreenAdapter::prepareCameras() {
         if (offScreen) {
             offScreen->prepareCameras();
@@ -82,6 +86,32 @@ namespace core {
         if (offScreen) {
             offScreen->prepareFrameMeshes();
         }
+    }
+
+    void OffScreenAdapter::prepareFrameCameraFrustums() {
+        if (offScreen) {
+            offScreen->prepareFrameCameraFrustums();
+        }
+    }
+
+    void OffScreenAdapter::prepareFrameBillboards() {
+        if (offScreen) {
+            offScreen->prepareFrameBillboards();
+        }
+    }
+
+    void OffScreenAdapter::setShowBillboardIcons(bool show) {
+        if (offScreen) {
+            offScreen->setShowBillboardIcons(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowBillboardIcons() const {
+        return offScreen && offScreen->getShowBillboardIcons();
+    }
+
+    bool OffScreenAdapter::loadBillboardAtlas(const std::string& atlasPath) {
+        return offScreen && offScreen->loadBillboardAtlas(atlasPath);
     }
 
     void OffScreenAdapter::rebuildBVH() {

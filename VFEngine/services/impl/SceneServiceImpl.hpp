@@ -1,9 +1,11 @@
 #pragma once
 #include "../interfaces/ISceneService.hpp"
 #include "../events/SceneEvents.hpp"
+#include "../data/EntityConversion.hpp"
 #include <entt/entt.hpp>
 #include <memory>
 #include <optional>
+#include <cstdint>
 
 namespace scene {
     class SceneGraphSystem;
@@ -11,29 +13,11 @@ namespace scene {
 
 namespace services {
 
-    // Internal conversion functions between EntityHandle and entt::entity
-    namespace internal {
-        inline EntityHandle toHandle(entt::entity entity) {
-            return EntityHandle{ static_cast<uint64_t>(static_cast<uint32_t>(entity)) };
-        }
-
-        inline entt::entity fromHandle(EntityHandle handle) {
-            return static_cast<entt::entity>(static_cast<uint32_t>(handle.id));
-        }
-
-        inline bool isValidHandle(EntityHandle handle, entt::registry& registry) {
-            if (!handle.isValid()) return false;
-            auto entity = fromHandle(handle);
-            return registry.valid(entity);
-        }
-    }
-
     class SceneServiceImpl : public ISceneService {
     public:
         explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~SceneServiceImpl() override = default;
-
-        // Register all command and query handlers with the EventDispatcher
+        
         void registerEventHandlers() override;
 
         // Entity Lifecycle
@@ -112,12 +96,13 @@ namespace services {
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
         std::optional<EntityHandle> selectedEntity;
-
-        // Helper to build EntityData from entt::entity
+        
         EntityData buildEntityData(entt::entity entity) const;
 
         // Recursive helper for scene hierarchy
         void collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const;
+        
+        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }

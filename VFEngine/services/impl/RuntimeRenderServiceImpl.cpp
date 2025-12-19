@@ -201,6 +201,12 @@ namespace services
                 return getLoadedMeshes();
             });
 
+        dispatcher.registerQueryHandler<events::render::GetMeshBoundingBoxQuery>(
+            [this](const events::render::GetMeshBoundingBoxQuery& q)
+            {
+                return getMeshBoundingBox(q.meshPath);
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {
@@ -249,6 +255,23 @@ namespace services
             return {};
         }
         return offScreenProvider->getLoadedMeshes();
+    }
+
+    std::optional<MeshBoundingBox> RuntimeRenderServiceImpl::getMeshBoundingBox(const std::string& meshPath) const
+    {
+        if (!offScreenProvider)
+        {
+            return std::nullopt;
+        }
+        auto bounds = offScreenProvider->getMeshBoundingBox(meshPath);
+        if (!bounds)
+        {
+            return std::nullopt;
+        }
+        MeshBoundingBox result;
+        result.min = bounds->min;
+        result.max = bounds->max;
+        return result;
     }
 
     void RuntimeRenderServiceImpl::prepareCameras()

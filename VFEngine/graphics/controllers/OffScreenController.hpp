@@ -3,11 +3,13 @@
 #include "math/Frustum.hpp"
 #include "scene/SceneBVH.hpp"
 #include "../render/occlusion/CameraRenderData.hpp"
+#include "../../services/providers/IOffScreenProvider.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <optional>
 
 namespace events { struct SubscriptionToken; }
 
@@ -33,6 +35,7 @@ namespace controllers
         math::Frustum currentFrustum;  // Current camera frustum for culling
         scene::SceneBVH sceneBVH;      // BVH for spatial culling
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;  // Subscription token for material saved notification
+        bool showBillboardIcons = true; 
 
         // Occlusion culling state
         glm::mat4 currentViewProj{1.0f};
@@ -63,12 +66,24 @@ namespace controllers
                               const glm::mat4& projection, const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
+        std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 
+       
         // Called each frame to sync CameraComponents with occlusion system
         void prepareCameras();
 
         // Called each frame to prepare mesh render list from ECS entities
         void prepareFrameMeshes();
+        
+        void prepareFrameBillboards();
+        
+        void prepareFrameCameraFrustums();
+
+        // Billboard visibility toggle
+        void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
+        bool getShowBillboardIcons() const { return showBillboardIcons; }
+        
+        bool loadBillboardAtlas(const std::string& atlasPath);
 
         // BVH management
         void rebuildBVH();        // Force rebuild BVH

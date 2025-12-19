@@ -43,6 +43,7 @@ namespace services {
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
         void prepareCameras();
+        std::optional<MeshBoundingBox> getMeshBoundingBox(const std::string& meshPath) const;
         void prepareFrameMeshes();
     };
 

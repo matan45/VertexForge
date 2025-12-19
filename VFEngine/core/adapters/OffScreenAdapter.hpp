@@ -36,6 +36,7 @@ namespace core
         bool isMeshLoaded(const std::string& meshPath) const override;
         std::vector<std::string> getLoadedMeshes() const override;
         void prepareCameras() override;
+        std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const override;
         void prepareFrameMeshes() override;
 
         // BVH spatial culling
@@ -47,5 +48,12 @@ namespace core
         void removeCamera(services::CameraId id) override;
         void setActiveCamera(services::CameraId id) override;
         services::CameraId getActiveCameraId() const override;
+        void prepareFrameCameraFrustums() override;
+
+        // Billboard API
+        void prepareFrameBillboards() override;
+        void setShowBillboardIcons(bool show) override;
+        bool getShowBillboardIcons() const override;
+        bool loadBillboardAtlas(const std::string& atlasPath) override;
     };
 }

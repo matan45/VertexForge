@@ -23,6 +23,8 @@ namespace serialization {
 		j["farPlane"] = camera.farPlane;
 		j["aspectRatio"] = camera.aspectRatio;
 		j["isPerspective"] = camera.isPerspective;
+		j["isPrimary"] = camera.isPrimary;
+		j["showFrustum"] = camera.showFrustum;
 		j["orthoSize"] = camera.orthoSize;
 		return j;
 	}
@@ -122,6 +124,10 @@ namespace serialization {
 			camera.aspectRatio = it->get<float>();
 		if (auto it = j.find("isPerspective"); it != j.end() && it->is_boolean())
 			camera.isPerspective = it->get<bool>();
+		if (auto it = j.find("isPrimary"); it != j.end() && it->is_boolean())
+			camera.isPrimary = it->get<bool>();
+		if (auto it = j.find("showFrustum"); it != j.end() && it->is_boolean())
+			camera.showFrustum = it->get<bool>();
 		if (auto it = j.find("orthoSize"); it != j.end() && it->is_number())
 			camera.orthoSize = it->get<float>();
 		camera.updateProjectionMatrix();

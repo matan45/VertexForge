@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <optional>
+#include "../../services/providers/IOffScreenProvider.hpp"
 
 namespace controllers {
 
@@ -43,6 +45,7 @@ namespace controllers {
 		bool isMeshLoaded(const std::string& meshPath) const;
 		std::vector<std::string> getLoadedMeshes() const;
 		void prepareCameras();  // Sync CameraComponents with occlusion system
+		std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 		void prepareFrameMeshes();
 
 		// BVH spatial culling
@@ -54,5 +57,12 @@ namespace controllers {
 		void removeCamera(CameraId id);
 		void setActiveCamera(CameraId id);
 		CameraId getActiveCameraId() const;
+		void prepareFrameCameraFrustums();
+
+		// Billboard API
+		void prepareFrameBillboards();
+		void setShowBillboardIcons(bool show);
+		bool getShowBillboardIcons() const;
+		bool loadBillboardAtlas(const std::string& atlasPath);
 	};
 }

@@ -16,6 +16,7 @@ namespace render
 {
     class ClearColor;
     class IBL;
+    class DebugRenderer;
 
     namespace occlusion
     {
@@ -26,6 +27,7 @@ namespace render
     {
         class StaticMeshPipeline;
         struct MeshRenderData;
+        struct CameraFrustumRenderData;
     }
 
     namespace billboard
@@ -44,6 +46,7 @@ namespace render
         std::unique_ptr<IBL> iblRenderer;
         std::unique_ptr<mesh::StaticMeshPipeline> meshPipeline;
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
+        std::unique_ptr<DebugRenderer> debugRenderer;
         std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
 
         core::OffscreenResources& offscreenResources;
@@ -56,6 +59,11 @@ namespace render
         // Billboard rendering state
         bool billboardPipelineInitialized = false;
         mutable std::vector<billboard::BillboardRenderData> currentBillboardDrawList;
+
+        // Debug rendering state
+        bool debugRendererInitialized = false;
+        mutable glm::mat4 currentView{1.0f};
+        mutable glm::mat4 currentProjection{1.0f};
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -79,13 +87,20 @@ namespace render
         //(called when IBL is set/changed)
         void reinitMeshPipelineWithIBL();
         
-        void setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes);
+        void setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
 
         // Billboard pipeline methods
         void initBillboardPipeline();
         billboard::BillboardPipeline* getBillboardPipeline() const { return billboardPipeline.get(); }
         bool isBillboardPipelineInitialized() const { return billboardPipelineInitialized; }
+        void setBillboardDrawList(std::vector<billboard::BillboardRenderData>&& billboards);
+
+        // Debug renderer methods
+        void initDebugRenderer();
+        void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
+        void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
+        bool isDebugRendererInitialized() const { return debugRendererInitialized; }
 
         // Camera occlusion manager access
         occlusion::CameraOcclusionManager* getCameraOcclusionManager() const { return cameraOcclusionManager.get(); }

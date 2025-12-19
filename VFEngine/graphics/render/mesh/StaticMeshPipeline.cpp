@@ -1,7 +1,7 @@
 #include "StaticMeshPipeline.hpp"
 #include "MeshGPUCache.hpp"
-#include "AABBDebugRenderer.hpp"
 #include "MaterialCacheManager.hpp"
+#include "../DebugRenderer.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialShaderCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
@@ -36,9 +36,6 @@ namespace render::mesh
         // Create material shader cache for per-material pipeline compilation
         materialShaderCache = std::make_unique<MaterialShaderCache>(device);
 
-        // Create AABB debug renderer
-        aabbRenderer = std::make_unique<AABBDebugRenderer>(device, swapChain);
-
         // Create material cache manager and link related caches
         materialCacheManager = std::make_unique<MaterialCacheManager>();
         materialCacheManager->setShaderCache(materialShaderCache.get());
@@ -64,7 +61,6 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
-        aabbRenderer->init(renderPass);
     }
 
     void StaticMeshPipeline::initWithDefaults()
@@ -89,7 +85,6 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
         createFramebuffers();
-        aabbRenderer->init(renderPass);
         usingDefaultTextures = true;
     }
 
@@ -114,8 +109,6 @@ namespace render::mesh
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
-
-        aabbRenderer->recreate(renderPass);
     }
 
     void StaticMeshPipeline::createRenderPass()
@@ -662,12 +655,6 @@ namespace render::mesh
         }
         textureDescriptorsInitialized = false;
 
-        // Clean up AABB debug renderer
-        if (aabbRenderer)
-        {
-            aabbRenderer->cleanUp();
-        }
-
         renderPass = nullptr;
         graphicsPipeline = nullptr;
         pipelineLayout = nullptr;
@@ -716,9 +703,6 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUpShader()
     {
         meshShader->cleanUp();
-        if (aabbRenderer) {
-            aabbRenderer->cleanUpShader();
-        }
     }
 
     void StaticMeshPipeline::invalidateMaterialCache(const std::string& materialPath)
@@ -787,15 +771,23 @@ namespace render::mesh
     void StaticMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                                   uint32_t imageIndex,
                                                   const std::vector<MeshRenderData>& meshDrawList,
-                                                  const math::Frustum* frustum) const
+                                                  const math::Frustum* frustum,
+                                                  render::DebugRenderer* debugRenderer,
+                                                  const glm::mat4& debugView,
+                                                  const glm::mat4& debugProjection) const
     {
-        if (meshDrawList.empty())
+        // Check if we have anything to render (meshes or debug items)
+        bool hasDebugItems = debugRenderer && debugRenderer->hasItemsToRender();
+        if (meshDrawList.empty() && !hasDebugItems)
         {
             return;
         }
 
         // Prepare textures for this frame (load, assign slots, update descriptor set)
-        prepareTexturesForFrame(meshDrawList);
+        if (!meshDrawList.empty())
+        {
+            prepareTexturesForFrame(meshDrawList);
+        }
 
         // Acquire shared lock for reading material cache during rendering
         auto cacheLock = materialCacheManager->acquireSharedLock();
@@ -1066,11 +1058,10 @@ namespace render::mesh
             renderSubmesh(*item.meshData, *item.subMesh, item.subMeshIndex,
                           material::BlendMode::Translucent, currentPipeline);
         }
-
-        // Render AABB wireframes for meshes with showBoundingBox enabled
-        if (aabbRenderer)
+        
+        if (debugRenderer && debugRenderer->hasItemsToRender())
         {
-            aabbRenderer->render(commandBuffer, meshDrawList, currentView, currentProjection,
+            debugRenderer->render(commandBuffer, meshDrawList, debugView, debugProjection,
                 [this](const std::string& meshId) { return getMesh(meshId); });
         }
 

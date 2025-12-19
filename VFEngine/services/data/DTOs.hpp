@@ -27,6 +27,8 @@ namespace services {
         float farPlane = 1000.0f;
         float aspectRatio = 16.0f / 9.0f;
         bool isPerspective = true;
+        bool isPrimary = false;
+        bool showFrustum = false;
         float orthoSize = 10.0f;
     };
 
@@ -37,6 +39,11 @@ namespace services {
     struct MeshData {
         std::string meshPath;
         bool showBoundingBox = false;
+    };
+
+    struct MeshBoundingBox {
+        glm::vec3 min{0.0f};
+        glm::vec3 max{0.0f};
     };
 
     

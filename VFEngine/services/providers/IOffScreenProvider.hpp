@@ -4,6 +4,7 @@
 #include <string_view>
 #include <vector>
 #include <cstdint>
+#include <optional>
 
 namespace services {
 
@@ -11,6 +12,12 @@ namespace services {
     using CameraId = uint32_t;
     constexpr CameraId MAIN_CAMERA_ID = 0;
 
+    struct MeshBounds {
+        glm::vec3 min{0.0f};
+        glm::vec3 max{0.0f};
+    };
+
+  
     class IOffScreenProvider {
     public:
         virtual ~IOffScreenProvider() = default;
@@ -36,6 +43,7 @@ namespace services {
         virtual bool isMeshLoaded(const std::string& meshPath) const = 0;
         virtual std::vector<std::string> getLoadedMeshes() const = 0;
         virtual void prepareCameras() = 0;  // Sync CameraComponents with occlusion system
+        virtual std::optional<MeshBounds> getMeshBoundingBox(const std::string& meshPath) const = 0;
         virtual void prepareFrameMeshes() = 0;
 
         // BVH spatial culling
@@ -48,6 +56,13 @@ namespace services {
         virtual void removeCamera(CameraId id) = 0;
         virtual void setActiveCamera(CameraId id) = 0;
         virtual CameraId getActiveCameraId() const = 0;
+        virtual void prepareFrameCameraFrustums() = 0;
+
+        // Billboard API
+        virtual void prepareFrameBillboards() = 0;
+        virtual void setShowBillboardIcons(bool show) = 0;
+        virtual bool getShowBillboardIcons() const = 0;
+        virtual bool loadBillboardAtlas(const std::string& atlasPath) = 0;
     };
 
 }

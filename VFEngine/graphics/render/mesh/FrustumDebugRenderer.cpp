@@ -1,4 +1,4 @@
-#include "AABBDebugRenderer.hpp"
+#include "FrustumDebugRenderer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -6,14 +6,14 @@
 
 namespace render::mesh
 {
-    AABBDebugRenderer::AABBDebugRenderer(core::Device& device, core::SwapChain& swapChain)
+    FrustumDebugRenderer::FrustumDebugRenderer(core::Device& device, core::SwapChain& swapChain)
         : device{device}, swapChain{swapChain}
     {
     }
 
-    AABBDebugRenderer::~AABBDebugRenderer() = default;
+    FrustumDebugRenderer::~FrustumDebugRenderer() = default;
 
-    void AABBDebugRenderer::init(vk::RenderPass renderPass)
+    void FrustumDebugRenderer::init(vk::RenderPass renderPass)
     {
         loadShader();
         createPipeline(renderPass);
@@ -21,7 +21,7 @@ namespace render::mesh
         initialized = true;
     }
 
-    void AABBDebugRenderer::recreate(vk::RenderPass renderPass)
+    void FrustumDebugRenderer::recreate(vk::RenderPass renderPass)
     {
         if (wireframePipeline)
         {
@@ -32,7 +32,7 @@ namespace render::mesh
         createPipeline(renderPass);
     }
 
-    void AABBDebugRenderer::cleanUp()
+    void FrustumDebugRenderer::cleanUp()
     {
         auto& dev = device.getLogicalDevice();
 
@@ -65,7 +65,7 @@ namespace render::mesh
         initialized = false;
     }
 
-    void AABBDebugRenderer::cleanUpShader()
+    void FrustumDebugRenderer::cleanUpShader()
     {
         if (wireframeShader)
         {
@@ -73,19 +73,19 @@ namespace render::mesh
         }
     }
 
-    void AABBDebugRenderer::loadShader()
+    void FrustumDebugRenderer::loadShader()
     {
         wireframeShader = std::make_shared<core::Shader>(device);
-        wireframeShader->readShader("../../resources/shaders/debug/aabbWireframe.glsl");
+        wireframeShader->readShader("../../resources/shaders/debug/wireframe.glsl");
     }
 
-    void AABBDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void FrustumDebugRenderer::createPipeline(vk::RenderPass renderPass)
     {
         // Push constant range for MVP + color
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(AABBPushConstants);
+        pushConstantRange.size = sizeof(FrustumPushConstants);
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.setLayoutCount = 0;
@@ -184,37 +184,30 @@ namespace render::mesh
         auto result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            throw std::runtime_error("Failed to create wireframe graphics pipeline");
+            throw std::runtime_error("Failed to create frustum wireframe graphics pipeline");
         }
         wireframePipeline = result.value;
     }
 
-    void AABBDebugRenderer::createBuffers()
+    void FrustumDebugRenderer::createBuffers()
     {
-        // Unit cube vertices (8 corners, from -1 to 1)
-        std::vector<glm::vec3> vertices = {
-            {-1.0f, -1.0f, -1.0f},  // 0: back-bottom-left
-            { 1.0f, -1.0f, -1.0f},  // 1: back-bottom-right
-            { 1.0f,  1.0f, -1.0f},  // 2: back-top-right
-            {-1.0f,  1.0f, -1.0f},  // 3: back-top-left
-            {-1.0f, -1.0f,  1.0f},  // 4: front-bottom-left
-            { 1.0f, -1.0f,  1.0f},  // 5: front-bottom-right
-            { 1.0f,  1.0f,  1.0f},  // 6: front-top-right
-            {-1.0f,  1.0f,  1.0f},  // 7: front-top-left
+        // Static NDC corners for frustum (Vulkan: z = 0 near, z = 1 far)
+        // These never change - the shader transforms them using push constant matrices
+        std::vector<glm::vec3> ndcCorners = {
+            // Near plane (z = 0 in Vulkan)
+            {-1.0f, -1.0f, 0.0f},  // bottom-left
+            { 1.0f, -1.0f, 0.0f},  // bottom-right
+            { 1.0f,  1.0f, 0.0f},  // top-right
+            {-1.0f,  1.0f, 0.0f},  // top-left
+            // Far plane (z = 1 in Vulkan)
+            {-1.0f, -1.0f, 1.0f},  // bottom-left
+            { 1.0f, -1.0f, 1.0f},  // bottom-right
+            { 1.0f,  1.0f, 1.0f},  // top-right
+            {-1.0f,  1.0f, 1.0f},  // top-left
         };
 
-        // Line indices for 12 edges of the cube
-        std::vector<uint32_t> indices = {
-            // Back face edges
-            0, 1,  1, 2,  2, 3,  3, 0,
-            // Front face edges
-            4, 5,  5, 6,  6, 7,  7, 4,
-            // Connecting edges
-            0, 4,  1, 5,  2, 6,  3, 7
-        };
-
-        // Create vertex buffer
-        vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * vertices.size();
+        // Create static vertex buffer (device local for best performance)
+        vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * ndcCorners.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
@@ -227,9 +220,20 @@ namespace render::mesh
             device.getGraphicsQueue(),
             device.getStagingCommandPool(),
             vertexBuffer,
-            vertices.data(),
+            ndcCorners.data(),
             vertexBufferSize
         );
+
+        // Line indices for 12 edges of the frustum
+        // Near plane: 0-1-2-3, Far plane: 4-5-6-7
+        std::vector<uint32_t> indices = {
+            // Near plane edges
+            0, 1,  1, 2,  2, 3,  3, 0,
+            // Far plane edges
+            4, 5,  5, 6,  6, 7,  7, 4,
+            // Connecting edges (near to far)
+            0, 4,  1, 5,  2, 6,  3, 7
+        };
 
         // Create index buffer
         vk::DeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
@@ -250,92 +254,68 @@ namespace render::mesh
         );
     }
 
-    void AABBDebugRenderer::render(const vk::CommandBuffer& commandBuffer,
-                                    const std::vector<MeshRenderData>& meshDrawList,
-                                    const glm::mat4& view,
-                                    const glm::mat4& projection,
-                                    const std::function<const MeshGPUData*(const std::string&)>& getMeshFunc) const
+    void FrustumDebugRenderer::render(const vk::CommandBuffer& commandBuffer,
+                                       const std::vector<CameraFrustumRenderData>& cameraDrawList,
+                                       const glm::mat4& editorView,
+                                       const glm::mat4& editorProjection) const
     {
         if (!initialized || !wireframePipeline || !vertexBuffer)
         {
             return;
         }
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, wireframePipeline);
+        bool hasFrustumToRender = false;
+        for (const auto& camera : cameraDrawList)
+        {
+            if (camera.showFrustum)
+            {
+                hasFrustumToRender = true;
+                break;
+            }
+        }
 
+        if (!hasFrustumToRender)
+        {
+            return;
+        }
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, wireframePipeline);
+        commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint32);
+
+        // Bind static vertex buffer once (NDC corners never change)
         vk::Buffer vertexBuffers[] = {vertexBuffer};
         vk::DeviceSize offsets[] = {0};
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-        commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint32);
 
-        for (const auto& meshData : meshDrawList)
+        // Editor's view-projection for final clip-space transform
+        glm::mat4 editorViewProj = editorProjection * editorView;
+
+        for (const auto& camera : cameraDrawList)
         {
-            if (!meshData.showBoundingBox)
+            if (!camera.showFrustum)
             {
                 continue;
             }
 
-            const MeshGPUData* gpuData = getMeshFunc(meshData.meshPath);
-            if (!gpuData)
-            {
-                continue;
-            }
+            // Compute camera's inverse view-projection
+            // The worldMatrix is where the camera entity IS in the scene
+            // View matrix = inverse(worldMatrix), so viewProj = proj * inverse(world)
+            glm::mat4 cameraViewFromWorld = glm::inverse(camera.worldMatrix);
+            glm::mat4 cameraViewProj = camera.projectionMatrix * cameraViewFromWorld;
+            glm::mat4 cameraInverseViewProj = glm::inverse(cameraViewProj);
 
-            // Render combined mesh AABB (green)
-            {
-                const math::AABB& aabb = gpuData->boundingBox;
-                glm::vec3 center = aabb.getCenter();
-                glm::vec3 extents = aabb.getExtents();
+            // Push constants: shader transforms NDC -> World -> Clip
+            FrustumPushConstants pushConstants{};
+            pushConstants.viewProj = editorViewProj;           // Editor's VP for final transform
+            pushConstants.inverseViewProj = cameraInverseViewProj;  // Camera's inverse VP for NDC->World
+            pushConstants.color = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);  // Cyan wireframe
 
-                // Scale and translate unit cube [-1,1] to AABB bounds
-                glm::mat4 aabbModel = meshData.modelMatrix;
-                aabbModel = glm::translate(aabbModel, center);
-                aabbModel = glm::scale(aabbModel, extents);
+            commandBuffer.pushConstants(wireframePipelineLayout,
+                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                0, sizeof(FrustumPushConstants), &pushConstants);
 
-                // Calculate MVP
-                glm::mat4 mvp = projection * view * aabbModel;
-
-                AABBPushConstants aabbPushConstants{};
-                aabbPushConstants.mvp = mvp;
-                aabbPushConstants.color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green wireframe
-
-                commandBuffer.pushConstants(wireframePipelineLayout,
-                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                    0, sizeof(AABBPushConstants), &aabbPushConstants);
-
-                // Draw unit cube wireframe (24 indices for 12 lines)
-                commandBuffer.drawIndexed(24, 1, 0, 0, 0);
-            }
-
-            // Render per-submesh AABBs (yellow) - only if there are multiple submeshes
-            if (gpuData->subMeshes.size() > 1)
-            {
-                for (const auto& subMesh : gpuData->subMeshes)
-                {
-                    const math::AABB& aabb = subMesh.boundingBox;
-                    glm::vec3 center = aabb.getCenter();
-                    glm::vec3 extents = aabb.getExtents();
-
-                    // Scale and translate unit cube [-1,1] to AABB bounds
-                    glm::mat4 aabbModel = meshData.modelMatrix;
-                    aabbModel = glm::translate(aabbModel, center);
-                    aabbModel = glm::scale(aabbModel, extents);
-
-                    // Calculate MVP
-                    glm::mat4 mvp = projection * view * aabbModel;
-
-                    AABBPushConstants aabbPushConstants{};
-                    aabbPushConstants.mvp = mvp;
-                    aabbPushConstants.color = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow wireframe
-
-                    commandBuffer.pushConstants(wireframePipelineLayout,
-                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                        0, sizeof(AABBPushConstants), &aabbPushConstants);
-
-                    // Draw unit cube wireframe (24 indices for 12 lines)
-                    commandBuffer.drawIndexed(24, 1, 0, 0, 0);
-                }
-            }
+            // Draw frustum wireframe (24 indices for 12 lines)
+            commandBuffer.drawIndexed(24, 1, 0, 0, 0);
         }
     }
 }
