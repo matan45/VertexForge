@@ -39,6 +39,10 @@ namespace imguiPass {
 
 		renderPassHandler = std::make_unique<render::RenderPassHandler>(device, swapChain, offscreenResources);
 		renderPassHandler->init();
+
+		// Initialize Hi-Z buffer for occlusion culling
+		renderPassHandler->initHiZ(offscreenResources.depthImage.depthImage,
+		                           swapChain.getSwapchainDepthStencilFormat());
 	}
 
 	vk::DescriptorSet OffScreenViewPort::render()
@@ -140,7 +144,7 @@ namespace imguiPass {
 		imageDepthInfo.height = swapChain.getSwapchainExtent().height;
 		imageDepthInfo.format = depthFormat;
 		imageDepthInfo.tiling = vk::ImageTiling::eOptimal;
-		imageDepthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+		imageDepthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
 		imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
 		core::DepthImage depth;

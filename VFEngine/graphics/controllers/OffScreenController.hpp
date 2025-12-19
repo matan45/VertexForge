@@ -33,6 +33,12 @@ namespace controllers
         scene::SceneBVH sceneBVH;      // BVH for spatial culling
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;  // Subscription token for material saved notification
 
+        // Occlusion culling state
+        glm::mat4 currentViewProj{1.0f};
+        float currentNearPlane = 0.1f;
+        bool occlusionCullingEnabled = true;
+        bool occlusionCullingReady = false;
+
     public:
         explicit OffScreenController();
         ~OffScreenController();
@@ -60,6 +66,13 @@ namespace controllers
         void rebuildBVH();        // Force rebuild BVH
         void markBVHDirty();      // Mark BVH for rebuild (call when entities change)
 
+        // Occlusion culling control
+        void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
+        bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
+
         void* render();
+
+    private:
+        void updateOcclusionCullingData();
     };
 }

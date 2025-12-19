@@ -7,6 +7,8 @@
 #include "mesh/MeshTypes.hpp"
 #include "billboard/BillboardPipeline.hpp"
 #include "billboard/BillboardTypes.hpp"
+#include "occlusion/HiZBuffer.hpp"
+#include "occlusion/OcclusionCullingManager.hpp"
 
 namespace render {
 	RenderPassHandler::RenderPassHandler(core::Device& device, core::SwapChain& swapChain, core::OffscreenResources& offscreenResources) : device{ device },
@@ -15,6 +17,8 @@ namespace render {
 		, iblRenderer{ std::make_unique<IBL>(device, swapChain, offscreenResources) }
 		, meshPipeline{ std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources) }
 		, billboardPipeline{ std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources) }
+		, hiZBuffer{ std::make_unique<occlusion::HiZBuffer>(device, swapChain) }
+		, occlusionCulling{ std::make_unique<occlusion::OcclusionCullingManager>(device, swapChain) }
 	{
 	}
 
@@ -98,6 +102,53 @@ namespace render {
 		billboardPipelineInitialized = true;
 	}
 
+	void RenderPassHandler::initHiZ(vk::Image depthImage, vk::Format depthFormat)
+	{
+		if (hiZInitialized)
+		{
+			return;
+		}
+
+		hiZBuffer->init(depthImage, offscreenResources.depthImage.depthImageView, depthFormat);
+		hiZInitialized = true;
+	}
+
+	void RenderPassHandler::initOcclusionCulling()
+	{
+		if (occlusionCullingInitialized || !hiZInitialized)
+		{
+			return;
+		}
+
+		occlusionCulling->init(hiZBuffer.get());
+		occlusionCullingInitialized = true;
+	}
+
+	void RenderPassHandler::updateOcclusionObjects(const std::vector<occlusion::GPUObjectData>& objects)
+	{
+		if (occlusionCullingInitialized)
+		{
+			occlusionCulling->updateObjects(objects);
+		}
+	}
+
+	void RenderPassHandler::updateOcclusionCamera(const glm::mat4& viewProj, float nearPlane)
+	{
+		if (occlusionCullingInitialized)
+		{
+			occlusionCulling->updateCamera(viewProj, nearPlane);
+		}
+	}
+
+	std::vector<uint32_t> RenderPassHandler::getOcclusionVisibility()
+	{
+		if (occlusionCullingInitialized)
+		{
+			return occlusionCulling->getVisibilityResults();
+		}
+		return {};
+	}
+
 	void RenderPassHandler::recreate() const
 	{
 		iblRenderer->recreate();
@@ -112,10 +163,23 @@ namespace render {
 		{
 			billboardPipeline->recreate();
 		}
+
+		// Hi-Z needs to be recreated when swapchain changes
+		// Note: Currently requires re-initialization after resize
 	}
 
 	void RenderPassHandler::cleanUp() const
 	{
+		if (occlusionCullingInitialized)
+		{
+			occlusionCulling->cleanup();
+		}
+
+		if (hiZInitialized)
+		{
+			hiZBuffer->cleanup();
+		}
+
 		if (billboardPipelineInitialized)
 		{
 			billboardPipeline->cleanUp();
@@ -151,6 +215,19 @@ namespace render {
 		if (billboardPipelineInitialized && !currentBillboardDrawList.empty())
 		{
 			billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+		}
+
+		// Generate Hi-Z pyramid after all depth-writing passes are complete
+		// This will be used for occlusion culling in the next frame
+		if (hiZInitialized)
+		{
+			hiZBuffer->generate(commandBuffer);
+
+			// Run GPU occlusion culling using the freshly generated Hi-Z
+			if (occlusionCullingInitialized)
+			{
+				occlusionCulling->cull(commandBuffer);
+			}
 		}
 	}
 

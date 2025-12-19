@@ -5,12 +5,14 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
+#include "../render/occlusion/OcclusionCullingManager.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/events/MaterialEvents.hpp"
+#include "print/Logger.hpp"
 
 namespace controllers
 {
@@ -130,6 +132,16 @@ namespace controllers
 
         // Update frustum for culling
         currentFrustum.extractFromMatrix(projection * view);
+
+        // Store view-projection for occlusion culling
+        currentViewProj = projection * view;
+
+        // Initialize occlusion culling if not already done
+        if (!occlusionCullingReady && renderHandler->isHiZInitialized())
+        {
+            renderHandler->initOcclusionCulling();
+            occlusionCullingReady = renderHandler->isOcclusionCullingInitialized();
+        }
     }
 
     bool OffScreenController::isMeshLoaded(const std::string& meshPath) const
@@ -305,6 +317,9 @@ namespace controllers
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
+
+        // Update occlusion culling data for next frame
+        updateOcclusionCullingData();
     }
 
     void OffScreenController::rebuildBVH()
@@ -320,5 +335,76 @@ namespace controllers
     void* OffScreenController::render()
     {
         return offScreen->render();
+    }
+
+    void OffScreenController::updateOcclusionCullingData()
+    {
+        if (!occlusionCullingEnabled || !occlusionCullingReady)
+        {
+            return;
+        }
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* meshPipeline = renderHandler->getMeshPipeline();
+
+        if (!meshPipeline)
+        {
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
+
+        std::vector<render::occlusion::GPUObjectData> objectData;
+        objectData.reserve(view.size_hint());
+
+        for (auto entity : view)
+        {
+            const auto& meshComp = view.get<components::MeshComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            if (meshComp.meshPath.empty())
+            {
+                continue;
+            }
+
+            const math::AABB* localAABB = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
+            if (!localAABB || !localAABB->isValid())
+            {
+                continue;
+            }
+
+            render::occlusion::GPUObjectData obj;
+            obj.aabbMin = glm::vec4(localAABB->min, static_cast<float>(entity));
+            obj.aabbMax = glm::vec4(localAABB->max, 0.0f);
+            obj.modelMatrix = worldTransform.worldMatrix;
+
+            objectData.push_back(obj);
+        }
+
+        if (!objectData.empty())
+        {
+            renderHandler->updateOcclusionObjects(objectData);
+            renderHandler->updateOcclusionCamera(currentViewProj, currentNearPlane);
+
+            // Debug: Log occlusion culling results (every 60 frames to avoid spam)
+            static int debugCounter = 0;
+            if (++debugCounter >= 60)
+            {
+                debugCounter = 0;
+                auto visibility = renderHandler->getOcclusionVisibility();
+                if (!visibility.empty())
+                {
+                    uint32_t visibleCount = 0;
+                    for (uint32_t v : visibility)
+                    {
+                        if (v) ++visibleCount;
+                    }
+                    uint32_t occludedCount = static_cast<uint32_t>(visibility.size()) - visibleCount;
+                    loggerInfo("Occlusion Culling: {} visible, {} occluded (total: {})",
+                               visibleCount, occludedCount, visibility.size());
+                }
+            }
+        }
     }
 }

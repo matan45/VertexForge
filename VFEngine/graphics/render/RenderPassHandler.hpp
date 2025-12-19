@@ -16,6 +16,13 @@ namespace render
     class ClearColor;
     class IBL;
 
+    namespace occlusion
+    {
+        class HiZBuffer;
+        class OcclusionCullingManager;
+        struct GPUObjectData;
+    }
+
     namespace mesh
     {
         class StaticMeshPipeline;
@@ -38,6 +45,8 @@ namespace render
         std::unique_ptr<IBL> iblRenderer;
         std::unique_ptr<mesh::StaticMeshPipeline> meshPipeline;
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
+        std::unique_ptr<occlusion::HiZBuffer> hiZBuffer;
+        std::unique_ptr<occlusion::OcclusionCullingManager> occlusionCulling;
 
         core::OffscreenResources& offscreenResources;
 
@@ -49,6 +58,10 @@ namespace render
         // Billboard rendering state
         bool billboardPipelineInitialized = false;
         mutable std::vector<billboard::BillboardRenderData> currentBillboardDrawList;
+
+        // Hi-Z occlusion culling state
+        bool hiZInitialized = false;
+        bool occlusionCullingInitialized = false;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -79,6 +92,19 @@ namespace render
         void initBillboardPipeline();
         billboard::BillboardPipeline* getBillboardPipeline() const { return billboardPipeline.get(); }
         bool isBillboardPipelineInitialized() const { return billboardPipelineInitialized; }
+
+        // Hi-Z occlusion culling methods
+        void initHiZ(vk::Image depthImage, vk::Format depthFormat);
+        occlusion::HiZBuffer* getHiZBuffer() const { return hiZBuffer.get(); }
+        bool isHiZInitialized() const { return hiZInitialized; }
+
+        // GPU occlusion culling methods
+        void initOcclusionCulling();
+        void updateOcclusionObjects(const std::vector<occlusion::GPUObjectData>& objects);
+        void updateOcclusionCamera(const glm::mat4& viewProj, float nearPlane);
+        std::vector<uint32_t> getOcclusionVisibility();
+        occlusion::OcclusionCullingManager* getOcclusionCulling() const { return occlusionCulling.get(); }
+        bool isOcclusionCullingInitialized() const { return occlusionCullingInitialized; }
 
         void cleanUp() const;
 
