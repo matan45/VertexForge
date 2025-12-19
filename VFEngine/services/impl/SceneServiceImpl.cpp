@@ -408,7 +408,14 @@ namespace services {
 
         // Ensure entity has TransformComponent (required for camera updates)
         if (!sceneEntity.hasComponent<components::TransformComponent>()) {
-            sceneEntity.addComponent<components::TransformComponent>();
+            auto& transform = sceneEntity.addComponent<components::TransformComponent>();
+            // Immediately create WorldTransformComponent so billboard can render
+            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.GetMatrix();
+        }
+        else if (!sceneEntity.hasComponent<components::WorldTransformComponent>()) {
+            // Entity has TransformComponent but no WorldTransformComponent
+            auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.GetMatrix();
         }
 
         if (!sceneEntity.hasComponent<components::CameraComponent>()) {
