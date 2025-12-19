@@ -11,7 +11,6 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/events/MaterialEvents.hpp"
-#include "print/Logger.hpp"
 
 namespace controllers
 {
