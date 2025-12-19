@@ -12,7 +12,6 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/events/MaterialEvents.hpp"
-#include "print/Logger.hpp"
 
 namespace controllers
 {
@@ -386,25 +385,6 @@ namespace controllers
         {
             renderHandler->updateOcclusionObjects(objectData);
             renderHandler->updateOcclusionCamera(currentViewProj, currentNearPlane);
-
-            // Debug: Log occlusion culling results (every 60 frames to avoid spam)
-            static int debugCounter = 0;
-            if (++debugCounter >= 60)
-            {
-                debugCounter = 0;
-                auto visibility = renderHandler->getOcclusionVisibility();
-                if (!visibility.empty())
-                {
-                    uint32_t visibleCount = 0;
-                    for (uint32_t v : visibility)
-                    {
-                        if (v) ++visibleCount;
-                    }
-                    uint32_t occludedCount = static_cast<uint32_t>(visibility.size()) - visibleCount;
-                    loggerInfo("Occlusion Culling: {} visible, {} occluded (total: {})",
-                               visibleCount, occludedCount, visibility.size());
-                }
-            }
         }
     }
 }
