@@ -17,7 +17,25 @@ namespace services {
         glm::vec3 max{0.0f};
     };
 
-  
+    // Per-camera culling statistics
+    struct CameraCullingStats {
+        CameraId cameraId = 0;
+        bool isActive = false;
+        bool occlusionEnabled = false;
+        bool occlusionInitialized = false;
+        bool frustumReady = false;
+        bool bvhBuilt = false;
+        uint32_t totalMeshEntities = 0;
+        uint32_t visibleAfterFrustumCull = 0;
+        uint32_t visibleAfterOcclusionCull = 0;
+        uint32_t occludedCount = 0;
+    };
+
+    struct CullingDebugStats {
+        std::vector<CameraCullingStats> cameraStats;
+        CameraId activeCameraId = 0;
+    };
+
     class IOffScreenProvider {
     public:
         virtual ~IOffScreenProvider() = default;
@@ -63,6 +81,9 @@ namespace services {
         virtual void setShowBillboardIcons(bool show) = 0;
         virtual bool getShowBillboardIcons() const = 0;
         virtual bool loadBillboardAtlas(const std::string& atlasPath) = 0;
+
+        // Debug/Stats API
+        virtual CullingDebugStats getCullingStats() const = 0;
     };
 
 }

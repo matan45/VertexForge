@@ -34,6 +34,9 @@ namespace windows
 		bool showEditorCameraWindow = false;
 		editor::EditorCamera* editorCameraRef = nullptr;  // Set by ViewPort
 
+		// Culling stats debug window
+		bool showCullingStatsWindow = false;
+
 		// Event subscription
 		events::SubscriptionToken sceneClearedToken;
 
@@ -56,6 +59,7 @@ namespace windows
 
 		void iblWindow();
 		void editorCameraWindow();
+		void cullingStatsWindow();
 
 		void subscribeToEvents();
 		void onSceneCleared();

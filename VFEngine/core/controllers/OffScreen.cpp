@@ -140,4 +140,9 @@ namespace controllers {
 	{
 		return offScreenController->loadBillboardAtlas(atlasPath);
 	}
+
+	services::CullingDebugStats OffScreen::getCullingStats() const
+	{
+		return offScreenController->getCullingStats();
+	}
 }

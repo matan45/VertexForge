@@ -148,4 +148,8 @@ namespace core {
         return offScreen ? offScreen->getActiveCameraId() : services::MAIN_CAMERA_ID;
     }
 
+    services::CullingDebugStats OffScreenAdapter::getCullingStats() const {
+        return offScreen ? offScreen->getCullingStats() : services::CullingDebugStats{};
+    }
+
 }

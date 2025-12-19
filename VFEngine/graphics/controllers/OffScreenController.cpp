@@ -236,24 +236,23 @@ namespace controllers
         for (auto entity : view)
         {
             auto& camComp = view.get<components::CameraComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
             // Register camera with occlusion system if not already registered
+            // Note: We only register scene cameras here, we don't update their matrices
+            // because the editor camera (main camera 0) is controlled by EditorCamera/ViewPort
+            // Scene cameras will be used when switching to game/runtime mode
             if (!camComp.isRegistered)
             {
-                loggerInfo("Registering camera {} (entity {}) with occlusion culling {}",
+                loggerInfo("Registering scene camera {} (entity {}) with occlusion culling {}",
                           camComp.cameraId, static_cast<uint32_t>(entity),
                           camComp.enableOcclusionCulling ? "enabled" : "disabled");
+                // Scene cameras get registered but don't override the main editor camera
+                // They'll be used in runtime mode when setActiveCamera is called
                 createCamera(camComp.cameraId, camComp.enableOcclusionCulling);
                 camComp.isRegistered = true;
             }
-
-            // Extract camera position from world transform
-            glm::vec3 cameraPosition = glm::vec3(worldTransform.worldMatrix[3]);
-
-            // Update camera matrices in the occlusion system
-            meshUpdateCamera(camComp.cameraId, camComp.viewMatrix,
-                           camComp.projectionMatrix, cameraPosition);
+            // Don't call meshUpdateCamera here - let the editor camera control rendering
+            // Scene camera matrices will be updated when they become the active camera
         }
     }
 
@@ -418,20 +417,6 @@ namespace controllers
             }
         }
 
-        // Periodic culling stats logging (every ~2 seconds at 60fps)
-        static int statsLogCounter = 0;
-        if (++statsLogCounter >= 120)
-        {
-            statsLogCounter = 0;
-            auto totalMeshEntities = registry.view<components::MeshComponent>().size();
-            auto activeCamId = cameraManager->getActiveCameraId();
-            bool usingBVH = sceneBVH.isBuilt() && frustumReady;
-
-            loggerInfo("Culling stats: camera={}, visible={}/{}, BVH={}, frustum={}",
-                      activeCamId, meshDrawList.size(), totalMeshEntities,
-                      usingBVH ? "yes" : "no", frustumReady ? "ready" : "not ready");
-        }
-
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
 
@@ -492,7 +477,7 @@ namespace controllers
         }
 
         std::vector<render::billboard::BillboardRenderData> billboardDrawList;
-        
+
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::BillboardComponent, components::WorldTransformComponent>();
 
@@ -639,14 +624,43 @@ namespace controllers
             render::occlusion::CameraId activeCameraId = cameraManager->getActiveCameraId();
             renderHandler->updateOcclusionObjects(activeCameraId, objectData);
             renderHandler->updateOcclusionCamera(activeCameraId, activeCamera->viewProj, activeCamera->nearPlane);
+        }
+    }
 
-            // Periodic occlusion culling stats logging (every ~2 seconds at 60fps)
-            // Note: GPU readback is slow, so only do this periodically for debugging
-            static int occlusionLogCounter = 0;
-            if (++occlusionLogCounter >= 120)
+    services::CullingDebugStats OffScreenController::getCullingStats() const
+    {
+        services::CullingDebugStats stats;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* cameraManager = renderHandler->getCameraOcclusionManager();
+
+        if (!cameraManager)
+        {
+            return stats;
+        }
+
+        stats.activeCameraId = cameraManager->getActiveCameraId();
+
+        // Get total mesh entities count
+        auto& registry = scene::EntityRegistry::getRegistry();
+        uint32_t totalMeshEntities = static_cast<uint32_t>(registry.view<components::MeshComponent>().size());
+
+        // Iterate over all registered cameras
+        for (const auto& [cameraId, cameraData] : cameraManager->getAllCameras())
+        {
+            services::CameraCullingStats camStats;
+            camStats.cameraId = cameraId;
+            camStats.isActive = (cameraId == stats.activeCameraId);
+            camStats.occlusionEnabled = cameraData->useOcclusionCulling;
+            camStats.occlusionInitialized = cameraData->occlusionInitialized;
+            camStats.frustumReady = cameraData->frustum.isInitialized();
+            camStats.bvhBuilt = sceneBVH.isBuilt();
+            camStats.totalMeshEntities = totalMeshEntities;
+
+            // Get visibility results for this camera if occlusion is active
+            if (camStats.occlusionInitialized && cameraData->occlusionManager)
             {
-                occlusionLogCounter = 0;
-                auto visibilityResults = cameraManager->getVisibilityResults(activeCameraId);
+                auto visibilityResults = cameraManager->getVisibilityResults(cameraId);
                 if (!visibilityResults.empty())
                 {
                     uint32_t visibleCount = 0;
@@ -654,11 +668,19 @@ namespace controllers
                     {
                         if (v != 0) ++visibleCount;
                     }
-                    uint32_t occludedCount = static_cast<uint32_t>(visibilityResults.size()) - visibleCount;
-                    loggerInfo("Occlusion culling stats: camera={}, visible={}, occluded={}, total={}",
-                              activeCameraId, visibleCount, occludedCount, visibilityResults.size());
+                    camStats.visibleAfterOcclusionCull = visibleCount;
+                    camStats.occludedCount = static_cast<uint32_t>(visibilityResults.size()) - visibleCount;
                 }
             }
+
+            // Estimate visible after frustum cull (approximate - uses total if no occlusion)
+            camStats.visibleAfterFrustumCull = camStats.visibleAfterOcclusionCull > 0
+                ? camStats.visibleAfterOcclusionCull + camStats.occludedCount
+                : totalMeshEntities;
+
+            stats.cameraStats.push_back(camStats);
         }
+
+        return stats;
     }
 }

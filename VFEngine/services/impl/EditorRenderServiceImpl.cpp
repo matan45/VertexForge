@@ -312,6 +312,12 @@ namespace services
                 return offScreenProvider ? offScreenProvider->loadBillboardAtlas(cmd.atlasPath) : false;
             });
 
+        dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
+            [this](const events::render::GetCullingStatsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {

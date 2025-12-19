@@ -55,5 +55,8 @@ namespace core
         void setShowBillboardIcons(bool show) override;
         bool getShowBillboardIcons() const override;
         bool loadBillboardAtlas(const std::string& atlasPath) override;
+
+        // Debug/Stats API
+        services::CullingDebugStats getCullingStats() const override;
     };
 }

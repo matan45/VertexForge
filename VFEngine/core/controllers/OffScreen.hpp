@@ -64,5 +64,8 @@ namespace controllers {
 		void setShowBillboardIcons(bool show);
 		bool getShowBillboardIcons() const;
 		bool loadBillboardAtlas(const std::string& atlasPath);
+
+		// Debug/Stats API
+		services::CullingDebugStats getCullingStats() const;
 	};
 }

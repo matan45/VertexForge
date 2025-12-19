@@ -77,6 +77,10 @@ namespace windows
 			{
 				editorCameraWindow();
 			}
+			if (showCullingStatsWindow)
+			{
+				cullingStatsWindow();
+			}
 		}
 		ImGui::End();
 	}
@@ -298,6 +302,11 @@ namespace windows
 				events::EventDispatcher::instance().execute(cmd);
 			}
 
+			if (ImGui::MenuItem("Culling Stats", nullptr, showCullingStatsWindow))
+			{
+				showCullingStatsWindow = !showCullingStatsWindow;
+			}
+
 			ImGui::EndMenu();
 		}
 	}
@@ -512,6 +521,100 @@ namespace windows
 				editorCameraRef->mouseSensitivity = 0.1f;
 				editorCameraRef->updateViewMatrix();
 				editorCameraRef->updateProjectionMatrix();
+			}
+		}
+		ImGui::End();
+	}
+
+	void MainImguiWindow::cullingStatsWindow()
+	{
+		ImGui::SetNextWindowSize(ImVec2(450, 350), ImGuiCond_FirstUseEver);
+		if (ImGui::Begin("Culling Stats", &showCullingStatsWindow))
+		{
+			events::render::GetCullingStatsQuery query;
+			auto stats = events::EventDispatcher::instance().query(query);
+
+			ImGui::Text("Active Camera: %u", stats.activeCameraId);
+			ImGui::Separator();
+
+			if (stats.cameraStats.empty())
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No cameras registered");
+			}
+			else
+			{
+				for (const auto& cam : stats.cameraStats)
+				{
+					ImGui::PushID(static_cast<int>(cam.cameraId));
+
+					// Camera header with active indicator
+					std::string header = "Camera " + std::to_string(cam.cameraId);
+					if (cam.isActive)
+					{
+						header += " [ACTIVE]";
+					}
+
+					if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+					{
+						ImGui::Indent();
+
+						// Status indicators
+						ImGui::Text("Status:");
+						ImGui::SameLine();
+						ImGui::TextColored(cam.frustumReady ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1),
+							cam.frustumReady ? "Frustum Ready" : "Frustum Not Ready");
+
+						ImGui::SameLine();
+						ImGui::TextColored(cam.bvhBuilt ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0.5f, 0, 1),
+							cam.bvhBuilt ? "| BVH Built" : "| BVH Not Built");
+
+						// Occlusion status
+						ImGui::Text("Occlusion:");
+						ImGui::SameLine();
+						if (!cam.occlusionEnabled)
+						{
+							ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1), "Disabled");
+						}
+						else if (!cam.occlusionInitialized)
+						{
+							ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Not Initialized");
+						}
+						else
+						{
+							ImGui::TextColored(ImVec4(0, 1, 0, 1), "Active");
+						}
+
+						ImGui::Separator();
+
+						// Culling statistics
+						ImGui::Text("Total Mesh Entities: %u", cam.totalMeshEntities);
+
+						if (cam.occlusionInitialized && cam.occlusionEnabled)
+						{
+							ImGui::Text("After Frustum Cull:  %u", cam.visibleAfterFrustumCull);
+							ImGui::Text("After Occlusion:     %u", cam.visibleAfterOcclusionCull);
+							ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1), "Occluded: %u", cam.occludedCount);
+
+							// Progress bar for occlusion effectiveness
+							if (cam.totalMeshEntities > 0)
+							{
+								float occlusionRate = static_cast<float>(cam.occludedCount) / static_cast<float>(cam.totalMeshEntities);
+								ImGui::Text("Occlusion Rate:");
+								ImGui::SameLine();
+								ImGui::ProgressBar(occlusionRate, ImVec2(-1, 0),
+									(std::to_string(static_cast<int>(occlusionRate * 100)) + "%%").c_str());
+							}
+						}
+						else
+						{
+							ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Occlusion stats not available");
+						}
+
+						ImGui::Unindent();
+					}
+
+					ImGui::PopID();
+				}
 			}
 		}
 		ImGui::End();

@@ -108,5 +108,8 @@ namespace render::occlusion
         // Accessors for compatibility
         bool isHiZInitialized(CameraId id) const;
         bool isOcclusionInitialized(CameraId id) const;
+
+        // Get all cameras for iteration (debug/stats)
+        const std::unordered_map<CameraId, std::unique_ptr<CameraRenderData>>& getAllCameras() const { return cameras; }
     };
 }

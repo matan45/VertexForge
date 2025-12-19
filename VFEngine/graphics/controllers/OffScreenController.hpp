@@ -43,6 +43,9 @@ namespace controllers
         bool occlusionCullingEnabled = true;
         bool occlusionCullingReady = false;
 
+        // Culling stats for debug visualization
+        mutable services::CullingDebugStats lastCullingStats;
+
     public:
         explicit OffScreenController();
         ~OffScreenController();
@@ -101,6 +104,9 @@ namespace controllers
         render::occlusion::CameraId getActiveCameraId() const;
 
         void* render();
+
+        // Debug/Stats API
+        services::CullingDebugStats getCullingStats() const;
 
     private:
         void updateOcclusionCullingData();
