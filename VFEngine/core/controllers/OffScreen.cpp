@@ -55,6 +55,12 @@ namespace controllers {
 		offScreenController->meshUpdateCamera(view, projection, cameraPos, time);
 	}
 
+	void OffScreen::meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
+	                                 const glm::vec3& cameraPos, float time)
+	{
+		offScreenController->meshUpdateCamera(cameraId, view, projection, cameraPos, time);
+	}
+
 	bool OffScreen::isMeshLoaded(const std::string& meshPath) const
 	{
 		return offScreenController->isMeshLoaded(meshPath);
@@ -63,6 +69,11 @@ namespace controllers {
 	std::vector<std::string> OffScreen::getLoadedMeshes() const
 	{
 		return offScreenController->getLoadedMeshes();
+	}
+
+	void OffScreen::prepareCameras()
+	{
+		offScreenController->prepareCameras();
 	}
 
 	void OffScreen::prepareFrameMeshes()
@@ -78,5 +89,25 @@ namespace controllers {
 	void OffScreen::markBVHDirty()
 	{
 		offScreenController->markBVHDirty();
+	}
+
+	void OffScreen::createCamera(CameraId id, bool enableOcclusion)
+	{
+		offScreenController->createCamera(id, enableOcclusion);
+	}
+
+	void OffScreen::removeCamera(CameraId id)
+	{
+		offScreenController->removeCamera(id);
+	}
+
+	void OffScreen::setActiveCamera(CameraId id)
+	{
+		offScreenController->setActiveCamera(id);
+	}
+
+	CameraId OffScreen::getActiveCameraId() const
+	{
+		return offScreenController->getActiveCameraId();
 	}
 }

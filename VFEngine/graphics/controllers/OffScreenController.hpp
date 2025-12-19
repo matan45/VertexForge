@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
 #include "scene/SceneBVH.hpp"
+#include "../render/occlusion/CameraRenderData.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
@@ -54,10 +55,17 @@ namespace controllers
         // Mesh API
         std::string meshLoad(std::string_view meshPath);
         void meshUnload(const std::string& meshId);
+        // Update main camera (backward compatible)
         void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
                               const glm::vec3& cameraPos, float time = 0.0f);
+        // Update specific camera
+        void meshUpdateCamera(render::occlusion::CameraId cameraId, const glm::mat4& view,
+                              const glm::mat4& projection, const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
+
+        // Called each frame to sync CameraComponents with occlusion system
+        void prepareCameras();
 
         // Called each frame to prepare mesh render list from ECS entities
         void prepareFrameMeshes();
@@ -66,9 +74,16 @@ namespace controllers
         void rebuildBVH();        // Force rebuild BVH
         void markBVHDirty();      // Mark BVH for rebuild (call when entities change)
 
-        // Occlusion culling control
+        // Occlusion culling control (main camera)
         void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
         bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
+
+        // Multi-camera support for occlusion culling
+        // Create a secondary camera (e.g., minimap) with optional occlusion culling
+        void createCamera(render::occlusion::CameraId id, bool enableOcclusion = false);
+        void removeCamera(render::occlusion::CameraId id);
+        void setActiveCamera(render::occlusion::CameraId id);
+        render::occlusion::CameraId getActiveCameraId() const;
 
         void* render();
 

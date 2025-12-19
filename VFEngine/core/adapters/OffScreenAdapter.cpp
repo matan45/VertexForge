@@ -57,12 +57,25 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::meshUpdateCamera(services::CameraId cameraId, const glm::mat4& view,
+                                             const glm::mat4& projection, const glm::vec3& cameraPos, float time) {
+        if (offScreen) {
+            offScreen->meshUpdateCamera(cameraId, view, projection, cameraPos, time);
+        }
+    }
+
     bool OffScreenAdapter::isMeshLoaded(const std::string& meshPath) const {
         return offScreen && offScreen->isMeshLoaded(meshPath);
     }
 
     std::vector<std::string> OffScreenAdapter::getLoadedMeshes() const {
         return offScreen ? offScreen->getLoadedMeshes() : std::vector<std::string>{};
+    }
+
+    void OffScreenAdapter::prepareCameras() {
+        if (offScreen) {
+            offScreen->prepareCameras();
+        }
     }
 
     void OffScreenAdapter::prepareFrameMeshes() {
@@ -81,6 +94,28 @@ namespace core {
         if (offScreen) {
             offScreen->markBVHDirty();
         }
+    }
+
+    void OffScreenAdapter::createCamera(services::CameraId id, bool enableOcclusion) {
+        if (offScreen) {
+            offScreen->createCamera(id, enableOcclusion);
+        }
+    }
+
+    void OffScreenAdapter::removeCamera(services::CameraId id) {
+        if (offScreen) {
+            offScreen->removeCamera(id);
+        }
+    }
+
+    void OffScreenAdapter::setActiveCamera(services::CameraId id) {
+        if (offScreen) {
+            offScreen->setActiveCamera(id);
+        }
+    }
+
+    services::CameraId OffScreenAdapter::getActiveCameraId() const {
+        return offScreen ? offScreen->getActiveCameraId() : services::MAIN_CAMERA_ID;
     }
 
 }

@@ -31,12 +31,21 @@ namespace core
         void meshUnload(const std::string& meshId) override;
         void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
                               const glm::vec3& cameraPos, float time = 0.0f) override;
+        void meshUpdateCamera(services::CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
+                              const glm::vec3& cameraPos, float time = 0.0f) override;
         bool isMeshLoaded(const std::string& meshPath) const override;
         std::vector<std::string> getLoadedMeshes() const override;
+        void prepareCameras() override;
         void prepareFrameMeshes() override;
 
         // BVH spatial culling
         void rebuildBVH() override;
         void markBVHDirty() override;
+
+        // Multi-camera occlusion culling
+        void createCamera(services::CameraId id, bool enableOcclusion = false) override;
+        void removeCamera(services::CameraId id) override;
+        void setActiveCamera(services::CameraId id) override;
+        services::CameraId getActiveCameraId() const override;
     };
 }

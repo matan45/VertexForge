@@ -5,13 +5,14 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
-#include "../render/occlusion/OcclusionCullingManager.hpp"
+#include "../render/occlusion/CameraRenderData.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/events/MaterialEvents.hpp"
+#include "print/Logger.hpp"
 
 namespace controllers
 {
@@ -123,23 +124,53 @@ namespace controllers
     void OffScreenController::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
                                                const glm::vec3& cameraPos, float time)
     {
+        // Backward compatible: update main camera
+        meshUpdateCamera(render::occlusion::MAIN_CAMERA_ID, view, projection, cameraPos, time);
+    }
+
+    void OffScreenController::meshUpdateCamera(render::occlusion::CameraId cameraId,
+                                               const glm::mat4& view, const glm::mat4& projection,
+                                               const glm::vec3& cameraPos, float time)
+    {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        if (renderHandler->isMeshPipelineInitialized())
+
+        // Update mesh pipeline UBO only for the active camera (the one being rendered)
+        if (cameraId == renderHandler->getActiveCameraId() && renderHandler->isMeshPipelineInitialized())
         {
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
         }
 
-        // Update frustum for culling
-        currentFrustum.extractFromMatrix(projection * view);
-
-        // Store view-projection for occlusion culling
-        currentViewProj = projection * view;
-
-        // Initialize occlusion culling if not already done
-        if (!occlusionCullingReady && renderHandler->isHiZInitialized())
+        // Get or create camera data
+        auto* cameraManager = renderHandler->getCameraOcclusionManager();
+        auto* cameraData = cameraManager->getCamera(cameraId);
+        if (!cameraData)
         {
-            renderHandler->initOcclusionCulling();
-            occlusionCullingReady = renderHandler->isOcclusionCullingInitialized();
+            return;
+        }
+
+        // Update camera's frustum
+        cameraData->frustum.extractFromMatrix(projection * view);
+        cameraData->viewProj = projection * view;
+        cameraData->nearPlane = currentNearPlane;
+
+        // Update occlusion camera data
+        cameraManager->updateCamera(cameraId, projection * view, currentNearPlane);
+
+        // Initialize occlusion culling for this camera if not already done
+        if (cameraData->useOcclusionCulling && !cameraData->occlusionInitialized)
+        {
+            if (cameraManager->isHiZInitialized(cameraId))
+            {
+                cameraManager->initCameraOcclusionCulling(cameraId);
+            }
+        }
+
+        // Keep backward compatibility for main camera ready flag
+        if (cameraId == render::occlusion::MAIN_CAMERA_ID)
+        {
+            occlusionCullingReady = cameraData->occlusionInitialized;
+            currentViewProj = projection * view;
+            currentFrustum = cameraData->frustum;
         }
     }
 
@@ -159,6 +190,38 @@ namespace controllers
         return meshPipeline->getLoadedMeshIds();
     }
 
+    void OffScreenController::prepareCameras()
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* cameraManager = renderHandler->getCameraOcclusionManager();
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::CameraComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            auto& camComp = view.get<components::CameraComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            // Register camera with occlusion system if not already registered
+            if (!camComp.isRegistered)
+            {
+                loggerInfo("Registering camera {} (entity {}) with occlusion culling {}",
+                          camComp.cameraId, static_cast<uint32_t>(entity),
+                          camComp.enableOcclusionCulling ? "enabled" : "disabled");
+                createCamera(camComp.cameraId, camComp.enableOcclusionCulling);
+                camComp.isRegistered = true;
+            }
+
+            // Extract camera position from world transform
+            glm::vec3 cameraPosition = glm::vec3(worldTransform.worldMatrix[3]);
+
+            // Update camera matrices in the occlusion system
+            meshUpdateCamera(camComp.cameraId, camComp.viewMatrix,
+                           camComp.projectionMatrix, cameraPosition);
+        }
+    }
+
     void OffScreenController::prepareFrameMeshes()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
@@ -169,6 +232,12 @@ namespace controllers
             renderHandler->setMeshDrawList({});
             return;
         }
+
+        // Get active camera's frustum for culling
+        auto* cameraManager = renderHandler->getCameraOcclusionManager();
+        auto* activeCamera = cameraManager->getActiveCamera();
+        const math::Frustum* activeFrustum = activeCamera ? &activeCamera->frustum : nullptr;
+        bool frustumReady = activeFrustum && activeFrustum->isInitialized();
 
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -196,18 +265,18 @@ namespace controllers
         }
 
         // Rebuild BVH only when marked dirty and frustum is ready
-        if (sceneBVH.isDirty() && currentFrustum.isInitialized())
+        if (sceneBVH.isDirty() && frustumReady)
         {
             sceneBVH.rebuild();
             bvhCooldown = 30;  // Wait ~0.5 sec before checking again
         }
 
         // Use BVH for spatial culling if available
-        if (sceneBVH.isBuilt() && currentFrustum.isInitialized())
+        if (sceneBVH.isBuilt() && frustumReady)
         {
-            // Query BVH for visible entities
+            // Query BVH for visible entities using active camera's frustum
             std::vector<uint32_t> visibleEntities;
-            sceneBVH.queryFrustum(currentFrustum, visibleEntities);
+            sceneBVH.queryFrustum(*activeFrustum, visibleEntities);
 
             // Process only visible entities
             for (uint32_t entityId : visibleEntities)
@@ -276,11 +345,11 @@ namespace controllers
                     continue;
                 }
 
-                // Frustum culling fallback
-                if (currentFrustum.isInitialized())
+                // Frustum culling fallback using active camera's frustum
+                if (frustumReady)
                 {
                     const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
-                    if (boundingBox && !currentFrustum.intersectsAABB(*boundingBox, worldTransform.worldMatrix))
+                    if (boundingBox && !activeFrustum->intersectsAABB(*boundingBox, worldTransform.worldMatrix))
                     {
                         continue;
                     }
@@ -314,6 +383,20 @@ namespace controllers
             }
         }
 
+        // Periodic culling stats logging (every ~2 seconds at 60fps)
+        static int statsLogCounter = 0;
+        if (++statsLogCounter >= 120)
+        {
+            statsLogCounter = 0;
+            auto totalMeshEntities = registry.view<components::MeshComponent>().size();
+            auto activeCamId = cameraManager->getActiveCameraId();
+            bool usingBVH = sceneBVH.isBuilt() && frustumReady;
+
+            loggerInfo("Culling stats: camera={}, visible={}/{}, BVH={}, frustum={}",
+                      activeCamId, meshDrawList.size(), totalMeshEntities,
+                      usingBVH ? "yes" : "no", frustumReady ? "ready" : "not ready");
+        }
+
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
 
@@ -331,6 +414,35 @@ namespace controllers
         sceneBVH.markDirty();
     }
 
+    void OffScreenController::createCamera(render::occlusion::CameraId id, bool enableOcclusion)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        renderHandler->createCamera(id, enableOcclusion);
+    }
+
+    void OffScreenController::removeCamera(render::occlusion::CameraId id)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        renderHandler->removeCamera(id);
+    }
+
+    void OffScreenController::setActiveCamera(render::occlusion::CameraId id)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto previousId = renderHandler->getActiveCameraId();
+        if (previousId != id)
+        {
+            loggerInfo("Switching active camera from {} to {}", previousId, id);
+        }
+        renderHandler->setActiveCamera(id);
+    }
+
+    render::occlusion::CameraId OffScreenController::getActiveCameraId() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        return renderHandler->getActiveCameraId();
+    }
+
     void* OffScreenController::render()
     {
         return offScreen->render();
@@ -338,14 +450,17 @@ namespace controllers
 
     void OffScreenController::updateOcclusionCullingData()
     {
-        if (!occlusionCullingEnabled || !occlusionCullingReady)
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* cameraManager = renderHandler->getCameraOcclusionManager();
+        auto* activeCamera = cameraManager->getActiveCamera();
+
+        // Check if active camera has occlusion culling enabled and initialized
+        if (!activeCamera || !activeCamera->useOcclusionCulling || !activeCamera->occlusionInitialized)
         {
             return;
         }
 
-        auto* renderHandler = offScreen->getRenderPassHandler();
         auto* meshPipeline = renderHandler->getMeshPipeline();
-
         if (!meshPipeline)
         {
             return;
@@ -383,8 +498,29 @@ namespace controllers
 
         if (!objectData.empty())
         {
-            renderHandler->updateOcclusionObjects(objectData);
-            renderHandler->updateOcclusionCamera(currentViewProj, currentNearPlane);
+            render::occlusion::CameraId activeCameraId = cameraManager->getActiveCameraId();
+            renderHandler->updateOcclusionObjects(activeCameraId, objectData);
+            renderHandler->updateOcclusionCamera(activeCameraId, activeCamera->viewProj, activeCamera->nearPlane);
+
+            // Periodic occlusion culling stats logging (every ~2 seconds at 60fps)
+            // Note: GPU readback is slow, so only do this periodically for debugging
+            static int occlusionLogCounter = 0;
+            if (++occlusionLogCounter >= 120)
+            {
+                occlusionLogCounter = 0;
+                auto visibilityResults = cameraManager->getVisibilityResults(activeCameraId);
+                if (!visibilityResults.empty())
+                {
+                    uint32_t visibleCount = 0;
+                    for (uint32_t v : visibilityResults)
+                    {
+                        if (v != 0) ++visibleCount;
+                    }
+                    uint32_t occludedCount = static_cast<uint32_t>(visibilityResults.size()) - visibleCount;
+                    loggerInfo("Occlusion culling stats: camera={}, visible={}, occluded={}, total={}",
+                              activeCameraId, visibleCount, occludedCount, visibilityResults.size());
+                }
+            }
         }
     }
 }

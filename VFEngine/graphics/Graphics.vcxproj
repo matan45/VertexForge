@@ -137,6 +137,7 @@
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
+    <ClInclude Include="render\occlusion\CameraRenderData.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
     <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
   </ItemGroup>
@@ -176,6 +177,7 @@
     <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
+    <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
     <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
   </ItemGroup>

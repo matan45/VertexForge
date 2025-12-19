@@ -42,6 +42,7 @@ namespace services {
                               const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
+        void prepareCameras();
         void prepareFrameMeshes();
     };
 

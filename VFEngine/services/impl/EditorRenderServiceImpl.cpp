@@ -20,6 +20,7 @@ namespace services
         }
 
         frameCounter++;
+        prepareCameras();
         prepareFrameMeshes();
 
         void* descriptorSet = offScreenProvider->render();
@@ -329,6 +330,14 @@ namespace services
             return {};
         }
         return offScreenProvider->getLoadedMeshes();
+    }
+
+    void EditorRenderServiceImpl::prepareCameras()
+    {
+        if (offScreenProvider)
+        {
+            offScreenProvider->prepareCameras();
+        }
     }
 
     void EditorRenderServiceImpl::prepareFrameMeshes()

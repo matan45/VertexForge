@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/OffScreen.hpp"
+#include "occlusion/CameraRenderData.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -18,8 +19,6 @@ namespace render
 
     namespace occlusion
     {
-        class HiZBuffer;
-        class OcclusionCullingManager;
         struct GPUObjectData;
     }
 
@@ -45,8 +44,7 @@ namespace render
         std::unique_ptr<IBL> iblRenderer;
         std::unique_ptr<mesh::StaticMeshPipeline> meshPipeline;
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
-        std::unique_ptr<occlusion::HiZBuffer> hiZBuffer;
-        std::unique_ptr<occlusion::OcclusionCullingManager> occlusionCulling;
+        std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
 
         core::OffscreenResources& offscreenResources;
 
@@ -58,10 +56,6 @@ namespace render
         // Billboard rendering state
         bool billboardPipelineInitialized = false;
         mutable std::vector<billboard::BillboardRenderData> currentBillboardDrawList;
-
-        // Hi-Z occlusion culling state
-        bool hiZInitialized = false;
-        bool occlusionCullingInitialized = false;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -93,18 +87,33 @@ namespace render
         billboard::BillboardPipeline* getBillboardPipeline() const { return billboardPipeline.get(); }
         bool isBillboardPipelineInitialized() const { return billboardPipelineInitialized; }
 
-        // Hi-Z occlusion culling methods
-        void initHiZ(vk::Image depthImage, vk::Format depthFormat);
-        occlusion::HiZBuffer* getHiZBuffer() const { return hiZBuffer.get(); }
-        bool isHiZInitialized() const { return hiZInitialized; }
+        // Camera occlusion manager access
+        occlusion::CameraOcclusionManager* getCameraOcclusionManager() const { return cameraOcclusionManager.get(); }
 
-        // GPU occlusion culling methods
-        void initOcclusionCulling();
-        void updateOcclusionObjects(const std::vector<occlusion::GPUObjectData>& objects);
-        void updateOcclusionCamera(const glm::mat4& viewProj, float nearPlane);
-        std::vector<uint32_t> getOcclusionVisibility();
-        occlusion::OcclusionCullingManager* getOcclusionCulling() const { return occlusionCulling.get(); }
-        bool isOcclusionCullingInitialized() const { return occlusionCullingInitialized; }
+        // Camera management (delegates to CameraOcclusionManager)
+        occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
+        occlusion::CameraRenderData* getCamera(occlusion::CameraId id);
+        void removeCamera(occlusion::CameraId id);
+        void setActiveCamera(occlusion::CameraId id);
+        occlusion::CameraId getActiveCameraId() const;
+
+        // Hi-Z occlusion culling methods (with camera ID support)
+        void initHiZ(vk::Image depthImage, vk::Format depthFormat);  // Main camera
+        void initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView, vk::Format depthFormat);
+        bool isHiZInitialized() const;  // Main camera
+        bool isHiZInitialized(occlusion::CameraId cameraId) const;
+
+        // GPU occlusion culling methods (with camera ID support)
+        void initOcclusionCulling();  // Main camera
+        void initOcclusionCulling(occlusion::CameraId cameraId);
+        void updateOcclusionObjects(const std::vector<occlusion::GPUObjectData>& objects);  // Main camera
+        void updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects);
+        void updateOcclusionCamera(const glm::mat4& viewProj, float nearPlane);  // Main camera
+        void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);
+        std::vector<uint32_t> getOcclusionVisibility();  // Main camera
+        std::vector<uint32_t> getOcclusionVisibility(occlusion::CameraId cameraId);
+        bool isOcclusionCullingInitialized() const;  // Main camera
+        bool isOcclusionCullingInitialized(occlusion::CameraId cameraId) const;
 
         void cleanUp() const;
 

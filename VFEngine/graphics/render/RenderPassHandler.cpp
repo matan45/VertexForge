@@ -7,8 +7,7 @@
 #include "mesh/MeshTypes.hpp"
 #include "billboard/BillboardPipeline.hpp"
 #include "billboard/BillboardTypes.hpp"
-#include "occlusion/HiZBuffer.hpp"
-#include "occlusion/OcclusionCullingManager.hpp"
+#include "occlusion/CameraRenderData.hpp"
 
 namespace render {
 	RenderPassHandler::RenderPassHandler(core::Device& device, core::SwapChain& swapChain, core::OffscreenResources& offscreenResources) : device{ device },
@@ -17,8 +16,7 @@ namespace render {
 		, iblRenderer{ std::make_unique<IBL>(device, swapChain, offscreenResources) }
 		, meshPipeline{ std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources) }
 		, billboardPipeline{ std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources) }
-		, hiZBuffer{ std::make_unique<occlusion::HiZBuffer>(device, swapChain) }
-		, occlusionCulling{ std::make_unique<occlusion::OcclusionCullingManager>(device, swapChain) }
+		, cameraOcclusionManager{ std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain) }
 	{
 	}
 
@@ -35,7 +33,7 @@ namespace render {
 		{
 			return;
 		}
-		
+
 		if (iblRenderer->isInitialized())
 		{
 			const auto& irradiance = iblRenderer->getIrradianceImage();
@@ -56,11 +54,11 @@ namespace render {
 		{
 			return;
 		}
-		
+
 		device.getLogicalDevice().waitIdle();
-		
+
 		meshPipeline->cleanUpForReinit();
-		
+
 		meshPipeline->initWithDefaults();
 	}
 
@@ -70,16 +68,16 @@ namespace render {
 		{
 			return;
 		}
-		
+
 		if (!iblRenderer->isInitialized())
 		{
 			return;
 		}
-		
+
 		device.getLogicalDevice().waitIdle();
-		
+
 		meshPipeline->cleanUpForReinit();
-		
+
 		const auto& irradiance = iblRenderer->getIrradianceImage();
 		const auto& prefilter = iblRenderer->getPrefilterImage();
 		const auto& brdfLUT = iblRenderer->getBrdfLUTImage();
@@ -102,51 +100,102 @@ namespace render {
 		billboardPipelineInitialized = true;
 	}
 
-	void RenderPassHandler::initHiZ(vk::Image depthImage, vk::Format depthFormat)
+	// Camera management
+	occlusion::CameraRenderData* RenderPassHandler::createCamera(occlusion::CameraId id, bool enableOcclusion)
 	{
-		if (hiZInitialized)
-		{
-			return;
-		}
-
-		hiZBuffer->init(depthImage, offscreenResources.depthImage.depthImageView, depthFormat);
-		hiZInitialized = true;
+		return cameraOcclusionManager->createCamera(id, enableOcclusion);
 	}
 
+	occlusion::CameraRenderData* RenderPassHandler::getCamera(occlusion::CameraId id)
+	{
+		return cameraOcclusionManager->getCamera(id);
+	}
+
+	void RenderPassHandler::removeCamera(occlusion::CameraId id)
+	{
+		cameraOcclusionManager->removeCamera(id);
+	}
+
+	void RenderPassHandler::setActiveCamera(occlusion::CameraId id)
+	{
+		cameraOcclusionManager->setActiveCamera(id);
+	}
+
+	occlusion::CameraId RenderPassHandler::getActiveCameraId() const
+	{
+		return cameraOcclusionManager->getActiveCameraId();
+	}
+
+	// Hi-Z methods - Main camera (backward compatible)
+	void RenderPassHandler::initHiZ(vk::Image depthImage, vk::Format depthFormat)
+	{
+		initHiZ(occlusion::MAIN_CAMERA_ID, depthImage, offscreenResources.depthImage.depthImageView, depthFormat);
+	}
+
+	void RenderPassHandler::initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView, vk::Format depthFormat)
+	{
+		cameraOcclusionManager->initCameraHiZ(cameraId, depthImage, depthView, depthFormat);
+	}
+
+	bool RenderPassHandler::isHiZInitialized() const
+	{
+		return isHiZInitialized(occlusion::MAIN_CAMERA_ID);
+	}
+
+	bool RenderPassHandler::isHiZInitialized(occlusion::CameraId cameraId) const
+	{
+		return cameraOcclusionManager->isHiZInitialized(cameraId);
+	}
+
+	// Occlusion culling methods - Main camera (backward compatible)
 	void RenderPassHandler::initOcclusionCulling()
 	{
-		if (occlusionCullingInitialized || !hiZInitialized)
-		{
-			return;
-		}
+		initOcclusionCulling(occlusion::MAIN_CAMERA_ID);
+	}
 
-		occlusionCulling->init(hiZBuffer.get());
-		occlusionCullingInitialized = true;
+	void RenderPassHandler::initOcclusionCulling(occlusion::CameraId cameraId)
+	{
+		cameraOcclusionManager->initCameraOcclusionCulling(cameraId);
 	}
 
 	void RenderPassHandler::updateOcclusionObjects(const std::vector<occlusion::GPUObjectData>& objects)
 	{
-		if (occlusionCullingInitialized)
-		{
-			occlusionCulling->updateObjects(objects);
-		}
+		updateOcclusionObjects(occlusion::MAIN_CAMERA_ID, objects);
+	}
+
+	void RenderPassHandler::updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects)
+	{
+		cameraOcclusionManager->updateOcclusionObjects(cameraId, objects);
 	}
 
 	void RenderPassHandler::updateOcclusionCamera(const glm::mat4& viewProj, float nearPlane)
 	{
-		if (occlusionCullingInitialized)
-		{
-			occlusionCulling->updateCamera(viewProj, nearPlane);
-		}
+		updateOcclusionCamera(occlusion::MAIN_CAMERA_ID, viewProj, nearPlane);
+	}
+
+	void RenderPassHandler::updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane)
+	{
+		cameraOcclusionManager->updateCamera(cameraId, viewProj, nearPlane);
 	}
 
 	std::vector<uint32_t> RenderPassHandler::getOcclusionVisibility()
 	{
-		if (occlusionCullingInitialized)
-		{
-			return occlusionCulling->getVisibilityResults();
-		}
-		return {};
+		return getOcclusionVisibility(occlusion::MAIN_CAMERA_ID);
+	}
+
+	std::vector<uint32_t> RenderPassHandler::getOcclusionVisibility(occlusion::CameraId cameraId)
+	{
+		return cameraOcclusionManager->getVisibilityResults(cameraId);
+	}
+
+	bool RenderPassHandler::isOcclusionCullingInitialized() const
+	{
+		return isOcclusionCullingInitialized(occlusion::MAIN_CAMERA_ID);
+	}
+
+	bool RenderPassHandler::isOcclusionCullingInitialized(occlusion::CameraId cameraId) const
+	{
+		return cameraOcclusionManager->isOcclusionInitialized(cameraId);
 	}
 
 	void RenderPassHandler::recreate() const
@@ -170,14 +219,9 @@ namespace render {
 
 	void RenderPassHandler::cleanUp() const
 	{
-		if (occlusionCullingInitialized)
+		if (cameraOcclusionManager)
 		{
-			occlusionCulling->cleanup();
-		}
-
-		if (hiZInitialized)
-		{
-			hiZBuffer->cleanup();
+			cameraOcclusionManager->cleanup();
 		}
 
 		if (billboardPipelineInitialized)
@@ -217,16 +261,16 @@ namespace render {
 			billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
 		}
 
-		// Generate Hi-Z pyramid after all depth-writing passes are complete
-		// This will be used for occlusion culling in the next frame
-		if (hiZInitialized)
-		{
-			hiZBuffer->generate(commandBuffer);
+		// Generate Hi-Z pyramid and run occlusion culling for the active camera
+		occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
 
-			// Run GPU occlusion culling using the freshly generated Hi-Z
-			if (occlusionCullingInitialized)
+		if (cameraOcclusionManager->isHiZInitialized(activeCameraId))
+		{
+			cameraOcclusionManager->generateHiZ(activeCameraId, commandBuffer);
+
+			if (cameraOcclusionManager->isOcclusionInitialized(activeCameraId))
 			{
-				occlusionCulling->cull(commandBuffer);
+				cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
 			}
 		}
 	}
