@@ -4,6 +4,8 @@
 #include <string_view>
 #include <string>
 #include <vector>
+#include <optional>
+#include "../../services/providers/IOffScreenProvider.hpp"
 
 namespace controllers {
 
@@ -35,6 +37,14 @@ namespace controllers {
 		                      const glm::vec3& cameraPos, float time = 0.0f);
 		bool isMeshLoaded(const std::string& meshPath) const;
 		std::vector<std::string> getLoadedMeshes() const;
+		std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 		void prepareFrameMeshes();
+		void prepareFrameCameraFrustums();
+
+		// Billboard API
+		void prepareFrameBillboards();
+		void setShowBillboardIcons(bool show);
+		bool getShowBillboardIcons() const;
+		bool loadBillboardAtlas(const std::string& atlasPath);
 	};
 }

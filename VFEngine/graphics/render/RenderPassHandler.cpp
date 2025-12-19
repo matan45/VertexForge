@@ -3,6 +3,7 @@
 #include "../core/SwapChain.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
+#include "DebugRenderer.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "mesh/MeshTypes.hpp"
 #include "billboard/BillboardPipeline.hpp"
@@ -15,6 +16,7 @@ namespace render {
 		, iblRenderer{ std::make_unique<IBL>(device, swapChain, offscreenResources) }
 		, meshPipeline{ std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources) }
 		, billboardPipeline{ std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources) }
+		, debugRenderer{ std::make_unique<DebugRenderer>(device, swapChain) }
 	{
 	}
 
@@ -82,9 +84,24 @@ namespace render {
 		meshPipeline->init(irradiance, prefilter, brdfLUT);
 	}
 
-	void RenderPassHandler::setMeshDrawList(const std::vector<mesh::MeshRenderData>& meshes)
+	void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes)
 	{
-		currentMeshDrawList = meshes;
+		currentMeshDrawList = std::move(meshes);
+
+		// Check if any meshes have showBoundingBox enabled for debug rendering
+		if (debugRendererInitialized && debugRenderer)
+		{
+			bool hasBoundingBoxes = false;
+			for (const auto& mesh : currentMeshDrawList)
+			{
+				if (mesh.showBoundingBox)
+				{
+					hasBoundingBoxes = true;
+					break;
+				}
+			}
+			debugRenderer->setHasBoundingBoxes(hasBoundingBoxes);
+		}
 	}
 
 	void RenderPassHandler::initBillboardPipeline()
@@ -98,6 +115,46 @@ namespace render {
 		billboardPipelineInitialized = true;
 	}
 
+	void RenderPassHandler::setBillboardDrawList(std::vector<billboard::BillboardRenderData>&& billboards)
+	{
+		currentBillboardDrawList = std::move(billboards);
+		if (billboardPipelineInitialized && billboardPipeline)
+		{
+			billboardPipeline->setBillboardList(currentBillboardDrawList);
+		}
+	}
+
+	void RenderPassHandler::initDebugRenderer()
+	{
+		if (debugRendererInitialized)
+		{
+			return;
+		}
+
+		// Debug renderer needs mesh pipeline's render pass for proper depth testing
+		if (!meshPipelineInitialized)
+		{
+			return;
+		}
+
+		debugRenderer->init(meshPipeline->getRenderPass());
+		debugRendererInitialized = true;
+	}
+
+	void RenderPassHandler::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
+	{
+		if (debugRenderer)
+		{
+			debugRenderer->setCameraFrustumDrawList(std::move(frustums));
+		}
+	}
+
+	void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
+	{
+		currentView = view;
+		currentProjection = projection;
+	}
+
 	void RenderPassHandler::recreate() const
 	{
 		iblRenderer->recreate();
@@ -106,6 +163,11 @@ namespace render {
 		if (meshPipelineInitialized)
 		{
 			meshPipeline->recreate();
+		}
+
+		if (debugRendererInitialized)
+		{
+			debugRenderer->recreate(meshPipeline->getRenderPass());
 		}
 
 		if (billboardPipelineInitialized)
@@ -119,6 +181,12 @@ namespace render {
 		if (billboardPipelineInitialized)
 		{
 			billboardPipeline->cleanUp();
+		}
+
+		if (debugRendererInitialized)
+		{
+			debugRenderer->cleanUp();
+			debugRenderer->cleanUpShaders();
 		}
 
 		if (meshPipelineInitialized)
@@ -142,9 +210,15 @@ namespace render {
 		clearColor->recordCommandBuffer(commandBuffer, imageIndex);
 		iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
-		if (meshPipelineInitialized && !currentMeshDrawList.empty())
+		// Determine if we need to run the mesh render pass (for meshes or debug rendering)
+		bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
+		bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems);
+
+		if (needsMeshPass)
 		{
-			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum);
+			render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
+			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
+				debugRendererPtr, currentView, currentProjection);
 		}
 
 		// Billboard rendering (after mesh pass for proper depth testing)

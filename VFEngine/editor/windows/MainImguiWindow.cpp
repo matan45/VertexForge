@@ -95,6 +95,7 @@ namespace windows
 			handleFileMenu();
 			handleSettingsMenu();
 			handleAddMenu();
+			handleDebug();
 			ImGui::EndMainMenuBar();
 		}
 	}
@@ -279,6 +280,24 @@ namespace windows
 			else if (ImGui::MenuItem("Terrain"))
 			{
 			}
+			ImGui::EndMenu();
+		}
+	}
+
+	void MainImguiWindow::handleDebug()
+	{
+		if (ImGui::BeginMenu("Debug"))
+		{
+			events::render::GetShowBillboardIconsQuery query;
+			bool showBillboards = events::EventDispatcher::instance().query(query);
+
+			if (ImGui::MenuItem("Show Billboard Icons", nullptr, showBillboards))
+			{
+				events::render::SetShowBillboardIconsCommand cmd;
+				cmd.show = !showBillboards;
+				events::EventDispatcher::instance().execute(cmd);
+			}
+
 			ImGui::EndMenu();
 		}
 	}

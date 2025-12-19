@@ -65,8 +65,38 @@ namespace controllers {
 		return offScreenController->getLoadedMeshes();
 	}
 
+	std::optional<services::MeshBounds> OffScreen::getMeshBoundingBox(const std::string& meshPath) const
+	{
+		return offScreenController->getMeshBoundingBox(meshPath);
+	}
+
 	void OffScreen::prepareFrameMeshes()
 	{
 		offScreenController->prepareFrameMeshes();
+	}
+
+	void OffScreen::prepareFrameCameraFrustums()
+	{
+		offScreenController->prepareFrameCameraFrustums();
+	}
+
+	void OffScreen::prepareFrameBillboards()
+	{
+		offScreenController->prepareFrameBillboards();
+	}
+
+	void OffScreen::setShowBillboardIcons(bool show)
+	{
+		offScreenController->setShowBillboardIcons(show);
+	}
+
+	bool OffScreen::getShowBillboardIcons() const
+	{
+		return offScreenController->getShowBillboardIcons();
+	}
+
+	bool OffScreen::loadBillboardAtlas(const std::string& atlasPath)
+	{
+		return offScreenController->loadBillboardAtlas(atlasPath);
 	}
 }

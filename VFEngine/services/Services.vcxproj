@@ -91,6 +91,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="data\DTOs.hpp" />
+    <ClInclude Include="data\EntityConversion.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />
     <ClInclude Include="events\ApplicationEvents.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />

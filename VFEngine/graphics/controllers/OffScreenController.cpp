@@ -5,6 +5,9 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
+#include "../render/billboard/BillboardPipeline.hpp"
+#include "../render/billboard/BillboardTypes.hpp"
+#include "../render/mesh/FrustumDebugRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
@@ -116,6 +119,18 @@ namespace controllers
         if (renderHandler->isMeshPipelineInitialized())
         {
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
+            
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+        
+        renderHandler->setDebugCameraMatrices(view, projection);
+        
+        if (renderHandler->isBillboardPipelineInitialized())
+        {
+            renderHandler->getBillboardPipeline()->updateCameraUBO(view, projection, cameraPos);
         }
 
         // Update frustum for culling
@@ -136,6 +151,26 @@ namespace controllers
             return {};
         }
         return meshPipeline->getLoadedMeshIds();
+    }
+
+    std::optional<services::MeshBounds> OffScreenController::getMeshBoundingBox(const std::string& meshPath) const
+    {
+        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        if (!meshPipeline)
+        {
+            return std::nullopt;
+        }
+
+        const math::AABB* aabb = meshPipeline->getMeshBoundingBox(meshPath);
+        if (!aabb)
+        {
+            return std::nullopt;
+        }
+
+        services::MeshBounds bounds;
+        bounds.min = aabb->min;
+        bounds.max = aabb->max;
+        return bounds;
     }
 
     void OffScreenController::prepareFrameMeshes()
@@ -217,6 +252,109 @@ namespace controllers
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
+    }
+
+    void OffScreenController::prepareFrameBillboards()
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+
+        // Lazy initialize billboard pipeline if needed
+        renderHandler->initBillboardPipeline();
+
+        if (!showBillboardIcons || !renderHandler->isBillboardPipelineInitialized())
+        {
+            renderHandler->setBillboardDrawList({});
+            return;
+        }
+
+        std::vector<render::billboard::BillboardRenderData> billboardDrawList;
+        
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::BillboardComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& billboard = view.get<components::BillboardComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            // Skip non-editor billboards in editor mode
+            if (!billboard.editorOnly)
+            {
+                continue;
+            }
+
+            render::billboard::BillboardRenderData renderData;
+            renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
+            renderData.atlasIndex = billboard.getEffectiveAtlasIndex();
+            renderData.size = billboard.size;
+            renderData.sizeMode = static_cast<uint32_t>(billboard.sizeMode);
+            renderData.entityId = static_cast<uint32_t>(entity);
+            renderData.colorTint = billboard.colorTint;
+
+            billboardDrawList.push_back(renderData);
+        }
+
+        renderHandler->setBillboardDrawList(std::move(billboardDrawList));
+    }
+
+    void OffScreenController::prepareFrameCameraFrustums()
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+
+        std::vector<render::mesh::CameraFrustumRenderData> frustumDrawList;
+        
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::CameraComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& cameraComp = view.get<components::CameraComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            // Skip cameras without frustum visualization enabled
+            if (!cameraComp.showFrustum)
+            {
+                continue;
+            }
+
+            render::mesh::CameraFrustumRenderData renderData;
+            renderData.projectionMatrix = cameraComp.projectionMatrix;
+            renderData.worldMatrix = worldTransform.worldMatrix;
+            renderData.showFrustum = cameraComp.showFrustum;
+
+            frustumDrawList.push_back(renderData);
+        }
+
+        // If we have frustums to render, ensure mesh pipeline and debug renderer are initialized
+        if (!frustumDrawList.empty())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+
+        renderHandler->setCameraFrustumDrawList(std::move(frustumDrawList));
+    }
+
+    bool OffScreenController::loadBillboardAtlas(const std::string& atlasPath)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+
+        // Initialize billboard pipeline if not already done
+        renderHandler->initBillboardPipeline();
+
+        auto* billboardPipeline = renderHandler->getBillboardPipeline();
+        if (!billboardPipeline)
+        {
+            return false;
+        }
+
+        return billboardPipeline->loadAtlas(atlasPath);
     }
 
     void* OffScreenController::render()

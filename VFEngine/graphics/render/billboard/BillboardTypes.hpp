@@ -61,9 +61,9 @@ namespace render::billboard
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 5> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 5> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 4> attributes{};
 
             // location 2: worldPosition (vec3) + atlasIndex (float) packed as vec4
             attributes[0].binding = 1;
@@ -83,23 +83,16 @@ namespace render::billboard
             attributes[2].format = vk::Format::eR32Uint;
             attributes[2].offset = offsetof(BillboardInstanceData, sizeMode);
 
-            // location 5: entityId (uint)
+            // location 5: colorTint (vec4)
             attributes[3].binding = 1;
             attributes[3].location = 5;
-            attributes[3].format = vk::Format::eR32Uint;
-            attributes[3].offset = offsetof(BillboardInstanceData, entityId);
-
-            // location 6: colorTint (vec4)
-            attributes[4].binding = 1;
-            attributes[4].location = 6;
-            attributes[4].format = vk::Format::eR32G32B32A32Sfloat;
-            attributes[4].offset = offsetof(BillboardInstanceData, colorTint);
+            attributes[3].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[3].offset = offsetof(BillboardInstanceData, colorTint);
 
             return attributes;
         }
     };
-
-    // Camera UBO - shared with mesh pipeline
+    
     struct BillboardCameraUBO
     {
         alignas(16) glm::mat4 view;

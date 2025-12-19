@@ -3,6 +3,7 @@
 #include "data/EntityHandle.hpp"
 #include "events/EventDispatcher.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 
@@ -12,9 +13,12 @@ namespace windows
     {
     private:
         services::EntityHandle selectedHandle;
+        services::EntityHandle lastSelectedHandle;
         events::SubscriptionToken sceneClearedToken;
 
-        // Cache for submesh names keyed by mesh path
+        // Set of entity handles that need to be auto-expanded (parents of selected entity)
+        std::unordered_set<uint64_t> expandedHandles;
+        
         static std::unordered_map<std::string, std::vector<std::string>> submeshNameCache;
 
     public:
@@ -29,6 +33,8 @@ namespace windows
         void dragDropEntity(services::EntityHandle handle);
         void subscribeToEvents();
         void onSceneCleared();
+        
+        void expandToSelection(services::EntityHandle handle);
 
         // UI styling helpers
         static void pushComponentHeaderStyle();

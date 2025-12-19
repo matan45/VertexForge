@@ -84,7 +84,9 @@ namespace components {
 	{
 		glm::mat4 projectionMatrix{1.0f};
 		glm::mat4 viewMatrix{1.0f};
-		bool isPerspective = true; // True for perspective, false for orthographic
+		bool isPerspective = true; 
+		bool isPrimary = false; // True if this is the primary camera for runtime playback
+		bool showFrustum = false;
 		float fieldOfView = 90.0f; // For perspective cameras, in degrees
 		float orthoSize = 10.0f; // For orthographic cameras, half the height of the view
 		float nearPlane = 0.1f;
@@ -197,11 +199,11 @@ namespace components {
 
 	
 	enum class BillboardIconType : uint8_t {
-		Custom = 0,   
-		Light,       
+		Light = 0,       
 		Camera,      
 		AudioSource, 
-		Particle     
+		Particle,
+		Custom,   
 	};
 
 	struct BillboardComponent {
@@ -209,7 +211,7 @@ namespace components {
 		uint32_t atlasIndex = 0;
 		
 		BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
-		glm::vec2 size{ 32.0f, 32.0f };  // Pixels (screen-space) or world units
+		glm::vec2 size{ 64.0f, 64.0f };  // Pixels (screen-space) or world units
 		
 		glm::vec4 colorTint{ 1.0f, 1.0f, 1.0f, 1.0f };  // RGBA
 
@@ -221,7 +223,7 @@ namespace components {
 			if (iconType == BillboardIconType::Custom) {
 				return atlasIndex;
 			}
-			// Explicit mapping - decoupled from enum order
+			
 			switch (iconType) {
 			case BillboardIconType::Light:       return 0;
 			case BillboardIconType::Camera:      return 1;

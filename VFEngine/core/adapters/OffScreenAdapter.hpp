@@ -33,6 +33,14 @@ namespace core
                               const glm::vec3& cameraPos, float time = 0.0f) override;
         bool isMeshLoaded(const std::string& meshPath) const override;
         std::vector<std::string> getLoadedMeshes() const override;
+        std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const override;
         void prepareFrameMeshes() override;
+        void prepareFrameCameraFrustums() override;
+
+        // Billboard API
+        void prepareFrameBillboards() override;
+        void setShowBillboardIcons(bool show) override;
+        bool getShowBillboardIcons() const override;
+        bool loadBillboardAtlas(const std::string& atlasPath) override;
     };
 }

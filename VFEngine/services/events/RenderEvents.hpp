@@ -128,4 +128,34 @@ namespace events::render {
         std::string_view getName() const override { return "GetLoadedMeshes"; }
     };
 
+    struct GetMeshBoundingBoxQuery : IQuery<std::optional<services::MeshBoundingBox>> {
+        std::string meshPath;
+
+        std::string_view getName() const override { return "GetMeshBoundingBox"; }
+    };
+
+    // ============================================
+    // BILLBOARD COMMANDS - Billboard icon visibility
+    // ============================================
+
+    struct SetShowBillboardIconsCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowBillboardIcons"; }
+    };
+
+    struct LoadBillboardAtlasCommand : ICommand<bool> {
+        std::string atlasPath;
+
+        std::string_view getName() const override { return "LoadBillboardAtlas"; }
+    };
+
+    // ============================================
+    // BILLBOARD QUERIES
+    // ============================================
+
+    struct GetShowBillboardIconsQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowBillboardIcons"; }
+    };
+
 }
