@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
+#include "scene/SceneBVH.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
@@ -29,6 +30,7 @@ namespace controllers
         core::Device& device;
         std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
         math::Frustum currentFrustum;  // Current camera frustum for culling
+        scene::SceneBVH sceneBVH;      // BVH for spatial culling
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;  // Subscription token for material saved notification
 
     public:
@@ -53,6 +55,10 @@ namespace controllers
 
         // Called each frame to prepare mesh render list from ECS entities
         void prepareFrameMeshes();
+
+        // BVH management
+        void rebuildBVH();        // Force rebuild BVH
+        void markBVHDirty();      // Mark BVH for rebuild (call when entities change)
 
         void* render();
     };

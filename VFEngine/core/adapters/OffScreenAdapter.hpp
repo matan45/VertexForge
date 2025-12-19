@@ -34,5 +34,9 @@ namespace core
         bool isMeshLoaded(const std::string& meshPath) const override;
         std::vector<std::string> getLoadedMeshes() const override;
         void prepareFrameMeshes() override;
+
+        // BVH spatial culling
+        void rebuildBVH() override;
+        void markBVHDirty() override;
     };
 }

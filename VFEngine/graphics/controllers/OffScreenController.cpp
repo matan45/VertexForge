@@ -11,6 +11,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/EventTypes.hpp"
 #include "../../services/events/MaterialEvents.hpp"
+#include "print/Logger.hpp"
 
 namespace controllers
 {
@@ -32,7 +33,17 @@ namespace controllers
     void OffScreenController::init()
     {
         offScreen->init();
-        
+
+        // Set up BVH mesh bounds callback
+        sceneBVH.setMeshBoundsCallback([this](const std::string& meshPath) -> const math::AABB* {
+            auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+            if (meshPipeline)
+            {
+                return meshPipeline->getMeshBoundingBox(meshPath);
+            }
+            return nullptr;
+        });
+
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
             [this](const events::material::MaterialFileSavedNotification& notification) {
 
@@ -150,73 +161,161 @@ namespace controllers
         }
 
         std::vector<render::mesh::MeshRenderData> meshDrawList;
-
-        // Iterate all entities with MeshComponent and WorldTransformComponent
         auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
 
-        for (auto entity : view)
+        // Check if any transforms are dirty - mark BVH dirty when entities move
+        // Use cooldown to avoid rebuilding every frame during continuous movement
+        static int bvhCooldown = 0;
+
+        if (bvhCooldown > 0)
         {
-            const auto& meshComp = view.get<components::MeshComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            // Skip if mesh path is empty
-            if (meshComp.meshPath.empty())
+            --bvhCooldown;
+        }
+        else if (!sceneBVH.isDirty())
+        {
+            auto transformView = registry.view<components::TransformComponent, components::MeshComponent>();
+            for (auto entity : transformView)
             {
-                continue;
-            }
-
-            // Skip meshes that aren't loaded yet - they will be preloaded via
-            // MeshDataChangedNotification subscription when mesh data is set on entities
-            if (!meshPipeline->isMeshLoaded(meshComp.meshPath))
-            {
-                continue;
-            }
-
-            // Frustum culling - skip meshes outside the camera frustum (only if frustum is initialized)
-            if (currentFrustum.isInitialized())
-            {
-                const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
-                if (boundingBox && !currentFrustum.intersectsAABB(*boundingBox, worldTransform.worldMatrix))
+                const auto& transform = transformView.get<components::TransformComponent>(entity);
+                if (transform.isDirty)
                 {
-                    continue;  // Mesh is outside frustum, skip rendering
+                    sceneBVH.markDirty();
+                    break;
                 }
             }
+        }
 
-            render::mesh::MeshRenderData renderData;
-            renderData.meshPath = meshComp.meshPath;
-            renderData.modelMatrix = worldTransform.worldMatrix;
+        // Rebuild BVH only when marked dirty and frustum is ready
+        if (sceneBVH.isDirty() && currentFrustum.isInitialized())
+        {
+            sceneBVH.rebuild();
+            bvhCooldown = 30;  // Wait ~0.5 sec before checking again
+        }
 
-            // Default PBR values (used if no material assigned)
-            renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-            renderData.metallic = 0.0f;
-            renderData.roughness = 0.5f;
-            renderData.ao = 1.0f;
-            renderData.emission = 0.0f;
-            renderData.showBoundingBox = meshComp.showBoundingBox;
+        // Use BVH for spatial culling if available
+        if (sceneBVH.isBuilt() && currentFrustum.isInitialized())
+        {
+            // Query BVH for visible entities
+            std::vector<uint32_t> visibleEntities;
+            sceneBVH.queryFrustum(currentFrustum, visibleEntities);
 
-            // Check for MaterialComponent and populate material assignments
-            if (registry.all_of<components::MaterialComponent>(entity))
+            // Process only visible entities
+            for (uint32_t entityId : visibleEntities)
             {
-                const auto& materialComp = registry.get<components::MaterialComponent>(entity);
+                auto entity = static_cast<entt::entity>(entityId);
 
-                // Set default material path
-                renderData.defaultMaterialPath = materialComp.defaultMaterial;
-
-                // Copy per-submesh material assignments
-                for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                if (!registry.valid(entity))
                 {
-                    render::mesh::SubMeshMaterialInfo matInfo;
-                    matInfo.materialPath = materialPath;
-                    renderData.submeshMaterials[submeshName] = matInfo;
+                    continue;
                 }
-            }
 
-            meshDrawList.push_back(renderData);
+                const auto& meshComp = registry.get<components::MeshComponent>(entity);
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+
+                if (meshComp.meshPath.empty() || !meshPipeline->isMeshLoaded(meshComp.meshPath))
+                {
+                    continue;
+                }
+
+                render::mesh::MeshRenderData renderData;
+                renderData.meshPath = meshComp.meshPath;
+                renderData.modelMatrix = worldTransform.worldMatrix;
+
+                // Default PBR values
+                renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                renderData.metallic = 0.0f;
+                renderData.roughness = 0.5f;
+                renderData.ao = 1.0f;
+                renderData.emission = 0.0f;
+                renderData.showBoundingBox = meshComp.showBoundingBox;
+
+                // Check for MaterialComponent
+                if (registry.all_of<components::MaterialComponent>(entity))
+                {
+                    const auto& materialComp = registry.get<components::MaterialComponent>(entity);
+                    renderData.defaultMaterialPath = materialComp.defaultMaterial;
+
+                    for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                    {
+                        render::mesh::SubMeshMaterialInfo matInfo;
+                        matInfo.materialPath = materialPath;
+                        renderData.submeshMaterials[submeshName] = matInfo;
+                    }
+                }
+
+                meshDrawList.push_back(renderData);
+            }
+        }
+        else
+        {
+            // Fallback: iterate all entities (BVH not ready or no frustum)
+            auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
+
+            for (auto entity : view)
+            {
+                const auto& meshComp = view.get<components::MeshComponent>(entity);
+                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+                if (meshComp.meshPath.empty())
+                {
+                    continue;
+                }
+
+                if (!meshPipeline->isMeshLoaded(meshComp.meshPath))
+                {
+                    continue;
+                }
+
+                // Frustum culling fallback
+                if (currentFrustum.isInitialized())
+                {
+                    const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
+                    if (boundingBox && !currentFrustum.intersectsAABB(*boundingBox, worldTransform.worldMatrix))
+                    {
+                        continue;
+                    }
+                }
+
+                render::mesh::MeshRenderData renderData;
+                renderData.meshPath = meshComp.meshPath;
+                renderData.modelMatrix = worldTransform.worldMatrix;
+
+                renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                renderData.metallic = 0.0f;
+                renderData.roughness = 0.5f;
+                renderData.ao = 1.0f;
+                renderData.emission = 0.0f;
+                renderData.showBoundingBox = meshComp.showBoundingBox;
+
+                if (registry.all_of<components::MaterialComponent>(entity))
+                {
+                    const auto& materialComp = registry.get<components::MaterialComponent>(entity);
+                    renderData.defaultMaterialPath = materialComp.defaultMaterial;
+
+                    for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                    {
+                        render::mesh::SubMeshMaterialInfo matInfo;
+                        matInfo.materialPath = materialPath;
+                        renderData.submeshMaterials[submeshName] = matInfo;
+                    }
+                }
+
+                meshDrawList.push_back(renderData);
+            }
         }
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
+    }
+
+    void OffScreenController::rebuildBVH()
+    {
+        sceneBVH.rebuild();
+    }
+
+    void OffScreenController::markBVHDirty()
+    {
+        sceneBVH.markDirty();
     }
 
     void* OffScreenController::render()

@@ -28,6 +28,10 @@ namespace services {
         virtual bool isMeshLoaded(const std::string& meshPath) const = 0;
         virtual std::vector<std::string> getLoadedMeshes() const = 0;
         virtual void prepareFrameMeshes() = 0;
+
+        // BVH spatial culling
+        virtual void rebuildBVH() = 0;
+        virtual void markBVHDirty() = 0;
     };
 
 }

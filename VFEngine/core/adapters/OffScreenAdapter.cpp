@@ -71,4 +71,16 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::rebuildBVH() {
+        if (offScreen) {
+            offScreen->rebuildBVH();
+        }
+    }
+
+    void OffScreenAdapter::markBVHDirty() {
+        if (offScreen) {
+            offScreen->markBVHDirty();
+        }
+    }
+
 }

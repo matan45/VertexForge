@@ -69,4 +69,14 @@ namespace controllers {
 	{
 		offScreenController->prepareFrameMeshes();
 	}
+
+	void OffScreen::rebuildBVH()
+	{
+		offScreenController->rebuildBVH();
+	}
+
+	void OffScreen::markBVHDirty()
+	{
+		offScreenController->markBVHDirty();
+	}
 }

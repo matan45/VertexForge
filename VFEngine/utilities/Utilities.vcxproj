@@ -96,6 +96,7 @@
     <ClInclude Include="material\MaterialAsset.hpp" />
     <ClInclude Include="material\MaterialManager.hpp" />
     <ClInclude Include="material\MaterialTypes.hpp" />
+    <ClInclude Include="math\BVH.hpp" />
     <ClInclude Include="math\Frustum.hpp" />
     <ClInclude Include="math\MathHelper.hpp" />
     <ClInclude Include="nfd\FileDialog.hpp" />
@@ -113,6 +114,7 @@
     <ClInclude Include="scene\EntityRegistry.hpp" />
     <ClInclude Include="scene\Level.hpp" />
     <ClInclude Include="scene\LevelHandler.hpp" />
+    <ClInclude Include="scene\SceneBVH.hpp" />
     <ClInclude Include="scene\SceneGraphSystem.hpp" />
     <ClInclude Include="serialization\JsonConverters.hpp" />
     <ClInclude Include="serialization\SceneSerialization.hpp" />

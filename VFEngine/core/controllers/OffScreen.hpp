@@ -36,5 +36,9 @@ namespace controllers {
 		bool isMeshLoaded(const std::string& meshPath) const;
 		std::vector<std::string> getLoadedMeshes() const;
 		void prepareFrameMeshes();
+
+		// BVH spatial culling
+		void rebuildBVH();
+		void markBVHDirty();
 	};
 }
