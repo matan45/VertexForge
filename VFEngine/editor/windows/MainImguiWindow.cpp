@@ -616,7 +616,7 @@ namespace windows
 								ImGui::Text("Occlusion Rate:");
 								ImGui::SameLine();
 								ImGui::ProgressBar(occlusionRate, ImVec2(-1, 0),
-									(std::to_string(static_cast<int>(occlusionRate * 100)) + "%%").c_str());
+									(std::to_string(static_cast<int>(occlusionRate * 100)) + "%").c_str());
 							}
 						}
 						else
