@@ -47,11 +47,9 @@ namespace windows {
 			meshCameraCmd.cameraPosition = editorCamera->position;
 			meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
 			dispatcher.execute(meshCameraCmd);
-
-			// Get viewport position for picking calculations
+			
 			ImVec2 viewportPos = ImGui::GetCursorScreenPos();
-
-			// Get viewport texture through event system
+			
 			events::render::GetViewportTextureQuery query;
 			auto texture = dispatcher.query(query);
 			if (texture.isValid()) {
@@ -63,8 +61,7 @@ namespace windows {
 			glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
 			updateBillboardScreenPositions(vp, vs);
 			updateMeshPickData();
-
-			// Handle left-click picking (only when not in camera look mode)
+			
 			if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
 				&& !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
 				ImVec2 mousePos = ImGui::GetMousePos();
@@ -152,11 +149,9 @@ namespace windows {
 			if (!billboard.selectable || !billboard.editorOnly) {
 				continue;
 			}
-
-			// Get world position from transform matrix
+			
 			glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
-
-			// Project to clip space
+			
 			glm::vec4 clipPos = projMatrix * viewMatrix * glm::vec4(worldPos, 1.0f);
 
 			// Behind camera check
@@ -166,8 +161,7 @@ namespace windows {
 
 			// Convert to NDC
 			glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
-
-			// Skip if outside frustum
+			
 			if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f) {
 				continue;
 			}
@@ -255,7 +249,6 @@ namespace windows {
 
 	math::Ray ViewPort::screenToWorldRay(glm::vec2 screenPos, glm::vec2 viewportPos, glm::vec2 viewportSize)
 	{
-		// Clamp screen position to viewport bounds to prevent unpredictable ray directions
 		screenPos.x = glm::clamp(screenPos.x, viewportPos.x, viewportPos.x + viewportSize.x);
 		screenPos.y = glm::clamp(screenPos.y, viewportPos.y, viewportPos.y + viewportSize.y);
 
@@ -283,8 +276,7 @@ namespace windows {
 		// Transform to world space
 		glm::vec3 worldNear = glm::vec3(invView * nearPoint);
 		glm::vec3 worldFar = glm::vec3(invView * farPoint);
-
-		// Create ray
+		
 		glm::vec3 direction = glm::normalize(worldFar - worldNear);
 		return math::Ray(worldNear, direction);
 	}
@@ -296,8 +288,7 @@ namespace windows {
 		}
 
 		auto& registry = scene::EntityRegistry::getRegistry();
-
-		// Create ray from screen position
+		
 		math::Ray ray = screenToWorldRay(screenPos, viewportPos, viewportSize);
 
 		// Find closest hit

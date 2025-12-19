@@ -134,8 +134,7 @@ namespace windows
         auto entityDataOpt = dispatcher.query(entityQuery);
 
         std::string entityName = entityDataOpt.has_value() ? entityDataOpt->name : "Unknown";
-
-        // Auto-expand if this handle is in the expand set (parent of selected entity)
+        
         if (expandedHandles.count(handle.id) > 0)
         {
             ImGui::SetNextItemOpen(true);

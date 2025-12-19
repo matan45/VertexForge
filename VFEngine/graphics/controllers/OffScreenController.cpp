@@ -119,18 +119,15 @@ namespace controllers
         if (renderHandler->isMeshPipelineInitialized())
         {
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
-
-            // Initialize debug renderer if not already done (requires mesh pipeline render pass)
+            
             if (!renderHandler->isDebugRendererInitialized())
             {
                 renderHandler->initDebugRenderer();
             }
         }
-
-        // Update debug renderer camera matrices
+        
         renderHandler->setDebugCameraMatrices(view, projection);
-
-        // Update billboard camera if pipeline is initialized
+        
         if (renderHandler->isBillboardPipelineInitialized())
         {
             renderHandler->getBillboardPipeline()->updateCameraUBO(view, projection, cameraPos);
@@ -271,8 +268,7 @@ namespace controllers
         }
 
         std::vector<render::billboard::BillboardRenderData> billboardDrawList;
-
-        // Iterate all entities with BillboardComponent and WorldTransformComponent
+        
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::BillboardComponent, components::WorldTransformComponent>();
 
@@ -288,7 +284,6 @@ namespace controllers
             }
 
             render::billboard::BillboardRenderData renderData;
-            // Extract position from world matrix (translation column)
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.atlasIndex = billboard.getEffectiveAtlasIndex();
             renderData.size = billboard.size;
@@ -307,8 +302,7 @@ namespace controllers
         auto* renderHandler = offScreen->getRenderPassHandler();
 
         std::vector<render::mesh::CameraFrustumRenderData> frustumDrawList;
-
-        // Iterate all entities with CameraComponent and WorldTransformComponent
+        
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::CameraComponent, components::WorldTransformComponent>();
 

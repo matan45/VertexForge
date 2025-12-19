@@ -84,9 +84,9 @@ namespace components {
 	{
 		glm::mat4 projectionMatrix{1.0f};
 		glm::mat4 viewMatrix{1.0f};
-		bool isPerspective = true; // True for perspective, false for orthographic
+		bool isPerspective = true; 
 		bool isPrimary = false; // True if this is the primary camera for runtime playback
-		bool showFrustum = false; // Debug: show camera frustum wireframe
+		bool showFrustum = false;
 		float fieldOfView = 90.0f; // For perspective cameras, in degrees
 		float orthoSize = 10.0f; // For orthographic cameras, half the height of the view
 		float nearPlane = 0.1f;

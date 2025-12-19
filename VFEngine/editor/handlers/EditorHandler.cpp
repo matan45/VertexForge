@@ -89,8 +89,7 @@ namespace handlers {
 		inputService->registerEventHandlers();
 		windowStateService->registerEventHandlers();
 		previewService->registerEventHandlers();
-
-		// Load billboard icon atlas for editor icons (camera, light, audio, particle)
+		
 		events::render::LoadBillboardAtlasCommand atlasCmd;
 		atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
 		events::EventDispatcher::instance().execute(atlasCmd);
@@ -99,26 +98,22 @@ namespace handlers {
 	void EditorHandler::setupEventSubscriptions()
 	{
 		auto& dispatcher = events::EventDispatcher::instance();
-
-		// Subscribe to window resize events
+		
 		resizeSubscription = dispatcher.subscribe<events::application::WindowResizedNotification>(
 			[this](const events::application::WindowResizedNotification&) {
 				bootstrap->triggerResize();
 			});
-
-		// Subscribe to window minimize events (pause rendering when minimized)
+		
 		minimizeSubscription = dispatcher.subscribe<events::application::WindowMinimizedNotification>(
 			[](const events::application::WindowMinimizedNotification&) {
 				// Could pause rendering or other expensive operations here
 			});
 
-		// Subscribe to window restore events
 		restoreSubscription = dispatcher.subscribe<events::application::WindowRestoredNotification>(
 			[](const events::application::WindowRestoredNotification&) {
 				// Could resume rendering or other operations here
 			});
-
-		// Subscribe to window focus events
+		
 		focusSubscription = dispatcher.subscribe<events::application::WindowFocusedNotification>(
 			[](const events::application::WindowFocusedNotification&) {
 				// Could handle focus changes (e.g., pause input when unfocused)

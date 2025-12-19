@@ -32,7 +32,7 @@ namespace controllers
         std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
         math::Frustum currentFrustum;  // Current camera frustum for culling
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;  // Subscription token for material saved notification
-        bool showBillboardIcons = true;  // Toggle for billboard icon visibility
+        bool showBillboardIcons = true; 
 
     public:
         explicit OffScreenController();
@@ -55,20 +55,17 @@ namespace controllers
         std::vector<std::string> getLoadedMeshes() const;
         std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 
-        // Called each frame to prepare mesh render list from ECS entities
+       
         void prepareFrameMeshes();
-
-        // Called each frame to prepare billboard render list from ECS entities
+        
         void prepareFrameBillboards();
-
-        // Called each frame to prepare camera frustum debug render list
+        
         void prepareFrameCameraFrustums();
 
         // Billboard visibility toggle
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
         bool getShowBillboardIcons() const { return showBillboardIcons; }
-
-        // Billboard atlas loading
+        
         bool loadBillboardAtlas(const std::string& atlasPath);
 
         void* render();

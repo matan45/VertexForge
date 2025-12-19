@@ -7,45 +7,45 @@
 
 namespace math
 {
-    // Ray for intersection tests
     struct Ray
     {
         glm::vec3 origin{0.0f};
         glm::vec3 direction{0.0f, 0.0f, -1.0f};
 
         Ray() = default;
-        Ray(const glm::vec3& o, const glm::vec3& d) : origin(o), direction(glm::normalize(d)) {}
+
+        Ray(const glm::vec3& o, const glm::vec3& d) : origin(o), direction(glm::normalize(d))
+        {
+        }
     };
 
-    // Axis-Aligned Bounding Box
     struct AABB
     {
         glm::vec3 min{0.0f};
         glm::vec3 max{0.0f};
 
         AABB() = default;
-        AABB(const glm::vec3& minPoint, const glm::vec3& maxPoint)
-            : min(minPoint), max(maxPoint) {}
 
-        // Get center of the AABB
+        AABB(const glm::vec3& minPoint, const glm::vec3& maxPoint)
+            : min(minPoint), max(maxPoint)
+        {
+        }
+
         glm::vec3 getCenter() const
         {
             return (min + max) * 0.5f;
         }
 
-        // Get half-extents (size from center to edge)
         glm::vec3 getExtents() const
         {
             return (max - min) * 0.5f;
         }
 
-        // Check if AABB is valid (min <= max)
         bool isValid() const
         {
             return min.x <= max.x && min.y <= max.y && min.z <= max.z;
         }
 
-        // Expand AABB to include a point
         void expand(const glm::vec3& point)
         {
             min = glm::min(min, point);
@@ -74,7 +74,6 @@ namespace math
         }
 
         // Ray-AABB intersection test (slab method)
-        // Returns distance along ray if hit, std::nullopt if no intersection
         std::optional<float> intersectRay(const Ray& ray) const
         {
             float tmin = 0.0f;
@@ -118,10 +117,16 @@ namespace math
     public:
         // Frustum planes: Left, Right, Bottom, Top, Near, Far
         enum Plane { Left = 0, Right, Bottom, Top, Near, Far, Count };
+        
+    private:
+        std::array<glm::vec4, Count> planes;
+        bool initialized = false;
+        
+    public:
+        
 
         Frustum() = default;
-
-        // Check if frustum has been initialized with valid planes
+        
         bool isInitialized() const { return initialized; }
 
         // Extract frustum planes from view-projection matrix
@@ -223,8 +228,6 @@ namespace math
             return intersectsAABB(worldAABB);
         }
 
-    private:
-        std::array<glm::vec4, Count> planes;
-        bool initialized = false;
+   
     };
 }

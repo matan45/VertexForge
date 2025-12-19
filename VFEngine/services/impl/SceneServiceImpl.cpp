@@ -413,7 +413,6 @@ namespace services {
 
         if (!sceneEntity.hasComponent<components::CameraComponent>()) {
             sceneEntity.addComponent<components::CameraComponent>();
-            // Auto-attach billboard icon for editor visualization (2 = Camera icon type)
             autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Camera));
             return true;
         }

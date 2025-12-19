@@ -10,14 +10,13 @@
 #include <optional>
 
 namespace windows {
-	// Cached screen-space data for billboard picking
+	
 	struct BillboardScreenHit {
 		services::EntityHandle entity;
 		glm::vec2 screenCenter;
 		glm::vec2 screenSize;
 	};
-
-	// Cached data for mesh picking (ray-AABB intersection)
+	
 	struct MeshPickData {
 		services::EntityHandle entity;
 		math::AABB worldAABB;
@@ -27,27 +26,23 @@ namespace windows {
 	class ViewPort : public controllers::imguiHandler::ImguiWindow
 	{
 	private:
-		// Editor camera - standalone camera for scene navigation
 		std::unique_ptr<editor::EditorCamera> editorCamera;
 
 		// Mouse tracking for camera look
 		bool isFirstMouseInput = true;
 		float lastMouseX = 0.0f;
 		float lastMouseY = 0.0f;
-
-		// Billboard picking cache
+		
 		std::vector<BillboardScreenHit> cachedBillboardHits;
-
-		// Mesh picking cache
+		
 		std::vector<MeshPickData> cachedMeshHits;
 
 	public:
-		ViewPort();
+		explicit ViewPort();
 		~ViewPort() override = default;
 
 		void draw() override;
-
-		// Get the editor camera for renderer access
+		
 		editor::EditorCamera* getEditorCamera() const { return editorCamera.get(); }
 
 	private:

@@ -2,7 +2,7 @@
 #version 460 core
 
 layout(location = 0) in vec2 inPosition;   // Quad corner offset (-0.5 to 0.5)
-layout(location = 1) in vec2 inTexCoord;   // UV coordinates
+layout(location = 1) in vec2 inTexCoord; 
 
 layout(location = 2) in vec4 inWorldPosAndAtlas;  // xyz = world position, w = atlas index
 layout(location = 3) in vec2 inSize;              // Size in pixels (screen) or world units
@@ -77,7 +77,6 @@ void main() {
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColorTint;
-// Note: entityId (location 2) is passed through for potential GPU picking but not used in color output
 
 layout(location = 0) out vec4 outColor;
 

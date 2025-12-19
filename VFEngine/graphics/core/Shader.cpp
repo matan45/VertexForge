@@ -12,7 +12,6 @@ namespace core {
 	void Shader::readShader(std::string_view path)
 	{
 		auto futureShaders = resource::ResourceManager::loadShaderAsync(path);
-		// Extract the shader name from the file path
 		std::string shaderName = std::filesystem::path(path).stem().string();
 
 		auto shaders = futureShaders.get();
@@ -25,7 +24,6 @@ namespace core {
 			vk::ShaderStageFlagBits stage = shaderTypeToVulkanStage(shader.type);
 			// Compile GLSL to SPIR-V
 			std::vector<uint32_t> spirvCode = compileShaderToSPIRV(shader.source, stage, shaderName);
-			// Create Vulkan shader module
 			createShaderModule(spirvCode, stage);
 		}
 	}

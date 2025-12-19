@@ -288,7 +288,6 @@ namespace windows
 	{
 		if (ImGui::BeginMenu("Debug"))
 		{
-			// Billboard Icons toggle
 			events::render::GetShowBillboardIconsQuery query;
 			bool showBillboards = events::EventDispatcher::instance().query(query);
 

@@ -84,7 +84,6 @@ namespace render::billboard
             attributes[2].offset = offsetof(BillboardInstanceData, sizeMode);
 
             // location 5: colorTint (vec4)
-            // Note: entityId kept in struct for CPU picking but not sent to shader
             attributes[3].binding = 1;
             attributes[3].location = 5;
             attributes[3].format = vk::Format::eR32G32B32A32Sfloat;
@@ -93,8 +92,7 @@ namespace render::billboard
             return attributes;
         }
     };
-
-    // Camera UBO - shared with mesh pipeline
+    
     struct BillboardCameraUBO
     {
         alignas(16) glm::mat4 view;

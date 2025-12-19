@@ -17,8 +17,7 @@ namespace services {
     public:
         explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~SceneServiceImpl() override = default;
-
-        // Register all command and query handlers with the EventDispatcher
+        
         void registerEventHandlers() override;
 
         // Entity Lifecycle
@@ -97,15 +96,12 @@ namespace services {
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
         std::optional<EntityHandle> selectedEntity;
-
-        // Helper to build EntityData from entt::entity
+        
         EntityData buildEntityData(entt::entity entity) const;
 
         // Recursive helper for scene hierarchy
         void collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const;
-
-        // Helper to auto-attach billboard component for editor visualization
-        // iconType: 0=Custom, 1=Light, 2=Camera, 3=AudioSource, 4=Particle
+        
         void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
     };
 

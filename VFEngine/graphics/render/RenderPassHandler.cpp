@@ -216,7 +216,6 @@ namespace render {
 
 		if (needsMeshPass)
 		{
-			// Pass debug renderer to mesh pipeline so it can render inside the same render pass
 			render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
 			meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
 				debugRendererPtr, currentView, currentProjection);

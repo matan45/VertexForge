@@ -1051,8 +1051,7 @@ namespace render::mesh
             renderSubmesh(*item.meshData, *item.subMesh, item.subMeshIndex,
                           material::BlendMode::Translucent, currentPipeline);
         }
-
-        // Render all debug visualizations (AABB, frustums, etc.)
+        
         if (debugRenderer && debugRenderer->hasItemsToRender())
         {
             debugRenderer->render(commandBuffer, meshDrawList, debugView, debugProjection,

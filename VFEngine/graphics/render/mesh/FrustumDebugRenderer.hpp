@@ -14,16 +14,14 @@ namespace core
 
 namespace render::mesh
 {
-    // Data needed to render a camera frustum
+    
     struct CameraFrustumRenderData
     {
         glm::mat4 projectionMatrix;
         glm::mat4 worldMatrix;  // Camera entity's world transform
         bool showFrustum = false;
     };
-
-    // Push constants for frustum wireframe rendering
-    // Total size: 64 + 64 + 16 = 144 bytes (within 256 byte limit of most GPUs)
+    
     struct FrustumPushConstants
     {
         glm::mat4 viewProj;          // Editor's view-projection matrix
@@ -51,7 +49,7 @@ namespace render::mesh
         bool initialized = false;
 
     public:
-        FrustumDebugRenderer(core::Device& device, core::SwapChain& swapChain);
+        explicit FrustumDebugRenderer(core::Device& device, core::SwapChain& swapChain);
         ~FrustumDebugRenderer();
 
         void init(vk::RenderPass renderPass);
