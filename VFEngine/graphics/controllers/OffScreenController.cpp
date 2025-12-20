@@ -6,11 +6,13 @@
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
 #include "../render/occlusion/CameraRenderData.hpp"
+#include "../render/occlusion/OcclusionCullingManager.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
 #include "../render/billboard/BillboardTypes.hpp"
 #include "../render/mesh/FrustumDebugRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "material/MaterialTypes.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/EventTypes.hpp"
@@ -72,44 +74,47 @@ namespace controllers
         materialSavedSubscription = std::make_unique<events::SubscriptionToken>(token);
 
         // Subscribe to mesh data changes (mesh added/changed/removed on entity)
+        // This is a structural change - requires full rebuild
         auto meshChangedToken = events::EventDispatcher::instance().subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification) {
-                // Check if entity is static or dynamic and mark appropriate tree
+                // Check if entity is static or dynamic and mark appropriate tree for structural rebuild
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto entity = static_cast<entt::entity>(notification.entity.id);
                 if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity)) {
                     const auto& transform = registry.get<components::TransformComponent>(entity);
                     if (transform.isStatic) {
-                        sceneBVH.markStaticDirty();
+                        sceneBVH.markStaticStructuralChange();
                     } else {
-                        sceneBVH.markDynamicDirty();
+                        sceneBVH.markDynamicStructuralChange();
                     }
                 } else {
                     // Default to static if we can't determine
-                    sceneBVH.markStaticDirty();
+                    sceneBVH.markStaticStructuralChange();
                 }
             });
         meshDataChangedSubscription = std::make_unique<events::SubscriptionToken>(meshChangedToken);
 
         // Subscribe to entity deleted notification to update BVH
+        // This is a structural change - requires full rebuild
         auto deletedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& notification) {
-                // Mark appropriate BVH dirty based on which tree the entity was in
+                // Mark appropriate BVH for structural rebuild based on which tree the entity was in
                 uint32_t entityId = static_cast<uint32_t>(notification.entity.id);
                 if (sceneBVH.isStaticEntity(entityId)) {
-                    sceneBVH.markStaticDirty();
+                    sceneBVH.markStaticStructuralChange();
                 } else {
-                    sceneBVH.markDynamicDirty();
+                    sceneBVH.markDynamicStructuralChange();
                 }
             });
         entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(deletedToken);
 
         // Subscribe to static flag changes to move entities between BVH trees
+        // This is a structural change for both trees
         auto staticChangedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityStaticChangedNotification>(
             [this](const events::scene::EntityStaticChangedNotification&) {
-                // Mark both trees dirty when entity moves between them
-                sceneBVH.markStaticDirty();
-                sceneBVH.markDynamicDirty();
+                // Mark both trees for structural rebuild when entity moves between them
+                sceneBVH.markStaticStructuralChange();
+                sceneBVH.markDynamicStructuralChange();
             });
         entityStaticChangedSubscription = std::make_unique<events::SubscriptionToken>(staticChangedToken);
     }
@@ -339,15 +344,17 @@ namespace controllers
         }
 
         // Dynamic BVH: check for dirty transforms on dynamic entities only
+        // Mark specific entities dirty for incremental refit (much faster than full rebuild)
         static int dynamicBvhCooldown = 0;
 
         if (dynamicBvhCooldown > 0)
         {
             --dynamicBvhCooldown;
         }
-        else if (!sceneBVH.isDynamicDirty())
+        else if (!sceneBVH.needsDynamicRebuild())
         {
             // Only check dynamic entities (TransformComponent.isStatic == false)
+            // Mark specific entities dirty for incremental update
             auto dynamicView = registry.view<components::TransformComponent, components::MeshComponent>();
             for (auto entity : dynamicView)
             {
@@ -355,16 +362,17 @@ namespace controllers
                 // Only check dynamic entities for movement
                 if (!transform.isStatic && transform.isDirty)
                 {
-                    sceneBVH.markDynamicDirty();
-                    break;
+                    // Mark specific entity dirty for incremental refit
+                    sceneBVH.markDynamicEntityDirty(static_cast<uint32_t>(entity));
                 }
             }
         }
 
-        // Rebuild dynamic BVH with short cooldown (optimized for highly dynamic scenes)
+        // Update dynamic BVH: uses fast refit for transform-only changes,
+        // full rebuild only when entities are added/removed
         if (sceneBVH.isDynamicDirty() && frustumReady)
         {
-            sceneBVH.rebuildDynamicBVH();
+            sceneBVH.updateDynamicBVH();
             dynamicBvhCooldown = 5;  // Short cooldown for dynamic entities
         }
 
@@ -674,9 +682,29 @@ namespace controllers
                 continue;
             }
 
+            // Determine occlusion flags based on material blend mode
+            uint32_t flags = render::occlusion::OcclusionFlags::None;
+
+            // Check if entity has a material and get its blend mode
+            if (registry.all_of<components::MaterialComponent>(entity))
+            {
+                const auto& matComp = registry.get<components::MaterialComponent>(entity);
+                // Check default material first, then any submesh materials
+                std::string materialToCheck = matComp.defaultMaterial;
+                if (!materialToCheck.empty())
+                {
+                    material::BlendMode blendMode = meshPipeline->getMaterialBlendMode(materialToCheck);
+                    if (blendMode != material::BlendMode::Opaque)
+                    {
+                        flags |= render::occlusion::OcclusionFlags::Transparent;
+                    }
+                }
+            }
+
             render::occlusion::GPUObjectData obj;
             obj.aabbMin = glm::vec4(localAABB->min, static_cast<float>(entity));
-            obj.aabbMax = glm::vec4(localAABB->max, 0.0f);
+            // Store flags as uint reinterpreted as float
+            obj.aabbMax = glm::vec4(localAABB->max, glm::uintBitsToFloat(flags));
             obj.modelMatrix = worldTransform.worldMatrix;
 
             objectData.push_back(obj);

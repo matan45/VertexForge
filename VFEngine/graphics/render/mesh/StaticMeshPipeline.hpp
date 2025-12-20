@@ -165,6 +165,10 @@ namespace render::mesh
         // Get bounding box of a loaded mesh (for frustum culling)
         const math::AABB* getMeshBoundingBox(const std::string& meshId) const;
 
+        // Get blend mode of a material (for occlusion culling)
+        // Returns Opaque if material not found or not loaded
+        material::BlendMode getMaterialBlendMode(const std::string& materialPath) const;
+
         std::vector<std::string> getLoadedMeshIds() const;
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,

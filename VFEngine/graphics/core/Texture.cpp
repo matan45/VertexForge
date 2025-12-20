@@ -168,6 +168,10 @@ namespace core
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingBufferMemory);
 
+        // Release CPU mip data now that it's uploaded to GPU
+        // This frees ~33% memory overhead for large textures
+        texturePtr->releaseCPUData();
+
         createSampler(texturePtr->mipLevels);
 
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
@@ -301,6 +305,10 @@ namespace core
 
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingBufferMemory);
+
+        // Release CPU mip data now that it's uploaded to GPU
+        // This frees ~33% memory overhead for large textures
+        texturePtr->releaseCPUData();
 
         createSampler(texturePtr->mipLevels);
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);

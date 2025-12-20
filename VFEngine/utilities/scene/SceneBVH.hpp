@@ -12,6 +12,7 @@ namespace scene
 
     // Two-level BVH manager for spatial queries on entities
     // Separates static and dynamic entities into separate trees for efficient updates
+    // Supports incremental refitting for transform-only changes
     class SceneBVH
     {
     public:
@@ -39,6 +40,7 @@ namespace scene
 
             staticBVH_.build(std::move(primitives));
             staticDirty_ = false;
+            staticStructuralChange_ = false;
         }
 
         // Rebuild dynamic BVH only (entities without StaticEntityComponent)
@@ -54,6 +56,63 @@ namespace scene
             }
 
             dynamicBVH_.build(std::move(primitives));
+            dirtyDynamicEntities_.clear();
+            dynamicDirty_ = false;
+            dynamicStructuralChange_ = false;
+        }
+
+        // Refit dynamic BVH (update bounds without restructuring)
+        // Much faster than full rebuild for transform-only changes
+        void refitDynamicBVH()
+        {
+            if (dirtyDynamicEntities_.empty())
+            {
+                dynamicDirty_ = false;
+                return;
+            }
+
+            // Collect new bounds for dirty entities
+            std::unordered_map<uint32_t, math::AABB> updatedBounds;
+            auto& registry = EntityRegistry::getRegistry();
+
+            for (uint32_t entityId : dirtyDynamicEntities_)
+            {
+                auto entity = static_cast<entt::entity>(entityId);
+                if (!registry.valid(entity))
+                {
+                    continue;
+                }
+
+                if (!registry.all_of<components::MeshComponent, components::WorldTransformComponent>(entity))
+                {
+                    continue;
+                }
+
+                const auto& meshComp = registry.get<components::MeshComponent>(entity);
+                if (meshComp.meshPath.empty())
+                {
+                    continue;
+                }
+
+                const math::AABB* localAABB = nullptr;
+                if (meshBoundsCallback_)
+                {
+                    localAABB = meshBoundsCallback_(meshComp.meshPath);
+                }
+
+                if (!localAABB || !localAABB->isValid())
+                {
+                    continue;
+                }
+
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+                updatedBounds[entityId] = localAABB->getTransformed(worldTransform.worldMatrix);
+            }
+
+            // Apply batch update to BVH
+            dynamicBVH_.updateEntitiesBounds(updatedBounds);
+
+            dirtyDynamicEntities_.clear();
             dynamicDirty_ = false;
         }
 
@@ -75,11 +134,38 @@ namespace scene
         void markStaticDirty()
         {
             staticDirty_ = true;
+            staticStructuralChange_ = true;  // Assume structural change for legacy calls
         }
 
         void markDynamicDirty()
         {
             dynamicDirty_ = true;
+            dynamicStructuralChange_ = true;  // Assume structural change for legacy calls
+        }
+
+        // Mark a specific dynamic entity as needing bounds update (transform change only)
+        void markDynamicEntityDirty(uint32_t entityId)
+        {
+            if (dynamicEntities_.find(entityId) != dynamicEntities_.end())
+            {
+                dirtyDynamicEntities_.insert(entityId);
+                dynamicDirty_ = true;
+                // Note: NOT setting dynamicStructuralChange_ - this is just a transform update
+            }
+        }
+
+        // Mark dynamic tree for structural rebuild (entity added/removed)
+        void markDynamicStructuralChange()
+        {
+            dynamicDirty_ = true;
+            dynamicStructuralChange_ = true;
+        }
+
+        // Mark static tree for structural rebuild (entity added/removed)
+        void markStaticStructuralChange()
+        {
+            staticDirty_ = true;
+            staticStructuralChange_ = true;
         }
 
         // Legacy method - marks both as dirty
@@ -87,6 +173,8 @@ namespace scene
         {
             staticDirty_ = true;
             dynamicDirty_ = true;
+            staticStructuralChange_ = true;
+            dynamicStructuralChange_ = true;
         }
 
         bool isStaticDirty() const
@@ -97,6 +185,18 @@ namespace scene
         bool isDynamicDirty() const
         {
             return dynamicDirty_;
+        }
+
+        // Check if dynamic tree needs full rebuild vs just refit
+        bool needsDynamicRebuild() const
+        {
+            return dynamicStructuralChange_;
+        }
+
+        // Get count of dirty dynamic entities (for debugging/profiling)
+        size_t getDirtyDynamicEntityCount() const
+        {
+            return dirtyDynamicEntities_.size();
         }
 
         // Legacy method - returns true if either is dirty
@@ -113,11 +213,31 @@ namespace scene
             }
         }
 
+        // Update dynamic BVH - uses refit when possible, full rebuild when necessary
+        void updateDynamicBVH()
+        {
+            if (!dynamicDirty_)
+            {
+                return;
+            }
+
+            if (dynamicStructuralChange_)
+            {
+                // Structural change: full rebuild required
+                rebuildDynamicBVH();
+            }
+            else
+            {
+                // Transform-only changes: use fast refit
+                refitDynamicBVH();
+            }
+        }
+
         void rebuildDynamicIfDirty()
         {
             if (dynamicDirty_)
             {
-                rebuildDynamicBVH();
+                updateDynamicBVH();
             }
         }
 
@@ -138,18 +258,16 @@ namespace scene
             // Reserve estimated space
             results.reserve(staticEntities_.size() + dynamicEntities_.size());
 
-            // Query static tree
+            // Query static tree (append directly)
             if (staticBVH_.isBuilt())
             {
-                staticBVH_.queryFrustum(frustum, results);
+                staticBVH_.queryFrustumAppend(frustum, results);
             }
 
-            // Query dynamic tree and append
+            // Query dynamic tree (append directly - no temp allocation)
             if (dynamicBVH_.isBuilt())
             {
-                std::vector<uint32_t> dynamicResults;
-                dynamicBVH_.queryFrustum(frustum, dynamicResults);
-                results.insert(results.end(), dynamicResults.begin(), dynamicResults.end());
+                dynamicBVH_.queryFrustumAppend(frustum, results);
             }
         }
 
@@ -208,21 +326,27 @@ namespace scene
             dynamicBVH_.clear();
             staticEntities_.clear();
             dynamicEntities_.clear();
+            dirtyDynamicEntities_.clear();
             staticDirty_ = true;
             dynamicDirty_ = true;
+            staticStructuralChange_ = true;
+            dynamicStructuralChange_ = true;
         }
 
     private:
         math::BVH staticBVH_;                          // Infrequently rebuilt
-        math::BVH dynamicBVH_;                         // Frequently rebuilt
+        math::BVH dynamicBVH_;                         // Frequently rebuilt/refitted
 
         MeshBoundsCallback meshBoundsCallback_;
 
-        std::unordered_set<uint32_t> staticEntities_;  // Track static entity IDs
-        std::unordered_set<uint32_t> dynamicEntities_; // Track dynamic entity IDs
+        std::unordered_set<uint32_t> staticEntities_;       // Track static entity IDs
+        std::unordered_set<uint32_t> dynamicEntities_;      // Track dynamic entity IDs
+        std::unordered_set<uint32_t> dirtyDynamicEntities_; // Entities needing bounds update
 
         bool staticDirty_ = true;
         bool dynamicDirty_ = true;
+        bool staticStructuralChange_ = true;   // Needs full rebuild (entity added/removed)
+        bool dynamicStructuralChange_ = true;  // Needs full rebuild vs just refit
 
         // Collect primitives for static entities (TransformComponent.isStatic == true)
         void collectStaticPrimitives(std::vector<math::BVHPrimitive>& primitives)

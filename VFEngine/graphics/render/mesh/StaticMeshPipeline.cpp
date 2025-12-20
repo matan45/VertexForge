@@ -763,6 +763,28 @@ namespace render::mesh
         return meshCache->getMeshBoundingBox(meshId);
     }
 
+    material::BlendMode StaticMeshPipeline::getMaterialBlendMode(const std::string& materialPath) const
+    {
+        if (materialPath.empty())
+        {
+            return material::BlendMode::Opaque;
+        }
+
+        auto materialData = materialCacheManager->getCachedMaterial(materialPath);
+        if (!materialData)
+        {
+            // Try to load the material if not cached
+            materialData = materialCacheManager->getMaterial(materialPath);
+        }
+
+        if (materialData)
+        {
+            return materialData->blendMode;
+        }
+
+        return material::BlendMode::Opaque;
+    }
+
     std::vector<std::string> StaticMeshPipeline::getLoadedMeshIds() const
     {
         return meshCache->getLoadedMeshIds();

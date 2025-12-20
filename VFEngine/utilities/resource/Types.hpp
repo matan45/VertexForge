@@ -83,6 +83,29 @@ namespace resource
             mipData.push_back({width, height, std::move(data)});
             mipLevels = 1;
         }
+
+        // Release CPU mip data to free memory after GPU upload
+        // Preserves metadata (dimensions, mip count) but frees pixel data
+        void releaseCPUData() {
+            for (auto& mip : mipData) {
+                mip.data.clear();
+                mip.data.shrink_to_fit();
+            }
+        }
+
+        // Check if CPU pixel data is still available
+        bool hasCPUData() const {
+            return !mipData.empty() && !mipData[0].data.empty();
+        }
+
+        // Get total CPU memory usage in bytes
+        size_t getCPUMemoryUsage() const {
+            size_t total = 0;
+            for (const auto& mip : mipData) {
+                total += mip.data.capacity();
+            }
+            return total;
+        }
     };
 
     struct HDRData
@@ -106,6 +129,29 @@ namespace resource
             mipData.clear();
             mipData.push_back({width, height, std::move(data)});
             mipLevels = 1;
+        }
+
+        // Release CPU mip data to free memory after GPU upload
+        // Preserves metadata (dimensions, mip count) but frees pixel data
+        void releaseCPUData() {
+            for (auto& mip : mipData) {
+                mip.data.clear();
+                mip.data.shrink_to_fit();
+            }
+        }
+
+        // Check if CPU pixel data is still available
+        bool hasCPUData() const {
+            return !mipData.empty() && !mipData[0].data.empty();
+        }
+
+        // Get total CPU memory usage in bytes
+        size_t getCPUMemoryUsage() const {
+            size_t total = 0;
+            for (const auto& mip : mipData) {
+                total += mip.data.capacity() * sizeof(float);
+            }
+            return total;
         }
     };
 

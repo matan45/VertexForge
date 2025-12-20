@@ -13,10 +13,18 @@ namespace render::occlusion {
 
     class HiZBuffer;
 
+    // Occlusion flags for GPUObjectData
+    namespace OcclusionFlags {
+        constexpr uint32_t None        = 0;
+        constexpr uint32_t Transparent = 1 << 0;  // Object is translucent/masked - don't write to Hi-Z
+        constexpr uint32_t NoOcclude   = 1 << 1;  // Object should never occlude others
+        constexpr uint32_t NoCull      = 1 << 2;  // Object should never be culled (always visible)
+    }
+
     // GPU object data for occlusion culling
     struct alignas(16) GPUObjectData {
         glm::vec4 aabbMin;  // xyz = min corner, w = entityId
-        glm::vec4 aabbMax;  // xyz = max corner, w = unused
+        glm::vec4 aabbMax;  // xyz = max corner, w = flags (cast to float, reinterpret as uint)
         glm::mat4 modelMatrix;
     };
 
