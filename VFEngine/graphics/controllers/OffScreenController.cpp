@@ -511,7 +511,7 @@ namespace controllers
         // Lazy initialize billboard pipeline if needed
         renderHandler->initBillboardPipeline();
 
-        if (!showBillboardIcons || !renderHandler->isBillboardPipelineInitialized())
+        if (playModeActive || !showBillboardIcons || !renderHandler->isBillboardPipelineInitialized())
         {
             renderHandler->setBillboardDrawList({});
             return;
@@ -551,8 +551,15 @@ namespace controllers
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
 
+        // Skip frustum visualization in Play mode or when debug rendering is disabled
+        if (playModeActive || !showDebugRendering)
+        {
+            renderHandler->setCameraFrustumDrawList({});
+            return;
+        }
+
         std::vector<render::mesh::CameraFrustumRenderData> frustumDrawList;
-        
+
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::CameraComponent, components::WorldTransformComponent>();
 

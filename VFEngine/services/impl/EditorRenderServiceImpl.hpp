@@ -20,6 +20,7 @@ namespace services
 
         std::unordered_map<void*, EditorTextureHandle> loadedTextures;
         events::SubscriptionToken meshDataChangedToken;
+        events::SubscriptionToken editorModeChangedToken;
 
     public:
         explicit EditorRenderServiceImpl(IOffScreenProvider* offScreenProvider,

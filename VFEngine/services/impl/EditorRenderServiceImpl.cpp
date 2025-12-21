@@ -343,6 +343,16 @@ namespace services
                     loadMesh(notification.meshPath);
                 }
             });
+
+        editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
+            [this](const events::editor::EditorModeChangedNotification& notification)
+            {
+                if (offScreenProvider)
+                {
+                    bool isPlayMode = notification.currentMode == services::EditorMode::Play;
+                    offScreenProvider->setPlayMode(isPlayMode);
+                }
+            });
     }
 
     std::string EditorRenderServiceImpl::loadMesh(const std::string& meshPath)
@@ -425,26 +435,12 @@ namespace services
             return;
         }
 
-        // Skip billboards in Play mode
-        bool isPlayMode = events::EventDispatcher::instance().query(events::editor::IsPlayModeQuery{});
-        if (isPlayMode)
-        {
-            return;
-        }
-
         offScreenProvider->prepareFrameBillboards();
     }
 
     void EditorRenderServiceImpl::prepareFrameCameraFrustums()
     {
         if (!offScreenProvider)
-        {
-            return;
-        }
-
-        // Skip camera frustum visualization in Play mode
-        bool isPlayMode = events::EventDispatcher::instance().query(events::editor::IsPlayModeQuery{});
-        if (isPlayMode)
         {
             return;
         }
