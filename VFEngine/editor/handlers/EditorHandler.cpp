@@ -59,11 +59,13 @@ namespace handlers {
 
 		windowImguiHandler->cleanUp();
 
-		// Reset services before graphics cleanup to release Vulkan resources
-		editorModeService.reset();
+		// Reset graphics-dependent services first
 		previewService.reset();
 		renderService.reset();
 		sceneService.reset();
+
+		// Then reset state/utility services
+		editorModeService.reset();
 		windowStateService.reset();
 		inputService.reset();
 

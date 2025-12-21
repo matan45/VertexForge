@@ -379,8 +379,8 @@ namespace controllers
                 renderData.roughness = 0.5f;
                 renderData.ao = 1.0f;
                 renderData.emission = 0.0f;
-                // Skip debug rendering in Play mode or when debug rendering is disabled
-                renderData.showBoundingBox = (playModeActive || !showDebugRendering) ? false : meshComp.showBoundingBox;
+                // Only show bounding boxes in Edit mode when debug rendering is enabled
+                renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
 
                 // Check for MaterialComponent
                 if (registry.all_of<components::MaterialComponent>(entity))
@@ -438,8 +438,8 @@ namespace controllers
                 renderData.roughness = 0.5f;
                 renderData.ao = 1.0f;
                 renderData.emission = 0.0f;
-                // Skip debug rendering in Play mode or when debug rendering is disabled
-                renderData.showBoundingBox = (playModeActive || !showDebugRendering) ? false : meshComp.showBoundingBox;
+                // Only show bounding boxes in Edit mode when debug rendering is enabled
+                renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
 
                 if (registry.all_of<components::MaterialComponent>(entity))
                 {

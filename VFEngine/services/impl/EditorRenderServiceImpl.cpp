@@ -13,6 +13,21 @@ namespace services
     {
     }
 
+    EditorRenderServiceImpl::~EditorRenderServiceImpl()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (meshDataChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(meshDataChangedToken);
+        }
+
+        if (editorModeChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(editorModeChangedToken);
+        }
+    }
+
     ViewportTextureHandle EditorRenderServiceImpl::getViewportTexture()
     {
         if (!offScreenProvider)

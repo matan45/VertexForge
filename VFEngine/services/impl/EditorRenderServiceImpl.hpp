@@ -25,7 +25,7 @@ namespace services
     public:
         explicit EditorRenderServiceImpl(IOffScreenProvider* offScreenProvider,
                                          IEditorTextureProvider* textureProvider);
-        ~EditorRenderServiceImpl() override = default;
+        ~EditorRenderServiceImpl() override;
 
         void registerEventHandlers() override;
 
