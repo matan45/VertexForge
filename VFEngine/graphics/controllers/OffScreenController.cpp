@@ -104,12 +104,12 @@ namespace controllers
             });
         entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(deletedToken);
 
-        // Subscribe to static flag changes to move entities between BVH trees
-        // This is a structural change for both trees
+       
         auto staticChangedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityStaticChangedNotification>(
             [this](const events::scene::EntityStaticChangedNotification&) {
-                // Mark both trees for structural rebuild when entity moves between them
-                sceneBVH.rebuildAll();
+                // Defer rebuild - entity moves between static/dynamic trees
+                // Both trees need structural rebuild, batched with other changes
+                sceneBVH.markDirty();
             });
         entityStaticChangedSubscription = std::make_unique<events::SubscriptionToken>(staticChangedToken);
     }
