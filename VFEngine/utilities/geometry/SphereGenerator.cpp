@@ -2,13 +2,13 @@
 #include <glm/gtc/constants.hpp>
 #include <cmath>
 
-namespace geometry {
-
-    resource::MeshData SphereGenerator::generate(const SphereParams& params) {
+namespace geometry
+{
+    resource::MeshData SphereGenerator::generate(const SphereParams& params)
+    {
         resource::MeshData mesh;
         mesh.name = "PreviewSphere";
 
-        // Initialize with one LOD level (procedural geometry doesn't need LOD simplification)
         mesh.lodLevels.resize(1);
         auto& lod0 = mesh.lodLevels[0];
 
@@ -17,12 +17,14 @@ namespace geometry {
         const uint32_t lonSegs = params.longitudeSegments;
 
         // Generate vertices
-        for (uint32_t lat = 0; lat <= latSegs; ++lat) {
+        for (uint32_t lat = 0; lat <= latSegs; ++lat)
+        {
             float theta = static_cast<float>(lat) * glm::pi<float>() / static_cast<float>(latSegs);
             float sinTheta = std::sin(theta);
             float cosTheta = std::cos(theta);
 
-            for (uint32_t lon = 0; lon <= lonSegs; ++lon) {
+            for (uint32_t lon = 0; lon <= lonSegs; ++lon)
+            {
                 float phi = static_cast<float>(lon) * 2.0f * glm::pi<float>() / static_cast<float>(lonSegs);
                 float sinPhi = std::sin(phi);
                 float cosPhi = std::cos(phi);
@@ -51,24 +53,25 @@ namespace geometry {
 
         // Generate indices with correct CCW winding for outward-facing normals
         // Vulkan uses CCW as front face (configured in pipeline)
-        for (uint32_t lat = 0; lat < latSegs; ++lat) {
-            for (uint32_t lon = 0; lon < lonSegs; ++lon) {
+        for (uint32_t lat = 0; lat < latSegs; ++lat)
+        {
+            for (uint32_t lon = 0; lon < lonSegs; ++lon)
+            {
                 uint32_t topLeft = lat * (lonSegs + 1) + lon;
                 uint32_t topRight = topLeft + 1;
                 uint32_t bottomLeft = topLeft + lonSegs + 1;
                 uint32_t bottomRight = bottomLeft + 1;
-
-                // At top pole (lat=0), topLeft and topRight are at same position - skip upper triangle
-                // At bottom pole (lat=latSegs-1), bottomLeft and bottomRight are at same position - skip lower triangle
-
-                if (lat != 0) {
+                
+                if (lat != 0)
+                {
                     // Upper-left triangle of quad: CCW from outside
                     lod0.indices.push_back(topLeft);
                     lod0.indices.push_back(bottomLeft);
                     lod0.indices.push_back(topRight);
                 }
 
-                if (lat != latSegs - 1) {
+                if (lat != latSegs - 1)
+                {
                     // Lower-right triangle of quad: CCW from outside
                     lod0.indices.push_back(topRight);
                     lod0.indices.push_back(bottomLeft);
@@ -80,12 +83,12 @@ namespace geometry {
         return mesh;
     }
 
-    resource::MeshesData SphereGenerator::generateMeshesData(const SphereParams& params) {
+    resource::MeshesData SphereGenerator::generateMeshesData(const SphereParams& params)
+    {
         resource::MeshesData meshesData;
         meshesData.headerFileType = resource::FileType::MESH;
         meshesData.numberOfMeshes = 1;
         meshesData.meshes.push_back(generate(params));
         return meshesData;
     }
-
 }

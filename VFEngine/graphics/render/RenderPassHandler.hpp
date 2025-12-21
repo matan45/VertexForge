@@ -72,7 +72,7 @@ namespace render
 
         void init();
 
-        void recreate() const;
+        void recreate();
 
         IBL* getIBL() const { return iblRenderer.get(); }
         
@@ -112,22 +112,15 @@ namespace render
         void setActiveCamera(occlusion::CameraId id);
         occlusion::CameraId getActiveCameraId() const;
 
-        // Hi-Z occlusion culling methods (with camera ID support)
-        void initHiZ(vk::Image depthImage, vk::Format depthFormat);  // Main camera
+        // Hi-Z occlusion culling methods
         void initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView, vk::Format depthFormat);
-        bool isHiZInitialized() const;  // Main camera
         bool isHiZInitialized(occlusion::CameraId cameraId) const;
 
-        // GPU occlusion culling methods (with camera ID support)
-        void initOcclusionCulling();  // Main camera
+        // GPU occlusion culling methods
         void initOcclusionCulling(occlusion::CameraId cameraId);
-        void updateOcclusionObjects(const std::vector<occlusion::GPUObjectData>& objects);  // Main camera
         void updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects);
-        void updateOcclusionCamera(const glm::mat4& viewProj, float nearPlane);  // Main camera
         void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);
-        std::vector<uint32_t> getOcclusionVisibility();  // Main camera
         std::vector<uint32_t> getOcclusionVisibility(occlusion::CameraId cameraId);
-        bool isOcclusionCullingInitialized() const;  // Main camera
         bool isOcclusionCullingInitialized(occlusion::CameraId cameraId) const;
 
         void cleanUp() const;

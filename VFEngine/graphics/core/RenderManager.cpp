@@ -135,6 +135,11 @@ namespace core {
 		commandPool->recreate();  // Reallocate command buffers if needed
 
 		imguiRender->recreate();
+
+		// Notify listeners (e.g., OffScreenViewPort for Hi-Z recreation)
+		if (onResizeCallback) {
+			onResizeCallback();
+		}
 	}
 
 	void RenderManager::cleanUp() const

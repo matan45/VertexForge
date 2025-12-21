@@ -23,37 +23,33 @@ namespace render::mesh
 {
     class MeshGPUCache
     {
+    private:
+        core::Device& device;
+        std::unique_ptr<core::TransferManager> transferManager;
+        std::unordered_map<std::string, MeshGPUData> loadedMeshes;
+        
     public:
         explicit MeshGPUCache(core::Device& device);
         ~MeshGPUCache();
 
         // Non-copyable
-        MeshGPUCache(const MeshGPUCache&) = delete;
+        explicit MeshGPUCache(const MeshGPUCache&) = delete;
         MeshGPUCache& operator=(const MeshGPUCache&) = delete;
-
-        // Mesh loading from file
+        
         std::string loadMesh(std::string_view meshPath);
-
-        // Upload procedural mesh data directly (bypasses file loading)
+        
         std::string uploadMesh(const std::string& meshId, const resource::MeshesData& meshData);
-
-        // Mesh unloading
+        
         void unloadMesh(const std::string& meshId);
         void unloadAllMeshes();
-
-        // Mesh queries
+        
         const MeshGPUData* getMesh(const std::string& meshId) const;
         bool isMeshLoaded(const std::string& meshId) const;
         const math::AABB* getMeshBoundingBox(const std::string& meshId) const;
         std::vector<std::string> getLoadedMeshIds() const;
 
     private:
-        // Helper functions for LOD buffer management
         void uploadLODLevel(LODGPUBuffers& lodBuffers, const resource::LODLevel& lodLevel);
         void destroyLODBuffers(LODGPUBuffers& lodBuffers);
-
-        core::Device& device;
-        std::unique_ptr<core::TransferManager> transferManager;
-        std::unordered_map<std::string, MeshGPUData> loadedMeshes;
     };
 }

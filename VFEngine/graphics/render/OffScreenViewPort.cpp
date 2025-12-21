@@ -5,12 +5,11 @@
 #include "../core/Utilities.hpp"
 #include "../core/RenderManager.hpp"
 #include "../render/RenderPassHandler.hpp"
-#include "print/Logger.hpp"
-
+#include "../../utilities/types/CameraTypes.hpp"
 #include <imgui_impl_vulkan.h>
 
 
-namespace imguiPass {
+namespace render {
 	OffScreenViewPort::OffScreenViewPort(core::Device& device, core::SwapChain& swapChain) :device{ device }
 		, swapChain{ swapChain }
 		, commandPool{ std::make_unique<core::CommandPool>(device, swapChain) }
@@ -41,7 +40,9 @@ namespace imguiPass {
 		renderPassHandler->init();
 
 		// Initialize Hi-Z buffer for occlusion culling
-		renderPassHandler->initHiZ(offscreenResources.depthImage.depthImage,
+		renderPassHandler->initHiZ(types::MAIN_CAMERA_ID,
+		                           offscreenResources.depthImage.depthImage,
+		                           offscreenResources.depthImage.depthImageView,
 		                           swapChain.getSwapchainDepthStencilFormat());
 	}
 
@@ -52,39 +53,27 @@ namespace imguiPass {
 		// Wait for the previous frame using this command buffer to complete
 		vk::Result result = device.getLogicalDevice().waitForFences(
 			1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
-		if (result != vk::Result::eSuccess) {
-			// Log error but continue
-		}
 		result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
 		(void)result;  // Suppress unused warning
-
-		// Get the command buffer for this frame
+		
 		vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
-
-		// Reset the command buffer for reuse (now safe after fence wait)
 		commandBuffer.reset();
-
-		// Begin recording commands for the acquired image
+		
 		commandBuffer.begin(vk::CommandBufferBeginInfo{});
-
-		// Begin the render pass (record drawing commands here)
+		
 		draw(commandBuffer);
-
-		// End command buffer recording
+		
 		commandBuffer.end();
-
-		// Submit the command buffer with fence for synchronization
+		
 		vk::SubmitInfo submitInfo(
 			0, nullptr, nullptr,
 			1, &commandBuffer,
 			0, nullptr
 		);
 		device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
-
-		// Wait for completion before returning (needed for ImGui to sample the image)
+		
 		device.getGraphicsQueue().waitIdle();
-
-		// Return the descriptor set for ImGui rendering
+		
 		return offscreenResources.colorImages[imageIndex].descriptorSet;
 	}
 
@@ -94,8 +83,7 @@ namespace imguiPass {
 
 		renderPassHandler->cleanUp();
 		commandPool->cleanUp();
-
-		// Destroy fences
+		
 		for (auto& fence : inFlightFences) {
 			if (fence) {
 				device.getLogicalDevice().destroyFence(fence);
@@ -111,14 +99,47 @@ namespace imguiPass {
 
 		device.getLogicalDevice().destroySampler(sampler);
 
+		cleanupOffscreenResources();
+	}
+
+	void OffScreenViewPort::cleanupOffscreenResources()
+	{
 		for (auto const& resources : offscreenResources.colorImages) {
 			device.getLogicalDevice().destroyImageView(resources.colorImageView);
 			device.getLogicalDevice().destroyImage(resources.colorImage);
 			device.getLogicalDevice().freeMemory(resources.colorImageMemory);
 		}
-		device.getLogicalDevice().destroyImageView(offscreenResources.depthImage.depthImageView);
-		device.getLogicalDevice().destroyImage(offscreenResources.depthImage.depthImage);
-		device.getLogicalDevice().freeMemory(offscreenResources.depthImage.depthImageMemory);
+		offscreenResources.colorImages.clear();
+
+		if (offscreenResources.depthImage.depthImageView) {
+			device.getLogicalDevice().destroyImageView(offscreenResources.depthImage.depthImageView);
+			offscreenResources.depthImage.depthImageView = nullptr;
+		}
+		if (offscreenResources.depthImage.depthImage) {
+			device.getLogicalDevice().destroyImage(offscreenResources.depthImage.depthImage);
+			offscreenResources.depthImage.depthImage = nullptr;
+		}
+		if (offscreenResources.depthImage.depthImageMemory) {
+			device.getLogicalDevice().freeMemory(offscreenResources.depthImage.depthImageMemory);
+			offscreenResources.depthImage.depthImageMemory = nullptr;
+		}
+	}
+
+	void OffScreenViewPort::recreate()
+	{
+		device.getLogicalDevice().waitIdle();
+
+		// Remove old ImGui textures
+		for (auto const& resources : offscreenResources.colorImages) {
+			if (resources.descriptorSet) {
+				ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
+			}
+		}
+		
+		cleanupOffscreenResources();
+		createOffscreenResources();
+		
+		renderPassHandler->recreate();
 	}
 
 	void OffScreenViewPort::draw(const vk::CommandBuffer& commandBuffer) const

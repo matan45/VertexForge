@@ -49,7 +49,7 @@ namespace windows
 		auto& dispatcher = events::EventDispatcher::instance();
 
 		events::render::LoadEditorTextureCommand cmd;
-		cmd.path = "../../resources/editor/contentBrowser/atlasIcons.vfImage";
+		cmd.path = "../../resources/editor/atlasIcons.vfImage";
 		cmd.isHDR = false;
 		iconAtlas = dispatcher.execute(cmd);
 

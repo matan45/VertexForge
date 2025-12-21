@@ -350,7 +350,7 @@ namespace services
     {
         if (offScreenProvider)
         {
-            offScreenProvider->meshUpdateCamera(view, projection, cameraPos, time);
+            offScreenProvider->meshUpdateCamera(MAIN_CAMERA_ID, view, projection, cameraPos, time);
         }
     }
 

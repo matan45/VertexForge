@@ -50,13 +50,6 @@ namespace core {
         }
     }
 
-    void OffScreenAdapter::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                             const glm::vec3& cameraPos, float time) {
-        if (offScreen) {
-            offScreen->meshUpdateCamera(view, projection, cameraPos, time);
-        }
-    }
-
     void OffScreenAdapter::meshUpdateCamera(services::CameraId cameraId, const glm::mat4& view,
                                              const glm::mat4& projection, const glm::vec3& cameraPos, float time) {
         if (offScreen) {

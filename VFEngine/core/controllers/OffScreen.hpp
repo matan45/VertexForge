@@ -7,12 +7,12 @@
 #include <cstdint>
 #include <optional>
 #include "../../services/providers/IOffScreenProvider.hpp"
+#include "../../utilities/types/CameraTypes.hpp"
 
 namespace controllers {
 
-	// Camera ID type for multi-camera occlusion culling
-	using CameraId = uint32_t;
-	constexpr CameraId MAIN_CAMERA_ID = 0;
+	using types::CameraId;
+	using types::MAIN_CAMERA_ID;
 
 	class OffScreenController;
 
@@ -26,6 +26,7 @@ namespace controllers {
 		~OffScreen();
 
 		void init();
+		void recreate();
 		void cleanUp();
 
 		void* render();
@@ -38,8 +39,6 @@ namespace controllers {
 		// Mesh API
 		std::string meshLoad(std::string_view meshPath);
 		void meshUnload(const std::string& meshId);
-		void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-		                      const glm::vec3& cameraPos, float time = 0.0f);
 		void meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
 		                      const glm::vec3& cameraPos, float time = 0.0f);
 		bool isMeshLoaded(const std::string& meshPath) const;

@@ -19,10 +19,10 @@ namespace windows
         // Set of entity handles that need to be auto-expanded (parents of selected entity)
         std::unordered_set<uint64_t> expandedHandles;
         
-        static std::unordered_map<std::string, std::vector<std::string>> submeshNameCache;
+        inline static std::unordered_map<std::string, std::vector<std::string>> submeshNameCache;
 
     public:
-        SceneGraph();
+        explicit SceneGraph();
         ~SceneGraph() override;
 
         void draw() override;
@@ -33,8 +33,17 @@ namespace windows
         void dragDropEntity(services::EntityHandle handle);
         void subscribeToEvents();
         void onSceneCleared();
-        
+
         void expandToSelection(services::EntityHandle handle);
+
+        // Component drawing helpers
+        void drawEntityName(services::EntityHandle handle, const std::string& currentName);
+        void drawTransformComponent(services::EntityHandle handle);
+        bool drawCameraComponent(services::EntityHandle handle);
+        void drawIBLComponent(services::EntityHandle handle);
+        bool drawMeshComponent(services::EntityHandle handle);
+        void drawMaterialComponent(services::EntityHandle handle);
+        void drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh);
 
         // UI styling helpers
         static void pushComponentHeaderStyle();

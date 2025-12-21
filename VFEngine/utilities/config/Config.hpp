@@ -5,9 +5,9 @@
 // Application version - static constants
 struct Version
 {
-    static constexpr  uint32_t major = 0;
+    static constexpr uint32_t major = 0;
     static constexpr uint32_t minor = 0;
-    static constexpr uint32_t patch = 3;  // v0.0.3: Added mesh LOD levels and texture mipmaps
+    static constexpr uint32_t patch = 3;
 };
 
 // File version - instance members for storing version info read from files
@@ -37,10 +37,10 @@ namespace importConfig
 
     struct ImportFiles
     {
-        std::string path;  // Must own the string - views dangle when source is destroyed
+        std::string path; // Must own the string - views dangle when source is destroyed
         ImportConfig config;
 
-        explicit ImportFiles(std::string_view path, const ImportConfig& config):
+        explicit ImportFiles(std::string_view path, const ImportConfig& config) :
             path{path}, config{config}
         {
         }

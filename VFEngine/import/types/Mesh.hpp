@@ -1,5 +1,4 @@
 #pragma once
-#include <string>
 #include <fstream>
 #include <functional>
 #include <array>
@@ -8,46 +7,37 @@
 struct aiScene;
 struct aiMesh;
 
-namespace types {
+namespace types
+{
+    using MeshProgressCallback = std::function<void(float progress)>;
 
-	using MeshProgressCallback = std::function<void(float progress)>;
+    struct LODMeshData
+    {
+        std::vector<resource::Vertex> vertices;
+        std::vector<uint32_t> indices;
+    };
 
-	// Internal structure for LOD mesh data during import
-	struct LODMeshData {
-		std::vector<resource::Vertex> vertices;
-		std::vector<uint32_t> indices;
-	};
+    class Mesh
+    {
+    public:
+        void loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
+                          std::string_view location, MeshProgressCallback progressCallback = nullptr) const;
 
-	class Mesh
-	{
-	public:
-		void loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
-		                  std::string_view location, MeshProgressCallback progressCallback = nullptr) const;
+    private:
+        static constexpr size_t chunkSize = 256 * 1024;
 
-	private:
-		// Save mesh with LOD levels
-		void saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
-		                                const aiScene* scene, MeshProgressCallback progressCallback) const;
+        static constexpr std::array<float, resource::LOD_LEVEL_COUNT> lodRatios = {1.0f, 0.5f, 0.25f, 0.125f};
 
-		// Convert aiMesh to LODMeshData
-		LODMeshData convertAssimpMesh(const aiMesh* assimpMesh) const;
+        
+        void saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
+                                        const aiScene* scene, MeshProgressCallback progressCallback) const;
 
-		// Generate all 4 LOD levels from the original mesh
-		std::array<LODMeshData, resource::LOD_LEVEL_COUNT> generateLODLevels(const LODMeshData& lod0) const;
+        LODMeshData convertAssimpMesh(const aiMesh* assimpMesh) const;
 
-		// Simplify mesh to target ratio using meshoptimizer
-		LODMeshData simplifyMesh(const LODMeshData& source, float targetRatio) const;
+        std::array<LODMeshData, resource::LOD_LEVEL_COUNT> generateLODLevels(const LODMeshData& lod0) const;
 
-		// Write a single LOD level to file
-		void writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const;
+        LODMeshData simplifyMesh(const LODMeshData& source, float targetRatio) const;
 
-		// Chunk size for streaming (256KB)
-		static constexpr size_t chunkSize = 256 * 1024;
-
-		// LOD target ratios (percentage of original triangles)
-		static constexpr std::array<float, resource::LOD_LEVEL_COUNT> lodRatios = { 1.0f, 0.5f, 0.25f, 0.125f };
-	};
-
+        void writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const;
+    };
 }
-
-

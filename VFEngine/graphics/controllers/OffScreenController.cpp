@@ -1,14 +1,13 @@
 #include "OffScreenController.hpp"
 #include "../core/VulkanContext.hpp"
-#include "../imguiPass/OffScreenViewPort.hpp"
+#include "../render/OffScreenViewPort.hpp"
 #include "../render/IBL.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
-#include "../render/occlusion/CameraRenderData.hpp"
 #include "../render/occlusion/OcclusionCullingManager.hpp"
-#include "../render/billboard/BillboardPipeline.hpp"
 #include "../render/billboard/BillboardTypes.hpp"
+#include "../render/billboard/BillboardPipeline.hpp"
 #include "../render/mesh/FrustumDebugRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -25,7 +24,7 @@ namespace controllers
     OffScreenController::OffScreenController()
         : swapChain{ *core::VulkanContext::getSwapChain() }
         , device{ *core::VulkanContext::getDevice() }
-        , offScreen{ std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain) }
+        , offScreen{ std::make_unique<render::OffScreenViewPort>(device, swapChain) }
     {
     }
 
@@ -83,13 +82,10 @@ namespace controllers
                 if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity)) {
                     const auto& transform = registry.get<components::TransformComponent>(entity);
                     if (transform.isStatic) {
-                        sceneBVH.markStaticStructuralChange();
+                        sceneBVH.markStaticDirty();
                     } else {
-                        sceneBVH.markDynamicStructuralChange();
+                        sceneBVH.markDynamicDirty();
                     }
-                } else {
-                    // Default to static if we can't determine
-                    sceneBVH.markStaticStructuralChange();
                 }
             });
         meshDataChangedSubscription = std::make_unique<events::SubscriptionToken>(meshChangedToken);
@@ -101,9 +97,9 @@ namespace controllers
                 // Mark appropriate BVH for structural rebuild based on which tree the entity was in
                 uint32_t entityId = static_cast<uint32_t>(notification.entity.id);
                 if (sceneBVH.isStaticEntity(entityId)) {
-                    sceneBVH.markStaticStructuralChange();
+                    sceneBVH.markStaticDirty();
                 } else {
-                    sceneBVH.markDynamicStructuralChange();
+                    sceneBVH.markDynamicDirty();
                 }
             });
         entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(deletedToken);
@@ -113,10 +109,14 @@ namespace controllers
         auto staticChangedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityStaticChangedNotification>(
             [this](const events::scene::EntityStaticChangedNotification&) {
                 // Mark both trees for structural rebuild when entity moves between them
-                sceneBVH.markStaticStructuralChange();
-                sceneBVH.markDynamicStructuralChange();
+                sceneBVH.rebuildAll();
             });
         entityStaticChangedSubscription = std::make_unique<events::SubscriptionToken>(staticChangedToken);
+    }
+
+    void OffScreenController::recreate()
+    {
+        offScreen->recreate();
     }
 
     void OffScreenController::cleanUp() const
@@ -179,13 +179,6 @@ namespace controllers
         {
             meshPipeline->unloadMesh(meshId);
         }
-    }
-
-    void OffScreenController::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                               const glm::vec3& cameraPos, float time)
-    {
-        // Backward compatible: update main camera
-        meshUpdateCamera(render::occlusion::MAIN_CAMERA_ID, view, projection, cameraPos, time);
     }
 
     void OffScreenController::meshUpdateCamera(render::occlusion::CameraId cameraId,
@@ -284,32 +277,17 @@ namespace controllers
 
     void OffScreenController::prepareCameras()
     {
-        auto* renderHandler = offScreen->getRenderPassHandler();
-        auto* cameraManager = renderHandler->getCameraOcclusionManager();
-
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::CameraComponent, components::WorldTransformComponent>();
 
         for (auto entity : view)
         {
             auto& camComp = view.get<components::CameraComponent>(entity);
-
-            // Register camera with occlusion system if not already registered
-            // Note: We only register scene cameras here, we don't update their matrices
-            // because the editor camera (main camera 0) is controlled by EditorCamera/ViewPort
-            // Scene cameras will be used when switching to game/runtime mode
             if (!camComp.isRegistered)
             {
-                loggerInfo("Registering scene camera {} (entity {}) with occlusion culling {}",
-                          camComp.cameraId, static_cast<uint32_t>(entity),
-                          camComp.enableOcclusionCulling ? "enabled" : "disabled");
-                // Scene cameras get registered but don't override the main editor camera
-                // They'll be used in runtime mode when setActiveCamera is called
                 createCamera(camComp.cameraId, camComp.enableOcclusionCulling);
                 camComp.isRegistered = true;
             }
-            // Don't call meshUpdateCamera here - let the editor camera control rendering
-            // Scene camera matrices will be updated when they become the active camera
         }
     }
 
@@ -326,25 +304,19 @@ namespace controllers
 
         // Get active camera's frustum for culling
         auto* cameraManager = renderHandler->getCameraOcclusionManager();
-        auto* activeCamera = cameraManager->getActiveCamera();
+        auto* activeCamera = cameraManager->getCamera(cameraManager->getActiveCameraId());
         const math::Frustum* activeFrustum = activeCamera ? &activeCamera->frustum : nullptr;
         bool frustumReady = activeFrustum && activeFrustum->isInitialized();
 
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // === Two-Level BVH Update Logic ===
-        // Static BVH: rebuilt only when static entities change (triggered by events)
-        // Dynamic BVH: rebuilt frequently when dynamic entities move
-
-        // Static BVH: rebuild if dirty (typically triggered by entity static flag changes)
+       
         if (sceneBVH.isStaticDirty() && frustumReady)
         {
             sceneBVH.rebuildStaticBVH();
         }
-
-        // Dynamic BVH: check for dirty transforms on dynamic entities only
-        // Mark specific entities dirty for incremental refit (much faster than full rebuild)
+        
         static int dynamicBvhCooldown = 0;
 
         if (dynamicBvhCooldown > 0)
@@ -353,13 +325,12 @@ namespace controllers
         }
         else if (!sceneBVH.needsDynamicRebuild())
         {
-            // Only check dynamic entities (TransformComponent.isStatic == false)
-            // Mark specific entities dirty for incremental update
+            // Only check dynamic entities
             auto dynamicView = registry.view<components::TransformComponent, components::MeshComponent>();
             for (auto entity : dynamicView)
             {
                 const auto& transform = dynamicView.get<components::TransformComponent>(entity);
-                // Only check dynamic entities for movement
+                
                 if (!transform.isStatic && transform.isDirty)
                 {
                     // Mark specific entity dirty for incremental refit
@@ -368,22 +339,19 @@ namespace controllers
             }
         }
 
-        // Update dynamic BVH: uses fast refit for transform-only changes,
-        // full rebuild only when entities are added/removed
+        // Update dynamic BVH
         if (sceneBVH.isDynamicDirty() && frustumReady)
         {
             sceneBVH.updateDynamicBVH();
-            dynamicBvhCooldown = 5;  // Short cooldown for dynamic entities
+            dynamicBvhCooldown = 5; 
         }
 
         // Use BVH for spatial culling if available
         if (sceneBVH.isBuilt() && frustumReady)
         {
-            // Query BVH for visible entities using active camera's frustum
             std::vector<uint32_t> visibleEntities;
             sceneBVH.queryFrustum(*activeFrustum, visibleEntities);
-
-            // Process only visible entities
+            
             for (uint32_t entityId : visibleEntities)
             {
                 auto entity = static_cast<entt::entity>(entityId);
@@ -497,7 +465,7 @@ namespace controllers
 
     void OffScreenController::rebuildBVH()
     {
-        sceneBVH.rebuild();
+        sceneBVH.rebuildAll();
     }
 
     void OffScreenController::markBVHDirty()
@@ -646,7 +614,7 @@ namespace controllers
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         auto* cameraManager = renderHandler->getCameraOcclusionManager();
-        auto* activeCamera = cameraManager->getActiveCamera();
+        auto* activeCamera = cameraManager->getCamera(cameraManager->getActiveCameraId());
 
         // Check if active camera has occlusion culling enabled and initialized
         if (!activeCamera || !activeCamera->useOcclusionCulling || !activeCamera->occlusionInitialized)

@@ -18,7 +18,6 @@ namespace types {
 	void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
 	                        std::string_view location, MeshProgressCallback progressCallback) const
 	{
-		// Report 0% - starting Assimp load
 		if (progressCallback) progressCallback(0.0f);
 
 		Assimp::Importer importer;
@@ -29,13 +28,11 @@ namespace types {
 			vfLogError("Failed to load Mesh file: {}", importer.GetErrorString());
 			return;
 		}
-
-		// Report 20% - Assimp loading complete, starting LOD generation and file write
+		
 		if (progressCallback) progressCallback(0.2f);
 
 		saveToFileStreamingWithLOD(location, fileName, scene, progressCallback);
-
-		// Report 100% - complete
+		
 		if (progressCallback) progressCallback(1.0f);
 	}
 
@@ -76,8 +73,7 @@ namespace types {
 
 			result.vertices.push_back(vertex);
 		}
-
-		// Convert indices
+		
 		uint32_t totalIndices = 0;
 		for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f) {
 			totalIndices += assimpMesh->mFaces[f].mNumIndices;
@@ -113,9 +109,7 @@ namespace types {
 
 		LODMeshData result;
 		result.indices.resize(source.indices.size()); // Allocate max size initially
-
-		// Use meshoptimizer's sloppy simplification for guaranteed reduction
-		// This is more aggressive and will reach the target index count
+		
 		size_t actualIndexCount = meshopt_simplifySloppy(
 			result.indices.data(),
 			source.indices.data(),
@@ -129,8 +123,7 @@ namespace types {
 		);
 
 		result.indices.resize(actualIndexCount);
-
-		// If no simplification was possible at all, return original
+		
 		if (actualIndexCount == source.indices.size()) {
 			vfLogWarning("  Simplification failed for ratio {:.1f}%, keeping original", targetRatio * 100.0f);
 			return source;
@@ -143,9 +136,7 @@ namespace types {
 			result.indices.size(),
 			source.vertices.size()
 		);
-
-		// Create a compact vertex buffer with only referenced vertices
-		// First, find all unique vertex indices used
+		
 		std::vector<unsigned int> remap(source.vertices.size(), ~0u);
 		size_t uniqueVertexCount = 0;
 

@@ -405,15 +405,12 @@ namespace services {
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-
-        // Ensure entity has TransformComponent (required for camera updates)
+        
         if (!sceneEntity.hasComponent<components::TransformComponent>()) {
             auto& transform = sceneEntity.addComponent<components::TransformComponent>();
-            // Immediately create WorldTransformComponent so billboard can render
             sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.GetMatrix();
         }
         else if (!sceneEntity.hasComponent<components::WorldTransformComponent>()) {
-            // Entity has TransformComponent but no WorldTransformComponent
             auto& transform = sceneEntity.getComponent<components::TransformComponent>();
             sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.GetMatrix();
         }
@@ -424,7 +421,7 @@ namespace services {
             return true;
         }
 
-        return false;  // Already has camera
+        return false;
     }
 
     void SceneServiceImpl::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
@@ -580,8 +577,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::MeshComponent>()) {
             sceneEntity.removeComponent<components::MeshComponent>();
-
-            // Publish notification to update BVH
+            
             events::scene::MeshDataChangedNotification notification;
             notification.entity = entity;
             notification.meshPath = "";
@@ -783,12 +779,11 @@ namespace services {
         bool wasStatic = transform.isStatic;
 
         if (isStatic == wasStatic) {
-            return true;  // No change needed
+            return true; 
         }
 
         transform.isStatic = isStatic;
-
-        // Publish notification
+        
         events::scene::EntityStaticChangedNotification notification;
         notification.entity = entity;
         notification.isStatic = isStatic;

@@ -12,13 +12,12 @@ const uint FLAG_TRANSPARENT = 1u << 0;  // Object is translucent - always visibl
 const uint FLAG_NO_OCCLUDE  = 1u << 1;  // Object should never occlude others
 const uint FLAG_NO_CULL     = 1u << 2;  // Object should never be culled (always visible)
 
-// Hi-Z pyramid sampler
 layout(set = 0, binding = 0) uniform sampler2D hiZPyramid;
 
-// Input: World-space AABBs and transforms
+// World-space AABBs
 struct ObjectData {
     vec4 aabbMin;  // xyz = min corner, w = entityId
-    vec4 aabbMax;  // xyz = max corner, w = flags (reinterpret as uint)
+    vec4 aabbMax;  // xyz = max corner, w = flags
     mat4 modelMatrix;
 };
 
@@ -31,7 +30,6 @@ layout(std430, set = 0, binding = 2) writeonly buffer VisibilityBuffer {
     uint visibility[];
 };
 
-// Camera uniforms
 layout(set = 0, binding = 3) uniform CameraUBO {
     mat4 viewProj;
     vec4 screenSize;  // xy = width/height, zw = 1/width, 1/height
@@ -47,9 +45,7 @@ vec4 projectPoint(vec3 worldPos) {
     return clip;
 }
 
-// Test if an AABB is visible using Hi-Z
 bool testAABBVisible(vec3 aabbMin, vec3 aabbMax) {
-    // Generate 8 corners of the AABB
     vec3 corners[8];
     corners[0] = vec3(aabbMin.x, aabbMin.y, aabbMin.z);
     corners[1] = vec3(aabbMax.x, aabbMin.y, aabbMin.z);
@@ -101,8 +97,7 @@ bool testAABBVisible(vec3 aabbMin, vec3 aabbMax) {
     float maxDim = max(rectSize.x, rectSize.y);
 
     if (maxDim < 1.0) {
-        // Too small to see, consider visible (conservative)
-        return true;
+      return false;  // Too small to see, cull it
     }
 
     // Select mip level based on coverage

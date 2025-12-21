@@ -122,6 +122,7 @@
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Profiler.hpp" />
     <ClInclude Include="time\Timer.hpp" />
+    <ClInclude Include="types\CameraTypes.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -138,6 +139,7 @@
     <ClCompile Include="resource\TextureResource.cpp" />
     <ClCompile Include="scene\Level.cpp" />
     <ClCompile Include="scene\LevelHandler.cpp" />
+    <ClCompile Include="scene\SceneBVH.cpp" />
     <ClCompile Include="scene\SceneGraphSystem.cpp" />
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="string\StringUtil.cpp" />

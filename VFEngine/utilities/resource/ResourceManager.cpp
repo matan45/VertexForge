@@ -6,6 +6,7 @@
 #include <bit>
 #include <algorithm>
 #include <cctype>
+#include <fstream>
 
 
 namespace resource

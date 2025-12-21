@@ -1,6 +1,6 @@
 #include "MeshPreviewController.hpp"
 #include "../core/VulkanContext.hpp"
-#include "../imguiPass/OffScreenViewPort.hpp"
+#include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
@@ -12,7 +12,7 @@ namespace controllers
     MeshPreviewController::MeshPreviewController()
         : swapChain{ *core::VulkanContext::getSwapChain() }
         , device{ *core::VulkanContext::getDevice() }
-        , offScreen{ std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain) }
+        , offScreen{ std::make_unique<render::OffScreenViewPort>(device, swapChain) }
     {
     }
 
@@ -60,8 +60,7 @@ namespace controllers
         {
             init();
         }
-
-        // Unload previous mesh if any
+        
         if (!loadedMeshPath.empty())
         {
             unloadMesh();
@@ -74,8 +73,7 @@ namespace controllers
         {
             return false;
         }
-
-        // Load the mesh
+        
         std::string meshId = meshPipeline->loadMesh(meshPath);
         if (meshId.empty())
         {
@@ -93,7 +91,6 @@ namespace controllers
         }
         else
         {
-            // Default bounds if not available
             meshBounds = math::AABB(glm::vec3(-1.0f), glm::vec3(1.0f));
             outBounds = meshBounds;
         }
@@ -145,7 +142,6 @@ namespace controllers
             const auto& subMesh = gpuData->subMeshes[i];
             services::SubMeshInfo info;
             info.name = subMesh.name.empty() ? ("SubMesh_" + std::to_string(i)) : subMesh.name;
-            // Use LOD0 counts for display
             info.vertexCount = subMesh.lodLevels[0].vertexCount;
             info.indexCount = subMesh.lodLevels[0].indexCount;
             result.push_back(info);

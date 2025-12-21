@@ -1,7 +1,7 @@
 #include "MaterialPreviewController.hpp"
 #include "../core/Device.hpp"
 #include "../core/Utilities.hpp"
-#include "../imguiPass/OffScreenViewPort.hpp"
+#include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
@@ -158,7 +158,7 @@ namespace controllers
     MaterialPreviewController::MaterialPreviewController()
         : swapChain{*core::VulkanContext::getSwapChain()}
           , device{*core::VulkanContext::getDevice()}
-          , offScreen{std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain)}
+          , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
           , textureManager{std::make_unique<TextureManagerImpl>()}
     {
     }
@@ -400,7 +400,7 @@ namespace controllers
         // Recreate offScreen if it was cleaned up (supports re-initialization)
         if (!offScreen)
         {
-            offScreen = std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain);
+            offScreen = std::make_unique<render::OffScreenViewPort>(device, swapChain);
         }
 
         offScreen->init();

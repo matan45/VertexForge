@@ -14,6 +14,11 @@ namespace controllers {
 		offScreenController->init();
 	}
 
+	void OffScreen::recreate()
+	{
+		offScreenController->recreate();
+	}
+
 	void OffScreen::cleanUp()
 	{
 		offScreenController->cleanUp();
@@ -47,12 +52,6 @@ namespace controllers {
 	void OffScreen::meshUnload(const std::string& meshId)
 	{
 		offScreenController->meshUnload(meshId);
-	}
-
-	void OffScreen::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-	                                 const glm::vec3& cameraPos, float time)
-	{
-		offScreenController->meshUpdateCamera(view, projection, cameraPos, time);
 	}
 
 	void OffScreen::meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,

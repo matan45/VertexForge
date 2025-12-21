@@ -18,23 +18,19 @@ namespace windows
 	{
 	private:
 		int windowFlags;
-
-		// Import settings
+		
 		nfd::FileDialog fileDialog;
 		std::vector<std::string> files;
 		std::vector<bool> isFlip;
 		bool openModal = false;
-
-		// IBL window
-		fs::path selectedIBLFile;
+		
 		bool showIBLWindow = false;
+		fs::path selectedIBLFile;
 		services::EditorTextureHandle iblPreviewHandle;
-
-		// Editor Camera settings window
+		
 		bool showEditorCameraWindow = false;
 		editor::EditorCamera* editorCameraRef = nullptr;  // Set by ViewPort
-
-		// Culling stats debug window
+		
 		bool showCullingStatsWindow = false;
 
 		// Event subscription

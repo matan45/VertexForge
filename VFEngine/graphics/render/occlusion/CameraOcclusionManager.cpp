@@ -8,7 +8,6 @@ namespace render::occlusion
     CameraOcclusionManager::CameraOcclusionManager(core::Device& device, core::SwapChain& swapChain)
         : device(device), swapChain(swapChain)
     {
-        // Create main camera by default
         createCamera(MAIN_CAMERA_ID, true);
     }
 
@@ -39,22 +38,6 @@ namespace render::occlusion
     {
         auto it = cameras.find(id);
         return (it != cameras.end()) ? it->second.get() : nullptr;
-    }
-
-    const CameraRenderData* CameraOcclusionManager::getCamera(CameraId id) const
-    {
-        auto it = cameras.find(id);
-        return (it != cameras.end()) ? it->second.get() : nullptr;
-    }
-
-    CameraRenderData* CameraOcclusionManager::getMainCamera()
-    {
-        return getCamera(MAIN_CAMERA_ID);
-    }
-
-    CameraRenderData* CameraOcclusionManager::getActiveCamera()
-    {
-        return getCamera(activeCameraId);
     }
 
     void CameraOcclusionManager::removeCamera(CameraId id)
@@ -122,6 +105,52 @@ namespace render::occlusion
         camera->hiZInitialized = true;
 
         loggerInfo("Initialized Hi-Z for camera {}", id);
+    }
+
+    void CameraOcclusionManager::recreateCameraHiZ(CameraId id, vk::Image depthImage,
+                                                    vk::ImageView depthView, vk::Format depthFormat)
+    {
+        auto* camera = getCamera(id);
+        if (!camera)
+        {
+            loggerError("Cannot recreate Hi-Z for non-existent camera {}", id);
+            return;
+        }
+
+        if (!camera->useOcclusionCulling)
+        {
+            return;
+        }
+        
+        if (camera->hiZBuffer)
+        {
+            camera->hiZBuffer->cleanup();
+        }
+        camera->hiZInitialized = false;
+        
+        if (camera->occlusionManager)
+        {
+            camera->occlusionManager->cleanup();
+        }
+        camera->occlusionInitialized = false;
+
+        // Reinitialize Hi-Z with new depth buffer
+        if (!camera->hiZBuffer)
+        {
+            camera->hiZBuffer = std::make_unique<HiZBuffer>(device, swapChain);
+        }
+        camera->hiZBuffer->init(depthImage, depthView, depthFormat);
+        camera->hiZInitialized = true;
+
+        // Reinitialize occlusion culling
+        if (!camera->occlusionManager)
+        {
+            camera->occlusionManager = std::make_unique<OcclusionCullingManager>(device, swapChain);
+        }
+        camera->occlusionManager->init(camera->hiZBuffer.get());
+        camera->occlusionInitialized = true;
+
+        loggerInfo("Recreated Hi-Z and occlusion culling for camera {}", id);
     }
 
     void CameraOcclusionManager::initCameraOcclusionCulling(CameraId id)
@@ -231,13 +260,13 @@ namespace render::occlusion
         cameras.clear();
     }
 
-    bool CameraOcclusionManager::isHiZInitialized(CameraId id) const
+    bool CameraOcclusionManager::isHiZInitialized(CameraId id)
     {
         auto* camera = getCamera(id);
         return camera && camera->hiZInitialized;
     }
 
-    bool CameraOcclusionManager::isOcclusionInitialized(CameraId id) const
+    bool CameraOcclusionManager::isOcclusionInitialized(CameraId id)
     {
         auto* camera = getCamera(id);
         return camera && camera->occlusionInitialized;

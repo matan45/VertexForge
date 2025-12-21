@@ -22,7 +22,6 @@ namespace core {
 
 		for (const auto& shader : *shaders) {
 			vk::ShaderStageFlagBits stage = shaderTypeToVulkanStage(shader.type);
-			// Compile GLSL to SPIR-V
 			std::vector<uint32_t> spirvCode = compileShaderToSPIRV(shader.source, stage, shaderName);
 			createShaderModule(spirvCode, stage);
 		}

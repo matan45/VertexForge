@@ -53,7 +53,7 @@ namespace core
         auto textureData = resource::ResourceManager::loadHDRAsync(filePath);
         auto texturePtr = textureData.get();
 
-        if (!texturePtr || texturePtr->mipData.empty())
+        if (!texturePtr || texturePtr->pixels.empty())
         {
             loggerError("Failed to load HDR texture from: {}", filePath);
             return;
@@ -62,27 +62,21 @@ namespace core
         imageData.height = texturePtr->height;
         imageData.width = texturePtr->width;
         imageData.numbersOfChannels = texturePtr->numbersOfChannels;
-        imageData.mipLevels = texturePtr->mipLevels;
 
-        // Calculate total staging buffer size for all mip levels
-        vk::DeviceSize totalSize = 0;
-        for (const auto& mip : texturePtr->mipData)
-        {
-            totalSize += static_cast<vk::DeviceSize>(mip.width) * mip.height * 4 * sizeof(float);
-        }
+        vk::DeviceSize dataSize = texturePtr->getDataSize();
 
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingBufferMemory;
 
         BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        bufferInfo.size = totalSize;
+        bufferInfo.size = dataSize;
         bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
         bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
         Utilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
-        // Copy all mip levels to staging buffer
+        // Copy pixel data to staging buffer
         void* data;
-        if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, totalSize, {}, &data);
+        if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, dataSize, {}, &data);
             result != vk::Result::eSuccess)
         {
             loggerError("failed to map memory");
@@ -90,99 +84,74 @@ namespace core
             device.getLogicalDevice().freeMemory(stagingBufferMemory);
             return;
         }
-
-        vk::DeviceSize offset = 0;
-        for (const auto& mip : texturePtr->mipData)
-        {
-            size_t mipSize = static_cast<size_t>(mip.width) * mip.height * 4 * sizeof(float);
-            memcpy(static_cast<char*>(data) + offset, mip.data.data(), mipSize);
-            offset += mipSize;
-        }
+        memcpy(data, texturePtr->pixels.data(), dataSize);
         device.getLogicalDevice().unmapMemory(stagingBufferMemory);
 
-        // Create image with all mip levels
+        // Create image (single mip level)
         ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageInfo.width = texturePtr->width;
         imageInfo.height = texturePtr->height;
-        imageInfo.mipLevels = texturePtr->mipLevels;
         imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         Utilities::createImage(imageInfo, image, imageMemory);
 
-        // Transition all mip levels to transfer destination
+        // Transition to transfer destination
         vk::UniqueCommandBuffer commandTransitionA = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool.get());
         Utilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
-                                         vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor,
-                                         1, texturePtr->mipLevels);
+                                         vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor);
         Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionA);
 
-        // Copy each mip level from staging buffer to image
+        // Copy staging buffer to image
         {
             vk::UniqueCommandBuffer copyCommand = core::Utilities::beginSingleTimeCommands(
                 device.getLogicalDevice(), commandPool.get());
 
-            std::vector<vk::BufferImageCopy> regions;
-            regions.reserve(texturePtr->mipLevels);
-            offset = 0;
-
-            for (uint32_t level = 0; level < texturePtr->mipLevels; ++level)
-            {
-                const auto& mip = texturePtr->mipData[level];
-
-                vk::BufferImageCopy region{};
-                region.bufferOffset = offset;
-                region.bufferRowLength = 0;
-                region.bufferImageHeight = 0;
-                region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-                region.imageSubresource.mipLevel = level;
-                region.imageSubresource.baseArrayLayer = 0;
-                region.imageSubresource.layerCount = 1;
-                region.imageOffset = vk::Offset3D(0, 0, 0);
-                region.imageExtent = vk::Extent3D(mip.width, mip.height, 1);
-
-                regions.push_back(region);
-                offset += static_cast<vk::DeviceSize>(mip.width) * mip.height * 4 * sizeof(float);
-            }
+            vk::BufferImageCopy region{};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = 1;
+            region.imageOffset = vk::Offset3D{0, 0, 0};
+            region.imageExtent = vk::Extent3D{texturePtr->width, texturePtr->height, 1};
 
             copyCommand.get().copyBufferToImage(
                 stagingBuffer,
                 image,
                 vk::ImageLayout::eTransferDstOptimal,
-                regions
+                1, &region
             );
 
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), copyCommand);
         }
 
-        // Transition all mip levels to shader read
+        // Transition to shader read
         vk::UniqueCommandBuffer commandTransitionB = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool.get());
         Utilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
-                                         vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor,
-                                         1, texturePtr->mipLevels);
+                                         vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor);
         Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionB);
 
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingBufferMemory);
 
-        // Release CPU mip data now that it's uploaded to GPU
-        // This frees ~33% memory overhead for large textures
         texturePtr->releaseCPUData();
 
-        createSampler(texturePtr->mipLevels);
+        createSampler(1);  // Single mip level
 
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
         imageViewRequest.format = vk::Format::eR32G32B32A32Sfloat;
-        imageViewRequest.mipLevels = texturePtr->mipLevels;
+        imageViewRequest.mipLevels = 1;
         Utilities::createImageView(imageViewRequest, imageView);
         if (isEditor)
         {
             isEditorTexture = true;
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            // Note: No per-mip views for HDR - IBL system handles its own filtering
         }
     }
 
@@ -385,7 +354,6 @@ namespace core
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
         samplerInfo.mipLodBias = 0.0f;
-        // Force this specific mip level only
         samplerInfo.minLod = static_cast<float>(mipLevel);
         samplerInfo.maxLod = static_cast<float>(mipLevel);
 
@@ -403,7 +371,6 @@ namespace core
         mipDescriptorSets.resize(imageData.mipLevels);
 
         for (uint32_t mip = 0; mip < imageData.mipLevels; ++mip) {
-            // Create image view for this single mip level
             vk::ImageViewCreateInfo viewInfo{};
             viewInfo.image = image;
             viewInfo.viewType = vk::ImageViewType::e2D;
@@ -415,11 +382,9 @@ namespace core
             viewInfo.subresourceRange.layerCount = 1;
 
             mipImageViews[mip] = device.getLogicalDevice().createImageView(viewInfo);
-
-            // Create sampler that forces this mip level
+            
             createMipSampler(mipSamplers[mip], mip);
-
-            // Create ImGui descriptor for this mip view
+            
             mipDescriptorSets[mip] = ImGui_ImplVulkan_AddTexture(
                 mipSamplers[mip],
                 mipImageViews[mip],

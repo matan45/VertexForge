@@ -19,7 +19,7 @@ namespace core
     class SwapChain;
 }
 
-namespace imguiPass
+namespace render
 {
     class OffScreenViewPort;
 }
@@ -31,9 +31,9 @@ namespace controllers
     private:
         core::SwapChain& swapChain;
         core::Device& device;
-        std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
+        std::unique_ptr<render::OffScreenViewPort> offScreen;
         math::Frustum currentFrustum;  // Current camera frustum for culling
-        scene::SceneBVH sceneBVH;      // BVH for spatial culling
+        scene::SceneBVH sceneBVH;     
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
         std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
         std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
@@ -54,6 +54,7 @@ namespace controllers
         ~OffScreenController();
 
         void init();
+        void recreate();
         void cleanUp() const;
 
         // IBL API
@@ -64,10 +65,6 @@ namespace controllers
         // Mesh API
         std::string meshLoad(std::string_view meshPath);
         void meshUnload(const std::string& meshId);
-        // Update main camera (backward compatible)
-        void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                              const glm::vec3& cameraPos, float time = 0.0f);
-        // Update specific camera
         void meshUpdateCamera(render::occlusion::CameraId cameraId, const glm::mat4& view,
                               const glm::mat4& projection, const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
@@ -77,8 +74,7 @@ namespace controllers
        
         // Called each frame to sync CameraComponents with occlusion system
         void prepareCameras();
-
-        // Called each frame to prepare mesh render list from ECS entities
+        
         void prepareFrameMeshes();
         
         void prepareFrameBillboards();
@@ -92,15 +88,14 @@ namespace controllers
         bool loadBillboardAtlas(const std::string& atlasPath);
 
         // BVH management
-        void rebuildBVH();        // Force rebuild BVH
-        void markBVHDirty();      // Mark BVH for rebuild (call when entities change)
+        void rebuildBVH();     
+        void markBVHDirty();     
 
         // Occlusion culling control (main camera)
         void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
         bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
 
         // Multi-camera support for occlusion culling
-        // Create a secondary camera (e.g., minimap) with optional occlusion culling
         void createCamera(render::occlusion::CameraId id, bool enableOcclusion = false);
         void removeCamera(render::occlusion::CameraId id);
         void setActiveCamera(render::occlusion::CameraId id);

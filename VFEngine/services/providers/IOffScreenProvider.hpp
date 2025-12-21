@@ -5,12 +5,12 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
+#include "../../utilities/types/CameraTypes.hpp"
 
 namespace services {
 
-    // Camera ID type for multi-camera occlusion culling
-    using CameraId = uint32_t;
-    constexpr CameraId MAIN_CAMERA_ID = 0;
+    using types::CameraId;
+    using types::MAIN_CAMERA_ID;
 
     struct MeshBounds {
         glm::vec3 min{0.0f};
@@ -58,10 +58,6 @@ namespace services {
 
         virtual std::string meshLoad(std::string_view meshPath) = 0;
         virtual void meshUnload(const std::string& meshId) = 0;
-        // Update camera matrices (main camera - backward compatible)
-        virtual void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                       const glm::vec3& cameraPos, float time = 0.0f) = 0;
-        // Update camera matrices for specific camera
         virtual void meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
                                        const glm::vec3& cameraPos, float time = 0.0f) = 0;
         virtual bool isMeshLoaded(const std::string& meshPath) const = 0;

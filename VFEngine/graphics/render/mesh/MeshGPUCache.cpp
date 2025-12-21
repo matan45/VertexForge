@@ -25,8 +25,7 @@ namespace render::mesh
     {
         unloadAllMeshes();
     }
-
-    // Helper function to upload a single LOD level to GPU
+    
     void MeshGPUCache::uploadLODLevel(LODGPUBuffers& lodBuffers, const resource::LODLevel& lodLevel)
     {
         if (lodLevel.vertices.empty()) {
@@ -35,8 +34,7 @@ namespace render::mesh
 
         lodBuffers.vertexCount = static_cast<uint32_t>(lodLevel.vertices.size());
         lodBuffers.indexCount = static_cast<uint32_t>(lodLevel.indices.size());
-
-        // Create vertex buffer (device local for best performance)
+        
         vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * lodLevel.vertices.size();
 
         core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
@@ -44,15 +42,13 @@ namespace render::mesh
         vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::Utilities::createBuffer(vertexBufferRequest, lodBuffers.vertexBuffer, lodBuffers.vertexBufferMemory);
-
-        // Copy vertex data to GPU using async transfer (non-blocking)
+        
         transferManager->copyToBufferAsync(
             lodBuffers.vertexBuffer,
             lodLevel.vertices.data(),
             vertexBufferSize
         );
-
-        // Create index buffer if indices exist
+        
         if (!lodLevel.indices.empty())
         {
             vk::DeviceSize indexBufferSize = sizeof(uint32_t) * lodLevel.indices.size();
@@ -62,8 +58,7 @@ namespace render::mesh
             indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
             indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::Utilities::createBuffer(indexBufferRequest, lodBuffers.indexBuffer, lodBuffers.indexBufferMemory);
-
-            // Copy index data to GPU using async transfer (non-blocking)
+            
             transferManager->copyToBufferAsync(
                 lodBuffers.indexBuffer,
                 lodLevel.indices.data(),
@@ -71,8 +66,7 @@ namespace render::mesh
             );
         }
     }
-
-    // Helper function to destroy LOD buffers
+    
     void MeshGPUCache::destroyLODBuffers(LODGPUBuffers& lodBuffers)
     {
         if (lodBuffers.vertexBuffer)

@@ -23,8 +23,7 @@ namespace windows
         float zoom = 1.0f;
         float panX = 0.0f;
         float panY = 0.0f;
-
-        // Mip level selection (informational - shows what dimensions each level has)
+        
         int selectedMipLevel = 0;
 
     public:

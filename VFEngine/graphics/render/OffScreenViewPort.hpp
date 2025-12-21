@@ -13,10 +13,7 @@ namespace core
 namespace render
 {
     class RenderPassHandler;
-}
 
-namespace imguiPass
-{
     class OffScreenViewPort
     {
     private:
@@ -37,6 +34,7 @@ namespace imguiPass
         ~OffScreenViewPort();
 
         void init();
+        void recreate();
         vk::DescriptorSet render();
         void cleanUp();
         render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
@@ -45,6 +43,7 @@ namespace imguiPass
         void draw(const vk::CommandBuffer& commandBuffer) const;
 
         void createOffscreenResources();
+        void cleanupOffscreenResources();
         void updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
         void createSampler();
     };

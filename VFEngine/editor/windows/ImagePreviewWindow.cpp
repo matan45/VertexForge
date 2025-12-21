@@ -11,7 +11,6 @@ namespace windows
         : imagePath(filePath)
         , isHDR(hdr)
     {
-        // Extract filename for window title
         std::filesystem::path path(filePath);
         windowTitle = (hdr ? "HDR Preview: " : "Image Preview: ") + path.filename().string();
     }
@@ -105,36 +104,11 @@ namespace windows
             imageSize.y = availSize.y * zoom;
             imageSize.x = imageSize.y * imageAspect;
         }
-
-        // Center the image
-        float offsetX = (availSize.x - imageSize.x) * 0.5f + panX;
-        float offsetY = (availSize.y - imageSize.y) * 0.5f + panY;
-
-        ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + offsetX, ImGui::GetCursorPosY() + offsetY));
-
-        // Use selected mip level's descriptor if available
+        
+        
         void* displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
         ImGui::Image(displayDescriptor, imageSize);
-
-        // Handle scroll to zoom
-        if (ImGui::IsWindowHovered())
-        {
-            float scroll = ImGui::GetIO().MouseWheel;
-            if (scroll != 0.0f)
-            {
-                zoom *= (1.0f + scroll * 0.1f);
-                zoom = glm::clamp(zoom, 0.1f, 10.0f);
-            }
-
-            // Handle middle mouse drag to pan
-            if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
-            {
-                ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Middle);
-                panX += delta.x;
-                panY += delta.y;
-                ImGui::ResetMouseDragDelta(ImGuiMouseButton_Middle);
-            }
-        }
+        
     }
 
     void ImagePreviewWindow::drawInfoPanel()
@@ -155,15 +129,13 @@ namespace windows
 
         ImGui::Separator();
         ImGui::Spacing();
-
-        // Mip Level selection (only for non-HDR textures with multiple mip levels)
+        
         if (!isHDR && imageHandle.isValid() && imageHandle.mipLevels > 1)
         {
             if (ImGui::CollapsingHeader("Mip Levels", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 float itemWidth = ImGui::GetContentRegionAvail().x;
-
-                // Build mip level labels with dimensions
+                
                 std::vector<std::string> mipLabels;
                 mipLabels.reserve(imageHandle.mipLevels);
 
@@ -178,8 +150,7 @@ namespace windows
                     mipWidth = std::max(1u, mipWidth / 2);
                     mipHeight = std::max(1u, mipHeight / 2);
                 }
-
-                // Create combo from labels
+                
                 ImGui::SetNextItemWidth(itemWidth);
                 if (ImGui::BeginCombo("##MipLevel", mipLabels[selectedMipLevel].c_str()))
                 {

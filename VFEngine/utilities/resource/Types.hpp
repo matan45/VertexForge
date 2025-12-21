@@ -70,35 +70,29 @@ namespace resource
         uint32_t numbersOfChannels = 0;
         uint32_t mipLevels = 1;                  // Number of mip levels (1 = no mipmaps)
         std::vector<MipLevelData> mipData;       // Mip chain (mipData[0] = base level)
-
-        // Legacy accessor for backward compatibility (returns base level data)
+        
         const std::vector<unsigned char>& textureData() const {
             static std::vector<unsigned char> empty;
             return mipData.empty() ? empty : mipData[0].data;
         }
-
-        // Legacy setter for backward compatibility
+        
         void setTextureData(std::vector<unsigned char>&& data) {
             mipData.clear();
             mipData.push_back({width, height, std::move(data)});
             mipLevels = 1;
         }
-
-        // Release CPU mip data to free memory after GPU upload
-        // Preserves metadata (dimensions, mip count) but frees pixel data
+        
         void releaseCPUData() {
             for (auto& mip : mipData) {
                 mip.data.clear();
                 mip.data.shrink_to_fit();
             }
         }
-
-        // Check if CPU pixel data is still available
+        
         bool hasCPUData() const {
             return !mipData.empty() && !mipData[0].data.empty();
         }
-
-        // Get total CPU memory usage in bytes
+        
         size_t getCPUMemoryUsage() const {
             size_t total = 0;
             for (const auto& mip : mipData) {
@@ -115,43 +109,17 @@ namespace resource
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t numbersOfChannels = 0;
-        uint32_t mipLevels = 1;                    // Number of mip levels (1 = no mipmaps)
-        std::vector<MipLevelDataHDR> mipData;      // Mip chain (mipData[0] = base level)
+        std::vector<float> pixels;
 
-        // Legacy accessor for backward compatibility (returns base level data)
-        const std::vector<float>& textureData() const {
-            static std::vector<float> empty;
-            return mipData.empty() ? empty : mipData[0].data;
+        [[nodiscard]] size_t getDataSize() const
+        {
+            return pixels.size() * sizeof(float);
         }
 
-        // Legacy setter for backward compatibility
-        void setTextureData(std::vector<float>&& data) {
-            mipData.clear();
-            mipData.push_back({width, height, std::move(data)});
-            mipLevels = 1;
-        }
-
-        // Release CPU mip data to free memory after GPU upload
-        // Preserves metadata (dimensions, mip count) but frees pixel data
-        void releaseCPUData() {
-            for (auto& mip : mipData) {
-                mip.data.clear();
-                mip.data.shrink_to_fit();
-            }
-        }
-
-        // Check if CPU pixel data is still available
-        bool hasCPUData() const {
-            return !mipData.empty() && !mipData[0].data.empty();
-        }
-
-        // Get total CPU memory usage in bytes
-        size_t getCPUMemoryUsage() const {
-            size_t total = 0;
-            for (const auto& mip : mipData) {
-                total += mip.data.capacity() * sizeof(float);
-            }
-            return total;
+        void releaseCPUData()
+        {
+            pixels.clear();
+            pixels.shrink_to_fit();
         }
     };
 
@@ -161,23 +129,21 @@ namespace resource
         glm::vec3 normal;
         glm::vec2 texCoords;
     };
-
-    // LOD level data - stores vertices and indices for a single LOD level
+    
     struct LODLevel
     {
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
     };
 
-    // Number of LOD levels supported
+   
     constexpr uint32_t LOD_LEVEL_COUNT = 4;
 
     struct MeshData
     {
         std::string name;
         std::vector<LODLevel> lodLevels; // 4 LOD levels (LOD0=100%, LOD1=50%, LOD2=25%, LOD3=12.5%)
-
-        // Legacy accessors for backward compatibility (returns LOD0 data)
+        
         const std::vector<Vertex>& vertices() const {
             static std::vector<Vertex> empty;
             return lodLevels.empty() ? empty : lodLevels[0].vertices;

@@ -23,8 +23,10 @@ namespace windows {
 		auto& dispatcher = events::EventDispatcher::instance();
 
 		if (ImGui::Begin("ViewPort")) {
-			// Handle camera input when viewport is focused or hovered
-			if (ImGui::IsWindowFocused() || ImGui::IsWindowHovered()) {
+			// Handle camera input only when viewport is focused AND mouse is hovering
+			bool isFocused = ImGui::IsWindowFocused();
+			bool isHovered = ImGui::IsWindowHovered();
+			if (isFocused && isHovered) {
 				handleCameraInput();
 			}
 

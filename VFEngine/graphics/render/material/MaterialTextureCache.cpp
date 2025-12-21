@@ -44,7 +44,7 @@ namespace render::mesh
         // Pool for per-material descriptor sets
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = MAX_MATERIAL_DESCRIPTOR_SETS * MAX_MATERIAL_TEXTURES;
+        poolSize.descriptorCount = MAX_MATERIAL_DESCRIPTOR_SETS * material::MAX_MATERIAL_TEXTURES;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -86,7 +86,7 @@ namespace render::mesh
             return;
         }
         
-        std::array<vk::DescriptorImageInfo, MAX_MATERIAL_TEXTURES> imageInfos;
+        std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
 
         // Helper to get view/sampler for a texture path
         auto getViewSampler = [this](const std::string& path) -> std::pair<vk::ImageView, vk::Sampler> {
@@ -135,7 +135,7 @@ namespace render::mesh
         writeSet.dstBinding = 0;
         writeSet.dstArrayElement = 0;
         writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writeSet.descriptorCount = MAX_MATERIAL_TEXTURES;
+        writeSet.descriptorCount = material::MAX_MATERIAL_TEXTURES;
         writeSet.pImageInfo = imageInfos.data();
 
         device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
