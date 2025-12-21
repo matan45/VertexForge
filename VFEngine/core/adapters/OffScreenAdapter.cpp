@@ -156,4 +156,14 @@ namespace core {
         return playModeActive;
     }
 
+    void OffScreenAdapter::setShowDebugRendering(bool show) {
+        if (offScreen) {
+            offScreen->setShowDebugRendering(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowDebugRendering() const {
+        return offScreen ? offScreen->getShowDebugRendering() : true;
+    }
+
 }

@@ -340,14 +340,22 @@ namespace windows
     {
         if (ImGui::BeginMenu("Debug"))
         {
-            events::render::GetShowBillboardIconsQuery query;
-            bool showBillboards = events::EventDispatcher::instance().query(query);
+            auto& dispatcher = events::EventDispatcher::instance();
 
+            bool showBillboards = dispatcher.query(events::render::GetShowBillboardIconsQuery{});
             if (ImGui::MenuItem("Show Billboard Icons", nullptr, showBillboards))
             {
                 events::render::SetShowBillboardIconsCommand cmd;
                 cmd.show = !showBillboards;
-                events::EventDispatcher::instance().execute(cmd);
+                dispatcher.execute(cmd);
+            }
+
+            bool showDebugRendering = dispatcher.query(events::render::GetShowDebugRenderingQuery{});
+            if (ImGui::MenuItem("Show Debug Rendering", nullptr, showDebugRendering))
+            {
+                events::render::SetShowDebugRenderingCommand cmd;
+                cmd.show = !showDebugRendering;
+                dispatcher.execute(cmd);
             }
 
             if (ImGui::MenuItem("Culling Stats", nullptr, showCullingStatsWindow))

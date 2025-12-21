@@ -70,5 +70,9 @@ namespace controllers {
 		// Editor Mode API
 		void setPlayMode(bool playMode);
 		bool isPlayMode() const;
+
+		// Debug Rendering API
+		void setShowDebugRendering(bool show);
+		bool getShowDebugRendering() const;
 	};
 }

@@ -61,6 +61,10 @@ namespace core
         void setPlayMode(bool playMode) override;
         bool isPlayMode() const override;
 
+        // Debug Rendering API
+        void setShowDebugRendering(bool show) override;
+        bool getShowDebugRendering() const override;
+
     private:
         bool playModeActive = false;
     };

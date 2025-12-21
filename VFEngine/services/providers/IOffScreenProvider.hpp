@@ -90,6 +90,10 @@ namespace services {
         // Editor Mode API
         virtual void setPlayMode(bool playMode) = 0;
         virtual bool isPlayMode() const = 0;
+
+        // Debug Rendering API
+        virtual void setShowDebugRendering(bool show) = 0;
+        virtual bool getShowDebugRendering() const = 0;
     };
 
 }

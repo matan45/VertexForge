@@ -319,6 +319,22 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
             });
 
+        // Debug rendering visibility command/query handlers
+        dispatcher.registerCommandHandler<events::render::SetShowDebugRenderingCommand>(
+            [this](const events::render::SetShowDebugRenderingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowDebugRendering(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowDebugRenderingQuery>(
+            [this](const events::render::GetShowDebugRenderingQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowDebugRendering() : true;
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {
