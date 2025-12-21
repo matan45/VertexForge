@@ -121,8 +121,8 @@ namespace types
 			hdrData.width = static_cast<uint32_t>(width);
 			hdrData.height = static_cast<uint32_t>(height);
 			hdrData.numbersOfChannels = 4;  // Always store as RGBA
-			
-			std::vector<float> rgbaData = convertToRGBA32F(imageData, width, height, channels);
+
+			hdrData.pixels = convertToRGBA32F(imageData, width, height, channels);
 
 			stbi_image_free(imageData);
 			
@@ -201,6 +201,11 @@ namespace types
 			hdrData.height = static_cast<uint32_t>(height);
 			hdrData.numbersOfChannels = 4;  // Always store as RGBA
 
+			// Copy pixel data before freeing
+			size_t pixelCount = static_cast<size_t>(width) * height * 4;
+			hdrData.pixels.resize(pixelCount);
+			std::memcpy(hdrData.pixels.data(), out, pixelCount * sizeof(float));
+
 			free(out);
 			FreeEXRImage(&exrImage);
 			FreeEXRHeader(&exrHeader);
@@ -277,6 +282,12 @@ namespace types
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.width);
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.height);
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.numbersOfChannels);
+
+		// Write pixel data (endian-safe)
+		for (float pixel : hdrData.pixels)
+		{
+			resource::endian::writeLE<float>(outFile, pixel);
+		}
 
 		outFile.close();
 	}

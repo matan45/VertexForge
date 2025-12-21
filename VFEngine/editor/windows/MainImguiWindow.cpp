@@ -366,22 +366,6 @@ namespace windows
             const bool hasFile = !filePath.empty();
 
             if (!hasFile) ImGui::BeginDisabled();
-            if (ImGui::Button("Preview", ImVec2(120, 0)))
-            {
-                // Release old preview if exists
-                if (iblPreviewHandle.isValid())
-                {
-                    events::render::ReleaseEditorTextureCommand releaseCmd;
-                    releaseCmd.handle = iblPreviewHandle.imguiDescriptorSet;
-                    dispatcher.execute(releaseCmd);
-                    iblPreviewHandle = services::EditorTextureHandle{};
-                }
-
-                events::render::LoadEditorTextureCommand loadCmd;
-                loadCmd.path = filePath;
-                loadCmd.isHDR = true;
-                iblPreviewHandle = dispatcher.execute(loadCmd);
-            }
 
             if (ImGui::Button("Apply", ImVec2(120, 0)))
             {
