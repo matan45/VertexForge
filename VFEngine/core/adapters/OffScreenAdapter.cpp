@@ -50,10 +50,10 @@ namespace core {
         }
     }
 
-    void OffScreenAdapter::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                             const glm::vec3& cameraPos, float time) {
+    void OffScreenAdapter::meshUpdateCamera(services::CameraId cameraId, const glm::mat4& view,
+                                             const glm::mat4& projection, const glm::vec3& cameraPos, float time) {
         if (offScreen) {
-            offScreen->meshUpdateCamera(view, projection, cameraPos, time);
+            offScreen->meshUpdateCamera(cameraId, view, projection, cameraPos, time);
         }
     }
 
@@ -67,6 +67,12 @@ namespace core {
 
     std::optional<services::MeshBounds> OffScreenAdapter::getMeshBoundingBox(const std::string& meshPath) const {
         return offScreen ? offScreen->getMeshBoundingBox(meshPath) : std::nullopt;
+    }
+
+    void OffScreenAdapter::prepareCameras() {
+        if (offScreen) {
+            offScreen->prepareCameras();
+        }
     }
 
     void OffScreenAdapter::prepareFrameMeshes() {
@@ -99,6 +105,44 @@ namespace core {
 
     bool OffScreenAdapter::loadBillboardAtlas(const std::string& atlasPath) {
         return offScreen && offScreen->loadBillboardAtlas(atlasPath);
+    }
+
+    void OffScreenAdapter::rebuildBVH() {
+        if (offScreen) {
+            offScreen->rebuildBVH();
+        }
+    }
+
+    void OffScreenAdapter::markBVHDirty() {
+        if (offScreen) {
+            offScreen->markBVHDirty();
+        }
+    }
+
+    void OffScreenAdapter::createCamera(services::CameraId id, bool enableOcclusion) {
+        if (offScreen) {
+            offScreen->createCamera(id, enableOcclusion);
+        }
+    }
+
+    void OffScreenAdapter::removeCamera(services::CameraId id) {
+        if (offScreen) {
+            offScreen->removeCamera(id);
+        }
+    }
+
+    void OffScreenAdapter::setActiveCamera(services::CameraId id) {
+        if (offScreen) {
+            offScreen->setActiveCamera(id);
+        }
+    }
+
+    services::CameraId OffScreenAdapter::getActiveCameraId() const {
+        return offScreen ? offScreen->getActiveCameraId() : services::MAIN_CAMERA_ID;
+    }
+
+    services::CullingDebugStats OffScreenAdapter::getCullingStats() const {
+        return offScreen ? offScreen->getCullingStats() : services::CullingDebugStats{};
     }
 
 }

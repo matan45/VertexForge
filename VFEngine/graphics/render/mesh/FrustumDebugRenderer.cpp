@@ -76,7 +76,7 @@ namespace render::mesh
     void FrustumDebugRenderer::loadShader()
     {
         wireframeShader = std::make_shared<core::Shader>(device);
-        wireframeShader->readShader("../../resources/shaders/debug/wireframe.glsl");
+        wireframeShader->readShader("../../resources/shaders/tools/wireframe.glsl");
     }
 
     void FrustumDebugRenderer::createPipeline(vk::RenderPass renderPass)

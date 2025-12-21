@@ -11,6 +11,7 @@ namespace services {
     struct MeshPreviewParams {
         glm::mat4 modelMatrix{ 1.0f };
         int highlightedSubMesh = -1;  // -1 = none highlighted
+        int forceLODLevel = -1;       // -1 = auto LOD selection, 0-3 = force specific LOD
     };
 
     class IMeshPreviewProvider {
@@ -30,6 +31,8 @@ namespace services {
         virtual bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const = 0;
 
         virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const = 0;
+
+        virtual std::vector<LODInfo> getPreviewMeshLODInfo(PreviewInstanceId instanceId) const = 0;
 
         virtual math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const = 0;
 

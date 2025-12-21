@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
+#include <functional>
 
 namespace window {
 	class Window;
@@ -23,6 +24,8 @@ namespace core {
 
 	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
+	using ResizeCallback = std::function<void()>;
+
 	class RenderManager
 	{
 	private:
@@ -31,6 +34,7 @@ namespace core {
 		const window::Window* window;  // Non-owning pointer
 		std::unique_ptr<CommandPool> commandPool;
 		std::unique_ptr<imguiPass::ImguiRender> imguiRender;
+		mutable ResizeCallback onResizeCallback;
 
 		// Per-frame synchronization objects (indexed by currentFrame)
 		std::vector<vk::Semaphore> imageAvailableSemaphores;
@@ -56,6 +60,8 @@ namespace core {
 		void recreate(uint32_t width, uint32_t height) const;
 
 		static uint32_t getImageIndex() { return imageIndex; }
+
+		void setResizeCallback(ResizeCallback callback) { onResizeCallback = std::move(callback); }
 
 		void cleanUp() const;
 

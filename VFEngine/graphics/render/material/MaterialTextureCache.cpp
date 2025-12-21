@@ -44,7 +44,7 @@ namespace render::mesh
         // Pool for per-material descriptor sets
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = MAX_MATERIAL_DESCRIPTOR_SETS * MAX_MATERIAL_TEXTURES;
+        poolSize.descriptorCount = MAX_MATERIAL_DESCRIPTOR_SETS * material::MAX_MATERIAL_TEXTURES;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -86,7 +86,7 @@ namespace render::mesh
             return;
         }
         
-        std::array<vk::DescriptorImageInfo, MAX_MATERIAL_TEXTURES> imageInfos;
+        std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
 
         // Helper to get view/sampler for a texture path
         auto getViewSampler = [this](const std::string& path) -> std::pair<vk::ImageView, vk::Sampler> {
@@ -135,7 +135,7 @@ namespace render::mesh
         writeSet.dstBinding = 0;
         writeSet.dstArrayElement = 0;
         writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writeSet.descriptorCount = MAX_MATERIAL_TEXTURES;
+        writeSet.descriptorCount = material::MAX_MATERIAL_TEXTURES;
         writeSet.pImageInfo = imageInfos.data();
 
         device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
@@ -412,7 +412,7 @@ namespace render::mesh
         auto textureFuture = resource::ResourceManager::loadTextureAsync(path);
         auto textureData = textureFuture.get();
 
-        if (!textureData || textureData->textureData.empty()) {
+        if (!textureData || textureData->textureData().empty()) {
             loggerWarning("Failed to load texture: {}", path);
             return false;
         }
@@ -443,7 +443,7 @@ namespace render::mesh
         device.getLogicalDevice().bindImageMemory(tex.image, tex.memory, 0);
 
         // Create staging buffer and copy
-        vk::DeviceSize imageSize = textureData->textureData.size();
+        vk::DeviceSize imageSize = textureData->textureData().size();
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingMemory;
 
@@ -455,7 +455,7 @@ namespace render::mesh
 
         void* data;
         [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        memcpy(data, textureData->textureData.data(), static_cast<size_t>(imageSize));
+        memcpy(data, textureData->textureData().data(), static_cast<size_t>(imageSize));
         device.getLogicalDevice().unmapMemory(stagingMemory);
 
         // Transition and copy

@@ -21,13 +21,15 @@ namespace windows
         std::string windowTitle;
         std::unique_ptr<editor::OrbitCamera> camera;
 
-        // Mesh preview is handled via PreviewService (EventDispatcher)
-        math::AABB meshBounds;  // Cached bounds for camera fitting
+        // Mesh preview
+        math::AABB meshBounds; // Cached bounds for camera fitting
         std::vector<services::SubMeshInfo> subMeshes;
-        int selectedSubMesh = -1;  // -1 = all submeshes
-        
-        glm::vec3 meshPosition{ 0.0f };
-        glm::vec3 meshRotation{ 0.0f };  // Euler angles in degrees
+        std::vector<services::LODInfo> lodLevels;
+        int selectedSubMesh = -1; // -1 = all submeshes
+        int selectedLOD = -1; // -1 = auto, 0-3 = force specific LOD
+
+        glm::vec3 meshPosition{0.0f};
+        glm::vec3 meshRotation{0.0f}; // Euler angles in degrees
         float meshScale = 1.0f;
 
         // Window state

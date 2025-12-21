@@ -38,4 +38,9 @@ namespace controllers {
 		renderManager->cleanUp();
 	}
 
+	void RenderController::setResizeCallback(core::ResizeCallback callback)
+	{
+		renderManager->setResizeCallback(std::move(callback));
+	}
+
 }

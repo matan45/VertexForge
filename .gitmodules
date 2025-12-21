@@ -43,3 +43,6 @@
 [submodule "dependencies/mType"]
 	path = dependencies/mType
 	url = https://github.com/matan45/mType.git
+[submodule "dependencies/meshoptimizer"]
+	path = dependencies/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer.git

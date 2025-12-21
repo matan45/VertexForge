@@ -115,12 +115,12 @@ project "Import"
       "dependencies/tinyexr",           -- exr headers
       "dependencies/assimp/include",     -- Assimp headers
 	  "dependencies/glm",
-	  
+	  "dependencies/meshoptimizer/src"  -- meshoptimizer for LOD generation
    }
-   
+
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   links { "Utilities" }
+   links { "Utilities", "meshoptimizer" }
 
    -- Debug configuration
    filter "configurations:Debug"
@@ -483,6 +483,48 @@ project "mType"
 
    filter { "system:windows", "configurations:Release" }
       buildoptions { "/arch:AVX2" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Project: meshoptimizer (Mesh simplification for LOD generation)
+project "meshoptimizer"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++17"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/meshoptimizer/src/meshoptimizer.h",
+      "dependencies/meshoptimizer/src/allocator.cpp",
+      "dependencies/meshoptimizer/src/clusterizer.cpp",
+      "dependencies/meshoptimizer/src/indexanalyzer.cpp",
+      "dependencies/meshoptimizer/src/indexcodec.cpp",
+      "dependencies/meshoptimizer/src/indexgenerator.cpp",
+      "dependencies/meshoptimizer/src/overdrawoptimizer.cpp",
+      "dependencies/meshoptimizer/src/partition.cpp",
+      "dependencies/meshoptimizer/src/quantization.cpp",
+      "dependencies/meshoptimizer/src/rasterizer.cpp",
+      "dependencies/meshoptimizer/src/simplifier.cpp",
+      "dependencies/meshoptimizer/src/spatialorder.cpp",
+      "dependencies/meshoptimizer/src/stripifier.cpp",
+      "dependencies/meshoptimizer/src/vcacheoptimizer.cpp",
+      "dependencies/meshoptimizer/src/vertexcodec.cpp",
+      "dependencies/meshoptimizer/src/vertexfilter.cpp",
+      "dependencies/meshoptimizer/src/vfetchoptimizer.cpp"
+   }
+
+   includedirs {
+      "dependencies/meshoptimizer/src"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }

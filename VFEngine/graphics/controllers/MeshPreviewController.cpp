@@ -1,9 +1,10 @@
 #include "MeshPreviewController.hpp"
 #include "../core/VulkanContext.hpp"
-#include "../imguiPass/OffScreenViewPort.hpp"
+#include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
+#include "resource/Types.hpp"
 #include "print/Logger.hpp"
 
 namespace controllers
@@ -11,7 +12,7 @@ namespace controllers
     MeshPreviewController::MeshPreviewController()
         : swapChain{ *core::VulkanContext::getSwapChain() }
         , device{ *core::VulkanContext::getDevice() }
-        , offScreen{ std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain) }
+        , offScreen{ std::make_unique<render::OffScreenViewPort>(device, swapChain) }
     {
     }
 
@@ -59,8 +60,7 @@ namespace controllers
         {
             init();
         }
-
-        // Unload previous mesh if any
+        
         if (!loadedMeshPath.empty())
         {
             unloadMesh();
@@ -73,8 +73,7 @@ namespace controllers
         {
             return false;
         }
-
-        // Load the mesh
+        
         std::string meshId = meshPipeline->loadMesh(meshPath);
         if (meshId.empty())
         {
@@ -92,7 +91,6 @@ namespace controllers
         }
         else
         {
-            // Default bounds if not available
             meshBounds = math::AABB(glm::vec3(-1.0f), glm::vec3(1.0f));
             outBounds = meshBounds;
         }
@@ -143,9 +141,53 @@ namespace controllers
         {
             const auto& subMesh = gpuData->subMeshes[i];
             services::SubMeshInfo info;
-            info.name = "SubMesh_" + std::to_string(i);
-            info.vertexCount = subMesh.vertexCount;
-            info.indexCount = subMesh.indexCount;
+            info.name = subMesh.name.empty() ? ("SubMesh_" + std::to_string(i)) : subMesh.name;
+            info.vertexCount = subMesh.lodLevels[0].vertexCount;
+            info.indexCount = subMesh.lodLevels[0].indexCount;
+            result.push_back(info);
+        }
+
+        return result;
+    }
+
+    std::vector<services::LODInfo> MeshPreviewController::getLODInfo() const
+    {
+        std::vector<services::LODInfo> result;
+
+        if (loadedMeshPath.empty())
+        {
+            return result;
+        }
+
+        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        if (!meshPipeline)
+        {
+            return result;
+        }
+
+        const render::mesh::MeshGPUData* gpuData = meshPipeline->getMesh(loadedMeshPath);
+        if (!gpuData || gpuData->subMeshes.empty())
+        {
+            return result;
+        }
+
+        // Aggregate LOD info across all submeshes
+        static constexpr float lodPercents[] = { 100.0f, 50.0f, 25.0f, 12.5f };
+
+        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+        {
+            services::LODInfo info;
+            info.lodLevel = lod;
+            info.vertexCount = 0;
+            info.indexCount = 0;
+            info.reductionPercent = lodPercents[lod];
+
+            for (const auto& subMesh : gpuData->subMeshes)
+            {
+                info.vertexCount += subMesh.lodLevels[lod].vertexCount;
+                info.indexCount += subMesh.lodLevels[lod].indexCount;
+            }
+
             result.push_back(info);
         }
 
@@ -188,6 +230,7 @@ namespace controllers
         renderData.emission = 0.0f;
         renderData.showBoundingBox = false;
         renderData.highlightedSubMesh = highlightedSubMesh;
+        renderData.forceLODLevel = forceLODLevel;
 
         meshDrawList.push_back(renderData);
 

@@ -11,7 +11,7 @@ namespace windows
 {
     MeshPreviewWindow::MeshPreviewWindow(const std::string& meshFilePath)
         : meshPath(meshFilePath)
-        , camera(std::make_unique<editor::OrbitCamera>())
+          , camera(std::make_unique<editor::OrbitCamera>())
     {
         std::filesystem::path path(meshFilePath);
         windowTitle = "Mesh Preview: " + path.filename().string();
@@ -46,8 +46,6 @@ namespace windows
 
         if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
         {
-            // Don't render content if window is being closed this frame
-            // (isOpen was just set to false by clicking X)
             if (isOpen)
             {
                 // Split layout: left panel for submesh list, right for 3D viewport
@@ -64,7 +62,7 @@ namespace windows
                 // 3D viewport on the right
                 float viewportWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("ViewportPanel", ImVec2(viewportWidth, contentSize.y), true,
-                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
                 ImVec2 viewportSize = ImGui::GetContentRegionAvail();
                 drawViewport(viewportSize.x, viewportSize.y);
@@ -77,12 +75,10 @@ namespace windows
 
     void MeshPreviewWindow::initRenderer()
     {
-        // Initialize mesh preview via PreviewService (using 'this' as instanceId)
         services::events::preview::InitMeshPreviewCommand initCmd;
         initCmd.instanceId = services::PreviewInstanceId(this);
         events::EventDispatcher::instance().execute(initCmd);
 
-        // Load mesh via PreviewService
         services::events::preview::LoadPreviewMeshCommand loadCmd;
         loadCmd.instanceId = services::PreviewInstanceId(this);
         loadCmd.meshPath = meshPath;
@@ -93,10 +89,13 @@ namespace windows
             meshBounds = result.bounds;
             camera->fitToBounds(meshBounds);
 
-            // Get submesh info via PreviewService
             services::events::preview::GetPreviewMeshSubMeshInfoQuery subMeshQuery;
             subMeshQuery.instanceId = services::PreviewInstanceId(this);
             subMeshes = events::EventDispatcher::instance().query(subMeshQuery);
+
+            services::events::preview::GetPreviewMeshLODInfoQuery lodQuery;
+            lodQuery.instanceId = services::PreviewInstanceId(this);
+            lodLevels = events::EventDispatcher::instance().query(lodQuery);
         }
     }
 
@@ -107,22 +106,24 @@ namespace windows
             return;
         }
         camera->setAspectRatio(width / height);
-        
+
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, meshPosition);
         model = glm::rotate(model, glm::radians(meshRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, glm::radians(meshRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
         model = glm::scale(model, glm::vec3(meshScale));
-        
+
         services::MeshPreviewParams meshParams;
         meshParams.modelMatrix = model;
         meshParams.highlightedSubMesh = selectedSubMesh;
+        meshParams.forceLODLevel = selectedLOD;
+
         services::events::preview::SetMeshPreviewParamsCommand meshCmd;
         meshCmd.instanceId = services::PreviewInstanceId(this);
         meshCmd.params = meshParams;
         events::EventDispatcher::instance().execute(meshCmd);
-        
+
         services::events::preview::UpdateMeshCameraCommand cameraCmd;
         cameraCmd.instanceId = services::PreviewInstanceId(this);
         cameraCmd.view = camera->getViewMatrix();
@@ -157,7 +158,6 @@ namespace windows
         if (ImGui::Selectable("All Submeshes", allSelected))
         {
             selectedSubMesh = -1;
-            // Highlight is updated via SetMeshPreviewParamsCommand in drawViewport
         }
 
         ImGui::Separator();
@@ -168,10 +168,10 @@ namespace windows
             const auto& info = subMeshes[i];
             bool isSelected = (selectedSubMesh == static_cast<int>(i));
 
+            ImGui::PushID(static_cast<int>(i));
             if (ImGui::Selectable(info.name.c_str(), isSelected))
             {
                 selectedSubMesh = static_cast<int>(i);
-                // Highlight is updated via SetMeshPreviewParamsCommand in drawViewport
             }
 
             // Show tooltip with details
@@ -183,9 +183,46 @@ namespace windows
                 ImGui::Text("Triangles: %u", info.indexCount / 3);
                 ImGui::EndTooltip();
             }
+            ImGui::PopID();
         }
 
         ImGui::Separator();
+
+        // LOD Level Selection
+        if (!lodLevels.empty())
+        {
+            ImGui::Spacing();
+            ImGui::Text("LOD Level");
+
+            const char* lodLabels[] = {"Auto", "LOD 0 (100%)", "LOD 1 (50%)", "LOD 2 (25%)", "LOD 3 (12.5%)"};
+            int currentLOD = selectedLOD + 1; // -1 becomes 0 (Auto), 0 becomes 1 (LOD 0), etc.
+
+            float itemWidth = ImGui::GetContentRegionAvail().x;
+            ImGui::SetNextItemWidth(itemWidth);
+            if (ImGui::Combo("##LODLevel", &currentLOD, lodLabels, 5))
+            {
+                selectedLOD = currentLOD - 1; // 0 becomes -1 (Auto), 1 becomes 0 (LOD 0), etc.
+            }
+
+
+            int displayLOD = (selectedLOD >= 0) ? selectedLOD : 0;
+            if (static_cast<size_t>(displayLOD) < lodLevels.size())
+            {
+                const auto& lodInfo = lodLevels[displayLOD];
+                if (selectedLOD < 0)
+                {
+                    ImGui::TextDisabled("Auto (showing LOD0):");
+                }
+                else
+                {
+                    ImGui::TextDisabled("LOD %d (%.1f%%):", lodInfo.lodLevel, lodInfo.reductionPercent);
+                }
+                ImGui::Text("  Vertices: %u", lodInfo.vertexCount);
+                ImGui::Text("  Triangles: %u", lodInfo.indexCount / 3);
+            }
+
+            ImGui::Separator();
+        }
 
         // Summary
         uint32_t totalVerts = 0;
@@ -196,18 +233,18 @@ namespace windows
             totalIndices += info.indexCount;
         }
 
-        ImGui::TextDisabled("Total:");
+        ImGui::TextDisabled("Total (LOD0):");
         ImGui::Text("  Submeshes: %zu", subMeshes.size());
         ImGui::Text("  Vertices: %u", totalVerts);
         ImGui::Text("  Triangles: %u", totalIndices / 3);
 
         ImGui::Separator();
         ImGui::Spacing();
-        
+
         if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
-            
+
             ImGui::Text("Pos X");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -224,7 +261,7 @@ namespace windows
             ImGui::DragFloat("##PosZ", &meshPosition.z, 0.1f, -1000.0f, 1000.0f, "%.2f");
 
             ImGui::Spacing();
-            
+
             ImGui::Text("Rot X");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -241,7 +278,7 @@ namespace windows
             ImGui::SliderFloat("##RotZ", &meshRotation.z, -180.0f, 180.0f, "%.0f");
 
             ImGui::Spacing();
-            
+
             ImGui::Text("Scale");
             ImGui::SameLine(50.0f);
             ImGui::SetNextItemWidth(itemWidth);
@@ -251,25 +288,25 @@ namespace windows
             }
 
             ImGui::Spacing();
-            
+
             if (ImGui::Button("Reset", ImVec2(-1, 0)))
             {
                 meshPosition = glm::vec3(0.0f);
                 meshRotation = glm::vec3(0.0f);
                 meshScale = 1.0f;
             }
-            
+
             if (ImGui::Button("Fit Camera", ImVec2(-1, 0)))
             {
                 // Use cached bounds from when mesh was loaded
                 camera->fitToBounds(meshBounds);
             }
         }
-        
+
         if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
-            
+
             float dist = camera->getDistance();
             float minDist = camera->getMinDistance();
             float maxDist = camera->getMaxDistance();
@@ -294,5 +331,4 @@ namespace windows
             }
         }
     }
-
 }

@@ -27,6 +27,11 @@ namespace core
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
 
         offScreen->init();
+
+        // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
+        coreInterface->setResizeCallback([this]() {
+            offScreen->recreate();
+        });
     }
 
     void EditorBootstrap::run() const

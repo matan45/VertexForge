@@ -1,6 +1,7 @@
 #pragma once
 #include "EventTypes.hpp"
 #include "../data/DTOs.hpp"
+#include "../providers/IOffScreenProvider.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <string>
@@ -156,6 +157,14 @@ namespace events::render {
 
     struct GetShowBillboardIconsQuery : IQuery<bool> {
         std::string_view getName() const override { return "GetShowBillboardIcons"; }
+    };
+
+    // ============================================
+    // DEBUG/STATS QUERIES
+    // ============================================
+
+    struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {
+        std::string_view getName() const override { return "GetCullingStats"; }
     };
 
 }

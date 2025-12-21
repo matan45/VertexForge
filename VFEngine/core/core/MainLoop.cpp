@@ -56,6 +56,11 @@ namespace core {
 		renderController->reSize();
 	}
 
+	void MainLoop::setResizeCallback(std::function<void()> callback)
+	{
+		renderController->setResizeCallback(std::move(callback));
+	}
+
 	void MainLoop::cleanUp() const
 	{
 		renderController->cleanUp();

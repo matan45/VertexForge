@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include <optional>
+#include <cstdint>
 #include "../uuid/UUID.hpp"
 
 namespace components {
@@ -49,9 +50,10 @@ namespace components {
 
 	struct TransformComponent {
 		glm::vec3 position{ 0.0f };
-		glm::vec3 rotation{ 0.0f }; // Euler angles
+		glm::vec3 rotation{ 0.0f };
 		glm::vec3 scale{ 1.0f };
 		bool isDirty = true;
+		bool isStatic = true;  // Static entities are in a BVH that rebuilds infrequently
 
 		// Mark as dirty when transform changes
 		void setPosition(const glm::vec3& newPos) {
@@ -92,8 +94,22 @@ namespace components {
 		float nearPlane = 0.1f;
 		float farPlane = 1000.0f;
 		float aspectRatio = 1.778f; // Typically screen width / height
-		
+
+		// Occlusion culling settings
+		uint32_t cameraId = 0;  // Unique ID for occlusion culling system
+		bool enableOcclusionCulling = true;  // Whether to use Hi-Z occlusion culling for this camera
+		bool isRegistered = false;  // Whether this camera has been registered with the occlusion system
+
+		// Static counter for generating unique camera IDs
+		static inline uint32_t nextCameraId = 0;
+
+		// Generate a new unique camera ID
+		static uint32_t generateCameraId() {
+			return nextCameraId++;
+		}
+
 		CameraComponent() {
+			cameraId = generateCameraId();
 			updateProjectionMatrix();
 			// Initialize view matrix looking down -Z axis
 			viewMatrix = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -223,7 +239,7 @@ namespace components {
 			if (iconType == BillboardIconType::Custom) {
 				return atlasIndex;
 			}
-			
+
 			switch (iconType) {
 			case BillboardIconType::Light:       return 0;
 			case BillboardIconType::Camera:      return 1;

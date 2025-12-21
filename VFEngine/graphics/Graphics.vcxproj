@@ -115,10 +115,10 @@
     <ClInclude Include="core\Utilities.hpp" />
     <ClInclude Include="core\VulkanContext.hpp" />
     <ClInclude Include="imguiPass\ImguiRender.hpp" />
-    <ClInclude Include="imguiPass\OffScreenViewPort.hpp" />
     <ClInclude Include="render\ClearColor.hpp" />
     <ClInclude Include="render\DebugRenderer.hpp" />
     <ClInclude Include="render\IBL.hpp" />
+    <ClInclude Include="render\OffScreenViewPort.hpp" />
     <ClInclude Include="render\RenderPassHandler.hpp" />
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
@@ -139,6 +139,9 @@
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
+    <ClInclude Include="render\occlusion\CameraRenderData.hpp" />
+    <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
+    <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Graphics.cpp" />
@@ -157,10 +160,10 @@
     <ClCompile Include="core\Utilities.cpp" />
     <ClCompile Include="core\VulkanContext.cpp" />
     <ClCompile Include="imguiPass\ImguiRender.cpp" />
-    <ClCompile Include="imguiPass\OffScreenViewPort.cpp" />
     <ClCompile Include="render\ClearColor.cpp" />
     <ClCompile Include="render\DebugRenderer.cpp" />
     <ClCompile Include="render\IBL.cpp" />
+    <ClCompile Include="render\OffScreenViewPort.cpp" />
     <ClCompile Include="render\RenderPassHandler.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
@@ -178,11 +181,14 @@
     <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
+    <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
+    <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
+    <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
-    <None Include="..\..\resources\shaders\debug\aabbWireframe.glsl" />
-    <None Include="..\..\resources\shaders\debug\wireframe.glsl" />
+    <None Include="..\..\resources\shaders\hiz\hiz_cull.glsl" />
+    <None Include="..\..\resources\shaders\hiz\hiz_generate.glsl" />
     <None Include="..\..\resources\shaders\ibl\brdf.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_convolution.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_to_cubemap.glsl" />
@@ -192,6 +198,8 @@
     <None Include="..\..\resources\shaders\material\material_fragment_header.glsl" />
     <None Include="..\..\resources\shaders\material\material_vertex.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
+    <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
+    <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">

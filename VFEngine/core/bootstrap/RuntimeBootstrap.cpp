@@ -21,6 +21,11 @@ namespace core
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());
 
         offScreen->init();
+
+        // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
+        coreInterface->setResizeCallback([this]() {
+            offScreen->recreate();
+        });
     }
 
     void RuntimeBootstrap::run() const

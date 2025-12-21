@@ -13,7 +13,7 @@ namespace core
     class SwapChain;
 }
 
-namespace imguiPass
+namespace render
 {
     class OffScreenViewPort;
 }
@@ -78,7 +78,7 @@ namespace controllers
     private:
         core::SwapChain& swapChain;
         core::Device& device;
-        std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
+        std::unique_ptr<render::OffScreenViewPort> offScreen;
 
         math::Frustum currentFrustum;
         PreviewMaterialParams materialParams;

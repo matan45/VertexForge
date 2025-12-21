@@ -14,6 +14,11 @@ namespace controllers {
 		offScreenController->init();
 	}
 
+	void OffScreen::recreate()
+	{
+		offScreenController->recreate();
+	}
+
 	void OffScreen::cleanUp()
 	{
 		offScreenController->cleanUp();
@@ -49,10 +54,10 @@ namespace controllers {
 		offScreenController->meshUnload(meshId);
 	}
 
-	void OffScreen::meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
+	void OffScreen::meshUpdateCamera(CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
 	                                 const glm::vec3& cameraPos, float time)
 	{
-		offScreenController->meshUpdateCamera(view, projection, cameraPos, time);
+		offScreenController->meshUpdateCamera(cameraId, view, projection, cameraPos, time);
 	}
 
 	bool OffScreen::isMeshLoaded(const std::string& meshPath) const
@@ -70,9 +75,44 @@ namespace controllers {
 		return offScreenController->getMeshBoundingBox(meshPath);
 	}
 
+	void OffScreen::prepareCameras()
+	{
+		offScreenController->prepareCameras();
+	}
+
 	void OffScreen::prepareFrameMeshes()
 	{
 		offScreenController->prepareFrameMeshes();
+	}
+
+	void OffScreen::rebuildBVH()
+	{
+		offScreenController->rebuildBVH();
+	}
+
+	void OffScreen::markBVHDirty()
+	{
+		offScreenController->markBVHDirty();
+	}
+
+	void OffScreen::createCamera(CameraId id, bool enableOcclusion)
+	{
+		offScreenController->createCamera(id, enableOcclusion);
+	}
+
+	void OffScreen::removeCamera(CameraId id)
+	{
+		offScreenController->removeCamera(id);
+	}
+
+	void OffScreen::setActiveCamera(CameraId id)
+	{
+		offScreenController->setActiveCamera(id);
+	}
+
+	CameraId OffScreen::getActiveCameraId() const
+	{
+		return offScreenController->getActiveCameraId();
 	}
 
 	void OffScreen::prepareFrameCameraFrustums()
@@ -98,5 +138,10 @@ namespace controllers {
 	bool OffScreen::loadBillboardAtlas(const std::string& atlasPath)
 	{
 		return offScreenController->loadBillboardAtlas(atlasPath);
+	}
+
+	services::CullingDebugStats OffScreen::getCullingStats() const
+	{
+		return offScreenController->getCullingStats();
 	}
 }

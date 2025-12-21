@@ -1,6 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
+#include "scene/SceneBVH.hpp"
+#include "../render/occlusion/CameraRenderData.hpp"
 #include "../../services/providers/IOffScreenProvider.hpp"
 #include <memory>
 #include <string_view>
@@ -17,7 +19,7 @@ namespace core
     class SwapChain;
 }
 
-namespace imguiPass
+namespace render
 {
     class OffScreenViewPort;
 }
@@ -29,16 +31,30 @@ namespace controllers
     private:
         core::SwapChain& swapChain;
         core::Device& device;
-        std::unique_ptr<imguiPass::OffScreenViewPort> offScreen;
+        std::unique_ptr<render::OffScreenViewPort> offScreen;
         math::Frustum currentFrustum;  // Current camera frustum for culling
-        std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;  // Subscription token for material saved notification
+        scene::SceneBVH sceneBVH;     
+        std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
+        std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
         bool showBillboardIcons = true; 
+
+        // Occlusion culling state
+        glm::mat4 currentViewProj{1.0f};
+        float currentNearPlane = 0.1f;
+        bool occlusionCullingEnabled = true;
+        bool occlusionCullingReady = false;
+
+        // Culling stats for debug visualization
+        mutable services::CullingDebugStats lastCullingStats;
 
     public:
         explicit OffScreenController();
         ~OffScreenController();
 
         void init();
+        void recreate();
         void cleanUp() const;
 
         // IBL API
@@ -49,13 +65,16 @@ namespace controllers
         // Mesh API
         std::string meshLoad(std::string_view meshPath);
         void meshUnload(const std::string& meshId);
-        void meshUpdateCamera(const glm::mat4& view, const glm::mat4& projection,
-                              const glm::vec3& cameraPos, float time = 0.0f);
+        void meshUpdateCamera(render::occlusion::CameraId cameraId, const glm::mat4& view,
+                              const glm::mat4& projection, const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
         std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 
        
+        // Called each frame to sync CameraComponents with occlusion system
+        void prepareCameras();
+        
         void prepareFrameMeshes();
         
         void prepareFrameBillboards();
@@ -68,6 +87,26 @@ namespace controllers
         
         bool loadBillboardAtlas(const std::string& atlasPath);
 
+        // BVH management
+        void rebuildBVH();     
+        void markBVHDirty();     
+
+        // Occlusion culling control (main camera)
+        void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
+        bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
+
+        // Multi-camera support for occlusion culling
+        void createCamera(render::occlusion::CameraId id, bool enableOcclusion = false);
+        void removeCamera(render::occlusion::CameraId id);
+        void setActiveCamera(render::occlusion::CameraId id);
+        render::occlusion::CameraId getActiveCameraId() const;
+
         void* render();
+
+        // Debug/Stats API
+        services::CullingDebugStats getCullingStats() const;
+
+    private:
+        void updateOcclusionCullingData();
     };
 }

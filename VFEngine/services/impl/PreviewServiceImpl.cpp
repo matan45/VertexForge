@@ -108,6 +108,11 @@ namespace services {
                 return getPreviewMeshSubMeshInfo(query.instanceId);
             });
 
+        dispatcher.registerQueryHandler<events::preview::GetPreviewMeshLODInfoQuery>(
+            [this](const events::preview::GetPreviewMeshLODInfoQuery& query) {
+                return getPreviewMeshLODInfo(query.instanceId);
+            });
+
         dispatcher.registerQueryHandler<events::preview::GetPreviewMeshBoundsQuery>(
             [this](const events::preview::GetPreviewMeshBoundsQuery& query) {
                 return getPreviewMeshBounds(query.instanceId);
@@ -184,6 +189,10 @@ namespace services {
 
     std::vector<SubMeshInfo> PreviewServiceImpl::getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const {
         return meshProvider->getPreviewMeshSubMeshInfo(instanceId);
+    }
+
+    std::vector<LODInfo> PreviewServiceImpl::getPreviewMeshLODInfo(PreviewInstanceId instanceId) const {
+        return meshProvider->getPreviewMeshLODInfo(instanceId);
     }
 
     math::AABB PreviewServiceImpl::getPreviewMeshBounds(PreviewInstanceId instanceId) const {

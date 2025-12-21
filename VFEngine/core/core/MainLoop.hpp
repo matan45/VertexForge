@@ -35,6 +35,9 @@ namespace core {
 		// Set callback to be called each frame (for service updates)
 		void setFrameCallback(std::function<void()> callback) { frameCallback = std::move(callback); }
 
+		// Set callback to be called on resize (for offscreen resource recreation)
+		void setResizeCallback(std::function<void()> callback);
+
 		// Trigger window resize handling (called by external event handlers)
 		void triggerResize();
 

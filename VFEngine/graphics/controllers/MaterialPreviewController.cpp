@@ -1,7 +1,7 @@
 #include "MaterialPreviewController.hpp"
 #include "../core/Device.hpp"
 #include "../core/Utilities.hpp"
-#include "../imguiPass/OffScreenViewPort.hpp"
+#include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
@@ -158,7 +158,7 @@ namespace controllers
     MaterialPreviewController::MaterialPreviewController()
         : swapChain{*core::VulkanContext::getSwapChain()}
           , device{*core::VulkanContext::getDevice()}
-          , offScreen{std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain)}
+          , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
           , textureManager{std::make_unique<TextureManagerImpl>()}
     {
     }
@@ -273,7 +273,7 @@ namespace controllers
             auto textureData = resource::ResourceManager::loadTextureAsync(path);
             auto texturePtr = textureData.get();
 
-            if (!texturePtr || texturePtr->textureData.empty())
+            if (!texturePtr || texturePtr->textureData().empty())
             {
                 loggerWarning("Failed to load texture: {}", path);
                 return tex;
@@ -295,7 +295,7 @@ namespace controllers
             // Copy data to staging buffer
             void* data;
             static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
-            memcpy(data, texturePtr->textureData.data(), imageSize);
+            memcpy(data, texturePtr->textureData().data(), imageSize);
             device.getLogicalDevice().unmapMemory(stagingBufferMemory);
 
             // Create image
@@ -400,7 +400,7 @@ namespace controllers
         // Recreate offScreen if it was cleaned up (supports re-initialization)
         if (!offScreen)
         {
-            offScreen = std::make_unique<imguiPass::OffScreenViewPort>(device, swapChain);
+            offScreen = std::make_unique<render::OffScreenViewPort>(device, swapChain);
         }
 
         offScreen->init();

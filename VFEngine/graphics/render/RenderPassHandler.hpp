@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/OffScreen.hpp"
+#include "occlusion/CameraRenderData.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -16,6 +17,11 @@ namespace render
     class ClearColor;
     class IBL;
     class DebugRenderer;
+
+    namespace occlusion
+    {
+        struct GPUObjectData;
+    }
 
     namespace mesh
     {
@@ -41,6 +47,7 @@ namespace render
         std::unique_ptr<mesh::StaticMeshPipeline> meshPipeline;
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
         std::unique_ptr<DebugRenderer> debugRenderer;
+        std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
 
         core::OffscreenResources& offscreenResources;
 
@@ -65,7 +72,7 @@ namespace render
 
         void init();
 
-        void recreate() const;
+        void recreate();
 
         IBL* getIBL() const { return iblRenderer.get(); }
         
@@ -94,6 +101,27 @@ namespace render
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
+
+        // Camera occlusion manager access
+        occlusion::CameraOcclusionManager* getCameraOcclusionManager() const { return cameraOcclusionManager.get(); }
+
+        // Camera management (delegates to CameraOcclusionManager)
+        occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
+        occlusion::CameraRenderData* getCamera(occlusion::CameraId id);
+        void removeCamera(occlusion::CameraId id);
+        void setActiveCamera(occlusion::CameraId id);
+        occlusion::CameraId getActiveCameraId() const;
+
+        // Hi-Z occlusion culling methods
+        void initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView, vk::Format depthFormat);
+        bool isHiZInitialized(occlusion::CameraId cameraId) const;
+
+        // GPU occlusion culling methods
+        void initOcclusionCulling(occlusion::CameraId cameraId);
+        void updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects);
+        void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);
+        std::vector<uint32_t> getOcclusionVisibility(occlusion::CameraId cameraId);
+        bool isOcclusionCullingInitialized(occlusion::CameraId cameraId) const;
 
         void cleanUp() const;
 

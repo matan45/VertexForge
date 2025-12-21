@@ -2,11 +2,20 @@
 #include <cstdint>
 #include <string>
 
+// Application version - static constants
 struct Version
 {
-    static constexpr  uint32_t major = 0;
+    static constexpr uint32_t major = 0;
     static constexpr uint32_t minor = 0;
-    static constexpr uint32_t patch = 2;  // v0.0.2: Added submesh names to vfMesh format
+    static constexpr uint32_t patch = 3;
+};
+
+// File version - instance members for storing version info read from files
+struct FileVersion
+{
+    uint32_t major = Version::major;
+    uint32_t minor = Version::minor;
+    uint32_t patch = Version::patch;
 };
 
 struct FileExtension
@@ -28,10 +37,10 @@ namespace importConfig
 
     struct ImportFiles
     {
-        std::string path;  // Must own the string - views dangle when source is destroyed
+        std::string path; // Must own the string - views dangle when source is destroyed
         ImportConfig config;
 
-        explicit ImportFiles(std::string_view path, const ImportConfig& config):
+        explicit ImportFiles(std::string_view path, const ImportConfig& config) :
             path{path}, config{config}
         {
         }

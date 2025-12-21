@@ -43,6 +43,12 @@ namespace render::mesh
     class StaticMeshPipeline
     {
     private:
+        // Screen-space LOD thresholds (in pixels)
+        static constexpr float LOD_THRESHOLD_0 = 400.0f;  // LOD0 for objects > 400 pixels
+        static constexpr float LOD_THRESHOLD_1 = 200.0f;  // LOD1 for objects > 200 pixels
+        static constexpr float LOD_THRESHOLD_2 = 100.0f;  // LOD2 for objects > 100 pixels
+        // LOD3 for everything else
+        
         core::Device& device;
         core::SwapChain& swapChain;
         core::OffscreenResources& offscreenResources;
@@ -68,14 +74,11 @@ namespace render::mesh
         bool textureDescriptorsInitialized = false;
 
         std::vector<vk::Framebuffer> framebuffers;
-
-        // Mesh GPU cache for loading/unloading mesh buffers
+        
         std::unique_ptr<MeshGPUCache> meshCache;
-
-        // Material texture cache for loading/managing material textures
+        
         std::unique_ptr<MaterialTextureCache> textureCache;
-
-        // Material shader cache for per-material compiled shaders and pipelines
+        
         std::unique_ptr<MaterialShaderCache> materialShaderCache;
 
         vk::Buffer cameraUBO;
@@ -86,21 +89,16 @@ namespace render::mesh
         mutable glm::mat4 currentProjection{1.0f};
         mutable glm::vec3 currentCameraPos{0.0f};
         mutable float currentTime{0.0f};
-
-        // Material cache manager (handles caching, invalidation, preview injection)
+        
         std::unique_ptr<MaterialCacheManager> materialCacheManager;
 
         // Prepare textures for frame rendering
         void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
-
-        // Default IBL textures (used when no IBL is set)
+        
         bool usingDefaultTextures = false;
         std::unique_ptr<DefaultIBLTextureFactory> defaultIBLFactory;
 
     public:
-        // Max textures per material (must match MaterialTextureCache::MAX_MATERIAL_TEXTURES)
-        static constexpr int MAX_MATERIAL_TEXTURES = 6;
-
         explicit StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
                                     core::OffscreenResources& offscreenResources);
         ~StaticMeshPipeline();
@@ -141,8 +139,8 @@ namespace render::mesh
 
         // Update the default descriptor set with material textures (for preview rendering)
         void updatePreviewTextureDescriptors(
-            const std::array<vk::ImageView, MAX_MATERIAL_TEXTURES>& imageViews,
-            const std::array<vk::Sampler, MAX_MATERIAL_TEXTURES>& samplers);
+            const std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES>& imageViews,
+            const std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES>& samplers);
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;
@@ -161,9 +159,10 @@ namespace render::mesh
         const MeshGPUData* getMesh(const std::string& meshId) const;
 
         bool isMeshLoaded(const std::string& meshId) const;
-
-        // Get bounding box of a loaded mesh (for frustum culling)
+        
         const math::AABB* getMeshBoundingBox(const std::string& meshId) const;
+        
+        material::BlendMode getMaterialBlendMode(const std::string& materialPath) const;
 
         std::vector<std::string> getLoadedMeshIds() const;
 
@@ -192,5 +191,8 @@ namespace render::mesh
         void createTextureDescriptorSetLayout();
         void createTextureDescriptorPool();
         void initializeDefaultTextureDescriptors();
+
+        // LOD selection based on screen-space size
+        uint32_t selectLODLevel(const MeshRenderData& meshData, const SubMeshGPUData& subMesh) const;
     };
 }

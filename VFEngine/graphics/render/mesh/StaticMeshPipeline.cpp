@@ -16,7 +16,6 @@
 #include "material/MaterialManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
-#include <optional>
 #include <algorithm>
 #include <cmath>
 
@@ -51,15 +50,15 @@ namespace render::mesh
         loadShaders();
         createRenderPass();
         createDescriptorSetLayout();
-        createTextureDescriptorSetLayout();  // Set 1 layout
+        createTextureDescriptorSetLayout(); // Set 1 layout
         createDescriptorPool();
-        createTextureDescriptorPool();       // Set 1 pool
+        createTextureDescriptorPool(); // Set 1 pool
         createCameraUBO();
         createDescriptorSet(irradianceMap, prefilterMap, brdfLUT);
         createPipelineLayout();
         createGraphicsPipeline();
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
-        initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
+        initializeDefaultTextureDescriptors(); // Initialize set 1 with defaults
         createFramebuffers();
     }
 
@@ -68,9 +67,9 @@ namespace render::mesh
         loadShaders();
         createRenderPass();
         createDescriptorSetLayout();
-        createTextureDescriptorSetLayout();  // Set 1 layout
+        createTextureDescriptorSetLayout(); // Set 1 layout
         createDescriptorPool();
-        createTextureDescriptorPool();       // Set 1 pool
+        createTextureDescriptorPool(); // Set 1 pool
         createCameraUBO();
 
         // Create default IBL textures using the factory
@@ -78,12 +77,12 @@ namespace render::mesh
         defaultIBLFactory->createDefaultTextures(device.getStagingCommandPool());
 
         createDescriptorSet(defaultIBLFactory->getIrradiance(),
-                           defaultIBLFactory->getPrefilter(),
-                           defaultIBLFactory->getBrdfLUT());
+                            defaultIBLFactory->getPrefilter(),
+                            defaultIBLFactory->getBrdfLUT());
         createPipelineLayout();
         createGraphicsPipeline();
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
-        initializeDefaultTextureDescriptors();  // Initialize set 1 with defaults
+        initializeDefaultTextureDescriptors(); // Initialize set 1 with defaults
         createFramebuffers();
         usingDefaultTextures = true;
     }
@@ -117,7 +116,7 @@ namespace render::mesh
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;  // Preserve skybox
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad; // Preserve skybox
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
         colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
         colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
@@ -205,7 +204,7 @@ namespace render::mesh
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[0].descriptorCount = 1;
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[1].descriptorCount = 3;  // irradiance, prefilter, brdfLUT
+        poolSizes[1].descriptorCount = 3; // irradiance, prefilter, brdfLUT
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -221,14 +220,14 @@ namespace render::mesh
         core::BufferInfoRequest bufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         bufferRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                   vk::MemoryPropertyFlagBits::eHostCoherent;
+            vk::MemoryPropertyFlagBits::eHostCoherent;
         bufferRequest.size = sizeof(CameraUBO);
         core::Utilities::createBuffer(bufferRequest, cameraUBO, cameraUBOMemory);
     }
 
     void StaticMeshPipeline::createDescriptorSet(const ibl::ImageData& irradianceMap,
-                                                  const ibl::ImageData& prefilterMap,
-                                                  const ibl::ImageData& brdfLUT)
+                                                 const ibl::ImageData& prefilterMap,
+                                                 const ibl::ImageData& brdfLUT)
     {
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
@@ -306,7 +305,7 @@ namespace render::mesh
         vk::DescriptorSetLayoutBinding textureBinding{};
         textureBinding.binding = 0;
         textureBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        textureBinding.descriptorCount = MaterialTextureCache::MAX_MATERIAL_TEXTURES;  // 6 textures per material
+        textureBinding.descriptorCount = material::MAX_MATERIAL_TEXTURES; // 6 textures per material
         textureBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
         textureBinding.pImmutableSamplers = nullptr;
 
@@ -322,7 +321,7 @@ namespace render::mesh
         // Legacy pool for backward compatibility - per-material pool is managed by MaterialTextureCache
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = MaterialTextureCache::MAX_MATERIAL_TEXTURES;
+        poolSize.descriptorCount = material::MAX_MATERIAL_TEXTURES;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -339,7 +338,8 @@ namespace render::mesh
         textureCache->initDescriptorResources(textureDescriptorSetLayout);
 
         // Ensure default texture is available before updating descriptors
-        if (!textureCache->hasDefaultTexture()) {
+        if (!textureCache->hasDefaultTexture())
+        {
             loggerWarning("Default texture not available, skipping default descriptor set creation");
             textureDescriptorsInitialized = false;
             return;
@@ -355,8 +355,8 @@ namespace render::mesh
             textureDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
 
             // Fill with default textures
-            std::array<vk::DescriptorImageInfo, MaterialTextureCache::MAX_MATERIAL_TEXTURES> imageInfos;
-            for (int i = 0; i < MaterialTextureCache::MAX_MATERIAL_TEXTURES; ++i)
+            std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
+            for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
             {
                 imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
                 imageInfos[i].imageView = textureCache->getDefaultView();
@@ -368,7 +368,7 @@ namespace render::mesh
             writeSet.dstBinding = 0;
             writeSet.dstArrayElement = 0;
             writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            writeSet.descriptorCount = MaterialTextureCache::MAX_MATERIAL_TEXTURES;
+            writeSet.descriptorCount = material::MAX_MATERIAL_TEXTURES;
             writeSet.pImageInfo = imageInfos.data();
 
             device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
@@ -377,14 +377,14 @@ namespace render::mesh
     }
 
     void StaticMeshPipeline::updatePreviewTextureDescriptors(
-        const std::array<vk::ImageView, MAX_MATERIAL_TEXTURES>& imageViews,
-        const std::array<vk::Sampler, MAX_MATERIAL_TEXTURES>& samplers)
+        const std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES>& imageViews,
+        const std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES>& samplers)
     {
         // Update the default descriptor set for preview rendering
         if (!textureDescriptorSet) return;
 
-        std::array<vk::DescriptorImageInfo, MaterialTextureCache::MAX_MATERIAL_TEXTURES> imageInfos;
-        for (int i = 0; i < MaterialTextureCache::MAX_MATERIAL_TEXTURES; ++i)
+        std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
+        for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
         {
             imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
             imageInfos[i].imageView = imageViews[i];
@@ -396,7 +396,7 @@ namespace render::mesh
         writeSet.dstBinding = 0;
         writeSet.dstArrayElement = 0;
         writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writeSet.descriptorCount = MaterialTextureCache::MAX_MATERIAL_TEXTURES;
+        writeSet.descriptorCount = material::MAX_MATERIAL_TEXTURES;
         writeSet.pImageInfo = imageInfos.data();
 
         device.getLogicalDevice().updateDescriptorSets(writeSet, nullptr);
@@ -412,8 +412,8 @@ namespace render::mesh
 
         // Two descriptor set layouts: set 0 (camera + IBL), set 1 (material textures)
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
-            descriptorSetLayout,        // Set 0: Camera + IBL
-            textureDescriptorSetLayout  // Set 1: Material textures
+            descriptorSetLayout, // Set 0: Camera + IBL
+            textureDescriptorSetLayout // Set 1: Material textures
         };
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
@@ -487,9 +487,9 @@ namespace render::mesh
         // Color blending - no blending
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-                                              vk::ColorComponentFlagBits::eG |
-                                              vk::ColorComponentFlagBits::eB |
-                                              vk::ColorComponentFlagBits::eA;
+            vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB |
+            vk::ColorComponentFlagBits::eA;
         colorBlendAttachment.blendEnable = VK_FALSE;
 
         vk::PipelineColorBlendStateCreateInfo colorBlending{};
@@ -520,9 +520,9 @@ namespace render::mesh
         // Create translucent pipeline with alpha blending
         vk::PipelineColorBlendAttachmentState translucentBlendAttachment{};
         translucentBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-                                                    vk::ColorComponentFlagBits::eG |
-                                                    vk::ColorComponentFlagBits::eB |
-                                                    vk::ColorComponentFlagBits::eA;
+            vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB |
+            vk::ColorComponentFlagBits::eA;
         translucentBlendAttachment.blendEnable = VK_TRUE;
         translucentBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
         translucentBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
@@ -539,7 +539,7 @@ namespace render::mesh
         // Translucent: depth test enabled but depth write disabled
         vk::PipelineDepthStencilStateCreateInfo translucentDepthStencil{};
         translucentDepthStencil.depthTestEnable = VK_TRUE;
-        translucentDepthStencil.depthWriteEnable = VK_FALSE;  // Don't write to depth buffer
+        translucentDepthStencil.depthWriteEnable = VK_FALSE; // Don't write to depth buffer
         translucentDepthStencil.depthCompareOp = vk::CompareOp::eLess;
         translucentDepthStencil.depthBoundsTestEnable = VK_FALSE;
         translucentDepthStencil.stencilTestEnable = VK_FALSE;
@@ -573,7 +573,7 @@ namespace render::mesh
     }
 
     void StaticMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                                              const glm::vec3& cameraPos, float time) const
+                                             const glm::vec3& cameraPos, float time) const
     {
         // Store for AABB wireframe rendering, translucent sorting, and animation
         currentView = view;
@@ -635,7 +635,8 @@ namespace render::mesh
 
         // Reset MaterialTextureCache descriptor resources before destroying layout
         // (they share the same layout, so must be freed first)
-        if (textureCache) {
+        if (textureCache)
+        {
             textureCache->resetDescriptorResources();
         }
 
@@ -674,17 +675,20 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUp()
     {
         // Clear material cache
-        if (materialCacheManager) {
+        if (materialCacheManager)
+        {
             materialCacheManager->clear();
         }
 
         // Clean up material shader cache (per-material compiled pipelines)
-        if (materialShaderCache) {
+        if (materialShaderCache)
+        {
             materialShaderCache->cleanUp();
         }
 
         // Clean up material textures
-        if (textureCache) {
+        if (textureCache)
+        {
             textureCache->cleanUp();
         }
 
@@ -707,22 +711,25 @@ namespace render::mesh
 
     void StaticMeshPipeline::invalidateMaterialCache(const std::string& materialPath)
     {
-        if (materialCacheManager) {
+        if (materialCacheManager)
+        {
             materialCacheManager->invalidate(materialPath);
         }
     }
 
     void StaticMeshPipeline::injectMaterialForPreview(const std::string& materialPath,
-                                                       std::shared_ptr<material::MaterialData> materialData)
+                                                      std::shared_ptr<material::MaterialData> materialData)
     {
-        if (materialCacheManager) {
+        if (materialCacheManager)
+        {
             materialCacheManager->injectForPreview(materialPath, materialData);
         }
     }
 
     std::string StaticMeshPipeline::getLastShaderCompilationError() const
     {
-        if (materialShaderCache) {
+        if (materialShaderCache)
+        {
             return materialShaderCache->getLastCompilationError();
         }
         return "";
@@ -763,18 +770,40 @@ namespace render::mesh
         return meshCache->getMeshBoundingBox(meshId);
     }
 
+    material::BlendMode StaticMeshPipeline::getMaterialBlendMode(const std::string& materialPath) const
+    {
+        if (materialPath.empty())
+        {
+            return material::BlendMode::Opaque;
+        }
+
+        auto materialData = materialCacheManager->getCachedMaterial(materialPath);
+        if (!materialData)
+        {
+            // Try to load the material if not cached
+            materialData = materialCacheManager->getMaterial(materialPath);
+        }
+
+        if (materialData)
+        {
+            return materialData->blendMode;
+        }
+
+        return material::BlendMode::Opaque;
+    }
+
     std::vector<std::string> StaticMeshPipeline::getLoadedMeshIds() const
     {
         return meshCache->getLoadedMeshIds();
     }
 
     void StaticMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
-                                                  uint32_t imageIndex,
-                                                  const std::vector<MeshRenderData>& meshDrawList,
-                                                  const math::Frustum* frustum,
-                                                  render::DebugRenderer* debugRenderer,
-                                                  const glm::mat4& debugView,
-                                                  const glm::mat4& debugProjection) const
+                                                 uint32_t imageIndex,
+                                                 const std::vector<MeshRenderData>& meshDrawList,
+                                                 const math::Frustum* frustum,
+                                                 render::DebugRenderer* debugRenderer,
+                                                 const glm::mat4& debugView,
+                                                 const glm::mat4& debugProjection) const
     {
         // Check if we have anything to render (meshes or debug items)
         bool hasDebugItems = debugRenderer && debugRenderer->hasItemsToRender();
@@ -826,9 +855,11 @@ namespace render::mesh
         // Helper lambda to render a submesh with the correct pipeline
         auto renderSubmesh = [&](const MeshRenderData& meshData, const SubMeshGPUData& subMesh,
                                  size_t subMeshIndex, material::BlendMode targetBlendMode,
-                                 vk::Pipeline& currentPipeline) {
+                                 vk::Pipeline& currentPipeline)
+        {
             // Get PBR values from assigned material (or fallback to mesh defaults)
-            ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(meshData, subMesh.name, materialCache, currentTime);
+            ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
+                meshData, subMesh.name, materialCache, currentTime);
 
             // Skip if blend mode doesn't match current pass
             if (pbrValues.blendMode != targetBlendMode) return;
@@ -837,22 +868,31 @@ namespace render::mesh
             vk::Pipeline targetPipeline = nullptr;
             bool usingMaterialPipeline = false;
 
-            if (materialShaderCache && !pbrValues.materialPath.empty()) {
+            if (materialShaderCache && !pbrValues.materialPath.empty())
+            {
                 // Check if material has custom shaders
                 auto matIt = materialCache.find(pbrValues.materialPath);
-                if (matIt != materialCache.end() && matIt->second) {
+                if (matIt != materialCache.end() && matIt->second)
+                {
                     const material::MaterialData& matData = *matIt->second;
                     // Only use custom pipeline if material has compiled shaders
-                    if (!matData.cachedVertexShader.empty() && !matData.cachedFragmentShader.empty()) {
+                    if (!matData.cachedVertexShader.empty() && !matData.cachedFragmentShader.empty())
+                    {
                         const MaterialPipelineData* matPipeline =
                             materialShaderCache->getOrCreatePipeline(pbrValues.materialPath, matData);
-                        if (matPipeline && matPipeline->valid) {
+                        if (matPipeline && matPipeline->valid)
+                        {
                             // Select appropriate pipeline variant based on blend mode
-                            if (pbrValues.blendMode == material::BlendMode::Masked) {
+                            if (pbrValues.blendMode == material::BlendMode::Masked)
+                            {
                                 targetPipeline = matPipeline->maskedPipeline;
-                            } else if (pbrValues.blendMode == material::BlendMode::Translucent) {
+                            }
+                            else if (pbrValues.blendMode == material::BlendMode::Translucent)
+                            {
                                 targetPipeline = matPipeline->translucentPipeline;
-                            } else {
+                            }
+                            else
+                            {
                                 targetPipeline = matPipeline->opaquePipeline;
                             }
                             usingMaterialPipeline = true;
@@ -862,17 +902,24 @@ namespace render::mesh
             }
 
             // Fall back to default pipeline if no custom shader
-            if (!usingMaterialPipeline) {
-                if (pbrValues.blendMode == material::BlendMode::Masked) {
+            if (!usingMaterialPipeline)
+            {
+                if (pbrValues.blendMode == material::BlendMode::Masked)
+                {
                     targetPipeline = maskedPipeline;
-                } else if (pbrValues.blendMode == material::BlendMode::Translucent) {
+                }
+                else if (pbrValues.blendMode == material::BlendMode::Translucent)
+                {
                     targetPipeline = translucentPipeline;
-                } else {
+                }
+                else
+                {
                     targetPipeline = graphicsPipeline;
                 }
             }
 
-            if (currentPipeline != targetPipeline) {
+            if (currentPipeline != targetPipeline)
+            {
                 commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, targetPipeline);
                 currentPipeline = targetPipeline;
             }
@@ -880,13 +927,14 @@ namespace render::mesh
             // Get or create per-material descriptor set if material has textures
             vk::DescriptorSet materialDescSet = nullptr;
             bool hasAnyTexture = !pbrValues.albedoTexturePath.empty() ||
-                                 !pbrValues.metallicTexturePath.empty() ||
-                                 !pbrValues.roughnessTexturePath.empty() ||
-                                 !pbrValues.aoTexturePath.empty() ||
-                                 !pbrValues.normalTexturePath.empty() ||
-                                 !pbrValues.emissionTexturePath.empty();
+                !pbrValues.metallicTexturePath.empty() ||
+                !pbrValues.roughnessTexturePath.empty() ||
+                !pbrValues.aoTexturePath.empty() ||
+                !pbrValues.normalTexturePath.empty() ||
+                !pbrValues.emissionTexturePath.empty();
 
-            if (hasAnyTexture && !pbrValues.materialPath.empty()) {
+            if (hasAnyTexture && !pbrValues.materialPath.empty())
+            {
                 // Build texture paths for this material
                 MaterialTexturePaths texPaths;
                 texPaths.albedo = pbrValues.albedoTexturePath;
@@ -901,11 +949,14 @@ namespace render::mesh
             }
 
             // Bind material descriptor set if different from current
-            if (materialDescSet && materialDescSet != currentMaterialDescriptorSet) {
+            if (materialDescSet && materialDescSet != currentMaterialDescriptorSet)
+            {
                 commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                                  pipelineLayout, 1, materialDescSet, nullptr);
                 currentMaterialDescriptorSet = materialDescSet;
-            } else if (!materialDescSet && currentMaterialDescriptorSet != textureDescriptorSet) {
+            }
+            else if (!materialDescSet && currentMaterialDescriptorSet != textureDescriptorSet)
+            {
                 // Bind default if no material textures
                 commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                                  pipelineLayout, 1, textureDescriptorSet, nullptr);
@@ -948,23 +999,26 @@ namespace render::mesh
             }
 
             commandBuffer.pushConstants(pipelineLayout,
-                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                0, sizeof(MeshPushConstants), &pushConstants);
+                                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                        0, sizeof(MeshPushConstants), &pushConstants);
 
-            // Bind vertex buffer
-            vk::Buffer vertexBuffers[] = {subMesh.vertexBuffer};
+            uint32_t lodLevel = selectLODLevel(meshData, subMesh);
+            const auto& lodBuffers = subMesh.getLOD(lodLevel);
+
+            if (!lodBuffers.isValid()) return;
+
+            vk::Buffer vertexBuffers[] = {lodBuffers.vertexBuffer};
             vk::DeviceSize offsets[] = {0};
             commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-            // Draw with indices if available, otherwise draw vertices directly
-            if (subMesh.indexCount > 0)
+            if (lodBuffers.indexCount > 0)
             {
-                commandBuffer.bindIndexBuffer(subMesh.indexBuffer, 0, vk::IndexType::eUint32);
-                commandBuffer.drawIndexed(subMesh.indexCount, 1, 0, 0, 0);
+                commandBuffer.bindIndexBuffer(lodBuffers.indexBuffer, 0, vk::IndexType::eUint32);
+                commandBuffer.drawIndexed(lodBuffers.indexCount, 1, 0, 0, 0);
             }
             else
             {
-                commandBuffer.draw(subMesh.vertexCount, 1, 0, 0);
+                commandBuffer.draw(lodBuffers.vertexCount, 1, 0, 0);
             }
         };
 
@@ -982,7 +1036,8 @@ namespace render::mesh
             {
                 const auto& subMesh = gpuData->subMeshes[subMeshIndex];
                 if (frustum && frustum->isInitialized() &&
-                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix)) continue;
+                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
+                    continue;
                 renderSubmesh(meshData, subMesh, subMeshIndex, material::BlendMode::Opaque, currentPipeline);
             }
         }
@@ -997,14 +1052,16 @@ namespace render::mesh
             {
                 const auto& subMesh = gpuData->subMeshes[subMeshIndex];
                 if (frustum && frustum->isInitialized() &&
-                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix)) continue;
+                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
+                    continue;
                 renderSubmesh(meshData, subMesh, subMeshIndex, material::BlendMode::Masked, currentPipeline);
             }
         }
 
         // Pass 3: Render translucent objects (alpha blending) - sorted back-to-front
         // Collect translucent submeshes with distance from camera
-        struct TranslucentItem {
+        struct TranslucentItem
+        {
             const MeshRenderData* meshData;
             const SubMeshGPUData* subMesh;
             size_t subMeshIndex;
@@ -1021,10 +1078,12 @@ namespace render::mesh
             {
                 const auto& subMesh = gpuData->subMeshes[subMeshIndex];
                 if (frustum && frustum->isInitialized() &&
-                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix)) continue;
+                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
+                    continue;
 
                 // Check if this submesh is translucent
-                ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(meshData, subMesh.name, materialCache, currentTime);
+                ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
+                    meshData, subMesh.name, materialCache, currentTime);
                 if (pbrValues.blendMode != material::BlendMode::Translucent) continue;
 
                 // Calculate world-space center of submesh AABB
@@ -1041,9 +1100,10 @@ namespace render::mesh
 
         // Sort back-to-front (farthest first)
         std::sort(translucentItems.begin(), translucentItems.end(),
-            [](const TranslucentItem& a, const TranslucentItem& b) {
-                return a.distanceSquared > b.distanceSquared;
-            });
+                  [](const TranslucentItem& a, const TranslucentItem& b)
+                  {
+                      return a.distanceSquared > b.distanceSquared;
+                  });
 
         // Render sorted translucent items
         for (const auto& item : translucentItems)
@@ -1051,14 +1111,51 @@ namespace render::mesh
             renderSubmesh(*item.meshData, *item.subMesh, item.subMeshIndex,
                           material::BlendMode::Translucent, currentPipeline);
         }
-        
+
         if (debugRenderer && debugRenderer->hasItemsToRender())
         {
             debugRenderer->render(commandBuffer, meshDrawList, debugView, debugProjection,
-                [this](const std::string& meshId) { return getMesh(meshId); });
+                                  [this](const std::string& meshId) { return getMesh(meshId); });
         }
 
         commandBuffer.endRenderPass();
+    }
+
+    uint32_t StaticMeshPipeline::selectLODLevel(const MeshRenderData& meshData, const SubMeshGPUData& subMesh) const
+    {
+        // If a specific LOD level is forced, use it
+        if (meshData.forceLODLevel >= 0 && meshData.forceLODLevel < static_cast<int>(resource::LOD_LEVEL_COUNT))
+        {
+            return static_cast<uint32_t>(meshData.forceLODLevel);
+        }
+
+        glm::vec3 localCenter = subMesh.boundingBox.getCenter();
+        glm::vec4 worldCenter = meshData.modelMatrix * glm::vec4(localCenter, 1.0f);
+
+        glm::vec3 extents = subMesh.boundingBox.getExtents();
+        float boundingRadius = glm::length(extents);
+
+
+        glm::vec4 viewPos = currentView * worldCenter;
+        glm::vec4 clipPos = currentProjection * viewPos;
+
+        // Avoid division by zero for objects at or behind camera
+        float w = std::max(clipPos.w, 0.01f);
+
+        // Calculate screen-space size in pixels
+        // Project the bounding radius to screen space
+        float ndcRadius = boundingRadius / w;
+        float screenHeight = static_cast<float>(swapChain.getSwapchainExtent().height);
+        float screenPixels = ndcRadius * screenHeight;
+
+        // Apply LOD bias
+        screenPixels *= std::pow(2.0f, -meshData.lodBias);
+
+        // Select LOD level based on screen-space size thresholds
+        if (screenPixels > LOD_THRESHOLD_0) return 0;
+        if (screenPixels > LOD_THRESHOLD_1) return 1;
+        if (screenPixels > LOD_THRESHOLD_2) return 2;
+        return 3;
     }
 
     void StaticMeshPipeline::prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const
@@ -1066,14 +1163,17 @@ namespace render::mesh
         // Check if any meshes have materials. If not (e.g., material preview),
         // skip texture preparation to preserve externally-bound textures
         bool hasMaterials = false;
-        for (const auto& meshData : meshDrawList) {
-            if (!meshData.defaultMaterialPath.empty() || !meshData.submeshMaterials.empty()) {
+        for (const auto& meshData : meshDrawList)
+        {
+            if (!meshData.defaultMaterialPath.empty() || !meshData.submeshMaterials.empty())
+            {
                 hasMaterials = true;
                 break;
             }
         }
 
-        if (!hasMaterials) {
+        if (!hasMaterials)
+        {
             // No materials in draw list - don't reset texture bindings
             // This allows external texture management (e.g., MaterialPreviewController)
             return;
@@ -1082,45 +1182,53 @@ namespace render::mesh
         // Check if cache needs to be invalidated (material was saved externally)
         materialCacheManager->checkAndClearInvalidation();
 
-        // Helper lambda to load textures from a material
-        auto loadTexturesFromMaterial = [this](const std::shared_ptr<material::MaterialData>& matData) {
+        auto loadTexturesFromMaterial = [this](const std::shared_ptr<material::MaterialData>& matData)
+        {
             if (!matData) return;
 
             ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
 
-            // Load textures if paths are specified
-            if (!pbr.albedoTexturePath.empty()) {
+            if (!pbr.albedoTexturePath.empty())
+            {
                 textureCache->loadTexture(pbr.albedoTexturePath);
             }
-            if (!pbr.metallicTexturePath.empty()) {
+            if (!pbr.metallicTexturePath.empty())
+            {
                 textureCache->loadTexture(pbr.metallicTexturePath);
             }
-            if (!pbr.roughnessTexturePath.empty()) {
+            if (!pbr.roughnessTexturePath.empty())
+            {
                 textureCache->loadTexture(pbr.roughnessTexturePath);
             }
-            if (!pbr.aoTexturePath.empty()) {
+            if (!pbr.aoTexturePath.empty())
+            {
                 textureCache->loadTexture(pbr.aoTexturePath);
             }
-            if (!pbr.normalTexturePath.empty()) {
+            if (!pbr.normalTexturePath.empty())
+            {
                 textureCache->loadTexture(pbr.normalTexturePath);
             }
-            if (!pbr.emissionTexturePath.empty()) {
+            if (!pbr.emissionTexturePath.empty())
+            {
                 textureCache->loadTexture(pbr.emissionTexturePath);
             }
         };
 
         // Load all unique materials and textures into cache
         // Per-material descriptor sets are created on-demand in recordCommandBuffer
-        for (const auto& meshData : meshDrawList) {
-            // Load default material and extract texture paths
-            if (!meshData.defaultMaterialPath.empty()) {
+        for (const auto& meshData : meshDrawList)
+        {
+            if (!meshData.defaultMaterialPath.empty())
+            {
                 auto matData = materialCacheManager->getMaterial(meshData.defaultMaterialPath);
                 loadTexturesFromMaterial(matData);
             }
 
             // Also process per-submesh materials
-            for (const auto& [submeshName, matInfo] : meshData.submeshMaterials) {
-                if (!matInfo.materialPath.empty()) {
+            for (const auto& [submeshName, matInfo] : meshData.submeshMaterials)
+            {
+                if (!matInfo.materialPath.empty())
+                {
                     auto matData = materialCacheManager->getMaterial(matInfo.materialPath);
                     loadTexturesFromMaterial(matData);
                 }

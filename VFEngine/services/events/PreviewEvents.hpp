@@ -136,13 +136,19 @@ namespace services::events::preview {
         std::string_view getName() const override { return "IsPreviewMeshLoaded"; }
     };
 
-    
+
     struct GetPreviewMeshSubMeshInfoQuery : ::events::IQuery<std::vector<SubMeshInfo>> {
         PreviewInstanceId instanceId;
         std::string_view getName() const override { return "GetPreviewMeshSubMeshInfo"; }
     };
 
-    
+
+    struct GetPreviewMeshLODInfoQuery : ::events::IQuery<std::vector<LODInfo>> {
+        PreviewInstanceId instanceId;
+        std::string_view getName() const override { return "GetPreviewMeshLODInfo"; }
+    };
+
+
     struct GetPreviewMeshBoundsQuery : ::events::IQuery<math::AABB> {
         PreviewInstanceId instanceId;
         std::string_view getName() const override { return "GetPreviewMeshBounds"; }

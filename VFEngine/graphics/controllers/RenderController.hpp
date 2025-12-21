@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <functional>
 
 namespace window
 {
@@ -11,6 +12,7 @@ namespace core
     class SwapChain;
     class Device;
     class RenderManager;
+    using ResizeCallback = std::function<void()>;
 }
 
 namespace controllers
@@ -33,5 +35,7 @@ namespace controllers
         void reSize() const;
 
         void render();
+
+        void setResizeCallback(core::ResizeCallback callback);
     };
 }

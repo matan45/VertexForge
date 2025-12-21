@@ -4,18 +4,20 @@
 
 #include <vector>
 #include <fstream>
-#include <bit>  // For std::bit_cast
+#include <bit>
 #include <filesystem>
 #include <algorithm>
+#include <unordered_map>
+#include <cfloat>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include <meshoptimizer.h>
 
 namespace types {
 	void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
 	                        std::string_view location, MeshProgressCallback progressCallback) const
 	{
-		// Report 0% - starting Assimp load
 		if (progressCallback) progressCallback(0.0f);
 
 		Assimp::Importer importer;
@@ -26,108 +28,175 @@ namespace types {
 			vfLogError("Failed to load Mesh file: {}", importer.GetErrorString());
 			return;
 		}
+		
+		if (progressCallback) progressCallback(0.2f);
 
-		// Report 30% - Assimp loading complete, starting file write
-		if (progressCallback) progressCallback(0.3f);
-
-		//TODO also extract the animation each animation to single file
-		// and extract texture that embedded
-		saveToFileStreaming(location, fileName, scene, progressCallback);
-
-		// Report 100% - complete
+		saveToFileStreamingWithLOD(location, fileName, scene, progressCallback);
+		
 		if (progressCallback) progressCallback(1.0f);
 	}
 
-	void Mesh::saveToFileStreaming(std::string_view location, std::string_view fileName,
-	                               const aiScene* scene, MeshProgressCallback progressCallback) const
+	LODMeshData Mesh::convertAssimpMesh(const aiMesh* assimpMesh) const
 	{
-		std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." + FileExtension::mesh);
-		std::ofstream outFile(newFileLocation, std::ios::binary);
+		LODMeshData result;
+		result.vertices.reserve(assimpMesh->mNumVertices);
 
-		if (!outFile) {
-			vfLogError("Failed to open file for writing: {}", newFileLocation.string());
-			return;
+		// Convert vertices
+		for (unsigned int v = 0; v < assimpMesh->mNumVertices; ++v) {
+			resource::Vertex vertex;
+			vertex.position = {
+				assimpMesh->mVertices[v].x,
+				assimpMesh->mVertices[v].y,
+				assimpMesh->mVertices[v].z
+			};
+
+			if (assimpMesh->HasNormals()) {
+				vertex.normal = {
+					assimpMesh->mNormals[v].x,
+					assimpMesh->mNormals[v].y,
+					assimpMesh->mNormals[v].z
+				};
+			}
+			else {
+				vertex.normal = { 0.0f, 0.0f, 0.0f };
+			}
+
+			if (assimpMesh->mTextureCoords[0]) {
+				vertex.texCoords = {
+					assimpMesh->mTextureCoords[0][v].x,
+					assimpMesh->mTextureCoords[0][v].y
+				};
+			}
+			else {
+				vertex.texCoords = { 0.0f, 0.0f };
+			}
+
+			result.vertices.push_back(vertex);
 		}
+		
+		uint32_t totalIndices = 0;
+		for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f) {
+			totalIndices += assimpMesh->mFaces[f].mNumIndices;
+		}
+		result.indices.reserve(totalIndices);
 
-		// Write header
-		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
-		resource::endian::writeLE<uint32_t>(outFile, Version::major);
-		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
-		resource::endian::writeLE<uint32_t>(outFile, Version::patch);
-		resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
-
-		// Process each mesh one at a time (not all at once)
-		for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
-			writeMeshChunked(outFile, scene->mMeshes[i]);
-
-			// Report progress: 30% + (i+1)/totalMeshes * 70%
-			if (progressCallback) {
-				float progress = 0.3f + (static_cast<float>(i + 1) / scene->mNumMeshes) * 0.7f;
-				progressCallback(progress);
+		for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f) {
+			const aiFace& face = assimpMesh->mFaces[f];
+			for (unsigned int k = 0; k < face.mNumIndices; ++k) {
+				result.indices.push_back(face.mIndices[k]);
 			}
 		}
 
-		outFile.close();
+		return result;
 	}
 
-	void Mesh::writeMeshChunked(std::ofstream& outFile, const aiMesh* assimpMesh) const
+	LODMeshData Mesh::simplifyMesh(const LODMeshData& source, float targetRatio) const
 	{
-		constexpr size_t verticesPerChunk = chunkSize / sizeof(resource::Vertex);  // ~8K vertices per chunk
-
-		// Write submesh name (from aiMesh->mName)
-		std::string meshName = assimpMesh->mName.C_Str();
-		uint32_t nameLength = static_cast<uint32_t>(meshName.length());
-		resource::endian::writeLE<uint32_t>(outFile, nameLength);
-		if (nameLength > 0) {
-			outFile.write(meshName.data(), nameLength);
+		if (source.indices.empty() || source.vertices.empty()) {
+			return source;
 		}
 
-		// Write vertex count
-		resource::endian::writeLE<uint32_t>(outFile, assimpMesh->mNumVertices);
+		// If ratio is 1.0, just return a copy
+		if (targetRatio >= 1.0f) {
+			return source;
+		}
 
-		// Process vertices in chunks to limit memory usage
-		std::vector<resource::Vertex> chunkBuffer;
-		chunkBuffer.reserve(verticesPerChunk);
+		size_t targetIndexCount = static_cast<size_t>(source.indices.size() * targetRatio);
+		// Ensure at least 3 indices (one triangle)
+		targetIndexCount = std::max(targetIndexCount, static_cast<size_t>(3));
+		// Round to multiple of 3
+		targetIndexCount = (targetIndexCount / 3) * 3;
 
-		for (unsigned int v = 0; v < assimpMesh->mNumVertices; ) {
-			unsigned int chunkEnd = static_cast<unsigned int>(
-				std::min(static_cast<size_t>(v + verticesPerChunk),
-				         static_cast<size_t>(assimpMesh->mNumVertices))
-			);
-			
-			for (unsigned int j = v; j < chunkEnd; ++j) {
-				resource::Vertex vertex;
-				vertex.position = {
-					assimpMesh->mVertices[j].x,
-					assimpMesh->mVertices[j].y,
-					assimpMesh->mVertices[j].z
-				};
+		LODMeshData result;
+		result.indices.resize(source.indices.size()); // Allocate max size initially
+		
+		size_t actualIndexCount = meshopt_simplifySloppy(
+			result.indices.data(),
+			source.indices.data(),
+			source.indices.size(),
+			reinterpret_cast<const float*>(source.vertices.data()),
+			source.vertices.size(),
+			sizeof(resource::Vertex),
+			targetIndexCount,
+			FLT_MAX,  // No error limit - allow maximum simplification
+			nullptr   // No result error output needed
+		);
 
-				if (assimpMesh->HasNormals()) {
-					vertex.normal = {
-						assimpMesh->mNormals[j].x,
-						assimpMesh->mNormals[j].y,
-						assimpMesh->mNormals[j].z
-					};
-				}
-				else {
-					vertex.normal = { 0.0f, 0.0f, 0.0f };
-				}
+		result.indices.resize(actualIndexCount);
+		
+		if (actualIndexCount == source.indices.size()) {
+			vfLogWarning("  Simplification failed for ratio {:.1f}%, keeping original", targetRatio * 100.0f);
+			return source;
+		}
 
-				if (assimpMesh->mTextureCoords[0]) {
-					vertex.texCoords = {
-						assimpMesh->mTextureCoords[0][j].x,
-						assimpMesh->mTextureCoords[0][j].y
-					};
-				}
-				else {
-					vertex.texCoords = { 0.0f, 0.0f };
-				}
+		// Optimize vertex cache for better GPU performance
+		meshopt_optimizeVertexCache(
+			result.indices.data(),
+			result.indices.data(),
+			result.indices.size(),
+			source.vertices.size()
+		);
+		
+		std::vector<unsigned int> remap(source.vertices.size(), ~0u);
+		size_t uniqueVertexCount = 0;
 
-				chunkBuffer.push_back(vertex);
+		for (size_t i = 0; i < result.indices.size(); ++i) {
+			uint32_t idx = result.indices[i];
+			if (remap[idx] == ~0u) {
+				remap[idx] = static_cast<unsigned int>(uniqueVertexCount++);
 			}
-			
-			for (const auto& vertex : chunkBuffer) {
+		}
+
+		// Create compacted vertex buffer
+		result.vertices.resize(uniqueVertexCount);
+		for (size_t i = 0; i < source.vertices.size(); ++i) {
+			if (remap[i] != ~0u) {
+				result.vertices[remap[i]] = source.vertices[i];
+			}
+		}
+
+		// Remap indices to use new vertex indices
+		for (size_t i = 0; i < result.indices.size(); ++i) {
+			result.indices[i] = remap[result.indices[i]];
+		}
+
+		return result;
+	}
+
+	std::array<LODMeshData, resource::LOD_LEVEL_COUNT> Mesh::generateLODLevels(const LODMeshData& lod0) const
+	{
+		std::array<LODMeshData, resource::LOD_LEVEL_COUNT> lodLevels;
+
+		// LOD0: Original mesh (100%)
+		lodLevels[0] = lod0;
+
+		// Generate LOD1, LOD2, LOD3 by simplifying from LOD0
+		for (uint32_t level = 1; level < resource::LOD_LEVEL_COUNT; ++level) {
+			lodLevels[level] = simplifyMesh(lod0, lodRatios[level]);
+
+			vfLogInfo("  LOD{}: {} vertices, {} triangles ({}%)",
+			          level,
+			          lodLevels[level].vertices.size(),
+			          lodLevels[level].indices.size() / 3,
+			          static_cast<int>(lodRatios[level] * 100));
+		}
+
+		return lodLevels;
+	}
+
+	void Mesh::writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const
+	{
+		constexpr size_t verticesPerChunk = chunkSize / sizeof(resource::Vertex);
+
+		// Write vertex count
+		resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(lodMesh.vertices.size()));
+
+		// Write vertices in chunks
+		for (size_t v = 0; v < lodMesh.vertices.size(); v += verticesPerChunk) {
+			size_t chunkEnd = std::min(v + verticesPerChunk, lodMesh.vertices.size());
+
+			for (size_t j = v; j < chunkEnd; ++j) {
+				const auto& vertex = lodMesh.vertices[j];
 				resource::endian::writeLE<float>(outFile, vertex.position.x);
 				resource::endian::writeLE<float>(outFile, vertex.position.y);
 				resource::endian::writeLE<float>(outFile, vertex.position.z);
@@ -137,37 +206,79 @@ namespace types {
 				resource::endian::writeLE<float>(outFile, vertex.texCoords.x);
 				resource::endian::writeLE<float>(outFile, vertex.texCoords.y);
 			}
-
-			v = chunkEnd;
-			chunkBuffer.clear();
 		}
-		
-		uint32_t totalIndices = 0;
-		for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f) {
-			totalIndices += assimpMesh->mFaces[f].mNumIndices;
+
+		// Write index count
+		resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(lodMesh.indices.size()));
+
+		// Write indices in chunks
+		constexpr size_t indicesPerChunk = chunkSize / sizeof(uint32_t);
+		for (size_t i = 0; i < lodMesh.indices.size(); i += indicesPerChunk) {
+			size_t chunkEnd = std::min(i + indicesPerChunk, lodMesh.indices.size());
+			std::vector<uint32_t> indexChunk(lodMesh.indices.begin() + i, lodMesh.indices.begin() + chunkEnd);
+			resource::endian::writeVectorLE<uint32_t>(outFile, indexChunk);
 		}
-		resource::endian::writeLE<uint32_t>(outFile, totalIndices);
-		
-		constexpr size_t indicesPerChunk = chunkSize / sizeof(uint32_t);  // ~64K indices per chunk
-		std::vector<uint32_t> indexBuffer;
-		indexBuffer.reserve(indicesPerChunk);
+	}
 
-		for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f) {
-			const aiFace& face = assimpMesh->mFaces[f];
-			for (unsigned int k = 0; k < face.mNumIndices; ++k) {
-				indexBuffer.push_back(face.mIndices[k]);
+	void Mesh::saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
+	                                      const aiScene* scene, MeshProgressCallback progressCallback) const
+	{
+		std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." + FileExtension::mesh);
+		std::ofstream outFile(newFileLocation, std::ios::binary);
 
-				// Flush when chunk is full
-				if (indexBuffer.size() >= indicesPerChunk) {
-					resource::endian::writeVectorLE<uint32_t>(outFile, indexBuffer);
-					indexBuffer.clear();
-				}
+		if (!outFile) {
+			vfLogError("Failed to open file for writing: {}", newFileLocation.string());
+			return;
+		}
+
+		// Write header with updated version (0.0.3 for LOD support)
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
+		resource::endian::writeLE<uint32_t>(outFile, 0); // major
+		resource::endian::writeLE<uint32_t>(outFile, 0); // minor
+		resource::endian::writeLE<uint32_t>(outFile, 3); // patch - version 0.0.3 for LOD
+		resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
+
+		vfLogInfo("Generating LODs for {} submeshes...", scene->mNumMeshes);
+
+		// Process each mesh
+		for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
+			const aiMesh* assimpMesh = scene->mMeshes[i];
+			std::string meshName = assimpMesh->mName.C_Str();
+
+			vfLogInfo("Processing submesh '{}' ({} vertices, {} triangles)...",
+			          meshName,
+			          assimpMesh->mNumVertices,
+			          assimpMesh->mNumFaces);
+
+			// Write submesh name
+			uint32_t nameLength = static_cast<uint32_t>(meshName.length());
+			resource::endian::writeLE<uint32_t>(outFile, nameLength);
+			if (nameLength > 0) {
+				outFile.write(meshName.data(), nameLength);
+			}
+
+			// Write LOD level count
+			resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
+
+			// Convert Assimp mesh to LODMeshData (LOD0)
+			LODMeshData lod0 = convertAssimpMesh(assimpMesh);
+
+			// Generate all LOD levels
+			auto lodLevels = generateLODLevels(lod0);
+
+			// Write each LOD level
+			for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod) {
+				writeLODLevel(outFile, lodLevels[lod]);
+			}
+
+			// Report progress: 20% + (i+1)/totalMeshes * 80%
+			if (progressCallback) {
+				float progress = 0.2f + (static_cast<float>(i + 1) / scene->mNumMeshes) * 0.8f;
+				progressCallback(progress);
 			}
 		}
 
-		// Write remaining indices
-		if (!indexBuffer.empty()) {
-			resource::endian::writeVectorLE<uint32_t>(outFile, indexBuffer);
-		}
+		outFile.close();
+		vfLogInfo("Mesh with LOD saved to: {}", newFileLocation.string());
 	}
 }

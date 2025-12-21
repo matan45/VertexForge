@@ -19,13 +19,6 @@ namespace resource
     public:
         static void readHDR(std::ifstream& file, int width, int height, int channels, std::vector<float>& pixels);
     };
-
-    struct TGAImage {
-        int width;
-        int height;
-        int channels;
-        std::vector<uint8_t> pixelData;
-    };
     
     class TGAReader
     {

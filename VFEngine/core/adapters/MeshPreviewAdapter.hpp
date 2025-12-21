@@ -22,6 +22,7 @@ namespace core
         void unloadPreviewMesh(services::PreviewInstanceId instanceId) override;
         bool isPreviewMeshLoaded(services::PreviewInstanceId instanceId) const override;
         std::vector<services::SubMeshInfo> getPreviewMeshSubMeshInfo(services::PreviewInstanceId instanceId) const override;
+        std::vector<services::LODInfo> getPreviewMeshLODInfo(services::PreviewInstanceId instanceId) const override;
         math::AABB getPreviewMeshBounds(services::PreviewInstanceId instanceId) const override;
         void setMeshPreviewParams(services::PreviewInstanceId instanceId, const services::MeshPreviewParams& params) override;
         void updateMeshCamera(services::PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,

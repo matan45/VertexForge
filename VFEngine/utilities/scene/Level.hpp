@@ -13,7 +13,7 @@ namespace scene
         std::shared_ptr<SceneGraphSystem> sceneGraphSystem;
 
     public:
-        Level();
+        explicit Level();
         ~Level() = default;
 
         void setName(const std::string& name);

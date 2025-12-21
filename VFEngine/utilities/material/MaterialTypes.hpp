@@ -9,6 +9,9 @@
 
 namespace material {
 
+    // Maximum number of textures per material (albedo, normal, metallic, roughness, AO, emissive)
+    constexpr int MAX_MATERIAL_TEXTURES = 6;
+
     // Parameter types for material properties
     enum class ParameterType : uint8_t {
         Scalar,

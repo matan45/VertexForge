@@ -20,6 +20,7 @@ namespace services
         }
 
         frameCounter++;
+        prepareCameras();
         prepareFrameMeshes();
         prepareFrameBillboards();
         prepareFrameCameraFrustums();
@@ -136,6 +137,8 @@ namespace services
         handle.imguiDescriptorSet = textureData.descriptorSet;
         handle.width = static_cast<uint32_t>(textureData.width);
         handle.height = static_cast<uint32_t>(textureData.height);
+        handle.mipLevels = static_cast<uint32_t>(textureData.mipLevels);
+        handle.mipDescriptorSets = textureData.mipDescriptorSets;
 
         loadedTextures[handle.imguiDescriptorSet] = handle;
 
@@ -160,6 +163,8 @@ namespace services
         handle.imguiDescriptorSet = textureData.descriptorSet;
         handle.width = static_cast<uint32_t>(textureData.width);
         handle.height = static_cast<uint32_t>(textureData.height);
+        handle.mipLevels = static_cast<uint32_t>(textureData.mipLevels);
+        handle.mipDescriptorSets = textureData.mipDescriptorSets;
 
         loadedTextures[handle.imguiDescriptorSet] = handle;
 
@@ -307,6 +312,12 @@ namespace services
                 return offScreenProvider ? offScreenProvider->loadBillboardAtlas(cmd.atlasPath) : false;
             });
 
+        dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
+            [this](const events::render::GetCullingStatsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {
@@ -339,7 +350,7 @@ namespace services
     {
         if (offScreenProvider)
         {
-            offScreenProvider->meshUpdateCamera(view, projection, cameraPos, time);
+            offScreenProvider->meshUpdateCamera(MAIN_CAMERA_ID, view, projection, cameraPos, time);
         }
     }
 
@@ -355,6 +366,14 @@ namespace services
             return {};
         }
         return offScreenProvider->getLoadedMeshes();
+    }
+
+    void EditorRenderServiceImpl::prepareCameras()
+    {
+        if (offScreenProvider)
+        {
+            offScreenProvider->prepareCameras();
+        }
     }
 
     std::optional<MeshBoundingBox> EditorRenderServiceImpl::getMeshBoundingBox(const std::string& meshPath) const

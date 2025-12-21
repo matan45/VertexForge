@@ -18,6 +18,7 @@ namespace services
         }
 
         frameCounter++;
+        prepareCameras();
         prepareFrameMeshes();
 
         void* descriptorSet = offScreenProvider->render();
@@ -238,7 +239,7 @@ namespace services
     {
         if (offScreenProvider)
         {
-            offScreenProvider->meshUpdateCamera(view, projection, cameraPos, time);
+            offScreenProvider->meshUpdateCamera(MAIN_CAMERA_ID, view, projection, cameraPos, time);
         }
     }
 
@@ -271,6 +272,14 @@ namespace services
         result.min = bounds->min;
         result.max = bounds->max;
         return result;
+    }
+
+    void RuntimeRenderServiceImpl::prepareCameras()
+    {
+        if (offScreenProvider)
+        {
+            offScreenProvider->prepareCameras();
+        }
     }
 
     void RuntimeRenderServiceImpl::prepareFrameMeshes()

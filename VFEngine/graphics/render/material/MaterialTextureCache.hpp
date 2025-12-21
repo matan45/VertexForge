@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.hpp>
 #include <string>
 #include <unordered_map>
+#include "../../../utilities/material/MaterialTypes.hpp"
 
 namespace core
 {
@@ -50,8 +51,6 @@ namespace render::mesh
         std::unordered_map<std::string, vk::DescriptorSet> materialDescriptorSets;
 
     public:
-        static constexpr int MAX_MATERIAL_TEXTURES = 6;
-
         explicit MaterialTextureCache(core::Device& device);
         ~MaterialTextureCache();
 

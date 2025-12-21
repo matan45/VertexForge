@@ -28,7 +28,6 @@ namespace types
 	void Texture::loadTextureFile(const importConfig::ImportFiles& file, std::string_view fileName,
 		std::string_view location, TextureProgressCallback progressCallback)
 	{
-		// Report 0% - starting load
 		if (progressCallback) progressCallback(0.0f);
 
 		resource::TextureData textureData;
@@ -38,7 +37,7 @@ namespace types
 		{
 			stbi_set_flip_vertically_on_load(true);
 		}
-		// Load image using stb_image
+		
 		int width;
 		int height;
 		int channels;
@@ -49,21 +48,25 @@ namespace types
 		if (!imageData)
 		{
 			vfLogError("Failed to load texture: {}", file.path.data());
-			return; // Return
+			return;
 		}
-
-		// Report 30% - image loaded from disk
-		if (progressCallback) progressCallback(0.3f);
-
-		// Store texture information
+		
+		if (progressCallback) progressCallback(0.2f);
+		
 		textureData.width = static_cast<uint32_t>(width);
 		textureData.height = static_cast<uint32_t>(height);
 		textureData.numbersOfChannels = channels;
-
-		convertTo4Channels(imageData, width, height, channels, textureData.textureData);
-
-		// Report 60% - channel conversion complete
-		if (progressCallback) progressCallback(0.6f);
+		
+		std::vector<unsigned char> rgbaData;
+		convertTo4Channels(imageData, width, height, channels, rgbaData);
+		
+		textureData.mipData.push_back({
+			static_cast<uint32_t>(width),
+			static_cast<uint32_t>(height),
+			std::move(rgbaData)
+		});
+		
+		if (progressCallback) progressCallback(0.4f);
 
 		if (file.config.isImageFlipVertically)
 		{
@@ -71,17 +74,19 @@ namespace types
 		}
 
 		stbi_image_free(imageData);
+		
+		generateMipmaps(textureData);
+		
+		if (progressCallback) progressCallback(0.7f);
 
-		saveToFileTexture(fileName, location, textureData);
-
-		// Report 100% - complete
+		saveToFileTextureWithMips(fileName, location, textureData);
+		
 		if (progressCallback) progressCallback(1.0f);
 	}
 
 	void Texture::loadHDRFile(const importConfig::ImportFiles& file, std::string_view fileName,
 		std::string_view location, TextureProgressCallback progressCallback) const
 	{
-		// Report 0% - starting load
 		if (progressCallback) progressCallback(0.0f);
 
 		resource::HDRData hdrData;
@@ -96,7 +101,6 @@ namespace types
 			{
 				stbi_set_flip_vertically_on_load(true);
 			}
-			// Load image using stb_image
 			int width;
 			int height;
 			int channels;
@@ -106,9 +110,8 @@ namespace types
 				vfLogError("Failed to load texture: {}", file.path.data());
 				return;
 			}
-
-			// Report 40% - HDR loaded
-			if (progressCallback) progressCallback(0.4f);
+			
+			if (progressCallback) progressCallback(0.3f);
 
 			if (file.config.isImageFlipVertically)
 			{
@@ -119,17 +122,16 @@ namespace types
 			hdrData.height = static_cast<uint32_t>(height);
 			hdrData.numbersOfChannels = 4;  // Always store as RGBA
 
-			// Convert to 4 channels (RGBA) for GPU compatibility
-			hdrData.textureData = convertToRGBA32F(imageData, width, height, channels);
-
-			// Report 70% - data copied, saving to file
-			if (progressCallback) progressCallback(0.7f);
-
-			saveToFileHDR(fileName, location, hdrData);
+			hdrData.pixels = convertToRGBA32F(imageData, width, height, channels);
 
 			stbi_image_free(imageData);
+			
+			if (progressCallback) progressCallback(0.5f);
+			
+			if (progressCallback) progressCallback(0.7f);
 
-			// Report 100% - complete
+			saveToFileHDRWithMips(fileName, location, hdrData);
+			
 			if (progressCallback) progressCallback(1.0f);
 		}
 		else if (extension == ".exr")
@@ -142,8 +144,7 @@ namespace types
 				vfLogError("Invalid EXR file: {}", filePath);
 				return;
 			}
-
-			// Report 10% - EXR version parsed
+			
 			if (progressCallback) progressCallback(0.1f);
 
 			EXRHeader exrHeader;
@@ -157,8 +158,7 @@ namespace types
 				FreeEXRErrorMessage(exrError);
 				return;
 			}
-
-			// Report 20% - EXR header parsed
+			
 			if (progressCallback) progressCallback(0.2f);
 
 			EXRImage exrImage;
@@ -172,9 +172,8 @@ namespace types
 				FreeEXRErrorMessage(exrError);
 				return;
 			}
-
-			// Report 40% - EXR image loaded
-			if (progressCallback) progressCallback(0.4f);
+			
+			if (progressCallback) progressCallback(0.3f);
 
 			float* out;
 			int width;
@@ -190,9 +189,8 @@ namespace types
 				FreeEXRHeader(&exrHeader);
 				return;
 			}
-
-			// Report 50% - EXR data extracted
-			if (progressCallback) progressCallback(0.5f);
+			
+			if (progressCallback) progressCallback(0.4f);
 
 			if (file.config.isImageFlipVertically)
 			{
@@ -203,20 +201,19 @@ namespace types
 			hdrData.height = static_cast<uint32_t>(height);
 			hdrData.numbersOfChannels = 4;  // Always store as RGBA
 
-			// LoadEXR returns RGBA, copy directly
-			size_t pixelCount = static_cast<size_t>(width) * height;
-			hdrData.textureData = std::vector<float>(out, out + pixelCount * 4);
-
-			// Report 70% - conversion complete
-			if (progressCallback) progressCallback(0.7f);
+			// Copy pixel data before freeing
+			size_t pixelCount = static_cast<size_t>(width) * height * 4;
+			hdrData.pixels.resize(pixelCount);
+			std::memcpy(hdrData.pixels.data(), out, pixelCount * sizeof(float));
 
 			free(out);
 			FreeEXRImage(&exrImage);
 			FreeEXRHeader(&exrHeader);
-
-			saveToFileHDR(fileName, location, hdrData);
-
-			// Report 100% - complete
+			
+			if (progressCallback) progressCallback(0.5f);
+			
+			saveToFileHDRWithMips(fileName, location, hdrData);
+			
 			if (progressCallback) progressCallback(1.0f);
 		}
 		else {
@@ -225,7 +222,7 @@ namespace types
 	}
 	
 
-	void Texture::saveToFileTexture(std::string_view fileName, std::string_view location,
+	void Texture::saveToFileTextureWithMips(std::string_view fileName, std::string_view location,
 		const resource::TextureData& textureData) const
 	{
 		// Open the file in binary mode
@@ -240,6 +237,7 @@ namespace types
 		}
 
 		// Write header, version, and dimensions (endian-safe)
+		// Version 0.0.3 format includes mipmap support
 		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(textureData.headerFileType));
 		resource::endian::writeLE<uint32_t>(outFile, Version::major);
 		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
@@ -247,14 +245,22 @@ namespace types
 		resource::endian::writeLE<uint32_t>(outFile, textureData.width);
 		resource::endian::writeLE<uint32_t>(outFile, textureData.height);
 		resource::endian::writeLE<uint32_t>(outFile, textureData.numbersOfChannels);
+		resource::endian::writeLE<uint32_t>(outFile, textureData.mipLevels);
 
-		TGAWriter::writeTGA(outFile, textureData.textureData);
+		// Write each mip level
+		for (const auto& mip : textureData.mipData)
+		{
+			resource::endian::writeLE<uint32_t>(outFile, mip.width);
+			resource::endian::writeLE<uint32_t>(outFile, mip.height);
+			// Write pixel data in BGRA format (TGA-style)
+			TGAWriter::writeTGA(outFile, mip.data);
+		}
 
 		// Close the file
 		outFile.close();
 	}
 
-	void Texture::saveToFileHDR(std::string_view fileName, std::string_view location,
+	void Texture::saveToFileHDRWithMips(std::string_view fileName, std::string_view location,
 		const resource::HDRData& hdrData) const
 	{
 		std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." +
@@ -268,6 +274,7 @@ namespace types
 		}
 
 		// Write HDR header, version, and dimensions (endian-safe)
+		// Version 0.0.3 format includes mipmap support
 		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(hdrData.headerFileType));
 		resource::endian::writeLE<uint32_t>(outFile, Version::major);
 		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
@@ -276,14 +283,99 @@ namespace types
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.height);
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.numbersOfChannels);
 
-		// Write raw float data (RGBA32F)
-		for (float value : hdrData.textureData)
+		// Write pixel data (endian-safe)
+		for (float pixel : hdrData.pixels)
 		{
-			resource::endian::writeLE<float>(outFile, value);
+			resource::endian::writeLE<float>(outFile, pixel);
 		}
 
 		outFile.close();
 	}
+	
+	void Texture::generateMipmaps(resource::TextureData& textureData) const
+	{
+		if (textureData.mipData.empty())
+		{
+			vfLogError("Cannot generate mipmaps: no base level data");
+			return;
+		}
+
+		// Calculate mip levels based on minimum dimension of 512
+		// Textures <= 512 get no additional mips
+		constexpr uint32_t minMipDimension = 512;
+		uint32_t minDimension = std::min(textureData.width, textureData.height);
+
+		if (minDimension <= minMipDimension)
+		{
+			// Texture is already small, no mips needed
+			textureData.mipLevels = 1;
+			return;
+		}
+
+		// Count how many times we can halve before reaching 512
+		textureData.mipLevels = 1;
+		uint32_t dim = minDimension;
+		while (dim > minMipDimension)
+		{
+			dim /= 2;
+			textureData.mipLevels++;
+		}
+
+		// Reserve space for all mip levels
+		textureData.mipData.reserve(textureData.mipLevels);
+
+		// Generate each subsequent mip level from the previous one
+		for (uint32_t level = 1; level < textureData.mipLevels; ++level)
+		{
+			const auto& sourceMip = textureData.mipData[level - 1];
+			auto newMip = generateMipLevel(sourceMip);
+			textureData.mipData.push_back(std::move(newMip));
+		}
+	}
+
+	// Generate a single mip level using 2x2 box filter (RGBA8)
+	resource::MipLevelData Texture::generateMipLevel(const resource::MipLevelData& source) const
+	{
+		resource::MipLevelData result;
+		result.width = std::max(1u, source.width / 2);
+		result.height = std::max(1u, source.height / 2);
+
+		size_t pixelCount = static_cast<size_t>(result.width) * result.height;
+		result.data.resize(pixelCount * 4); // RGBA
+
+		// Box filter: average 2x2 blocks of source pixels
+		for (uint32_t y = 0; y < result.height; ++y)
+		{
+			for (uint32_t x = 0; x < result.width; ++x)
+			{
+				// Source coordinates (clamped for edge cases)
+				uint32_t sx0 = std::min(x * 2, source.width - 1);
+				uint32_t sy0 = std::min(y * 2, source.height - 1);
+				uint32_t sx1 = std::min(x * 2 + 1, source.width - 1);
+				uint32_t sy1 = std::min(y * 2 + 1, source.height - 1);
+
+				// Sample 4 source pixels
+				size_t idx00 = (static_cast<size_t>(sy0) * source.width + sx0) * 4;
+				size_t idx10 = (static_cast<size_t>(sy0) * source.width + sx1) * 4;
+				size_t idx01 = (static_cast<size_t>(sy1) * source.width + sx0) * 4;
+				size_t idx11 = (static_cast<size_t>(sy1) * source.width + sx1) * 4;
+
+				// Average each channel
+				size_t dstIdx = (static_cast<size_t>(y) * result.width + x) * 4;
+				for (int c = 0; c < 4; ++c)
+				{
+					uint32_t sum = static_cast<uint32_t>(source.data[idx00 + c]) +
+								   static_cast<uint32_t>(source.data[idx10 + c]) +
+								   static_cast<uint32_t>(source.data[idx01 + c]) +
+								   static_cast<uint32_t>(source.data[idx11 + c]);
+					result.data[dstIdx + c] = static_cast<unsigned char>((sum + 2) / 4); // +2 for rounding
+				}
+			}
+		}
+
+		return result;
+	}
+	
 
 	void Texture::convertTo4Channels(unsigned char* inputData, int width, int height, int inputChannels, std::vector<unsigned char>& outputData)
 	{
