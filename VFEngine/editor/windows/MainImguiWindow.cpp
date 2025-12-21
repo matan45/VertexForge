@@ -6,6 +6,7 @@
 #include "events/RenderEvents.hpp"
 #include "events/ResourceEvents.hpp"
 #include "events/ApplicationEvents.hpp"
+#include "events/EditorModeEvents.hpp"
 #include "string/StringUtil.hpp"
 #include "Import.hpp"
 #include "config/Config.hpp"
@@ -102,7 +103,47 @@ namespace windows
             handleSettingsMenu();
             handleAddMenu();
             handleDebug();
+            handlePlayControls();
             ImGui::EndMainMenuBar();
+        }
+    }
+
+    void MainImguiWindow::handlePlayControls()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto currentMode = dispatcher.query(events::editor::GetEditorModeQuery{});
+
+        // Calculate center position
+        float menuBarWidth = ImGui::GetWindowWidth();
+        float buttonWidth = 60.0f;
+        float centerX = (menuBarWidth - buttonWidth) * 0.5f;
+        ImGui::SetCursorPosX(centerX);
+
+        if (currentMode == services::EditorMode::Edit)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
+            if (ImGui::Button("Play", ImVec2(buttonWidth, 0)))
+            {
+                events::editor::SetEditorModeCommand cmd;
+                cmd.mode = services::EditorMode::Play;
+                dispatcher.execute(cmd);
+            }
+            ImGui::PopStyleColor(3);
+        }
+        else
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
+            if (ImGui::Button("Stop", ImVec2(buttonWidth, 0)))
+            {
+                events::editor::SetEditorModeCommand cmd;
+                cmd.mode = services::EditorMode::Edit;
+                dispatcher.execute(cmd);
+            }
+            ImGui::PopStyleColor(3);
         }
     }
 

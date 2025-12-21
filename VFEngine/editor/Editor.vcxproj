@@ -140,8 +140,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\editor\VertexForge-icon.vfImage" />
+    <None Include="..\..\resources\editor\VertexForge-logo.vfImage" />
+    <None Include="..\..\resources\editor\atlasIcons.vfImage" />
     <None Include="..\..\resources\editor\billboardAtlas.vfImage" />
-    <None Include="..\..\resources\editor\contentBrowser\atlasIcons.vfImage" />
     <None Include="..\..\resources\editor\window-icon.vfImage" />
   </ItemGroup>
   <ItemGroup>

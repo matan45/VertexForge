@@ -145,4 +145,15 @@ namespace core {
         return offScreen ? offScreen->getCullingStats() : services::CullingDebugStats{};
     }
 
+    void OffScreenAdapter::setPlayMode(bool playMode) {
+        playModeActive = playMode;
+        if (offScreen) {
+            offScreen->setPlayMode(playMode);
+        }
+    }
+
+    bool OffScreenAdapter::isPlayMode() const {
+        return playModeActive;
+    }
+
 }

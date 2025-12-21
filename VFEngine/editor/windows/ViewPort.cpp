@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/EditorModeEvents.hpp"
 #include "time/Timer.hpp"
 #include "imgui.h"
 #include "scene/EntityRegistry.hpp"
@@ -51,20 +52,26 @@ namespace windows {
 			dispatcher.execute(meshCameraCmd);
 			
 			ImVec2 viewportPos = ImGui::GetCursorScreenPos();
-			
+
 			events::render::GetViewportTextureQuery query;
 			auto texture = dispatcher.query(query);
 			if (texture.isValid()) {
 				ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
 			}
 
-			// Update picking data
+			// Check if we're in Play mode - skip picking/selection in Play mode
+			bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
+
+			// Update picking data (only in Edit mode)
 			glm::vec2 vp(viewportPos.x, viewportPos.y);
 			glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
-			updateBillboardScreenPositions(vp, vs);
-			updateMeshPickData();
-			
-			if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+			if (!isPlayMode) {
+				updateBillboardScreenPositions(vp, vs);
+				updateMeshPickData();
+			}
+
+			// Handle picking (only in Edit mode)
+			if (!isPlayMode && ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
 				&& !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
 				ImVec2 mousePos = ImGui::GetMousePos();
 				glm::vec2 mp(mousePos.x, mousePos.y);

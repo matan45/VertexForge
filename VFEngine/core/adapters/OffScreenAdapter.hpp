@@ -56,5 +56,12 @@ namespace core
 
         // Debug/Stats API
         services::CullingDebugStats getCullingStats() const override;
+
+        // Editor Mode API
+        void setPlayMode(bool playMode) override;
+        bool isPlayMode() const override;
+
+    private:
+        bool playModeActive = false;
     };
 }

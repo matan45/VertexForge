@@ -1,5 +1,6 @@
 #include "EditorRenderServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/EditorModeEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <filesystem>
 
@@ -403,17 +404,35 @@ namespace services
 
     void EditorRenderServiceImpl::prepareFrameBillboards()
     {
-        if (offScreenProvider)
+        if (!offScreenProvider)
         {
-            offScreenProvider->prepareFrameBillboards();
+            return;
         }
+
+        // Skip billboards in Play mode
+        bool isPlayMode = events::EventDispatcher::instance().query(events::editor::IsPlayModeQuery{});
+        if (isPlayMode)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameBillboards();
     }
 
     void EditorRenderServiceImpl::prepareFrameCameraFrustums()
     {
-        if (offScreenProvider)
+        if (!offScreenProvider)
         {
-            offScreenProvider->prepareFrameCameraFrustums();
+            return;
         }
+
+        // Skip camera frustum visualization in Play mode
+        bool isPlayMode = events::EventDispatcher::instance().query(events::editor::IsPlayModeQuery{});
+        if (isPlayMode)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameCameraFrustums();
     }
 }

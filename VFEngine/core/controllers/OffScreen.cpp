@@ -144,4 +144,14 @@ namespace controllers {
 	{
 		return offScreenController->getCullingStats();
 	}
+
+	void OffScreen::setPlayMode(bool playMode)
+	{
+		offScreenController->setPlayMode(playMode);
+	}
+
+	bool OffScreen::isPlayMode() const
+	{
+		return offScreenController->isPlayMode();
+	}
 }

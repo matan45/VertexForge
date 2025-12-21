@@ -38,7 +38,8 @@ namespace controllers
         std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
         std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
-        bool showBillboardIcons = true; 
+        bool showBillboardIcons = true;
+        bool playModeActive = false;
 
         // Occlusion culling state
         glm::mat4 currentViewProj{1.0f};
@@ -105,6 +106,10 @@ namespace controllers
 
         // Debug/Stats API
         services::CullingDebugStats getCullingStats() const;
+
+        // Editor Mode API
+        void setPlayMode(bool playMode) { playModeActive = playMode; }
+        bool isPlayMode() const { return playModeActive; }
 
     private:
         void updateOcclusionCullingData();
