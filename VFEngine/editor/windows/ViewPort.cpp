@@ -10,8 +10,6 @@
 #include "data/EntityConversion.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/matrix_decompose.hpp>
 #include <limits>
 
 namespace windows
@@ -585,27 +583,24 @@ namespace windows
 
     glm::mat4 ViewPort::buildTransformMatrix(const services::TransformData& transform) const
     {
+        float translation[3] = {transform.position.x, transform.position.y, transform.position.z};
+        float rotation[3] = {transform.rotation.x, transform.rotation.y, transform.rotation.z};
+        float scale[3] = {transform.scale.x, transform.scale.y, transform.scale.z};
+
         glm::mat4 mat(1.0f);
-        mat = glm::translate(mat, transform.position);
-        mat = glm::rotate(mat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
-        mat = glm::rotate(mat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
-        mat = glm::rotate(mat, glm::radians(transform.rotation.z), glm::vec3(0, 0, 1));
-        mat = glm::scale(mat, transform.scale);
+        ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, glm::value_ptr(mat));
         return mat;
     }
 
     services::TransformData ViewPort::decomposeTransformMatrix(const glm::mat4& matrix) const
     {
+        float translation[3], rotation[3], scale[3];
+        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(matrix), translation, rotation, scale);
+
         services::TransformData result;
-        glm::vec3 scale, translation, skew;
-        glm::vec4 perspective;
-        glm::quat rotation;
-
-        glm::decompose(matrix, scale, rotation, translation, skew, perspective);
-
-        result.position = translation;
-        result.scale = scale;
-        result.rotation = glm::degrees(glm::eulerAngles(rotation));
+        result.position = glm::vec3(translation[0], translation[1], translation[2]);
+        result.rotation = glm::vec3(rotation[0], rotation[1], rotation[2]);
+        result.scale = glm::vec3(scale[0], scale[1], scale[2]);
 
         return result;
     }
