@@ -23,25 +23,29 @@
 namespace controllers
 {
     OffScreenController::OffScreenController()
-        : swapChain{ *core::VulkanContext::getSwapChain() }
-        , device{ *core::VulkanContext::getDevice() }
-        , offScreen{ std::make_unique<render::OffScreenViewPort>(device, swapChain) }
+        : swapChain{*core::VulkanContext::getSwapChain()}
+          , device{*core::VulkanContext::getDevice()}
+          , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
     {
     }
 
     OffScreenController::~OffScreenController()
     {
         // Unsubscribe from notifications
-        if (materialSavedSubscription && materialSavedSubscription->isValid()) {
+        if (materialSavedSubscription && materialSavedSubscription->isValid())
+        {
             events::EventDispatcher::instance().unsubscribe(*materialSavedSubscription);
         }
-        if (meshDataChangedSubscription && meshDataChangedSubscription->isValid()) {
+        if (meshDataChangedSubscription && meshDataChangedSubscription->isValid())
+        {
             events::EventDispatcher::instance().unsubscribe(*meshDataChangedSubscription);
         }
-        if (entityDeletedSubscription && entityDeletedSubscription->isValid()) {
+        if (entityDeletedSubscription && entityDeletedSubscription->isValid())
+        {
             events::EventDispatcher::instance().unsubscribe(*entityDeletedSubscription);
         }
-        if (entityStaticChangedSubscription && entityStaticChangedSubscription->isValid()) {
+        if (entityStaticChangedSubscription && entityStaticChangedSubscription->isValid())
+        {
             events::EventDispatcher::instance().unsubscribe(*entityStaticChangedSubscription);
         }
     }
@@ -51,7 +55,8 @@ namespace controllers
         offScreen->init();
 
         // Set up BVH mesh bounds callback
-        sceneBVH.setMeshBoundsCallback([this](const std::string& meshPath) -> const math::AABB* {
+        sceneBVH.setMeshBoundsCallback([this](const std::string& meshPath) -> const math::AABB*
+        {
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
             if (meshPipeline)
             {
@@ -61,13 +66,14 @@ namespace controllers
         });
 
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
-            [this](const events::material::MaterialFileSavedNotification& notification) {
-
+            [this](const events::material::MaterialFileSavedNotification& notification)
+            {
                 resource::ResourceManager::invalidateMaterialCache(notification.materialPath);
 
                 // Invalidate GPU shader/pipeline cache
                 auto* renderHandler = offScreen->getRenderPassHandler();
-                if (renderHandler && renderHandler->isMeshPipelineInitialized()) {
+                if (renderHandler && renderHandler->isMeshPipelineInitialized())
+                {
                     renderHandler->getMeshPipeline()->invalidateMaterialCache(notification.materialPath);
                 }
             });
@@ -75,16 +81,22 @@ namespace controllers
 
         // Subscribe to mesh data changes (mesh added/changed/removed on entity)
         // This is a structural change - requires full rebuild
-        auto meshChangedToken = events::EventDispatcher::instance().subscribe<events::scene::MeshDataChangedNotification>(
-            [this](const events::scene::MeshDataChangedNotification& notification) {
+        auto meshChangedToken = events::EventDispatcher::instance().subscribe<
+            events::scene::MeshDataChangedNotification>(
+            [this](const events::scene::MeshDataChangedNotification& notification)
+            {
                 // Check if entity is static or dynamic and mark appropriate tree for structural rebuild
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto entity = static_cast<entt::entity>(notification.entity.id);
-                if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity)) {
+                if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity))
+                {
                     const auto& transform = registry.get<components::TransformComponent>(entity);
-                    if (transform.isStatic) {
+                    if (transform.isStatic)
+                    {
                         sceneBVH.markStaticDirty();
-                    } else {
+                    }
+                    else
+                    {
                         sceneBVH.markDynamicDirty();
                     }
                 }
@@ -94,20 +106,26 @@ namespace controllers
         // Subscribe to entity deleted notification to update BVH
         // This is a structural change - requires full rebuild
         auto deletedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityDeletedNotification>(
-            [this](const events::scene::EntityDeletedNotification& notification) {
+            [this](const events::scene::EntityDeletedNotification& notification)
+            {
                 // Mark appropriate BVH for structural rebuild based on which tree the entity was in
                 uint32_t entityId = static_cast<uint32_t>(notification.entity.id);
-                if (sceneBVH.isStaticEntity(entityId)) {
+                if (sceneBVH.isStaticEntity(entityId))
+                {
                     sceneBVH.markStaticDirty();
-                } else {
+                }
+                else
+                {
                     sceneBVH.markDynamicDirty();
                 }
             });
         entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(deletedToken);
 
-       
-        auto staticChangedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityStaticChangedNotification>(
-            [this](const events::scene::EntityStaticChangedNotification&) {
+
+        auto staticChangedToken = events::EventDispatcher::instance().subscribe<
+            events::scene::EntityStaticChangedNotification>(
+            [this](const events::scene::EntityStaticChangedNotification&)
+            {
                 // Defer rebuild - entity moves between static/dynamic trees
                 // Both trees need structural rebuild, batched with other changes
                 sceneBVH.markDirty();
@@ -128,7 +146,7 @@ namespace controllers
     void OffScreenController::iblSet(std::string_view iblPath)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        
+
         renderHandler->getIBL()->init(iblPath);
 
         // If mesh pipeline was initialized, reinitialize it with the new IBL textures
@@ -147,7 +165,7 @@ namespace controllers
     void OffScreenController::iblRemove()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        
+
         renderHandler->getIBL()->remove();
 
         // If mesh pipeline was initialized with IBL textures, reinitialize with defaults
@@ -192,15 +210,15 @@ namespace controllers
         if (cameraId == renderHandler->getActiveCameraId() && renderHandler->isMeshPipelineInitialized())
         {
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
-            
+
             if (!renderHandler->isDebugRendererInitialized())
             {
                 renderHandler->initDebugRenderer();
             }
         }
-        
+
         renderHandler->setDebugCameraMatrices(view, projection);
-        
+
         if (renderHandler->isBillboardPipelineInitialized())
         {
             renderHandler->getBillboardPipeline()->updateCameraUBO(view, projection, cameraPos);
@@ -324,12 +342,12 @@ namespace controllers
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
 
-       
+
         if (sceneBVH.isStaticDirty() && frustumReady)
         {
             sceneBVH.rebuildStaticBVH();
         }
-        
+
         static int dynamicBvhCooldown = 0;
 
         if (dynamicBvhCooldown > 0)
@@ -343,7 +361,7 @@ namespace controllers
             for (auto entity : dynamicView)
             {
                 const auto& transform = dynamicView.get<components::TransformComponent>(entity);
-                
+
                 if (!transform.isStatic && transform.isDirty)
                 {
                     // Mark specific entity dirty for incremental refit
@@ -356,7 +374,7 @@ namespace controllers
         if (sceneBVH.isDynamicDirty() && frustumReady)
         {
             sceneBVH.updateDynamicBVH();
-            dynamicBvhCooldown = 5; 
+            dynamicBvhCooldown = 5;
         }
 
         // Use BVH for spatial culling if available
@@ -364,7 +382,7 @@ namespace controllers
         {
             std::vector<uint32_t> visibleEntities;
             sceneBVH.queryFrustum(*activeFrustum, visibleEntities);
-            
+
             for (uint32_t entityId : visibleEntities)
             {
                 auto entity = static_cast<entt::entity>(entityId);
@@ -561,7 +579,7 @@ namespace controllers
     void OffScreenController::prepareFrameCameraFrustums()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        
+
         if (playModeActive || !showDebugRendering)
         {
             renderHandler->setCameraFrustumDrawList({});
@@ -753,8 +771,8 @@ namespace controllers
 
             // Estimate visible after frustum cull (approximate - uses total if no occlusion)
             camStats.visibleAfterFrustumCull = camStats.visibleAfterOcclusionCull > 0
-                ? camStats.visibleAfterOcclusionCull + camStats.occludedCount
-                : totalMeshEntities;
+                                                   ? camStats.visibleAfterOcclusionCull + camStats.occludedCount
+                                                   : totalMeshEntities;
 
             stats.cameraStats.push_back(camStats);
         }
