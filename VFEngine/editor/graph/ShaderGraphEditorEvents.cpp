@@ -54,6 +54,15 @@ namespace editor::graph {
                             }
                         }
 
+                        // Remove any existing link to this input pin (input pins only accept one connection)
+                        currentGraph->links.erase(
+                            std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
+                                [&newLink](const material::NodeLink& existing) {
+                                    return existing.targetNodeId == newLink.targetNodeId &&
+                                           existing.targetPin == newLink.targetPin;
+                                }),
+                            currentGraph->links.end());
+
                         currentGraph->links.push_back(newLink);
                         if (onGraphChanged) onGraphChanged();
                     }

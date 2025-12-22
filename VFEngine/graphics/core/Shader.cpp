@@ -1,6 +1,7 @@
 #include "Shader.hpp"
 #include "Device.hpp"
 #include "print/Logger.hpp"
+#include "print/EditorLogger.hpp"
 #include <filesystem>
 
 namespace core {
@@ -63,6 +64,7 @@ namespace core {
 		if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
 			lastCompilationError = result.GetErrorMessage();
 			loggerError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
+			vfLogError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
 			return {};
 		}
 
