@@ -23,7 +23,7 @@ namespace editor::graph {
         {"Roughness", 4},   // TextureSlot::Roughness (legacy individual)
         {"AO", 5},          // TextureSlot::AO (legacy individual)
         {"Emission", 6},    // TextureSlot::Emission
-        {"Height", 7}       // TextureSlot::Height
+        {"Displacement", 7} // TextureSlot::Height (displacement/height map)
     };
 
     

@@ -19,6 +19,7 @@ namespace services {
         std::string aoTexturePath;
         std::string normalTexturePath;
         std::string emissionTexturePath;
+        std::string heightTexturePath;
 
         std::string materialPath;
 

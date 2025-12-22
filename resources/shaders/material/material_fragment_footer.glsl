@@ -6,27 +6,45 @@
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
-    vec3 tangentNormal = mat_normalTS * 2.0 - 1.0;
+    // Construct TBN matrix from screen-space derivatives (needed for normal mapping and parallax)
+    vec3 pos_dx = dFdx(fragWorldPos);
+    vec3 pos_dy = dFdy(fragWorldPos);
+    vec2 uv_dx = dFdx(fragTexCoord);
+    vec2 uv_dy = dFdy(fragTexCoord);
 
-    // Only apply if it's not the default normal (pointing up in tangent space)
-    if (abs(tangentNormal.x) > 0.001 || abs(tangentNormal.y) > 0.001 || tangentNormal.z < 0.999) {
-        // Construct TBN matrix from screen-space derivatives
-        vec3 pos_dx = dFdx(fragWorldPos);
-        vec3 pos_dy = dFdy(fragWorldPos);
-        vec2 uv_dx = dFdx(fragTexCoord);
-        vec2 uv_dy = dFdy(fragTexCoord);
+    vec3 T = normalize(pos_dx * uv_dy.y - pos_dy * uv_dx.y);
+    vec3 B = normalize(pos_dy * uv_dx.x - pos_dx * uv_dy.x);
+    T = normalize(T - N * dot(N, T));
+    B = cross(N, T);
+    mat3 TBN = mat3(T, B, N);
 
-        // Calculate tangent and bitangent
-        vec3 T = normalize(pos_dx * uv_dy.y - pos_dy * uv_dx.y);
-        vec3 B = normalize(pos_dy * uv_dx.x - pos_dx * uv_dy.x);
+    // Apply Parallax Occlusion Mapping if displacement texture is connected
+    // mat_displacement deviating from 0.5 indicates a height texture is in use
+    vec2 parallaxUV = fragTexCoord;
+    float heightScale = (mat_displacement - 0.5) * 0.1; // Scale factor for parallax depth
+    if (abs(heightScale) > 0.001) {
+        vec3 viewDirTangent = normalize(transpose(TBN) * V);
+        parallaxUV = parallaxOcclusionMapping(fragTexCoord, viewDirTangent, abs(heightScale));
 
-        // Ensure orthogonal TBN
-        T = normalize(T - N * dot(N, T));
-        B = cross(N, T);
+        // Re-sample textures with parallax-adjusted UV for proper displacement effect
+        // Re-sample albedo
+        vec4 parallaxAlbedo = texture(u_Textures[TEX_SLOT_ALBEDO], parallaxUV);
+        if (parallaxAlbedo.a > 0.01) { // Only if albedo texture is bound
+            albedo_linear = pow(parallaxAlbedo.rgb, vec3(2.2));
+        }
 
-        // Transform normal from tangent space to world space
-        mat3 TBN = mat3(T, B, N);
-        N = normalize(TBN * tangentNormal);
+        // Re-sample normal map
+        vec4 parallaxNormal = texture(u_Textures[TEX_SLOT_NORMAL], parallaxUV);
+        if (length(parallaxNormal.rgb) > 0.01) {
+            vec3 tangentNormal = parallaxNormal.rgb * 2.0 - 1.0;
+            N = normalize(TBN * tangentNormal);
+        }
+    } else {
+        // Normal mapping without parallax
+        vec3 tangentNormal = mat_normalTS * 2.0 - 1.0;
+        if (abs(tangentNormal.x) > 0.001 || abs(tangentNormal.y) > 0.001 || tangentNormal.z < 0.999) {
+            N = normalize(TBN * tangentNormal);
+        }
     }
 
     vec3 R = reflect(-V, N);
