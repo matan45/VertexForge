@@ -14,9 +14,20 @@
 
 namespace windows {
 
-	ViewPort::ViewPort() 
-		: editorCamera(std::make_unique<editor::EditorCamera>()) 
+	ViewPort::ViewPort()
+		: editorCamera(std::make_unique<editor::EditorCamera>())
 	{
+	}
+
+	ViewPort::~ViewPort()
+	{
+		if (iconAtlas.isValid())
+		{
+			auto& dispatcher = events::EventDispatcher::instance();
+			events::render::ReleaseEditorTextureCommand cmd;
+			cmd.handle = iconAtlas.imguiDescriptorSet;
+			dispatcher.execute(cmd);
+		}
 	}
 
 	void ViewPort::draw()
@@ -332,6 +343,12 @@ namespace windows {
 			return;
 		}
 
+		// Load icon atlas if not loaded
+		if (!iconsLoaded)
+		{
+			loadIconAtlas();
+		}
+
 		// Position overlay in top-left of viewport content area
 		ImVec2 windowPos = ImGui::GetWindowPos();
 		ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
@@ -353,19 +370,132 @@ namespace windows {
 			// Grid toggle button
 			bool currentGridState = dispatcher.query(events::render::GetShowGridQuery{});
 
-			if (ImGui::Button(currentGridState ? "Grid: ON" : "Grid: OFF", ImVec2(80, 0)))
+			if (iconAtlas.isValid())
 			{
-				events::render::SetShowGridCommand cmd;
-				cmd.show = !currentGridState;
-				dispatcher.execute(cmd);
-			}
+				if (iconButton(ViewportIcon::Grid, currentGridState, "Toggle 3D grid overlay (G)"))
+				{
+					events::render::SetShowGridCommand cmd;
+					cmd.show = !currentGridState;
+					dispatcher.execute(cmd);
+				}
 
-			if (ImGui::IsItemHovered())
+				ImGui::SameLine();
+
+				// Transform tool buttons (placeholder for future functionality)
+				if (iconButton(ViewportIcon::Move, false, "Move tool (W)"))
+				{
+					// TODO: Activate move gizmo
+				}
+
+				ImGui::SameLine();
+
+				if (iconButton(ViewportIcon::Rotate, false, "Rotate tool (E)"))
+				{
+					// TODO: Activate rotate gizmo
+				}
+
+				ImGui::SameLine();
+
+				if (iconButton(ViewportIcon::Scale, false, "Scale tool (R)"))
+				{
+					// TODO: Activate scale gizmo
+				}
+
+				ImGui::SameLine();
+
+				if (iconButton(ViewportIcon::Translate, false, "Translate tool (T)"))
+				{
+					// TODO: Activate translate gizmo
+				}
+			}
+			else
 			{
-				ImGui::SetTooltip("Toggle 3D grid overlay (G)");
+				// Fallback to text button if icons not loaded
+				if (ImGui::Button(currentGridState ? "Grid: ON" : "Grid: OFF", ImVec2(80, 0)))
+				{
+					events::render::SetShowGridCommand cmd;
+					cmd.show = !currentGridState;
+					dispatcher.execute(cmd);
+				}
+
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Toggle 3D grid overlay (G)");
+				}
 			}
 		}
 		ImGui::End();
+	}
+
+	void ViewPort::loadIconAtlas()
+	{
+		auto& dispatcher = events::EventDispatcher::instance();
+
+		events::render::LoadEditorTextureCommand cmd;
+		cmd.path = "../../resources/editor/viewPortAtlasIcons.vfImage";
+		cmd.isHDR = false;
+		iconAtlas = dispatcher.execute(cmd);
+
+		iconsLoaded = true;
+	}
+
+	std::pair<glm::vec2, glm::vec2> ViewPort::getIconUV(ViewportIcon icon) const
+	{
+		uint32_t index = static_cast<uint32_t>(icon);
+		uint32_t maxIndex = ATLAS_COLUMNS * ATLAS_ROWS;
+
+		// Bounds check - fallback to first icon if out of range
+		if (index >= maxIndex)
+		{
+			index = 0;
+		}
+
+		float colSize = 1.0f / static_cast<float>(ATLAS_COLUMNS);
+		float rowSize = 1.0f / static_cast<float>(ATLAS_ROWS);
+
+		float col = static_cast<float>(index % ATLAS_COLUMNS);
+		float row = static_cast<float>(index / ATLAS_COLUMNS);
+
+		glm::vec2 uv0(col * colSize, row * rowSize);
+		glm::vec2 uv1((col + 1.0f) * colSize, (row + 1.0f) * rowSize);
+
+		return {uv0, uv1};
+	}
+
+	bool ViewPort::iconButton(ViewportIcon icon, bool isActive, const char* tooltip)
+	{
+		auto [uv0, uv1] = getIconUV(icon);
+
+		ImGui::PushID(static_cast<int>(icon));
+
+		// Style for active/inactive state
+		ImVec4 bgColor = isActive ? ImVec4(0.3f, 0.5f, 0.8f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f);
+		ImVec4 tintColor = isActive ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
+
+		ImGui::PushStyleColor(ImGuiCol_Button, bgColor);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(bgColor.x + 0.1f, bgColor.y + 0.1f, bgColor.z + 0.1f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(bgColor.x + 0.2f, bgColor.y + 0.2f, bgColor.z + 0.2f, 1.0f));
+
+		bool clicked = ImGui::ImageButton(
+			"##iconBtn",
+			iconAtlas.imguiDescriptorSet,
+			ImVec2(ICON_SIZE, ICON_SIZE),
+			ImVec2(uv0.x, uv0.y),
+			ImVec2(uv1.x, uv1.y),
+			ImVec4(0.0f, 0.0f, 0.0f, 0.0f),  // bg_col (transparent)
+			tintColor
+		);
+
+		ImGui::PopStyleColor(3);
+
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("%s", tooltip);
+		}
+
+		ImGui::PopID();
+
+		return clicked;
 	}
 
 }
