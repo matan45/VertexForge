@@ -356,7 +356,7 @@ namespace windows {
 		                            windowPos.y + contentMin.y + 8.0f);
 
 		ImGui::SetNextWindowPos(overlayPos);
-		ImGui::SetNextWindowBgAlpha(0.7f);
+		ImGui::SetNextWindowBgAlpha(0.0f);
 
 		ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration
 		                              | ImGuiWindowFlags_AlwaysAutoResize
@@ -364,6 +364,9 @@ namespace windows {
 		                              | ImGuiWindowFlags_NoFocusOnAppearing
 		                              | ImGuiWindowFlags_NoNav
 		                              | ImGuiWindowFlags_NoMove;
+
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
 		if (ImGui::Begin("##ViewportOverlay", nullptr, overlayFlags))
 		{
@@ -425,6 +428,7 @@ namespace windows {
 			}
 		}
 		ImGui::End();
+		ImGui::PopStyleVar(2);
 	}
 
 	void ViewPort::loadIconAtlas()
