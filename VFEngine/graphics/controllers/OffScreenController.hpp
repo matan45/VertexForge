@@ -40,6 +40,7 @@ namespace controllers
         std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
         bool showBillboardIcons = true;
         bool showDebugRendering = true;
+        bool showGrid = true;
         bool playModeActive = false;
 
         // Occlusion culling state
@@ -109,12 +110,17 @@ namespace controllers
         services::CullingDebugStats getCullingStats() const;
 
         // Editor Mode API
-        void setPlayMode(bool playMode) { playModeActive = playMode; }
+        void setPlayMode(bool playMode);
         bool isPlayMode() const { return playModeActive; }
 
         // Debug Rendering API
         void setShowDebugRendering(bool show) { showDebugRendering = show; }
         bool getShowDebugRendering() const { return showDebugRendering; }
+
+        // Grid API
+        void setShowGrid(bool show);
+        bool getShowGrid() const { return showGrid; }
+        void prepareGrid();
 
     private:
         void updateOcclusionCullingData();

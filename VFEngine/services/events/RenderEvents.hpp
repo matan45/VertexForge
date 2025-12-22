@@ -185,4 +185,22 @@ namespace events::render {
         std::string_view getName() const override { return "GetCullingStats"; }
     };
 
+    // ============================================
+    // GRID COMMANDS
+    // ============================================
+
+    struct SetShowGridCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowGrid"; }
+    };
+
+    // ============================================
+    // GRID QUERIES
+    // ============================================
+
+    struct GetShowGridQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowGrid"; }
+    };
+
 }

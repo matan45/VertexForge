@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MeshTypes.hpp"
+#include "../mesh/MeshTypes.hpp"
 #include <memory>
 #include <vector>
 

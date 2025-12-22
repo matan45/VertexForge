@@ -94,6 +94,11 @@ namespace services {
         // Debug Rendering API
         virtual void setShowDebugRendering(bool show) = 0;
         virtual bool getShowDebugRendering() const = 0;
+
+        // Grid API
+        virtual void setShowGrid(bool show) = 0;
+        virtual bool getShowGrid() const = 0;
+        virtual void prepareGrid() = 0;
     };
 
 }

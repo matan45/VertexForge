@@ -101,6 +101,7 @@ namespace render
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
+        DebugRenderer* getDebugRenderer() const { return debugRenderer.get(); }
 
         // Camera occlusion manager access
         occlusion::CameraOcclusionManager* getCameraOcclusionManager() const { return cameraOcclusionManager.get(); }

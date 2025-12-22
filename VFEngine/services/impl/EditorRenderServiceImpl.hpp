@@ -60,5 +60,6 @@ namespace services
         void prepareFrameMeshes();
         void prepareFrameBillboards();
         void prepareFrameCameraFrustums();
+        void prepareGrid();
     };
 }
