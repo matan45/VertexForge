@@ -80,6 +80,7 @@ project "Core"
       "VFEngine/utilities",              -- Utilities headers
 	  "VFEngine/services",               -- Services layer interfaces
 	  "dependencies/imgui",
+	  "dependencies/ImGuizmo",
 	  "dependencies/glm",
 	  "dependencies/glfw/include",
 	  "dependencies/imgui/backends",
