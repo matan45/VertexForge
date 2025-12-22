@@ -38,7 +38,6 @@ namespace windows
         std::string ormAoPath;
         std::string ormRoughnessPath;
         std::string ormMetallicPath;
-        std::string ormEmissivePath;
         std::string ormOutputPath;
         std::string ormPackError;
         float ormPackProgress = 0.0f;

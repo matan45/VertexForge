@@ -818,23 +818,6 @@ namespace windows {
             }
             ImGui::PopID();
 
-            // Emissive texture selection (optional)
-            ImGui::Text("Emissive - default: 255 (full alpha):");
-            ImGui::PushID("emissive");
-            {
-                std::string display = ormEmissivePath.empty() ? "(None - uses default)" :
-                    std::filesystem::path(ormEmissivePath).filename().string();
-                ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
-                ImGui::SameLine();
-                if (ImGui::Button("Browse...")) {
-                    std::string path = fileDialog.openFileDialog(filters);
-                    if (!path.empty()) ormEmissivePath = path;
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Clear")) ormEmissivePath.clear();
-            }
-            ImGui::PopID();
-
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -881,7 +864,7 @@ namespace windows {
 
             // Buttons - need at least one texture and an output path
             bool hasAtLeastOneTexture = !ormAoPath.empty() || !ormRoughnessPath.empty() ||
-                                        !ormMetallicPath.empty() || !ormEmissivePath.empty();
+                                        !ormMetallicPath.empty();
             bool canPack = hasAtLeastOneTexture && !ormOutputPath.empty() && !ormPackInProgress;
 
             if (!canPack) ImGui::BeginDisabled();
@@ -908,7 +891,6 @@ namespace windows {
         input.aoPath = ormAoPath;
         input.roughnessPath = ormRoughnessPath;
         input.metallicPath = ormMetallicPath;
-        input.emissivePath = ormEmissivePath;
         input.outputPath = ormOutputPath;
 
         auto result = texture::OrmTexturePacker::packORM(

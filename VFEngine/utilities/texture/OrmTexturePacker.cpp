@@ -10,7 +10,6 @@ namespace texture
     constexpr uint8_t DEFAULT_AO = 255;        // No occlusion (fully lit)
     constexpr uint8_t DEFAULT_ROUGHNESS = 128; // Mid roughness (~0.5)
     constexpr uint8_t DEFAULT_METALLIC = 0;    // Non-metallic
-    constexpr uint8_t DEFAULT_EMISSIVE = 255;  // Full alpha (visible in previews), shader treats as no emission
 
     // ============================================================================
     // Helper: Get grayscale value from mip data
@@ -73,11 +72,9 @@ namespace texture
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
-        const resource::TextureData* emissiveTexture,
         const resource::MipLevelData& aoMip,
         const resource::MipLevelData& roughnessMip,
         const resource::MipLevelData& metallicMip,
-        const resource::MipLevelData& emissiveMip,
         std::string& errorMessage)
     {
         if (aoTexture && aoMip.data.empty())
@@ -95,16 +92,11 @@ namespace texture
             errorMessage = "Metallic texture has no mip level 0 data";
             return false;
         }
-        if (emissiveTexture && emissiveMip.data.empty())
-        {
-            errorMessage = "Emissive texture has no mip level 0 data";
-            return false;
-        }
         return true;
     }
 
     // ============================================================================
-    // Helper: Pack pixels from source textures into ORM format
+    // Helper: Pack pixels from source textures into ORM format (RGBA for GPU compatibility)
     // ============================================================================
     static void packPixels(
         resource::MipLevelData& ormMip,
@@ -113,16 +105,14 @@ namespace texture
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
-        const resource::TextureData* emissiveTexture,
         const resource::MipLevelData& aoMip,
         const resource::MipLevelData& roughnessMip,
         const resource::MipLevelData& metallicMip,
-        const resource::MipLevelData& emissiveMip,
         OrmPackProgressCallback progressCallback)
     {
         ormMip.width = width;
         ormMip.height = height;
-        ormMip.data.resize(width * height * 4);
+        ormMip.data.resize(width * height * 4);  // RGBA for GPU compatibility
 
         for (uint32_t y = 0; y < height; ++y)
         {
@@ -140,15 +130,12 @@ namespace texture
                 uint8_t metallic = metallicTexture
                     ? getGrayscaleValue(metallicMip, x, y, width, metallicTexture->numbersOfChannels)
                     : DEFAULT_METALLIC;
-                uint8_t emissive = emissiveTexture
-                    ? getGrayscaleValue(emissiveMip, x, y, width, emissiveTexture->numbersOfChannels)
-                    : DEFAULT_EMISSIVE;
 
-                // Write in BGR order - TGAReader will swap [0] and [2] to get RGB
-                ormMip.data[outIdx + 0] = metallic;  // B position -> becomes R after swap
-                ormMip.data[outIdx + 1] = roughness; // G = Roughness (unchanged)
-                ormMip.data[outIdx + 2] = ao;        // R position -> becomes B after swap
-                ormMip.data[outIdx + 3] = emissive;  // A = Emissive intensity
+                // ORM format: R=AO, G=Roughness, B=Metallic, A=255 (unused, full opacity)
+                ormMip.data[outIdx + 0] = ao;
+                ormMip.data[outIdx + 1] = roughness;
+                ormMip.data[outIdx + 2] = metallic;
+                ormMip.data[outIdx + 3] = 255;  // Unused alpha, set to opaque
             }
 
             if (progressCallback && (y % (height / 10 + 1) == 0))
@@ -160,7 +147,7 @@ namespace texture
     }
 
     // ============================================================================
-    // Helper: Generate mipmaps using box filter
+    // Helper: Generate mipmaps using box filter (RGBA)
     // ============================================================================
     static void generateMipmaps(resource::TextureData& ormTexture)
     {
@@ -189,7 +176,7 @@ namespace texture
 
                     // Sample up to 4 pixels (handle edge cases)
                     uint32_t samples = 0;
-                    uint32_t sumR = 0, sumG = 0, sumB = 0, sumA = 0;
+                    uint32_t sumR = 0, sumG = 0, sumB = 0;
 
                     for (uint32_t dy = 0; dy < 2 && (srcY + dy) < mipHeight; ++dy)
                     {
@@ -199,7 +186,6 @@ namespace texture
                             sumR += srcMip.data[srcIdx + 0];
                             sumG += srcMip.data[srcIdx + 1];
                             sumB += srcMip.data[srcIdx + 2];
-                            sumA += srcMip.data[srcIdx + 3];
                             ++samples;
                         }
                     }
@@ -214,7 +200,7 @@ namespace texture
                     newMip.data[dstIdx + 0] = static_cast<uint8_t>(sumR / samples);
                     newMip.data[dstIdx + 1] = static_cast<uint8_t>(sumG / samples);
                     newMip.data[dstIdx + 2] = static_cast<uint8_t>(sumB / samples);
-                    newMip.data[dstIdx + 3] = static_cast<uint8_t>(sumA / samples);
+                    newMip.data[dstIdx + 3] = 255;  // Keep alpha at 255
                 }
             }
 
@@ -297,9 +283,8 @@ namespace texture
         bool hasAo = !input.aoPath.empty();
         bool hasRoughness = !input.roughnessPath.empty();
         bool hasMetallic = !input.metallicPath.empty();
-        bool hasEmissive = !input.emissivePath.empty();
 
-        if (!hasAo && !hasRoughness && !hasMetallic && !hasEmissive)
+        if (!hasAo && !hasRoughness && !hasMetallic)
         {
             result.errorMessage = "At least one texture must be provided to determine output dimensions";
             return result;
@@ -311,12 +296,10 @@ namespace texture
         std::future<std::shared_ptr<resource::TextureData>> aoFuture;
         std::future<std::shared_ptr<resource::TextureData>> roughnessFuture;
         std::future<std::shared_ptr<resource::TextureData>> metallicFuture;
-        std::future<std::shared_ptr<resource::TextureData>> emissiveFuture;
 
         if (hasAo) aoFuture = resource::ResourceManager::loadTextureAsync(input.aoPath);
         if (hasRoughness) roughnessFuture = resource::ResourceManager::loadTextureAsync(input.roughnessPath);
         if (hasMetallic) metallicFuture = resource::ResourceManager::loadTextureAsync(input.metallicPath);
-        if (hasEmissive) emissiveFuture = resource::ResourceManager::loadTextureAsync(input.emissivePath);
 
         if (progressCallback) progressCallback(0.1f);
 
@@ -324,13 +307,11 @@ namespace texture
         std::shared_ptr<resource::TextureData> aoData;
         std::shared_ptr<resource::TextureData> roughnessData;
         std::shared_ptr<resource::TextureData> metallicData;
-        std::shared_ptr<resource::TextureData> emissiveData;
 
         // Collect results - by the time we call .get(), most/all loads should be complete
         if (hasAo) aoData = aoFuture.get();
         if (hasRoughness) roughnessData = roughnessFuture.get();
         if (hasMetallic) metallicData = metallicFuture.get();
-        if (hasEmissive) emissiveData = emissiveFuture.get();
 
         if (progressCallback) progressCallback(0.5f);
 
@@ -350,11 +331,6 @@ namespace texture
             result.errorMessage = "Failed to load metallic texture: " + input.metallicPath;
             return result;
         }
-        if (hasEmissive && (!emissiveData || emissiveData->textureData().empty()))
-        {
-            result.errorMessage = "Failed to load emissive texture: " + input.emissivePath;
-            return result;
-        }
 
         if (progressCallback) progressCallback(0.6f);
 
@@ -362,7 +338,6 @@ namespace texture
             aoData.get(),
             roughnessData.get(),
             metallicData.get(),
-            emissiveData.get(),
             input.outputPath,
             progressCallback);
     }
@@ -374,7 +349,6 @@ namespace texture
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
-        const resource::TextureData* emissiveTexture,
         const std::string& outputPath,
         OrmPackProgressCallback progressCallback)
     {
@@ -385,7 +359,6 @@ namespace texture
         if (aoTexture) providedTextures.push_back(aoTexture);
         if (roughnessTexture) providedTextures.push_back(roughnessTexture);
         if (metallicTexture) providedTextures.push_back(metallicTexture);
-        if (emissiveTexture) providedTextures.push_back(emissiveTexture);
 
         // Validate dimensions
         uint32_t width, height;
@@ -404,17 +377,15 @@ namespace texture
             ? roughnessTexture->mipData[0] : emptyMip;
         const auto& metallicMip = (metallicTexture && !metallicTexture->mipData.empty())
             ? metallicTexture->mipData[0] : emptyMip;
-        const auto& emissiveMip = (emissiveTexture && !emissiveTexture->mipData.empty())
-            ? emissiveTexture->mipData[0] : emptyMip;
 
         // Validate mip data
-        if (!validateMipData(aoTexture, roughnessTexture, metallicTexture, emissiveTexture,
-                             aoMip, roughnessMip, metallicMip, emissiveMip, result.errorMessage))
+        if (!validateMipData(aoTexture, roughnessTexture, metallicTexture,
+                             aoMip, roughnessMip, metallicMip, result.errorMessage))
         {
             return result;
         }
 
-        // Create output texture
+        // Create output texture (RGBA for GPU compatibility, alpha unused)
         resource::TextureData ormTexture;
         ormTexture.width = width;
         ormTexture.height = height;
@@ -424,8 +395,8 @@ namespace texture
         // Pack pixels
         resource::MipLevelData ormMip;
         packPixels(ormMip, width, height,
-                   aoTexture, roughnessTexture, metallicTexture, emissiveTexture,
-                   aoMip, roughnessMip, metallicMip, emissiveMip,
+                   aoTexture, roughnessTexture, metallicTexture,
+                   aoMip, roughnessMip, metallicMip,
                    progressCallback);
         ormTexture.mipData.push_back(std::move(ormMip));
 

@@ -305,7 +305,6 @@ namespace editor::graph {
             addOutputPin("AO", material::PinType::Float);
             addOutputPin("Roughness", material::PinType::Float);
             addOutputPin("Metallic", material::PinType::Float);
-            addOutputPin("Emissive", material::PinType::Float);
         }
 
         std::string generateCode(const std::string& outputVarPrefix,
@@ -325,13 +324,11 @@ namespace editor::graph {
             texIndex = std::clamp(texIndex, 0, material::MAX_MATERIAL_TEXTURES - 1);
 
             std::string code;
-            // Sample the ORM texture
-            code += "vec4 " + outputVarPrefix + "ORME = texture(u_Textures[" + std::to_string(texIndex) + "], " + uvVar + ");\n";
-            // ORM format: R=AO, G=Roughness, B=Metallic, A=Emissive
-            code += "float " + outputVarPrefix + "AO = " + outputVarPrefix + "ORME.r;\n";
-            code += "float " + outputVarPrefix + "Roughness = " + outputVarPrefix + "ORME.g;\n";
-            code += "float " + outputVarPrefix + "Metallic = " + outputVarPrefix + "ORME.b;\n";
-            code += "float " + outputVarPrefix + "Emissive = " + outputVarPrefix + "ORME.a;\n";
+            // Sample the ORM texture (R=AO, G=Roughness, B=Metallic, A unused)
+            code += "vec4 " + outputVarPrefix + "ORM = texture(u_Textures[" + std::to_string(texIndex) + "], " + uvVar + ");\n";
+            code += "float " + outputVarPrefix + "AO = " + outputVarPrefix + "ORM.r;\n";
+            code += "float " + outputVarPrefix + "Roughness = " + outputVarPrefix + "ORM.g;\n";
+            code += "float " + outputVarPrefix + "Metallic = " + outputVarPrefix + "ORM.b;\n";
             return code;
         }
 
@@ -340,8 +337,7 @@ namespace editor::graph {
             if (pinName == "AO") return outputVarPrefix + "AO";
             if (pinName == "Roughness") return outputVarPrefix + "Roughness";
             if (pinName == "Metallic") return outputVarPrefix + "Metallic";
-            if (pinName == "Emissive") return outputVarPrefix + "Emissive";
-            return outputVarPrefix + "ORME";
+            return outputVarPrefix + "ORM";
         }
 
         std::string getOutputType([[maybe_unused]] const std::string& pinName) const override {

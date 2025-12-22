@@ -264,8 +264,8 @@ void main() {
     // Add emission
     vec3 emissive = vec3(0.0);
     if (hasTexture(SLOT_EMISSION)) {
-        // Convert emission from sRGB to linear
-        emissive = pow(texture(u_Textures[SLOT_EMISSION], fragTexCoord).rgb, vec3(2.2));
+        // Convert emission from sRGB to linear and apply emission strength
+        emissive = pow(texture(u_Textures[SLOT_EMISSION], fragTexCoord).rgb, vec3(2.2)) * pc.emission;
     } else {
         emissive = albedo * pc.emission;
     }

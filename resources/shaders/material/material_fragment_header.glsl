@@ -36,9 +36,9 @@ const int TEX_SLOT_AO = 5;
 const int TEX_SLOT_EMISSION = 6;
 const int TEX_SLOT_HEIGHT = 7;
 
-// Unpack ORM texture: R=AO, G=Roughness, B=Metallic
+// Unpack ORM texture: R=AO, G=Roughness, B=Metallic (A unused)
 vec3 unpackORM(vec4 ormSample) {
-    return vec3(ormSample.r, ormSample.g, ormSample.b); // AO, Roughness, Metallic
+    return ormSample.rgb; // AO, Roughness, Metallic
 }
 
 // PBR Functions

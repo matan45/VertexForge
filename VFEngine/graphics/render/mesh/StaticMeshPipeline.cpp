@@ -18,6 +18,7 @@
 #include "print/Logger.hpp"
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 namespace render::mesh
 {

@@ -19,15 +19,14 @@ namespace texture
         std::string aoPath;         // Optional - defaults to 255 (no occlusion)
         std::string roughnessPath;  // Optional - defaults to 128 (mid roughness)
         std::string metallicPath;   // Optional - defaults to 0 (non-metallic)
-        std::string emissivePath;   // Optional - defaults to 0 (no emission)
         std::string outputPath;     // Required
     };
 
     class OrmTexturePacker
     {
     public:
-        // Pack textures into a single ORME texture
-        // R = AO, G = Roughness, B = Metallic, A = Emissive
+        // Pack textures into a single ORM texture (RGBA for GPU compatibility)
+        // R = AO, G = Roughness, B = Metallic, A = 255 (unused)
         // All input textures are optional - missing ones use default values
         static OrmPackResult packORM(
             const OrmPackInput& input,
@@ -38,7 +37,6 @@ namespace texture
             const resource::TextureData* aoTexture,
             const resource::TextureData* roughnessTexture,
             const resource::TextureData* metallicTexture,
-            const resource::TextureData* emissiveTexture,
             const std::string& outputPath,
             OrmPackProgressCallback progressCallback = nullptr);
     };
