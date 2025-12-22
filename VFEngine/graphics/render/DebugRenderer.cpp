@@ -1,6 +1,7 @@
 #include "DebugRenderer.hpp"
-#include "mesh/AABBDebugRenderer.hpp"
-#include "mesh/FrustumDebugRenderer.hpp"
+#include "tools/AABBDebugRenderer.hpp"
+#include "tools/FrustumDebugRenderer.hpp"
+#include "tools/GridRenderer.hpp"
 
 namespace render
 {
@@ -9,6 +10,7 @@ namespace render
     {
         aabbRenderer = std::make_unique<mesh::AABBDebugRenderer>(device, swapChain);
         frustumRenderer = std::make_unique<mesh::FrustumDebugRenderer>(device, swapChain);
+        gridRenderer = std::make_unique<mesh::GridRenderer>(device, swapChain);
     }
 
     DebugRenderer::~DebugRenderer() = default;
@@ -17,6 +19,7 @@ namespace render
     {
         aabbRenderer->init(renderPass);
         frustumRenderer->init(renderPass);
+        gridRenderer->init(renderPass);
         initialized = true;
     }
 
@@ -24,6 +27,7 @@ namespace render
     {
         aabbRenderer->recreate(renderPass);
         frustumRenderer->recreate(renderPass);
+        gridRenderer->recreate(renderPass);
     }
 
     void DebugRenderer::cleanUp()
@@ -35,6 +39,10 @@ namespace render
         if (frustumRenderer)
         {
             frustumRenderer->cleanUp();
+        }
+        if (gridRenderer)
+        {
+            gridRenderer->cleanUp();
         }
         initialized = false;
     }
@@ -49,6 +57,10 @@ namespace render
         {
             frustumRenderer->cleanUpShader();
         }
+        if (gridRenderer)
+        {
+            gridRenderer->cleanUpShader();
+        }
     }
 
     void DebugRenderer::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
@@ -62,6 +74,12 @@ namespace render
                                 const glm::mat4& projection,
                                 const std::function<const mesh::MeshGPUData*(const std::string&)>& getMeshFunc) const
     {
+        // Render grid first (behind other debug visuals)
+        if (gridRenderer && showGrid)
+        {
+            gridRenderer->render(commandBuffer, view, projection);
+        }
+
         // Render AABB wireframes for meshes with showBoundingBox enabled
         if (aabbRenderer)
         {
@@ -72,6 +90,15 @@ namespace render
         if (frustumRenderer && !cameraFrustumDrawList.empty())
         {
             frustumRenderer->render(commandBuffer, cameraFrustumDrawList, view, projection);
+        }
+    }
+
+    void DebugRenderer::setShowGrid(bool show)
+    {
+        showGrid = show;
+        if (gridRenderer)
+        {
+            gridRenderer->setVisible(show);
         }
     }
 }

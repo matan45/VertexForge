@@ -132,9 +132,7 @@
     <ClInclude Include="render\material\MaterialPipeline.hpp" />
     <ClInclude Include="render\material\MaterialShaderCache.hpp" />
     <ClInclude Include="render\material\MaterialTextureCache.hpp" />
-    <ClInclude Include="render\mesh\AABBDebugRenderer.hpp" />
     <ClInclude Include="render\mesh\DefaultIBLTextureFactory.hpp" />
-    <ClInclude Include="render\mesh\FrustumDebugRenderer.hpp" />
     <ClInclude Include="render\mesh\MaterialCacheManager.hpp" />
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
@@ -142,6 +140,9 @@
     <ClInclude Include="render\occlusion\CameraRenderData.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
     <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
+    <ClInclude Include="render\tools\AABBDebugRenderer.hpp" />
+    <ClInclude Include="render\tools\FrustumDebugRenderer.hpp" />
+    <ClInclude Include="render\tools\GridRenderer.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Graphics.cpp" />
@@ -175,15 +176,16 @@
     <ClCompile Include="render\material\MaterialPipeline.cpp" />
     <ClCompile Include="render\material\MaterialShaderCache.cpp" />
     <ClCompile Include="render\material\MaterialTextureCache.cpp" />
-    <ClCompile Include="render\mesh\AABBDebugRenderer.cpp" />
     <ClCompile Include="render\mesh\DefaultIBLTextureFactory.cpp" />
-    <ClCompile Include="render\mesh\FrustumDebugRenderer.cpp" />
     <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
     <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
+    <ClCompile Include="render\tools\AABBDebugRenderer.cpp" />
+    <ClCompile Include="render\tools\FrustumDebugRenderer.cpp" />
+    <ClCompile Include="render\tools\GridRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />

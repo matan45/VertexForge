@@ -74,5 +74,9 @@ namespace controllers {
 		// Debug Rendering API
 		void setShowDebugRendering(bool show);
 		bool getShowDebugRendering() const;
+
+		// Grid API
+		void setShowGrid(bool show);
+		bool getShowGrid() const;
 	};
 }

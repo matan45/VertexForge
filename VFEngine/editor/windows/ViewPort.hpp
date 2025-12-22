@@ -47,6 +47,7 @@ namespace windows {
 
 	private:
 		void handleCameraInput();
+		void drawViewportOverlay();
 		void updateBillboardScreenPositions(glm::vec2 viewportPos, glm::vec2 viewportSize);
 		std::optional<services::EntityHandle> pickBillboardAt(glm::vec2 screenPos);
 

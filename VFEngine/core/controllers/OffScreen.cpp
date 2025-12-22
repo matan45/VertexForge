@@ -164,4 +164,14 @@ namespace controllers {
 	{
 		return offScreenController->getShowDebugRendering();
 	}
+
+	void OffScreen::setShowGrid(bool show)
+	{
+		offScreenController->setShowGrid(show);
+	}
+
+	bool OffScreen::getShowGrid() const
+	{
+		return offScreenController->getShowGrid();
+	}
 }

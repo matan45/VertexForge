@@ -8,7 +8,8 @@
 #include "../render/occlusion/OcclusionCullingManager.hpp"
 #include "../render/billboard/BillboardTypes.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
-#include "../render/mesh/FrustumDebugRenderer.hpp"
+#include "../render/tools/FrustumDebugRenderer.hpp"
+#include "../render/DebugRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "material/MaterialTypes.hpp"
@@ -753,5 +754,29 @@ namespace controllers
         stats.dynamicBvhNodeCount = sceneBVH.getDynamicNodeCount();
 
         return stats;
+    }
+
+    void OffScreenController::setShowGrid(bool show)
+    {
+        showGrid = show;
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler && renderHandler->isDebugRendererInitialized())
+        {
+            // Grid is hidden in play mode, regardless of showGrid setting
+            renderHandler->getDebugRenderer()->setShowGrid(show && !playModeActive);
+        }
+    }
+
+    void OffScreenController::setPlayMode(bool playMode)
+    {
+        playModeActive = playMode;
+
+        // Update grid visibility when entering/exiting play mode
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler && renderHandler->isDebugRendererInitialized())
+        {
+            // Grid is shown only if showGrid is true AND not in play mode
+            renderHandler->getDebugRenderer()->setShowGrid(showGrid && !playModeActive);
+        }
     }
 }

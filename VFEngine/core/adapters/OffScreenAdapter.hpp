@@ -65,6 +65,10 @@ namespace core
         void setShowDebugRendering(bool show) override;
         bool getShowDebugRendering() const override;
 
+        // Grid API
+        void setShowGrid(bool show) override;
+        bool getShowGrid() const override;
+
     private:
         bool playModeActive = false;
     };

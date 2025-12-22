@@ -349,6 +349,21 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowDebugRendering() : true;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShowGridCommand>(
+            [this](const events::render::SetShowGridCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowGrid(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowGridQuery>(
+            [this](const events::render::GetShowGridQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowGrid() : true;
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {

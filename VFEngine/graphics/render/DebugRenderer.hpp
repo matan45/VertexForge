@@ -17,6 +17,7 @@ namespace render::mesh
 {
     class AABBDebugRenderer;
     class FrustumDebugRenderer;
+    class GridRenderer;
     struct MeshRenderData;
     struct MeshGPUData;
     struct CameraFrustumRenderData;
@@ -24,10 +25,7 @@ namespace render::mesh
 
 namespace render
 {
-    /**
-     * Central debug visualization renderer.
-     * Manages all debug rendering tools (AABB wireframes, camera frustums, etc.)
-     */
+   
     class DebugRenderer
     {
     private:
@@ -36,11 +34,13 @@ namespace render
 
         std::unique_ptr<mesh::AABBDebugRenderer> aabbRenderer;
         std::unique_ptr<mesh::FrustumDebugRenderer> frustumRenderer;
+        std::unique_ptr<mesh::GridRenderer> gridRenderer;
 
         // Camera frustum draw list for current frame
         std::vector<mesh::CameraFrustumRenderData> cameraFrustumDrawList;
 
         bool initialized = false;
+        bool showGrid = true;
 
     public:
         DebugRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -69,6 +69,10 @@ namespace render
 
         // Set flag indicating if any meshes have showBoundingBox enabled
         void setHasBoundingBoxes(bool hasBoundingBoxes) { hasBoundingBoxesToRender = hasBoundingBoxes; }
+
+        // Grid visibility control
+        void setShowGrid(bool show);
+        bool getShowGrid() const { return showGrid; }
 
     private:
         bool hasBoundingBoxesToRender = false;

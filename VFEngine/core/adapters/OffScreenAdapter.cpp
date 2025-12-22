@@ -166,4 +166,14 @@ namespace core {
         return offScreen ? offScreen->getShowDebugRendering() : true;
     }
 
+    void OffScreenAdapter::setShowGrid(bool show) {
+        if (offScreen) {
+            offScreen->setShowGrid(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowGrid() const {
+        return offScreen ? offScreen->getShowGrid() : true;
+    }
+
 }

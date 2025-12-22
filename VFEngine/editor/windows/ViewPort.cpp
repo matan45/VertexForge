@@ -58,7 +58,10 @@ namespace windows {
 			if (texture.isValid()) {
 				ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
 			}
-			
+
+			// Draw viewport overlay (grid toggle, etc.)
+			drawViewportOverlay();
+
 			bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
 
 			// Update picking data
@@ -316,6 +319,53 @@ namespace windows {
 		}
 
 		return closestEntity;
+	}
+
+	void ViewPort::drawViewportOverlay()
+	{
+		auto& dispatcher = events::EventDispatcher::instance();
+		bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
+
+		// Don't show overlay controls in play mode
+		if (isPlayMode)
+		{
+			return;
+		}
+
+		// Position overlay in top-left of viewport content area
+		ImVec2 windowPos = ImGui::GetWindowPos();
+		ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
+		ImVec2 overlayPos = ImVec2(windowPos.x + contentMin.x + 8.0f,
+		                            windowPos.y + contentMin.y + 8.0f);
+
+		ImGui::SetNextWindowPos(overlayPos);
+		ImGui::SetNextWindowBgAlpha(0.7f);
+
+		ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration
+		                              | ImGuiWindowFlags_AlwaysAutoResize
+		                              | ImGuiWindowFlags_NoSavedSettings
+		                              | ImGuiWindowFlags_NoFocusOnAppearing
+		                              | ImGuiWindowFlags_NoNav
+		                              | ImGuiWindowFlags_NoMove;
+
+		if (ImGui::Begin("##ViewportOverlay", nullptr, overlayFlags))
+		{
+			// Grid toggle button
+			bool currentGridState = dispatcher.query(events::render::GetShowGridQuery{});
+
+			if (ImGui::Button(currentGridState ? "Grid: ON" : "Grid: OFF", ImVec2(80, 0)))
+			{
+				events::render::SetShowGridCommand cmd;
+				cmd.show = !currentGridState;
+				dispatcher.execute(cmd);
+			}
+
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Toggle 3D grid overlay (G)");
+			}
+		}
+		ImGui::End();
 	}
 
 }
