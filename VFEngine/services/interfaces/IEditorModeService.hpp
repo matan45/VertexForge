@@ -2,9 +2,7 @@
 #include "../data/EditorMode.hpp"
 
 namespace services {
-
-    // Editor mode service interface - manages Editor/Play/Pause mode state
-    // Used to disable editor-only features when in Play mode
+    
     class IEditorModeService {
     public:
         virtual ~IEditorModeService() = default;
@@ -25,7 +23,6 @@ namespace services {
 
         virtual bool isPlayMode() const = 0;
         virtual bool isEditMode() const = 0;
-        virtual bool isPauseMode() const = 0;
     };
 
 }

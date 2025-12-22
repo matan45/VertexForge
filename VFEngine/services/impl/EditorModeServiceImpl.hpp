@@ -17,7 +17,6 @@ namespace services {
         // Convenience Queries
         bool isPlayMode() const override;
         bool isEditMode() const override;
-        bool isPauseMode() const override;
 
     private:
         EditorMode currentMode = EditorMode::Edit;

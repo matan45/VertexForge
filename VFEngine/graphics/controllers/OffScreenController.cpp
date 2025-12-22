@@ -379,7 +379,6 @@ namespace controllers
                 renderData.roughness = 0.5f;
                 renderData.ao = 1.0f;
                 renderData.emission = 0.0f;
-                // Only show bounding boxes in Edit mode when debug rendering is enabled
                 renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
 
                 // Check for MaterialComponent
@@ -438,7 +437,6 @@ namespace controllers
                 renderData.roughness = 0.5f;
                 renderData.ao = 1.0f;
                 renderData.emission = 0.0f;
-                // Only show bounding boxes in Edit mode when debug rendering is enabled
                 renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
 
                 if (registry.all_of<components::MaterialComponent>(entity))
@@ -550,8 +548,7 @@ namespace controllers
     void OffScreenController::prepareFrameCameraFrustums()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-
-        // Skip frustum visualization in Play mode or when debug rendering is disabled
+        
         if (playModeActive || !showDebugRendering)
         {
             renderHandler->setCameraFrustumDrawList({});

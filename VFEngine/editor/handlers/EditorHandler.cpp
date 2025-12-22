@@ -54,17 +54,14 @@ namespace handlers {
 
 	void EditorHandler::cleanUp()
 	{
-		// Unsubscribe from events before cleanup
 		cleanupEventSubscriptions();
 
 		windowImguiHandler->cleanUp();
-
-		// Reset graphics-dependent services first
+		
 		previewService.reset();
 		renderService.reset();
 		sceneService.reset();
-
-		// Then reset state/utility services
+		
 		editorModeService.reset();
 		windowStateService.reset();
 		inputService.reset();

@@ -58,25 +58,23 @@ namespace windows {
 			if (texture.isValid()) {
 				ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
 			}
-
-			// Check if we're in Play mode - skip picking/selection in Play mode
+			
 			bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
 
-			// Update picking data (only in Edit mode)
+			// Update picking data
 			glm::vec2 vp(viewportPos.x, viewportPos.y);
 			glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
 			if (!isPlayMode) {
 				updateBillboardScreenPositions(vp, vs);
 				updateMeshPickData();
 			}
-
-			// Handle picking (only in Edit mode)
+			
 			if (!isPlayMode && ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
 				&& !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
 				ImVec2 mousePos = ImGui::GetMousePos();
 				glm::vec2 mp(mousePos.x, mousePos.y);
 
-				// Try billboard picking first (higher priority - smaller targets)
+				// Try billboard picking first 
 				auto picked = pickBillboardAt(mp);
 
 				// If no billboard hit, try mesh picking

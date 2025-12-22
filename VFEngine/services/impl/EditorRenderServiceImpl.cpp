@@ -333,8 +333,7 @@ namespace services
             {
                 return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
             });
-
-        // Debug rendering visibility command/query handlers
+        
         dispatcher.registerCommandHandler<events::render::SetShowDebugRenderingCommand>(
             [this](const events::render::SetShowDebugRenderingCommand& cmd)
             {
