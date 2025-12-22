@@ -4,6 +4,8 @@
 #include "data/EntityHandle.hpp"
 #include "data/DTOs.hpp"
 #include "math/Frustum.hpp"
+#include "imgui.h"
+#include "ImGuizmo.h"
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -13,14 +15,23 @@
 
 namespace windows {
 
-	// Viewport toolbar icon indices in the atlas (5 columns x 1 row)
+	// Viewport toolbar icon indices in the atlas
 	enum class ViewportIcon : uint32_t
 	{
 		Grid = 0,
-		Move = 1,
+		World = 1,
 		Rotate = 2,
 		Scale = 3,
 		Translate = 4
+	};
+
+	// Gizmo operation modes
+	enum class GizmoOperation
+	{
+		None,
+		Translate,
+		Rotate,
+		Scale
 	};
 
 	struct BillboardScreenHit {
@@ -55,6 +66,10 @@ namespace windows {
 		static constexpr uint32_t ATLAS_ROWS = 4;
 		static constexpr float ICON_SIZE = 32.0f;
 
+		// Gizmo state
+		GizmoOperation currentGizmoOp = GizmoOperation::None;
+		ImGuizmo::MODE currentGizmoMode = ImGuizmo::LOCAL;
+
 	public:
 		explicit ViewPort();
 		~ViewPort() override;
@@ -76,5 +91,10 @@ namespace windows {
 		void loadIconAtlas();
 		std::pair<glm::vec2, glm::vec2> getIconUV(ViewportIcon icon) const;
 		bool iconButton(ViewportIcon icon, bool isActive, const char* tooltip);
+
+		// Gizmo methods
+		void drawGizmo();
+		glm::mat4 buildTransformMatrix(const services::TransformData& transform) const;
+		services::TransformData decomposeTransformMatrix(const glm::mat4& matrix) const;
 	};
 }

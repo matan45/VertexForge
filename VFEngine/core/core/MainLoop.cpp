@@ -11,6 +11,7 @@
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 #include <imgui_impl_glfw.h>
+#include <ImGuizmo.h>
 
 namespace core {
 
@@ -82,6 +83,7 @@ namespace core {
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
+		ImGuizmo::BeginFrame();
 	}
 
 	void MainLoop::endFrame() const

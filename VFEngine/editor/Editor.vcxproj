@@ -143,6 +143,7 @@
     <None Include="..\..\resources\editor\VertexForge-logo.vfImage" />
     <None Include="..\..\resources\editor\atlasIcons.vfImage" />
     <None Include="..\..\resources\editor\billboardAtlas.vfImage" />
+    <None Include="..\..\resources\editor\viewPortAtlasIcons.vfImage" />
     <None Include="..\..\resources\editor\window-icon.vfImage" />
   </ItemGroup>
   <ItemGroup>
