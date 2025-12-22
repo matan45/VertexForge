@@ -91,9 +91,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="data\DTOs.hpp" />
+    <ClInclude Include="data\EditorMode.hpp" />
     <ClInclude Include="data\EntityConversion.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />
     <ClInclude Include="events\ApplicationEvents.hpp" />
+    <ClInclude Include="events\EditorModeEvents.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
     <ClInclude Include="events\InputEvents.hpp" />
@@ -102,6 +104,7 @@
     <ClInclude Include="events\RenderEvents.hpp" />
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
+    <ClInclude Include="impl\EditorModeServiceImpl.hpp" />
     <ClInclude Include="impl\EditorRenderServiceImpl.hpp" />
     <ClInclude Include="impl\InputServiceImpl.hpp" />
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
@@ -110,6 +113,7 @@
     <ClInclude Include="impl\WindowStateServiceImpl.hpp" />
     <ClInclude Include="interfaces\IAnimationService.hpp" />
     <ClInclude Include="interfaces\IAudioService.hpp" />
+    <ClInclude Include="interfaces\IEditorModeService.hpp" />
     <ClInclude Include="interfaces\IEditorRenderService.hpp" />
     <ClInclude Include="interfaces\IInputService.hpp" />
     <ClInclude Include="interfaces\IPhysicsService.hpp" />
@@ -127,6 +131,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="events\EventDispatcher.cpp" />
+    <ClCompile Include="impl\EditorModeServiceImpl.cpp" />
     <ClCompile Include="impl\EditorRenderServiceImpl.cpp" />
     <ClCompile Include="impl\InputServiceImpl.cpp" />
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />

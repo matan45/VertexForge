@@ -5,6 +5,7 @@
 #include "impl/InputServiceImpl.hpp"
 #include "impl/WindowStateServiceImpl.hpp"
 #include "impl/PreviewServiceImpl.hpp"
+#include "impl/EditorModeServiceImpl.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -53,18 +54,18 @@ namespace handlers {
 
 	void EditorHandler::cleanUp()
 	{
-		// Unsubscribe from events before cleanup
 		cleanupEventSubscriptions();
 
 		windowImguiHandler->cleanUp();
-
-		// Reset services before graphics cleanup to release Vulkan resources
+		
 		previewService.reset();
 		renderService.reset();
 		sceneService.reset();
+		
+		editorModeService.reset();
 		windowStateService.reset();
 		inputService.reset();
-		
+
 		bootstrap->cleanUp();
 	}
 
@@ -82,6 +83,7 @@ namespace handlers {
 			bootstrap->getMaterialPreviewProvider(),
 			bootstrap->getMeshPreviewProvider()
 		);
+		editorModeService = std::make_shared<services::EditorModeServiceImpl>();
 
 		// Register event handlers for command/query pattern
 		sceneService->registerEventHandlers();
@@ -89,7 +91,8 @@ namespace handlers {
 		inputService->registerEventHandlers();
 		windowStateService->registerEventHandlers();
 		previewService->registerEventHandlers();
-		
+		editorModeService->registerEventHandlers();
+
 		events::render::LoadBillboardAtlasCommand atlasCmd;
 		atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
 		events::EventDispatcher::instance().execute(atlasCmd);

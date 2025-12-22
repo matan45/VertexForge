@@ -145,4 +145,25 @@ namespace core {
         return offScreen ? offScreen->getCullingStats() : services::CullingDebugStats{};
     }
 
+    void OffScreenAdapter::setPlayMode(bool playMode) {
+        playModeActive = playMode;
+        if (offScreen) {
+            offScreen->setPlayMode(playMode);
+        }
+    }
+
+    bool OffScreenAdapter::isPlayMode() const {
+        return playModeActive;
+    }
+
+    void OffScreenAdapter::setShowDebugRendering(bool show) {
+        if (offScreen) {
+            offScreen->setShowDebugRendering(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowDebugRendering() const {
+        return offScreen ? offScreen->getShowDebugRendering() : true;
+    }
+
 }

@@ -7,6 +7,7 @@
 #include "interfaces/IInputService.hpp"
 #include "interfaces/IWindowStateService.hpp"
 #include "interfaces/IPreviewService.hpp"
+#include "interfaces/IEditorModeService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -28,6 +29,7 @@ namespace handlers {
 		std::shared_ptr<services::IInputService> inputService;
 		std::shared_ptr<services::IWindowStateService> windowStateService;
 		std::shared_ptr<services::IPreviewService> previewService;
+		std::shared_ptr<services::IEditorModeService> editorModeService;
 		
 		events::SubscriptionToken resizeSubscription;
 		events::SubscriptionToken minimizeSubscription;

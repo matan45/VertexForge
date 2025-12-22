@@ -1,5 +1,6 @@
 #include "EditorRenderServiceImpl.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../events/EditorModeEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <filesystem>
 
@@ -10,6 +11,21 @@ namespace services
         : offScreenProvider(offScreenProvider)
           , textureProvider(textureProvider)
     {
+    }
+
+    EditorRenderServiceImpl::~EditorRenderServiceImpl()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (meshDataChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(meshDataChangedToken);
+        }
+
+        if (editorModeChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(editorModeChangedToken);
+        }
     }
 
     ViewportTextureHandle EditorRenderServiceImpl::getViewportTexture()
@@ -317,6 +333,21 @@ namespace services
             {
                 return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
             });
+        
+        dispatcher.registerCommandHandler<events::render::SetShowDebugRenderingCommand>(
+            [this](const events::render::SetShowDebugRenderingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowDebugRendering(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowDebugRenderingQuery>(
+            [this](const events::render::GetShowDebugRenderingQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowDebugRendering() : true;
+            });
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
@@ -324,6 +355,16 @@ namespace services
                 if (!notification.meshPath.empty() && !isMeshLoaded(notification.meshPath))
                 {
                     loadMesh(notification.meshPath);
+                }
+            });
+
+        editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
+            [this](const events::editor::EditorModeChangedNotification& notification)
+            {
+                if (offScreenProvider)
+                {
+                    bool isPlayMode = notification.currentMode == services::EditorMode::Play;
+                    offScreenProvider->setPlayMode(isPlayMode);
                 }
             });
     }
@@ -403,17 +444,21 @@ namespace services
 
     void EditorRenderServiceImpl::prepareFrameBillboards()
     {
-        if (offScreenProvider)
+        if (!offScreenProvider)
         {
-            offScreenProvider->prepareFrameBillboards();
+            return;
         }
+
+        offScreenProvider->prepareFrameBillboards();
     }
 
     void EditorRenderServiceImpl::prepareFrameCameraFrustums()
     {
-        if (offScreenProvider)
+        if (!offScreenProvider)
         {
-            offScreenProvider->prepareFrameCameraFrustums();
+            return;
         }
+
+        offScreenProvider->prepareFrameCameraFrustums();
     }
 }

@@ -379,7 +379,7 @@ namespace controllers
                 renderData.roughness = 0.5f;
                 renderData.ao = 1.0f;
                 renderData.emission = 0.0f;
-                renderData.showBoundingBox = meshComp.showBoundingBox;
+                renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
 
                 // Check for MaterialComponent
                 if (registry.all_of<components::MaterialComponent>(entity))
@@ -437,7 +437,7 @@ namespace controllers
                 renderData.roughness = 0.5f;
                 renderData.ao = 1.0f;
                 renderData.emission = 0.0f;
-                renderData.showBoundingBox = meshComp.showBoundingBox;
+                renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
 
                 if (registry.all_of<components::MaterialComponent>(entity))
                 {
@@ -509,7 +509,7 @@ namespace controllers
         // Lazy initialize billboard pipeline if needed
         renderHandler->initBillboardPipeline();
 
-        if (!showBillboardIcons || !renderHandler->isBillboardPipelineInitialized())
+        if (playModeActive || !showBillboardIcons || !renderHandler->isBillboardPipelineInitialized())
         {
             renderHandler->setBillboardDrawList({});
             return;
@@ -548,9 +548,15 @@ namespace controllers
     void OffScreenController::prepareFrameCameraFrustums()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
+        
+        if (playModeActive || !showDebugRendering)
+        {
+            renderHandler->setCameraFrustumDrawList({});
+            return;
+        }
 
         std::vector<render::mesh::CameraFrustumRenderData> frustumDrawList;
-        
+
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::CameraComponent, components::WorldTransformComponent>();
 

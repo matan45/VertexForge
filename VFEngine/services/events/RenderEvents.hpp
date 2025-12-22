@@ -160,6 +160,24 @@ namespace events::render {
     };
 
     // ============================================
+    // DEBUG RENDERING COMMANDS
+    // ============================================
+
+    struct SetShowDebugRenderingCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowDebugRendering"; }
+    };
+
+    // ============================================
+    // DEBUG RENDERING QUERIES
+    // ============================================
+
+    struct GetShowDebugRenderingQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowDebugRendering"; }
+    };
+
+    // ============================================
     // DEBUG/STATS QUERIES
     // ============================================
 

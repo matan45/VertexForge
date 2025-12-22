@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/EditorModeEvents.hpp"
 #include "time/Timer.hpp"
 #include "imgui.h"
 #include "scene/EntityRegistry.hpp"
@@ -51,25 +52,29 @@ namespace windows {
 			dispatcher.execute(meshCameraCmd);
 			
 			ImVec2 viewportPos = ImGui::GetCursorScreenPos();
-			
+
 			events::render::GetViewportTextureQuery query;
 			auto texture = dispatcher.query(query);
 			if (texture.isValid()) {
 				ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
 			}
+			
+			bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
 
 			// Update picking data
 			glm::vec2 vp(viewportPos.x, viewportPos.y);
 			glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
-			updateBillboardScreenPositions(vp, vs);
-			updateMeshPickData();
+			if (!isPlayMode) {
+				updateBillboardScreenPositions(vp, vs);
+				updateMeshPickData();
+			}
 			
-			if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+			if (!isPlayMode && ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
 				&& !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
 				ImVec2 mousePos = ImGui::GetMousePos();
 				glm::vec2 mp(mousePos.x, mousePos.y);
 
-				// Try billboard picking first (higher priority - smaller targets)
+				// Try billboard picking first 
 				auto picked = pickBillboardAt(mp);
 
 				// If no billboard hit, try mesh picking

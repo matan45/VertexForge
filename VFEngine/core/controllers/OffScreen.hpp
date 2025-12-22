@@ -66,5 +66,13 @@ namespace controllers {
 
 		// Debug/Stats API
 		services::CullingDebugStats getCullingStats() const;
+
+		// Editor Mode API
+		void setPlayMode(bool playMode);
+		bool isPlayMode() const;
+
+		// Debug Rendering API
+		void setShowDebugRendering(bool show);
+		bool getShowDebugRendering() const;
 	};
 }
