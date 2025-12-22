@@ -41,10 +41,5 @@ namespace texture
             const resource::TextureData* emissiveTexture,
             const std::string& outputPath,
             OrmPackProgressCallback progressCallback = nullptr);
-
-    private:
-        static uint8_t getGrayscaleValue(const resource::MipLevelData& mipData,
-                                          uint32_t x, uint32_t y,
-                                          uint32_t width, uint32_t channels);
     };
 }

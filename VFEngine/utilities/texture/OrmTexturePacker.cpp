@@ -12,190 +12,114 @@ namespace texture
     constexpr uint8_t DEFAULT_METALLIC = 0;    // Non-metallic
     constexpr uint8_t DEFAULT_EMISSIVE = 255;  // Full alpha (visible in previews), shader treats as no emission
 
-    OrmPackResult OrmTexturePacker::packORM(
-        const OrmPackInput& input,
-        OrmPackProgressCallback progressCallback)
+    // ============================================================================
+    // Helper: Get grayscale value from mip data
+    // ============================================================================
+    static uint8_t getGrayscaleValue(const resource::MipLevelData& mipData,
+                                     uint32_t x, uint32_t y,
+                                     uint32_t width, [[maybe_unused]] uint32_t channels)
     {
-        OrmPackResult result;
-
-        if (input.outputPath.empty())
+        // Early return for empty data
+        if (mipData.data.empty())
         {
-            result.errorMessage = "Output path is required";
-            return result;
+            return 128; // Default mid-gray
         }
 
-        // Check if at least one texture is provided
-        bool hasAo = !input.aoPath.empty();
-        bool hasRoughness = !input.roughnessPath.empty();
-        bool hasMetallic = !input.metallicPath.empty();
-        bool hasEmissive = !input.emissivePath.empty();
-
-        if (!hasAo && !hasRoughness && !hasMetallic && !hasEmissive)
+        // TGAReader always outputs RGBA (4 channels per pixel)
+        uint32_t idx = (y * width + x) * 4;
+        if (idx >= mipData.data.size())
         {
-            result.errorMessage = "At least one texture must be provided to determine output dimensions";
-            return result;
+            return 128; // Default mid-gray if out of bounds
         }
 
-        if (progressCallback) progressCallback(0.0f);
-
-        // Load provided textures asynchronously
-        std::future<std::shared_ptr<resource::TextureData>> aoFuture;
-        std::future<std::shared_ptr<resource::TextureData>> roughnessFuture;
-        std::future<std::shared_ptr<resource::TextureData>> metallicFuture;
-        std::future<std::shared_ptr<resource::TextureData>> emissiveFuture;
-
-        if (hasAo) aoFuture = resource::ResourceManager::loadTextureAsync(input.aoPath);
-        if (hasRoughness) roughnessFuture = resource::ResourceManager::loadTextureAsync(input.roughnessPath);
-        if (hasMetallic) metallicFuture = resource::ResourceManager::loadTextureAsync(input.metallicPath);
-        if (hasEmissive) emissiveFuture = resource::ResourceManager::loadTextureAsync(input.emissivePath);
-
-        if (progressCallback) progressCallback(0.1f);
-
-        // Get loaded textures
-        std::shared_ptr<resource::TextureData> aoData;
-        std::shared_ptr<resource::TextureData> roughnessData;
-        std::shared_ptr<resource::TextureData> metallicData;
-        std::shared_ptr<resource::TextureData> emissiveData;
-
-        if (hasAo)
-        {
-            aoData = aoFuture.get();
-            if (!aoData || aoData->textureData().empty())
-            {
-                result.errorMessage = "Failed to load AO texture: " + input.aoPath;
-                return result;
-            }
-        }
-
-        if (progressCallback) progressCallback(0.25f);
-
-        if (hasRoughness)
-        {
-            roughnessData = roughnessFuture.get();
-            if (!roughnessData || roughnessData->textureData().empty())
-            {
-                result.errorMessage = "Failed to load roughness texture: " + input.roughnessPath;
-                return result;
-            }
-        }
-
-        if (progressCallback) progressCallback(0.4f);
-
-        if (hasMetallic)
-        {
-            metallicData = metallicFuture.get();
-            if (!metallicData || metallicData->textureData().empty())
-            {
-                result.errorMessage = "Failed to load metallic texture: " + input.metallicPath;
-                return result;
-            }
-        }
-
-        if (progressCallback) progressCallback(0.5f);
-
-        if (hasEmissive)
-        {
-            emissiveData = emissiveFuture.get();
-            if (!emissiveData || emissiveData->textureData().empty())
-            {
-                result.errorMessage = "Failed to load emissive texture: " + input.emissivePath;
-                return result;
-            }
-        }
-
-        if (progressCallback) progressCallback(0.6f);
-
-        return packORMFromData(
-            aoData.get(),
-            roughnessData.get(),
-            metallicData.get(),
-            emissiveData.get(),
-            input.outputPath,
-            progressCallback);
+        // Use red channel (first channel after B<->R swap in TGAReader)
+        return mipData.data[idx];
     }
 
-    OrmPackResult OrmTexturePacker::packORMFromData(
+    // ============================================================================
+    // Helper: Validate texture dimensions match
+    // ============================================================================
+    static bool validateTextureDimensions(
+        const std::vector<const resource::TextureData*>& textures,
+        uint32_t& outWidth,
+        uint32_t& outHeight,
+        std::string& errorMessage)
+    {
+        if (textures.empty())
+        {
+            errorMessage = "At least one texture must be provided to determine output dimensions";
+            return false;
+        }
+
+        outWidth = textures[0]->width;
+        outHeight = textures[0]->height;
+
+        for (size_t i = 1; i < textures.size(); ++i)
+        {
+            if (textures[i]->width != outWidth || textures[i]->height != outHeight)
+            {
+                errorMessage = "Texture dimensions do not match. All provided textures must have the same size.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // ============================================================================
+    // Helper: Validate mip data exists for provided textures
+    // ============================================================================
+    static bool validateMipData(
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
         const resource::TextureData* emissiveTexture,
-        const std::string& outputPath,
-        OrmPackProgressCallback progressCallback)
+        const resource::MipLevelData& aoMip,
+        const resource::MipLevelData& roughnessMip,
+        const resource::MipLevelData& metallicMip,
+        const resource::MipLevelData& emissiveMip,
+        std::string& errorMessage)
     {
-        OrmPackResult result;
-
-        // Collect all provided textures to determine dimensions
-        std::vector<const resource::TextureData*> providedTextures;
-        if (aoTexture) providedTextures.push_back(aoTexture);
-        if (roughnessTexture) providedTextures.push_back(roughnessTexture);
-        if (metallicTexture) providedTextures.push_back(metallicTexture);
-        if (emissiveTexture) providedTextures.push_back(emissiveTexture);
-
-        if (providedTextures.empty())
-        {
-            result.errorMessage = "At least one texture must be provided to determine output dimensions";
-            return result;
-        }
-
-        // Get dimensions from first provided texture
-        uint32_t width = providedTextures[0]->width;
-        uint32_t height = providedTextures[0]->height;
-
-        // Validate all provided textures have matching dimensions
-        for (size_t i = 1; i < providedTextures.size(); ++i)
-        {
-            if (providedTextures[i]->width != width || providedTextures[i]->height != height)
-            {
-                result.errorMessage = "Texture dimensions do not match. All provided textures must have the same size.";
-                return result;
-            }
-        }
-
-        if (progressCallback) progressCallback(0.65f);
-
-        // Create output texture data
-        resource::TextureData ormTexture;
-        ormTexture.width = width;
-        ormTexture.height = height;
-        ormTexture.numbersOfChannels = 4; // RGBA output
-        ormTexture.mipLevels = 1;
-
-        // Get mip level 0 data from each provided texture
-        resource::MipLevelData emptyMip;
-        const auto& aoMip = (aoTexture && !aoTexture->mipData.empty())
-            ? aoTexture->mipData[0] : emptyMip;
-        const auto& roughnessMip = (roughnessTexture && !roughnessTexture->mipData.empty())
-            ? roughnessTexture->mipData[0] : emptyMip;
-        const auto& metallicMip = (metallicTexture && !metallicTexture->mipData.empty())
-            ? metallicTexture->mipData[0] : emptyMip;
-        const auto& emissiveMip = (emissiveTexture && !emissiveTexture->mipData.empty())
-            ? emissiveTexture->mipData[0] : emptyMip;
-
-        // Validate provided textures have mip data
         if (aoTexture && aoMip.data.empty())
         {
-            result.errorMessage = "AO texture has no mip level 0 data";
-            return result;
+            errorMessage = "AO texture has no mip level 0 data";
+            return false;
         }
         if (roughnessTexture && roughnessMip.data.empty())
         {
-            result.errorMessage = "Roughness texture has no mip level 0 data";
-            return result;
+            errorMessage = "Roughness texture has no mip level 0 data";
+            return false;
         }
         if (metallicTexture && metallicMip.data.empty())
         {
-            result.errorMessage = "Metallic texture has no mip level 0 data";
-            return result;
+            errorMessage = "Metallic texture has no mip level 0 data";
+            return false;
         }
         if (emissiveTexture && emissiveMip.data.empty())
         {
-            result.errorMessage = "Emissive texture has no mip level 0 data";
-            return result;
+            errorMessage = "Emissive texture has no mip level 0 data";
+            return false;
         }
+        return true;
+    }
 
-        // Pack textures in BGR format (TGAReader swaps B<->R on load)
-        // After load: R=AO, G=Roughness, B=Metallic, A=Emissive
-        resource::MipLevelData ormMip;
+    // ============================================================================
+    // Helper: Pack pixels from source textures into ORM format
+    // ============================================================================
+    static void packPixels(
+        resource::MipLevelData& ormMip,
+        uint32_t width,
+        uint32_t height,
+        const resource::TextureData* aoTexture,
+        const resource::TextureData* roughnessTexture,
+        const resource::TextureData* metallicTexture,
+        const resource::TextureData* emissiveTexture,
+        const resource::MipLevelData& aoMip,
+        const resource::MipLevelData& roughnessMip,
+        const resource::MipLevelData& metallicMip,
+        const resource::MipLevelData& emissiveMip,
+        OrmPackProgressCallback progressCallback)
+    {
         ormMip.width = width;
         ormMip.height = height;
         ormMip.data.resize(width * height * 4);
@@ -221,10 +145,10 @@ namespace texture
                     : DEFAULT_EMISSIVE;
 
                 // Write in BGR order - TGAReader will swap [0] and [2] to get RGB
-                ormMip.data[outIdx + 0] = metallic; // B position -> becomes R after swap
+                ormMip.data[outIdx + 0] = metallic;  // B position -> becomes R after swap
                 ormMip.data[outIdx + 1] = roughness; // G = Roughness (unchanged)
-                ormMip.data[outIdx + 2] = ao; // R position -> becomes B after swap
-                ormMip.data[outIdx + 3] = emissive; // A = Emissive intensity
+                ormMip.data[outIdx + 2] = ao;        // R position -> becomes B after swap
+                ormMip.data[outIdx + 3] = emissive;  // A = Emissive intensity
             }
 
             if (progressCallback && (y % (height / 10 + 1) == 0))
@@ -233,12 +157,16 @@ namespace texture
                 progressCallback(0.65f + packProgress * 0.25f);
             }
         }
+    }
 
-        ormTexture.mipData.push_back(std::move(ormMip));
+    // ============================================================================
+    // Helper: Generate mipmaps using box filter
+    // ============================================================================
+    static void generateMipmaps(resource::TextureData& ormTexture)
+    {
+        uint32_t mipWidth = ormTexture.width;
+        uint32_t mipHeight = ormTexture.height;
 
-        // Generate mipmaps using box filter
-        uint32_t mipWidth = width;
-        uint32_t mipHeight = height;
         while (mipWidth > 1 || mipHeight > 1)
         {
             const auto& srcMip = ormTexture.mipData.back();
@@ -276,6 +204,12 @@ namespace texture
                         }
                     }
 
+                    // Safety check to prevent division by zero
+                    if (samples == 0)
+                    {
+                        continue;
+                    }
+
                     uint32_t dstIdx = (y * newWidth + x) * 4;
                     newMip.data[dstIdx + 0] = static_cast<uint8_t>(sumR / samples);
                     newMip.data[dstIdx + 1] = static_cast<uint8_t>(sumG / samples);
@@ -290,10 +224,16 @@ namespace texture
         }
 
         ormTexture.mipLevels = static_cast<uint32_t>(ormTexture.mipData.size());
+    }
 
-        if (progressCallback) progressCallback(0.9f);
-
-        // Save to file
+    // ============================================================================
+    // Helper: Serialize texture to file
+    // ============================================================================
+    static bool serializeToFile(
+        const resource::TextureData& ormTexture,
+        const std::string& outputPath,
+        std::string& errorMessage)
+    {
         try
         {
             std::filesystem::path outPath(outputPath);
@@ -302,8 +242,8 @@ namespace texture
             std::ofstream file(outputPath, std::ios::binary);
             if (!file)
             {
-                result.errorMessage = "Failed to create output file: " + outputPath;
-                return result;
+                errorMessage = "Failed to create output file: " + outputPath;
+                return false;
             }
 
             // Write header (version 0.0.3 = mip format expected by TextureResource loader)
@@ -320,44 +260,192 @@ namespace texture
             uint32_t mipLevels = static_cast<uint32_t>(ormTexture.mipData.size());
             file.write(reinterpret_cast<const char*>(&mipLevels), sizeof(mipLevels));
 
-            // Write mip data (TGAReader expects just width, height, then raw pixel data)
+            // Write mip data
             for (const auto& mip : ormTexture.mipData)
             {
                 file.write(reinterpret_cast<const char*>(&mip.width), sizeof(mip.width));
                 file.write(reinterpret_cast<const char*>(&mip.height), sizeof(mip.height));
-                // No dataSize prefix - TGAReader calculates size as width*height*4
                 file.write(reinterpret_cast<const char*>(mip.data.data()), mip.data.size());
             }
 
             file.close();
-
-            result.success = true;
-            result.outputPath = outputPath;
+            return true;
         }
         catch (const std::exception& e)
         {
-            result.errorMessage = std::string("Exception while saving ORM texture: ") + e.what();
+            errorMessage = std::string("Exception while saving ORM texture: ") + e.what();
+            return false;
+        }
+    }
+
+    // ============================================================================
+    // Public: Pack ORM from file paths
+    // ============================================================================
+    OrmPackResult OrmTexturePacker::packORM(
+        const OrmPackInput& input,
+        OrmPackProgressCallback progressCallback)
+    {
+        OrmPackResult result;
+
+        if (input.outputPath.empty())
+        {
+            result.errorMessage = "Output path is required";
             return result;
         }
+
+        // Check if at least one texture is provided
+        bool hasAo = !input.aoPath.empty();
+        bool hasRoughness = !input.roughnessPath.empty();
+        bool hasMetallic = !input.metallicPath.empty();
+        bool hasEmissive = !input.emissivePath.empty();
+
+        if (!hasAo && !hasRoughness && !hasMetallic && !hasEmissive)
+        {
+            result.errorMessage = "At least one texture must be provided to determine output dimensions";
+            return result;
+        }
+
+        if (progressCallback) progressCallback(0.0f);
+
+        // Start all async loads in parallel - maximize I/O parallelism
+        std::future<std::shared_ptr<resource::TextureData>> aoFuture;
+        std::future<std::shared_ptr<resource::TextureData>> roughnessFuture;
+        std::future<std::shared_ptr<resource::TextureData>> metallicFuture;
+        std::future<std::shared_ptr<resource::TextureData>> emissiveFuture;
+
+        if (hasAo) aoFuture = resource::ResourceManager::loadTextureAsync(input.aoPath);
+        if (hasRoughness) roughnessFuture = resource::ResourceManager::loadTextureAsync(input.roughnessPath);
+        if (hasMetallic) metallicFuture = resource::ResourceManager::loadTextureAsync(input.metallicPath);
+        if (hasEmissive) emissiveFuture = resource::ResourceManager::loadTextureAsync(input.emissivePath);
+
+        if (progressCallback) progressCallback(0.1f);
+
+        // Now wait for all futures - I/O happens in parallel while we wait
+        std::shared_ptr<resource::TextureData> aoData;
+        std::shared_ptr<resource::TextureData> roughnessData;
+        std::shared_ptr<resource::TextureData> metallicData;
+        std::shared_ptr<resource::TextureData> emissiveData;
+
+        // Collect results - by the time we call .get(), most/all loads should be complete
+        if (hasAo) aoData = aoFuture.get();
+        if (hasRoughness) roughnessData = roughnessFuture.get();
+        if (hasMetallic) metallicData = metallicFuture.get();
+        if (hasEmissive) emissiveData = emissiveFuture.get();
+
+        if (progressCallback) progressCallback(0.5f);
+
+        // Validate loaded textures
+        if (hasAo && (!aoData || aoData->textureData().empty()))
+        {
+            result.errorMessage = "Failed to load AO texture: " + input.aoPath;
+            return result;
+        }
+        if (hasRoughness && (!roughnessData || roughnessData->textureData().empty()))
+        {
+            result.errorMessage = "Failed to load roughness texture: " + input.roughnessPath;
+            return result;
+        }
+        if (hasMetallic && (!metallicData || metallicData->textureData().empty()))
+        {
+            result.errorMessage = "Failed to load metallic texture: " + input.metallicPath;
+            return result;
+        }
+        if (hasEmissive && (!emissiveData || emissiveData->textureData().empty()))
+        {
+            result.errorMessage = "Failed to load emissive texture: " + input.emissivePath;
+            return result;
+        }
+
+        if (progressCallback) progressCallback(0.6f);
+
+        return packORMFromData(
+            aoData.get(),
+            roughnessData.get(),
+            metallicData.get(),
+            emissiveData.get(),
+            input.outputPath,
+            progressCallback);
+    }
+
+    // ============================================================================
+    // Public: Pack ORM from loaded texture data
+    // ============================================================================
+    OrmPackResult OrmTexturePacker::packORMFromData(
+        const resource::TextureData* aoTexture,
+        const resource::TextureData* roughnessTexture,
+        const resource::TextureData* metallicTexture,
+        const resource::TextureData* emissiveTexture,
+        const std::string& outputPath,
+        OrmPackProgressCallback progressCallback)
+    {
+        OrmPackResult result;
+
+        // Collect provided textures
+        std::vector<const resource::TextureData*> providedTextures;
+        if (aoTexture) providedTextures.push_back(aoTexture);
+        if (roughnessTexture) providedTextures.push_back(roughnessTexture);
+        if (metallicTexture) providedTextures.push_back(metallicTexture);
+        if (emissiveTexture) providedTextures.push_back(emissiveTexture);
+
+        // Validate dimensions
+        uint32_t width, height;
+        if (!validateTextureDimensions(providedTextures, width, height, result.errorMessage))
+        {
+            return result;
+        }
+
+        if (progressCallback) progressCallback(0.65f);
+
+        // Get mip level 0 data from each provided texture
+        resource::MipLevelData emptyMip;
+        const auto& aoMip = (aoTexture && !aoTexture->mipData.empty())
+            ? aoTexture->mipData[0] : emptyMip;
+        const auto& roughnessMip = (roughnessTexture && !roughnessTexture->mipData.empty())
+            ? roughnessTexture->mipData[0] : emptyMip;
+        const auto& metallicMip = (metallicTexture && !metallicTexture->mipData.empty())
+            ? metallicTexture->mipData[0] : emptyMip;
+        const auto& emissiveMip = (emissiveTexture && !emissiveTexture->mipData.empty())
+            ? emissiveTexture->mipData[0] : emptyMip;
+
+        // Validate mip data
+        if (!validateMipData(aoTexture, roughnessTexture, metallicTexture, emissiveTexture,
+                             aoMip, roughnessMip, metallicMip, emissiveMip, result.errorMessage))
+        {
+            return result;
+        }
+
+        // Create output texture
+        resource::TextureData ormTexture;
+        ormTexture.width = width;
+        ormTexture.height = height;
+        ormTexture.numbersOfChannels = 4;
+        ormTexture.mipLevels = 1;
+
+        // Pack pixels
+        resource::MipLevelData ormMip;
+        packPixels(ormMip, width, height,
+                   aoTexture, roughnessTexture, metallicTexture, emissiveTexture,
+                   aoMip, roughnessMip, metallicMip, emissiveMip,
+                   progressCallback);
+        ormTexture.mipData.push_back(std::move(ormMip));
+
+        // Generate mipmaps
+        generateMipmaps(ormTexture);
+
+        if (progressCallback) progressCallback(0.9f);
+
+        // Serialize to file
+        if (!serializeToFile(ormTexture, outputPath, result.errorMessage))
+        {
+            return result;
+        }
+
+        result.success = true;
+        result.outputPath = outputPath;
 
         if (progressCallback) progressCallback(1.0f);
 
         return result;
     }
 
-    uint8_t OrmTexturePacker::getGrayscaleValue(const resource::MipLevelData& mipData,
-                                                uint32_t x, uint32_t y,
-                                                uint32_t width, [[maybe_unused]] uint32_t channels)
-    {
-        // TGAReader always outputs RGBA (4 channels per pixel), regardless of original channel count
-        // So we always use stride of 4 here
-        uint32_t idx = (y * width + x) * 4;
-        if (idx >= mipData.data.size())
-        {
-            return 128; // Default mid-gray if out of bounds
-        }
-
-        // Use red channel (first channel after B<->R swap in TGAReader)
-        return mipData.data[idx];
-    }
 }

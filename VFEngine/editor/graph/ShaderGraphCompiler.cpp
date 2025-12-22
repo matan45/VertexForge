@@ -150,11 +150,46 @@ namespace editor::graph {
         return s_vertexTemplate;
     }
 
+    // Check if Displacement pin on PBROutput node has a connection
+    static bool isDisplacementConnected(const material::ShaderGraph& graph) {
+        const material::ShaderNode* outputNode = graph.findOutputNode();
+        if (!outputNode) return false;
+
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == outputNode->id && link.targetPin == "Displacement") {
+                return true;
+            }
+        }
+        return false;
+    }
+
     std::string ShaderGraphCompiler::generateFragmentShader(const material::ShaderGraph& graph) {
         std::string code;
 
-        // Start with cached fragment header (includes uniforms, PBR functions, and main() opening)
-        code += s_fragmentHeader;
+        // Check if parallax is used (Displacement pin connected)
+        bool useParallax = isDisplacementConnected(graph);
+
+        // Insert parallax define after #version directive if needed
+        if (useParallax) {
+            // Find the end of the #version line (after #type FRAGMENT line)
+            size_t versionPos = s_fragmentHeader.find("#version");
+            if (versionPos != std::string::npos) {
+                size_t versionEnd = s_fragmentHeader.find('\n', versionPos);
+                if (versionEnd != std::string::npos) {
+                    code += s_fragmentHeader.substr(0, versionEnd + 1);
+                    code += "#define USE_PARALLAX 1\n";
+                    code += s_fragmentHeader.substr(versionEnd + 1);
+                } else {
+                    code += s_fragmentHeader;
+                    code += "#define USE_PARALLAX 1\n";
+                }
+            } else {
+                code += "#define USE_PARALLAX 1\n";
+                code += s_fragmentHeader;
+            }
+        } else {
+            code += s_fragmentHeader;
+        }
 
         // Get topologically sorted nodes
         std::vector<uint32_t> sortedNodes = topologicalSort(graph);

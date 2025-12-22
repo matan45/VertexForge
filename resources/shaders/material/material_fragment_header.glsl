@@ -82,7 +82,8 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-// Parallax Occlusion Mapping
+// Parallax Occlusion Mapping - only compiled when USE_PARALLAX is defined
+#ifdef USE_PARALLAX
 // Returns offset UV coordinates based on height map
 vec2 parallaxOcclusionMapping(vec2 texCoord, vec3 viewDirTangent, float heightScale) {
     const float minLayers = 8.0;
@@ -111,5 +112,6 @@ vec2 parallaxOcclusionMapping(vec2 texCoord, vec3 viewDirTangent, float heightSc
 
     return mix(currentTexCoord, prevTexCoord, weight);
 }
+#endif
 
 void main() {

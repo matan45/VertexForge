@@ -47,8 +47,7 @@ namespace resource
         uint32_t height = 0;
         std::vector<float> data;  // RGBA32F pixel data for this mip level
     };
-
-    // Calculate number of mip levels for given dimensions
+    
     inline uint32_t calculateMipLevels(uint32_t width, uint32_t height)
     {
         uint32_t levels = 1;
