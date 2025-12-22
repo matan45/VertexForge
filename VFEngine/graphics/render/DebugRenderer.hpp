@@ -63,9 +63,9 @@ namespace render
 
         bool isInitialized() const { return initialized; }
 
-        // Check if there are any debug items to render (frustums, etc.)
+        // Check if there are any debug items to render (grid, frustums, etc.)
         // Note: AABB rendering depends on meshDrawList passed to render(), so we track it separately
-        bool hasItemsToRender() const { return !cameraFrustumDrawList.empty() || hasBoundingBoxesToRender; }
+        bool hasItemsToRender() const { return showGrid || !cameraFrustumDrawList.empty() || hasBoundingBoxesToRender; }
 
         // Set flag indicating if any meshes have showBoundingBox enabled
         void setHasBoundingBoxes(bool hasBoundingBoxes) { hasBoundingBoxesToRender = hasBoundingBoxes; }

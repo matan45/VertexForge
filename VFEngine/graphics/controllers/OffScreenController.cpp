@@ -295,6 +295,18 @@ namespace controllers
     void OffScreenController::prepareFrameMeshes()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
+
+        // Ensure debug renderer is initialized for grid rendering
+        if (showGrid && !playModeActive && !renderHandler->isDebugRendererInitialized())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            renderHandler->initDebugRenderer();
+            renderHandler->getDebugRenderer()->setShowGrid(true);
+        }
+
         auto* meshPipeline = renderHandler->getMeshPipeline();
 
         if (!meshPipeline)
@@ -760,10 +772,23 @@ namespace controllers
     {
         showGrid = show;
         auto* renderHandler = offScreen->getRenderPassHandler();
-        if (renderHandler && renderHandler->isDebugRendererInitialized())
+        if (renderHandler)
         {
-            // Grid is hidden in play mode, regardless of showGrid setting
-            renderHandler->getDebugRenderer()->setShowGrid(show && !playModeActive);
+            // Initialize debug renderer if needed when enabling grid
+            if (show && !renderHandler->isDebugRendererInitialized())
+            {
+                if (!renderHandler->isMeshPipelineInitialized())
+                {
+                    renderHandler->initMeshPipeline();
+                }
+                renderHandler->initDebugRenderer();
+            }
+
+            if (renderHandler->isDebugRendererInitialized())
+            {
+                // Grid is hidden in play mode, regardless of showGrid setting
+                renderHandler->getDebugRenderer()->setShowGrid(show && !playModeActive);
+            }
         }
     }
 

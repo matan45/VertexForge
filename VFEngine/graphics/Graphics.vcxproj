@@ -201,6 +201,7 @@
     <None Include="..\..\resources\shaders\material\material_vertex.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
+    <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
   </ItemGroup>
   <ItemGroup>
