@@ -138,6 +138,9 @@ namespace material {
         Normalize,
         Length,
 
+        // Mix/Blend
+        MixColor,       // Mix two Vec3 colors by alpha factor
+
         // Utilities
         MakeVec2,
         MakeVec3,
@@ -237,7 +240,7 @@ namespace material {
         // Shader graph
         ShaderGraph graph;
 
-        // Exposed parameters (for runtime modification)
+        // Exposed parameters (for runtime modification, not serialized to file)
         std::map<std::string, MaterialParameter> parameters;
 
         // Cached generated shader code

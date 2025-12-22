@@ -676,47 +676,6 @@ namespace material
                 material.graph.nodes.push_back(std::move(outputNode));
             }
 
-            // Parse parameters
-            if (j.contains("parameters"))
-            {
-                if (!j["parameters"].is_object())
-                {
-                    logWarningLimited("'parameters' field is not an object, skipping parameters");
-                }
-                else
-                {
-                    for (auto& [name, paramJson] : j["parameters"].items())
-                    {
-                        if (!paramJson.is_object())
-                        {
-                            logWarningLimited(std::format("Parameter '{}' is not an object, skipping", name));
-                            continue;
-                        }
-
-                        try
-                        {
-                            MaterialParameter param;
-                            param.name = name;
-                            param.type = stringToParamType(paramJson.value("type", "scalar"));
-                            param.min = paramJson.value("min", 0.0f);
-                            param.max = paramJson.value("max", 1.0f);
-
-                            if (paramJson.contains("value"))
-                            {
-                                param.value = deserializeParamValue(paramJson["value"], param.type, name);
-                            }
-
-                            material.parameters[name] = std::move(param);
-                        }
-                        catch (const std::exception& e)
-                        {
-                            logWarningLimited(std::format(
-                                "Failed to parse parameter '{}': {}", name, e.what()));
-                        }
-                    }
-                }
-            }
-
             // Parse cached shaders
             if (j.contains("cachedShader"))
             {
@@ -849,19 +808,6 @@ namespace material
         }
         graphJson["links"] = linksJson;
         j["graph"] = graphJson;
-
-        // Parameters
-        json paramsJson;
-        for (const auto& [name, param] : material.parameters)
-        {
-            json paramJson;
-            paramJson["type"] = paramTypeToString(param.type);
-            paramJson["value"] = serializeParamValue(param.value);
-            paramJson["min"] = param.min;
-            paramJson["max"] = param.max;
-            paramsJson[name] = paramJson;
-        }
-        j["parameters"] = paramsJson;
 
         // Cached shaders
         if (!material.cachedVertexShader.empty() || !material.cachedFragmentShader.empty())

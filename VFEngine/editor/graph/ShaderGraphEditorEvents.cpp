@@ -168,6 +168,10 @@ namespace editor::graph {
                     createNode(material::NodeType::Lerp, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
+                if (ImGui::MenuItem("Mix Color")) {
+                    createNode(material::NodeType::MixColor, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
                 if (ImGui::MenuItem("Clamp")) {
                     createNode(material::NodeType::Clamp, newNodePosition);
                     ImGui::CloseCurrentPopup();

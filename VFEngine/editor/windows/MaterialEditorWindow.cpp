@@ -13,6 +13,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/MaterialEvents.hpp"
 #include "events/PreviewEvents.hpp"
+#include "events/ResourceEvents.hpp"
 #include "time/Timer.hpp"
 #include <filesystem>
 #include <algorithm>
@@ -891,6 +892,14 @@ namespace windows {
         if (result.success) {
             vfLogInfo("ORM texture packed successfully: {}", result.outputPath);
             showOrmPackDialog = false;
+
+            // Notify content browser to refresh (reuses import notification)
+            events::resource::ImportCompletedNotification notification;
+            services::ImportResult importResult;
+            importResult.success = true;
+            importResult.sourcePath = result.outputPath;
+            notification.results.push_back(importResult);
+            events::EventDispatcher::instance().publish(notification);
         } else {
             ormPackError = result.errorMessage;
             vfLogError("Failed to pack ORM texture: {}", result.errorMessage);
