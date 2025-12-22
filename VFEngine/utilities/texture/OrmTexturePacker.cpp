@@ -247,20 +247,17 @@ namespace texture
 
     uint8_t OrmTexturePacker::getGrayscaleValue(const resource::MipLevelData& mipData,
                                                 uint32_t x, uint32_t y,
-                                                uint32_t width, uint32_t channels)
+                                                uint32_t width, [[maybe_unused]] uint32_t channels)
     {
-        uint32_t idx = (y * width + x) * channels;
+        // TGAReader always outputs RGBA (4 channels per pixel), regardless of original channel count
+        // So we always use stride of 4 here
+        uint32_t idx = (y * width + x) * 4;
         if (idx >= mipData.data.size())
         {
             return 128; // Default mid-gray if out of bounds
         }
 
-        if (channels == 1)
-        {
-            return mipData.data[idx];
-        }
-
-        // For multi-channel textures, use red channel
+        // Use red channel (first channel after B<->R swap in TGAReader)
         return mipData.data[idx];
     }
 }
