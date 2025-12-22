@@ -257,11 +257,13 @@ namespace render::mesh
 
         // Extract texture paths from connected TextureSample nodes
         pbr.albedoTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Albedo");
+        pbr.normalTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Normal");
+        pbr.ormTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "ORM");
         pbr.metallicTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Metallic");
         pbr.roughnessTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Roughness");
         pbr.aoTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "AO");
-        pbr.normalTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Normal");
         pbr.emissionTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Emission");
+        pbr.heightTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Height");
 
         // Get blend mode from material
         pbr.blendMode = matData.blendMode;

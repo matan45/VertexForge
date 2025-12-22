@@ -33,6 +33,16 @@ namespace windows
         bool showCompileError = false;
         std::string compileErrorMessage;
 
+        // ORM Packing dialog state
+        bool showOrmPackDialog = false;
+        std::string ormAoPath;
+        std::string ormRoughnessPath;
+        std::string ormMetallicPath;
+        std::string ormOutputPath;
+        std::string ormPackError;
+        float ormPackProgress = 0.0f;
+        bool ormPackInProgress = false;
+
         // Preview panel state
         float previewPanelWidth = 250.0f;
         bool isDraggingPreview = false; // Track if drag started in preview
@@ -63,5 +73,8 @@ namespace windows
         void updatePreviewMaterial(bool useCustomShader = false);
 
         void onGraphChanged();
+
+        void drawOrmPackDialog();
+        void packOrmTextures();
     };
 }

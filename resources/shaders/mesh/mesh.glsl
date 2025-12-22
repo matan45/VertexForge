@@ -23,14 +23,12 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
-    // Texture indices: < 0 = no texture, fixed indices per material:
-    // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
-    float albedoTexIdx;
-    float metallicTexIdx;
-    float roughnessTexIdx;
-    float aoTexIdx;
-    float normalTexIdx;
-    float emissionTexIdx;
+    // Packed texture indices: 4 indices per uint (8 bits each, 255 = no texture)
+    // Pack 0: slots 0-3 (Albedo, Normal, ORM, Metallic)
+    // Pack 1: slots 4-7 (Roughness, AO, Emission, Height)
+    // Pack 2: slots 8-11 (DetailNormal, DetailAlbedo, Subsurface, Anisotropy)
+    // Pack 3: slots 12-15 (Clearcoat, ClearcoatNormal, Reserved1, Reserved2)
+    uint textureIndicesPacked[4];
     float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
     float iblDiffuse;
     float iblSpecular;
@@ -70,9 +68,9 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Set 1: Material textures (6 per material)
-// Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
-layout(set = 1, binding = 0) uniform sampler2D u_Textures[6];
+// Set 1: Material textures (16 per material)
+// See TextureSlot enum for slot assignments
+layout(set = 1, binding = 0) uniform sampler2D u_Textures[16];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -81,14 +79,12 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
-    // Texture indices: < 0 = no texture, fixed indices per material:
-    // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
-    float albedoTexIdx;
-    float metallicTexIdx;
-    float roughnessTexIdx;
-    float aoTexIdx;
-    float normalTexIdx;
-    float emissionTexIdx;
+    // Packed texture indices: 4 indices per uint (8 bits each, 255 = no texture)
+    // Pack 0: slots 0-3 (Albedo, Normal, ORM, Metallic)
+    // Pack 1: slots 4-7 (Roughness, AO, Emission, Height)
+    // Pack 2: slots 8-11 (DetailNormal, DetailAlbedo, Subsurface, Anisotropy)
+    // Pack 3: slots 12-15 (Clearcoat, ClearcoatNormal, Reserved1, Reserved2)
+    uint textureIndicesPacked[4];
     float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
     float iblDiffuse;
     float iblSpecular;
@@ -97,6 +93,35 @@ layout(push_constant) uniform PushConstants {
 const float PI = 3.14159265359;
 const float ALPHA_CUTOFF = 0.5;  // Alpha threshold for masked mode
 const float MAX_REFLECTION_LOD = 4.0;
+const uint TEXTURE_INDEX_NONE = 255u;
+
+// Texture slot indices (matching TextureSlot enum in MaterialTypes.hpp)
+const uint SLOT_ALBEDO = 0u;
+const uint SLOT_NORMAL = 1u;
+const uint SLOT_ORM = 2u;
+const uint SLOT_METALLIC = 3u;
+const uint SLOT_ROUGHNESS = 4u;
+const uint SLOT_AO = 5u;
+const uint SLOT_EMISSION = 6u;
+const uint SLOT_HEIGHT = 7u;
+
+// Unpack texture index from packed uint32 array
+// slot: 0-15, returns 255 if no texture
+uint unpackTextureIndex(uint slot) {
+    uint packIdx = slot / 4u;
+    uint byteOffset = slot % 4u;
+    return (pc.textureIndicesPacked[packIdx] >> (byteOffset * 8u)) & 0xFFu;
+}
+
+// Check if texture slot has a valid texture
+bool hasTexture(uint slot) {
+    return unpackTextureIndex(slot) != TEXTURE_INDEX_NONE;
+}
+
+// Unpack ORM texture: R=AO, G=Roughness, B=Metallic
+vec3 unpackORM(vec4 ormSample) {
+    return vec3(ormSample.r, ormSample.g, ormSample.b); // AO, Roughness, Metallic
+}
 
 // Normal Distribution Function (GGX/Trowbridge-Reitz)
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
@@ -150,8 +175,8 @@ void main() {
     // Sample textures or use push constant values
     vec3 albedo = pc.albedo.rgb;
     float alpha = pc.albedo.a;
-    if (pc.albedoTexIdx >= 0.0) {
-        vec4 albedoSample = texture(u_Textures[int(pc.albedoTexIdx)], fragTexCoord);
+    if (hasTexture(SLOT_ALBEDO)) {
+        vec4 albedoSample = texture(u_Textures[SLOT_ALBEDO], fragTexCoord);
         // Convert from sRGB to linear space for PBR calculations
         albedo = pow(albedoSample.rgb, vec3(2.2));
         alpha = albedoSample.a;
@@ -164,24 +189,33 @@ void main() {
         }
     }
 
+    // Sample PBR values - prioritize ORM packed texture, fallback to individual textures
     float metallic = pc.metallic;
-    if (pc.metallicTexIdx >= 0.0) {
-        metallic = texture(u_Textures[int(pc.metallicTexIdx)], fragTexCoord).r;
-    }
-
     float roughness = pc.roughness;
-    if (pc.roughnessTexIdx >= 0.0) {
-        roughness = texture(u_Textures[int(pc.roughnessTexIdx)], fragTexCoord).r;
-    }
-
     float ao = pc.ao;
-    if (pc.aoTexIdx >= 0.0) {
-        ao = texture(u_Textures[int(pc.aoTexIdx)], fragTexCoord).r;
+
+    if (hasTexture(SLOT_ORM)) {
+        // Use packed ORM texture: R=AO, G=Roughness, B=Metallic
+        vec3 ormValues = unpackORM(texture(u_Textures[SLOT_ORM], fragTexCoord));
+        ao = ormValues.x;
+        roughness = ormValues.y;
+        metallic = ormValues.z;
+    } else {
+        // Fallback to individual textures
+        if (hasTexture(SLOT_METALLIC)) {
+            metallic = texture(u_Textures[SLOT_METALLIC], fragTexCoord).r;
+        }
+        if (hasTexture(SLOT_ROUGHNESS)) {
+            roughness = texture(u_Textures[SLOT_ROUGHNESS], fragTexCoord).r;
+        }
+        if (hasTexture(SLOT_AO)) {
+            ao = texture(u_Textures[SLOT_AO], fragTexCoord).r;
+        }
     }
 
     // Normal mapping using derivative-based TBN construction
-    if (pc.normalTexIdx >= 0.0) {
-        vec3 tangentNormal = texture(u_Textures[int(pc.normalTexIdx)], fragTexCoord).rgb * 2.0 - 1.0;
+    if (hasTexture(SLOT_NORMAL)) {
+        vec3 tangentNormal = texture(u_Textures[SLOT_NORMAL], fragTexCoord).rgb * 2.0 - 1.0;
 
         // Construct TBN matrix from screen-space derivatives
         vec3 pos_dx = dFdx(fragWorldPos);
@@ -229,9 +263,9 @@ void main() {
 
     // Add emission
     vec3 emissive = vec3(0.0);
-    if (pc.emissionTexIdx >= 0.0) {
+    if (hasTexture(SLOT_EMISSION)) {
         // Convert emission from sRGB to linear
-        emissive = pow(texture(u_Textures[int(pc.emissionTexIdx)], fragTexCoord).rgb, vec3(2.2));
+        emissive = pow(texture(u_Textures[SLOT_EMISSION], fragTexCoord).rgb, vec3(2.2));
     } else {
         emissive = albedo * pc.emission;
     }

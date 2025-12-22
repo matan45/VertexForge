@@ -13,13 +13,17 @@ namespace editor::graph {
         std::string errorMessage;
     };
 
+    // Maps PBR output pin names to texture slot indices (matching TextureSlot enum)
+    // Note: Slot 2 is reserved for ORM packed textures (handled specially in shader)
     static const std::map<std::string, int> pbrPinToIndex = {
-        {"Albedo", 0},
-        {"Metallic", 1},
-        {"Roughness", 2},
-        {"AO", 3},
-        {"Normal", 4},
-        {"Emission", 5}
+        {"Albedo", 0},      // TextureSlot::Albedo
+        {"Normal", 1},      // TextureSlot::Normal
+        {"ORM", 2},         // TextureSlot::ORM (packed AO/Roughness/Metallic)
+        {"Metallic", 3},    // TextureSlot::Metallic (legacy individual)
+        {"Roughness", 4},   // TextureSlot::Roughness (legacy individual)
+        {"AO", 5},          // TextureSlot::AO (legacy individual)
+        {"Emission", 6},    // TextureSlot::Emission
+        {"Height", 7}       // TextureSlot::Height
     };
 
     

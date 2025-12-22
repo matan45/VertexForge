@@ -1,6 +1,7 @@
 #include "Import.hpp"
 #include <future>
 #include <algorithm>
+#include <filesystem>
 #include "../pipeline/stages/FileValidationStage.hpp"
 #include "../pipeline/stages/HeaderReadingStage.hpp"
 #include "../pipeline/stages/FileTypeDetectionStage.hpp"

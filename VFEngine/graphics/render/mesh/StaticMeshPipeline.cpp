@@ -300,8 +300,8 @@ namespace render::mesh
 
     void StaticMeshPipeline::createTextureDescriptorSetLayout()
     {
-        // Set 1, Binding 0: Array of 6 material textures per material
-        // Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
+        // Set 1, Binding 0: Array of 16 material textures per material
+        // See material::TextureSlot for slot assignments (albedo, normal, ORM, metallic, roughness, ao, emission, etc.)
         vk::DescriptorSetLayoutBinding textureBinding{};
         textureBinding.binding = 0;
         textureBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -927,22 +927,25 @@ namespace render::mesh
             // Get or create per-material descriptor set if material has textures
             vk::DescriptorSet materialDescSet = nullptr;
             bool hasAnyTexture = !pbrValues.albedoTexturePath.empty() ||
+                !pbrValues.normalTexturePath.empty() ||
+                !pbrValues.ormTexturePath.empty() ||
                 !pbrValues.metallicTexturePath.empty() ||
                 !pbrValues.roughnessTexturePath.empty() ||
                 !pbrValues.aoTexturePath.empty() ||
-                !pbrValues.normalTexturePath.empty() ||
                 !pbrValues.emissionTexturePath.empty();
 
             if (hasAnyTexture && !pbrValues.materialPath.empty())
             {
-                // Build texture paths for this material
+                // Build texture paths for this material (16 slots)
                 MaterialTexturePaths texPaths;
                 texPaths.albedo = pbrValues.albedoTexturePath;
+                texPaths.normal = pbrValues.normalTexturePath;
+                texPaths.orm = pbrValues.ormTexturePath;
                 texPaths.metallic = pbrValues.metallicTexturePath;
                 texPaths.roughness = pbrValues.roughnessTexturePath;
                 texPaths.ao = pbrValues.aoTexturePath;
-                texPaths.normal = pbrValues.normalTexturePath;
                 texPaths.emission = pbrValues.emissionTexturePath;
+                // Additional slots left empty for now
 
                 materialDescSet = textureCache->getOrCreateMaterialDescriptorSet(
                     pbrValues.materialPath, texPaths);
@@ -971,15 +974,26 @@ namespace render::mesh
             pushConstants.ao = pbrValues.ao;
             pushConstants.blendMode = static_cast<float>(pbrValues.blendMode);
 
-            // With per-material descriptor sets, texture indices are fixed:
-            // 0 = albedo, 1 = metallic, 2 = roughness, 3 = ao, 4 = normal, 5 = emission
-            // Use -1.0 if no texture, otherwise use fixed index
-            pushConstants.albedoTexIdx = pbrValues.albedoTexturePath.empty() ? -1.0f : 0.0f;
-            pushConstants.metallicTexIdx = pbrValues.metallicTexturePath.empty() ? -1.0f : 1.0f;
-            pushConstants.roughnessTexIdx = pbrValues.roughnessTexturePath.empty() ? -1.0f : 2.0f;
-            pushConstants.aoTexIdx = pbrValues.aoTexturePath.empty() ? -1.0f : 3.0f;
-            pushConstants.normalTexIdx = pbrValues.normalTexturePath.empty() ? -1.0f : 4.0f;
-            pushConstants.emissionTexIdx = pbrValues.emissionTexturePath.empty() ? -1.0f : 5.0f;
+            // Pack texture indices into uint32 arrays
+            // With per-material descriptor sets, texture indices map to TextureSlot enum
+            // Use 255 (TEXTURE_INDEX_NONE) if no texture, otherwise use slot index
+            // Group 0: slots 0-3 (Albedo, Normal, ORM, Metallic)
+            pushConstants.textureIndicesPacked[0] = packTextureIndices(
+                pbrValues.albedoTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Albedo)),
+                pbrValues.normalTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Normal)),
+                pbrValues.ormTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::ORM)),
+                pbrValues.metallicTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Metallic))
+            );
+            // Group 1: slots 4-7 (Roughness, AO, Emission, Height)
+            pushConstants.textureIndicesPacked[1] = packTextureIndices(
+                pbrValues.roughnessTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Roughness)),
+                pbrValues.aoTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::AO)),
+                pbrValues.emissionTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Emission)),
+                pbrValues.heightTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Height))
+            );
+            // Group 2-3: Reserved slots (all empty for now)
+            pushConstants.textureIndicesPacked[2] = packTextureIndices(TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE);
+            pushConstants.textureIndicesPacked[3] = packTextureIndices(TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE);
 
             // Set IBL intensity values
             pushConstants.iblDiffuse = pbrValues.iblDiffuse;
@@ -1188,30 +1202,23 @@ namespace render::mesh
 
             ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
 
+            // Load all texture types that may be used
             if (!pbr.albedoTexturePath.empty())
-            {
                 textureCache->loadTexture(pbr.albedoTexturePath);
-            }
-            if (!pbr.metallicTexturePath.empty())
-            {
-                textureCache->loadTexture(pbr.metallicTexturePath);
-            }
-            if (!pbr.roughnessTexturePath.empty())
-            {
-                textureCache->loadTexture(pbr.roughnessTexturePath);
-            }
-            if (!pbr.aoTexturePath.empty())
-            {
-                textureCache->loadTexture(pbr.aoTexturePath);
-            }
             if (!pbr.normalTexturePath.empty())
-            {
                 textureCache->loadTexture(pbr.normalTexturePath);
-            }
+            if (!pbr.ormTexturePath.empty())
+                textureCache->loadTexture(pbr.ormTexturePath);
+            if (!pbr.metallicTexturePath.empty())
+                textureCache->loadTexture(pbr.metallicTexturePath);
+            if (!pbr.roughnessTexturePath.empty())
+                textureCache->loadTexture(pbr.roughnessTexturePath);
+            if (!pbr.aoTexturePath.empty())
+                textureCache->loadTexture(pbr.aoTexturePath);
             if (!pbr.emissionTexturePath.empty())
-            {
                 textureCache->loadTexture(pbr.emissionTexturePath);
-            }
+            if (!pbr.heightTexturePath.empty())
+                textureCache->loadTexture(pbr.heightTexturePath);
         };
 
         // Load all unique materials and textures into cache

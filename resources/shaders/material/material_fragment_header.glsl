@@ -18,12 +18,28 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Material textures (6 per material)
-// Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
-layout(set = 1, binding = 0) uniform sampler2D u_Textures[6];
+// Material textures (16 per material)
+// See TextureSlot enum for slot assignments:
+// 0: Albedo, 1: Normal, 2: ORM (packed), 3: Metallic, 4: Roughness, 5: AO, 6: Emission, 7: Height, etc.
+layout(set = 1, binding = 0) uniform sampler2D u_Textures[16];
 
 const float PI = 3.14159265359;
 const float MAX_REFLECTION_LOD = 4.0;
+
+// Texture slot indices (matching TextureSlot enum in MaterialTypes.hpp)
+const int TEX_SLOT_ALBEDO = 0;
+const int TEX_SLOT_NORMAL = 1;
+const int TEX_SLOT_ORM = 2;
+const int TEX_SLOT_METALLIC = 3;
+const int TEX_SLOT_ROUGHNESS = 4;
+const int TEX_SLOT_AO = 5;
+const int TEX_SLOT_EMISSION = 6;
+const int TEX_SLOT_HEIGHT = 7;
+
+// Unpack ORM texture: R=AO, G=Roughness, B=Metallic
+vec3 unpackORM(vec4 ormSample) {
+    return vec3(ormSample.r, ormSample.g, ormSample.b); // AO, Roughness, Metallic
+}
 
 // PBR Functions
 float DistributionGGX(vec3 N, vec3 H, float roughness) {

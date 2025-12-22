@@ -262,7 +262,7 @@ namespace editor::graph {
             }
             
             int texIndex = static_cast<int>(getPropertyValue<float>("textureIndex", 0.0f));
-            texIndex = std::clamp(texIndex, 0, 5);  // Max 6 textures per material (indices 0-5)
+            texIndex = std::clamp(texIndex, 0, material::MAX_MATERIAL_TEXTURES - 1);  // Max 16 textures per material (indices 0-15)
 
             std::string code;
             // Sample the texture - uses texture array indexed by textureIndex

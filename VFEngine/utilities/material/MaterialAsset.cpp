@@ -383,12 +383,13 @@ namespace material
         try
         {
             // Check version compatibility
-            std::string fileVersion = j.value("version", "1.0");
-            if (fileVersion != FORMAT_VERSION)
+            std::string fileVersion = j.value("version", MATERIAL_FORMAT_VERSION_LEGACY);
+            bool needsMigration = (fileVersion != MATERIAL_FORMAT_VERSION);
+            if (needsMigration)
             {
                 logWarningLimited(std::format(
-                    "Material file '{}' has version {} (expected {}). Some features may not load correctly.",
-                    std::string(path), fileVersion, FORMAT_VERSION));
+                    "Material file '{}' has version {} (current is {}). Will migrate on save.",
+                    std::string(path), fileVersion, MATERIAL_FORMAT_VERSION));
             }
 
             // Basic properties with validation
@@ -725,46 +726,44 @@ namespace material
                     material.cachedFragmentShader = j["cachedShader"].value("fragmentCode", "");
                     material.needsRecompile = material.cachedFragmentShader.empty();
 
-                    // Check for outdated shaders using old texture array size (> 6 textures)
-                    // Current system uses 6 textures per material (indices 0-5)
+                    // Check for outdated shaders - v1.0 used 6 textures, v1.1 uses 16 textures
+                    // Force recompile if shader was compiled with old texture array size
                     if (!material.needsRecompile && !material.cachedFragmentShader.empty())
                     {
                         bool isOutdated = false;
 
-                        // Check for old array declaration (u_Textures[8] or higher)
-                        for (int size = 7; size <= 16; ++size)
+                        // Check for old array declaration (u_Textures[6] means old format)
+                        // Current v1.1 format uses u_Textures[16]
+                        std::string oldDeclPattern = "u_Textures[6]";
+                        if (material.cachedFragmentShader.find(oldDeclPattern) != std::string::npos)
                         {
-                            std::string declPattern = "u_Textures[" + std::to_string(size) + "]";
-                            if (material.cachedFragmentShader.find(declPattern) != std::string::npos)
-                            {
-                                isOutdated = true;
-                                break;
-                            }
+                            isOutdated = true;
                         }
 
-                        // Also check for actual texture access beyond index 5
-                        // Must look for texture() or textureLod() calls to distinguish from declaration
-                        // Declaration: sampler2D u_Textures[6] (array of size 6 - valid)
-                        // Access: texture(u_Textures[6], uv) (accessing index 6 - invalid)
+                        // Also check for any declaration that isn't the current MAX_MATERIAL_TEXTURES
                         if (!isOutdated)
                         {
-                            for (int i = 6; i < 16; ++i)
+                            std::string expectedDecl = "u_Textures[" + std::to_string(MAX_MATERIAL_TEXTURES) + "]";
+                            // If we don't find the expected declaration, it might be outdated
+                            if (material.cachedFragmentShader.find(expectedDecl) == std::string::npos)
                             {
-                                std::string accessPattern1 = "texture(u_Textures[" + std::to_string(i) + "]";
-                                std::string accessPattern2 = "textureLod(u_Textures[" + std::to_string(i) + "]";
-                                if (material.cachedFragmentShader.find(accessPattern1) != std::string::npos ||
-                                    material.cachedFragmentShader.find(accessPattern2) != std::string::npos)
+                                // Double-check by looking for any other size
+                                for (int size = 1; size < MAX_MATERIAL_TEXTURES; ++size)
                                 {
-                                    isOutdated = true;
-                                    break;
+                                    std::string declPattern = "u_Textures[" + std::to_string(size) + "]";
+                                    if (material.cachedFragmentShader.find(declPattern) != std::string::npos)
+                                    {
+                                        isOutdated = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
 
-                        if (isOutdated)
+                        if (isOutdated || needsMigration)
                         {
-                            // Critical issues (invalid texture access) - must clear cached shader
-                            logWarningLimited("Material has critically outdated cached shader, clearing for recompile");
+                            // Force recompile for version upgrade
+                            logWarningLimited("Material has outdated cached shader (texture array size changed), clearing for recompile");
                             material.needsRecompile = true;
                             material.cachedVertexShader.clear();
                             material.cachedFragmentShader.clear();
@@ -775,6 +774,12 @@ namespace material
                 {
                     logWarningLimited("'cachedShader' field is not an object, ignoring cached shaders");
                 }
+            }
+
+            // Apply version migration if needed
+            if (needsMigration)
+            {
+                migrateFromVersion(material, fileVersion);
             }
 
             if (warningCount > 0)
@@ -800,8 +805,8 @@ namespace material
     {
         json j;
 
-        // Basic properties
-        j["version"] = FORMAT_VERSION;
+        // Basic properties - always save with current format version
+        j["version"] = MATERIAL_FORMAT_VERSION;
         j["uuid"] = material.uuid;
         j["name"] = material.name;
         j["blendMode"] = blendModeToString(material.blendMode);
@@ -909,5 +914,39 @@ namespace material
         material.graph.nodes.push_back(std::move(outputNode));
 
         return material;
+    }
+
+    void MaterialAsset::migrateFromVersion(MaterialData& material, const std::string& fromVersion)
+    {
+        vfLogInfo("Migrating material '{}' from version {} to {}",
+                  material.name, fromVersion, MATERIAL_FORMAT_VERSION);
+
+        // Migration from v1.0 to v1.1:
+        // - Texture slot layout changed:
+        //   v1.0: 0=albedo, 1=metallic, 2=roughness, 3=ao, 4=normal, 5=emission
+        //   v1.1: 0=albedo, 1=normal, 2=ORM, 3=metallic, 4=roughness, 5=ao, 6=emission
+        // - TextureSample nodes have textureIndex property that needs remapping
+        //
+        // Note: The actual texture indices in TextureSample nodes are determined
+        // by the ShaderGraphCompiler based on where they connect to PBROutput.
+        // The pbrPinToIndex mapping in ShaderGraphCompiler handles the slot assignment.
+        // So we mainly need to force shader recompilation (done above) and let
+        // the compiler use the new slot mapping.
+
+        if (fromVersion == MATERIAL_FORMAT_VERSION_LEGACY || fromVersion == "1.0")
+        {
+            // For v1.0 materials, the main migration is forcing shader recompile
+            // which is already done by setting needsRecompile = true.
+            // The texture index mapping will be handled by ShaderGraphCompiler
+            // when it recompiles with the new pbrPinToIndex mapping.
+
+            // Mark material as needing recompile (should already be set, but ensure it)
+            material.needsRecompile = true;
+            material.cachedVertexShader.clear();
+            material.cachedFragmentShader.clear();
+
+            vfLogInfo("  - Cleared cached shaders for recompilation with new texture slot layout");
+            vfLogInfo("  - New layout: 0=Albedo, 1=Normal, 2=ORM, 3=Metallic, 4=Roughness, 5=AO, 6=Emission");
+        }
     }
 }

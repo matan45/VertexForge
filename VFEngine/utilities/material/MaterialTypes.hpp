@@ -9,8 +9,47 @@
 
 namespace material {
 
-    // Maximum number of textures per material (albedo, normal, metallic, roughness, AO, emissive)
-    constexpr int MAX_MATERIAL_TEXTURES = 6;
+    // Material format version for serialization compatibility
+    constexpr const char* MATERIAL_FORMAT_VERSION = "1.1";
+    constexpr const char* MATERIAL_FORMAT_VERSION_LEGACY = "1.0";
+
+    // Maximum number of textures per material (expanded for ORM packing and additional maps)
+    constexpr int MAX_MATERIAL_TEXTURES = 16;
+
+    // Texture slot indices for the material system
+    // Supports both packed ORM workflow and legacy individual textures
+    enum class TextureSlot : uint8_t {
+        // Core PBR textures
+        Albedo = 0,             // RGB color, A for opacity
+        Normal = 1,             // Tangent-space normal map
+        ORM = 2,                // Packed: R=AO, G=Roughness, B=Metallic
+
+        // Legacy individual textures (backward compatibility)
+        Metallic = 3,           // Individual metallic map
+        Roughness = 4,          // Individual roughness map
+        AO = 5,                 // Individual ambient occlusion map
+
+        // Additional textures
+        Emission = 6,           // RGB emission color
+        Height = 7,             // Height/displacement map
+        DetailNormal = 8,       // Secondary normal map for detail
+        DetailAlbedo = 9,       // Secondary albedo for detail
+        Subsurface = 10,        // Subsurface scattering
+        Anisotropy = 11,        // Anisotropic direction/strength
+        Clearcoat = 12,         // Clearcoat layer
+        ClearcoatNormal = 13,   // Clearcoat normal map
+
+        // Reserved for future use
+        Reserved1 = 14,
+        Reserved2 = 15,
+
+        Count = 16
+    };
+
+    // Helper to convert TextureSlot to index
+    constexpr int toIndex(TextureSlot slot) {
+        return static_cast<int>(slot);
+    }
 
     // Parameter types for material properties
     enum class ParameterType : uint8_t {
