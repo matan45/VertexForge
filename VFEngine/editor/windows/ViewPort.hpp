@@ -14,8 +14,7 @@
 #include <utility>
 
 namespace windows {
-
-	// Viewport toolbar icon indices in the atlas
+	
 	enum class ViewportIcon : uint32_t
 	{
 		Grid = 0,
@@ -24,8 +23,7 @@ namespace windows {
 		Scale = 3,
 		Translate = 4
 	};
-
-	// Gizmo operation modes
+	
 	enum class GizmoOperation
 	{
 		None,
@@ -65,8 +63,7 @@ namespace windows {
 		static constexpr uint32_t ATLAS_COLUMNS = 4;
 		static constexpr uint32_t ATLAS_ROWS = 4;
 		static constexpr float ICON_SIZE = 32.0f;
-
-		// Gizmo state
+		
 		GizmoOperation currentGizmoOp = GizmoOperation::None;
 		ImGuizmo::MODE currentGizmoMode = ImGuizmo::LOCAL;
 
@@ -91,8 +88,7 @@ namespace windows {
 		void loadIconAtlas();
 		std::pair<glm::vec2, glm::vec2> getIconUV(ViewportIcon icon) const;
 		bool iconButton(ViewportIcon icon, bool isActive, const char* tooltip);
-
-		// Gizmo methods
+		
 		void drawGizmo();
 		glm::mat4 buildTransformMatrix(const services::TransformData& transform) const;
 		services::TransformData decomposeTransformMatrix(const glm::mat4& matrix) const;

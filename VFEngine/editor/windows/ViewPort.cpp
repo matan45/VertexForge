@@ -35,7 +35,6 @@ namespace windows
 
         if (ImGui::Begin("ViewPort"))
         {
-            // Handle camera input only when viewport is focused AND mouse is hovering
             bool isFocused = ImGui::IsWindowFocused();
             bool isHovered = ImGui::IsWindowHovered();
             if (isFocused && isHovered)
@@ -50,8 +49,7 @@ namespace windows
             {
                 editorCamera->setAspectRatio(viewportPanelSize.x / viewportPanelSize.y);
             }
-
-            // Update IBL camera matrices with editor camera matrices each frame
+            
             events::render::UpdateIBLCameraCommand cameraCmd;
             cameraCmd.viewMatrix = editorCamera->getViewMatrix();
             cameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();
@@ -117,8 +115,7 @@ namespace windows
     void ViewPort::handleCameraInput()
     {
         float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-
-        // Camera movement (WASD + Q/E)
+        
         bool forward = ImGui::IsKeyDown(ImGuiKey_W);
         bool backward = ImGui::IsKeyDown(ImGuiKey_S);
         bool left = ImGui::IsKeyDown(ImGuiKey_A);
@@ -131,8 +128,7 @@ namespace windows
         {
             editorCamera->processKeyboardInput(dt, forward, backward, left, right, up, down, sprint);
         }
-
-        // Mouse look (right mouse button held)
+        
         if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
         {
             ImGui::SetMouseCursor(ImGuiMouseCursor_None);
@@ -526,12 +522,10 @@ namespace windows
         // Skip in play mode or if no operation selected
         if (dispatcher.query(events::editor::IsPlayModeQuery{})) return;
         if (currentGizmoOp == GizmoOperation::None) return;
-
-        // Get selected entity
+        
         auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
         if (!selectedEntity.has_value()) return;
-
-        // Get transform
+        
         events::scene::GetTransformQuery transformQuery;
         transformQuery.entity = *selectedEntity;
         auto transformOpt = dispatcher.query(transformQuery);
