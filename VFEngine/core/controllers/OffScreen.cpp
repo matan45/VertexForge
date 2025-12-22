@@ -174,4 +174,9 @@ namespace controllers {
 	{
 		return offScreenController->getShowGrid();
 	}
+
+	void OffScreen::prepareGrid()
+	{
+		offScreenController->prepareGrid();
+	}
 }

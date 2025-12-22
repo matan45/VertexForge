@@ -59,10 +59,8 @@ void main() {
     // Determine color based on line type
     vec4 color;
     if (isXAxis) {
-        // X-axis line (red)
         color = pc.axisColorX;
     } else if (isZAxis) {
-        // Z-axis line (blue)
         color = pc.axisColorZ;
     } else if (isMajor) {
         // Major grid line (brighter gray)
@@ -70,7 +68,6 @@ void main() {
         color.rgb *= 1.5;
         color.a = min(color.a * 1.3, 1.0);
     } else {
-        // Regular grid line
         color = pc.gridColor;
     }
 

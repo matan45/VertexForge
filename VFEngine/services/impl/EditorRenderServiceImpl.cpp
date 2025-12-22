@@ -36,6 +36,7 @@ namespace services
         }
 
         frameCounter++;
+        prepareGrid();
         prepareCameras();
         prepareFrameMeshes();
         prepareFrameBillboards();
@@ -475,5 +476,15 @@ namespace services
         }
 
         offScreenProvider->prepareFrameCameraFrustums();
+    }
+
+    void EditorRenderServiceImpl::prepareGrid()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareGrid();
     }
 }

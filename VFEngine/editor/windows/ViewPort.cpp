@@ -69,8 +69,7 @@ namespace windows {
 			if (texture.isValid()) {
 				ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
 			}
-
-			// Draw viewport overlay (grid toggle, etc.)
+			
 			drawViewportOverlay();
 
 			bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
@@ -336,14 +335,12 @@ namespace windows {
 	{
 		auto& dispatcher = events::EventDispatcher::instance();
 		bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
-
-		// Don't show overlay controls in play mode
+		
 		if (isPlayMode)
 		{
 			return;
 		}
-
-		// Load icon atlas if not loaded
+		
 		if (!iconsLoaded)
 		{
 			loadIconAtlas();
@@ -370,7 +367,6 @@ namespace windows {
 
 		if (ImGui::Begin("##ViewportOverlay", nullptr, overlayFlags))
 		{
-			// Grid toggle button
 			bool currentGridState = dispatcher.query(events::render::GetShowGridQuery{});
 
 			if (iconAtlas.isValid())
@@ -383,8 +379,7 @@ namespace windows {
 				}
 
 				ImGui::SameLine();
-
-				// Transform tool buttons (placeholder for future functionality)
+				
 				if (iconButton(ViewportIcon::Move, false, "Move tool (W)"))
 				{
 					// TODO: Activate move gizmo
@@ -409,21 +404,6 @@ namespace windows {
 				if (iconButton(ViewportIcon::Translate, false, "Translate tool (T)"))
 				{
 					// TODO: Activate translate gizmo
-				}
-			}
-			else
-			{
-				// Fallback to text button if icons not loaded
-				if (ImGui::Button(currentGridState ? "Grid: ON" : "Grid: OFF", ImVec2(80, 0)))
-				{
-					events::render::SetShowGridCommand cmd;
-					cmd.show = !currentGridState;
-					dispatcher.execute(cmd);
-				}
-
-				if (ImGui::IsItemHovered())
-				{
-					ImGui::SetTooltip("Toggle 3D grid overlay (G)");
 				}
 			}
 		}
@@ -471,8 +451,7 @@ namespace windows {
 		auto [uv0, uv1] = getIconUV(icon);
 
 		ImGui::PushID(static_cast<int>(icon));
-
-		// Style for active/inactive state
+		
 		ImVec4 bgColor = isActive ? ImVec4(0.3f, 0.5f, 0.8f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f);
 		ImVec4 tintColor = isActive ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
 

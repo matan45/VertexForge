@@ -68,6 +68,7 @@ namespace core
         // Grid API
         void setShowGrid(bool show) override;
         bool getShowGrid() const override;
+        void prepareGrid() override;
 
     private:
         bool playModeActive = false;

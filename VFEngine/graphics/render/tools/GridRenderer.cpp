@@ -81,7 +81,6 @@ namespace render::mesh
 
     void GridRenderer::createPipeline(vk::RenderPass renderPass)
     {
-        // Push constant range for grid parameters
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         pushConstantRange.offset = 0;
@@ -94,8 +93,7 @@ namespace render::mesh
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
         gridPipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
-
-        // Vertex input - simple vec3 positions
+        
         vk::VertexInputBindingDescription bindingDescription{};
         bindingDescription.binding = 0;
         bindingDescription.stride = sizeof(glm::vec3);
@@ -150,7 +148,7 @@ namespace render::mesh
 
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_FALSE;  // Don't write to depth buffer
+        depthStencil.depthWriteEnable = VK_FALSE; // Don't write to depth buffer
         depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
         depthStencil.depthBoundsTestEnable = VK_FALSE;
         depthStencil.stencilTestEnable = VK_FALSE;
@@ -158,9 +156,9 @@ namespace render::mesh
         // Enable alpha blending for semi-transparent grid
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-                                               vk::ColorComponentFlagBits::eG |
-                                               vk::ColorComponentFlagBits::eB |
-                                               vk::ColorComponentFlagBits::eA;
+            vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB |
+            vk::ColorComponentFlagBits::eA;
         colorBlendAttachment.blendEnable = VK_TRUE;
         colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
         colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
@@ -211,7 +209,7 @@ namespace render::mesh
         {
             float z = i * cellSize;
             vertices.push_back({-halfSize, 0.0f, z});
-            vertices.push_back({ halfSize, 0.0f, z});
+            vertices.push_back({halfSize, 0.0f, z});
             indices.push_back(idx++);
             indices.push_back(idx++);
         }
@@ -221,14 +219,13 @@ namespace render::mesh
         {
             float x = i * cellSize;
             vertices.push_back({x, 0.0f, -halfSize});
-            vertices.push_back({x, 0.0f,  halfSize});
+            vertices.push_back({x, 0.0f, halfSize});
             indices.push_back(idx++);
             indices.push_back(idx++);
         }
 
         indexCount = static_cast<uint32_t>(indices.size());
-
-        // Create vertex buffer
+        
         vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * vertices.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
@@ -245,8 +242,7 @@ namespace render::mesh
             vertices.data(),
             vertexBufferSize
         );
-
-        // Create index buffer
+        
         vk::DeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
@@ -266,8 +262,8 @@ namespace render::mesh
     }
 
     void GridRenderer::render(const vk::CommandBuffer& commandBuffer,
-                               const glm::mat4& view,
-                               const glm::mat4& projection) const
+                              const glm::mat4& view,
+                              const glm::mat4& projection) const
     {
         if (!initialized || !gridPipeline || !vertexBuffer || !visible)
         {
@@ -292,8 +288,8 @@ namespace render::mesh
         pushConstants.gridParams = glm::vec4(gridSize, cellSize, fadeStart, fadeEnd);
 
         commandBuffer.pushConstants(gridPipelineLayout,
-            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-            0, sizeof(GridPushConstants), &pushConstants);
+                                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                    0, sizeof(GridPushConstants), &pushConstants);
 
         commandBuffer.drawIndexed(indexCount, 1, 0, 0, 0);
     }

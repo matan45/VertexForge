@@ -13,8 +13,7 @@ namespace core
 
 namespace render::mesh
 {
-    // Push constants for grid rendering
-    // Must match gridOverlay.glsl push_constant layout
+    
     struct GridPushConstants
     {
         glm::mat4 viewProj;     // 64 bytes - View-Projection matrix
@@ -55,7 +54,7 @@ namespace render::mesh
         glm::vec4 axisColorZ = glm::vec4(0.2f, 0.2f, 0.8f, 0.8f); // Blue for Z-axis
 
     public:
-        GridRenderer(core::Device& device, core::SwapChain& swapChain);
+        explicit GridRenderer(core::Device& device, core::SwapChain& swapChain);
         ~GridRenderer();
 
         void init(vk::RenderPass renderPass);

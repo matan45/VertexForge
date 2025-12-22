@@ -313,18 +313,6 @@ namespace controllers
     void OffScreenController::prepareFrameMeshes()
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
-
-        // Ensure debug renderer is initialized for grid rendering
-        if (showGrid && !playModeActive && !renderHandler->isDebugRendererInitialized())
-        {
-            if (!renderHandler->isMeshPipelineInitialized())
-            {
-                renderHandler->initMeshPipeline();
-            }
-            renderHandler->initDebugRenderer();
-            renderHandler->getDebugRenderer()->setShowGrid(true);
-        }
-
         auto* meshPipeline = renderHandler->getMeshPipeline();
 
         if (!meshPipeline)
@@ -626,6 +614,28 @@ namespace controllers
         renderHandler->setCameraFrustumDrawList(std::move(frustumDrawList));
     }
 
+    void OffScreenController::prepareGrid()
+    {
+        if (!showGrid || playModeActive)
+        {
+            return;
+        }
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+
+        // Initialize mesh pipeline and debug renderer if needed for grid
+        if (!renderHandler->isMeshPipelineInitialized())
+        {
+            renderHandler->initMeshPipeline();
+        }
+
+        if (!renderHandler->isDebugRendererInitialized())
+        {
+            renderHandler->initDebugRenderer();
+            renderHandler->getDebugRenderer()->setShowGrid(true);
+        }
+    }
+
     bool OffScreenController::loadBillboardAtlas(const std::string& atlasPath)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
@@ -792,13 +802,9 @@ namespace controllers
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (renderHandler)
         {
-            // Initialize debug renderer if needed when enabling grid
-            if (show && !renderHandler->isDebugRendererInitialized())
+            // Initialize debug renderer if needed when enabling grid (only if mesh pipeline is ready)
+            if (show && renderHandler->isMeshPipelineInitialized() && !renderHandler->isDebugRendererInitialized())
             {
-                if (!renderHandler->isMeshPipelineInitialized())
-                {
-                    renderHandler->initMeshPipeline();
-                }
                 renderHandler->initDebugRenderer();
             }
 

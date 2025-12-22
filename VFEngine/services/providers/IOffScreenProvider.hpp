@@ -98,6 +98,7 @@ namespace services {
         // Grid API
         virtual void setShowGrid(bool show) = 0;
         virtual bool getShowGrid() const = 0;
+        virtual void prepareGrid() = 0;
     };
 
 }

@@ -78,5 +78,6 @@ namespace controllers {
 		// Grid API
 		void setShowGrid(bool show);
 		bool getShowGrid() const;
+		void prepareGrid();
 	};
 }

@@ -48,8 +48,7 @@ namespace windows {
 		std::vector<BillboardScreenHit> cachedBillboardHits;
 
 		std::vector<MeshPickData> cachedMeshHits;
-
-		// Viewport toolbar icon atlas
+		
 		services::EditorTextureHandle iconAtlas;
 		bool iconsLoaded = false;
 		static constexpr uint32_t ATLAS_COLUMNS = 4;
@@ -73,8 +72,7 @@ namespace windows {
 		void updateMeshPickData();
 		std::optional<services::EntityHandle> pickMeshAt(glm::vec2 screenPos, glm::vec2 viewportPos, glm::vec2 viewportSize);
 		math::Ray screenToWorldRay(glm::vec2 screenPos, glm::vec2 viewportPos, glm::vec2 viewportSize);
-
-		// Icon atlas helpers
+		
 		void loadIconAtlas();
 		std::pair<glm::vec2, glm::vec2> getIconUV(ViewportIcon icon) const;
 		bool iconButton(ViewportIcon icon, bool isActive, const char* tooltip);

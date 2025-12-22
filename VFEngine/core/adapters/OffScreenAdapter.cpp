@@ -176,4 +176,10 @@ namespace core {
         return offScreen ? offScreen->getShowGrid() : true;
     }
 
+    void OffScreenAdapter::prepareGrid() {
+        if (offScreen) {
+            offScreen->prepareGrid();
+        }
+    }
+
 }

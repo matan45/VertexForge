@@ -120,6 +120,7 @@ namespace controllers
         // Grid API
         void setShowGrid(bool show);
         bool getShowGrid() const { return showGrid; }
+        void prepareGrid();
 
     private:
         void updateOcclusionCullingData();
