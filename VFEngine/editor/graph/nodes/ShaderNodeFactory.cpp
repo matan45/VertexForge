@@ -80,6 +80,8 @@ namespace editor::graph {
             // Texture
             case material::NodeType::TextureSample:
                 return std::make_unique<TextureSampleNode>();
+            case material::NodeType::OrmSample:
+                return std::make_unique<OrmSampleNode>();
 
             default:
                 return std::make_unique<ConstantScalarNode>();  // Default fallback

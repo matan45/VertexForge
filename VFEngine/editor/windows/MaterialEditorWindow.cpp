@@ -410,12 +410,14 @@ namespace windows {
             return std::nullopt;
         };
 
-        // Helper to get connected texture path from TextureSample node
+        // Helper to get connected texture path from TextureSample or OrmSample node
         auto getConnectedTexturePath = [this, pbrOutput](const std::string& pinName) -> std::string {
             for (const auto& link : materialData->graph.links) {
                 if (link.targetNodeId == pbrOutput->id && link.targetPin == pinName) {
                     for (const auto& node : materialData->graph.nodes) {
-                        if (node.id == link.sourceNodeId && node.type == material::NodeType::TextureSample) {
+                        if (node.id == link.sourceNodeId &&
+                            (node.type == material::NodeType::TextureSample ||
+                             node.type == material::NodeType::OrmSample)) {
                             auto it = node.properties.find("texturePath");
                             if (it != node.properties.end() && std::holds_alternative<std::string>(it->second)) {
                                 return std::get<std::string>(it->second);
@@ -644,6 +646,11 @@ namespace windows {
         bool changed = false;
 
         for (auto& [propName, propValue] : selectedNode->properties) {
+            // Skip internal properties that shouldn't be user-editable
+            if (propName == "textureIndex") {
+                continue;  // Auto-determined based on connections
+            }
+
             ImGui::PushID(propName.c_str());
 
             if (std::holds_alternative<float>(propValue)) {
@@ -686,7 +693,9 @@ namespace windows {
                 std::string value = std::get<std::string>(propValue);
 
                 // Special handling for texture path property
-                if (propName == "texturePath" && selectedNode->type == material::NodeType::TextureSample) {
+                if (propName == "texturePath" &&
+                    (selectedNode->type == material::NodeType::TextureSample ||
+                     selectedNode->type == material::NodeType::OrmSample)) {
                     ImGui::Text("Texture:");
                     ImGui::SameLine();
 
@@ -747,7 +756,7 @@ namespace windows {
         ImGui::SetNextWindowSize(ImVec2(500, 350), ImGuiCond_FirstUseEver);
 
         if (ImGui::BeginPopupModal("Pack ORM Texture", &showOrmPackDialog, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextWrapped("Pack Ambient Occlusion, Roughness, and Metallic textures into a single ORM texture.");
+            ImGui::TextWrapped("Pack textures into a single ORME texture (R=AO, G=Roughness, B=Metallic, A=Emissive). All textures are optional - provide at least one. Missing textures use defaults.");
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -758,11 +767,11 @@ namespace windows {
                 {L"All Files", L"*.*"}
             };
 
-            // AO texture selection
-            ImGui::Text("Ambient Occlusion (AO):");
+            // AO texture selection (optional)
+            ImGui::Text("Ambient Occlusion (AO) - default: 255 (no occlusion):");
             ImGui::PushID("ao");
             {
-                std::string display = ormAoPath.empty() ? "(None)" :
+                std::string display = ormAoPath.empty() ? "(None - uses default)" :
                     std::filesystem::path(ormAoPath).filename().string();
                 ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
                 ImGui::SameLine();
@@ -775,11 +784,11 @@ namespace windows {
             }
             ImGui::PopID();
 
-            // Roughness texture selection
-            ImGui::Text("Roughness:");
+            // Roughness texture selection (optional)
+            ImGui::Text("Roughness - default: 128 (mid roughness):");
             ImGui::PushID("roughness");
             {
-                std::string display = ormRoughnessPath.empty() ? "(None)" :
+                std::string display = ormRoughnessPath.empty() ? "(None - uses default)" :
                     std::filesystem::path(ormRoughnessPath).filename().string();
                 ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
                 ImGui::SameLine();
@@ -792,11 +801,11 @@ namespace windows {
             }
             ImGui::PopID();
 
-            // Metallic texture selection
-            ImGui::Text("Metallic:");
+            // Metallic texture selection (optional)
+            ImGui::Text("Metallic - default: 0 (non-metallic):");
             ImGui::PushID("metallic");
             {
-                std::string display = ormMetallicPath.empty() ? "(None)" :
+                std::string display = ormMetallicPath.empty() ? "(None - uses default)" :
                     std::filesystem::path(ormMetallicPath).filename().string();
                 ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
                 ImGui::SameLine();
@@ -806,6 +815,23 @@ namespace windows {
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Clear")) ormMetallicPath.clear();
+            }
+            ImGui::PopID();
+
+            // Emissive texture selection (optional)
+            ImGui::Text("Emissive - default: 255 (full alpha):");
+            ImGui::PushID("emissive");
+            {
+                std::string display = ormEmissivePath.empty() ? "(None - uses default)" :
+                    std::filesystem::path(ormEmissivePath).filename().string();
+                ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...")) {
+                    std::string path = fileDialog.openFileDialog(filters);
+                    if (!path.empty()) ormEmissivePath = path;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear")) ormEmissivePath.clear();
             }
             ImGui::PopID();
 
@@ -853,9 +879,10 @@ namespace windows {
             ImGui::Separator();
             ImGui::Spacing();
 
-            // Buttons
-            bool canPack = !ormAoPath.empty() && !ormRoughnessPath.empty() &&
-                           !ormMetallicPath.empty() && !ormOutputPath.empty() && !ormPackInProgress;
+            // Buttons - need at least one texture and an output path
+            bool hasAtLeastOneTexture = !ormAoPath.empty() || !ormRoughnessPath.empty() ||
+                                        !ormMetallicPath.empty() || !ormEmissivePath.empty();
+            bool canPack = hasAtLeastOneTexture && !ormOutputPath.empty() && !ormPackInProgress;
 
             if (!canPack) ImGui::BeginDisabled();
             if (ImGui::Button("Pack", ImVec2(120, 0))) {
@@ -877,11 +904,15 @@ namespace windows {
         ormPackInProgress = true;
         ormPackProgress = 0.0f;
 
+        texture::OrmPackInput input;
+        input.aoPath = ormAoPath;
+        input.roughnessPath = ormRoughnessPath;
+        input.metallicPath = ormMetallicPath;
+        input.emissivePath = ormEmissivePath;
+        input.outputPath = ormOutputPath;
+
         auto result = texture::OrmTexturePacker::packORM(
-            ormAoPath,
-            ormRoughnessPath,
-            ormMetallicPath,
-            ormOutputPath,
+            input,
             [this](float progress) {
                 ormPackProgress = progress;
             }

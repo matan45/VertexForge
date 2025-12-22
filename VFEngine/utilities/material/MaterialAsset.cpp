@@ -52,6 +52,8 @@ namespace material
         case NodeType::VertexUV: return "VertexUV";
         case NodeType::Time: return "Time";
         case NodeType::TextureSample: return "TextureSample";
+        case NodeType::OrmSample: return "OrmSample";
+        case NodeType::MixColor: return "MixColor";
         default: return "Unknown";
         }
     }
@@ -94,6 +96,8 @@ namespace material
         if (str == "VertexUV") return NodeType::VertexUV;
         if (str == "Time") return NodeType::Time;
         if (str == "TextureSample") return NodeType::TextureSample;
+        if (str == "OrmSample") return NodeType::OrmSample;
+        if (str == "MixColor") return NodeType::MixColor;
         return NodeType::ConstantScalar; // Default
     }
 

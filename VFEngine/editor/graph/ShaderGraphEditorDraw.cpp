@@ -131,8 +131,8 @@ namespace editor::graph {
                 ImGuiColorEditFlags_NoTooltip, ImVec2(20, 20));
         }
 
-        // Show texture path for TextureSample nodes
-        if (node.type == material::NodeType::TextureSample) {
+        // Show texture path for TextureSample and OrmSample nodes
+        if (node.type == material::NodeType::TextureSample || node.type == material::NodeType::OrmSample) {
             std::string texPath = "";
             auto it = node.properties.find("texturePath");
             if (it != node.properties.end()) {

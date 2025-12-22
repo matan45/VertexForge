@@ -260,6 +260,10 @@ namespace editor::graph {
                     createNode(material::NodeType::TextureSample, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
+                if (ImGui::MenuItem("ORM Sample")) {
+                    createNode(material::NodeType::OrmSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
                 ImGui::EndMenu();
             }
 

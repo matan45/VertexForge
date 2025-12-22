@@ -156,7 +156,8 @@ namespace material {
         Time,
 
         // Texture
-        TextureSample
+        TextureSample,
+        OrmSample           // Specialized ORM texture sampler with AO/Roughness/Metallic/Emissive outputs
     };
 
     // Node property variant (for node-specific settings)

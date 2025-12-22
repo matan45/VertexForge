@@ -297,6 +297,7 @@ namespace editor::graph {
         material::ShaderNode modifiedNodeData = *nodeData;
 
         // For TextureSample nodes, determine correct texture index based on PBR connection
+        // Note: OrmSample nodes always use slot 2 (ORM) - they have multiple outputs from one texture
         if (nodeData->type == material::NodeType::TextureSample) {
             int pbrIndex = determinePBRTextureIndex(graph, nodeId);
             if (pbrIndex >= 0) {

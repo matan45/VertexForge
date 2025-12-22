@@ -13,23 +13,32 @@ namespace texture
         std::string errorMessage;
     };
 
+    // Input paths for ORM packing - all optional
+    // At least one texture must be provided to determine output dimensions
+    struct OrmPackInput {
+        std::string aoPath;         // Optional - defaults to 255 (no occlusion)
+        std::string roughnessPath;  // Optional - defaults to 128 (mid roughness)
+        std::string metallicPath;   // Optional - defaults to 0 (non-metallic)
+        std::string emissivePath;   // Optional - defaults to 0 (no emission)
+        std::string outputPath;     // Required
+    };
+
     class OrmTexturePacker
     {
     public:
-        // Pack 3 .vfImage textures into a single ORM texture
-        // R = AO, G = Roughness, B = Metallic
+        // Pack textures into a single ORME texture
+        // R = AO, G = Roughness, B = Metallic, A = Emissive
+        // All input textures are optional - missing ones use default values
         static OrmPackResult packORM(
-            const std::string& aoPath,
-            const std::string& roughnessPath,
-            const std::string& metallicPath,
-            const std::string& outputPath,
+            const OrmPackInput& input,
             OrmPackProgressCallback progressCallback = nullptr);
 
-        // Pack from already-loaded texture data
+        // Pack from already-loaded texture data (all optional, nullptr for defaults)
         static OrmPackResult packORMFromData(
-            const resource::TextureData& aoTexture,
-            const resource::TextureData& roughnessTexture,
-            const resource::TextureData& metallicTexture,
+            const resource::TextureData* aoTexture,
+            const resource::TextureData* roughnessTexture,
+            const resource::TextureData* metallicTexture,
+            const resource::TextureData* emissiveTexture,
             const std::string& outputPath,
             OrmPackProgressCallback progressCallback = nullptr);
 
