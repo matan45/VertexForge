@@ -25,6 +25,11 @@ namespace texture
     class OrmTexturePacker
     {
     public:
+        // Default values for missing textures
+        static constexpr uint8_t DEFAULT_AO = 255;        // No occlusion (fully lit)
+        static constexpr uint8_t DEFAULT_ROUGHNESS = 128; // Mid roughness (~0.5)
+        static constexpr uint8_t DEFAULT_METALLIC = 0;    // Non-metallic
+
         // Pack textures into a single ORM texture (RGBA for GPU compatibility)
         // R = AO, G = Roughness, B = Metallic, A = 255 (unused)
         // All input textures are optional - missing ones use default values

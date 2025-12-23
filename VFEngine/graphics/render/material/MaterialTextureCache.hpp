@@ -11,8 +11,7 @@ namespace core
 
 namespace render::mesh
 {
-    // Texture paths for all material texture slots
-    // Supports both ORM packed workflow and legacy individual textures
+   
     struct MaterialTexturePaths
     {
         // Core PBR textures
@@ -28,14 +27,15 @@ namespace render::mesh
         // Additional textures
         std::string emission;       // Slot 6: RGB emission color
         std::string height;         // Slot 7: Height/displacement map
-        std::string detailNormal;   // Slot 8: Secondary normal map
-        std::string detailAlbedo;   // Slot 9: Secondary albedo
-        std::string subsurface;     // Slot 10: Subsurface scattering
-        std::string anisotropy;     // Slot 11: Anisotropic direction/strength
-        std::string clearcoat;      // Slot 12: Clearcoat layer
-        std::string clearcoatNormal;// Slot 13: Clearcoat normal map
-        std::string reserved1;      // Slot 14: Reserved
-        std::string reserved2;      // Slot 15: Reserved
+        // Additional texture slots for material graph use (mixing, animation, etc.)
+        std::string texture8;       // Slot 8: User-defined
+        std::string texture9;       // Slot 9: User-defined
+        std::string texture10;      // Slot 10: User-defined
+        std::string texture11;      // Slot 11: User-defined
+        std::string texture12;      // Slot 12: User-defined
+        std::string texture13;      // Slot 13: User-defined
+        std::string texture14;      // Slot 14: User-defined
+        std::string texture15;      // Slot 15: User-defined
 
         // Check if using packed ORM texture (vs individual metallic/roughness/ao)
         bool usesORM() const { return !orm.empty(); }
@@ -51,14 +51,14 @@ namespace render::mesh
                 case 5: return ao;
                 case 6: return emission;
                 case 7: return height;
-                case 8: return detailNormal;
-                case 9: return detailAlbedo;
-                case 10: return subsurface;
-                case 11: return anisotropy;
-                case 12: return clearcoat;
-                case 13: return clearcoatNormal;
-                case 14: return reserved1;
-                case 15: return reserved2;
+                case 8: return texture8;
+                case 9: return texture9;
+                case 10: return texture10;
+                case 11: return texture11;
+                case 12: return texture12;
+                case 13: return texture13;
+                case 14: return texture14;
+                case 15: return texture15;
                 default: return albedo; // Fallback
             }
         }

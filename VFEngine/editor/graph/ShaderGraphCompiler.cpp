@@ -11,18 +11,6 @@
 
 namespace editor::graph {
 
-    // Limits to prevent stack overflow from malicious/malformed material files
-    static constexpr size_t MAX_RECURSION_DEPTH = 100;
-    static constexpr size_t MAX_NODES = 1000;
-
-    // Shader template paths (relative to executable)
-    static constexpr std::string_view VERTEX_TEMPLATE_PATH = "../../resources/shaders/material/material_vertex.glsl";
-    static constexpr std::string_view FRAGMENT_HEADER_PATH = "../../resources/shaders/material/material_fragment_header.glsl";
-    static constexpr std::string_view FRAGMENT_FOOTER_PATH = "../../resources/shaders/material/material_fragment_footer.glsl";
-
-    // Allowed base directory for shader files (relative to executable)
-    static constexpr std::string_view ALLOWED_SHADER_DIR = "../../resources/shaders";
-
     // Static member initialization
     std::string ShaderGraphCompiler::s_vertexTemplate;
     std::string ShaderGraphCompiler::s_fragmentHeader;
@@ -149,8 +137,7 @@ namespace editor::graph {
     std::string ShaderGraphCompiler::generateVertexShader() {
         return s_vertexTemplate;
     }
-
-    // Check if Displacement pin on PBROutput node has a connection
+    
     static bool isDisplacementConnected(const material::ShaderGraph& graph) {
         const material::ShaderNode* outputNode = graph.findOutputNode();
         if (!outputNode) return false;
@@ -165,11 +152,9 @@ namespace editor::graph {
 
     std::string ShaderGraphCompiler::generateFragmentShader(const material::ShaderGraph& graph) {
         std::string code;
-
-        // Check if parallax is used (Displacement pin connected)
+        
         bool useParallax = isDisplacementConnected(graph);
-
-        // Insert parallax define after #version directive if needed
+        
         if (useParallax) {
             // Find the end of the #version line (after #type FRAGMENT line)
             size_t versionPos = s_fragmentHeader.find("#version");
@@ -330,9 +315,7 @@ namespace editor::graph {
         // Create a mutable copy of node data for TextureSample nodes
         // so we can set the correct texture index based on PBR connection
         material::ShaderNode modifiedNodeData = *nodeData;
-
-        // For TextureSample nodes, determine correct texture index based on PBR connection
-        // Note: OrmSample nodes always use slot 2 (ORM) - they have multiple outputs from one texture
+        
         if (nodeData->type == material::NodeType::TextureSample) {
             int pbrIndex = determinePBRTextureIndex(graph, nodeId);
             if (pbrIndex >= 0) {
@@ -413,8 +396,7 @@ namespace editor::graph {
                 }
             }
         }
-
-        // Ultimate fallback
+        
         return "0.0";
     }
 

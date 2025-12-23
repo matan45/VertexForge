@@ -409,8 +409,7 @@ namespace windows {
             }
             return std::nullopt;
         };
-
-        // Helper to get connected texture path from TextureSample or OrmSample node
+        
         auto getConnectedTexturePath = [this, pbrOutput](const std::string& pinName) -> std::string {
             for (const auto& link : materialData->graph.links) {
                 if (link.targetNodeId == pbrOutput->id && link.targetPin == pinName) {

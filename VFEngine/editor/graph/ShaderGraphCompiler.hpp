@@ -12,9 +12,7 @@ namespace editor::graph {
         std::string fragmentShader;
         std::string errorMessage;
     };
-
-    // Maps PBR output pin names to texture slot indices (matching TextureSlot enum)
-    // Note: Slot 2 is reserved for ORM packed textures (handled specially in shader)
+    
     static const std::map<std::string, int> pbrPinToIndex = {
         {"Albedo", 0},      // TextureSlot::Albedo
         {"Normal", 1},      // TextureSlot::Normal
@@ -29,6 +27,18 @@ namespace editor::graph {
     
     class ShaderGraphCompiler {
     private:
+        // Limits to prevent stack overflow from malicious/malformed material files
+        static constexpr size_t MAX_RECURSION_DEPTH = 100;
+        static constexpr size_t MAX_NODES = 1000;
+
+        // Shader template paths (relative to executable)
+        static constexpr std::string_view VERTEX_TEMPLATE_PATH = "../../resources/shaders/material/material_vertex.glsl";
+        static constexpr std::string_view FRAGMENT_HEADER_PATH = "../../resources/shaders/material/material_fragment_header.glsl";
+        static constexpr std::string_view FRAGMENT_FOOTER_PATH = "../../resources/shaders/material/material_fragment_footer.glsl";
+
+        // Allowed base directory for shader files (relative to executable)
+        static constexpr std::string_view ALLOWED_SHADER_DIR = "../../resources/shaders";
+
         // Cached shader templates
         static std::string s_vertexTemplate;
         static std::string s_fragmentHeader;

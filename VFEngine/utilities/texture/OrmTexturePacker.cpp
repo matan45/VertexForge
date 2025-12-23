@@ -6,11 +6,6 @@
 
 namespace texture
 {
-    // Default values for missing textures
-    constexpr uint8_t DEFAULT_AO = 255;        // No occlusion (fully lit)
-    constexpr uint8_t DEFAULT_ROUGHNESS = 128; // Mid roughness (~0.5)
-    constexpr uint8_t DEFAULT_METALLIC = 0;    // Non-metallic
-
     // ============================================================================
     // Helper: Get grayscale value from mip data
     // ============================================================================
@@ -112,7 +107,7 @@ namespace texture
     {
         ormMip.width = width;
         ormMip.height = height;
-        ormMip.data.resize(width * height * 4);  // RGBA for GPU compatibility
+        ormMip.data.resize(width * height * 4); // RGBA for GPU compatibility
 
         for (uint32_t y = 0; y < height; ++y)
         {
@@ -122,20 +117,21 @@ namespace texture
 
                 // Get values from textures or use defaults
                 uint8_t ao = aoTexture
-                    ? getGrayscaleValue(aoMip, x, y, width, aoTexture->numbersOfChannels)
-                    : DEFAULT_AO;
+                                 ? getGrayscaleValue(aoMip, x, y, width, aoTexture->numbersOfChannels)
+                                 : OrmTexturePacker::DEFAULT_AO;
                 uint8_t roughness = roughnessTexture
-                    ? getGrayscaleValue(roughnessMip, x, y, width, roughnessTexture->numbersOfChannels)
-                    : DEFAULT_ROUGHNESS;
+                                        ? getGrayscaleValue(roughnessMip, x, y, width,
+                                                            roughnessTexture->numbersOfChannels)
+                                        : OrmTexturePacker::DEFAULT_ROUGHNESS;
                 uint8_t metallic = metallicTexture
-                    ? getGrayscaleValue(metallicMip, x, y, width, metallicTexture->numbersOfChannels)
-                    : DEFAULT_METALLIC;
+                                       ? getGrayscaleValue(metallicMip, x, y, width, metallicTexture->numbersOfChannels)
+                                       : OrmTexturePacker::DEFAULT_METALLIC;
 
                 // ORM format: R=AO, G=Roughness, B=Metallic, A=255 (unused, full opacity)
                 ormMip.data[outIdx + 0] = ao;
                 ormMip.data[outIdx + 1] = roughness;
                 ormMip.data[outIdx + 2] = metallic;
-                ormMip.data[outIdx + 3] = 255;  // Unused alpha, set to opaque
+                ormMip.data[outIdx + 3] = 255; // Unused alpha, set to opaque
             }
 
             if (progressCallback && (y % (height / 10 + 1) == 0))
@@ -200,7 +196,7 @@ namespace texture
                     newMip.data[dstIdx + 0] = static_cast<uint8_t>(sumR / samples);
                     newMip.data[dstIdx + 1] = static_cast<uint8_t>(sumG / samples);
                     newMip.data[dstIdx + 2] = static_cast<uint8_t>(sumB / samples);
-                    newMip.data[dstIdx + 3] = 255;  // Keep alpha at 255
+                    newMip.data[dstIdx + 3] = 255; // Keep alpha at 255
                 }
             }
 
@@ -372,11 +368,14 @@ namespace texture
         // Get mip level 0 data from each provided texture
         resource::MipLevelData emptyMip;
         const auto& aoMip = (aoTexture && !aoTexture->mipData.empty())
-            ? aoTexture->mipData[0] : emptyMip;
+                                ? aoTexture->mipData[0]
+                                : emptyMip;
         const auto& roughnessMip = (roughnessTexture && !roughnessTexture->mipData.empty())
-            ? roughnessTexture->mipData[0] : emptyMip;
+                                       ? roughnessTexture->mipData[0]
+                                       : emptyMip;
         const auto& metallicMip = (metallicTexture && !metallicTexture->mipData.empty())
-            ? metallicTexture->mipData[0] : emptyMip;
+                                      ? metallicTexture->mipData[0]
+                                      : emptyMip;
 
         // Validate mip data
         if (!validateMipData(aoTexture, roughnessTexture, metallicTexture,
@@ -418,5 +417,4 @@ namespace texture
 
         return result;
     }
-
 }

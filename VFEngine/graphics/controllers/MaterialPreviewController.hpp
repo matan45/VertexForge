@@ -31,7 +31,6 @@ namespace controllers
 
     struct TextureManagerImpl
     {
-        // 16 texture slots per material (see material::TextureSlot)
         static constexpr int MAX_TEXTURES = 16;
         std::unordered_map<std::string, PreviewTextureGPU> textureCache;
         std::array<std::string, MAX_TEXTURES> textureSlots;

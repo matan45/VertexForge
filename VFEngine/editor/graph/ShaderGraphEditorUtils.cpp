@@ -100,9 +100,9 @@ namespace editor::graph {
             case material::NodeType::TextureSample:
                 return IM_COL32(180, 100, 180, 255);
             case material::NodeType::OrmSample:
-                return IM_COL32(180, 100, 180, 255);  // Same purple as TextureSample
+                return IM_COL32(180, 100, 180, 255);
             case material::NodeType::MixColor:
-                return IM_COL32(100, 180, 100, 255);  // Green for blend nodes
+                return IM_COL32(100, 180, 100, 255);
             default:
                 return IM_COL32(100, 100, 100, 255);
         }

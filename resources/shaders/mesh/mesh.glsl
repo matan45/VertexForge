@@ -23,11 +23,6 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
-    // Packed texture indices: 4 indices per uint (8 bits each, 255 = no texture)
-    // Pack 0: slots 0-3 (Albedo, Normal, ORM, Metallic)
-    // Pack 1: slots 4-7 (Roughness, AO, Emission, Height)
-    // Pack 2: slots 8-11 (DetailNormal, DetailAlbedo, Subsurface, Anisotropy)
-    // Pack 3: slots 12-15 (Clearcoat, ClearcoatNormal, Reserved1, Reserved2)
     uint textureIndicesPacked[4];
     float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
     float iblDiffuse;
@@ -79,11 +74,6 @@ layout(push_constant) uniform PushConstants {
     float roughness;
     float ao;
     float emission;
-    // Packed texture indices: 4 indices per uint (8 bits each, 255 = no texture)
-    // Pack 0: slots 0-3 (Albedo, Normal, ORM, Metallic)
-    // Pack 1: slots 4-7 (Roughness, AO, Emission, Height)
-    // Pack 2: slots 8-11 (DetailNormal, DetailAlbedo, Subsurface, Anisotropy)
-    // Pack 3: slots 12-15 (Clearcoat, ClearcoatNormal, Reserved1, Reserved2)
     uint textureIndicesPacked[4];
     float blendMode;  // 0=Opaque, 1=Masked, 2=Translucent
     float iblDiffuse;
@@ -113,14 +103,13 @@ uint unpackTextureIndex(uint slot) {
     return (pc.textureIndicesPacked[packIdx] >> (byteOffset * 8u)) & 0xFFu;
 }
 
-// Check if texture slot has a valid texture
 bool hasTexture(uint slot) {
     return unpackTextureIndex(slot) != TEXTURE_INDEX_NONE;
 }
 
 // Unpack ORM texture: R=AO, G=Roughness, B=Metallic
 vec3 unpackORM(vec4 ormSample) {
-    return vec3(ormSample.r, ormSample.g, ormSample.b); // AO, Roughness, Metallic
+    return vec3(ormSample.r, ormSample.g, ormSample.b);
 }
 
 // Normal Distribution Function (GGX/Trowbridge-Reitz)
@@ -137,7 +126,6 @@ float DistributionGGX(vec3 N, vec3 H, float roughness) {
     return nom / denom;
 }
 
-// Geometry Function (Schlick-GGX)
 float GeometrySchlickGGX(float NdotV, float roughness) {
     float r = (roughness + 1.0);
     float k = (r * r) / 8.0;
@@ -148,7 +136,6 @@ float GeometrySchlickGGX(float NdotV, float roughness) {
     return nom / denom;
 }
 
-// Smith's method for geometry
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     float NdotV = max(dot(N, V), 0.0);
     float NdotL = max(dot(N, L), 0.0);
@@ -158,12 +145,10 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
-// Fresnel-Schlick approximation
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-// Fresnel-Schlick with roughness for IBL
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
@@ -172,7 +157,6 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
-    // Sample textures or use push constant values
     vec3 albedo = pc.albedo.rgb;
     float alpha = pc.albedo.a;
     if (hasTexture(SLOT_ALBEDO)) {
@@ -264,7 +248,6 @@ void main() {
     // Add emission
     vec3 emissive = vec3(0.0);
     if (hasTexture(SLOT_EMISSION)) {
-        // Convert emission from sRGB to linear and apply emission strength
         emissive = pow(texture(u_Textures[SLOT_EMISSION], fragTexCoord).rgb, vec3(2.2)) * pc.emission;
     } else {
         emissive = albedo * pc.emission;
@@ -272,10 +255,8 @@ void main() {
 
     vec3 color = ambient + emissive;
 
-    // HDR tonemapping (Reinhard)
     color = color / (color + vec3(1.0));
 
-    // Gamma correction
     color = pow(color, vec3(1.0/2.2));
 
     outColor = vec4(color, alpha);

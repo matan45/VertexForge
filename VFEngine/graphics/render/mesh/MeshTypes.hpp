@@ -162,9 +162,7 @@ namespace render::mesh
         float time; // Animation time in seconds
     };
 
-    // Push constants - matches mesh.glsl push_constant block
-    // Total size: 64 (mat4) + 16 (vec4) + 16 (floats) + 16 (packed indices) + 12 (blendMode, ibl) = 124 bytes
-    // Well under the 128 byte conservative limit for most GPUs
+    
     struct MeshPushConstants
     {
         glm::mat4 model;    // 64 bytes
@@ -174,11 +172,6 @@ namespace render::mesh
         float ao;           // 4 bytes
         float emission;     // 4 bytes
 
-        // Packed texture indices: 4 indices per uint32 (8 bits each, 255 = no texture)
-        // textureIndicesPacked[0]: slots 0-3 (Albedo, Normal, ORM, Metallic)
-        // textureIndicesPacked[1]: slots 4-7 (Roughness, AO, Emission, Height)
-        // textureIndicesPacked[2]: slots 8-11 (DetailNormal, DetailAlbedo, Subsurface, Anisotropy)
-        // textureIndicesPacked[3]: slots 12-15 (Clearcoat, ClearcoatNormal, Reserved1, Reserved2)
         uint32_t textureIndicesPacked[4]; // 16 bytes total for 16 texture indices
 
         float blendMode;    // 4 bytes (0=Opaque, 1=Masked, 2=Translucent)
@@ -210,11 +203,7 @@ namespace render::mesh
         }
     };
 
-    // Vertex input helper matching resource::Vertex (32 bytes)
-    // From utilities/resource/Types.hpp:
-    //   position: vec3 at offset 0
-    //   normal: vec3 at offset 12
-    //   texCoords: vec2 at offset 24
+   
     struct MeshVertexInput
     {
         static vk::VertexInputBindingDescription getBindingDescription()

@@ -468,8 +468,7 @@ namespace controllers
                 meshPipeline->injectMaterialForPreview(params.materialPath, params.materialData);
             }
         }
-
-        // Texture slots match material::TextureSlot enum order
+        
         std::array<std::string, TextureManagerImpl::MAX_TEXTURES> texturePaths = {
             params.albedoTexturePath,      // 0: Albedo
             params.normalTexturePath,      // 1: Normal
@@ -518,7 +517,6 @@ namespace controllers
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
             if (meshPipeline)
             {
-                // Build arrays of image views and samplers (16 per material)
                 std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES> imageViews;
                 std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES> samplers;
 

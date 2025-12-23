@@ -119,8 +119,7 @@ namespace editor::graph {
             return "float";
         }
     };
-
-    // MixColor: mix two Vec3 colors by alpha factor (for texture blending)
+    
     class MixColorNode : public ShaderNodeBase {
     public:
         MixColorNode() {

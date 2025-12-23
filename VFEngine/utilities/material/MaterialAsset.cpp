@@ -767,8 +767,7 @@ namespace material
     bool MaterialAsset::save(std::string_view path, const MaterialData& material)
     {
         json j;
-
-        // Basic properties - always save with current format version
+        
         j["version"] = MATERIAL_FORMAT_VERSION;
         j["uuid"] = material.uuid;
         j["name"] = material.name;
