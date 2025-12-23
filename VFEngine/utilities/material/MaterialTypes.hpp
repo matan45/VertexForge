@@ -91,6 +91,18 @@ namespace material {
         Texture2D  // For future texture support
     };
 
+    // Helper to convert PinType to string
+    inline std::string pinTypeToString(PinType type) {
+        switch (type) {
+            case PinType::Float:     return "Float";
+            case PinType::Vec2:      return "Vec2";
+            case PinType::Vec3:      return "Vec3";
+            case PinType::Vec4:      return "Vec4";
+            case PinType::Texture2D: return "Texture2D";
+            default:                 return "Unknown";
+        }
+    }
+
     // Pin direction
     enum class PinKind : uint8_t {
         Input,
@@ -166,7 +178,11 @@ namespace material {
         Vec2ToFloat,
         Vec3ToFloat,
         Vec4ToFloat,
+        Vec2ToVec3,
+        Vec2ToVec4,
+        Vec3ToVec2,
         Vec3ToVec4,
+        Vec4ToVec2,
         Vec4ToVec3
     };
 

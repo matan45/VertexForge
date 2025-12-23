@@ -408,18 +408,6 @@ namespace editor::graph {
         return "0.0";
     }
 
-    // VK-56: Type validation helper
-    std::string ShaderGraphCompiler::pinTypeToString(material::PinType type) {
-        switch (type) {
-            case material::PinType::Float:     return "Float";
-            case material::PinType::Vec2:      return "Vec2";
-            case material::PinType::Vec3:      return "Vec3";
-            case material::PinType::Vec4:      return "Vec4";
-            case material::PinType::Texture2D: return "Texture2D";
-            default:                           return "Unknown";
-        }
-    }
-
     // VK-56: Validate that all links have matching types
     bool ShaderGraphCompiler::validateLinkTypes(const material::ShaderGraph& graph, std::string& errorMessage) {
         for (const auto& link : graph.links) {
@@ -463,13 +451,13 @@ namespace editor::graph {
             if (sourceType != targetType) {
                 errorMessage = "Type mismatch in link from '" + sourceNode->name + "' (" + link.sourcePin +
                               ") to '" + targetNode->name + "' (" + link.targetPin + ").\n" +
-                              "Expected: " + pinTypeToString(targetType) +
-                              ", Got: " + pinTypeToString(sourceType) + ".\n" +
+                              "Expected: " + material::pinTypeToString(targetType) +
+                              ", Got: " + material::pinTypeToString(sourceType) + ".\n" +
                               "Use a conversion node to fix this.";
                 vfLogError("Shader graph type mismatch: {} ({}) -> {} ({}) : {} vs {}",
                           sourceNode->name, link.sourcePin,
                           targetNode->name, link.targetPin,
-                          pinTypeToString(sourceType), pinTypeToString(targetType));
+                          material::pinTypeToString(sourceType), material::pinTypeToString(targetType));
                 return false;
             }
         }

@@ -57,24 +57,14 @@ namespace editor::graph {
 
         if (sourcePin->type == targetPin->type) return "";
 
-        std::string srcTypeName = pinTypeToString(sourcePin->type);
-        std::string dstTypeName = pinTypeToString(targetPin->type);
+        std::string srcTypeName = material::pinTypeToString(sourcePin->type);
+        std::string dstTypeName = material::pinTypeToString(targetPin->type);
 
         std::string conversionNode = getConversionNodeName(sourcePin->type, targetPin->type);
 
         return "Cannot connect " + srcTypeName + " to " + dstTypeName + ".\nUse '" + conversionNode + "' node.";
     }
 
-    std::string ShaderGraphEditor::pinTypeToString(material::PinType type) const {
-        switch (type) {
-            case material::PinType::Float:     return "Float";
-            case material::PinType::Vec2:      return "Vec2";
-            case material::PinType::Vec3:      return "Vec3";
-            case material::PinType::Vec4:      return "Vec4";
-            case material::PinType::Texture2D: return "Texture2D";
-            default:                           return "Unknown";
-        }
-    }
 
     std::string ShaderGraphEditor::getConversionNodeName(material::PinType srcType, material::PinType dstType) const {
         // Return the appropriate conversion node name
@@ -86,19 +76,29 @@ namespace editor::graph {
                 default: break;
             }
         }
-        else if (dstType == material::PinType::Float) {
-            switch (srcType) {
-                case material::PinType::Vec2: return "Vec2 To Float";
-                case material::PinType::Vec3: return "Vec3 To Float";
-                case material::PinType::Vec4: return "Vec4 To Float";
+        else if (srcType == material::PinType::Vec2) {
+            switch (dstType) {
+                case material::PinType::Float: return "Vec2 To Float";
+                case material::PinType::Vec3: return "Vec2 To Vec3";
+                case material::PinType::Vec4: return "Vec2 To Vec4";
                 default: break;
             }
         }
-        else if (srcType == material::PinType::Vec3 && dstType == material::PinType::Vec4) {
-            return "Vec3 To Vec4";
+        else if (srcType == material::PinType::Vec3) {
+            switch (dstType) {
+                case material::PinType::Float: return "Vec3 To Float";
+                case material::PinType::Vec2: return "Vec3 To Vec2";
+                case material::PinType::Vec4: return "Vec3 To Vec4";
+                default: break;
+            }
         }
-        else if (srcType == material::PinType::Vec4 && dstType == material::PinType::Vec3) {
-            return "Vec4 To Vec3";
+        else if (srcType == material::PinType::Vec4) {
+            switch (dstType) {
+                case material::PinType::Float: return "Vec4 To Float";
+                case material::PinType::Vec2: return "Vec4 To Vec2";
+                case material::PinType::Vec3: return "Vec4 To Vec3";
+                default: break;
+            }
         }
 
         return "a conversion";
@@ -148,7 +148,11 @@ namespace editor::graph {
             case material::NodeType::Vec2ToFloat:
             case material::NodeType::Vec3ToFloat:
             case material::NodeType::Vec4ToFloat:
+            case material::NodeType::Vec2ToVec3:
+            case material::NodeType::Vec2ToVec4:
+            case material::NodeType::Vec3ToVec2:
             case material::NodeType::Vec3ToVec4:
+            case material::NodeType::Vec4ToVec2:
             case material::NodeType::Vec4ToVec3:
                 return IM_COL32(100, 180, 180, 255);
             default:
@@ -202,7 +206,11 @@ namespace editor::graph {
             case material::NodeType::Vec2ToFloat:    return "Vec2 To Float";
             case material::NodeType::Vec3ToFloat:    return "Vec3 To Float";
             case material::NodeType::Vec4ToFloat:    return "Vec4 To Float";
+            case material::NodeType::Vec2ToVec3:     return "Vec2 To Vec3";
+            case material::NodeType::Vec2ToVec4:     return "Vec2 To Vec4";
+            case material::NodeType::Vec3ToVec2:     return "Vec3 To Vec2";
             case material::NodeType::Vec3ToVec4:     return "Vec3 To Vec4";
+            case material::NodeType::Vec4ToVec2:     return "Vec4 To Vec2";
             case material::NodeType::Vec4ToVec3:     return "Vec4 To Vec3";
             default:                                 return "Unknown";
         }

@@ -79,7 +79,6 @@ namespace editor::graph {
 
         // VK-56: Type validation for links
         static bool validateLinkTypes(const material::ShaderGraph& graph, std::string& errorMessage);
-        static std::string pinTypeToString(material::PinType type);
 
     };
 

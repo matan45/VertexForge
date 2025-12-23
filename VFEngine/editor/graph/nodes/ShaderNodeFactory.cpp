@@ -97,8 +97,16 @@ namespace editor::graph {
                 return std::make_unique<Vec3ToFloatNode>();
             case material::NodeType::Vec4ToFloat:
                 return std::make_unique<Vec4ToFloatNode>();
+            case material::NodeType::Vec2ToVec3:
+                return std::make_unique<Vec2ToVec3Node>();
+            case material::NodeType::Vec2ToVec4:
+                return std::make_unique<Vec2ToVec4Node>();
+            case material::NodeType::Vec3ToVec2:
+                return std::make_unique<Vec3ToVec2Node>();
             case material::NodeType::Vec3ToVec4:
                 return std::make_unique<Vec3ToVec4Node>();
+            case material::NodeType::Vec4ToVec2:
+                return std::make_unique<Vec4ToVec2Node>();
             case material::NodeType::Vec4ToVec3:
                 return std::make_unique<Vec4ToVec3Node>();
 

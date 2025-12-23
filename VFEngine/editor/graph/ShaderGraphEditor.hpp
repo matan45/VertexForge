@@ -90,7 +90,6 @@ namespace editor::graph {
         material::ShaderNode* findNodeByPinId(uint32_t pinId);
         bool canCreateLink(uint32_t startPinId, uint32_t endPinId) const;
         std::string getTypeMismatchMessage(uint32_t startPinId, uint32_t endPinId) const;
-        std::string pinTypeToString(material::PinType type) const;
         std::string getConversionNodeName(material::PinType srcType, material::PinType dstType) const;
         ImU32 getPinColor(material::PinType type) const;
         ImU32 getNodeHeaderColor(material::NodeType type) const;
