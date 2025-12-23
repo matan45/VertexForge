@@ -24,13 +24,16 @@ namespace render::mesh
 
         // Texture paths (empty = use scalar value)
         std::string albedoTexturePath;
-        std::string metallicTexturePath;
-        std::string roughnessTexturePath;
-        std::string aoTexturePath;
         std::string normalTexturePath;
+        std::string ormTexturePath;           // ORM packed texture (R=AO, G=Roughness, B=Metallic)
+        std::string metallicTexturePath;      // Individual metallic
+        std::string roughnessTexturePath;     // Individual roughness
+        std::string aoTexturePath;            // Individual AO
         std::string emissionTexturePath;
-
-        // Material path for shader cache lookup
+        std::string heightTexturePath;
+        
+        bool usesORM() const { return !ormTexturePath.empty(); }
+        
         std::string materialPath;
     };
 

@@ -262,7 +262,7 @@ namespace editor::graph {
             }
             
             int texIndex = static_cast<int>(getPropertyValue<float>("textureIndex", 0.0f));
-            texIndex = std::clamp(texIndex, 0, 5);  // Max 6 textures per material (indices 0-5)
+            texIndex = std::clamp(texIndex, 0, material::MAX_MATERIAL_TEXTURES - 1); 
 
             std::string code;
             // Sample the texture - uses texture array indexed by textureIndex
@@ -289,6 +289,59 @@ namespace editor::graph {
             if (pinName == "R" || pinName == "G" || pinName == "B" || pinName == "A") return "float";
             if (pinName == "RGB") return "vec3";
             return "vec4";
+        }
+    };
+
+    // ORM Sample Node - Specialized sampler for ORM (AO/Roughness/Metallic/Emissive) textures
+    class OrmSampleNode : public ShaderNodeBase {
+    public:
+        OrmSampleNode() {
+            type = material::NodeType::OrmSample;
+            name = "ORM Sample";
+            properties["texturePath"] = std::string("");
+            properties["textureIndex"] = static_cast<float>(material::toIndex(material::TextureSlot::ORM)); // Default to ORM slot (2)
+
+            addInputPin("UV", material::PinType::Vec2, glm::vec2(0.0f));  // Default uses vertex UV
+            addOutputPin("AO", material::PinType::Float);
+            addOutputPin("Roughness", material::PinType::Float);
+            addOutputPin("Metallic", material::PinType::Float);
+        }
+
+        std::string generateCode(const std::string& outputVarPrefix,
+                                const std::map<std::string, std::string>& inputVarNames) const override {
+            // Get UV input (use vertex UV if not connected or if using default value)
+            std::string uvVar = "fragTexCoord";
+            auto it = inputVarNames.find("UV");
+            if (it != inputVarNames.end() && !it->second.empty()) {
+                const std::string& uv = it->second;
+                if (uv.find("vec2(0.0") == std::string::npos) {
+                    uvVar = uv;
+                }
+            }
+
+            int texIndex = static_cast<int>(getPropertyValue<float>("textureIndex",
+                static_cast<float>(material::toIndex(material::TextureSlot::ORM))));
+            texIndex = std::clamp(texIndex, 0, material::MAX_MATERIAL_TEXTURES - 1);
+
+            std::string code;
+            // Sample the ORM texture (R=AO, G=Roughness, B=Metallic, A unused)
+            code += "vec4 " + outputVarPrefix + "ORM = texture(u_Textures[" + std::to_string(texIndex) + "], " + uvVar + ");\n";
+            code += "float " + outputVarPrefix + "AO = " + outputVarPrefix + "ORM.r;\n";
+            code += "float " + outputVarPrefix + "Roughness = " + outputVarPrefix + "ORM.g;\n";
+            code += "float " + outputVarPrefix + "Metallic = " + outputVarPrefix + "ORM.b;\n";
+            return code;
+        }
+
+        std::string getOutputVarName(const std::string& outputVarPrefix,
+                                    const std::string& pinName) const override {
+            if (pinName == "AO") return outputVarPrefix + "AO";
+            if (pinName == "Roughness") return outputVarPrefix + "Roughness";
+            if (pinName == "Metallic") return outputVarPrefix + "Metallic";
+            return outputVarPrefix + "ORM";
+        }
+
+        std::string getOutputType([[maybe_unused]] const std::string& pinName) const override {
+            return "float";  // All outputs are floats
         }
     };
 

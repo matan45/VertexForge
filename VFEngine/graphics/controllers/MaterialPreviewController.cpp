@@ -468,23 +468,26 @@ namespace controllers
                 meshPipeline->injectMaterialForPreview(params.materialPath, params.materialData);
             }
         }
-
-        std::array<std::string, 6> texturePaths = {
-            params.albedoTexturePath,
-            params.metallicTexturePath,
-            params.roughnessTexturePath,
-            params.aoTexturePath,
-            params.normalTexturePath,
-            params.emissionTexturePath
+        
+        std::array<std::string, TextureManagerImpl::MAX_TEXTURES> texturePaths = {
+            params.albedoTexturePath,      // 0: Albedo
+            params.normalTexturePath,      // 1: Normal
+            params.ormTexturePath,         // 2: ORM
+            params.metallicTexturePath,    // 3: Metallic
+            params.roughnessTexturePath,   // 4: Roughness
+            params.aoTexturePath,          // 5: AO
+            params.emissionTexturePath,    // 6: Emission
+            params.heightTexturePath,      // 7: Height
+            "", "", "", "", "", "", "", "" // 8-15: Reserved
         };
 
         // Clear previous slot assignments and assign textures to fixed slots
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i)
         {
             textureManager->textureSlots[i].clear();
         }
 
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES; ++i)
         {
             const std::string& path = texturePaths[i];
             if (!path.empty())
@@ -514,11 +517,10 @@ namespace controllers
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
             if (meshPipeline)
             {
-                // Build arrays of image views and samplers (6 per material)
-                std::array<vk::ImageView, 6> imageViews;
-                std::array<vk::Sampler, 6> samplers;
+                std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES> imageViews;
+                std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES> samplers;
 
-                for (int i = 0; i < 6; ++i)
+                for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
                 {
                     if (!textureManager->textureSlots[i].empty())
                     {
@@ -643,12 +645,15 @@ namespace controllers
         }
 
 
-        renderData.albedoTexIdx = materialParams.albedoTexturePath.empty() ? -1.0f : 0.0f;
-        renderData.metallicTexIdx = materialParams.metallicTexturePath.empty() ? -1.0f : 1.0f;
-        renderData.roughnessTexIdx = materialParams.roughnessTexturePath.empty() ? -1.0f : 2.0f;
-        renderData.aoTexIdx = materialParams.aoTexturePath.empty() ? -1.0f : 3.0f;
-        renderData.normalTexIdx = materialParams.normalTexturePath.empty() ? -1.0f : 4.0f;
-        renderData.emissionTexIdx = materialParams.emissionTexturePath.empty() ? -1.0f : 5.0f;
+        // Set texture indices using new slot layout
+        // Slot 0=Albedo, 1=Normal, 2=ORM, 3=Metallic, 4=Roughness, 5=AO, 6=Emission
+        renderData.albedoTexIdx() = materialParams.albedoTexturePath.empty() ? -1.0f : 0.0f;
+        renderData.normalTexIdx() = materialParams.normalTexturePath.empty() ? -1.0f : 1.0f;
+        renderData.ormTexIdx() = materialParams.ormTexturePath.empty() ? -1.0f : 2.0f;
+        renderData.metallicTexIdx() = materialParams.metallicTexturePath.empty() ? -1.0f : 3.0f;
+        renderData.roughnessTexIdx() = materialParams.roughnessTexturePath.empty() ? -1.0f : 4.0f;
+        renderData.aoTexIdx() = materialParams.aoTexturePath.empty() ? -1.0f : 5.0f;
+        renderData.emissionTexIdx() = materialParams.emissionTexturePath.empty() ? -1.0f : 6.0f;
 
         meshDrawList.push_back(renderData);
 

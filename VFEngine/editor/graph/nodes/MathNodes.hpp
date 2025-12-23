@@ -119,6 +119,36 @@ namespace editor::graph {
             return "float";
         }
     };
+    
+    class MixColorNode : public ShaderNodeBase {
+    public:
+        MixColorNode() {
+            type = material::NodeType::MixColor;
+            name = "Mix Color";
+
+            addInputPin("A", material::PinType::Vec3, glm::vec3(0.0f));
+            addInputPin("B", material::PinType::Vec3, glm::vec3(1.0f));
+            addInputPin("Factor", material::PinType::Float, 0.5f);
+            addOutputPin("Result", material::PinType::Vec3);
+        }
+
+        std::string generateCode(const std::string& outputVarPrefix,
+                                const std::map<std::string, std::string>& inputVarNames) const override {
+            std::string a = inputVarNames.count("A") ? inputVarNames.at("A") : "vec3(0.0)";
+            std::string b = inputVarNames.count("B") ? inputVarNames.at("B") : "vec3(1.0)";
+            std::string factor = inputVarNames.count("Factor") ? inputVarNames.at("Factor") : "0.5";
+            return "vec3 " + outputVarPrefix + "Result = mix(" + a + ", " + b + ", " + factor + ");\n";
+        }
+
+        std::string getOutputVarName(const std::string& outputVarPrefix,
+                                    const std::string& /*pinName*/) const override {
+            return outputVarPrefix + "Result";
+        }
+
+        std::string getOutputType(const std::string& /*pinName*/) const override {
+            return "vec3";
+        }
+    };
 
     // Clamp: clamp(Value, Min, Max)
     class ClampNode : public ShaderNodeBase {

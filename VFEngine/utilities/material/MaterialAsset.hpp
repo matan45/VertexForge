@@ -17,8 +17,8 @@ namespace material {
         static MaterialData createDefault(const std::string& name = "New Material");
 
     private:
-        // Version for .vfMat format
-        static constexpr const char* FORMAT_VERSION = "1.0";
+        // Migrate material from older format versions
+        static void migrateFromVersion(MaterialData& material, const std::string& fromVersion);
     };
 
 }

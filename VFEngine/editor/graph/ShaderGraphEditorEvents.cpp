@@ -54,6 +54,15 @@ namespace editor::graph {
                             }
                         }
 
+                        // Remove any existing link to this input pin (input pins only accept one connection)
+                        currentGraph->links.erase(
+                            std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
+                                [&newLink](const material::NodeLink& existing) {
+                                    return existing.targetNodeId == newLink.targetNodeId &&
+                                           existing.targetPin == newLink.targetPin;
+                                }),
+                            currentGraph->links.end());
+
                         currentGraph->links.push_back(newLink);
                         if (onGraphChanged) onGraphChanged();
                     }
@@ -168,6 +177,10 @@ namespace editor::graph {
                     createNode(material::NodeType::Lerp, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
+                if (ImGui::MenuItem("Mix Color")) {
+                    createNode(material::NodeType::MixColor, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
                 if (ImGui::MenuItem("Clamp")) {
                     createNode(material::NodeType::Clamp, newNodePosition);
                     ImGui::CloseCurrentPopup();
@@ -254,6 +267,10 @@ namespace editor::graph {
             if (ImGui::BeginMenu("Texture")) {
                 if (ImGui::MenuItem("Texture Sample")) {
                     createNode(material::NodeType::TextureSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("ORM Sample")) {
+                    createNode(material::NodeType::OrmSample, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndMenu();

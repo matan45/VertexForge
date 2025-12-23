@@ -23,6 +23,7 @@ namespace editor::graph {
             addInputPin("Opacity", material::PinType::Float, 1.0f);
             addInputPin("IBLDiffuse", material::PinType::Float, 1.0f);
             addInputPin("IBLSpecular", material::PinType::Float, 0.5f);
+            addInputPin("Displacement", material::PinType::Float, 0.5f); 
         }
 
         std::string generateCode(const std::string& outputVarPrefix,
@@ -58,6 +59,7 @@ namespace editor::graph {
             std::string opacity = inputVarNames.count("Opacity") ? inputVarNames.at("Opacity") : "1.0";
             std::string iblDiffuse = inputVarNames.count("IBLDiffuse") ? toFloat(inputVarNames.at("IBLDiffuse"), "1.0") : "1.0";
             std::string iblSpecular = inputVarNames.count("IBLSpecular") ? toFloat(inputVarNames.at("IBLSpecular"), "0.5") : "0.5";
+            std::string displacement = inputVarNames.count("Displacement") ? toFloat(inputVarNames.at("Displacement"), "0.5") : "0.5";
 
             // Assign to material output variables (these will be used by the PBR lighting code)
             code += "    // Material properties from shader graph\n";
@@ -71,6 +73,7 @@ namespace editor::graph {
             code += "    float mat_opacity = clamp(" + opacity + ", 0.0, 1.0);\n";
             code += "    float mat_iblDiffuse = clamp(" + iblDiffuse + ", 0.0, 2.0);\n";
             code += "    float mat_iblSpecular = clamp(" + iblSpecular + ", 0.0, 2.0);\n";
+            code += "    float mat_displacement = " + displacement + ";\n";
 
             return code;
         }
@@ -95,6 +98,7 @@ namespace editor::graph {
         static std::string getOpacityVar() { return "mat_opacity"; }
         static std::string getIBLDiffuseVar() { return "mat_iblDiffuse"; }
         static std::string getIBLSpecularVar() { return "mat_iblSpecular"; }
+        static std::string getDisplacementVar() { return "mat_displacement"; }
     };
 
 }

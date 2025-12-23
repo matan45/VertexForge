@@ -51,6 +51,7 @@ namespace core {
         controllerParams.aoTexturePath = params.aoTexturePath;
         controllerParams.normalTexturePath = params.normalTexturePath;
         controllerParams.emissionTexturePath = params.emissionTexturePath;
+        controllerParams.heightTexturePath = params.heightTexturePath;
         controllerParams.materialPath = params.materialPath;
         controllerParams.useCustomShader = params.useCustomShader;
 
@@ -83,6 +84,7 @@ namespace core {
         result.aoTexturePath = controllerParams.aoTexturePath;
         result.normalTexturePath = controllerParams.normalTexturePath;
         result.emissionTexturePath = controllerParams.emissionTexturePath;
+        result.heightTexturePath = controllerParams.heightTexturePath;
         result.materialPath = controllerParams.materialPath;
         result.useCustomShader = controllerParams.useCustomShader;
         return result;

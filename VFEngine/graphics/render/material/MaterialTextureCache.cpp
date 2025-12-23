@@ -85,7 +85,7 @@ namespace render::mesh
             loggerError("Cannot update material descriptor set: default texture not available");
             return;
         }
-        
+
         std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
 
         // Helper to get view/sampler for a texture path
@@ -99,36 +99,14 @@ namespace render::mesh
             }
             return {defaultTexture.view, defaultTexture.sampler};
         };
-        
-        auto [albedoView, albedoSampler] = getViewSampler(textures.albedo);
-        imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        imageInfos[0].imageView = albedoView;
-        imageInfos[0].sampler = albedoSampler;
-        
-        auto [metallicView, metallicSampler] = getViewSampler(textures.metallic);
-        imageInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        imageInfos[1].imageView = metallicView;
-        imageInfos[1].sampler = metallicSampler;
-        
-        auto [roughnessView, roughnessSampler] = getViewSampler(textures.roughness);
-        imageInfos[2].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        imageInfos[2].imageView = roughnessView;
-        imageInfos[2].sampler = roughnessSampler;
-        
-        auto [aoView, aoSampler] = getViewSampler(textures.ao);
-        imageInfos[3].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        imageInfos[3].imageView = aoView;
-        imageInfos[3].sampler = aoSampler;
-        
-        auto [normalView, normalSampler] = getViewSampler(textures.normal);
-        imageInfos[4].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        imageInfos[4].imageView = normalView;
-        imageInfos[4].sampler = normalSampler;
-        
-        auto [emissionView, emissionSampler] = getViewSampler(textures.emission);
-        imageInfos[5].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        imageInfos[5].imageView = emissionView;
-        imageInfos[5].sampler = emissionSampler;
+
+        // Fill all 16 texture slots using the getPath helper
+        for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i) {
+            auto [view, sampler] = getViewSampler(textures.getPath(i));
+            imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            imageInfos[i].imageView = view;
+            imageInfos[i].sampler = sampler;
+        }
 
         vk::WriteDescriptorSet writeSet{};
         writeSet.dstSet = set;
@@ -158,12 +136,12 @@ namespace render::mesh
 
         // Load all textures before creating descriptor set
         // This ensures textures are in cache when we update the descriptor set
-        if (!textures.albedo.empty()) loadTexture(textures.albedo);
-        if (!textures.metallic.empty()) loadTexture(textures.metallic);
-        if (!textures.roughness.empty()) loadTexture(textures.roughness);
-        if (!textures.ao.empty()) loadTexture(textures.ao);
-        if (!textures.normal.empty()) loadTexture(textures.normal);
-        if (!textures.emission.empty()) loadTexture(textures.emission);
+        for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i) {
+            const std::string& path = textures.getPath(i);
+            if (!path.empty()) {
+                loadTexture(path);
+            }
+        }
 
         // Allocate and update new descriptor set
         vk::DescriptorSet set = allocateDescriptorSet();

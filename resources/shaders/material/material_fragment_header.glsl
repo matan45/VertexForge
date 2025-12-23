@@ -18,12 +18,28 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Material textures (6 per material)
-// Slot 0: albedo, 1: metallic, 2: roughness, 3: ao, 4: normal, 5: emission
-layout(set = 1, binding = 0) uniform sampler2D u_Textures[6];
+// Material textures (16 per material)
+// See TextureSlot enum for slot assignments:
+// 0: Albedo, 1: Normal, 2: ORM (packed), 3: Metallic, 4: Roughness, 5: AO, 6: Emission, 7: Height, etc.
+layout(set = 1, binding = 0) uniform sampler2D u_Textures[16];
 
 const float PI = 3.14159265359;
 const float MAX_REFLECTION_LOD = 4.0;
+
+// Texture slot indices (matching TextureSlot enum in MaterialTypes.hpp)
+const int TEX_SLOT_ALBEDO = 0;
+const int TEX_SLOT_NORMAL = 1;
+const int TEX_SLOT_ORM = 2;
+const int TEX_SLOT_METALLIC = 3;
+const int TEX_SLOT_ROUGHNESS = 4;
+const int TEX_SLOT_AO = 5;
+const int TEX_SLOT_EMISSION = 6;
+const int TEX_SLOT_HEIGHT = 7;
+
+// Unpack ORM texture: R=AO, G=Roughness, B=Metallic (A unused)
+vec3 unpackORM(vec4 ormSample) {
+    return ormSample.rgb; // AO, Roughness, Metallic
+}
 
 // PBR Functions
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
@@ -65,5 +81,37 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0) {
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
+
+// Parallax Occlusion Mapping - only compiled when USE_PARALLAX is defined
+#ifdef USE_PARALLAX
+// Returns offset UV coordinates based on height map
+vec2 parallaxOcclusionMapping(vec2 texCoord, vec3 viewDirTangent, float heightScale) {
+    const float minLayers = 8.0;
+    const float maxLayers = 32.0;
+    float numLayers = mix(maxLayers, minLayers, abs(dot(vec3(0.0, 0.0, 1.0), viewDirTangent)));
+
+    float layerDepth = 1.0 / numLayers;
+    float currentLayerDepth = 0.0;
+    vec2 P = viewDirTangent.xy / viewDirTangent.z * heightScale;
+    vec2 deltaTexCoord = P / numLayers;
+
+    vec2 currentTexCoord = texCoord;
+    float currentDepthMapValue = texture(u_Textures[TEX_SLOT_HEIGHT], currentTexCoord).r;
+
+    while (currentLayerDepth < currentDepthMapValue) {
+        currentTexCoord -= deltaTexCoord;
+        currentDepthMapValue = texture(u_Textures[TEX_SLOT_HEIGHT], currentTexCoord).r;
+        currentLayerDepth += layerDepth;
+    }
+
+    // Interpolation for smoother result
+    vec2 prevTexCoord = currentTexCoord + deltaTexCoord;
+    float afterDepth = currentDepthMapValue - currentLayerDepth;
+    float beforeDepth = texture(u_Textures[TEX_SLOT_HEIGHT], prevTexCoord).r - currentLayerDepth + layerDepth;
+    float weight = afterDepth / (afterDepth - beforeDepth);
+
+    return mix(currentTexCoord, prevTexCoord, weight);
+}
+#endif
 
 void main() {

@@ -6,12 +6,14 @@
 #include <material/MaterialManager.hpp>
 #include <material/MaterialAsset.hpp>
 #include <resource/ResourceManager.hpp>
+#include <texture/OrmTexturePacker.hpp>
 #include <nfd/FileDialog.hpp>
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/MaterialEvents.hpp"
 #include "events/PreviewEvents.hpp"
+#include "events/ResourceEvents.hpp"
 #include "time/Timer.hpp"
 #include <filesystem>
 #include <algorithm>
@@ -193,6 +195,9 @@ namespace windows {
                 }
                 ImGui::EndChild();
             }
+
+            // Draw ORM Pack dialog if open
+            drawOrmPackDialog();
         }
         ImGui::End();
     }
@@ -216,6 +221,20 @@ namespace windows {
             if (ImGui::BeginMenu("Edit")) {
                 if (ImGui::MenuItem("Navigate to Content")) {
                     graphEditor->navigateToContent();
+                }
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Tools")) {
+                if (ImGui::MenuItem("Pack ORM Texture...")) {
+                    showOrmPackDialog = true;
+                    ormAoPath.clear();
+                    ormRoughnessPath.clear();
+                    ormMetallicPath.clear();
+                    ormOutputPath.clear();
+                    ormPackError.clear();
+                    ormPackProgress = 0.0f;
+                    ormPackInProgress = false;
                 }
                 ImGui::EndMenu();
             }
@@ -390,13 +409,14 @@ namespace windows {
             }
             return std::nullopt;
         };
-
-        // Helper to get connected texture path from TextureSample node
+        
         auto getConnectedTexturePath = [this, pbrOutput](const std::string& pinName) -> std::string {
             for (const auto& link : materialData->graph.links) {
                 if (link.targetNodeId == pbrOutput->id && link.targetPin == pinName) {
                     for (const auto& node : materialData->graph.nodes) {
-                        if (node.id == link.sourceNodeId && node.type == material::NodeType::TextureSample) {
+                        if (node.id == link.sourceNodeId &&
+                            (node.type == material::NodeType::TextureSample ||
+                             node.type == material::NodeType::OrmSample)) {
                             auto it = node.properties.find("texturePath");
                             if (it != node.properties.end() && std::holds_alternative<std::string>(it->second)) {
                                 return std::get<std::string>(it->second);
@@ -625,6 +645,11 @@ namespace windows {
         bool changed = false;
 
         for (auto& [propName, propValue] : selectedNode->properties) {
+            // Skip internal properties that shouldn't be user-editable
+            if (propName == "textureIndex") {
+                continue;  // Auto-determined based on connections
+            }
+
             ImGui::PushID(propName.c_str());
 
             if (std::holds_alternative<float>(propValue)) {
@@ -667,7 +692,9 @@ namespace windows {
                 std::string value = std::get<std::string>(propValue);
 
                 // Special handling for texture path property
-                if (propName == "texturePath" && selectedNode->type == material::NodeType::TextureSample) {
+                if (propName == "texturePath" &&
+                    (selectedNode->type == material::NodeType::TextureSample ||
+                     selectedNode->type == material::NodeType::OrmSample)) {
                     ImGui::Text("Texture:");
                     ImGui::SameLine();
 
@@ -715,6 +742,179 @@ namespace windows {
 
         if (selectedNode->properties.empty()) {
             ImGui::TextDisabled("No editable properties");
+        }
+    }
+
+    void MaterialEditorWindow::drawOrmPackDialog() {
+        if (!showOrmPackDialog) return;
+
+        ImGui::OpenPopup("Pack ORM Texture");
+
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(500, 350), ImGuiCond_FirstUseEver);
+
+        if (ImGui::BeginPopupModal("Pack ORM Texture", &showOrmPackDialog, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped("Pack textures into a single ORME texture (R=AO, G=Roughness, B=Metallic, A=Emissive). All textures are optional - provide at least one. Missing textures use defaults.");
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            nfd::FileDialog fileDialog;
+            std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                {L"VF Image", L"*.vfImage"},
+                {L"All Files", L"*.*"}
+            };
+
+            // AO texture selection (optional)
+            ImGui::Text("Ambient Occlusion (AO) - default: 255 (no occlusion):");
+            ImGui::PushID("ao");
+            {
+                std::string display = ormAoPath.empty() ? "(None - uses default)" :
+                    std::filesystem::path(ormAoPath).filename().string();
+                ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...")) {
+                    std::string path = fileDialog.openFileDialog(filters);
+                    if (!path.empty()) ormAoPath = path;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear")) ormAoPath.clear();
+            }
+            ImGui::PopID();
+
+            // Roughness texture selection (optional)
+            ImGui::Text("Roughness - default: 128 (mid roughness):");
+            ImGui::PushID("roughness");
+            {
+                std::string display = ormRoughnessPath.empty() ? "(None - uses default)" :
+                    std::filesystem::path(ormRoughnessPath).filename().string();
+                ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...")) {
+                    std::string path = fileDialog.openFileDialog(filters);
+                    if (!path.empty()) ormRoughnessPath = path;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear")) ormRoughnessPath.clear();
+            }
+            ImGui::PopID();
+
+            // Metallic texture selection (optional)
+            ImGui::Text("Metallic - default: 0 (non-metallic):");
+            ImGui::PushID("metallic");
+            {
+                std::string display = ormMetallicPath.empty() ? "(None - uses default)" :
+                    std::filesystem::path(ormMetallicPath).filename().string();
+                ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...")) {
+                    std::string path = fileDialog.openFileDialog(filters);
+                    if (!path.empty()) ormMetallicPath = path;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear")) ormMetallicPath.clear();
+            }
+            ImGui::PopID();
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Output path selection
+            ImGui::Text("Output Path:");
+            ImGui::PushID("output");
+            {
+                std::string display = ormOutputPath.empty() ? "(Select output location)" :
+                    std::filesystem::path(ormOutputPath).filename().string();
+                ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...")) {
+                    std::vector<std::pair<std::wstring, std::wstring>> saveFilters = {
+                        {L"VF Image", L"*.vfImage"}
+                    };
+                    std::string path = fileDialog.saveFileDialog(saveFilters, L"ORM_packed.vfImage");
+                    if (!path.empty()) {
+                        // Ensure .vfImage extension
+                        if (path.find(".vfImage") == std::string::npos) {
+                            path += ".vfImage";
+                        }
+                        ormOutputPath = path;
+                    }
+                }
+            }
+            ImGui::PopID();
+
+            ImGui::Spacing();
+
+            // Progress bar
+            if (ormPackInProgress) {
+                ImGui::ProgressBar(ormPackProgress, ImVec2(-1, 0), "Packing...");
+            }
+
+            // Error message
+            if (!ormPackError.empty()) {
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", ormPackError.c_str());
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Buttons - need at least one texture and an output path
+            bool hasAtLeastOneTexture = !ormAoPath.empty() || !ormRoughnessPath.empty() ||
+                                        !ormMetallicPath.empty();
+            bool canPack = hasAtLeastOneTexture && !ormOutputPath.empty() && !ormPackInProgress;
+
+            if (!canPack) ImGui::BeginDisabled();
+            if (ImGui::Button("Pack", ImVec2(120, 0))) {
+                packOrmTextures();
+            }
+            if (!canPack) ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+                showOrmPackDialog = false;
+            }
+
+            ImGui::EndPopup();
+        }
+    }
+
+    void MaterialEditorWindow::packOrmTextures() {
+        ormPackError.clear();
+        ormPackInProgress = true;
+        ormPackProgress = 0.0f;
+
+        texture::OrmPackInput input;
+        input.aoPath = ormAoPath;
+        input.roughnessPath = ormRoughnessPath;
+        input.metallicPath = ormMetallicPath;
+        input.outputPath = ormOutputPath;
+
+        auto result = texture::OrmTexturePacker::packORM(
+            input,
+            [this](float progress) {
+                ormPackProgress = progress;
+            }
+        );
+
+        ormPackInProgress = false;
+
+        if (result.success) {
+            vfLogInfo("ORM texture packed successfully: {}", result.outputPath);
+            showOrmPackDialog = false;
+
+            // Notify content browser to refresh (reuses import notification)
+            events::resource::ImportCompletedNotification notification;
+            services::ImportResult importResult;
+            importResult.success = true;
+            importResult.sourcePath = result.outputPath;
+            notification.results.push_back(importResult);
+            events::EventDispatcher::instance().publish(notification);
+        } else {
+            ormPackError = result.errorMessage;
+            vfLogError("Failed to pack ORM texture: {}", result.errorMessage);
         }
     }
 

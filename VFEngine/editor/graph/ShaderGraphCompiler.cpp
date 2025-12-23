@@ -11,18 +11,6 @@
 
 namespace editor::graph {
 
-    // Limits to prevent stack overflow from malicious/malformed material files
-    static constexpr size_t MAX_RECURSION_DEPTH = 100;
-    static constexpr size_t MAX_NODES = 1000;
-
-    // Shader template paths (relative to executable)
-    static constexpr std::string_view VERTEX_TEMPLATE_PATH = "../../resources/shaders/material/material_vertex.glsl";
-    static constexpr std::string_view FRAGMENT_HEADER_PATH = "../../resources/shaders/material/material_fragment_header.glsl";
-    static constexpr std::string_view FRAGMENT_FOOTER_PATH = "../../resources/shaders/material/material_fragment_footer.glsl";
-
-    // Allowed base directory for shader files (relative to executable)
-    static constexpr std::string_view ALLOWED_SHADER_DIR = "../../resources/shaders";
-
     // Static member initialization
     std::string ShaderGraphCompiler::s_vertexTemplate;
     std::string ShaderGraphCompiler::s_fragmentHeader;
@@ -149,12 +137,44 @@ namespace editor::graph {
     std::string ShaderGraphCompiler::generateVertexShader() {
         return s_vertexTemplate;
     }
+    
+    static bool isDisplacementConnected(const material::ShaderGraph& graph) {
+        const material::ShaderNode* outputNode = graph.findOutputNode();
+        if (!outputNode) return false;
+
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == outputNode->id && link.targetPin == "Displacement") {
+                return true;
+            }
+        }
+        return false;
+    }
 
     std::string ShaderGraphCompiler::generateFragmentShader(const material::ShaderGraph& graph) {
         std::string code;
-
-        // Start with cached fragment header (includes uniforms, PBR functions, and main() opening)
-        code += s_fragmentHeader;
+        
+        bool useParallax = isDisplacementConnected(graph);
+        
+        if (useParallax) {
+            // Find the end of the #version line (after #type FRAGMENT line)
+            size_t versionPos = s_fragmentHeader.find("#version");
+            if (versionPos != std::string::npos) {
+                size_t versionEnd = s_fragmentHeader.find('\n', versionPos);
+                if (versionEnd != std::string::npos) {
+                    code += s_fragmentHeader.substr(0, versionEnd + 1);
+                    code += "#define USE_PARALLAX 1\n";
+                    code += s_fragmentHeader.substr(versionEnd + 1);
+                } else {
+                    code += s_fragmentHeader;
+                    code += "#define USE_PARALLAX 1\n";
+                }
+            } else {
+                code += "#define USE_PARALLAX 1\n";
+                code += s_fragmentHeader;
+            }
+        } else {
+            code += s_fragmentHeader;
+        }
 
         // Get topologically sorted nodes
         std::vector<uint32_t> sortedNodes = topologicalSort(graph);
@@ -295,8 +315,7 @@ namespace editor::graph {
         // Create a mutable copy of node data for TextureSample nodes
         // so we can set the correct texture index based on PBR connection
         material::ShaderNode modifiedNodeData = *nodeData;
-
-        // For TextureSample nodes, determine correct texture index based on PBR connection
+        
         if (nodeData->type == material::NodeType::TextureSample) {
             int pbrIndex = determinePBRTextureIndex(graph, nodeId);
             if (pbrIndex >= 0) {
@@ -377,8 +396,7 @@ namespace editor::graph {
                 }
             }
         }
-
-        // Ultimate fallback
+        
         return "0.0";
     }
 

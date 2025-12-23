@@ -11,14 +11,57 @@ namespace core
 
 namespace render::mesh
 {
+   
     struct MaterialTexturePaths
     {
-        std::string albedo;
-        std::string metallic;
-        std::string roughness;
-        std::string ao;
-        std::string normal;
-        std::string emission;
+        // Core PBR textures
+        std::string albedo;         // Slot 0: RGB color, A for opacity
+        std::string normal;         // Slot 1: Tangent-space normal map
+        std::string orm;            // Slot 2: Packed ORM (R=AO, G=Roughness, B=Metallic)
+
+        // Legacy individual textures (for backward compatibility)
+        std::string metallic;       // Slot 3: Individual metallic map
+        std::string roughness;      // Slot 4: Individual roughness map
+        std::string ao;             // Slot 5: Individual ambient occlusion map
+
+        // Additional textures
+        std::string emission;       // Slot 6: RGB emission color
+        std::string height;         // Slot 7: Height/displacement map
+        // Additional texture slots for material graph use (mixing, animation, etc.)
+        std::string texture8;       // Slot 8: User-defined
+        std::string texture9;       // Slot 9: User-defined
+        std::string texture10;      // Slot 10: User-defined
+        std::string texture11;      // Slot 11: User-defined
+        std::string texture12;      // Slot 12: User-defined
+        std::string texture13;      // Slot 13: User-defined
+        std::string texture14;      // Slot 14: User-defined
+        std::string texture15;      // Slot 15: User-defined
+
+        // Check if using packed ORM texture (vs individual metallic/roughness/ao)
+        bool usesORM() const { return !orm.empty(); }
+
+        // Get path for a specific slot index
+        const std::string& getPath(int slotIndex) const {
+            switch (slotIndex) {
+                case 0: return albedo;
+                case 1: return normal;
+                case 2: return orm;
+                case 3: return metallic;
+                case 4: return roughness;
+                case 5: return ao;
+                case 6: return emission;
+                case 7: return height;
+                case 8: return texture8;
+                case 9: return texture9;
+                case 10: return texture10;
+                case 11: return texture11;
+                case 12: return texture12;
+                case 13: return texture13;
+                case 14: return texture14;
+                case 15: return texture15;
+                default: return albedo; // Fallback
+            }
+        }
     };
 
     class MaterialTextureCache

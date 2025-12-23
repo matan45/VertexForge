@@ -31,8 +31,7 @@ namespace controllers
 
     struct TextureManagerImpl
     {
-        // 6 texture slots per material: albedo, metallic, roughness, ao, normal, emission
-        static constexpr int MAX_TEXTURES = 6;
+        static constexpr int MAX_TEXTURES = 16;
         std::unordered_map<std::string, PreviewTextureGPU> textureCache;
         std::array<std::string, MAX_TEXTURES> textureSlots;
         PreviewTextureGPU defaultTexture;
@@ -56,12 +55,15 @@ namespace controllers
         float emission = 0.0f;
 
         // Texture paths (empty = use scalar value)
+        // Order matches material::TextureSlot enum
         std::string albedoTexturePath;
-        std::string metallicTexturePath;
-        std::string roughnessTexturePath;
-        std::string aoTexturePath;
         std::string normalTexturePath;
+        std::string ormTexturePath;          // ORM packed texture (R=AO, G=Roughness, B=Metallic)
+        std::string metallicTexturePath;     // Legacy individual
+        std::string roughnessTexturePath;    // Legacy individual
+        std::string aoTexturePath;           // Legacy individual
         std::string emissionTexturePath;
+        std::string heightTexturePath;
 
         // Material path for custom shader pipeline lookup
         std::string materialPath;

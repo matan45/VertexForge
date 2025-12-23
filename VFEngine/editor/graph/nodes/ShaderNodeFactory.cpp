@@ -42,6 +42,8 @@ namespace editor::graph {
                 return std::make_unique<PowerNode>();
             case material::NodeType::Lerp:
                 return std::make_unique<LerpNode>();
+            case material::NodeType::MixColor:
+                return std::make_unique<MixColorNode>();
             case material::NodeType::Clamp:
                 return std::make_unique<ClampNode>();
             case material::NodeType::Saturate:
@@ -78,6 +80,8 @@ namespace editor::graph {
             // Texture
             case material::NodeType::TextureSample:
                 return std::make_unique<TextureSampleNode>();
+            case material::NodeType::OrmSample:
+                return std::make_unique<OrmSampleNode>();
 
             default:
                 return std::make_unique<ConstantScalarNode>();  // Default fallback

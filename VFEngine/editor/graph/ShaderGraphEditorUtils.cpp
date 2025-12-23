@@ -99,6 +99,10 @@ namespace editor::graph {
                 return IM_COL32(150, 150, 80, 255);
             case material::NodeType::TextureSample:
                 return IM_COL32(180, 100, 180, 255);
+            case material::NodeType::OrmSample:
+                return IM_COL32(180, 100, 180, 255);
+            case material::NodeType::MixColor:
+                return IM_COL32(100, 180, 100, 255);
             default:
                 return IM_COL32(100, 100, 100, 255);
         }
@@ -141,6 +145,8 @@ namespace editor::graph {
             case material::NodeType::VertexUV:       return "UV";
             case material::NodeType::Time:           return "Time";
             case material::NodeType::TextureSample:  return "Texture Sample";
+            case material::NodeType::OrmSample:      return "ORM Sample";
+            case material::NodeType::MixColor:       return "Mix Color";
             default:                                 return "Unknown";
         }
     }

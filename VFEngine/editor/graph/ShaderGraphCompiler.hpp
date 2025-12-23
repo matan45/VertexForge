@@ -12,19 +12,33 @@ namespace editor::graph {
         std::string fragmentShader;
         std::string errorMessage;
     };
-
+    
     static const std::map<std::string, int> pbrPinToIndex = {
-        {"Albedo", 0},
-        {"Metallic", 1},
-        {"Roughness", 2},
-        {"AO", 3},
-        {"Normal", 4},
-        {"Emission", 5}
+        {"Albedo", 0},      // TextureSlot::Albedo
+        {"Normal", 1},      // TextureSlot::Normal
+        {"ORM", 2},         // TextureSlot::ORM (packed AO/Roughness/Metallic)
+        {"Metallic", 3},    // TextureSlot::Metallic (legacy individual)
+        {"Roughness", 4},   // TextureSlot::Roughness (legacy individual)
+        {"AO", 5},          // TextureSlot::AO (legacy individual)
+        {"Emission", 6},    // TextureSlot::Emission
+        {"Displacement", 7} // TextureSlot::Height (displacement/height map)
     };
 
     
     class ShaderGraphCompiler {
     private:
+        // Limits to prevent stack overflow from malicious/malformed material files
+        static constexpr size_t MAX_RECURSION_DEPTH = 100;
+        static constexpr size_t MAX_NODES = 1000;
+
+        // Shader template paths (relative to executable)
+        static constexpr std::string_view VERTEX_TEMPLATE_PATH = "../../resources/shaders/material/material_vertex.glsl";
+        static constexpr std::string_view FRAGMENT_HEADER_PATH = "../../resources/shaders/material/material_fragment_header.glsl";
+        static constexpr std::string_view FRAGMENT_FOOTER_PATH = "../../resources/shaders/material/material_fragment_footer.glsl";
+
+        // Allowed base directory for shader files (relative to executable)
+        static constexpr std::string_view ALLOWED_SHADER_DIR = "../../resources/shaders";
+
         // Cached shader templates
         static std::string s_vertexTemplate;
         static std::string s_fragmentHeader;

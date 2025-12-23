@@ -119,6 +119,7 @@
     <ClInclude Include="serialization\JsonConverters.hpp" />
     <ClInclude Include="serialization\SceneSerialization.hpp" />
     <ClInclude Include="string\StringUtil.hpp" />
+    <ClInclude Include="texture\OrmTexturePacker.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Profiler.hpp" />
     <ClInclude Include="time\Timer.hpp" />
@@ -143,6 +144,7 @@
     <ClCompile Include="scene\SceneGraphSystem.cpp" />
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="string\StringUtil.cpp" />
+    <ClCompile Include="texture\OrmTexturePacker.cpp" />
     <ClCompile Include="time\Profiler.cpp" />
     <ClCompile Include="time\Timer.cpp" />
   </ItemGroup>
