@@ -2,6 +2,7 @@
 #include "ConstantNodes.hpp"
 #include "MathNodes.hpp"
 #include "PBROutputNode.hpp"
+#include "ConversionNodes.hpp"
 
 namespace editor::graph {
 
@@ -82,6 +83,24 @@ namespace editor::graph {
                 return std::make_unique<TextureSampleNode>();
             case material::NodeType::OrmSample:
                 return std::make_unique<OrmSampleNode>();
+
+            // Type Conversions (VK-56)
+            case material::NodeType::FloatToVec2:
+                return std::make_unique<FloatToVec2Node>();
+            case material::NodeType::FloatToVec3:
+                return std::make_unique<FloatToVec3Node>();
+            case material::NodeType::FloatToVec4:
+                return std::make_unique<FloatToVec4Node>();
+            case material::NodeType::Vec2ToFloat:
+                return std::make_unique<Vec2ToFloatNode>();
+            case material::NodeType::Vec3ToFloat:
+                return std::make_unique<Vec3ToFloatNode>();
+            case material::NodeType::Vec4ToFloat:
+                return std::make_unique<Vec4ToFloatNode>();
+            case material::NodeType::Vec3ToVec4:
+                return std::make_unique<Vec3ToVec4Node>();
+            case material::NodeType::Vec4ToVec3:
+                return std::make_unique<Vec4ToVec3Node>();
 
             default:
                 return std::make_unique<ConstantScalarNode>();  // Default fallback

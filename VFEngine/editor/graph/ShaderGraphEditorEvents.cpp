@@ -68,6 +68,16 @@ namespace editor::graph {
                     }
                 } else {
                     ed::RejectNewItem(ImColor(255, 0, 0), 2.0f);
+
+                    // VK-56: Show tooltip with type mismatch reason
+                    std::string errorMsg = getTypeMismatchMessage(startId, endId);
+                    if (!errorMsg.empty()) {
+                        ImGui::BeginTooltip();
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+                        ImGui::TextUnformatted(errorMsg.c_str());
+                        ImGui::PopStyleColor();
+                        ImGui::EndTooltip();
+                    }
                 }
             }
 
@@ -271,6 +281,45 @@ namespace editor::graph {
                 }
                 if (ImGui::MenuItem("ORM Sample")) {
                     createNode(material::NodeType::OrmSample, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndMenu();
+            }
+
+            // Conversion (VK-56: Type casting nodes)
+            if (ImGui::BeginMenu("Conversion")) {
+                if (ImGui::MenuItem("Float To Vec2")) {
+                    createNode(material::NodeType::FloatToVec2, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Float To Vec3")) {
+                    createNode(material::NodeType::FloatToVec3, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Float To Vec4")) {
+                    createNode(material::NodeType::FloatToVec4, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Vec2 To Float")) {
+                    createNode(material::NodeType::Vec2ToFloat, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Vec3 To Float")) {
+                    createNode(material::NodeType::Vec3ToFloat, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Vec4 To Float")) {
+                    createNode(material::NodeType::Vec4ToFloat, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Vec3 To Vec4")) {
+                    createNode(material::NodeType::Vec3ToVec4, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::MenuItem("Vec4 To Vec3")) {
+                    createNode(material::NodeType::Vec4ToVec3, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndMenu();

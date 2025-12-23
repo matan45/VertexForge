@@ -27,7 +27,7 @@ namespace editor::graph {
     }
 
     bool ShaderGraphEditor::canCreateLink(uint32_t startPinId, uint32_t endPinId) const {
-        
+
         const material::NodePin* startPin = findPin(startPinId);
         const material::NodePin* endPin = findPin(endPinId);
 
@@ -40,30 +40,68 @@ namespace editor::graph {
         const material::NodePin* sourcePin = (startPin->kind == material::PinKind::Output) ? startPin : endPin;
         const material::NodePin* targetPin = (startPin->kind == material::PinKind::Input) ? startPin : endPin;
 
-        material::PinType srcType = sourcePin->type;
-        material::PinType dstType = targetPin->type;
-        
-        // Same type is always compatible
-        if (srcType == dstType) return true;
+        // VK-56: Strict type matching - only exact type matches allowed
+        // Use conversion nodes (FloatToVec3, Vec3ToFloat, etc.) for type conversions
+        return sourcePin->type == targetPin->type;
+    }
 
-        //TODO https://matan33214.atlassian.net/browse/VK-56
-        // Texture2D can only connect to Texture2D
-        if (srcType == material::PinType::Texture2D || dstType == material::PinType::Texture2D) {
-            return false;
+    std::string ShaderGraphEditor::getTypeMismatchMessage(uint32_t startPinId, uint32_t endPinId) const {
+        const material::NodePin* startPin = findPin(startPinId);
+        const material::NodePin* endPin = findPin(endPinId);
+
+        if (!startPin || !endPin) return "";
+
+        // Determine source and target
+        const material::NodePin* sourcePin = (startPin->kind == material::PinKind::Output) ? startPin : endPin;
+        const material::NodePin* targetPin = (startPin->kind == material::PinKind::Input) ? startPin : endPin;
+
+        if (sourcePin->type == targetPin->type) return "";
+
+        std::string srcTypeName = pinTypeToString(sourcePin->type);
+        std::string dstTypeName = pinTypeToString(targetPin->type);
+
+        std::string conversionNode = getConversionNodeName(sourcePin->type, targetPin->type);
+
+        return "Cannot connect " + srcTypeName + " to " + dstTypeName + ".\nUse '" + conversionNode + "' node.";
+    }
+
+    std::string ShaderGraphEditor::pinTypeToString(material::PinType type) const {
+        switch (type) {
+            case material::PinType::Float:     return "Float";
+            case material::PinType::Vec2:      return "Vec2";
+            case material::PinType::Vec3:      return "Vec3";
+            case material::PinType::Vec4:      return "Vec4";
+            case material::PinType::Texture2D: return "Texture2D";
+            default:                           return "Unknown";
         }
+    }
 
-        // Float can connect to any vector type (broadcasts)
+    std::string ShaderGraphEditor::getConversionNodeName(material::PinType srcType, material::PinType dstType) const {
+        // Return the appropriate conversion node name
         if (srcType == material::PinType::Float) {
-            return true;
+            switch (dstType) {
+                case material::PinType::Vec2: return "Float To Vec2";
+                case material::PinType::Vec3: return "Float To Vec3";
+                case material::PinType::Vec4: return "Float To Vec4";
+                default: break;
+            }
+        }
+        else if (dstType == material::PinType::Float) {
+            switch (srcType) {
+                case material::PinType::Vec2: return "Vec2 To Float";
+                case material::PinType::Vec3: return "Vec3 To Float";
+                case material::PinType::Vec4: return "Vec4 To Float";
+                default: break;
+            }
+        }
+        else if (srcType == material::PinType::Vec3 && dstType == material::PinType::Vec4) {
+            return "Vec3 To Vec4";
+        }
+        else if (srcType == material::PinType::Vec4 && dstType == material::PinType::Vec3) {
+            return "Vec4 To Vec3";
         }
 
-        // Vector types can connect to Float (takes first component)
-        if (dstType == material::PinType::Float) {
-            return true;
-        }
-
-        // Vector type conversions (with padding/truncating)
-        return true;
+        return "a conversion";
     }
 
     ImU32 ShaderGraphEditor::getPinColor(material::PinType type) const {
@@ -103,6 +141,16 @@ namespace editor::graph {
                 return IM_COL32(180, 100, 180, 255);
             case material::NodeType::MixColor:
                 return IM_COL32(100, 180, 100, 255);
+            // Type Conversions (VK-56) - Cyan/Teal
+            case material::NodeType::FloatToVec2:
+            case material::NodeType::FloatToVec3:
+            case material::NodeType::FloatToVec4:
+            case material::NodeType::Vec2ToFloat:
+            case material::NodeType::Vec3ToFloat:
+            case material::NodeType::Vec4ToFloat:
+            case material::NodeType::Vec3ToVec4:
+            case material::NodeType::Vec4ToVec3:
+                return IM_COL32(100, 180, 180, 255);
             default:
                 return IM_COL32(100, 100, 100, 255);
         }
@@ -147,6 +195,15 @@ namespace editor::graph {
             case material::NodeType::TextureSample:  return "Texture Sample";
             case material::NodeType::OrmSample:      return "ORM Sample";
             case material::NodeType::MixColor:       return "Mix Color";
+            // Type Conversions (VK-56)
+            case material::NodeType::FloatToVec2:    return "Float To Vec2";
+            case material::NodeType::FloatToVec3:    return "Float To Vec3";
+            case material::NodeType::FloatToVec4:    return "Float To Vec4";
+            case material::NodeType::Vec2ToFloat:    return "Vec2 To Float";
+            case material::NodeType::Vec3ToFloat:    return "Vec3 To Float";
+            case material::NodeType::Vec4ToFloat:    return "Vec4 To Float";
+            case material::NodeType::Vec3ToVec4:     return "Vec3 To Vec4";
+            case material::NodeType::Vec4ToVec3:     return "Vec4 To Vec3";
             default:                                 return "Unknown";
         }
     }

@@ -157,7 +157,17 @@ namespace material {
 
         // Texture
         TextureSample,
-        OrmSample           // Specialized ORM texture sampler with AO/Roughness/Metallic/Emissive outputs
+        OrmSample,          // Specialized ORM texture sampler with AO/Roughness/Metallic/Emissive outputs
+
+        // Type Conversions
+        FloatToVec2,
+        FloatToVec3,
+        FloatToVec4,
+        Vec2ToFloat,
+        Vec3ToFloat,
+        Vec4ToFloat,
+        Vec3ToVec4,
+        Vec4ToVec3
     };
 
     // Node property variant (for node-specific settings)

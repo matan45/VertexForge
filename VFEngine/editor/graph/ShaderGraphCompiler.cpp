@@ -54,6 +54,14 @@ namespace editor::graph {
             return result;
         }
 
+        // VK-56: Validate link types as a safety net
+        std::string typeErrorMessage;
+        if (!validateLinkTypes(graph, typeErrorMessage)) {
+            result.success = false;
+            result.errorMessage = typeErrorMessage;
+            return result;
+        }
+
         // Generate shaders
         result.vertexShader = generateVertexShader();
         result.fragmentShader = generateFragmentShader(graph);
@@ -398,6 +406,75 @@ namespace editor::graph {
         }
         
         return "0.0";
+    }
+
+    // VK-56: Type validation helper
+    std::string ShaderGraphCompiler::pinTypeToString(material::PinType type) {
+        switch (type) {
+            case material::PinType::Float:     return "Float";
+            case material::PinType::Vec2:      return "Vec2";
+            case material::PinType::Vec3:      return "Vec3";
+            case material::PinType::Vec4:      return "Vec4";
+            case material::PinType::Texture2D: return "Texture2D";
+            default:                           return "Unknown";
+        }
+    }
+
+    // VK-56: Validate that all links have matching types
+    bool ShaderGraphCompiler::validateLinkTypes(const material::ShaderGraph& graph, std::string& errorMessage) {
+        for (const auto& link : graph.links) {
+            // Find source and target nodes
+            const material::ShaderNode* sourceNode = graph.findNode(link.sourceNodeId);
+            const material::ShaderNode* targetNode = graph.findNode(link.targetNodeId);
+
+            if (!sourceNode || !targetNode) {
+                errorMessage = "Invalid link: source or target node not found";
+                return false;
+            }
+
+            // Find source pin (output)
+            material::PinType sourceType = material::PinType::Float;
+            bool foundSource = false;
+            for (const auto& pin : sourceNode->outputs) {
+                if (pin.name == link.sourcePin) {
+                    sourceType = pin.type;
+                    foundSource = true;
+                    break;
+                }
+            }
+
+            // Find target pin (input)
+            material::PinType targetType = material::PinType::Float;
+            bool foundTarget = false;
+            for (const auto& pin : targetNode->inputs) {
+                if (pin.name == link.targetPin) {
+                    targetType = pin.type;
+                    foundTarget = true;
+                    break;
+                }
+            }
+
+            if (!foundSource || !foundTarget) {
+                errorMessage = "Invalid link: pin not found on node";
+                return false;
+            }
+
+            // Check type match
+            if (sourceType != targetType) {
+                errorMessage = "Type mismatch in link from '" + sourceNode->name + "' (" + link.sourcePin +
+                              ") to '" + targetNode->name + "' (" + link.targetPin + ").\n" +
+                              "Expected: " + pinTypeToString(targetType) +
+                              ", Got: " + pinTypeToString(sourceType) + ".\n" +
+                              "Use a conversion node to fix this.";
+                vfLogError("Shader graph type mismatch: {} ({}) -> {} ({}) : {} vs {}",
+                          sourceNode->name, link.sourcePin,
+                          targetNode->name, link.targetPin,
+                          pinTypeToString(sourceType), pinTypeToString(targetType));
+                return false;
+            }
+        }
+
+        return true;
     }
 
 }
