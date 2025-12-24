@@ -74,9 +74,11 @@ namespace editor::graph {
                                           const std::string& pinName,
                                           const std::map<uint32_t, std::map<std::string, std::string>>& nodeOutputVars);
 
-        
+
         static int determinePBRTextureIndex(const material::ShaderGraph& graph, uint32_t nodeId);
-        
+
+        static bool validateLinkTypes(const material::ShaderGraph& graph, std::string& errorMessage);
+
     };
 
 }

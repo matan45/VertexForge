@@ -97,6 +97,7 @@
     <ClInclude Include="graph\ShaderGraphCompiler.hpp" />
     <ClInclude Include="graph\ShaderGraphEditor.hpp" />
     <ClInclude Include="graph\nodes\ConstantNodes.hpp" />
+    <ClInclude Include="graph\nodes\ConversionNodes.hpp" />
     <ClInclude Include="graph\nodes\MathNodes.hpp" />
     <ClInclude Include="graph\nodes\PBROutputNode.hpp" />
     <ClInclude Include="graph\nodes\ShaderNode.hpp" />
