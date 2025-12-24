@@ -85,9 +85,11 @@ namespace services {
         virtual void removeAudioSource(EntityHandle entity) = 0;
         
         virtual bool hasAudioSource(EntityHandle entity) const = 0;
-        
+
         virtual void playEntityAudio(EntityHandle entity) = 0;
-        
+
+        virtual void pauseEntityAudio(EntityHandle entity) = 0;
+
         virtual void stopEntityAudio(EntityHandle entity) = 0;
     };
 

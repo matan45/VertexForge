@@ -106,6 +106,11 @@ namespace services {
                 playEntityAudio(cmd.entity);
             });
 
+        dispatcher.registerCommandHandler<events::audio::PauseEntityAudioCommand>(
+            [this](const auto& cmd) {
+                pauseEntityAudio(cmd.entity);
+            });
+
         dispatcher.registerCommandHandler<events::audio::StopEntityAudioCommand>(
             [this](const auto& cmd) {
                 stopEntityAudio(cmd.entity);
@@ -243,6 +248,15 @@ namespace services {
         AudioPlayParams playParams = convertParams(params);
         AudioHandleId handleId = audioProvider->playSound(state.data.audioFilePath, playParams);
         state.currentHandle = AudioHandle{handleId};
+    }
+
+    void AudioServiceImpl::pauseEntityAudio(EntityHandle entity) {
+        auto it = entityAudioSources.find(entity);
+        if (it == entityAudioSources.end()) return;
+
+        if (it->second.currentHandle.isValid()) {
+            audioProvider->pauseSound(it->second.currentHandle.id);
+        }
     }
 
     void AudioServiceImpl::stopEntityAudio(EntityHandle entity) {

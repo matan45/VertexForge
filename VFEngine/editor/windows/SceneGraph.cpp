@@ -845,7 +845,15 @@ namespace windows
 
             // Check if we have an active preview handle for this entity
             auto previewIt = audioPreviewHandles.find(handle.id);
-            bool hasPreviewHandle = previewIt != audioPreviewHandles.end() && previewIt->second.isValid();
+            bool hasPreviewHandle = previewIt != audioPreviewHandles.end();
+
+            // Clean up invalid handles
+            if (hasPreviewHandle && !previewIt->second.isValid())
+            {
+                audioPreviewHandles.erase(previewIt);
+                hasPreviewHandle = false;
+                previewIt = audioPreviewHandles.end();
+            }
 
             // Check if currently playing
             bool isCurrentlyPlaying = false;
@@ -854,13 +862,6 @@ namespace windows
                 services::events::audio::IsSoundPlayingQuery playingQuery;
                 playingQuery.handle = previewIt->second;
                 isCurrentlyPlaying = dispatcher.query(playingQuery);
-
-                // Clean up invalid handles
-                if (!isCurrentlyPlaying && !previewIt->second.isValid())
-                {
-                    audioPreviewHandles.erase(previewIt);
-                    hasPreviewHandle = false;
-                }
             }
 
             // Play button - only enabled if audio file is set
