@@ -188,6 +188,13 @@ namespace services {
             }
             break;
         }
+        case ComponentTypeId::AudioSource: {
+            auto view = registry.view<components::AudioSourceComponent>();
+            for (auto entity : view) {
+                handles.push_back(internal::toHandle(entity));
+            }
+            break;
+        }
         default:
             break;
         }
@@ -283,6 +290,8 @@ namespace services {
             return registry.all_of<components::IBLComponent>(enttEntity);
         case ComponentTypeId::Mesh:
             return registry.all_of<components::MeshComponent>(enttEntity);
+        case ComponentTypeId::AudioSource:
+            return registry.all_of<components::AudioSourceComponent>(enttEntity);
         default:
             return false;
         }
@@ -313,6 +322,8 @@ namespace services {
             types.push_back(ComponentTypeId::IBL);
         if (registry.all_of<components::MeshComponent>(enttEntity))
             types.push_back(ComponentTypeId::Mesh);
+        if (registry.all_of<components::AudioSourceComponent>(enttEntity))
+            types.push_back(ComponentTypeId::AudioSource);
 
         return types;
     }
@@ -439,6 +450,22 @@ namespace services {
         }
     }
 
+    void SceneServiceImpl::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
+            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
+            // Only remove if it matches the expected icon type (auto-attached billboard)
+            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
+                sceneEntity.removeComponent<components::BillboardComponent>();
+            }
+        }
+    }
+
     bool SceneServiceImpl::removeCameraComponent(EntityHandle entity) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
@@ -448,6 +475,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::CameraComponent>()) {
             sceneEntity.removeComponent<components::CameraComponent>();
+            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Camera));
             return true;
         }
 
@@ -762,6 +790,93 @@ namespace services {
         }
 
         return children;
+    }
+
+    // ========== AUDIO SOURCE COMPONENT OPERATIONS ==========
+
+    bool SceneServiceImpl::addAudioSourceComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::AudioSourceComponent>()) {
+            sceneEntity.addComponent<components::AudioSourceComponent>();
+            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
+            return true;
+        }
+        return false;
+    }
+
+    bool SceneServiceImpl::removeAudioSourceComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::AudioSourceComponent>()) {
+            sceneEntity.removeComponent<components::AudioSourceComponent>();
+            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
+            return true;
+        }
+        return false;
+    }
+
+    bool SceneServiceImpl::hasAudioSourceComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::AudioSourceComponent>();
+    }
+
+    std::optional<AudioSourceData> SceneServiceImpl::getAudioSourceData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::AudioSourceComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::AudioSourceComponent>();
+        AudioSourceData data;
+        data.audioFilePath = comp.audioFilePath;
+        data.volume = comp.volume;
+        data.pitch = comp.pitch;
+        data.loop = comp.loop;
+        data.is3D = comp.is3D;
+        data.minDistance = comp.minDistance;
+        data.maxDistance = comp.maxDistance;
+        return data;
+    }
+
+    bool SceneServiceImpl::setAudioSourceData(EntityHandle entity, const AudioSourceData& audioData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::AudioSourceComponent>()) {
+            sceneEntity.addComponent<components::AudioSourceComponent>();
+        }
+
+        auto& comp = sceneEntity.getComponent<components::AudioSourceComponent>();
+        comp.audioFilePath = audioData.audioFilePath;
+        comp.volume = audioData.volume;
+        comp.pitch = audioData.pitch;
+        comp.loop = audioData.loop;
+        comp.is3D = audioData.is3D;
+        comp.minDistance = audioData.minDistance;
+        comp.maxDistance = audioData.maxDistance;
+        return true;
     }
 
     bool SceneServiceImpl::setEntityStatic(EntityHandle entity, bool isStatic) {
@@ -1219,6 +1334,32 @@ namespace services {
         dispatcher.registerQueryHandler<events::material::GetAllSubMeshMaterialsQuery>(
             [this](const events::material::GetAllSubMeshMaterialsQuery& query) {
                 return getAllSubMeshMaterials(query.entity);
+            });
+
+        // Audio Source component handlers
+        dispatcher.registerCommandHandler<events::scene::AddAudioSourceComponentCommand>(
+            [this](const events::scene::AddAudioSourceComponentCommand& cmd) {
+                return addAudioSourceComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveAudioSourceComponentCommand>(
+            [this](const events::scene::RemoveAudioSourceComponentCommand& cmd) {
+                return removeAudioSourceComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetAudioSourceDataCommand>(
+            [this](const events::scene::SetAudioSourceDataCommand& cmd) {
+                return setAudioSourceData(cmd.entity, cmd.audioData);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasAudioSourceComponentQuery>(
+            [this](const events::scene::HasAudioSourceComponentQuery& query) {
+                return hasAudioSourceComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetAudioSourceDataQuery>(
+            [this](const events::scene::GetAudioSourceDataQuery& query) {
+                return getAudioSourceData(query.entity);
             });
     }
 

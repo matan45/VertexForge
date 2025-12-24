@@ -88,6 +88,10 @@ namespace serialization {
 			componentsJson["billboard"] = serializeBillboard(entity.getComponent<components::BillboardComponent>());
 		}
 
+		if (entity.hasComponent<components::AudioSourceComponent>()) {
+			componentsJson["audioSource"] = serializeAudioSource(entity.getComponent<components::AudioSourceComponent>());
+		}
+
 		entityJson["components"] = componentsJson;
 
 		// Serialize children recursively
@@ -264,6 +268,51 @@ namespace serialization {
 		billboard.selectable = j.value("selectable", true);
 	}
 
+	json SceneSerialization::serializeAudioSource(const components::AudioSourceComponent& audioSource) {
+		json j;
+		// Clean the audio file path
+		std::string cleanPath = audioSource.audioFilePath;
+		if (auto pos = cleanPath.find('\0'); pos != std::string::npos) {
+			cleanPath.resize(pos);
+		}
+		j["audioFilePath"] = cleanPath;
+		j["volume"] = audioSource.volume;
+		j["pitch"] = audioSource.pitch;
+		j["loop"] = audioSource.loop;
+		j["is3D"] = audioSource.is3D;
+		j["minDistance"] = audioSource.minDistance;
+		j["maxDistance"] = audioSource.maxDistance;
+		// Note: activeHandle and isPlaying are runtime state, not serialized
+		return j;
+	}
+
+	void SceneSerialization::deserializeAudioSource(const json& j, components::AudioSourceComponent& audioSource) {
+		if (auto it = j.find("audioFilePath"); it != j.end() && it->is_string()) {
+			audioSource.audioFilePath = it->get<std::string>();
+		}
+		if (auto it = j.find("volume"); it != j.end() && it->is_number()) {
+			audioSource.volume = it->get<float>();
+		}
+		if (auto it = j.find("pitch"); it != j.end() && it->is_number()) {
+			audioSource.pitch = it->get<float>();
+		}
+		if (auto it = j.find("loop"); it != j.end() && it->is_boolean()) {
+			audioSource.loop = it->get<bool>();
+		}
+		if (auto it = j.find("is3D"); it != j.end() && it->is_boolean()) {
+			audioSource.is3D = it->get<bool>();
+		}
+		if (auto it = j.find("minDistance"); it != j.end() && it->is_number()) {
+			audioSource.minDistance = it->get<float>();
+		}
+		if (auto it = j.find("maxDistance"); it != j.end() && it->is_number()) {
+			audioSource.maxDistance = it->get<float>();
+		}
+		// Reset runtime state
+		audioSource.activeHandle = 0;
+		audioSource.isPlaying = false;
+	}
+
 	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
 		for (const auto& childJson : childrenJson) {
@@ -358,6 +407,16 @@ namespace serialization {
 			if (componentsJson.contains("billboard")) {
 				auto& billboardComp = entity.addOrReplaceComponent<components::BillboardComponent>();
 				deserializeBillboard(componentsJson["billboard"], billboardComp);
+			}
+
+			if (componentsJson.contains("audioSource")) {
+				auto& audioComp = entity.addOrReplaceComponent<components::AudioSourceComponent>();
+				deserializeAudioSource(componentsJson["audioSource"], audioComp);
+				// Auto-add audio source billboard if no billboard component is defined
+				if (!componentsJson.contains("billboard")) {
+					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+					billboard.iconType = components::BillboardIconType::AudioSource;
+				}
 			}
 		}
 

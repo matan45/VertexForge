@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/EntityHandle.hpp"
 #include "events/EventDispatcher.hpp"
+#include "interfaces/IAudioService.hpp"
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
@@ -18,8 +19,10 @@ namespace windows
 
         // Set of entity handles that need to be auto-expanded (parents of selected entity)
         std::unordered_set<uint64_t> expandedHandles;
-        
+
         inline static std::unordered_map<std::string, std::vector<std::string>> submeshNameCache;
+        
+        inline static std::unordered_map<uint64_t, services::AudioHandle> audioPreviewHandles;
 
     public:
         explicit SceneGraph();
@@ -43,7 +46,8 @@ namespace windows
         void drawIBLComponent(services::EntityHandle handle);
         bool drawMeshComponent(services::EntityHandle handle);
         void drawMaterialComponent(services::EntityHandle handle);
-        void drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh);
+        bool drawAudioSourceComponent(services::EntityHandle handle);
+        void drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudioSource);
 
         // UI styling helpers
         static void pushComponentHeaderStyle();

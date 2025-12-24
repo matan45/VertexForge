@@ -2,6 +2,7 @@
 #include "EventTypes.hpp"
 #include "../data/EntityHandle.hpp"
 #include "../data/DTOs.hpp"
+#include "../interfaces/IAudioService.hpp"
 #include <optional>
 #include <vector>
 #include <string>
@@ -109,6 +110,25 @@ namespace events::scene {
 
         std::string_view getName() const override { return "SetEntityStatic"; }
     };
+    
+    struct AddAudioSourceComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddAudioSourceComponent"; }
+    };
+
+    struct RemoveAudioSourceComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveAudioSourceComponent"; }
+    };
+
+    struct SetAudioSourceDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::AudioSourceData audioData;
+
+        std::string_view getName() const override { return "SetAudioSourceData"; }
+    };
 
     struct NewSceneCommand : ICommand<bool> {
         std::string_view getName() const override { return "NewScene"; }
@@ -210,6 +230,18 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "IsEntityStatic"; }
+    };
+    
+    struct HasAudioSourceComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasAudioSourceComponent"; }
+    };
+
+    struct GetAudioSourceDataQuery : IQuery<std::optional<services::AudioSourceData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetAudioSourceData"; }
     };
 
     // ============================================

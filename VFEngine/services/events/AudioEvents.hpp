@@ -113,6 +113,11 @@ namespace services::events::audio {
         std::string_view getName() const override { return "PlayEntityAudio"; }
     };
 
+    struct PauseEntityAudioCommand : ::events::ICommand<void> {
+        EntityHandle entity;
+        std::string_view getName() const override { return "PauseEntityAudio"; }
+    };
+
     struct StopEntityAudioCommand : ::events::ICommand<void> {
         EntityHandle entity;
         std::string_view getName() const override { return "StopEntityAudio"; }

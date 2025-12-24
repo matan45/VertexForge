@@ -80,6 +80,13 @@ namespace services {
         // Hierarchy - Children
         std::vector<EntityHandle> getChildren(EntityHandle entity) const override;
 
+        // Audio Source Operations
+        bool addAudioSourceComponent(EntityHandle entity) override;
+        bool removeAudioSourceComponent(EntityHandle entity) override;
+        bool hasAudioSourceComponent(EntityHandle entity) const override;
+        std::optional<AudioSourceData> getAudioSourceData(EntityHandle entity) const override;
+        bool setAudioSourceData(EntityHandle entity, const AudioSourceData& audioData) override;
+
         // Static Entity Operations
         bool setEntityStatic(EntityHandle entity, bool isStatic) override;
         bool isEntityStatic(EntityHandle entity) const override;
@@ -107,6 +114,7 @@ namespace services {
         void collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const;
         
         void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
+        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }

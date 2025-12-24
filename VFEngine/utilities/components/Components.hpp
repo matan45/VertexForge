@@ -14,10 +14,11 @@ namespace components {
 	struct MeshComponent;
 	struct MaterialComponent;
 	struct BillboardComponent;
+	struct AudioSourceComponent;
 
 	// Type list of optional components that can be removed during cleanup
 	// Add new optional component types here when they are created
-	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent, BillboardComponent>;
+	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent, BillboardComponent, AudioSourceComponent>;
 
 	struct WorldTransformComponent
 	{
@@ -248,6 +249,20 @@ namespace components {
 			default:                             return atlasIndex;
 			}
 		}
+	};
+
+	struct AudioSourceComponent {
+		std::string audioFilePath;      // Path to .vfAudio file
+		float volume = 1.0f;            // 0.0 to 1.0
+		float pitch = 1.0f;             // 0.5 to 2.0
+		bool loop = false;
+		bool is3D = false;              // If true, uses entity transform for position
+		float minDistance = 1.0f;       // 3D: distance where volume starts to attenuate
+		float maxDistance = 100.0f;     // 3D: distance where volume reaches minimum
+
+		// Runtime state (not serialized)
+		uint64_t activeHandle = 0;      // AudioHandle from AudioController
+		bool isPlaying = false;
 	};
 
 }

@@ -44,6 +44,7 @@ namespace services {
         void removeAudioSource(EntityHandle entity) override;
         [[nodiscard]] bool hasAudioSource(EntityHandle entity) const override;
         void playEntityAudio(EntityHandle entity) override;
+        void pauseEntityAudio(EntityHandle entity) override;
         void stopEntityAudio(EntityHandle entity) override;
 
     private:
