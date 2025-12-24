@@ -69,7 +69,6 @@ namespace editor::graph {
                 } else {
                     ed::RejectNewItem(ImColor(255, 0, 0), 2.0f);
 
-                    // VK-56: Show tooltip with type mismatch reason
                     std::string errorMsg = getTypeMismatchMessage(startId, endId);
                     if (!errorMsg.empty()) {
                         ImGui::BeginTooltip();

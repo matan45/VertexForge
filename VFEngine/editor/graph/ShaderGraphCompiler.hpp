@@ -77,7 +77,6 @@ namespace editor::graph {
 
         static int determinePBRTextureIndex(const material::ShaderGraph& graph, uint32_t nodeId);
 
-        // VK-56: Type validation for links
         static bool validateLinkTypes(const material::ShaderGraph& graph, std::string& errorMessage);
 
     };

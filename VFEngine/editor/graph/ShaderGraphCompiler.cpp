@@ -53,8 +53,7 @@ namespace editor::graph {
             result.errorMessage = "Shader graph contains a cycle or exceeds maximum depth limit";
             return result;
         }
-
-        // VK-56: Validate link types as a safety net
+        
         std::string typeErrorMessage;
         if (!validateLinkTypes(graph, typeErrorMessage)) {
             result.success = false;
@@ -408,7 +407,6 @@ namespace editor::graph {
         return "0.0";
     }
 
-    // VK-56: Validate that all links have matching types
     bool ShaderGraphCompiler::validateLinkTypes(const material::ShaderGraph& graph, std::string& errorMessage) {
         for (const auto& link : graph.links) {
             // Find source and target nodes

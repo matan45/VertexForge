@@ -40,7 +40,6 @@ namespace editor::graph {
         const material::NodePin* sourcePin = (startPin->kind == material::PinKind::Output) ? startPin : endPin;
         const material::NodePin* targetPin = (startPin->kind == material::PinKind::Input) ? startPin : endPin;
 
-        // VK-56: Strict type matching - only exact type matches allowed
         // Use conversion nodes (FloatToVec3, Vec3ToFloat, etc.) for type conversions
         return sourcePin->type == targetPin->type;
     }
