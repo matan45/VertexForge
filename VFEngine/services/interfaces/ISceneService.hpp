@@ -1,6 +1,7 @@
 #pragma once
 #include "../data/EntityHandle.hpp"
 #include "../data/DTOs.hpp"
+#include "IAudioService.hpp"
 #include <optional>
 #include <vector>
 #include <string>
@@ -175,6 +176,25 @@ namespace services {
 
         // Get all submesh material assignments
         virtual std::map<std::string, std::string> getAllSubMeshMaterials(EntityHandle entity) const = 0;
+
+        // ============================================
+        // Audio Source Component Operations
+        // ============================================
+
+        // Add audio source component to entity
+        virtual bool addAudioSourceComponent(EntityHandle entity) = 0;
+
+        // Remove audio source component from entity
+        virtual bool removeAudioSourceComponent(EntityHandle entity) = 0;
+
+        // Check if entity has audio source component
+        virtual bool hasAudioSourceComponent(EntityHandle entity) const = 0;
+
+        // Get audio source component data
+        virtual std::optional<AudioSourceData> getAudioSourceData(EntityHandle entity) const = 0;
+
+        // Set audio source component data
+        virtual bool setAudioSourceData(EntityHandle entity, const AudioSourceData& audioData) = 0;
 
         // ============================================
         // Static Entity Operations (BVH Optimization)

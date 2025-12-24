@@ -241,7 +241,7 @@ namespace services {
         params.maxDistance = state.data.maxDistance;
 
         AudioPlayParams playParams = convertParams(params);
-        AudioHandleId handleId = audioProvider->playSound(state.data.clipPath, playParams);
+        AudioHandleId handleId = audioProvider->playSound(state.data.audioFilePath, playParams);
         state.currentHandle = AudioHandle{handleId};
     }
 

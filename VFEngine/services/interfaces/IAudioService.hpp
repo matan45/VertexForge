@@ -22,12 +22,11 @@ namespace services {
     };
     
     struct AudioSourceData {
-        std::string clipPath;
+        std::string audioFilePath;
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
-        bool playOnStart = false;
-        bool is3D = true;
+        bool is3D = false;
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
     };

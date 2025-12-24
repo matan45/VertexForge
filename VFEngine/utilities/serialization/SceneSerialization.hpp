@@ -52,5 +52,8 @@ namespace serialization
 		static json serializeBillboard(const components::BillboardComponent& billboard);
 		static void deserializeBillboard(const json& j, components::BillboardComponent& billboard);
 
+		static json serializeAudioSource(const components::AudioSourceComponent& audioSource);
+		static void deserializeAudioSource(const json& j, components::AudioSourceComponent& audioSource);
+
 	};
 }
