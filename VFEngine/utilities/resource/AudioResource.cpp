@@ -62,8 +62,11 @@ namespace resource
             return 0;
         }
 
-        // Resize buffer to fit the samples we're reading
-        buffer.resize(samplesToRead);
+        // Only grow buffer if needed (avoid shrinking to prevent repeated allocations)
+        if (buffer.size() < samplesToRead)
+        {
+            buffer.resize(samplesToRead);
+        }
 
         // Read samples using endian-safe method
         endian::readVectorLE<short>(file, buffer, samplesToRead);
@@ -76,10 +79,9 @@ namespace resource
         }
 
         // Update position
-        size_t actuallyRead = buffer.size();
-        currentSamplePosition += actuallyRead;
+        currentSamplePosition += samplesToRead;
 
-        return actuallyRead;
+        return samplesToRead;
     }
 
     bool AudioStreamHandle::seekToSample(size_t sampleIndex)

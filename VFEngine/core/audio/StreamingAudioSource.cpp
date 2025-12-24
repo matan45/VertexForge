@@ -95,8 +95,8 @@ namespace core::audio {
             samplesPerBuffer++;
         }
 
-        // Reserve read buffer
-        readBuffer.reserve(samplesPerBuffer);
+        // Pre-allocate read buffer to avoid repeated allocations
+        readBuffer.resize(samplesPerBuffer);
 
         // Create OpenAL source
         alGenSources(1, &sourceId);
@@ -151,6 +151,7 @@ namespace core::audio {
         }
 
         readBuffer.clear();
+        bufferSampleCounts.clear();
         samplesPerBuffer = 0;
     }
 
@@ -170,6 +171,9 @@ namespace core::audio {
         if (samplesRead == 0) {
             return false;
         }
+
+        // Track actual samples in this buffer for accurate position reporting
+        bufferSampleCounts[bufferId] = samplesRead;
 
         const auto& header = streamHandle->getHeader();
         alBufferData(
@@ -210,8 +214,10 @@ namespace core::audio {
                 break;
             }
 
-            // Update samples played count
-            totalSamplesPlayed += samplesPerBuffer;
+            // Update samples played count using actual samples in this buffer
+            auto it = bufferSampleCounts.find(bufferId);
+            size_t samplesInBuffer = (it != bufferSampleCounts.end()) ? it->second : samplesPerBuffer;
+            totalSamplesPlayed += samplesInBuffer;
 
             // Try to refill the buffer
             if (!streamHandle->isEOF()) {
@@ -222,6 +228,7 @@ namespace core::audio {
                 // Reset stream and refill
                 streamHandle->reset();
                 totalSamplesPlayed = 0;
+                bufferSampleCounts.clear();
                 if (fillBuffer(bufferId)) {
                     queueBuffer(bufferId);
                 }
@@ -295,6 +302,7 @@ namespace core::audio {
             streamHandle->reset();
         }
         totalSamplesPlayed = 0;
+        bufferSampleCounts.clear();
 
         state = StreamingState::Stopped;
     }
@@ -460,6 +468,7 @@ namespace core::audio {
         // Update position tracking
         const auto& header = streamHandle->getHeader();
         totalSamplesPlayed = static_cast<size_t>(seconds * header.sampleRate * header.channels);
+        bufferSampleCounts.clear();
 
         // Refill buffers
         for (ALuint bufferId : bufferIds) {

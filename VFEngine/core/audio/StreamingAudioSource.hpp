@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace core::audio {
 
@@ -141,6 +142,9 @@ namespace core::audio {
 
         // Track total samples played for accurate position reporting
         size_t totalSamplesPlayed = 0;
+
+        // Track actual samples in each buffer (for partial buffers at EOF)
+        std::unordered_map<ALuint, size_t> bufferSampleCounts;
     };
 
 }
