@@ -178,18 +178,32 @@ namespace services {
         virtual std::map<std::string, std::string> getAllSubMeshMaterials(EntityHandle entity) const = 0;
 
         // ============================================
-        // Audio Source Component Operations
+        // 2D Audio Source Component Operations (streaming, for background music)
         // ============================================
-        
-        virtual bool addAudioSourceComponent(EntityHandle entity) = 0;
-        
-        virtual bool removeAudioSourceComponent(EntityHandle entity) = 0;
-        
-        virtual bool hasAudioSourceComponent(EntityHandle entity) const = 0;
-        
-        virtual std::optional<AudioSourceData> getAudioSourceData(EntityHandle entity) const = 0;
-        
-        virtual bool setAudioSourceData(EntityHandle entity, const AudioSourceData& audioData) = 0;
+
+        virtual bool addAudioSource2DComponent(EntityHandle entity) = 0;
+
+        virtual bool removeAudioSource2DComponent(EntityHandle entity) = 0;
+
+        virtual bool hasAudioSource2DComponent(EntityHandle entity) const = 0;
+
+        virtual std::optional<AudioSource2DData> getAudioSource2DData(EntityHandle entity) const = 0;
+
+        virtual bool setAudioSource2DData(EntityHandle entity, const AudioSource2DData& audioData) = 0;
+
+        // ============================================
+        // 3D Audio Source Component Operations (cached, for spatial sound effects)
+        // ============================================
+
+        virtual bool addAudioSource3DComponent(EntityHandle entity) = 0;
+
+        virtual bool removeAudioSource3DComponent(EntityHandle entity) = 0;
+
+        virtual bool hasAudioSource3DComponent(EntityHandle entity) const = 0;
+
+        virtual std::optional<AudioSource3DData> getAudioSource3DData(EntityHandle entity) const = 0;
+
+        virtual bool setAudioSource3DData(EntityHandle entity, const AudioSource3DData& audioData) = 0;
 
         // ============================================
         // Static Entity Operations (BVH Optimization)

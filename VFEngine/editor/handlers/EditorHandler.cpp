@@ -6,6 +6,8 @@
 #include "impl/WindowStateServiceImpl.hpp"
 #include "impl/PreviewServiceImpl.hpp"
 #include "impl/EditorModeServiceImpl.hpp"
+#include "impl/AudioServiceImpl.hpp"
+#include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -39,6 +41,10 @@ namespace handlers {
 			if (windowStateService) {
 				windowStateService->update();
 			}
+			// Update 3D audio source positions
+			if (audioSceneUpdater) {
+				audioSceneUpdater->update();
+			}
 		});
 
 		// Subscribe to window events from Services
@@ -62,6 +68,8 @@ namespace handlers {
 		renderService.reset();
 		sceneService.reset();
 		
+		audioSceneUpdater.reset();
+		audioService.reset();
 		editorModeService.reset();
 		windowStateService.reset();
 		inputService.reset();
@@ -84,6 +92,8 @@ namespace handlers {
 			bootstrap->getMeshPreviewProvider()
 		);
 		editorModeService = std::make_shared<services::EditorModeServiceImpl>();
+		audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
+		audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
 
 		// Register event handlers for command/query pattern
 		sceneService->registerEventHandlers();
@@ -92,6 +102,7 @@ namespace handlers {
 		windowStateService->registerEventHandlers();
 		previewService->registerEventHandlers();
 		editorModeService->registerEventHandlers();
+		static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
 
 		events::render::LoadBillboardAtlasCommand atlasCmd;
 		atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

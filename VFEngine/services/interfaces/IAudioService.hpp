@@ -22,12 +22,20 @@ namespace services {
         bool streaming = false;      // Use streaming playback for long audio
     };
     
-    struct AudioSourceData {
+    // 2D Audio - streaming, good for background music
+    struct AudioSource2DData {
         std::string audioFilePath;
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
-        bool is3D = false;
+    };
+
+    // 3D Audio - cached, good for spatial sound effects
+    struct AudioSource3DData {
+        std::string audioFilePath;
+        float volume = 1.0f;
+        float pitch = 1.0f;
+        bool loop = false;
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
     };
@@ -79,19 +87,24 @@ namespace services {
         
         virtual void setPosition(AudioHandle handle, const glm::vec3& position) = 0;
 
-        // === Audio Source Component ===
-        
-        virtual void addAudioSource(EntityHandle entity, const AudioSourceData& data) = 0;
-        
-        virtual void removeAudioSource(EntityHandle entity) = 0;
-        
-        virtual bool hasAudioSource(EntityHandle entity) const = 0;
+        // === 2D Audio Source Component ===
 
-        virtual void playEntityAudio(EntityHandle entity) = 0;
+        virtual void addAudioSource2D(EntityHandle entity, const AudioSource2DData& data) = 0;
+        virtual void removeAudioSource2D(EntityHandle entity) = 0;
+        virtual bool hasAudioSource2D(EntityHandle entity) const = 0;
+        virtual void playEntityAudio2D(EntityHandle entity) = 0;
+        virtual void pauseEntityAudio2D(EntityHandle entity) = 0;
+        virtual void stopEntityAudio2D(EntityHandle entity) = 0;
 
-        virtual void pauseEntityAudio(EntityHandle entity) = 0;
+        // === 3D Audio Source Component ===
 
-        virtual void stopEntityAudio(EntityHandle entity) = 0;
+        virtual void addAudioSource3D(EntityHandle entity, const AudioSource3DData& data) = 0;
+        virtual void removeAudioSource3D(EntityHandle entity) = 0;
+        virtual bool hasAudioSource3D(EntityHandle entity) const = 0;
+        virtual void playEntityAudio3D(EntityHandle entity, const glm::vec3& position) = 0;
+        virtual void pauseEntityAudio3D(EntityHandle entity) = 0;
+        virtual void stopEntityAudio3D(EntityHandle entity) = 0;
+        virtual void updateEntityAudio3DPosition(EntityHandle entity, const glm::vec3& position) = 0;
 
         // === Streaming Audio ===
 

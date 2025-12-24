@@ -1,6 +1,8 @@
 #include "AudioPreviewWindow.hpp"
 #include "imgui.h"
 #include "resource/AudioResource.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/AudioEvents.hpp"
 #include <filesystem>
 #include <algorithm>
 
@@ -11,6 +13,17 @@ namespace windows
     {
         std::filesystem::path path(filePath);
         windowTitle = "Audio Preview: " + path.filename().string();
+    }
+
+    AudioPreviewWindow::~AudioPreviewWindow()
+    {
+        // Stop any playing audio when window closes
+        if (currentAudioHandle.isValid())
+        {
+            events::audio::StopSoundCommand stopCmd;
+            stopCmd.handle = currentAudioHandle;
+            events::EventDispatcher::instance().execute(stopCmd);
+        }
     }
 
     void AudioPreviewWindow::draw()
@@ -157,30 +170,129 @@ namespace windows
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Playback controls (placeholder)
+        // Playback controls
         if (ImGui::CollapsingHeader("Playback", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::TextDisabled("(Coming soon)");
+            auto& dispatcher = events::EventDispatcher::instance();
 
-            ImGui::BeginDisabled(true);
+            // Update playing state from audio system
+            if (currentAudioHandle.isValid())
+            {
+                events::audio::IsSoundPlayingQuery playingQuery;
+                playingQuery.handle = currentAudioHandle;
+                isPlaying = dispatcher.query(playingQuery);
+
+                // Get current playback position
+                if (isPlaying)
+                {
+                    events::audio::GetPlaybackPositionQuery posQuery;
+                    posQuery.handle = currentAudioHandle;
+                    float currentPos = dispatcher.query(posQuery);
+                    if (audioDurationSeconds > 0.0f)
+                    {
+                        playbackPosition = currentPos / audioDurationSeconds;
+                    }
+                }
+            }
+            else
+            {
+                isPlaying = false;
+            }
 
             // Play/Pause button
             if (ImGui::Button(isPlaying ? "Pause" : "Play", ImVec2(-1, 0)))
             {
-                isPlaying = !isPlaying;
+                if (isPlaying)
+                {
+                    // Pause
+                    events::audio::PauseSoundCommand pauseCmd;
+                    pauseCmd.handle = currentAudioHandle;
+                    dispatcher.execute(pauseCmd);
+                }
+                else
+                {
+                    // Start or resume playback
+                    if (!currentAudioHandle.isValid())
+                    {
+                        // Start new streaming playback
+                        events::audio::PlayStreamingSoundCommand playCmd;
+                        playCmd.path = audioPath;
+                        playCmd.params.volume = volume;
+                        currentAudioHandle = dispatcher.execute(playCmd);
+
+                        // Get duration for the progress bar
+                        if (currentAudioHandle.isValid())
+                        {
+                            events::audio::GetDurationQuery durQuery;
+                            durQuery.handle = currentAudioHandle;
+                            audioDurationSeconds = dispatcher.query(durQuery);
+                        }
+                    }
+                    else
+                    {
+                        // Resume paused playback
+                        events::audio::ResumeSoundCommand resumeCmd;
+                        resumeCmd.handle = currentAudioHandle;
+                        dispatcher.execute(resumeCmd);
+                    }
+                }
             }
 
             // Stop button
             if (ImGui::Button("Stop", ImVec2(-1, 0)))
             {
-                isPlaying = false;
+                if (currentAudioHandle.isValid())
+                {
+                    events::audio::StopSoundCommand stopCmd;
+                    stopCmd.handle = currentAudioHandle;
+                    dispatcher.execute(stopCmd);
+                    currentAudioHandle = {};
+                }
                 playbackPosition = 0.0f;
             }
 
-            // Progress slider
-            ImGui::SliderFloat("##Position", &playbackPosition, 0.0f, 1.0f, "");
+            // Progress slider with seek
+            if (ImGui::SliderFloat("##Position", &playbackPosition, 0.0f, 1.0f, ""))
+            {
+                // User dragged the slider - seek to new position
+                if (currentAudioHandle.isValid() && audioDurationSeconds > 0.0f)
+                {
+                    float seekSeconds = playbackPosition * audioDurationSeconds;
+                    events::audio::SetPlaybackPositionCommand seekCmd;
+                    seekCmd.handle = currentAudioHandle;
+                    seekCmd.seconds = seekSeconds;
+                    dispatcher.execute(seekCmd);
+                }
+            }
 
-            ImGui::EndDisabled();
+            // Show time display
+            if (audioDurationSeconds > 0.0f)
+            {
+                float currentSeconds = playbackPosition * audioDurationSeconds;
+                int curMin = static_cast<int>(currentSeconds) / 60;
+                int curSec = static_cast<int>(currentSeconds) % 60;
+                int totalMin = static_cast<int>(audioDurationSeconds) / 60;
+                int totalSec = static_cast<int>(audioDurationSeconds) % 60;
+                ImGui::Text("%02d:%02d / %02d:%02d", curMin, curSec, totalMin, totalSec);
+            }
+
+            ImGui::Spacing();
+
+            // Volume slider
+            ImGui::Text("Volume");
+            float volumePercent = volume * 100.0f;
+            if (ImGui::SliderFloat("##Volume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp))
+            {
+                volume = volumePercent / 100.0f;
+                // Update volume on playing sound
+                if (currentAudioHandle.isValid())
+                {
+                    events::audio::SetSoundVolumeCommand volCmd;
+                    volCmd.handle = currentAudioHandle;
+                    volCmd.volume = volume;
+                    dispatcher.execute(volCmd);
+                }
+            }
         }
     }
 
@@ -225,6 +337,17 @@ namespace windows
             float y2 = centerY - point.minVal * halfHeight;
 
             drawList->AddLine(ImVec2(x, y1), ImVec2(x, y2), waveColor);
+        }
+
+        // Draw playhead indicator
+        if (playbackPosition > 0.0f || isPlaying)
+        {
+            float playheadX = canvasPos.x + playbackPosition * canvasSize.x;
+            drawList->AddLine(
+                ImVec2(playheadX, canvasPos.y),
+                ImVec2(playheadX, canvasPos.y + canvasSize.y),
+                IM_COL32(255, 100, 100, 255),
+                2.0f);
         }
 
         // Reserve space for the canvas

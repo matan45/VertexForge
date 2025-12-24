@@ -88,8 +88,12 @@ namespace serialization {
 			componentsJson["billboard"] = serializeBillboard(entity.getComponent<components::BillboardComponent>());
 		}
 
-		if (entity.hasComponent<components::AudioSourceComponent>()) {
-			componentsJson["audioSource"] = serializeAudioSource(entity.getComponent<components::AudioSourceComponent>());
+		if (entity.hasComponent<components::AudioSource2DComponent>()) {
+			componentsJson["audioSource2D"] = serializeAudioSource2D(entity.getComponent<components::AudioSource2DComponent>());
+		}
+
+		if (entity.hasComponent<components::AudioSource3DComponent>()) {
+			componentsJson["audioSource3D"] = serializeAudioSource3D(entity.getComponent<components::AudioSource3DComponent>());
 		}
 
 		entityJson["components"] = componentsJson;
@@ -268,7 +272,7 @@ namespace serialization {
 		billboard.selectable = j.value("selectable", true);
 	}
 
-	json SceneSerialization::serializeAudioSource(const components::AudioSourceComponent& audioSource) {
+	json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource) {
 		json j;
 		// Clean the audio file path
 		std::string cleanPath = audioSource.audioFilePath;
@@ -279,14 +283,11 @@ namespace serialization {
 		j["volume"] = audioSource.volume;
 		j["pitch"] = audioSource.pitch;
 		j["loop"] = audioSource.loop;
-		j["is3D"] = audioSource.is3D;
-		j["minDistance"] = audioSource.minDistance;
-		j["maxDistance"] = audioSource.maxDistance;
 		// Note: activeHandle and isPlaying are runtime state, not serialized
 		return j;
 	}
 
-	void SceneSerialization::deserializeAudioSource(const json& j, components::AudioSourceComponent& audioSource) {
+	void SceneSerialization::deserializeAudioSource2D(const json& j, components::AudioSource2DComponent& audioSource) {
 		if (auto it = j.find("audioFilePath"); it != j.end() && it->is_string()) {
 			audioSource.audioFilePath = it->get<std::string>();
 		}
@@ -299,8 +300,40 @@ namespace serialization {
 		if (auto it = j.find("loop"); it != j.end() && it->is_boolean()) {
 			audioSource.loop = it->get<bool>();
 		}
-		if (auto it = j.find("is3D"); it != j.end() && it->is_boolean()) {
-			audioSource.is3D = it->get<bool>();
+		// Reset runtime state
+		audioSource.activeHandle = 0;
+		audioSource.isPlaying = false;
+	}
+
+	json SceneSerialization::serializeAudioSource3D(const components::AudioSource3DComponent& audioSource) {
+		json j;
+		// Clean the audio file path
+		std::string cleanPath = audioSource.audioFilePath;
+		if (auto pos = cleanPath.find('\0'); pos != std::string::npos) {
+			cleanPath.resize(pos);
+		}
+		j["audioFilePath"] = cleanPath;
+		j["volume"] = audioSource.volume;
+		j["pitch"] = audioSource.pitch;
+		j["loop"] = audioSource.loop;
+		j["minDistance"] = audioSource.minDistance;
+		j["maxDistance"] = audioSource.maxDistance;
+		// Note: activeHandle and isPlaying are runtime state, not serialized
+		return j;
+	}
+
+	void SceneSerialization::deserializeAudioSource3D(const json& j, components::AudioSource3DComponent& audioSource) {
+		if (auto it = j.find("audioFilePath"); it != j.end() && it->is_string()) {
+			audioSource.audioFilePath = it->get<std::string>();
+		}
+		if (auto it = j.find("volume"); it != j.end() && it->is_number()) {
+			audioSource.volume = it->get<float>();
+		}
+		if (auto it = j.find("pitch"); it != j.end() && it->is_number()) {
+			audioSource.pitch = it->get<float>();
+		}
+		if (auto it = j.find("loop"); it != j.end() && it->is_boolean()) {
+			audioSource.loop = it->get<bool>();
 		}
 		if (auto it = j.find("minDistance"); it != j.end() && it->is_number()) {
 			audioSource.minDistance = it->get<float>();
@@ -409,9 +442,37 @@ namespace serialization {
 				deserializeBillboard(componentsJson["billboard"], billboardComp);
 			}
 
+			// Handle legacy "audioSource" key - convert to either 2D or 3D based on is3D flag
 			if (componentsJson.contains("audioSource")) {
-				auto& audioComp = entity.addOrReplaceComponent<components::AudioSourceComponent>();
-				deserializeAudioSource(componentsJson["audioSource"], audioComp);
+				const auto& audioJson = componentsJson["audioSource"];
+				bool is3D = audioJson.value("is3D", false);
+				if (is3D) {
+					auto& audioComp = entity.addOrReplaceComponent<components::AudioSource3DComponent>();
+					deserializeAudioSource3D(audioJson, audioComp);
+				} else {
+					auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
+					deserializeAudioSource2D(audioJson, audioComp);
+				}
+				// Auto-add audio source billboard if no billboard component is defined
+				if (!componentsJson.contains("billboard")) {
+					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+					billboard.iconType = components::BillboardIconType::AudioSource;
+				}
+			}
+
+			if (componentsJson.contains("audioSource2D")) {
+				auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
+				deserializeAudioSource2D(componentsJson["audioSource2D"], audioComp);
+				// Auto-add audio source billboard if no billboard component is defined
+				if (!componentsJson.contains("billboard")) {
+					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+					billboard.iconType = components::BillboardIconType::AudioSource;
+				}
+			}
+
+			if (componentsJson.contains("audioSource3D")) {
+				auto& audioComp = entity.addOrReplaceComponent<components::AudioSource3DComponent>();
+				deserializeAudioSource3D(componentsJson["audioSource3D"], audioComp);
 				// Auto-add audio source billboard if no billboard component is defined
 				if (!componentsJson.contains("billboard")) {
 					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();

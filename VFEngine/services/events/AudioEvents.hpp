@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <string>
 
-namespace services::events::audio {
+namespace events::audio {
 
     // ============================================================
     // GLOBAL AUDIO COMMANDS
@@ -47,48 +47,48 @@ namespace services::events::audio {
     // SOUND PLAYBACK COMMANDS
     // ============================================================
 
-    struct PlaySoundCommand : ::events::ICommand<AudioHandle> {
+    struct PlaySoundCommand : ::events::ICommand<services::AudioHandle> {
         std::string path;
-        AudioParams params;
+        services::AudioParams params;
         std::string_view getName() const override { return "PlaySound"; }
     };
 
-    struct PlaySound3DCommand : ::events::ICommand<AudioHandle> {
+    struct PlaySound3DCommand : ::events::ICommand<services::AudioHandle> {
         std::string path;
         glm::vec3 position;
-        AudioParams params;
+        services::AudioParams params;
         std::string_view getName() const override { return "PlaySound3D"; }
     };
 
     struct StopSoundCommand : ::events::ICommand<void> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "StopSound"; }
     };
 
     struct PauseSoundCommand : ::events::ICommand<void> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "PauseSound"; }
     };
 
     struct ResumeSoundCommand : ::events::ICommand<void> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "ResumeSound"; }
     };
 
     struct SetSoundVolumeCommand : ::events::ICommand<void> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         float volume;
         std::string_view getName() const override { return "SetSoundVolume"; }
     };
 
     struct SetSoundPitchCommand : ::events::ICommand<void> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         float pitch;
         std::string_view getName() const override { return "SetSoundPitch"; }
     };
 
     struct SetSoundPositionCommand : ::events::ICommand<void> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         glm::vec3 position;
         std::string_view getName() const override { return "SetSoundPosition"; }
     };
@@ -97,53 +97,90 @@ namespace services::events::audio {
     // STREAMING AUDIO COMMANDS
     // ============================================================
 
-    struct PlayStreamingSoundCommand : ::events::ICommand<AudioHandle> {
+    struct PlayStreamingSoundCommand : ::events::ICommand<services::AudioHandle> {
         std::string path;
-        AudioParams params;
+        services::AudioParams params;
         std::string_view getName() const override { return "PlayStreamingSound"; }
     };
 
-    struct PlayStreamingSound3DCommand : ::events::ICommand<AudioHandle> {
+    struct PlayStreamingSound3DCommand : ::events::ICommand<services::AudioHandle> {
         std::string path;
         glm::vec3 position;
-        AudioParams params;
+        services::AudioParams params;
         std::string_view getName() const override { return "PlayStreamingSound3D"; }
     };
 
     struct SetPlaybackPositionCommand : ::events::ICommand<bool> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         float seconds;
         std::string_view getName() const override { return "SetPlaybackPosition"; }
     };
 
     // ============================================================
-    // AUDIO SOURCE COMPONENT COMMANDS
+    // 2D AUDIO SOURCE COMPONENT COMMANDS (streaming)
     // ============================================================
 
-    struct AddAudioSourceCommand : ::events::ICommand<void> {
-        EntityHandle entity;
-        AudioSourceData data;
-        std::string_view getName() const override { return "AddAudioSource"; }
+    struct AddAudioSource2DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        services::AudioSource2DData data;
+        std::string_view getName() const override { return "AddAudioSource2D"; }
     };
 
-    struct RemoveAudioSourceCommand : ::events::ICommand<void> {
-        EntityHandle entity;
-        std::string_view getName() const override { return "RemoveAudioSource"; }
+    struct RemoveAudioSource2DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "RemoveAudioSource2D"; }
     };
 
-    struct PlayEntityAudioCommand : ::events::ICommand<void> {
-        EntityHandle entity;
-        std::string_view getName() const override { return "PlayEntityAudio"; }
+    struct PlayEntityAudio2DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "PlayEntityAudio2D"; }
     };
 
-    struct PauseEntityAudioCommand : ::events::ICommand<void> {
-        EntityHandle entity;
-        std::string_view getName() const override { return "PauseEntityAudio"; }
+    struct PauseEntityAudio2DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "PauseEntityAudio2D"; }
     };
 
-    struct StopEntityAudioCommand : ::events::ICommand<void> {
-        EntityHandle entity;
-        std::string_view getName() const override { return "StopEntityAudio"; }
+    struct StopEntityAudio2DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "StopEntityAudio2D"; }
+    };
+
+    // ============================================================
+    // 3D AUDIO SOURCE COMPONENT COMMANDS (cached/spatial)
+    // ============================================================
+
+    struct AddAudioSource3DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        services::AudioSource3DData data;
+        std::string_view getName() const override { return "AddAudioSource3D"; }
+    };
+
+    struct RemoveAudioSource3DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "RemoveAudioSource3D"; }
+    };
+
+    struct PlayEntityAudio3DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        glm::vec3 position;
+        std::string_view getName() const override { return "PlayEntityAudio3D"; }
+    };
+
+    struct PauseEntityAudio3DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "PauseEntityAudio3D"; }
+    };
+
+    struct StopEntityAudio3DCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "StopEntityAudio3D"; }
+    };
+
+    struct UpdateEntityAudio3DPositionCommand : ::events::ICommand<void> {
+        services::EntityHandle entity;
+        glm::vec3 position;
+        std::string_view getName() const override { return "UpdateEntityAudio3DPosition"; }
     };
 
     // ============================================================
@@ -155,13 +192,18 @@ namespace services::events::audio {
     };
 
     struct IsSoundPlayingQuery : ::events::IQuery<bool> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "IsSoundPlaying"; }
     };
 
-    struct HasAudioSourceQuery : ::events::IQuery<bool> {
-        EntityHandle entity;
-        std::string_view getName() const override { return "HasAudioSource"; }
+    struct HasAudioSource2DQuery : ::events::IQuery<bool> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "HasAudioSource2D"; }
+    };
+
+    struct HasAudioSource3DQuery : ::events::IQuery<bool> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "HasAudioSource3D"; }
     };
 
     // ============================================================
@@ -169,17 +211,17 @@ namespace services::events::audio {
     // ============================================================
 
     struct GetPlaybackPositionQuery : ::events::IQuery<float> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "GetPlaybackPosition"; }
     };
 
     struct GetDurationQuery : ::events::IQuery<float> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "GetDuration"; }
     };
 
     struct IsStreamingHandleQuery : ::events::IQuery<bool> {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "IsStreamingHandle"; }
     };
 
@@ -192,18 +234,18 @@ namespace services::events::audio {
     };
 
     struct SoundStartedNotification : ::events::INotification {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string path;
         std::string_view getName() const override { return "SoundStarted"; }
     };
 
     struct SoundStoppedNotification : ::events::INotification {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "SoundStopped"; }
     };
 
     struct SoundFinishedNotification : ::events::INotification {
-        AudioHandle handle;
+        services::AudioHandle handle;
         std::string_view getName() const override { return "SoundFinished"; }
     };
 

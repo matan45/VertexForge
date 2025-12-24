@@ -39,13 +39,22 @@ namespace services {
         void setPitch(AudioHandle handle, float pitch) override;
         void setPosition(AudioHandle handle, const glm::vec3& position) override;
 
-        // === Audio Source Component ===
-        void addAudioSource(EntityHandle entity, const AudioSourceData& data) override;
-        void removeAudioSource(EntityHandle entity) override;
-        [[nodiscard]] bool hasAudioSource(EntityHandle entity) const override;
-        void playEntityAudio(EntityHandle entity) override;
-        void pauseEntityAudio(EntityHandle entity) override;
-        void stopEntityAudio(EntityHandle entity) override;
+        // === 2D Audio Source Component (streaming) ===
+        void addAudioSource2D(EntityHandle entity, const AudioSource2DData& data) override;
+        void removeAudioSource2D(EntityHandle entity) override;
+        [[nodiscard]] bool hasAudioSource2D(EntityHandle entity) const override;
+        void playEntityAudio2D(EntityHandle entity) override;
+        void pauseEntityAudio2D(EntityHandle entity) override;
+        void stopEntityAudio2D(EntityHandle entity) override;
+
+        // === 3D Audio Source Component (cached/spatial) ===
+        void addAudioSource3D(EntityHandle entity, const AudioSource3DData& data) override;
+        void removeAudioSource3D(EntityHandle entity) override;
+        [[nodiscard]] bool hasAudioSource3D(EntityHandle entity) const override;
+        void playEntityAudio3D(EntityHandle entity, const glm::vec3& position) override;
+        void pauseEntityAudio3D(EntityHandle entity) override;
+        void stopEntityAudio3D(EntityHandle entity) override;
+        void updateEntityAudio3DPosition(EntityHandle entity, const glm::vec3& position) override;
 
         // === Streaming Audio ===
         [[nodiscard]] AudioHandle playStreamingSound(const std::string& path,
@@ -62,11 +71,20 @@ namespace services {
 
         IAudioProvider* audioProvider;
 
-        struct EntityAudioState {
-            AudioSourceData data;
+        // 2D Audio source state (streaming)
+        struct EntityAudio2DState {
+            AudioSource2DData data;
             AudioHandle currentHandle;
         };
-        std::unordered_map<EntityHandle, EntityAudioState, EntityHandle::Hash> entityAudioSources;
+        std::unordered_map<EntityHandle, EntityAudio2DState, EntityHandle::Hash> entityAudio2DSources;
+
+        // 3D Audio source state (cached/spatial)
+        struct EntityAudio3DState {
+            AudioSource3DData data;
+            AudioHandle currentHandle;
+            glm::vec3 position{0.0f};
+        };
+        std::unordered_map<EntityHandle, EntityAudio3DState, EntityHandle::Hash> entityAudio3DSources;
     };
 
 }

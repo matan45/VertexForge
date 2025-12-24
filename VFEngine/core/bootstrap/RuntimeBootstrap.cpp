@@ -82,7 +82,15 @@ namespace core
     {
         if (coreInterface)
         {
-            coreInterface->setFrameCallback(std::move(callback));
+            // Wrap the callback to also update audio each frame
+            coreInterface->setFrameCallback([this, cb = std::move(callback)]() {
+                if (audioAdapter) {
+                    audioAdapter->update();
+                }
+                if (cb) {
+                    cb();
+                }
+            });
         }
     }
 

@@ -8,10 +8,15 @@
 #include "interfaces/IWindowStateService.hpp"
 #include "interfaces/IPreviewService.hpp"
 #include "interfaces/IEditorModeService.hpp"
+#include "interfaces/IAudioService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
 	class EditorBootstrap;
+}
+
+namespace core::audio {
+	class AudioSceneUpdater;
 }
 
 namespace handlers {
@@ -30,7 +35,9 @@ namespace handlers {
 		std::shared_ptr<services::IWindowStateService> windowStateService;
 		std::shared_ptr<services::IPreviewService> previewService;
 		std::shared_ptr<services::IEditorModeService> editorModeService;
-		
+		std::shared_ptr<services::IAudioService> audioService;
+		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
+
 		events::SubscriptionToken resizeSubscription;
 		events::SubscriptionToken minimizeSubscription;
 		events::SubscriptionToken restoreSubscription;
