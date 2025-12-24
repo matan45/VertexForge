@@ -58,6 +58,18 @@ namespace core {
         size_t getActiveSourceCount() const override;
         size_t getLoadedBufferCount() const override;
 
+        // Streaming-specific methods
+        services::AudioHandleId playStreamingSound(const std::string& path,
+                                                    const services::AudioPlayParams& params) override;
+        services::AudioHandleId playStreamingSound3D(const std::string& path,
+                                                      const glm::vec3& position,
+                                                      const services::AudioPlayParams& params) override;
+        float getPlaybackPosition(services::AudioHandleId handle) const override;
+        bool setPlaybackPosition(services::AudioHandleId handle, float seconds) override;
+        float getDuration(services::AudioHandleId handle) const override;
+        bool isStreamingHandle(services::AudioHandleId handle) const override;
+        size_t getActiveStreamingCount() const override;
+
     private:
         std::unique_ptr<audio::AudioController> audioController;
     };

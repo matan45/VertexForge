@@ -3,6 +3,7 @@
 #include "AudioBufferManager.hpp"
 #include "AudioSourceManager.hpp"
 #include "AudioListener.hpp"
+#include "StreamingAudioManager.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
@@ -19,6 +20,7 @@ namespace core::audio {
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         float rolloffFactor = 1.0f;
+        bool streaming = false;  // Use streaming playback for long audio
     };
 
     class AudioController {
@@ -71,11 +73,22 @@ namespace core::audio {
         size_t getActiveSourceCount() const;
         size_t getLoadedBufferCount() const;
 
+        // Streaming-specific methods
+        AudioHandle playStreamingSound(const std::string& path, const PlaySoundParams& params = {});
+        AudioHandle playStreamingSound3D(const std::string& path, const glm::vec3& position,
+                                          const PlaySoundParams& params = {});
+        float getPlaybackPosition(AudioHandle handle) const;
+        bool setPlaybackPosition(AudioHandle handle, float seconds);
+        float getDuration(AudioHandle handle) const;
+        bool isStreamingHandle(AudioHandle handle) const;
+        size_t getActiveStreamingCount() const;
+
     private:
         std::unique_ptr<AudioSystem> audioSystem;
         std::unique_ptr<AudioBufferManager> bufferManager;
         std::unique_ptr<AudioSourceManager> sourceManager;
         std::unique_ptr<AudioListener> listener;
+        std::unique_ptr<StreamingAudioManager> streamingManager;
 
         float masterVolume = 1.0f;
         bool initialized = false;

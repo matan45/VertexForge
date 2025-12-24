@@ -116,6 +116,22 @@ namespace services {
                 stopEntityAudio(cmd.entity);
             });
 
+        // Streaming Audio Commands
+        dispatcher.registerCommandHandler<events::audio::PlayStreamingSoundCommand>(
+            [this](const auto& cmd) {
+                return playStreamingSound(cmd.path, cmd.params);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::PlayStreamingSound3DCommand>(
+            [this](const auto& cmd) {
+                return playStreamingSound3D(cmd.path, cmd.position, cmd.params);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetPlaybackPositionCommand>(
+            [this](const auto& cmd) {
+                return setPlaybackPosition(cmd.handle, cmd.seconds);
+            });
+
         // Queries
         dispatcher.registerQueryHandler<events::audio::GetMasterVolumeQuery>(
             [this](const auto&) {
@@ -130,6 +146,22 @@ namespace services {
         dispatcher.registerQueryHandler<events::audio::HasAudioSourceQuery>(
             [this](const auto& query) {
                 return hasAudioSource(query.entity);
+            });
+
+        // Streaming Audio Queries
+        dispatcher.registerQueryHandler<events::audio::GetPlaybackPositionQuery>(
+            [this](const auto& query) {
+                return getPlaybackPosition(query.handle);
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetDurationQuery>(
+            [this](const auto& query) {
+                return getDuration(query.handle);
+            });
+
+        dispatcher.registerQueryHandler<events::audio::IsStreamingHandleQuery>(
+            [this](const auto& query) {
+                return isStreamingHandle(query.handle);
             });
     }
 
@@ -279,7 +311,41 @@ namespace services {
         playParams.minDistance = params.minDistance;
         playParams.maxDistance = params.maxDistance;
         playParams.rolloffFactor = params.rolloffFactor;
+        playParams.streaming = params.streaming;
         return playParams;
+    }
+
+    // === Streaming Audio ===
+
+    AudioHandle AudioServiceImpl::playStreamingSound(const std::string& path, const AudioParams& params) {
+        AudioPlayParams playParams = convertParams(params);
+        playParams.streaming = true;
+        AudioHandleId handleId = audioProvider->playStreamingSound(path, playParams);
+        return AudioHandle{handleId};
+    }
+
+    AudioHandle AudioServiceImpl::playStreamingSound3D(const std::string& path, const glm::vec3& position,
+                                                        const AudioParams& params) {
+        AudioPlayParams playParams = convertParams(params);
+        playParams.streaming = true;
+        AudioHandleId handleId = audioProvider->playStreamingSound3D(path, position, playParams);
+        return AudioHandle{handleId};
+    }
+
+    float AudioServiceImpl::getPlaybackPosition(AudioHandle handle) const {
+        return audioProvider->getPlaybackPosition(handle.id);
+    }
+
+    bool AudioServiceImpl::setPlaybackPosition(AudioHandle handle, float seconds) {
+        return audioProvider->setPlaybackPosition(handle.id, seconds);
+    }
+
+    float AudioServiceImpl::getDuration(AudioHandle handle) const {
+        return audioProvider->getDuration(handle.id);
+    }
+
+    bool AudioServiceImpl::isStreamingHandle(AudioHandle handle) const {
+        return audioProvider->isStreamingHandle(handle.id);
     }
 
 }

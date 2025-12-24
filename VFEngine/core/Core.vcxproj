@@ -109,6 +109,8 @@
     <ClInclude Include="audio\AudioSource.hpp" />
     <ClInclude Include="audio\AudioSourceManager.hpp" />
     <ClInclude Include="audio\AudioSystem.hpp" />
+    <ClInclude Include="audio\StreamingAudioManager.hpp" />
+    <ClInclude Include="audio\StreamingAudioSource.hpp" />
     <ClInclude Include="bootstrap\EditorBootstrap.hpp" />
     <ClInclude Include="bootstrap\RuntimeBootstrap.hpp" />
     <ClInclude Include="controllers\CoreInterface.hpp" />
@@ -133,6 +135,8 @@
     <ClCompile Include="audio\AudioSource.cpp" />
     <ClCompile Include="audio\AudioSourceManager.cpp" />
     <ClCompile Include="audio\AudioSystem.cpp" />
+    <ClCompile Include="audio\StreamingAudioManager.cpp" />
+    <ClCompile Include="audio\StreamingAudioSource.cpp" />
     <ClCompile Include="bootstrap\EditorBootstrap.cpp" />
     <ClCompile Include="bootstrap\RuntimeBootstrap.cpp" />
     <ClCompile Include="controllers\CoreInterface.cpp" />

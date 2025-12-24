@@ -28,6 +28,7 @@ namespace services {
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         float rolloffFactor = 1.0f;
+        bool streaming = false;  // Use streaming playback for long audio
     };
 
     class IAudioProvider {
@@ -74,6 +75,18 @@ namespace services {
 
         virtual size_t getActiveSourceCount() const = 0;
         virtual size_t getLoadedBufferCount() const = 0;
+
+        // Streaming-specific methods
+        virtual AudioHandleId playStreamingSound(const std::string& path,
+                                                  const AudioPlayParams& params) = 0;
+        virtual AudioHandleId playStreamingSound3D(const std::string& path,
+                                                    const glm::vec3& position,
+                                                    const AudioPlayParams& params) = 0;
+        virtual float getPlaybackPosition(AudioHandleId handle) const = 0;
+        virtual bool setPlaybackPosition(AudioHandleId handle, float seconds) = 0;
+        virtual float getDuration(AudioHandleId handle) const = 0;
+        virtual bool isStreamingHandle(AudioHandleId handle) const = 0;
+        virtual size_t getActiveStreamingCount() const = 0;
     };
 
 }

@@ -94,6 +94,29 @@ namespace services::events::audio {
     };
 
     // ============================================================
+    // STREAMING AUDIO COMMANDS
+    // ============================================================
+
+    struct PlayStreamingSoundCommand : ::events::ICommand<AudioHandle> {
+        std::string path;
+        AudioParams params;
+        std::string_view getName() const override { return "PlayStreamingSound"; }
+    };
+
+    struct PlayStreamingSound3DCommand : ::events::ICommand<AudioHandle> {
+        std::string path;
+        glm::vec3 position;
+        AudioParams params;
+        std::string_view getName() const override { return "PlayStreamingSound3D"; }
+    };
+
+    struct SetPlaybackPositionCommand : ::events::ICommand<bool> {
+        AudioHandle handle;
+        float seconds;
+        std::string_view getName() const override { return "SetPlaybackPosition"; }
+    };
+
+    // ============================================================
     // AUDIO SOURCE COMPONENT COMMANDS
     // ============================================================
 
@@ -139,6 +162,25 @@ namespace services::events::audio {
     struct HasAudioSourceQuery : ::events::IQuery<bool> {
         EntityHandle entity;
         std::string_view getName() const override { return "HasAudioSource"; }
+    };
+
+    // ============================================================
+    // STREAMING AUDIO QUERIES
+    // ============================================================
+
+    struct GetPlaybackPositionQuery : ::events::IQuery<float> {
+        AudioHandle handle;
+        std::string_view getName() const override { return "GetPlaybackPosition"; }
+    };
+
+    struct GetDurationQuery : ::events::IQuery<float> {
+        AudioHandle handle;
+        std::string_view getName() const override { return "GetDuration"; }
+    };
+
+    struct IsStreamingHandleQuery : ::events::IQuery<bool> {
+        AudioHandle handle;
+        std::string_view getName() const override { return "IsStreamingHandle"; }
     };
 
     // ============================================================

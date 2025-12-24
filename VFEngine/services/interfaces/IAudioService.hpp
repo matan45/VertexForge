@@ -19,6 +19,7 @@ namespace services {
         float minDistance = 1.0f;    // Distance at which sound is at full volume
         float maxDistance = 100.0f;  // Distance at which sound is inaudible
         float rolloffFactor = 1.0f;  // How quickly sound attenuates
+        bool streaming = false;      // Use streaming playback for long audio
     };
     
     struct AudioSourceData {
@@ -91,6 +92,21 @@ namespace services {
         virtual void pauseEntityAudio(EntityHandle entity) = 0;
 
         virtual void stopEntityAudio(EntityHandle entity) = 0;
+
+        // === Streaming Audio ===
+
+        virtual AudioHandle playStreamingSound(const std::string& path, const AudioParams& params = {}) = 0;
+
+        virtual AudioHandle playStreamingSound3D(const std::string& path, const glm::vec3& position,
+                                                  const AudioParams& params = {}) = 0;
+
+        virtual float getPlaybackPosition(AudioHandle handle) const = 0;
+
+        virtual bool setPlaybackPosition(AudioHandle handle, float seconds) = 0;
+
+        virtual float getDuration(AudioHandle handle) const = 0;
+
+        virtual bool isStreamingHandle(AudioHandle handle) const = 0;
     };
 
 }

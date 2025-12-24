@@ -49,6 +49,7 @@ namespace core {
         coreParams.minDistance = params.minDistance;
         coreParams.maxDistance = params.maxDistance;
         coreParams.rolloffFactor = params.rolloffFactor;
+        coreParams.streaming = params.streaming;
 
         return audioController->playSound(path, coreParams);
     }
@@ -65,6 +66,7 @@ namespace core {
         coreParams.minDistance = params.minDistance;
         coreParams.maxDistance = params.maxDistance;
         coreParams.rolloffFactor = params.rolloffFactor;
+        coreParams.streaming = params.streaming;
 
         return audioController->playSound3D(path, position, coreParams);
     }
@@ -177,6 +179,63 @@ namespace core {
 
     size_t AudioAdapter::getLoadedBufferCount() const {
         return audioController->getLoadedBufferCount();
+    }
+
+    // Streaming-specific methods
+
+    services::AudioHandleId AudioAdapter::playStreamingSound(const std::string& path,
+                                                              const services::AudioPlayParams& params) {
+        audio::PlaySoundParams coreParams;
+        coreParams.volume = params.volume;
+        coreParams.pitch = params.pitch;
+        coreParams.loop = params.loop;
+        coreParams.is3D = params.is3D;
+        coreParams.position = params.position;
+        coreParams.velocity = params.velocity;
+        coreParams.minDistance = params.minDistance;
+        coreParams.maxDistance = params.maxDistance;
+        coreParams.rolloffFactor = params.rolloffFactor;
+        coreParams.streaming = true;
+
+        return audioController->playStreamingSound(path, coreParams);
+    }
+
+    services::AudioHandleId AudioAdapter::playStreamingSound3D(const std::string& path,
+                                                                const glm::vec3& position,
+                                                                const services::AudioPlayParams& params) {
+        audio::PlaySoundParams coreParams;
+        coreParams.volume = params.volume;
+        coreParams.pitch = params.pitch;
+        coreParams.loop = params.loop;
+        coreParams.is3D = true;
+        coreParams.position = position;
+        coreParams.velocity = params.velocity;
+        coreParams.minDistance = params.minDistance;
+        coreParams.maxDistance = params.maxDistance;
+        coreParams.rolloffFactor = params.rolloffFactor;
+        coreParams.streaming = true;
+
+        return audioController->playStreamingSound3D(path, position, coreParams);
+    }
+
+    float AudioAdapter::getPlaybackPosition(services::AudioHandleId handle) const {
+        return audioController->getPlaybackPosition(handle);
+    }
+
+    bool AudioAdapter::setPlaybackPosition(services::AudioHandleId handle, float seconds) {
+        return audioController->setPlaybackPosition(handle, seconds);
+    }
+
+    float AudioAdapter::getDuration(services::AudioHandleId handle) const {
+        return audioController->getDuration(handle);
+    }
+
+    bool AudioAdapter::isStreamingHandle(services::AudioHandleId handle) const {
+        return audioController->isStreamingHandle(handle);
+    }
+
+    size_t AudioAdapter::getActiveStreamingCount() const {
+        return audioController->getActiveStreamingCount();
     }
 
 }

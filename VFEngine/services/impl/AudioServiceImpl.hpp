@@ -47,6 +47,16 @@ namespace services {
         void pauseEntityAudio(EntityHandle entity) override;
         void stopEntityAudio(EntityHandle entity) override;
 
+        // === Streaming Audio ===
+        [[nodiscard]] AudioHandle playStreamingSound(const std::string& path,
+                                                      const AudioParams& params = {}) override;
+        [[nodiscard]] AudioHandle playStreamingSound3D(const std::string& path, const glm::vec3& position,
+                                                        const AudioParams& params = {}) override;
+        [[nodiscard]] float getPlaybackPosition(AudioHandle handle) const override;
+        bool setPlaybackPosition(AudioHandle handle, float seconds) override;
+        [[nodiscard]] float getDuration(AudioHandle handle) const override;
+        [[nodiscard]] bool isStreamingHandle(AudioHandle handle) const override;
+
     private:
         AudioPlayParams convertParams(const AudioParams& params) const;
 
