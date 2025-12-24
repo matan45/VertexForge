@@ -450,6 +450,22 @@ namespace services {
         }
     }
 
+    void SceneServiceImpl::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
+            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
+            // Only remove if it matches the expected icon type (auto-attached billboard)
+            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
+                sceneEntity.removeComponent<components::BillboardComponent>();
+            }
+        }
+    }
+
     bool SceneServiceImpl::removeCameraComponent(EntityHandle entity) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
@@ -459,6 +475,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::CameraComponent>()) {
             sceneEntity.removeComponent<components::CameraComponent>();
+            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Camera));
             return true;
         }
 
@@ -801,6 +818,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::AudioSourceComponent>()) {
             sceneEntity.removeComponent<components::AudioSourceComponent>();
+            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
             return true;
         }
         return false;

@@ -114,6 +114,7 @@ namespace services {
         void collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const;
         
         void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
+        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }
