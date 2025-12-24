@@ -180,20 +180,15 @@ namespace services {
         // ============================================
         // Audio Source Component Operations
         // ============================================
-
-        // Add audio source component to entity
+        
         virtual bool addAudioSourceComponent(EntityHandle entity) = 0;
-
-        // Remove audio source component from entity
+        
         virtual bool removeAudioSourceComponent(EntityHandle entity) = 0;
-
-        // Check if entity has audio source component
+        
         virtual bool hasAudioSourceComponent(EntityHandle entity) const = 0;
-
-        // Get audio source component data
+        
         virtual std::optional<AudioSourceData> getAudioSourceData(EntityHandle entity) const = 0;
-
-        // Set audio source component data
+        
         virtual bool setAudioSourceData(EntityHandle entity, const AudioSourceData& audioData) = 0;
 
         // ============================================
@@ -219,11 +214,9 @@ namespace services {
         // ============================================
         // Entity Naming
         // ============================================
-
-        // Get entity name
+        
         virtual std::string getEntityName(EntityHandle entity) const = 0;
-
-        // Set entity name
+        
         virtual void setEntityName(EntityHandle entity, const std::string& name) = 0;
     };
 

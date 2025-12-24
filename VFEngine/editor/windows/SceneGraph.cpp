@@ -36,8 +36,8 @@ namespace windows
     void SceneGraph::onSceneCleared()
     {
         selectedHandle = services::EntityHandle::invalid();
-        submeshNameCache.clear(); // Clear cached submesh names
-        audioPreviewHandles.clear(); // Clear audio preview handles
+        submeshNameCache.clear();
+        audioPreviewHandles.clear();
     }
 
     void SceneGraph::draw()
@@ -731,8 +731,7 @@ namespace windows
 
             services::AudioSourceData audioData = *audioOpt;
             bool changed = false;
-
-            // Audio file path display and browse button
+            
             if (!audioData.audioFilePath.empty())
             {
                 std::string filename = audioData.audioFilePath;
@@ -770,30 +769,26 @@ namespace windows
             }
 
             ImGui::Spacing();
-
-            // Volume slider
+            
             if (ImGui::SliderFloat("Volume", &audioData.volume, 0.0f, 1.0f, "%.2f"))
             {
                 changed = true;
             }
-
-            // Pitch slider
+            
             if (ImGui::SliderFloat("Pitch", &audioData.pitch, 0.5f, 2.0f, "%.2f"))
             {
                 changed = true;
             }
 
             ImGui::Spacing();
-
-            // Loop checkbox
+            
             if (ImGui::Checkbox("Loop", &audioData.loop))
             {
                 changed = true;
             }
 
             ImGui::Spacing();
-
-            // 3D audio toggle
+            
             if (ImGui::Checkbox("3D Audio", &audioData.is3D))
             {
                 changed = true;
@@ -803,8 +798,7 @@ namespace windows
             {
                 ImGui::SetTooltip("Enable 3D positional audio.\nAudio will be spatialized based on entity position.");
             }
-
-            // 3D-specific settings (only show if 3D is enabled)
+            
             if (audioData.is3D)
             {
                 ImGui::Indent(10.0f);
@@ -837,8 +831,7 @@ namespace windows
                 cmd.audioData = audioData;
                 dispatcher.execute(cmd);
             }
-
-            // Playback controls
+            
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -893,8 +886,7 @@ namespace windows
             if (!canPlay) ImGui::EndDisabled();
 
             ImGui::SameLine();
-
-            // Pause button - only enabled if playing
+            
             if (!isCurrentlyPlaying) ImGui::BeginDisabled();
             if (ImGui::Button("Pause", ImVec2(60, 0)))
             {
@@ -908,8 +900,7 @@ namespace windows
             if (!isCurrentlyPlaying) ImGui::EndDisabled();
 
             ImGui::SameLine();
-
-            // Stop button - only enabled if we have a handle
+            
             if (!hasPreviewHandle) ImGui::BeginDisabled();
             if (ImGui::Button("Stop", ImVec2(60, 0)))
             {
@@ -933,8 +924,7 @@ namespace windows
             events::scene::RemoveAudioSourceComponentCommand cmd;
             cmd.entity = handle;
             dispatcher.execute(cmd);
-
-            // Clean up any preview handle
+            
             audioPreviewHandles.erase(handle.id);
         }
 

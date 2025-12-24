@@ -21,8 +21,7 @@ namespace windows
         std::unordered_set<uint64_t> expandedHandles;
 
         inline static std::unordered_map<std::string, std::vector<std::string>> submeshNameCache;
-
-        // Audio preview handles for editor playback (entity id -> audio handle)
+        
         inline static std::unordered_map<uint64_t, services::AudioHandle> audioPreviewHandles;
 
     public:

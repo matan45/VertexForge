@@ -110,8 +110,7 @@ namespace events::scene {
 
         std::string_view getName() const override { return "SetEntityStatic"; }
     };
-
-    // Audio Source Component Commands
+    
     struct AddAudioSourceComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -232,8 +231,7 @@ namespace events::scene {
 
         std::string_view getName() const override { return "IsEntityStatic"; }
     };
-
-    // Audio Source Component Queries
+    
     struct HasAudioSourceComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
