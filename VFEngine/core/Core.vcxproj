@@ -56,7 +56,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
@@ -67,13 +67,17 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <Lib>
+      <AdditionalDependencies>OpenAL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\dependencies\openal-soft\build\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -88,12 +92,23 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
+    <Lib>
+      <AdditionalDependencies>OpenAL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\dependencies\openal-soft\build\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="adapters\AudioAdapter.hpp" />
     <ClInclude Include="adapters\EditorTextureAdapter.hpp" />
     <ClInclude Include="adapters\MaterialPreviewAdapter.hpp" />
     <ClInclude Include="adapters\MeshPreviewAdapter.hpp" />
     <ClInclude Include="adapters\OffScreenAdapter.hpp" />
+    <ClInclude Include="audio\AudioBufferManager.hpp" />
+    <ClInclude Include="audio\AudioController.hpp" />
+    <ClInclude Include="audio\AudioListener.hpp" />
+    <ClInclude Include="audio\AudioSource.hpp" />
+    <ClInclude Include="audio\AudioSourceManager.hpp" />
+    <ClInclude Include="audio\AudioSystem.hpp" />
     <ClInclude Include="bootstrap\EditorBootstrap.hpp" />
     <ClInclude Include="bootstrap\RuntimeBootstrap.hpp" />
     <ClInclude Include="controllers\CoreInterface.hpp" />
@@ -107,10 +122,17 @@
     <ClInclude Include="handlers\WindowHandler.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="adapters\AudioAdapter.cpp" />
     <ClCompile Include="adapters\EditorTextureAdapter.cpp" />
     <ClCompile Include="adapters\MaterialPreviewAdapter.cpp" />
     <ClCompile Include="adapters\MeshPreviewAdapter.cpp" />
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
+    <ClCompile Include="audio\AudioBufferManager.cpp" />
+    <ClCompile Include="audio\AudioController.cpp" />
+    <ClCompile Include="audio\AudioListener.cpp" />
+    <ClCompile Include="audio\AudioSource.cpp" />
+    <ClCompile Include="audio\AudioSourceManager.cpp" />
+    <ClCompile Include="audio\AudioSystem.cpp" />
     <ClCompile Include="bootstrap\EditorBootstrap.cpp" />
     <ClCompile Include="bootstrap\RuntimeBootstrap.cpp" />
     <ClCompile Include="controllers\CoreInterface.cpp" />

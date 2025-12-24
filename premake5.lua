@@ -57,10 +57,18 @@ project "Editor"
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      -- Copy OpenAL DLL to Editor output directory
+      postbuildcommands {
+         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      -- Copy OpenAL DLL to Editor output directory
+      postbuildcommands {
+         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/Release/x64/"
+      }
 
 -- Project 2: Core
 project "Core"
@@ -71,7 +79,7 @@ project "Core"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
    files { "VFEngine/core/**.hpp", "VFEngine/core/**.cpp" }
-   
+
    includedirs {
       "VFEngine/graphics/controllers",   -- Graphics headers
       "VFEngine/window/controllers",     -- Window headers
@@ -84,6 +92,7 @@ project "Core"
 	  "dependencies/glm",
 	  "dependencies/glfw/include",
 	  "dependencies/imgui/backends",
+	  "dependencies/openal-soft/include", -- OpenAL headers
 	  vulkanLibPath.."/Include"
    }
 
@@ -93,10 +102,14 @@ project "Core"
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      libdirs { "dependencies/openal-soft/build/Debug" }
+      links { "OpenAL32.lib" }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      libdirs { "dependencies/openal-soft/build/Release" }
+      links { "OpenAL32.lib" }
 	  
 	  
 project "Import"
@@ -218,10 +231,18 @@ project "Runtime"
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      -- Copy OpenAL DLL to Runtime output directory
+      postbuildcommands {
+         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Runtime/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      -- Copy OpenAL DLL to Runtime output directory
+      postbuildcommands {
+         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Runtime/Release/x64/"
+      }
 
 -- Project 5: Utilities (Moved before Graphics)
 project "Utilities"
