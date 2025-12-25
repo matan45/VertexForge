@@ -1508,6 +1508,13 @@ namespace services {
             return false;
         }
 
+        // Prevent saving root entity as prefab
+        scene::Entity& root = sceneGraph->GetRoot();
+        if (internal::fromHandle(entity) == root.getHandle()) {
+            vfLogWarning("Cannot save root entity as prefab");
+            return false;
+        }
+
         scene::Entity sceneEntity(internal::fromHandle(entity));
         bool success = serialization::PrefabSerialization::savePrefab(sceneEntity, filePath);
 
