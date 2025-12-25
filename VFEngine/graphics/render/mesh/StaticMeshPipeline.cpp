@@ -1038,9 +1038,21 @@ namespace render::mesh
 
         vk::Pipeline currentPipeline = nullptr;
 
-        // Pass 1: Render opaque objects
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-        currentPipeline = graphicsPipeline;
+        // Helper struct for material-sorted rendering
+        struct SortedSubmesh
+        {
+            const MeshRenderData* meshData;
+            const SubMeshGPUData* subMesh;
+            size_t subMeshIndex;
+            std::string materialPath;  // For sorting by material
+        };
+
+        // Collect and sort opaque/masked submeshes by material to minimize descriptor set switches
+        std::vector<SortedSubmesh> opaqueSubmeshes;
+        std::vector<SortedSubmesh> maskedSubmeshes;
+        opaqueSubmeshes.reserve(256);  // Pre-allocate for typical scene
+        maskedSubmeshes.reserve(64);
+
         for (const auto& meshData : meshDrawList)
         {
             const MeshGPUData* gpuData = getMesh(meshData.meshPath);
@@ -1049,27 +1061,48 @@ namespace render::mesh
             for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
             {
                 const auto& subMesh = gpuData->subMeshes[subMeshIndex];
+
+                // Frustum culling
                 if (frustum && frustum->isInitialized() &&
                     !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
                     continue;
-                renderSubmesh(meshData, subMesh, subMeshIndex, material::BlendMode::Opaque, currentPipeline);
+
+                // Get material path for sorting
+                ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
+                    meshData, subMesh.name, materialCache, currentTime);
+
+                if (pbrValues.blendMode == material::BlendMode::Opaque)
+                {
+                    opaqueSubmeshes.push_back({&meshData, &subMesh, subMeshIndex, pbrValues.materialPath});
+                }
+                else if (pbrValues.blendMode == material::BlendMode::Masked)
+                {
+                    maskedSubmeshes.push_back({&meshData, &subMesh, subMeshIndex, pbrValues.materialPath});
+                }
             }
         }
 
-        // Pass 2: Render masked objects (alpha testing)
-        for (const auto& meshData : meshDrawList)
-        {
-            const MeshGPUData* gpuData = getMesh(meshData.meshPath);
-            if (!gpuData || gpuData->subMeshes.empty()) continue;
+        // Sort by material path to group same-material submeshes together
+        auto materialSortComparator = [](const SortedSubmesh& a, const SortedSubmesh& b) {
+            return a.materialPath < b.materialPath;
+        };
+        std::sort(opaqueSubmeshes.begin(), opaqueSubmeshes.end(), materialSortComparator);
+        std::sort(maskedSubmeshes.begin(), maskedSubmeshes.end(), materialSortComparator);
 
-            for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
-            {
-                const auto& subMesh = gpuData->subMeshes[subMeshIndex];
-                if (frustum && frustum->isInitialized() &&
-                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
-                    continue;
-                renderSubmesh(meshData, subMesh, subMeshIndex, material::BlendMode::Masked, currentPipeline);
-            }
+        // Pass 1: Render opaque objects (sorted by material)
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        currentPipeline = graphicsPipeline;
+        for (const auto& item : opaqueSubmeshes)
+        {
+            renderSubmesh(*item.meshData, *item.subMesh, item.subMeshIndex,
+                         material::BlendMode::Opaque, currentPipeline);
+        }
+
+        // Pass 2: Render masked objects (sorted by material)
+        for (const auto& item : maskedSubmeshes)
+        {
+            renderSubmesh(*item.meshData, *item.subMesh, item.subMeshIndex,
+                         material::BlendMode::Masked, currentPipeline);
         }
 
         // Pass 3: Render translucent objects (alpha blending) - sorted back-to-front
