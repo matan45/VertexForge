@@ -432,11 +432,11 @@ namespace services {
         
         if (!sceneEntity.hasComponent<components::TransformComponent>()) {
             auto& transform = sceneEntity.addComponent<components::TransformComponent>();
-            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.GetMatrix();
+            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.getMatrix();
         }
         else if (!sceneEntity.hasComponent<components::WorldTransformComponent>()) {
             auto& transform = sceneEntity.getComponent<components::TransformComponent>();
-            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.GetMatrix();
+            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.getMatrix();
         }
 
         if (!sceneEntity.hasComponent<components::CameraComponent>()) {

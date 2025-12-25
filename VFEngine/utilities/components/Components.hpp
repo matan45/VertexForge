@@ -73,7 +73,7 @@ namespace components {
 			isDirty = true;
 		}
 		
-		glm::mat4 GetMatrix() const {
+		glm::mat4 getMatrix() const {
 			auto transform = glm::mat4(1.0f);
 			transform = glm::translate(transform, position);
 			transform = glm::rotate(transform, glm::radians(rotation.x), glm::vec3(1, 0, 0));

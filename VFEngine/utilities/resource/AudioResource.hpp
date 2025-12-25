@@ -7,8 +7,7 @@
 
 
 namespace resource {
-
-	// Header information for streaming audio
+	
 	struct AudioStreamHeader {
 		uint32_t sampleRate = 0;
 		uint32_t channels = 0;
@@ -17,8 +16,7 @@ namespace resource {
 		uint32_t dataSize = 0;
 		std::streampos dataStartOffset = 0;  // Position in file where PCM data begins
 	};
-
-	// Handle for streaming audio - keeps file open for chunked reading
+	
 	class AudioStreamHandle {
 	private:
 		friend class AudioResource;
@@ -26,51 +24,26 @@ namespace resource {
 		std::ifstream file;
 		AudioStreamHeader header;
 		size_t currentSamplePosition = 0;
+
+		bool seekToSample(size_t sampleIndex);
+		size_t getTotalSamples() const { return header.frames * header.channels; }
+
 	public:
 		explicit AudioStreamHandle() = default;
 		~AudioStreamHandle();
 
-		// Non-copyable, movable
 		AudioStreamHandle(const AudioStreamHandle&) = delete;
 		AudioStreamHandle& operator=(const AudioStreamHandle&) = delete;
 		AudioStreamHandle(AudioStreamHandle&& other) noexcept;
 		AudioStreamHandle& operator=(AudioStreamHandle&& other) noexcept;
 
-		// Check if stream is open and valid
-		[[nodiscard]] bool isOpen() const { return file.is_open(); }
-
-		// Read chunk of samples into buffer, returns actual samples read
-		// sampleCount is total samples (frames * channels)
+		bool isOpen() const { return file.is_open(); }
 		size_t readSamples(std::vector<short>& buffer, size_t sampleCount);
-
-		// Seek to sample position (0-based, total samples not frames)
-		bool seekToSample(size_t sampleIndex);
-
-		// Seek to time position in seconds
 		bool seekToTime(float seconds);
-
-		// Reset to beginning of audio data (for looping)
 		void reset();
-
-		// Check if at end of file
-		[[nodiscard]] bool isEOF() const;
-
-		// Get header information
-		[[nodiscard]] const AudioStreamHeader& getHeader() const { return header; }
-
-		// Get current sample position
-		[[nodiscard]] size_t getCurrentSamplePosition() const { return currentSamplePosition; }
-
-		// Get current time position in seconds
-		[[nodiscard]] float getCurrentTimePosition() const;
-
-		// Get total samples in file
-		[[nodiscard]] size_t getTotalSamples() const { return header.frames * header.channels; }
-
-		// Get duration in seconds
-		[[nodiscard]] float getDuration() const { return static_cast<float>(header.totalDurationSeconds); }
-
-	
+		bool isEOF() const;
+		const AudioStreamHeader& getHeader() const { return header; }
+		float getDuration() const { return static_cast<float>(header.totalDurationSeconds); }
 	};
 
 	class AudioResource

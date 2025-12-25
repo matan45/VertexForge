@@ -427,6 +427,9 @@ namespace core::audio
     {
         if (!streamHandle) return false;
 
+        // Clamp to valid range (must match what seekToTime does internally)
+        seconds = std::max(0.0f, std::min(seconds, streamHandle->getDuration()));
+
         bool wasPlaying = (state == StreamingState::Playing);
 
         // Stop current playback

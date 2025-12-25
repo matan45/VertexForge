@@ -144,16 +144,6 @@ namespace resource
         return currentSamplePosition >= getTotalSamples();
     }
 
-    float AudioStreamHandle::getCurrentTimePosition() const
-    {
-        if (header.sampleRate == 0 || header.channels == 0)
-        {
-            return 0.0f;
-        }
-        return static_cast<float>(currentSamplePosition) /
-            static_cast<float>(header.sampleRate * header.channels);
-    }
-
     // ============================================
     // AudioResource::openStream Implementation
     // ============================================

@@ -133,7 +133,8 @@ namespace windows
         entityQuery.entity = handle;
         auto entityDataOpt = dispatcher.query(entityQuery);
 
-        std::string entityName = entityDataOpt.has_value() ? entityDataOpt->name : "Unknown";
+        static const std::string unknownName = "Unknown";
+        const std::string& entityName = entityDataOpt.has_value() ? entityDataOpt->name : unknownName;
 
         if (expandedHandles.count(handle.id) > 0)
         {

@@ -156,9 +156,9 @@ namespace render::mesh
 
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-                                               vk::ColorComponentFlagBits::eG |
-                                               vk::ColorComponentFlagBits::eB |
-                                               vk::ColorComponentFlagBits::eA;
+            vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB |
+            vk::ColorComponentFlagBits::eA;
         colorBlendAttachment.blendEnable = VK_FALSE;
 
         vk::PipelineColorBlendStateCreateInfo colorBlending{};
@@ -277,9 +277,9 @@ namespace render::mesh
     }
 
     void AudioSphereDebugRenderer::render(const vk::CommandBuffer& commandBuffer,
-                                           const std::vector<AudioSphereRenderData>& audioSourceDrawList,
-                                           const glm::mat4& view,
-                                           const glm::mat4& projection) const
+                                          const std::vector<AudioSphereRenderData>& audioSourceDrawList,
+                                          const glm::mat4& view,
+                                          const glm::mat4& projection) const
     {
         if (!initialized || !wireframePipeline || !vertexBuffer)
         {
@@ -327,8 +327,8 @@ namespace render::mesh
                 pushConstants.color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f); // Green
 
                 commandBuffer.pushConstants(wireframePipelineLayout,
-                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                    0, sizeof(AudioSpherePushConstants), &pushConstants);
+                                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                            0, sizeof(AudioSpherePushConstants), &pushConstants);
 
                 commandBuffer.drawIndexed(indexCount, 1, 0, 0, 0);
             }
@@ -343,8 +343,8 @@ namespace render::mesh
                 pushConstants.color = glm::vec4(1.0f, 0.6f, 0.0f, 1.0f); // Orange
 
                 commandBuffer.pushConstants(wireframePipelineLayout,
-                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                    0, sizeof(AudioSpherePushConstants), &pushConstants);
+                                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                            0, sizeof(AudioSpherePushConstants), &pushConstants);
 
                 commandBuffer.drawIndexed(indexCount, 1, 0, 0, 0);
             }
