@@ -301,9 +301,7 @@ namespace resource
             }
         }
 
-        audioData.data.reserve(dataSize / sizeof(short)); // Reserve space for the entire buffer
-
-        // Read audio data in chunks (endian-safe)
+        // Read audio data (endian-safe)
         size_t totalSamples = dataSize / sizeof(short);
         endian::readVectorLE<short>(inFile, audioData.data, totalSamples);
 

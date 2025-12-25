@@ -49,16 +49,11 @@ namespace core::audio
         }
 
         stopAll();
-        streamingManager->stopAll();
 
         sourceManager.reset();
         streamingManager.reset();
-        bufferManager->unloadAll();
+        bufferManager.reset();
         audioSystem->cleanUp();
-
-        sourceManager = std::make_unique<AudioSourceManager>(0);
-        bufferManager = std::make_unique<AudioBufferManager>();
-        streamingManager = std::make_unique<StreamingAudioManager>();
 
         initialized = false;
         loggerInfo("AudioController cleaned up");
@@ -159,8 +154,8 @@ namespace core::audio
             if (source)
             {
                 source->stop();
+                sourceManager->releaseSource(handle);
             }
-            sourceManager->releaseSource(handle);
         }
     }
 
