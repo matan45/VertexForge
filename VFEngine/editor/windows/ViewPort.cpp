@@ -3,6 +3,7 @@
 #include "events/RenderEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/EditorModeEvents.hpp"
+#include "events/AudioEvents.hpp"
 #include "time/Timer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -61,6 +62,13 @@ namespace windows
             meshCameraCmd.cameraPosition = editorCamera->position;
             meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
             dispatcher.execute(meshCameraCmd);
+
+            // Update audio listener position from editor camera
+            events::audio::SetListenerPositionCommand listenerCmd;
+            listenerCmd.position = editorCamera->position;
+            listenerCmd.forward = editorCamera->getForwardDirection();
+            listenerCmd.up = glm::vec3(0.0f, 1.0f, 0.0f);
+            dispatcher.execute(listenerCmd);
 
             ImVec2 viewportPos = ImGui::GetCursorScreenPos();
 

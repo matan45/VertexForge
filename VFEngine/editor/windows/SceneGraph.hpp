@@ -46,8 +46,9 @@ namespace windows
         void drawIBLComponent(services::EntityHandle handle);
         bool drawMeshComponent(services::EntityHandle handle);
         void drawMaterialComponent(services::EntityHandle handle);
-        bool drawAudioSourceComponent(services::EntityHandle handle);
-        void drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudioSource);
+        bool drawAudioSource2DComponent(services::EntityHandle handle);
+        bool drawAudioSource3DComponent(services::EntityHandle handle);
+        void drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D);
 
         // UI styling helpers
         static void pushComponentHeaderStyle();

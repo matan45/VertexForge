@@ -57,6 +57,7 @@ namespace controllers {
 		void setActiveCamera(CameraId id);
 		CameraId getActiveCameraId() const;
 		void prepareFrameCameraFrustums();
+		void prepareFrameAudioSpheres();
 
 		// Billboard API
 		void prepareFrameBillboards();

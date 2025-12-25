@@ -129,7 +129,7 @@ namespace scene {
 		// Check if the transform or any ancestor's transform is dirty
 		if (transform.isDirty) {
 			// Calculate the new world transform by combining with the parent's world transform
-			glm::mat4 worldMatrix = parentWorldTransform * transform.GetMatrix();
+			glm::mat4 worldMatrix = parentWorldTransform * transform.getMatrix();
 
 			// Update or replace the WorldTransform component
 			entity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = worldMatrix;

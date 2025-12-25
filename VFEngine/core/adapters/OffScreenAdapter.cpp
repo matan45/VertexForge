@@ -87,6 +87,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameAudioSpheres() {
+        if (offScreen) {
+            offScreen->prepareFrameAudioSpheres();
+        }
+    }
+
     void OffScreenAdapter::prepareFrameBillboards() {
         if (offScreen) {
             offScreen->prepareFrameBillboards();

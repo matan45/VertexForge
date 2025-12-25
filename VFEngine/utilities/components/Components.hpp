@@ -14,11 +14,12 @@ namespace components {
 	struct MeshComponent;
 	struct MaterialComponent;
 	struct BillboardComponent;
-	struct AudioSourceComponent;
+	struct AudioSource2DComponent;
+	struct AudioSource3DComponent;
 
 	// Type list of optional components that can be removed during cleanup
 	// Add new optional component types here when they are created
-	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent, BillboardComponent, AudioSourceComponent>;
+	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent, BillboardComponent, AudioSource2DComponent, AudioSource3DComponent>;
 
 	struct WorldTransformComponent
 	{
@@ -72,7 +73,7 @@ namespace components {
 			isDirty = true;
 		}
 		
-		glm::mat4 GetMatrix() const {
+		glm::mat4 getMatrix() const {
 			auto transform = glm::mat4(1.0f);
 			transform = glm::translate(transform, position);
 			transform = glm::rotate(transform, glm::radians(rotation.x), glm::vec3(1, 0, 0));
@@ -251,14 +252,27 @@ namespace components {
 		}
 	};
 
-	struct AudioSourceComponent {
+	// 2D Audio Source - uses streaming, good for background music/ambient
+	struct AudioSource2DComponent {
 		std::string audioFilePath;      // Path to .vfAudio file
 		float volume = 1.0f;            // 0.0 to 1.0
 		float pitch = 1.0f;             // 0.5 to 2.0
 		bool loop = false;
-		bool is3D = false;              // If true, uses entity transform for position
-		float minDistance = 1.0f;       // 3D: distance where volume starts to attenuate
-		float maxDistance = 100.0f;     // 3D: distance where volume reaches minimum
+
+		// Runtime state (not serialized)
+		uint64_t activeHandle = 0;      // AudioHandle from AudioController
+		bool isPlaying = false;
+	};
+
+	// 3D Audio Source - uses cached audio, good for spatial sound effects
+	struct AudioSource3DComponent {
+		std::string audioFilePath;      // Path to .vfAudio file
+		float volume = 1.0f;            // 0.0 to 1.0
+		float pitch = 1.0f;             // 0.5 to 2.0
+		bool loop = false;
+		float minDistance = 1.0f;       // Distance where volume starts to attenuate
+		float maxDistance = 100.0f;     // Distance where volume reaches minimum
+		bool showDebugSpheres = false;  // Show min/max distance wireframe spheres
 
 		// Runtime state (not serialized)
 		uint64_t activeHandle = 0;      // AudioHandle from AudioController

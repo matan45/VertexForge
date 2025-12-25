@@ -1,5 +1,5 @@
 #include "AudioSystem.hpp"
-#include <spdlog/spdlog.h>
+#include "print/Logger.hpp"
 
 namespace core::audio {
 
@@ -11,26 +11,26 @@ namespace core::audio {
 
     bool AudioSystem::init() {
         if (initialized) {
-            spdlog::warn("AudioSystem already initialized");
+            loggerWarning("AudioSystem already initialized");
             return true;
         }
 
         device = alcOpenDevice(nullptr);
         if (!device) {
-            spdlog::error("Failed to open default OpenAL device");
+            loggerError("Failed to open default OpenAL device");
             return false;
         }
 
         context = alcCreateContext(device, nullptr);
         if (!context) {
-            spdlog::error("Failed to create OpenAL context");
+            loggerError("Failed to create OpenAL context");
             alcCloseDevice(device);
             device = nullptr;
             return false;
         }
 
         if (!alcMakeContextCurrent(context)) {
-            spdlog::error("Failed to make OpenAL context current");
+            loggerError("Failed to make OpenAL context current");
             alcDestroyContext(context);
             alcCloseDevice(device);
             context = nullptr;
@@ -40,17 +40,15 @@ namespace core::audio {
 
         alGetError();
 
-        setDistanceModel(currentDistanceModel);
-        setDopplerFactor(dopplerFactor);
-        setSpeedOfSound(speedOfSound);
+        alDistanceModel(AL_INVERSE_DISTANCE_CLAMPED);
 
         initialized = true;
 
-        spdlog::info("AudioSystem initialized successfully");
-        spdlog::info("  Device: {}", getDeviceName());
-        spdlog::info("  Vendor: {}", getVendor());
-        spdlog::info("  Version: {}", getVersion());
-        spdlog::info("  Renderer: {}", getRenderer());
+        loggerInfo("AudioSystem initialized successfully");
+        loggerInfo("  Device: {}", getDeviceName());
+        loggerInfo("  Vendor: {}", getVendor());
+        loggerInfo("  Version: {}", getVersion());
+        loggerInfo("  Renderer: {}", getRenderer());
 
         return true;
     }
@@ -73,55 +71,7 @@ namespace core::audio {
         }
 
         initialized = false;
-        spdlog::info("AudioSystem cleaned up");
-    }
-
-    void AudioSystem::setDistanceModel(DistanceModel model) {
-        if (!initialized) return;
-
-        ALenum alModel;
-        switch (model) {
-            case DistanceModel::InverseDistance:
-                alModel = AL_INVERSE_DISTANCE;
-                break;
-            case DistanceModel::InverseDistanceClamped:
-                alModel = AL_INVERSE_DISTANCE_CLAMPED;
-                break;
-            case DistanceModel::LinearDistance:
-                alModel = AL_LINEAR_DISTANCE;
-                break;
-            case DistanceModel::LinearDistanceClamped:
-                alModel = AL_LINEAR_DISTANCE_CLAMPED;
-                break;
-            case DistanceModel::ExponentDistance:
-                alModel = AL_EXPONENT_DISTANCE;
-                break;
-            case DistanceModel::ExponentDistanceClamped:
-                alModel = AL_EXPONENT_DISTANCE_CLAMPED;
-                break;
-            case DistanceModel::None:
-            default:
-                alModel = AL_NONE;
-                break;
-        }
-
-        alDistanceModel(alModel);
-        currentDistanceModel = model;
-        checkError("setDistanceModel");
-    }
-
-    void AudioSystem::setDopplerFactor(float factor) {
-        if (!initialized) return;
-        alDopplerFactor(factor);
-        dopplerFactor = factor;
-        checkError("setDopplerFactor");
-    }
-
-    void AudioSystem::setSpeedOfSound(float speed) {
-        if (!initialized) return;
-        alSpeedOfSound(speed);
-        speedOfSound = speed;
-        checkError("setSpeedOfSound");
+        loggerInfo("AudioSystem cleaned up");
     }
 
     std::string AudioSystem::getDeviceName() const {
@@ -172,7 +122,7 @@ namespace core::audio {
                     errorStr = "Unknown error";
                     break;
             }
-            spdlog::error("OpenAL error in {}: {} (0x{:X})", operation, errorStr, error);
+            loggerError("OpenAL error in {}: {} (0x{:X})", operation, errorStr, error);
             return true;
         }
         return false;

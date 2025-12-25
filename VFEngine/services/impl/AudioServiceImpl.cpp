@@ -10,33 +10,10 @@ namespace services {
         assert(audioProvider && "AudioProvider must not be null");
     }
 
-    AudioServiceImpl::~AudioServiceImpl() {
-        entityAudioSources.clear();
-    }
+    AudioServiceImpl::~AudioServiceImpl() = default;
 
     void AudioServiceImpl::registerEventHandlers() {
         auto& dispatcher = ::events::EventDispatcher::instance();
-
-        // Global Audio Commands
-        dispatcher.registerCommandHandler<events::audio::SetMasterVolumeCommand>(
-            [this](const auto& cmd) {
-                setMasterVolume(cmd.volume);
-            });
-
-        dispatcher.registerCommandHandler<events::audio::PauseAllCommand>(
-            [this](const auto&) {
-                pauseAll();
-            });
-
-        dispatcher.registerCommandHandler<events::audio::ResumeAllCommand>(
-            [this](const auto&) {
-                resumeAll();
-            });
-
-        dispatcher.registerCommandHandler<events::audio::StopAllCommand>(
-            [this](const auto&) {
-                stopAll();
-            });
 
         // Listener Commands
         dispatcher.registerCommandHandler<events::audio::SetListenerPositionCommand>(
@@ -44,17 +21,7 @@ namespace services {
                 setListenerPosition(cmd.position, cmd.forward, cmd.up);
             });
 
-        dispatcher.registerCommandHandler<events::audio::SetListenerVelocityCommand>(
-            [this](const auto& cmd) {
-                setListenerVelocity(cmd.velocity);
-            });
-
         // Sound Playback Commands
-        dispatcher.registerCommandHandler<events::audio::PlaySoundCommand>(
-            [this](const auto& cmd) {
-                return playSound(cmd.path, cmd.params);
-            });
-
         dispatcher.registerCommandHandler<events::audio::PlaySound3DCommand>(
             [this](const auto& cmd) {
                 return playSound3D(cmd.path, cmd.position, cmd.params);
@@ -85,72 +52,32 @@ namespace services {
                 setPitch(cmd.handle, cmd.pitch);
             });
 
-        dispatcher.registerCommandHandler<events::audio::SetSoundPositionCommand>(
+        // Streaming Audio Commands
+        dispatcher.registerCommandHandler<events::audio::PlayStreamingSoundCommand>(
             [this](const auto& cmd) {
-                setPosition(cmd.handle, cmd.position);
+                return playStreamingSound(cmd.path, cmd.params);
             });
 
-        // Entity Audio Commands
-        dispatcher.registerCommandHandler<events::audio::AddAudioSourceCommand>(
+        dispatcher.registerCommandHandler<events::audio::SetPlaybackPositionCommand>(
             [this](const auto& cmd) {
-                addAudioSource(cmd.entity, cmd.data);
-            });
-
-        dispatcher.registerCommandHandler<events::audio::RemoveAudioSourceCommand>(
-            [this](const auto& cmd) {
-                removeAudioSource(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::audio::PlayEntityAudioCommand>(
-            [this](const auto& cmd) {
-                playEntityAudio(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::audio::PauseEntityAudioCommand>(
-            [this](const auto& cmd) {
-                pauseEntityAudio(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::audio::StopEntityAudioCommand>(
-            [this](const auto& cmd) {
-                stopEntityAudio(cmd.entity);
+                return setPlaybackPosition(cmd.handle, cmd.seconds);
             });
 
         // Queries
-        dispatcher.registerQueryHandler<events::audio::GetMasterVolumeQuery>(
-            [this](const auto&) {
-                return getMasterVolume();
-            });
-
         dispatcher.registerQueryHandler<events::audio::IsSoundPlayingQuery>(
             [this](const auto& query) {
                 return isPlaying(query.handle);
             });
 
-        dispatcher.registerQueryHandler<events::audio::HasAudioSourceQuery>(
+        dispatcher.registerQueryHandler<events::audio::GetPlaybackPositionQuery>(
             [this](const auto& query) {
-                return hasAudioSource(query.entity);
+                return getPlaybackPosition(query.handle);
             });
-    }
 
-    void AudioServiceImpl::setMasterVolume(float volume) {
-        audioProvider->setMasterVolume(volume);
-    }
-
-    float AudioServiceImpl::getMasterVolume() const {
-        return audioProvider->getMasterVolume();
-    }
-
-    void AudioServiceImpl::pauseAll() {
-        audioProvider->pauseAll();
-    }
-
-    void AudioServiceImpl::resumeAll() {
-        audioProvider->resumeAll();
-    }
-
-    void AudioServiceImpl::stopAll() {
-        audioProvider->stopAll();
+        dispatcher.registerQueryHandler<events::audio::GetDurationQuery>(
+            [this](const auto& query) {
+                return getDuration(query.handle);
+            });
     }
 
     void AudioServiceImpl::setListenerPosition(const glm::vec3& position,
@@ -159,20 +86,17 @@ namespace services {
         audioProvider->setListenerPosition(position, forward, up);
     }
 
-    void AudioServiceImpl::setListenerVelocity(const glm::vec3& velocity) {
-        audioProvider->setListenerVelocity(velocity);
-    }
-
-    AudioHandle AudioServiceImpl::playSound(const std::string& path, const AudioParams& params) {
-        AudioPlayParams playParams = convertParams(params);
-        AudioHandleId handleId = audioProvider->playSound(path, playParams);
-        return AudioHandle{handleId};
-    }
-
     AudioHandle AudioServiceImpl::playSound3D(const std::string& path, const glm::vec3& position,
                                                const AudioParams& params) {
         AudioPlayParams playParams = convertParams(params);
         AudioHandleId handleId = audioProvider->playSound3D(path, position, playParams);
+        return AudioHandle{handleId};
+    }
+
+    AudioHandle AudioServiceImpl::playStreamingSound(const std::string& path, const AudioParams& params) {
+        AudioPlayParams playParams = convertParams(params);
+        playParams.streaming = true;
+        AudioHandleId handleId = audioProvider->playStreamingSound(path, playParams);
         return AudioHandle{handleId};
     }
 
@@ -200,73 +124,16 @@ namespace services {
         audioProvider->setPitch(handle.id, pitch);
     }
 
-    void AudioServiceImpl::setPosition(AudioHandle handle, const glm::vec3& position) {
-        audioProvider->setPosition(handle.id, position);
+    float AudioServiceImpl::getPlaybackPosition(AudioHandle handle) const {
+        return audioProvider->getPlaybackPosition(handle.id);
     }
 
-    void AudioServiceImpl::addAudioSource(EntityHandle entity, const AudioSourceData& data) {
-        if (!entity.isValid()) return;
-
-        EntityAudioState state;
-        state.data = data;
-        state.currentHandle = AudioHandle{InvalidAudioHandleId};
-        entityAudioSources[entity] = state;
+    bool AudioServiceImpl::setPlaybackPosition(AudioHandle handle, float seconds) {
+        return audioProvider->setPlaybackPosition(handle.id, seconds);
     }
 
-    void AudioServiceImpl::removeAudioSource(EntityHandle entity) {
-        auto it = entityAudioSources.find(entity);
-        if (it != entityAudioSources.end()) {
-            if (it->second.currentHandle.isValid()) {
-                audioProvider->stopSound(it->second.currentHandle.id);
-            }
-            entityAudioSources.erase(it);
-        }
-    }
-
-    bool AudioServiceImpl::hasAudioSource(EntityHandle entity) const {
-        return entityAudioSources.find(entity) != entityAudioSources.end();
-    }
-
-    void AudioServiceImpl::playEntityAudio(EntityHandle entity) {
-        auto it = entityAudioSources.find(entity);
-        if (it == entityAudioSources.end()) return;
-
-        auto& state = it->second;
-
-        if (state.currentHandle.isValid() && audioProvider->isPlaying(state.currentHandle.id)) {
-            return;
-        }
-
-        AudioParams params;
-        params.volume = state.data.volume;
-        params.pitch = state.data.pitch;
-        params.loop = state.data.loop;
-        params.is3D = state.data.is3D;
-        params.minDistance = state.data.minDistance;
-        params.maxDistance = state.data.maxDistance;
-
-        AudioPlayParams playParams = convertParams(params);
-        AudioHandleId handleId = audioProvider->playSound(state.data.audioFilePath, playParams);
-        state.currentHandle = AudioHandle{handleId};
-    }
-
-    void AudioServiceImpl::pauseEntityAudio(EntityHandle entity) {
-        auto it = entityAudioSources.find(entity);
-        if (it == entityAudioSources.end()) return;
-
-        if (it->second.currentHandle.isValid()) {
-            audioProvider->pauseSound(it->second.currentHandle.id);
-        }
-    }
-
-    void AudioServiceImpl::stopEntityAudio(EntityHandle entity) {
-        auto it = entityAudioSources.find(entity);
-        if (it == entityAudioSources.end()) return;
-
-        if (it->second.currentHandle.isValid()) {
-            audioProvider->stopSound(it->second.currentHandle.id);
-            it->second.currentHandle = AudioHandle{InvalidAudioHandleId};
-        }
+    float AudioServiceImpl::getDuration(AudioHandle handle) const {
+        return audioProvider->getDuration(handle.id);
     }
 
     AudioPlayParams AudioServiceImpl::convertParams(const AudioParams& params) const {
@@ -279,6 +146,7 @@ namespace services {
         playParams.minDistance = params.minDistance;
         playParams.maxDistance = params.maxDistance;
         playParams.rolloffFactor = params.rolloffFactor;
+        playParams.streaming = params.streaming;
         return playParams;
     }
 

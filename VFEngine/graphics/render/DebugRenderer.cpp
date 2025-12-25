@@ -1,6 +1,7 @@
 #include "DebugRenderer.hpp"
 #include "tools/AABBDebugRenderer.hpp"
 #include "tools/FrustumDebugRenderer.hpp"
+#include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/GridRenderer.hpp"
 
 namespace render
@@ -10,6 +11,7 @@ namespace render
     {
         aabbRenderer = std::make_unique<mesh::AABBDebugRenderer>(device, swapChain);
         frustumRenderer = std::make_unique<mesh::FrustumDebugRenderer>(device, swapChain);
+        audioSphereRenderer = std::make_unique<mesh::AudioSphereDebugRenderer>(device, swapChain);
         gridRenderer = std::make_unique<mesh::GridRenderer>(device, swapChain);
     }
 
@@ -19,6 +21,7 @@ namespace render
     {
         aabbRenderer->init(renderPass);
         frustumRenderer->init(renderPass);
+        audioSphereRenderer->init(renderPass);
         gridRenderer->init(renderPass);
         initialized = true;
     }
@@ -27,6 +30,7 @@ namespace render
     {
         aabbRenderer->recreate(renderPass);
         frustumRenderer->recreate(renderPass);
+        audioSphereRenderer->recreate(renderPass);
         gridRenderer->recreate(renderPass);
     }
 
@@ -39,6 +43,10 @@ namespace render
         if (frustumRenderer)
         {
             frustumRenderer->cleanUp();
+        }
+        if (audioSphereRenderer)
+        {
+            audioSphereRenderer->cleanUp();
         }
         if (gridRenderer)
         {
@@ -57,6 +65,10 @@ namespace render
         {
             frustumRenderer->cleanUpShader();
         }
+        if (audioSphereRenderer)
+        {
+            audioSphereRenderer->cleanUpShader();
+        }
         if (gridRenderer)
         {
             gridRenderer->cleanUpShader();
@@ -66,6 +78,11 @@ namespace render
     void DebugRenderer::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
     {
         cameraFrustumDrawList = std::move(frustums);
+    }
+
+    void DebugRenderer::setAudioSphereDrawList(std::vector<mesh::AudioSphereRenderData>&& spheres)
+    {
+        audioSphereDrawList = std::move(spheres);
     }
 
     void DebugRenderer::render(const vk::CommandBuffer& commandBuffer,
@@ -90,6 +107,12 @@ namespace render
         if (frustumRenderer && !cameraFrustumDrawList.empty())
         {
             frustumRenderer->render(commandBuffer, cameraFrustumDrawList, view, projection);
+        }
+
+        // Render audio sphere wireframes for audio sources with showDebugSpheres enabled
+        if (audioSphereRenderer && !audioSphereDrawList.empty())
+        {
+            audioSphereRenderer->render(commandBuffer, audioSphereDrawList, view, projection);
         }
     }
 

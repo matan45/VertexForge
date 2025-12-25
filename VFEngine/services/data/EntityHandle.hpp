@@ -42,7 +42,8 @@ namespace services {
         Light,
         Material,
         Billboard,
-        AudioSource,
+        AudioSource2D,
+        AudioSource3D,
         // Add more as needed
     };
 

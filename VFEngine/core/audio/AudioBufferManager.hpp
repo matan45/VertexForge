@@ -5,9 +5,10 @@
 #include <optional>
 #include <cstdint>
 
-namespace core::audio {
-
-    struct AudioBufferInfo {
+namespace core::audio
+{
+    struct AudioBufferInfo
+    {
         ALuint bufferId = 0;
         uint32_t channels = 0;
         uint32_t sampleRate = 0;
@@ -15,9 +16,14 @@ namespace core::audio {
         float durationSeconds = 0.0f;
     };
 
-    class AudioBufferManager {
+    class AudioBufferManager
+    {
+    private:
+        std::unordered_map<std::string, AudioBufferInfo> pathToBuffer;
+        std::unordered_map<ALuint, std::string> bufferToPath;
+
     public:
-        AudioBufferManager() = default;
+        explicit AudioBufferManager() = default;
         ~AudioBufferManager();
 
         AudioBufferManager(const AudioBufferManager&) = delete;
@@ -36,10 +42,6 @@ namespace core::audio {
 
     private:
         ALuint createBufferFromData(const short* data, size_t dataSize,
-                                     uint32_t channels, uint32_t sampleRate);
-
-        std::unordered_map<std::string, AudioBufferInfo> pathToBuffer;
-        std::unordered_map<ALuint, std::string> bufferToPath;
+                                    uint32_t channels, uint32_t sampleRate);
     };
-
 }

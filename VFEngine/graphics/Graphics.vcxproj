@@ -141,6 +141,7 @@
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
     <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
     <ClInclude Include="render\tools\AABBDebugRenderer.hpp" />
+    <ClInclude Include="render\tools\AudioSphereDebugRenderer.hpp" />
     <ClInclude Include="render\tools\FrustumDebugRenderer.hpp" />
     <ClInclude Include="render\tools\GridRenderer.hpp" />
   </ItemGroup>
@@ -184,6 +185,7 @@
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
     <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
     <ClCompile Include="render\tools\AABBDebugRenderer.cpp" />
+    <ClCompile Include="render\tools\AudioSphereDebugRenderer.cpp" />
     <ClCompile Include="render\tools\FrustumDebugRenderer.cpp" />
     <ClCompile Include="render\tools\GridRenderer.cpp" />
   </ItemGroup>
@@ -202,6 +204,7 @@
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />
+    <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
   </ItemGroup>
   <ItemGroup>

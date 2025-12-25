@@ -9,6 +9,7 @@
 #include "billboard/BillboardPipeline.hpp"
 #include "billboard/BillboardTypes.hpp"
 #include "occlusion/CameraRenderData.hpp"
+#include "tools/AudioSphereDebugRenderer.hpp"
 
 namespace render
 {
@@ -150,6 +151,14 @@ namespace render
         if (debugRenderer)
         {
             debugRenderer->setCameraFrustumDrawList(std::move(frustums));
+        }
+    }
+
+    void RenderPassHandler::setAudioSphereDrawList(std::vector<mesh::AudioSphereRenderData>&& spheres)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setAudioSphereDrawList(std::move(spheres));
         }
     }
 

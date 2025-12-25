@@ -3,34 +3,36 @@
 #include <glm/glm.hpp>
 #include <cstdint>
 
-namespace core::audio {
-
-    enum class AudioSourceState : uint8_t {
+namespace core::audio
+{
+    enum class AudioSourceState : uint8_t
+    {
         Initial,
         Playing,
         Paused,
         Stopped
     };
 
-    struct AudioSourceConfig {
+    struct AudioSourceConfig
+    {
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
         bool is3D = false;
         glm::vec3 position{0.0f};
-        glm::vec3 velocity{0.0f};
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         float rolloffFactor = 1.0f;
-        float coneInnerAngle = 360.0f;
-        float coneOuterAngle = 360.0f;
-        float coneOuterGain = 0.0f;
-        glm::vec3 direction{0.0f, 0.0f, -1.0f};
     };
 
-    class AudioSource {
+    class AudioSource
+    {
+    private:
+        ALuint sourceId = 0;
+        bool spatialEnabled = false;
+
     public:
-        AudioSource();
+        explicit AudioSource();
         ~AudioSource();
 
         AudioSource(const AudioSource&) = delete;
@@ -66,14 +68,7 @@ namespace core::audio {
         void setPosition(const glm::vec3& position);
         glm::vec3 getPosition() const;
 
-        void setVelocity(const glm::vec3& velocity);
-        glm::vec3 getVelocity() const;
-
-        void setDirection(const glm::vec3& direction);
-        glm::vec3 getDirection() const;
-
         void set3D(bool is3D);
-        bool is3D() const;
 
         void setMinDistance(float distance);
         float getMinDistance() const;
@@ -82,19 +77,10 @@ namespace core::audio {
         float getMaxDistance() const;
 
         void setRolloffFactor(float factor);
-        float getRolloffFactor() const;
-
-        void setConeAngles(float innerAngle, float outerAngle);
-        void setConeOuterGain(float gain);
 
         void applyConfig(const AudioSourceConfig& config);
 
         float getPlaybackPosition() const;
         void setPlaybackPosition(float seconds);
-
-    private:
-        ALuint sourceId = 0;
-        bool spatialEnabled = false;
     };
-
 }
