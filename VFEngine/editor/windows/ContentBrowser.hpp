@@ -32,8 +32,7 @@ namespace windows
         Hdr = 7,
         Audio = 8,
         File = 9,
-        prefab = 10,
-        project = 11
+        Prefab = 10
     };
 
     struct Asset

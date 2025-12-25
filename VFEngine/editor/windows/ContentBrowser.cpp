@@ -195,7 +195,8 @@ namespace windows
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(150.0f);
 		char searchBuffer[256];
-		std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer));
+		std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer) - 1);
+		searchBuffer[sizeof(searchBuffer) - 1] = '\0';
 		if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
 		{
 			searchQuery = std::string(searchBuffer);
@@ -370,7 +371,7 @@ namespace windows
 			icon = AtlasIcon::Material;
 			break;
 		case Prefab:
-			icon = AtlasIcon::prefab;
+			icon = AtlasIcon::Prefab;
 			break;
 		case Other:
 			if (fs::is_directory(asset.path))
@@ -534,7 +535,8 @@ namespace windows
 		{
 			// Use a buffer initialized with the current folder name.
 			char buffer[256];
-			std::strncpy(buffer, newFolderName.c_str(), sizeof(buffer));
+			std::strncpy(buffer, newFolderName.c_str(), sizeof(buffer) - 1);
+			buffer[sizeof(buffer) - 1] = '\0';
 			if (ImGui::InputText("Folder Name", buffer, IM_ARRAYSIZE(buffer)))
 			{
 				newFolderName = std::string(buffer);
@@ -562,7 +564,8 @@ namespace windows
 			ImGui::BeginPopupModal("Create New Material", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			char buffer[256];
-			std::strncpy(buffer, newMaterialName.c_str(), sizeof(buffer));
+			std::strncpy(buffer, newMaterialName.c_str(), sizeof(buffer) - 1);
+			buffer[sizeof(buffer) - 1] = '\0';
 			if (ImGui::InputText("Material Name", buffer, IM_ARRAYSIZE(buffer)))
 			{
 				newMaterialName = std::string(buffer);
@@ -608,7 +611,8 @@ namespace windows
 			ImGui::BeginPopupModal("Save Prefab", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			char buffer[256];
-			std::strncpy(buffer, newPrefabName.c_str(), sizeof(buffer));
+			std::strncpy(buffer, newPrefabName.c_str(), sizeof(buffer) - 1);
+			buffer[sizeof(buffer) - 1] = '\0';
 			if (ImGui::InputText("Prefab Name", buffer, IM_ARRAYSIZE(buffer)))
 			{
 				newPrefabName = std::string(buffer);
@@ -664,7 +668,8 @@ namespace windows
 			ImGui::Separator();
 
 			char buffer[256];
-			std::strncpy(buffer, renameFileName.c_str(), sizeof(buffer));
+			std::strncpy(buffer, renameFileName.c_str(), sizeof(buffer) - 1);
+			buffer[sizeof(buffer) - 1] = '\0';
 			if (ImGui::InputText("New Name", buffer, IM_ARRAYSIZE(buffer)))
 			{
 				renameFileName = std::string(buffer);

@@ -107,7 +107,7 @@ namespace scene {
 		}
 
 		// Get the entity name
-		std::string getName() {
+		std::string getName() const {
 			if (hasComponent<components::NameComponent>()) {
 				return getComponent<components::NameComponent>().name; // Access the 'name' field
 			}
@@ -181,12 +181,12 @@ namespace scene {
 		}
 
 		// Get children entities
-		std::vector<Entity> getChildren() {
+		std::vector<Entity> getChildren() const {
 			std::vector<Entity> childEntities;
 
 			if (hasComponent<components::ChildrenComponent>()) {
-				auto& childrenHandles = getComponent<components::ChildrenComponent>().children;
-				for (auto& childHandle : childrenHandles) {
+				const auto& childrenHandles = getComponent<components::ChildrenComponent>().children;
+				for (const auto& childHandle : childrenHandles) {
 					childEntities.emplace_back(childHandle);
 				}
 			}

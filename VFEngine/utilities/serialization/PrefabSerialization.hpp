@@ -17,7 +17,7 @@ namespace serialization
 	public:
 		// Save entity (and children) to prefab file
 		// Returns true on success
-		static bool savePrefab(scene::Entity& entity, std::string_view filename);
+		static bool savePrefab(const scene::Entity& entity, std::string_view filename);
 
 		// Load prefab and instantiate as new entity under parent
 		// Returns the root entity of the instantiated prefab, or nullopt on failure
@@ -32,7 +32,7 @@ namespace serialization
 
 	private:
 		// Serialize entity tree to JSON (recursive)
-		static json serializeEntityTree(scene::Entity& entity);
+		static json serializeEntityTree(const scene::Entity& entity);
 
 		// Deserialize with NEW UUIDs (not restoring originals)
 		static scene::Entity deserializeEntityTree(

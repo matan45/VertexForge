@@ -8,7 +8,7 @@
 
 namespace serialization {
 
-	json PrefabSerialization::serializeEntityTree(scene::Entity& entity) {
+	json PrefabSerialization::serializeEntityTree(const scene::Entity& entity) {
 		json entityJson;
 
 		// Store name (UUID is NOT stored - will be generated fresh on load)
@@ -62,7 +62,7 @@ namespace serialization {
 
 		// Serialize children recursively
 		json childrenJson = json::array();
-		for (auto& child : entity.getChildren()) {
+		for (const auto& child : entity.getChildren()) {
 			childrenJson.push_back(serializeEntityTree(child));
 		}
 		entityJson["children"] = childrenJson;
@@ -168,7 +168,7 @@ namespace serialization {
 		return entity;
 	}
 
-	bool PrefabSerialization::savePrefab(scene::Entity& entity, std::string_view filename) {
+	bool PrefabSerialization::savePrefab(const scene::Entity& entity, std::string_view filename) {
 		try {
 			json prefabJson;
 			prefabJson["version"] = "1.0";
@@ -184,6 +184,10 @@ namespace serialization {
 			}
 
 			file << prefabJson.dump(2); // Pretty print with 2-space indent
+			if (!file.good()) {
+				vfLogError("Failed to write prefab data to: {}", filename);
+				return false;
+			}
 			file.close();
 
 			vfLogInfo("Prefab saved successfully to: {}", filename);
