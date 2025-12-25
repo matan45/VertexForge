@@ -111,6 +111,11 @@ namespace services {
         bool saveScene(const std::string& filePath);
         bool loadScene(const std::string& filePath);
 
+        // Prefab Operations
+        bool savePrefab(EntityHandle entity, const std::string& filePath);
+        std::optional<EntityHandle> loadPrefab(const std::string& filePath,
+                                               std::optional<EntityHandle> parent = std::nullopt);
+
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
         std::optional<EntityHandle> selectedEntity;

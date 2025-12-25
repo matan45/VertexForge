@@ -4,6 +4,7 @@
 #include "../../utilities/scene/EntityRegistry.hpp"
 #include "../../utilities/components/Components.hpp"
 #include "../../utilities/serialization/SceneSerialization.hpp"
+#include "../../utilities/serialization/PrefabSerialization.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../events/RenderEvents.hpp"
@@ -12,6 +13,7 @@
 #include "print/EditorLogger.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <functional>
 
 namespace services {
 
@@ -1487,6 +1489,97 @@ namespace services {
             [this](const events::scene::GetAudioSource3DDataQuery& query) {
                 return getAudioSource3DData(query.entity);
             });
+
+        // Prefab handlers
+        dispatcher.registerCommandHandler<events::scene::SavePrefabCommand>(
+            [this](const events::scene::SavePrefabCommand& cmd) {
+                return savePrefab(cmd.entity, cmd.filePath);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::LoadPrefabCommand>(
+            [this](const events::scene::LoadPrefabCommand& cmd) {
+                return loadPrefab(cmd.filePath, cmd.parent);
+            });
+    }
+
+    bool SceneServiceImpl::savePrefab(EntityHandle entity, const std::string& filePath) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        bool success = serialization::PrefabSerialization::savePrefab(sceneEntity, filePath);
+
+        if (success) {
+            // Publish notification
+            events::scene::PrefabCreatedNotification notification;
+            notification.filePath = filePath;
+            notification.sourceEntity = entity;
+            events::EventDispatcher::instance().publish(notification);
+        }
+
+        return success;
+    }
+
+    std::optional<EntityHandle> SceneServiceImpl::loadPrefab(const std::string& filePath,
+                                                              std::optional<EntityHandle> parent) {
+        // Determine parent entity
+        scene::Entity parentEntity = sceneGraph->GetRoot();
+        if (parent.has_value() && parent->isValid()) {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (internal::isValidHandle(*parent, registry)) {
+                parentEntity = scene::Entity(internal::fromHandle(*parent));
+            }
+        }
+
+        auto result = serialization::PrefabSerialization::loadPrefab(filePath, parentEntity, *sceneGraph);
+
+        if (result.has_value()) {
+            auto handle = internal::toHandle(result->getHandle());
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            // Trigger resource loading for all entities in the prefab tree
+            // This is needed because prefab loading bypasses service methods which normally trigger preloading
+            std::function<void(scene::Entity&)> triggerResourceLoading = [&](scene::Entity& entity) {
+                // Mesh loading
+                if (entity.hasComponent<components::MeshComponent>()) {
+                    const auto& meshComp = entity.getComponent<components::MeshComponent>();
+                    if (!meshComp.meshPath.empty()) {
+                        events::scene::MeshDataChangedNotification meshNotif;
+                        meshNotif.entity = internal::toHandle(entity.getHandle());
+                        meshNotif.meshPath = meshComp.meshPath;
+                        dispatcher.publish(meshNotif);
+                    }
+                }
+
+                // IBL loading (rare in prefabs, but handle it)
+                if (entity.hasComponent<components::IBLComponent>()) {
+                    const auto& iblComp = entity.getComponent<components::IBLComponent>();
+                    if (!iblComp.fileName.empty()) {
+                        events::render::SetIBLCommand setIblCmd;
+                        setIblCmd.hdrPath = iblComp.fileName;
+                        dispatcher.execute(setIblCmd);
+                    }
+                }
+
+                // Recurse into children
+                for (auto& child : entity.getChildren()) {
+                    triggerResourceLoading(child);
+                }
+            };
+            triggerResourceLoading(*result);
+
+            // Publish notification
+            events::scene::PrefabInstantiatedNotification notification;
+            notification.filePath = filePath;
+            notification.rootEntity = handle;
+            dispatcher.publish(notification);
+
+            return handle;
+        }
+
+        return std::nullopt;
     }
 
 }

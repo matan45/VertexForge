@@ -77,6 +77,30 @@ namespace windows
             if (texture.isValid())
             {
                 ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
+
+                // Accept prefab drops to instantiate in viewport
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PREFAB_PATH"))
+                    {
+                        std::string prefabPath(static_cast<const char*>(payload->Data));
+
+                        // Instantiate prefab at scene root
+                        events::scene::LoadPrefabCommand loadCmd;
+                        loadCmd.filePath = prefabPath;
+                        loadCmd.parent = std::nullopt;  // Add to scene root
+                        auto result = dispatcher.execute(loadCmd);
+
+                        if (result.has_value())
+                        {
+                            // Select the newly instantiated entity (uses transform from prefab)
+                            events::scene::SelectEntityCommand selectCmd;
+                            selectCmd.entity = *result;
+                            dispatcher.execute(selectCmd);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
             }
 
             drawViewportOverlay();

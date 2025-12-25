@@ -26,6 +26,7 @@ struct FileExtension
     inline static const std::string mesh = "vfMesh";
     inline static const std::string animation = "vfAnim";
     inline static const std::string shader = "glsl";
+    inline static const std::string prefab = "vfPrefab";
 };
 
 namespace importConfig

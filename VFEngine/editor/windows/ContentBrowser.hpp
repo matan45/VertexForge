@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "imgui.h"
 #include "data/DTOs.hpp"
+#include "data/EntityHandle.hpp"
 #include "events/EventTypes.hpp"
 
 #include <string>
@@ -17,7 +18,7 @@ namespace windows
     class AudioPreviewWindow;
     class MaterialEditorWindow;
 
-    enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Material, Other };
+    enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Material, Prefab, Other };
     
     enum class AtlasIcon : uint32_t
     {
@@ -30,7 +31,9 @@ namespace windows
         Scene = 6,
         Hdr = 7,
         Audio = 8,
-        File = 9        // other
+        File = 9,
+        prefab = 10,
+        project = 11
     };
 
     struct Asset
@@ -57,6 +60,11 @@ namespace windows
         std::string renameFileName;
         bool showRenameFileModal = false;
         bool showDeleteConfirmModal = false;
+
+        // Prefab save modal
+        std::string newPrefabName;
+        bool showSavePrefabModal = false;
+        services::EntityHandle pendingSavePrefabEntity;
 
         fs::path selectedFile;
         AssetType selectedType;
@@ -102,6 +110,7 @@ namespace windows
         void createNewFolder(const std::string& folderName);
         void createNewFolderModel();
         void createNewMaterialModal();
+        void savePrefabModal();
         void renameFileModal();
         void deleteFileConfirmModal();
         void handleCreateFiles();

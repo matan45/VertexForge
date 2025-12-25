@@ -10,9 +10,11 @@
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/ResourceEvents.hpp"
+#include "events/SceneEvents.hpp"
 #include "Import.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include <IconsFontAwesome6.h>
+#include <imgui_internal.h>
 #include <algorithm>
 
 namespace windows
@@ -109,6 +111,12 @@ namespace windows
 		}
 		createNewMaterialModal();
 
+		if (showSavePrefabModal)
+		{
+			ImGui::OpenPopup("Save Prefab");
+		}
+		savePrefabModal();
+
 		if (showRenameFileModal)
 		{
 			ImGui::OpenPopup("Rename File");
@@ -146,10 +154,28 @@ namespace windows
 				drawFileWindow();
 			}
 
+			// Capture the drop zone rect BEFORE columns are set up in drawAssetGrid()
+			ImVec2 dropZoneStart = ImGui::GetCursorScreenPos();
+			ImVec2 contentSize = ImGui::GetContentRegionAvail();
+			ImRect dropRect(dropZoneStart, ImVec2(dropZoneStart.x + contentSize.x, dropZoneStart.y + contentSize.y));
+
 			drawAssetGrid();
+
+			// Reset columns BEFORE setting up drop target
+			ImGui::Columns(1);
+
+			// Accept entity drops anywhere in the content panel to create prefabs
+			if (ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("ContentFolderDropZone")))
+			{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))
+				{
+					pendingSavePrefabEntity = *(services::EntityHandle*)payload->Data;
+					showSavePrefabModal = true;
+				}
+				ImGui::EndDragDropTarget();
+			}
 		}
 
-		ImGui::Columns(1);
 		ImGui::End();
 	}
 
@@ -235,11 +261,15 @@ namespace windows
 			}
 			else
 			{
-				// Check for .vfMat files first (JSON format, not binary header)
+				// Check for JSON format files first (not binary header)
 				std::string extension = entry.path().extension().string();
 				if (extension == ".vfMat")
 				{
 					asset.type = Material;
+				}
+				else if (extension == ".vfPrefab")
+				{
+					asset.type = Prefab;
 				}
 				else
 				{
@@ -339,6 +369,9 @@ namespace windows
 		case Material:
 			icon = AtlasIcon::Material;
 			break;
+		case Prefab:
+			icon = AtlasIcon::prefab;
+			break;
 		case Other:
 			if (fs::is_directory(asset.path))
 			{
@@ -372,6 +405,15 @@ namespace windows
 		{
 			ImGui::BeginGroup();
 			ImGui::Image(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
+
+			// Add drag-drop source for prefab files
+			if (asset.type == AssetType::Prefab && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+			{
+				ImGui::SetDragDropPayload("DND_PREFAB_PATH", asset.path.c_str(), asset.path.size() + 1);
+				ImGui::Text("Instantiate %s", asset.name.c_str());
+				ImGui::EndDragDropSource();
+			}
+
 			ImGui::TextWrapped("%s", asset.name.c_str());
 			ImGui::EndGroup();
 		}
@@ -555,6 +597,59 @@ namespace windows
 			{
 				ImGui::CloseCurrentPopup();
 				showCreateMaterialModal = false;
+			}
+			ImGui::EndPopup();
+		}
+	}
+
+	void ContentBrowser::savePrefabModal()
+	{
+		if (showSavePrefabModal &&
+			ImGui::BeginPopupModal("Save Prefab", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			char buffer[256];
+			std::strncpy(buffer, newPrefabName.c_str(), sizeof(buffer));
+			if (ImGui::InputText("Prefab Name", buffer, IM_ARRAYSIZE(buffer)))
+			{
+				newPrefabName = std::string(buffer);
+			}
+
+			if (ImGui::Button("Save", ImVec2(120, 0)))
+			{
+				if (!newPrefabName.empty() && pendingSavePrefabEntity.isValid())
+				{
+					std::string extension = ".vfPrefab";
+					fs::path newPrefabPath = currentPath / (newPrefabName + extension);
+
+					// Check if file already exists
+					int counter = 1;
+					while (fs::exists(newPrefabPath)) {
+						newPrefabPath = currentPath / (newPrefabName + "_" + std::to_string(counter) + extension);
+						counter++;
+					}
+
+					// Save prefab using the event system
+					std::string pathStr = StringUtil::wstringToUtf8(newPrefabPath.wstring());
+					events::scene::SavePrefabCommand cmd;
+					cmd.entity = pendingSavePrefabEntity;
+					cmd.filePath = pathStr;
+					auto& dispatcher = events::EventDispatcher::instance();
+					if (dispatcher.execute(cmd)) {
+						loadDirectory(currentPath);  // Refresh
+					}
+				}
+				newPrefabName.clear();
+				pendingSavePrefabEntity = services::EntityHandle::invalid();
+				ImGui::CloseCurrentPopup();
+				showSavePrefabModal = false;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			{
+				newPrefabName.clear();
+				pendingSavePrefabEntity = services::EntityHandle::invalid();
+				ImGui::CloseCurrentPopup();
+				showSavePrefabModal = false;
 			}
 			ImGui::EndPopup();
 		}
