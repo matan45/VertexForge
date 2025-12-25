@@ -272,6 +272,7 @@ namespace components {
 		bool loop = false;
 		float minDistance = 1.0f;       // Distance where volume starts to attenuate
 		float maxDistance = 100.0f;     // Distance where volume reaches minimum
+		bool showDebugSpheres = false;  // Show min/max distance wireframe spheres
 
 		// Runtime state (not serialized)
 		uint64_t activeHandle = 0;      // AudioHandle from AudioController

@@ -84,6 +84,8 @@ namespace controllers
         
         void prepareFrameCameraFrustums();
 
+        void prepareFrameAudioSpheres();
+
         // Billboard visibility toggle
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
         bool getShowBillboardIcons() const { return showBillboardIcons; }

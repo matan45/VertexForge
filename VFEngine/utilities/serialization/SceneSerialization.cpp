@@ -318,6 +318,7 @@ namespace serialization {
 		j["loop"] = audioSource.loop;
 		j["minDistance"] = audioSource.minDistance;
 		j["maxDistance"] = audioSource.maxDistance;
+		j["showDebugSpheres"] = audioSource.showDebugSpheres;
 		// Note: activeHandle and isPlaying are runtime state, not serialized
 		return j;
 	}
@@ -340,6 +341,9 @@ namespace serialization {
 		}
 		if (auto it = j.find("maxDistance"); it != j.end() && it->is_number()) {
 			audioSource.maxDistance = it->get<float>();
+		}
+		if (auto it = j.find("showDebugSpheres"); it != j.end() && it->is_boolean()) {
+			audioSource.showDebugSpheres = it->get<bool>();
 		}
 		// Reset runtime state
 		audioSource.activeHandle = 0;

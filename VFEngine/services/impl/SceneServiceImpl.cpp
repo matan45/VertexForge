@@ -953,6 +953,7 @@ namespace services {
         data.loop = comp.loop;
         data.minDistance = comp.minDistance;
         data.maxDistance = comp.maxDistance;
+        data.showDebugSpheres = comp.showDebugSpheres;
         return data;
     }
 
@@ -974,6 +975,7 @@ namespace services {
         comp.loop = audioData.loop;
         comp.minDistance = audioData.minDistance;
         comp.maxDistance = audioData.maxDistance;
+        comp.showDebugSpheres = audioData.showDebugSpheres;
         return true;
     }
 
@@ -1061,10 +1063,6 @@ namespace services {
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Stop all playing audio before clearing the scene
-        events::audio::StopAllCommand stopAudioCmd;
-        dispatcher.execute(stopAudioCmd);
-
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
@@ -1105,10 +1103,6 @@ namespace services {
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
-
-        // Stop all playing audio before loading new scene
-        events::audio::StopAllCommand stopAudioCmd;
-        dispatcher.execute(stopAudioCmd);
 
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);

@@ -41,6 +41,7 @@ namespace services
         prepareFrameMeshes();
         prepareFrameBillboards();
         prepareFrameCameraFrustums();
+        prepareFrameAudioSpheres();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -476,6 +477,16 @@ namespace services
         }
 
         offScreenProvider->prepareFrameCameraFrustums();
+    }
+
+    void EditorRenderServiceImpl::prepareFrameAudioSpheres()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameAudioSpheres();
     }
 
     void EditorRenderServiceImpl::prepareGrid()

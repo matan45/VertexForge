@@ -1044,6 +1044,16 @@ namespace windows
                 ImGui::SetTooltip("Distance at which volume reaches minimum");
             }
 
+            ImGui::Spacing();
+            if (ImGui::Checkbox("Show Debug Spheres##3D", &audioData.showDebugSpheres))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Draw wireframe spheres for min/max distance");
+            }
+
             ImGui::Unindent(10.0f);
 
             if (changed)

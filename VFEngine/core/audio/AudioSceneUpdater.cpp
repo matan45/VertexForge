@@ -3,14 +3,8 @@
 #include "../../services/events/AudioEvents.hpp"
 #include "../../utilities/scene/EntityRegistry.hpp"
 #include "../../utilities/components/Components.hpp"
-#include "../../services/data/EntityConversion.hpp"
 
 namespace core::audio {
-
-    void AudioSceneUpdater::update()
-    {
-        updateAudioSourcePositions();
-    }
 
     void AudioSceneUpdater::updateListenerFromCamera(const glm::vec3& position,
                                                       const glm::vec3& forward,
@@ -58,63 +52,6 @@ namespace core::audio {
             updateListenerFromCamera(position, forward, up);
 
             break;  // Only use first primary camera
-        }
-    }
-
-    void AudioSceneUpdater::updateAudioSourcePositions()
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        // Only 3D audio sources need position updates (2D audio is not spatial)
-        auto view = registry.view<components::AudioSource3DComponent,
-                                   components::WorldTransformComponent>();
-
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        for (auto entityHandle : view)
-        {
-            auto& audioSource = view.get<components::AudioSource3DComponent>(entityHandle);
-
-            // Only update 3D audio sources that are currently playing
-            if (!audioSource.isPlaying || audioSource.activeHandle == 0)
-                continue;
-
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entityHandle);
-            glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
-
-            events::audio::SetSoundPositionCommand cmd;
-            cmd.handle = services::AudioHandle{audioSource.activeHandle};
-            cmd.position = position;
-            dispatcher.execute(cmd);
-        }
-    }
-
-    void AudioSceneUpdater::stopAllAudioSources()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-        events::audio::StopAllCommand cmd;
-        dispatcher.execute(cmd);
-
-        // Reset all 2D audio source component states
-        auto& registry = scene::EntityRegistry::getRegistry();
-        {
-            auto view = registry.view<components::AudioSource2DComponent>();
-            for (auto entityHandle : view)
-            {
-                auto& audioSource = view.get<components::AudioSource2DComponent>(entityHandle);
-                audioSource.activeHandle = 0;
-                audioSource.isPlaying = false;
-            }
-        }
-
-        // Reset all 3D audio source component states
-        {
-            auto view = registry.view<components::AudioSource3DComponent>();
-            for (auto entityHandle : view)
-            {
-                auto& audioSource = view.get<components::AudioSource3DComponent>(entityHandle);
-                audioSource.activeHandle = 0;
-                audioSource.isPlaying = false;
-            }
         }
     }
 

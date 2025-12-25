@@ -120,6 +120,11 @@ namespace controllers {
 		offScreenController->prepareFrameCameraFrustums();
 	}
 
+	void OffScreen::prepareFrameAudioSpheres()
+	{
+		offScreenController->prepareFrameAudioSpheres();
+	}
+
 	void OffScreen::prepareFrameBillboards()
 	{
 		offScreenController->prepareFrameBillboards();

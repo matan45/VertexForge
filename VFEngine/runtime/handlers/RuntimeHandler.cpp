@@ -28,10 +28,9 @@ namespace handlers {
             if (windowStateService) {
                 windowStateService->update();
             }
-            // Update audio: listener from primary camera and 3D source positions
+            // Update audio listener from primary camera
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
-                audioSceneUpdater->update();
             }
         });
         

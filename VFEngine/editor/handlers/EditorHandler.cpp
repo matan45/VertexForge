@@ -41,10 +41,6 @@ namespace handlers {
 			if (windowStateService) {
 				windowStateService->update();
 			}
-			// Update 3D audio source positions
-			if (audioSceneUpdater) {
-				audioSceneUpdater->update();
-			}
 		});
 
 		// Subscribe to window events from Services

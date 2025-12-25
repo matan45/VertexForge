@@ -28,6 +28,7 @@ namespace render
         class StaticMeshPipeline;
         struct MeshRenderData;
         struct CameraFrustumRenderData;
+        struct AudioSphereRenderData;
     }
 
     namespace billboard
@@ -99,6 +100,7 @@ namespace render
         // Debug renderer methods
         void initDebugRenderer();
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
+        void setAudioSphereDrawList(std::vector<mesh::AudioSphereRenderData>&& spheres);
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
         DebugRenderer* getDebugRenderer() const { return debugRenderer.get(); }

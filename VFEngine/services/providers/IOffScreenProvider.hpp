@@ -77,6 +77,7 @@ namespace services {
         virtual void setActiveCamera(CameraId id) = 0;
         virtual CameraId getActiveCameraId() const = 0;
         virtual void prepareFrameCameraFrustums() = 0;
+        virtual void prepareFrameAudioSpheres() = 0;
 
         // Billboard API
         virtual void prepareFrameBillboards() = 0;

@@ -20,7 +20,7 @@ namespace core::audio {
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         float rolloffFactor = 1.0f;
-        bool streaming = false;  // Use streaming playback for long audio
+        bool streaming = false;
     };
 
     class AudioController {
@@ -37,60 +37,38 @@ namespace core::audio {
 
         bool isInitialized() const { return initialized; }
 
-        void setMasterVolume(float volume);
-        float getMasterVolume() const { return masterVolume; }
-
-        AudioHandle playSound(const std::string& path, const PlaySoundParams& params = {});
+        // === Sound Playback ===
         AudioHandle playSound3D(const std::string& path, const glm::vec3& position,
                                  const PlaySoundParams& params = {});
+        AudioHandle playStreamingSound(const std::string& path, const PlaySoundParams& params = {});
 
+        // === Sound Control ===
         void stopSound(AudioHandle handle);
         void pauseSound(AudioHandle handle);
         void resumeSound(AudioHandle handle);
         bool isPlaying(AudioHandle handle) const;
-
         void setVolume(AudioHandle handle, float volume);
         void setPitch(AudioHandle handle, float pitch);
-        void setPosition(AudioHandle handle, const glm::vec3& position);
-        void setLooping(AudioHandle handle, bool loop);
 
-        void stopAll();
-        void pauseAll();
-        void resumeAll();
-
+        // === Listener ===
         void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
                                   const glm::vec3& up);
-        void setListenerVelocity(const glm::vec3& velocity);
 
-        void setDistanceModel(DistanceModel model);
-        void setDopplerFactor(float factor);
-        void setSpeedOfSound(float speed);
-
-        bool loadBuffer(const std::string& path);
-        void unloadBuffer(const std::string& path);
-        bool isBufferLoaded(const std::string& path) const;
-
-        size_t getActiveSourceCount() const;
-        size_t getLoadedBufferCount() const;
-
-        // Streaming-specific methods
-        AudioHandle playStreamingSound(const std::string& path, const PlaySoundParams& params = {});
-        AudioHandle playStreamingSound3D(const std::string& path, const glm::vec3& position,
-                                          const PlaySoundParams& params = {});
+        // === Playback Position ===
         float getPlaybackPosition(AudioHandle handle) const;
         bool setPlaybackPosition(AudioHandle handle, float seconds);
         float getDuration(AudioHandle handle) const;
-        bool isStreamingHandle(AudioHandle handle) const;
-        size_t getActiveStreamingCount() const;
 
     private:
+        AudioHandle playSound(const std::string& path, const PlaySoundParams& params);
+        void stopAll();
+
         std::unique_ptr<AudioSystem> audioSystem;
         std::unique_ptr<AudioBufferManager> bufferManager;
         std::unique_ptr<AudioSourceManager> sourceManager;
         std::unique_ptr<AudioListener> listener;
         std::unique_ptr<StreamingAudioManager> streamingManager;
 
-        float masterVolume = 1.0f;
         bool initialized = false;
     };
 

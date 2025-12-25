@@ -9,6 +9,7 @@
 #include "../render/billboard/BillboardTypes.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
 #include "../render/tools/FrustumDebugRenderer.hpp"
+#include "../render/tools/AudioSphereDebugRenderer.hpp"
 #include "../render/DebugRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -634,6 +635,57 @@ namespace controllers
             renderHandler->initDebugRenderer();
             renderHandler->getDebugRenderer()->setShowGrid(true);
         }
+    }
+
+    void OffScreenController::prepareFrameAudioSpheres()
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+
+        if (playModeActive || !showDebugRendering)
+        {
+            renderHandler->setAudioSphereDrawList({});
+            return;
+        }
+
+        std::vector<render::mesh::AudioSphereRenderData> audioSphereDrawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::AudioSource3DComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& audioComp = view.get<components::AudioSource3DComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            // Skip audio sources without debug spheres enabled
+            if (!audioComp.showDebugSpheres)
+            {
+                continue;
+            }
+
+            render::mesh::AudioSphereRenderData renderData;
+            renderData.position = glm::vec3(worldTransform.worldMatrix[3]);
+            renderData.minDistance = audioComp.minDistance;
+            renderData.maxDistance = audioComp.maxDistance;
+            renderData.showDebugSpheres = audioComp.showDebugSpheres;
+
+            audioSphereDrawList.push_back(renderData);
+        }
+
+        // If we have spheres to render, ensure mesh pipeline and debug renderer are initialized
+        if (!audioSphereDrawList.empty())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+
+        renderHandler->setAudioSphereDrawList(std::move(audioSphereDrawList));
     }
 
     bool OffScreenController::loadBillboardAtlas(const std::string& atlasPath)
