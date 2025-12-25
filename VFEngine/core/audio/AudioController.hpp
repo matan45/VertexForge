@@ -16,7 +16,6 @@ namespace core::audio {
         bool loop = false;
         bool is3D = false;
         glm::vec3 position{0.0f};
-        glm::vec3 velocity{0.0f};
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         float rolloffFactor = 1.0f;
@@ -24,8 +23,16 @@ namespace core::audio {
     };
 
     class AudioController {
+    private:
+        std::unique_ptr<AudioSystem> audioSystem;
+        std::unique_ptr<AudioBufferManager> bufferManager;
+        std::unique_ptr<AudioSourceManager> sourceManager;
+        std::unique_ptr<AudioListener> listener;
+        std::unique_ptr<StreamingAudioManager> streamingManager;
+
+        bool initialized = false;
     public:
-        AudioController();
+        explicit AudioController();
         ~AudioController();
 
         AudioController(const AudioController&) = delete;
@@ -62,14 +69,6 @@ namespace core::audio {
     private:
         AudioHandle playSound(const std::string& path, const PlaySoundParams& params);
         void stopAll();
-
-        std::unique_ptr<AudioSystem> audioSystem;
-        std::unique_ptr<AudioBufferManager> bufferManager;
-        std::unique_ptr<AudioSourceManager> sourceManager;
-        std::unique_ptr<AudioListener> listener;
-        std::unique_ptr<StreamingAudioManager> streamingManager;
-
-        bool initialized = false;
     };
 
 }

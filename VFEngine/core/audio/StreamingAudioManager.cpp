@@ -1,5 +1,5 @@
 #include "StreamingAudioManager.hpp"
-#include <spdlog/spdlog.h>
+#include "print/Logger.hpp"
 #include <algorithm>
 
 namespace core::audio {
@@ -19,7 +19,7 @@ namespace core::audio {
         auto source = std::make_unique<StreamingAudioSource>();
 
         if (!source->open(path, streamConfig)) {
-            spdlog::error("Failed to open streaming audio: {}", path);
+            loggerError("Failed to open streaming audio: {}", path);
             return InvalidAudioHandle;
         }
 
@@ -28,8 +28,6 @@ namespace core::audio {
 
         AudioHandle handle = generateHandle();
         activeSources[handle] = std::move(source);
-
-        spdlog::debug("Started streaming playback: {} (handle: {})", path, handle);
 
         return handle;
     }
@@ -67,13 +65,6 @@ namespace core::audio {
         auto it = activeSources.find(handle);
         if (it != activeSources.end()) {
             it->second->setPitch(pitch);
-        }
-    }
-
-    void StreamingAudioManager::setPosition(AudioHandle handle, const glm::vec3& position) {
-        auto it = activeSources.find(handle);
-        if (it != activeSources.end()) {
-            it->second->setPosition(position);
         }
     }
 
@@ -116,41 +107,11 @@ namespace core::audio {
         return 0.0f;
     }
 
-    StreamingAudioSource* StreamingAudioManager::getSource(AudioHandle handle) {
-        auto it = activeSources.find(handle);
-        if (it != activeSources.end()) {
-            return it->second.get();
-        }
-        return nullptr;
-    }
-
-    const StreamingAudioSource* StreamingAudioManager::getSource(AudioHandle handle) const {
-        auto it = activeSources.find(handle);
-        if (it != activeSources.end()) {
-            return it->second.get();
-        }
-        return nullptr;
-    }
-
     void StreamingAudioManager::stopAll() {
         for (auto& [handle, source] : activeSources) {
             source->stop();
         }
         activeSources.clear();
-    }
-
-    void StreamingAudioManager::pauseAll() {
-        for (auto& [handle, source] : activeSources) {
-            source->pause();
-        }
-    }
-
-    void StreamingAudioManager::resumeAll() {
-        for (auto& [handle, source] : activeSources) {
-            if (source->isPaused()) {
-                source->play();
-            }
-        }
     }
 
     void StreamingAudioManager::update() {
@@ -164,10 +125,8 @@ namespace core::audio {
     }
 
     void StreamingAudioManager::cleanupFinishedSources() {
-        // Remove finished sources
         for (auto it = activeSources.begin(); it != activeSources.end(); ) {
             if (it->second->isFinished()) {
-                spdlog::debug("Cleaning up finished streaming source: {}", it->first);
                 it = activeSources.erase(it);
             } else {
                 ++it;

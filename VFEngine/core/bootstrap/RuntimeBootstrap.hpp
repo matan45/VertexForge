@@ -34,11 +34,12 @@ namespace core
     private:
         std::unique_ptr<::controllers::CoreInterface> coreInterface;
         std::unique_ptr<::controllers::OffScreen> offScreen;
-        
+
         std::unique_ptr<OffScreenAdapter> offScreenAdapter;
         std::unique_ptr<AudioAdapter> audioAdapter;
+
     public:
-       explicit RuntimeBootstrap();
+        explicit RuntimeBootstrap();
         ~RuntimeBootstrap();
 
         // Non-copyable

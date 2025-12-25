@@ -1,5 +1,5 @@
 #include "AudioSourceManager.hpp"
-#include <spdlog/spdlog.h>
+#include "print/Logger.hpp"
 #include <algorithm>
 
 namespace core::audio {
@@ -17,9 +17,6 @@ namespace core::audio {
     }
 
     AudioSourceManager::~AudioSourceManager() {
-        // Note: Don't call stopAll() here - the OpenAL context may already be destroyed.
-        // The AudioController::cleanUp() should call stopAll() before destroying the AudioSystem.
-        // Just clear our source pool (AudioSource destructors will handle cleanup if context is valid).
         activeHandles.clear();
         freeIndices.clear();
         sourcePool.clear();
@@ -35,11 +32,9 @@ namespace core::audio {
                 sourcePool.push_back(std::move(source));
                 freeIndices.push_back(startIndex + i);
             } else {
-                spdlog::warn("Failed to create audio source in pool");
+                loggerWarning("Failed to create audio source in pool");
             }
         }
-
-        spdlog::debug("Audio source pool grown to {} sources", sourcePool.size());
     }
 
     AudioHandle AudioSourceManager::generateHandle() {
@@ -52,7 +47,7 @@ namespace core::audio {
         }
 
         if (freeIndices.empty()) {
-            spdlog::error("Failed to acquire audio source - pool exhausted");
+            loggerError("Failed to acquire audio source - pool exhausted");
             return InvalidAudioHandle;
         }
 
@@ -114,22 +109,6 @@ namespace core::audio {
         for (auto& [handle, index] : activeHandles) {
             if (index < sourcePool.size()) {
                 sourcePool[index]->stop();
-            }
-        }
-    }
-
-    void AudioSourceManager::pauseAll() {
-        for (auto& [handle, index] : activeHandles) {
-            if (index < sourcePool.size() && sourcePool[index]->isPlaying()) {
-                sourcePool[index]->pause();
-            }
-        }
-    }
-
-    void AudioSourceManager::resumeAll() {
-        for (auto& [handle, index] : activeHandles) {
-            if (index < sourcePool.size() && sourcePool[index]->isPaused()) {
-                sourcePool[index]->play();
             }
         }
     }

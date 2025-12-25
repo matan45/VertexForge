@@ -14,7 +14,6 @@ namespace services {
         bool loop = false;
         bool is3D = false;
         glm::vec3 position{0.0f};
-        glm::vec3 velocity{0.0f};
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         float rolloffFactor = 1.0f;

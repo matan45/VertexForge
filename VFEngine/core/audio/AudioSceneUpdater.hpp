@@ -9,7 +9,7 @@ namespace core::audio {
      */
     class AudioSceneUpdater {
     public:
-        AudioSceneUpdater() = default;
+        explicit AudioSceneUpdater() = default;
         ~AudioSceneUpdater() = default;
 
         // Update listener position from editor camera

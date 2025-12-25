@@ -37,7 +37,6 @@ namespace core {
         coreParams.loop = params.loop;
         coreParams.is3D = true;
         coreParams.position = position;
-        coreParams.velocity = params.velocity;
         coreParams.minDistance = params.minDistance;
         coreParams.maxDistance = params.maxDistance;
         coreParams.rolloffFactor = params.rolloffFactor;
@@ -54,7 +53,6 @@ namespace core {
         coreParams.loop = params.loop;
         coreParams.is3D = params.is3D;
         coreParams.position = params.position;
-        coreParams.velocity = params.velocity;
         coreParams.minDistance = params.minDistance;
         coreParams.maxDistance = params.maxDistance;
         coreParams.rolloffFactor = params.rolloffFactor;
