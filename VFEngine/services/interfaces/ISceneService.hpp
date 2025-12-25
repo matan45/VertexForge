@@ -1,6 +1,7 @@
 #pragma once
 #include "../data/EntityHandle.hpp"
 #include "../data/DTOs.hpp"
+#include "IAudioService.hpp"
 #include <optional>
 #include <vector>
 #include <string>
@@ -177,6 +178,34 @@ namespace services {
         virtual std::map<std::string, std::string> getAllSubMeshMaterials(EntityHandle entity) const = 0;
 
         // ============================================
+        // 2D Audio Source Component Operations (streaming, for background music)
+        // ============================================
+
+        virtual bool addAudioSource2DComponent(EntityHandle entity) = 0;
+
+        virtual bool removeAudioSource2DComponent(EntityHandle entity) = 0;
+
+        virtual bool hasAudioSource2DComponent(EntityHandle entity) const = 0;
+
+        virtual std::optional<AudioSource2DData> getAudioSource2DData(EntityHandle entity) const = 0;
+
+        virtual bool setAudioSource2DData(EntityHandle entity, const AudioSource2DData& audioData) = 0;
+
+        // ============================================
+        // 3D Audio Source Component Operations (cached, for spatial sound effects)
+        // ============================================
+
+        virtual bool addAudioSource3DComponent(EntityHandle entity) = 0;
+
+        virtual bool removeAudioSource3DComponent(EntityHandle entity) = 0;
+
+        virtual bool hasAudioSource3DComponent(EntityHandle entity) const = 0;
+
+        virtual std::optional<AudioSource3DData> getAudioSource3DData(EntityHandle entity) const = 0;
+
+        virtual bool setAudioSource3DData(EntityHandle entity, const AudioSource3DData& audioData) = 0;
+
+        // ============================================
         // Static Entity Operations (BVH Optimization)
         // ============================================
 
@@ -199,11 +228,9 @@ namespace services {
         // ============================================
         // Entity Naming
         // ============================================
-
-        // Get entity name
+        
         virtual std::string getEntityName(EntityHandle entity) const = 0;
-
-        // Set entity name
+        
         virtual void setEntityName(EntityHandle entity, const std::string& name) = 0;
     };
 

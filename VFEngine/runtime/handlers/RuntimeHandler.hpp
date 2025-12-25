@@ -5,7 +5,12 @@
 #include "interfaces/IRenderService.hpp"
 #include "interfaces/IInputService.hpp"
 #include "interfaces/IWindowStateService.hpp"
+#include "interfaces/IAudioService.hpp"
 #include "events/EventTypes.hpp"
+
+namespace core::audio {
+    class AudioSceneUpdater;
+}
 
 namespace core {
     class RuntimeBootstrap;
@@ -21,6 +26,8 @@ namespace handlers {
         std::shared_ptr<services::IRenderService> renderService;
         std::shared_ptr<services::IInputService> inputService;
         std::shared_ptr<services::IWindowStateService> windowStateService;
+        std::shared_ptr<services::IAudioService> audioService;
+        std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 
         events::SubscriptionToken resizeSubscription;
         events::SubscriptionToken minimizeSubscription;

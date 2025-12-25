@@ -2,6 +2,7 @@
 #include "EventTypes.hpp"
 #include "../data/EntityHandle.hpp"
 #include "../data/DTOs.hpp"
+#include "../interfaces/IAudioService.hpp"
 #include <optional>
 #include <vector>
 #include <string>
@@ -109,6 +110,46 @@ namespace events::scene {
 
         std::string_view getName() const override { return "SetEntityStatic"; }
     };
+    
+    // 2D Audio Source (streaming, for background music/ambient)
+    struct AddAudioSource2DComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddAudioSource2DComponent"; }
+    };
+
+    struct RemoveAudioSource2DComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveAudioSource2DComponent"; }
+    };
+
+    struct SetAudioSource2DDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::AudioSource2DData audioData;
+
+        std::string_view getName() const override { return "SetAudioSource2DData"; }
+    };
+
+    // 3D Audio Source (cached, for spatial sound effects)
+    struct AddAudioSource3DComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddAudioSource3DComponent"; }
+    };
+
+    struct RemoveAudioSource3DComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveAudioSource3DComponent"; }
+    };
+
+    struct SetAudioSource3DDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::AudioSource3DData audioData;
+
+        std::string_view getName() const override { return "SetAudioSource3DData"; }
+    };
 
     struct NewSceneCommand : ICommand<bool> {
         std::string_view getName() const override { return "NewScene"; }
@@ -210,6 +251,32 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "IsEntityStatic"; }
+    };
+    
+    // 2D Audio Source queries
+    struct HasAudioSource2DComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasAudioSource2DComponent"; }
+    };
+
+    struct GetAudioSource2DDataQuery : IQuery<std::optional<services::AudioSource2DData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetAudioSource2DData"; }
+    };
+
+    // 3D Audio Source queries
+    struct HasAudioSource3DComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasAudioSource3DComponent"; }
+    };
+
+    struct GetAudioSource3DDataQuery : IQuery<std::optional<services::AudioSource3DData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetAudioSource3DData"; }
     };
 
     // ============================================

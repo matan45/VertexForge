@@ -31,12 +31,12 @@ namespace editor {
                                    bool left, bool right, bool up, bool down, bool sprint);
         void processMouseMovement(float xOffset, float yOffset);
 
+        glm::vec3 getForwardDirection() const;
+        glm::vec3 getRightDirection() const;
+
     private:
         glm::mat4 viewMatrix{ 1.0f };
         glm::mat4 projectionMatrix{ 1.0f };
-        
-        glm::vec3 getForwardDirection() const;
-        glm::vec3 getRightDirection() const;
     };
 
 }

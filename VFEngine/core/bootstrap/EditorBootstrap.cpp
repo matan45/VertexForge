@@ -5,6 +5,7 @@
 #include "../adapters/EditorTextureAdapter.hpp"
 #include "../adapters/MaterialPreviewAdapter.hpp"
 #include "../adapters/MeshPreviewAdapter.hpp"
+#include "../adapters/AudioAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 
 namespace core
@@ -25,8 +26,10 @@ namespace core
         textureAdapter = std::make_unique<EditorTextureAdapter>();
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
+        audioAdapter = std::make_unique<AudioAdapter>();
 
         offScreen->init();
+        audioAdapter->init();
 
         // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
         coreInterface->setResizeCallback([this]() {
@@ -46,10 +49,16 @@ namespace core
             offScreen->cleanUp();
         }
 
+        if (audioAdapter)
+        {
+            audioAdapter->cleanUp();
+        }
+
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
         textureAdapter.reset();
         offScreenAdapter.reset();
+        audioAdapter.reset();
 
         if (coreInterface)
         {
@@ -77,6 +86,11 @@ namespace core
         return meshPreviewAdapter.get();
     }
 
+    services::IAudioProvider* EditorBootstrap::getAudioProvider()
+    {
+        return audioAdapter.get();
+    }
+
     window::Window* EditorBootstrap::getWindow()
     {
         return coreInterface ? coreInterface->getWindow() : nullptr;
@@ -92,7 +106,15 @@ namespace core
     {
         if (coreInterface)
         {
-            coreInterface->setFrameCallback(std::move(callback));
+            // Wrap the callback to also update audio each frame
+            coreInterface->setFrameCallback([this, cb = std::move(callback)]() {
+                if (audioAdapter) {
+                    audioAdapter->update();
+                }
+                if (cb) {
+                    cb();
+                }
+            });
         }
     }
 

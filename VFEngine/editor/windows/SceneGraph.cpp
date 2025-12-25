@@ -3,6 +3,7 @@
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/MaterialEvents.hpp"
+#include "events/AudioEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "print/EditorLogger.hpp"
 #include "resource/MeshResource.hpp"
@@ -35,7 +36,8 @@ namespace windows
     void SceneGraph::onSceneCleared()
     {
         selectedHandle = services::EntityHandle::invalid();
-        submeshNameCache.clear(); // Clear cached submesh names
+        submeshNameCache.clear();
+        audioPreviewHandles.clear();
     }
 
     void SceneGraph::draw()
@@ -131,7 +133,8 @@ namespace windows
         entityQuery.entity = handle;
         auto entityDataOpt = dispatcher.query(entityQuery);
 
-        std::string entityName = entityDataOpt.has_value() ? entityDataOpt->name : "Unknown";
+        static const std::string unknownName = "Unknown";
+        const std::string& entityName = entityDataOpt.has_value() ? entityDataOpt->name : unknownName;
 
         if (expandedHandles.count(handle.id) > 0)
         {
@@ -201,7 +204,10 @@ namespace windows
         if (hasMesh)
             drawMaterialComponent(handle);
 
-        drawAddComponentButton(handle, hasCamera, hasMesh);
+        bool hasAudio2D = drawAudioSource2DComponent(handle);
+        bool hasAudio3D = drawAudioSource3DComponent(handle);
+
+        drawAddComponentButton(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D);
     }
 
     void SceneGraph::drawEntityName(services::EntityHandle handle, const std::string& currentName)
@@ -684,7 +690,494 @@ namespace windows
         ImGui::PopID();
     }
 
-    void SceneGraph::drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh)
+    bool SceneGraph::drawAudioSource2DComponent(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::scene::HasAudioSource2DComponentQuery hasAudioQuery;
+        hasAudioQuery.entity = handle;
+        bool hasAudioSource = dispatcher.query(hasAudioQuery);
+
+        if (!hasAudioSource)
+            return false;
+
+        events::scene::GetAudioSource2DDataQuery audioQuery;
+        audioQuery.entity = handle;
+        auto audioOpt = dispatcher.query(audioQuery);
+
+        if (!audioOpt.has_value())
+            return true;
+
+        ImGui::PushID("AudioSource2DComponent");
+
+        bool removeAudioSource = false;
+
+        pushComponentHeaderStyle();
+        bool isOpen = ImGui::CollapsingHeader("##AudioSource2DHeader",
+                                              ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+
+        ImGui::SameLine();
+        ImGui::Text("Audio Source 2D (Streaming)");
+
+        pushRemoveButtonStyle();
+        if (ImGui::Button("x##RemoveAudioSource2D", ImVec2(18, 18)))
+        {
+            removeAudioSource = true;
+        }
+        popRemoveButtonStyle();
+        popComponentHeaderStyle();
+
+        if (isOpen)
+        {
+            ImGui::Indent(10.0f);
+
+            services::AudioSource2DData audioData = *audioOpt;
+            bool changed = false;
+
+            ImGui::TextDisabled("Use for: background music, ambient sounds");
+            ImGui::Spacing();
+
+            if (!audioData.audioFilePath.empty())
+            {
+                std::string filename = audioData.audioFilePath;
+                auto lastSlash = filename.find_last_of("/\\");
+                if (lastSlash != std::string::npos)
+                {
+                    filename = filename.substr(lastSlash + 1);
+                }
+                ImGui::Text("File: %s", filename.c_str());
+            }
+            else
+            {
+                ImGui::TextDisabled("No audio file selected");
+            }
+
+            if (ImGui::Button("Select Audio File##2D"))
+            {
+                nfd::FileDialog fileDialog;
+                std::string path = fileDialog.openFileDialog(
+                    {{L"VF Audio Files (*.vfAudio)", L"*.vfAudio"}});
+                if (!path.empty())
+                {
+                    std::ifstream file(path);
+                    if (file.good())
+                    {
+                        file.close();
+                        audioData.audioFilePath = path;
+                        changed = true;
+                    }
+                    else
+                    {
+                        vfLogError("Selected audio file does not exist or cannot be read: {}", path);
+                    }
+                }
+            }
+
+            ImGui::SameLine();
+            if (audioData.audioFilePath.empty()) ImGui::BeginDisabled();
+            if (ImGui::Button("Clear##Audio2D"))
+            {
+                audioData.audioFilePath = "";
+                changed = true;
+            }
+            if (audioData.audioFilePath.empty()) ImGui::EndDisabled();
+
+            ImGui::Spacing();
+
+            if (ImGui::SliderFloat("Volume##2D", &audioData.volume, 0.0f, 1.0f, "%.2f"))
+            {
+                changed = true;
+            }
+
+            if (ImGui::SliderFloat("Pitch##2D", &audioData.pitch, 0.5f, 2.0f, "%.2f"))
+            {
+                changed = true;
+            }
+
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Loop##2D", &audioData.loop))
+            {
+                changed = true;
+            }
+
+            if (changed)
+            {
+                events::scene::SetAudioSource2DDataCommand cmd;
+                cmd.entity = handle;
+                cmd.audioData = audioData;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Check if we have an active preview handle for this entity (use unique key for 2D)
+            uint64_t previewKey = handle.id * 2; // 2D uses even keys
+            auto previewIt = audioPreviewHandles.find(previewKey);
+            bool hasPreviewHandle = previewIt != audioPreviewHandles.end();
+
+            // Clean up invalid handles
+            if (hasPreviewHandle && !previewIt->second.isValid())
+            {
+                audioPreviewHandles.erase(previewIt);
+                hasPreviewHandle = false;
+                previewIt = audioPreviewHandles.end();
+            }
+
+            // Check if currently playing
+            bool isCurrentlyPlaying = false;
+            if (hasPreviewHandle)
+            {
+                events::audio::IsSoundPlayingQuery playingQuery;
+                playingQuery.handle = previewIt->second;
+                isCurrentlyPlaying = dispatcher.query(playingQuery);
+            }
+
+            // Track if paused (has handle but not playing)
+            bool isPaused = hasPreviewHandle && !isCurrentlyPlaying;
+
+            // Play button - only enabled if audio file is set and not already playing
+            bool canPlay = !audioData.audioFilePath.empty() && !isCurrentlyPlaying;
+            if (!canPlay) ImGui::BeginDisabled();
+            if (ImGui::Button("Play##2D", ImVec2(60, 0)))
+            {
+                if (isPaused)
+                {
+                    // Resume from paused position
+                    events::audio::ResumeSoundCommand resumeCmd;
+                    resumeCmd.handle = previewIt->second;
+                    dispatcher.execute(resumeCmd);
+                }
+                else
+                {
+                    // Start new playback
+                    events::audio::PlayStreamingSoundCommand playCmd;
+                    playCmd.path = audioData.audioFilePath;
+                    playCmd.params.volume = audioData.volume;
+                    playCmd.params.pitch = audioData.pitch;
+                    playCmd.params.loop = audioData.loop;
+
+                    services::AudioHandle newHandle = dispatcher.execute(playCmd);
+                    audioPreviewHandles[previewKey] = newHandle;
+                }
+            }
+            if (!canPlay) ImGui::EndDisabled();
+
+            ImGui::SameLine();
+
+            if (!isCurrentlyPlaying) ImGui::BeginDisabled();
+            if (ImGui::Button("Pause##2D", ImVec2(60, 0)))
+            {
+                if (hasPreviewHandle)
+                {
+                    events::audio::PauseSoundCommand pauseCmd;
+                    pauseCmd.handle = previewIt->second;
+                    dispatcher.execute(pauseCmd);
+                }
+            }
+            if (!isCurrentlyPlaying) ImGui::EndDisabled();
+
+            ImGui::SameLine();
+
+            if (!hasPreviewHandle) ImGui::BeginDisabled();
+            if (ImGui::Button("Stop##2D", ImVec2(60, 0)))
+            {
+                if (hasPreviewHandle)
+                {
+                    events::audio::StopSoundCommand stopCmd;
+                    stopCmd.handle = previewIt->second;
+                    dispatcher.execute(stopCmd);
+                    audioPreviewHandles.erase(previewKey);
+                }
+            }
+            if (!hasPreviewHandle) ImGui::EndDisabled();
+
+            ImGui::Unindent(10.0f);
+        }
+
+        ImGui::PopID();
+
+        if (removeAudioSource)
+        {
+            events::scene::RemoveAudioSource2DComponentCommand cmd;
+            cmd.entity = handle;
+            dispatcher.execute(cmd);
+
+            uint64_t previewKey = handle.id * 2;
+            audioPreviewHandles.erase(previewKey);
+        }
+
+        return true;
+    }
+
+    bool SceneGraph::drawAudioSource3DComponent(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::scene::HasAudioSource3DComponentQuery hasAudioQuery;
+        hasAudioQuery.entity = handle;
+        bool hasAudioSource = dispatcher.query(hasAudioQuery);
+
+        if (!hasAudioSource)
+            return false;
+
+        events::scene::GetAudioSource3DDataQuery audioQuery;
+        audioQuery.entity = handle;
+        auto audioOpt = dispatcher.query(audioQuery);
+
+        if (!audioOpt.has_value())
+            return true;
+
+        ImGui::PushID("AudioSource3DComponent");
+
+        bool removeAudioSource = false;
+
+        pushComponentHeaderStyle();
+        bool isOpen = ImGui::CollapsingHeader("##AudioSource3DHeader",
+                                              ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+
+        ImGui::SameLine();
+        ImGui::Text("Audio Source 3D (Spatial)");
+
+        pushRemoveButtonStyle();
+        if (ImGui::Button("x##RemoveAudioSource3D", ImVec2(18, 18)))
+        {
+            removeAudioSource = true;
+        }
+        popRemoveButtonStyle();
+        popComponentHeaderStyle();
+
+        if (isOpen)
+        {
+            ImGui::Indent(10.0f);
+
+            services::AudioSource3DData audioData = *audioOpt;
+            bool changed = false;
+
+            ImGui::TextDisabled("Use for: spatial sound effects");
+            ImGui::Spacing();
+
+            if (!audioData.audioFilePath.empty())
+            {
+                std::string filename = audioData.audioFilePath;
+                auto lastSlash = filename.find_last_of("/\\");
+                if (lastSlash != std::string::npos)
+                {
+                    filename = filename.substr(lastSlash + 1);
+                }
+                ImGui::Text("File: %s", filename.c_str());
+            }
+            else
+            {
+                ImGui::TextDisabled("No audio file selected");
+            }
+
+            if (ImGui::Button("Select Audio File##3D"))
+            {
+                nfd::FileDialog fileDialog;
+                std::string path = fileDialog.openFileDialog(
+                    {{L"VF Audio Files (*.vfAudio)", L"*.vfAudio"}});
+                if (!path.empty())
+                {
+                    std::ifstream file(path);
+                    if (file.good())
+                    {
+                        file.close();
+                        audioData.audioFilePath = path;
+                        changed = true;
+                    }
+                    else
+                    {
+                        vfLogError("Selected audio file does not exist or cannot be read: {}", path);
+                    }
+                }
+            }
+
+            ImGui::SameLine();
+            if (audioData.audioFilePath.empty()) ImGui::BeginDisabled();
+            if (ImGui::Button("Clear##Audio3D"))
+            {
+                audioData.audioFilePath = "";
+                changed = true;
+            }
+            if (audioData.audioFilePath.empty()) ImGui::EndDisabled();
+
+            ImGui::Spacing();
+
+            if (ImGui::SliderFloat("Volume##3D", &audioData.volume, 0.0f, 1.0f, "%.2f"))
+            {
+                changed = true;
+            }
+
+            if (ImGui::SliderFloat("Pitch##3D", &audioData.pitch, 0.5f, 2.0f, "%.2f"))
+            {
+                changed = true;
+            }
+
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Loop##3D", &audioData.loop))
+            {
+                changed = true;
+            }
+
+            ImGui::Spacing();
+            ImGui::Text("Spatial Settings:");
+            ImGui::Indent(10.0f);
+
+            if (ImGui::SliderFloat("Min Distance##3D", &audioData.minDistance, 0.1f, 50.0f, "%.1f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Distance at which volume starts to attenuate");
+            }
+
+            if (ImGui::SliderFloat("Max Distance##3D", &audioData.maxDistance, 1.0f, 500.0f, "%.1f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Distance at which volume reaches minimum");
+            }
+
+            ImGui::Spacing();
+            if (ImGui::Checkbox("Show Debug Spheres##3D", &audioData.showDebugSpheres))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Draw wireframe spheres for min/max distance");
+            }
+
+            ImGui::Unindent(10.0f);
+
+            if (changed)
+            {
+                events::scene::SetAudioSource3DDataCommand cmd;
+                cmd.entity = handle;
+                cmd.audioData = audioData;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Check if we have an active preview handle for this entity (use unique key for 3D)
+            uint64_t previewKey = handle.id * 2 + 1; // 3D uses odd keys
+            auto previewIt = audioPreviewHandles.find(previewKey);
+            bool hasPreviewHandle = previewIt != audioPreviewHandles.end();
+
+            // Clean up invalid handles
+            if (hasPreviewHandle && !previewIt->second.isValid())
+            {
+                audioPreviewHandles.erase(previewIt);
+                hasPreviewHandle = false;
+                previewIt = audioPreviewHandles.end();
+            }
+
+            // Check if currently playing
+            bool isCurrentlyPlaying = false;
+            if (hasPreviewHandle)
+            {
+                events::audio::IsSoundPlayingQuery playingQuery;
+                playingQuery.handle = previewIt->second;
+                isCurrentlyPlaying = dispatcher.query(playingQuery);
+            }
+
+            // Track if paused (has handle but not playing)
+            bool isPaused = hasPreviewHandle && !isCurrentlyPlaying;
+
+            // Play button - only enabled if audio file is set and not already playing
+            bool canPlay = !audioData.audioFilePath.empty() && !isCurrentlyPlaying;
+            if (!canPlay) ImGui::BeginDisabled();
+            if (ImGui::Button("Play##3D", ImVec2(60, 0)))
+            {
+                if (isPaused)
+                {
+                    // Resume from paused position
+                    events::audio::ResumeSoundCommand resumeCmd;
+                    resumeCmd.handle = previewIt->second;
+                    dispatcher.execute(resumeCmd);
+                }
+                else
+                {
+                    // Start new playback
+                    // 3D audio: use cached resource audio at entity position
+                    events::scene::GetTransformQuery transformQuery;
+                    transformQuery.entity = handle;
+                    auto transformOpt = dispatcher.query(transformQuery);
+                    glm::vec3 position = transformOpt.has_value() ? transformOpt->position : glm::vec3(0.0f);
+
+                    events::audio::PlaySound3DCommand playCmd;
+                    playCmd.path = audioData.audioFilePath;
+                    playCmd.position = position;
+                    playCmd.params.volume = audioData.volume;
+                    playCmd.params.pitch = audioData.pitch;
+                    playCmd.params.loop = audioData.loop;
+                    playCmd.params.minDistance = audioData.minDistance;
+                    playCmd.params.maxDistance = audioData.maxDistance;
+
+                    services::AudioHandle newHandle = dispatcher.execute(playCmd);
+                    audioPreviewHandles[previewKey] = newHandle;
+                }
+            }
+            if (!canPlay) ImGui::EndDisabled();
+
+            ImGui::SameLine();
+
+            if (!isCurrentlyPlaying) ImGui::BeginDisabled();
+            if (ImGui::Button("Pause##3D", ImVec2(60, 0)))
+            {
+                if (hasPreviewHandle)
+                {
+                    events::audio::PauseSoundCommand pauseCmd;
+                    pauseCmd.handle = previewIt->second;
+                    dispatcher.execute(pauseCmd);
+                }
+            }
+            if (!isCurrentlyPlaying) ImGui::EndDisabled();
+
+            ImGui::SameLine();
+
+            if (!hasPreviewHandle) ImGui::BeginDisabled();
+            if (ImGui::Button("Stop##3D", ImVec2(60, 0)))
+            {
+                if (hasPreviewHandle)
+                {
+                    events::audio::StopSoundCommand stopCmd;
+                    stopCmd.handle = previewIt->second;
+                    dispatcher.execute(stopCmd);
+                    audioPreviewHandles.erase(previewKey);
+                }
+            }
+            if (!hasPreviewHandle) ImGui::EndDisabled();
+
+            ImGui::Unindent(10.0f);
+        }
+
+        ImGui::PopID();
+
+        if (removeAudioSource)
+        {
+            events::scene::RemoveAudioSource3DComponentCommand cmd;
+            cmd.entity = handle;
+            dispatcher.execute(cmd);
+
+            uint64_t previewKey = handle.id * 2 + 1;
+            audioPreviewHandles.erase(previewKey);
+        }
+
+        return true;
+    }
+
+    void SceneGraph::drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -737,7 +1230,35 @@ namespace windows
                 }
             }
 
-            if (hasCamera && hasMesh)
+            if (!hasAudio2D)
+            {
+                if (ImGui::Selectable("  Audio Source 2D"))
+                {
+                    events::scene::AddAudioSource2DComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Streaming audio for background music and ambient sounds");
+                }
+            }
+
+            if (!hasAudio3D)
+            {
+                if (ImGui::Selectable("  Audio Source 3D"))
+                {
+                    events::scene::AddAudioSource3DComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Cached audio for spatial sound effects");
+                }
+            }
+
+            if (hasCamera && hasMesh && hasAudio2D && hasAudio3D)
             {
                 ImGui::TextDisabled("All components added");
             }

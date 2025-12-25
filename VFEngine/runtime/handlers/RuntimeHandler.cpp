@@ -4,6 +4,8 @@
 #include "impl/RuntimeRenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
 #include "impl/WindowStateServiceImpl.hpp"
+#include "impl/AudioServiceImpl.hpp"
+#include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
 
@@ -26,6 +28,10 @@ namespace handlers {
             if (windowStateService) {
                 windowStateService->update();
             }
+            // Update audio listener from primary camera
+            if (audioSceneUpdater) {
+                audioSceneUpdater->updateListenerFromPrimaryCamera();
+            }
         });
         
         setupEventSubscriptions();
@@ -38,6 +44,8 @@ namespace handlers {
     void RuntimeHandler::cleanUp() {
         cleanupEventSubscriptions();
         
+        audioSceneUpdater.reset();
+        audioService.reset();
         renderService.reset();
         sceneService.reset();
         windowStateService.reset();
@@ -61,12 +69,15 @@ namespace handlers {
         );
         inputService = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
         windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());
+        audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
+        audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
 
         // Register event handlers for command/query pattern
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
         windowStateService->registerEventHandlers();
+        static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
     }
 
     void RuntimeHandler::setupEventSubscriptions()

@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "resource/Types.hpp"
+#include "interfaces/IAudioService.hpp"
 #include <string>
 #include <optional>
 #include <vector>
@@ -37,13 +38,16 @@ namespace windows
         bool isOpen = true;
         bool needsInit = true;
 
-        // Placeholder playback state (for future use)
+        // Playback state
         bool isPlaying = false;
         float playbackPosition = 0.0f;
+        float volume = 1.0f;
+        services::AudioHandle currentAudioHandle;
+        float audioDurationSeconds = 0.0f;
 
     public:
         explicit AudioPreviewWindow(const std::string& filePath);
-        ~AudioPreviewWindow() override = default;
+        ~AudioPreviewWindow() override;
 
         void draw() override;
 

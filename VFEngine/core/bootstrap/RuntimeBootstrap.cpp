@@ -2,6 +2,7 @@
 #include "../controllers/CoreInterface.hpp"
 #include "../controllers/OffScreen.hpp"
 #include "../adapters/OffScreenAdapter.hpp"
+#include "../adapters/AudioAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 
 namespace core
@@ -19,11 +20,14 @@ namespace core
         coreInterface->init();
 
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());
+        audioAdapter = std::make_unique<AudioAdapter>();
 
         offScreen->init();
+        audioAdapter->init();
 
         // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
-        coreInterface->setResizeCallback([this]() {
+        coreInterface->setResizeCallback([this]()
+        {
             offScreen->recreate();
         });
     }
@@ -40,7 +44,13 @@ namespace core
             offScreen->cleanUp();
         }
 
+        if (audioAdapter)
+        {
+            audioAdapter->cleanUp();
+        }
+
         offScreenAdapter.reset();
+        audioAdapter.reset();
 
         if (coreInterface)
         {
@@ -51,6 +61,11 @@ namespace core
     services::IOffScreenProvider* RuntimeBootstrap::getOffScreenProvider()
     {
         return offScreenAdapter.get();
+    }
+
+    services::IAudioProvider* RuntimeBootstrap::getAudioProvider()
+    {
+        return audioAdapter.get();
     }
 
     window::Window* RuntimeBootstrap::getWindow()
@@ -68,7 +83,18 @@ namespace core
     {
         if (coreInterface)
         {
-            coreInterface->setFrameCallback(std::move(callback));
+            // Wrap the callback to also update audio each frame
+            coreInterface->setFrameCallback([this, cb = std::move(callback)]()
+            {
+                if (audioAdapter)
+                {
+                    audioAdapter->update();
+                }
+                if (cb)
+                {
+                    cb();
+                }
+            });
         }
     }
 

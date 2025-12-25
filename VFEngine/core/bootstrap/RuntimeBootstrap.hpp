@@ -5,6 +5,7 @@
 namespace services
 {
     class IOffScreenProvider;
+    class IAudioProvider;
 }
 
 namespace window
@@ -26,16 +27,19 @@ namespace controllers
 namespace core
 {
     class OffScreenAdapter;
+    class AudioAdapter;
 
     class RuntimeBootstrap
     {
     private:
         std::unique_ptr<::controllers::CoreInterface> coreInterface;
         std::unique_ptr<::controllers::OffScreen> offScreen;
-        
+
         std::unique_ptr<OffScreenAdapter> offScreenAdapter;
+        std::unique_ptr<AudioAdapter> audioAdapter;
+
     public:
-       explicit RuntimeBootstrap();
+        explicit RuntimeBootstrap();
         ~RuntimeBootstrap();
 
         // Non-copyable
@@ -51,6 +55,8 @@ namespace core
         // === Provider Accessors ===
 
         services::IOffScreenProvider* getOffScreenProvider();
+
+        services::IAudioProvider* getAudioProvider();
 
         // === Other Accessors ===
 

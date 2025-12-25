@@ -80,6 +80,20 @@ namespace services {
         // Hierarchy - Children
         std::vector<EntityHandle> getChildren(EntityHandle entity) const override;
 
+        // 2D Audio Source Operations (streaming, for background music)
+        bool addAudioSource2DComponent(EntityHandle entity) override;
+        bool removeAudioSource2DComponent(EntityHandle entity) override;
+        bool hasAudioSource2DComponent(EntityHandle entity) const override;
+        std::optional<AudioSource2DData> getAudioSource2DData(EntityHandle entity) const override;
+        bool setAudioSource2DData(EntityHandle entity, const AudioSource2DData& audioData) override;
+
+        // 3D Audio Source Operations (cached, for spatial sound effects)
+        bool addAudioSource3DComponent(EntityHandle entity) override;
+        bool removeAudioSource3DComponent(EntityHandle entity) override;
+        bool hasAudioSource3DComponent(EntityHandle entity) const override;
+        std::optional<AudioSource3DData> getAudioSource3DData(EntityHandle entity) const override;
+        bool setAudioSource3DData(EntityHandle entity, const AudioSource3DData& audioData) override;
+
         // Static Entity Operations
         bool setEntityStatic(EntityHandle entity, bool isStatic) override;
         bool isEntityStatic(EntityHandle entity) const override;
@@ -107,6 +121,7 @@ namespace services {
         void collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const;
         
         void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
+        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
 
 }
