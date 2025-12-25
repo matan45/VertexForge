@@ -342,27 +342,33 @@ namespace windows
 
         math::Ray ray = screenToWorldRay(screenPos, viewportPos, viewportSize);
 
-        // Find closest hit
-        float closestDistance = std::numeric_limits<float>::max();
-        std::optional<services::EntityHandle> closestEntity;
+        // Collect all hits, then prefer smaller bounding boxes
+        // This allows selecting inner objects within larger parent bounds
+        float smallestVolume = std::numeric_limits<float>::max();
+        std::optional<services::EntityHandle> bestEntity;
 
         for (const auto& meshData : cachedMeshHits)
         {
             auto hitDistance = meshData.worldAABB.intersectRay(ray);
-            if (hitDistance.has_value() && *hitDistance < closestDistance)
+            if (hitDistance.has_value())
             {
                 // Validate entity still exists
                 auto enttEntity = services::internal::fromHandle(meshData.entity);
                 if (registry.valid(enttEntity) &&
                     registry.all_of<components::MeshComponent>(enttEntity))
                 {
-                    closestDistance = *hitDistance;
-                    closestEntity = meshData.entity;
+                    // Prefer smaller bounding boxes - allows picking nested objects
+                    float volume = meshData.worldAABB.getVolume();
+                    if (volume < smallestVolume)
+                    {
+                        smallestVolume = volume;
+                        bestEntity = meshData.entity;
+                    }
                 }
             }
         }
 
-        return closestEntity;
+        return bestEntity;
     }
 
     void ViewPort::drawViewportOverlay()

@@ -41,6 +41,17 @@ namespace math
             return (max - min) * 0.5f;
         }
 
+        glm::vec3 getSize() const
+        {
+            return max - min;
+        }
+
+        float getVolume() const
+        {
+            glm::vec3 size = getSize();
+            return size.x * size.y * size.z;
+        }
+
         bool isValid() const
         {
             return min.x <= max.x && min.y <= max.y && min.z <= max.z;
