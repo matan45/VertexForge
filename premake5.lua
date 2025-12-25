@@ -7,7 +7,10 @@ workspace "VertexForge"
    -- Enable UTF-8 support for all C++ projects (required by spdlog/fmt)
    filter "language:C++"
       buildoptions { "/utf-8" }
-      defines { "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1" }
+      defines {
+         "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1",
+         "GLM_FORCE_DEPTH_ZERO_TO_ONE"  -- Vulkan uses [0,1] depth range, not OpenGL's [-1,1]
+      }
    filter {}
 
 -- Check if the Vulkan SDK environment variable is set
@@ -141,11 +144,11 @@ project "Import"
       defines { "DEBUG" }
       symbols "On"
       libdirs { "dependencies/assimp/lib/Debug" }
-      links { "assimp-vc143-mtd.lib" }  -- Assimp Debug library
+      links { "assimp-vc145-mtd.lib" }  -- Assimp Debug library
 
     -- Copy the DLL to the Editor's output directory after the build
    postbuildcommands {
-      "{COPY} ../../dependencies/assimp/bin/Debug/assimp-vc143-mtd.dll ../../bin/Editor/Debug/x64/"
+      "{COPY} ../../dependencies/assimp/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/Debug/x64/"
    }
 
    -- Release configuration
@@ -153,11 +156,11 @@ project "Import"
       defines { "NDEBUG" }
       optimize "On"
       libdirs { "dependencies/assimp/lib/Release" }
-      links { "assimp-vc143-mt.lib" }  -- Assimp Release library
+      links { "assimp-vc145-mt.lib" }  -- Assimp Release library
 
       -- Copy the DLL to the output directory after the build
       postbuildcommands {
-         "{COPY} ../../dependencies/assimp/bin/Release/assimp-vc143-mt.dll ../../bin/Editor/Release/x64/"
+         "{COPY} ../../dependencies/assimp/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/Release/x64/"
       }
 
 

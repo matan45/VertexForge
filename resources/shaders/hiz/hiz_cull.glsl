@@ -87,22 +87,28 @@ bool testAABBVisible(vec3 aabbMin, vec3 aabbMax) {
         return true;
     }
 
-    // Clamp to screen bounds
-    minScreen = clamp(minScreen, vec2(0.0), vec2(1.0));
-    maxScreen = clamp(maxScreen, vec2(0.0), vec2(1.0));
+    // Objects extending off-screen should be conservatively marked as visible
+    // Clamping their bounds would reduce the sample region and cause false occlusion
+    if (minScreen.x < 0.0 || minScreen.y < 0.0 || maxScreen.x > 1.0 || maxScreen.y > 1.0) {
+        return true;  // Partially off-screen, conservatively visible
+    }
 
     // Calculate screen coverage to determine mip level
     vec2 screenSize2D = screenSize.xy;
     vec2 rectSize = (maxScreen - minScreen) * screenSize2D;
     float maxDim = max(rectSize.x, rectSize.y);
 
+    // Don't auto-cull small objects - let them render (conservative approach)
+    // Objects < 1 pixel may still contribute visually and should not be
+    // culled without proper occlusion testing
     if (maxDim < 1.0) {
-      return false;  // Too small to see, cull it
+        return true;  // Conservative: keep small objects visible
     }
 
     // Select mip level based on coverage
-    // We want to sample a mip where the AABB covers roughly 2x2 texels
-    float mipLevel = floor(log2(maxDim));
+    // Add +1 to ensure AABB covers at least 4 texels for more accurate sampling
+    // (industry practice to avoid over-aggressive culling)
+    float mipLevel = floor(log2(maxDim)) + 1.0;
     mipLevel = clamp(mipLevel, 0.0, float(hiZMipLevels - 1));
 
     // Sample Hi-Z at the center of the screen-space AABB
