@@ -1,10 +1,12 @@
 #include "MergedMeshBuffer.hpp"
 #include "../mesh/MeshGPUCache.hpp"
 #include "../mesh/MeshTypes.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Utilities.hpp"
 #include "../../core/TransferManager.hpp"
 #include "resource/Types.hpp"
+#include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
 
@@ -358,7 +360,8 @@ namespace render::gpudriven {
 
     void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
                                           const mesh::MeshGPUCache& cache,
-                                          const TextureIndexResolver& textureResolver)
+                                          const TextureIndexResolver& textureResolver,
+                                          float time)
     {
         currentObjectCount = 0;
 
@@ -437,36 +440,54 @@ namespace render::gpudriven {
                 // Material data
                 // Check for submesh-specific material
                 const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
+                float emissionStrength = 0.0f;
+                std::string materialPath;
+
                 if (subMat) {
                     obj.albedo = subMat->albedo;
+                    emissionStrength = subMat->emission;
+                    obj.iblParams = glm::vec4(subMat->iblDiffuse, subMat->iblSpecular, 0.0f, 0.0f);
+                    materialPath = subMat->materialPath;
+
                     obj.materialParams = glm::vec4(
                         subMat->metallic,
                         subMat->roughness,
                         subMat->ao,
-                        subMat->emission
+                        emissionStrength
                     );
-                    obj.iblParams = glm::vec4(subMat->iblDiffuse, subMat->iblSpecular, 0.0f, 0.0f);
                 } else {
                     obj.albedo = meshRender.albedo;
+                    emissionStrength = meshRender.emission;
+                    obj.iblParams = glm::vec4(1.0f, 0.5f, 0.0f, 0.0f);
+                    materialPath = meshRender.defaultMaterialPath;
+
                     obj.materialParams = glm::vec4(
                         meshRender.metallic,
                         meshRender.roughness,
                         meshRender.ao,
-                        meshRender.emission
+                        emissionStrength
                     );
-                    obj.iblParams = glm::vec4(1.0f, 0.5f, 0.0f, 0.0f);
+                }
+
+                // Evaluate dynamic emission strength from Time nodes in material graph
+                if (!materialPath.empty() && time > 0.0f) {
+                    auto matData = resource::ResourceManager::getMaterial(materialPath);
+                    if (matData) {
+                        const auto* outputNode = matData->graph.findOutputNode();
+                        if (outputNode) {
+                            float dynamicEmission = mesh::MaterialPBRExtractor::evaluateEmissionStrength(
+                                matData->graph, outputNode->id, time);
+                            if (dynamicEmission != 0.0f) {
+                                // Override with dynamic emission
+                                obj.materialParams.w = dynamicEmission;
+                            }
+                        }
+                    }
                 }
 
                 // Texture indices - resolve via callback if provided
+                // (materialPath already set above for emission evaluation)
                 if (textureResolver) {
-                    // Get material path for this submesh
-                    std::string materialPath;
-                    if (subMat && !subMat->materialPath.empty()) {
-                        materialPath = subMat->materialPath;
-                    } else if (!meshRender.defaultMaterialPath.empty()) {
-                        materialPath = meshRender.defaultMaterialPath;
-                    }
-
                     if (!materialPath.empty()) {
                         // Resolve each texture slot
                         obj.textureIndices0 = glm::uvec4(

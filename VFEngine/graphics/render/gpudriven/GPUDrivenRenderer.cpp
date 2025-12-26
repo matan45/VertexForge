@@ -419,7 +419,8 @@ namespace render::gpudriven {
         const glm::mat4& projection,
         const glm::vec3& cameraPosition,
         float nearPlane,
-        float farPlane)
+        float farPlane,
+        float time)
     {
         glm::mat4 viewProjection = projection * view;
 
@@ -459,7 +460,8 @@ namespace render::gpudriven {
         const glm::mat4& projection,
         const glm::vec3& cameraPosition,
         float nearPlane,
-        float farPlane)
+        float farPlane,
+        float time)
     {
         if (!initialized || !enabled) {
             return;
@@ -521,8 +523,8 @@ namespace render::gpudriven {
             };
         }
 
-        // Update object buffer with current frame's render data
-        mergedBuffer->updateObjects(opaqueObjects, cache, textureResolver);
+        // Update object buffer with current frame's render data (pass time for Time node evaluation)
+        mergedBuffer->updateObjects(opaqueObjects, cache, textureResolver, time);
 
         // Debug: Log all meshes' LOD data once
         static bool debugLogged = false;
@@ -552,7 +554,7 @@ namespace render::gpudriven {
         }
 
         // Update camera data for compute shader
-        updateCameraData(view, projection, cameraPosition, nearPlane, farPlane);
+        updateCameraData(view, projection, cameraPosition, nearPlane, farPlane, time);
 
         // Update cull pipeline descriptors
         cullPipeline->updateDescriptors(

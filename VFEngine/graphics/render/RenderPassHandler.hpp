@@ -77,6 +77,7 @@ namespace render
         mutable glm::vec3 currentCameraPosition{0.0f};
         mutable float currentNearPlane = 0.1f;
         mutable float currentFarPlane = 1000.0f;
+        mutable float currentTime = 0.0f;
 
         // Private helper to initialize GPU-driven renderer (called from initMeshPipeline)
         void initGPUDrivenRenderer();
@@ -126,7 +127,7 @@ namespace render
         // GPU-driven rendering methods
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
-        void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane);
+        void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
 
         // Camera management (delegates to CameraOcclusionManager)
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);

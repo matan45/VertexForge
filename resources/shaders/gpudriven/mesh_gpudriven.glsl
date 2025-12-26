@@ -125,6 +125,11 @@ const float ALPHA_CUTOFF = 0.5;
 const float MAX_REFLECTION_LOD = 4.0;
 const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
+// Parallax mapping settings
+const float HEIGHT_SCALE = 0.05;        // Height scale for parallax effect
+const int MIN_PARALLAX_LAYERS = 8;      // Minimum layers for parallax occlusion
+const int MAX_PARALLAX_LAYERS = 32;     // Maximum layers for parallax occlusion
+
 // Debug mode: set to 1 to visualize LOD levels with colors
 // LOD0 = Green, LOD1 = Yellow, LOD2 = Orange, LOD3 = Red
 const int DEBUG_VISUALIZE_LOD = 0;
@@ -145,6 +150,47 @@ bool isValidTexture(uint index) {
 // Unpack ORM texture: R=AO, G=Roughness, B=Metallic
 vec3 unpackORM(vec4 ormSample) {
     return vec3(ormSample.r, ormSample.g, ormSample.b);
+}
+
+// Parallax Occlusion Mapping
+// Returns offset texture coordinates based on height map
+vec2 parallaxOcclusionMapping(vec2 texCoords, vec3 viewDirTangent, uint heightIdx) {
+    // Number of layers based on view angle (more layers at grazing angles)
+    float numLayers = mix(float(MAX_PARALLAX_LAYERS), float(MIN_PARALLAX_LAYERS),
+                          abs(dot(vec3(0.0, 0.0, 1.0), viewDirTangent)));
+
+    // Height of each layer
+    float layerDepth = 1.0 / numLayers;
+    float currentLayerDepth = 0.0;
+
+    // Amount to shift texture coordinates per layer
+    vec2 P = viewDirTangent.xy / viewDirTangent.z * HEIGHT_SCALE;
+    vec2 deltaTexCoords = P / numLayers;
+
+    // Current texture coordinates and height
+    vec2 currentTexCoords = texCoords;
+    float currentDepthMapValue = 1.0 - texture(bindlessTextures[nonuniformEXT(heightIdx)], currentTexCoords).r;
+
+    // Raymarching through height layers
+    while (currentLayerDepth < currentDepthMapValue) {
+        currentTexCoords -= deltaTexCoords;
+        currentDepthMapValue = 1.0 - texture(bindlessTextures[nonuniformEXT(heightIdx)], currentTexCoords).r;
+        currentLayerDepth += layerDepth;
+    }
+
+    // Get texture coordinates before collision (for interpolation)
+    vec2 prevTexCoords = currentTexCoords + deltaTexCoords;
+
+    // Get depth values before and after collision for linear interpolation
+    float afterDepth = currentDepthMapValue - currentLayerDepth;
+    float beforeDepth = (1.0 - texture(bindlessTextures[nonuniformEXT(heightIdx)], prevTexCoords).r)
+                        - currentLayerDepth + layerDepth;
+
+    // Interpolate texture coordinates
+    float weight = afterDepth / (afterDepth - beforeDepth);
+    vec2 finalTexCoords = prevTexCoords * weight + currentTexCoords * (1.0 - weight);
+
+    return finalTexCoords;
 }
 
 // PBR Functions
@@ -202,13 +248,46 @@ void main() {
     uint roughnessIdx = drawData.textureIndices1.x;
     uint aoIdx = drawData.textureIndices1.y;
     uint emissionIdx = drawData.textureIndices1.z;
+    uint heightIdx = drawData.textureIndices1.w;
 
-    // Sample albedo
+    // Construct TBN matrix from screen-space derivatives (needed for parallax and normal mapping)
+    vec3 pos_dx = dFdx(fragWorldPos);
+    vec3 pos_dy = dFdy(fragWorldPos);
+    vec2 uv_dx = dFdx(fragTexCoord);
+    vec2 uv_dy = dFdy(fragTexCoord);
+
+    // Calculate tangent and bitangent
+    vec3 T = normalize(pos_dx * uv_dy.y - pos_dy * uv_dx.y);
+    vec3 B = normalize(pos_dy * uv_dx.x - pos_dx * uv_dy.x);
+
+    // Ensure orthogonal TBN
+    T = normalize(T - N * dot(N, T));
+    B = cross(N, T);
+    mat3 TBN = mat3(T, B, N);
+
+    // Calculate texture coordinates (apply parallax mapping if height texture available)
+    vec2 texCoords = fragTexCoord;
+
+    if (isValidTexture(heightIdx)) {
+        // Transform view direction to tangent space for parallax mapping
+        mat3 invTBN = transpose(TBN);  // TBN is orthonormal, so transpose = inverse
+        vec3 viewDirTangent = normalize(invTBN * V);
+
+        // Apply parallax occlusion mapping
+        texCoords = parallaxOcclusionMapping(fragTexCoord, viewDirTangent, heightIdx);
+
+        // Discard fragments outside texture bounds (prevents edge artifacts)
+        if (texCoords.x < 0.0 || texCoords.x > 1.0 || texCoords.y < 0.0 || texCoords.y > 1.0) {
+            discard;
+        }
+    }
+
+    // Sample albedo using parallax-adjusted coordinates
     vec3 albedo = drawData.albedo.rgb;
     float alpha = drawData.albedo.a;
 
     if (isValidTexture(albedoIdx)) {
-        vec4 albedoSample = texture(bindlessTextures[nonuniformEXT(albedoIdx)], fragTexCoord);
+        vec4 albedoSample = texture(bindlessTextures[nonuniformEXT(albedoIdx)], texCoords);
         // Convert from sRGB to linear space for PBR calculations
         albedo = pow(albedoSample.rgb, vec3(2.2));
         alpha = albedoSample.a;
@@ -229,43 +308,27 @@ void main() {
 
     if (isValidTexture(ormIdx)) {
         // Use packed ORM texture: R=AO, G=Roughness, B=Metallic
-        vec3 ormValues = unpackORM(texture(bindlessTextures[nonuniformEXT(ormIdx)], fragTexCoord));
+        vec3 ormValues = unpackORM(texture(bindlessTextures[nonuniformEXT(ormIdx)], texCoords));
         ao = ormValues.x;
         roughness = ormValues.y;
         metallic = ormValues.z;
     } else {
         // Fallback to individual textures
         if (isValidTexture(metallicIdx)) {
-            metallic = texture(bindlessTextures[nonuniformEXT(metallicIdx)], fragTexCoord).r;
+            metallic = texture(bindlessTextures[nonuniformEXT(metallicIdx)], texCoords).r;
         }
         if (isValidTexture(roughnessIdx)) {
-            roughness = texture(bindlessTextures[nonuniformEXT(roughnessIdx)], fragTexCoord).r;
+            roughness = texture(bindlessTextures[nonuniformEXT(roughnessIdx)], texCoords).r;
         }
         if (isValidTexture(aoIdx)) {
-            ao = texture(bindlessTextures[nonuniformEXT(aoIdx)], fragTexCoord).r;
+            ao = texture(bindlessTextures[nonuniformEXT(aoIdx)], texCoords).r;
         }
     }
 
-    // Normal mapping using derivative-based TBN construction
+    // Normal mapping using pre-computed TBN matrix
     if (isValidTexture(normalIdx)) {
-        vec3 tangentNormal = texture(bindlessTextures[nonuniformEXT(normalIdx)], fragTexCoord).rgb * 2.0 - 1.0;
-
-        // Construct TBN matrix from screen-space derivatives
-        vec3 pos_dx = dFdx(fragWorldPos);
-        vec3 pos_dy = dFdy(fragWorldPos);
-        vec2 uv_dx = dFdx(fragTexCoord);
-        vec2 uv_dy = dFdy(fragTexCoord);
-
-        // Calculate tangent and bitangent
-        vec3 T = normalize(pos_dx * uv_dy.y - pos_dy * uv_dx.y);
-        vec3 B = normalize(pos_dy * uv_dx.x - pos_dx * uv_dy.x);
-
-        // Ensure orthogonal TBN
-        T = normalize(T - N * dot(N, T));
-        B = cross(N, T);
-
+        vec3 tangentNormal = texture(bindlessTextures[nonuniformEXT(normalIdx)], texCoords).rgb * 2.0 - 1.0;
         // Transform normal from tangent space to world space
-        mat3 TBN = mat3(T, B, N);
         N = normalize(TBN * tangentNormal);
     }
 
@@ -294,10 +357,10 @@ void main() {
     // Combine ambient
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    // Add emission
+    // Add emission (using parallax-adjusted coordinates)
     vec3 emissive = vec3(0.0);
     if (isValidTexture(emissionIdx)) {
-        emissive = pow(texture(bindlessTextures[nonuniformEXT(emissionIdx)], fragTexCoord).rgb, vec3(2.2)) * emission;
+        emissive = pow(texture(bindlessTextures[nonuniformEXT(emissionIdx)], texCoords).rgb, vec3(2.2)) * emission;
     } else {
         emissive = albedo * emission;
     }

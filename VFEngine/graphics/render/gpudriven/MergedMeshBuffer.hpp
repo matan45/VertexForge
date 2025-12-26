@@ -66,9 +66,11 @@ namespace render::gpudriven {
         // Update object buffer from render data list
         // This is called each frame to update transforms and prepare for GPU culling
         // The textureResolver callback is used to convert texture paths to bindless indices
+        // The time parameter is used to evaluate Time nodes in material shader graphs
         void updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
                           const mesh::MeshGPUCache& cache,
-                          const TextureIndexResolver& textureResolver = nullptr);
+                          const TextureIndexResolver& textureResolver = nullptr,
+                          float time = 0.0f);
 
         // Upload object buffer changes to GPU
         void uploadObjects(vk::CommandBuffer cmd);

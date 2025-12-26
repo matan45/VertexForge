@@ -268,7 +268,7 @@ namespace controllers
                 if (farPlane < 0.0f) farPlane = 1000.0f;
             }
         }
-        renderHandler->setGPUDrivenCameraData(cameraPos, currentNearPlane, farPlane);
+        renderHandler->setGPUDrivenCameraData(cameraPos, currentNearPlane, farPlane, time);
 
         renderHandler->setDebugCameraMatrices(view, projection);
 

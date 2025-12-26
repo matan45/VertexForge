@@ -83,6 +83,7 @@ namespace render::gpudriven {
          * @param cameraPosition Camera world position
          * @param nearPlane Camera near plane distance
          * @param farPlane Camera far plane distance
+         * @param time Current animation time in seconds (for Time node evaluation)
          */
         void updateScene(
             const std::vector<mesh::MeshRenderData>& opaqueObjects,
@@ -91,7 +92,8 @@ namespace render::gpudriven {
             const glm::mat4& projection,
             const glm::vec3& cameraPosition,
             float nearPlane,
-            float farPlane
+            float farPlane,
+            float time = 0.0f
         );
 
         /**
@@ -210,7 +212,8 @@ namespace render::gpudriven {
             const glm::mat4& projection,
             const glm::vec3& cameraPosition,
             float nearPlane,
-            float farPlane
+            float farPlane,
+            float time
         );
         void extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6]);
     };

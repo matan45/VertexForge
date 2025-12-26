@@ -189,11 +189,12 @@ namespace render
         debugRendererInitialized = true;
     }
 
-    void RenderPassHandler::setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane)
+    void RenderPassHandler::setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time)
     {
         currentCameraPosition = cameraPos;
         currentNearPlane = nearPlane;
         currentFarPlane = farPlane;
+        currentTime = time;
     }
 
     void RenderPassHandler::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
@@ -390,7 +391,8 @@ namespace render
                     currentProjection,
                     currentCameraPosition,
                     currentNearPlane,
-                    currentFarPlane
+                    currentFarPlane,
+                    currentTime
                 );
             }
 
