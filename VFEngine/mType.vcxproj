@@ -41,14 +41,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(ProjectDir)..\bin\mType\Debug\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Debug\mType\</IntDir>
+    <OutDir>..\bin\mType\Debug\x64\</OutDir>
+    <IntDir>obj\x64\Debug\mType\</IntDir>
     <TargetName>mType</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(ProjectDir)..\bin\mType\Release\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Release\mType\</IntDir>
+    <OutDir>..\bin\mType\Release\x64\</OutDir>
+    <IntDir>obj\x64\Release\mType\</IntDir>
     <TargetName>mType</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -183,21 +183,14 @@
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\InheritanceTracker.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\NativeRegistry.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\Registry.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\AcosFunction.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\AsinFunction.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\Atan2Function.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\AtanFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\BuiltinFunction.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\CosFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\HashCodeFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\IndexOfFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ParsePrimitiveFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\PrintFunction.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\SinFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\SqrtFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\StrLengthFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\SubstringFunction.hpp" />
-    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\TanFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ToLowerCaseFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ToUpperCaseFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ValuePrinter.hpp" />
@@ -249,6 +242,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\base\OptimizationPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\ConstantFoldingPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\DeadCodeEliminationPass.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\UnusedDeclarationEliminationPass.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\ClassParser.hpp" />
@@ -410,6 +404,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\ConstantFoldingPattern.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\DeadCodePattern.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\JumpThreadingPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\LoadStoreOptimizationPattern.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\NullSequencePattern.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\PatternSafetyHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\StackOptimizationPattern.hpp" />
@@ -518,20 +513,13 @@
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\FunctionRegistry.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\InheritanceTracker.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\NativeRegistry.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\AcosFunction.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\AsinFunction.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\Atan2Function.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\AtanFunction.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\CosFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\HashCodeFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\IndexOfFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ParsePrimitiveFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\PrintFunction.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\SinFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\SqrtFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\StrLengthFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\SubstringFunction.cpp" />
-    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\TanFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ToLowerCaseFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ToUpperCaseFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ValuePrinter.cpp" />
@@ -556,6 +544,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\base\OptimizationPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\ConstantFoldingPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\DeadCodeEliminationPass.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\UnusedDeclarationEliminationPass.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\ConstantEvaluator.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\optimizer\passes\constant_folding\SafeArithmetic.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\ClassParser.cpp" />
@@ -694,6 +683,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\ConstantFoldingPattern.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\DeadCodePattern.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\JumpThreadingPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\LoadStoreOptimizationPattern.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\NullSequencePattern.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\PatternSafetyHelper.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\StackOptimizationPattern.cpp" />

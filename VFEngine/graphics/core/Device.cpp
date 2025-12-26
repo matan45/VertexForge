@@ -223,9 +223,33 @@ namespace core {
 
 		vk::PhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
-		
+
+		// Vulkan 1.1 features (required for gl_BaseInstance in shaders)
+		vk::PhysicalDeviceVulkan11Features vulkan11Features{};
+		vulkan11Features.shaderDrawParameters = VK_TRUE;
+
+		// Vulkan 1.2 features (required for drawIndirectCount and descriptor indexing)
+		vk::PhysicalDeviceVulkan12Features vulkan12Features{};
+		vulkan12Features.drawIndirectCount = VK_TRUE;
+		vulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+		vulkan12Features.runtimeDescriptorArray = VK_TRUE;
+		vulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
+		vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
+		vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+		vulkan12Features.pNext = &vulkan11Features;  // Chain Vulkan 1.1 features
+
+		// Vulkan 1.2 descriptor indexing features (deprecated, but kept for compatibility)
+		vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
+		descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+		descriptorIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
+		descriptorIndexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
+		descriptorIndexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
+		descriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+		descriptorIndexingFeatures.pNext = &vulkan12Features;  // Chain Vulkan 1.2 features
+
 		vk::PhysicalDeviceVulkan13Features vulkan13Features{};
 		vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
+		vulkan13Features.pNext = &descriptorIndexingFeatures;  // Chain descriptor indexing
 
 		vk::DeviceCreateInfo createInfo{};
 		createInfo.pNext = &vulkan13Features;

@@ -1,0 +1,163 @@
+#pragma once
+
+#include "GPUDrivenTypes.hpp"
+#include <vulkan/vulkan.hpp>
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+#include <unordered_map>
+
+namespace core {
+    class Device;
+    class TransferManager;
+}
+
+namespace render::mesh {
+    class MeshGPUCache;
+    struct MeshGPUData;
+    struct MeshRenderData;
+}
+
+namespace render::gpudriven {
+
+    // Texture slots for bindless texture array
+    enum class TextureSlotType : uint8_t {
+        Albedo = 0,
+        Normal = 1,
+        ORM = 2,
+        Metallic = 3,
+        Roughness = 4,
+        AO = 5,
+        Emission = 6,
+        Height = 7
+    };
+
+    // Callback to resolve material path + texture slot to bindless texture index
+    // Returns INVALID_TEXTURE_INDEX if texture is not registered
+    using TextureIndexResolver = std::function<uint32_t(const std::string& materialPath, TextureSlotType slot)>;
+
+    class MergedMeshBuffer {
+    public:
+        explicit MergedMeshBuffer(core::Device& device);
+        ~MergedMeshBuffer();
+
+        // Non-copyable
+        MergedMeshBuffer(const MergedMeshBuffer&) = delete;
+        MergedMeshBuffer& operator=(const MergedMeshBuffer&) = delete;
+
+        // Initialize with maximum expected capacity
+        void init(uint32_t maxVertices = 1000000, uint32_t maxIndices = 3000000);
+
+        // Cleanup GPU resources
+        void cleanup();
+
+        // Rebuild merged buffer from current MeshGPUCache contents
+        // This merges all loaded meshes into single vertex/index buffers
+        void rebuildFromCache(const mesh::MeshGPUCache& cache);
+
+        // Register a mesh from the cache into the merged buffer
+        // Returns the mesh info with submesh locations
+        MergedMeshInfo* registerMesh(const std::string& meshPath, const mesh::MeshGPUData& meshData);
+
+        // Unregister a mesh (marks its space as free, doesn't defrag)
+        void unregisterMesh(const std::string& meshPath);
+
+        // Update object buffer from render data list
+        // This is called each frame to update transforms and prepare for GPU culling
+        // The textureResolver callback is used to convert texture paths to bindless indices
+        void updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
+                          const mesh::MeshGPUCache& cache,
+                          const TextureIndexResolver& textureResolver = nullptr);
+
+        // Upload object buffer changes to GPU
+        void uploadObjects(vk::CommandBuffer cmd);
+
+        // Accessors
+        vk::Buffer getVertexBuffer() const { return vertexBuffer; }
+        vk::Buffer getIndexBuffer() const { return indexBuffer; }
+        vk::Buffer getObjectBuffer() const { return objectBuffer; }
+
+        uint32_t getTotalVertexCount() const { return totalVertexCount; }
+        uint32_t getTotalIndexCount() const { return totalIndexCount; }
+        uint32_t getObjectCount() const { return currentObjectCount; }
+        uint32_t getMaxObjects() const { return maxObjectCount; }
+
+        // Get submesh location for a specific mesh/submesh
+        const SubmeshLocation* getSubmeshLocation(const std::string& meshPath,
+                                                   const std::string& submeshName) const;
+
+        // Get all registered meshes
+        const std::vector<MergedMeshInfo>& getRegisteredMeshes() const { return registeredMeshes; }
+
+        // Check if buffer needs rebuild
+        bool isDirty() const { return dirty; }
+        void markDirty() { dirty = true; }
+
+        // Statistics
+        size_t getVertexBufferSize() const { return totalVertexCount * vertexStride; }
+        size_t getIndexBufferSize() const { return totalIndexCount * sizeof(uint32_t); }
+        size_t getObjectBufferSize() const { return maxObjectCount * sizeof(GPUObjectData); }
+
+    private:
+        core::Device& device;
+        std::unique_ptr<core::TransferManager> transferManager;
+
+        // Merged GPU buffers
+        vk::Buffer vertexBuffer;
+        vk::DeviceMemory vertexBufferMemory;
+        vk::Buffer indexBuffer;
+        vk::DeviceMemory indexBufferMemory;
+
+        // GPU object buffer (for compute shader input)
+        vk::Buffer objectBuffer;
+        vk::DeviceMemory objectBufferMemory;
+
+        // Staging buffer for object updates
+        vk::Buffer objectStagingBuffer;
+        vk::DeviceMemory objectStagingMemory;
+        void* objectStagingMapped = nullptr;
+
+        // CPU-side object data
+        std::vector<GPUObjectData> cpuObjectData;
+
+        // Buffer capacities
+        uint32_t maxVertexCount = 0;
+        uint32_t maxIndexCount = 0;
+        uint32_t maxObjectCount = MAX_GPU_OBJECTS;
+
+        // Current usage
+        uint32_t totalVertexCount = 0;
+        uint32_t totalIndexCount = 0;
+        uint32_t currentObjectCount = 0;
+
+        // Vertex stride (should match resource::Vertex)
+        static constexpr uint32_t vertexStride = 32; // vec3 + vec3 + vec2
+
+        // Registered mesh tracking
+        std::vector<MergedMeshInfo> registeredMeshes;
+        std::unordered_map<std::string, size_t> meshPathToIndex;
+
+        // All submesh locations (flat list for fast lookup)
+        std::vector<SubmeshLocation> allSubmeshLocations;
+        std::unordered_map<std::string, size_t> submeshKeyToIndex; // "meshPath:submeshName" -> index
+
+        bool initialized = false;
+        bool dirty = true;
+
+        // Helper functions
+        void createBuffers();
+        void destroyBuffers();
+        void resizeObjectBuffer(uint32_t newMaxObjects);
+
+        // Append geometry to merged buffers
+        void appendVertexData(const void* data, uint32_t vertexCount);
+        void appendIndexData(const uint32_t* data, uint32_t indexCount, int32_t vertexOffset);
+
+        // Build submesh location key
+        static std::string makeSubmeshKey(const std::string& meshPath, const std::string& submeshName) {
+            return meshPath + ":" + submeshName;
+        }
+    };
+
+}

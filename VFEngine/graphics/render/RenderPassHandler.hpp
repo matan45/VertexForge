@@ -12,6 +12,11 @@ namespace core
     class SwapChain;
 }
 
+namespace render::gpudriven
+{
+    class GPUDrivenRenderer;
+}
+
 namespace render
 {
     class ClearColor;
@@ -49,6 +54,7 @@ namespace render
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
         std::unique_ptr<DebugRenderer> debugRenderer;
         std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
+        std::unique_ptr<gpudriven::GPUDrivenRenderer> gpuDrivenRenderer;
 
         core::OffscreenResources& offscreenResources;
 
@@ -65,6 +71,15 @@ namespace render
         bool debugRendererInitialized = false;
         mutable glm::mat4 currentView{1.0f};
         mutable glm::mat4 currentProjection{1.0f};
+
+        // GPU-driven rendering state
+        bool gpuDrivenRendererInitialized = false;
+        mutable glm::vec3 currentCameraPosition{0.0f};
+        mutable float currentNearPlane = 0.1f;
+        mutable float currentFarPlane = 1000.0f;
+
+        // Private helper to initialize GPU-driven renderer (called from initMeshPipeline)
+        void initGPUDrivenRenderer();
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -107,6 +122,11 @@ namespace render
 
         // Camera occlusion manager access
         occlusion::CameraOcclusionManager* getCameraOcclusionManager() const { return cameraOcclusionManager.get(); }
+
+        // GPU-driven rendering methods
+        gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
+        bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
+        void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane);
 
         // Camera management (delegates to CameraOcclusionManager)
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);

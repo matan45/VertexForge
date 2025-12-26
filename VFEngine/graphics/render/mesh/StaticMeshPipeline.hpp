@@ -122,6 +122,18 @@ namespace render::mesh
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
 
+        // GPU-driven rendering support
+        vk::DescriptorSetLayout getIBLDescriptorSetLayout() const { return descriptorSetLayout; }
+        vk::DescriptorSet getIBLDescriptorSet(uint32_t /*imageIndex*/) const { return descriptorSet; }
+        const MeshGPUCache& getMeshGPUCache() const { return *meshCache; }
+
+        // Render pass control for GPU-driven integration
+        void beginRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void endRenderPass(const vk::CommandBuffer& commandBuffer) const;
+        void renderTranslucentInPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                     const std::vector<MeshRenderData>& translucentMeshes,
+                                     const math::Frustum* frustum) const;
+
         // Clear cached material to force reload (called when materials are saved)
         void invalidateMaterialCache(const std::string& materialPath = "");
 

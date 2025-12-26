@@ -1275,4 +1275,200 @@ namespace render::mesh
             }
         }
     }
+
+    void StaticMeshPipeline::beginRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = framebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+
+        // Clear values for depth only - color uses loadOp::eLoad to preserve skybox
+        std::array<vk::ClearValue, 2> clearValues{};
+        clearValues[0].color = vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
+        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    }
+
+    void StaticMeshPipeline::endRenderPass(const vk::CommandBuffer& commandBuffer) const
+    {
+        commandBuffer.endRenderPass();
+    }
+
+    void StaticMeshPipeline::renderTranslucentInPass(const vk::CommandBuffer& commandBuffer,
+                                                     uint32_t /*imageIndex*/,
+                                                     const std::vector<MeshRenderData>& translucentMeshes,
+                                                     const math::Frustum* frustum) const
+    {
+        if (translucentMeshes.empty())
+        {
+            return;
+        }
+
+        // Acquire shared lock for reading material cache during rendering
+        auto cacheLock = materialCacheManager->acquireSharedLock();
+        const auto& materialCache = materialCacheManager->getCache();
+
+        // Bind descriptor set 0 (camera/IBL) - shared across all materials
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                         pipelineLayout, 0, descriptorSet, nullptr);
+
+        // Bind default texture descriptor set (set 1) as fallback
+        vk::DescriptorSet currentMaterialDescriptorSet = textureDescriptorSet;
+        if (textureDescriptorsInitialized && textureDescriptorSet)
+        {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                             pipelineLayout, 1, textureDescriptorSet, nullptr);
+        }
+
+        // Collect translucent submeshes with distance from camera
+        struct TranslucentItem
+        {
+            const MeshRenderData* meshData;
+            const SubMeshGPUData* subMesh;
+            size_t subMeshIndex;
+            float distanceSquared;
+        };
+        std::vector<TranslucentItem> translucentItems;
+
+        for (const auto& meshData : translucentMeshes)
+        {
+            const MeshGPUData* gpuData = getMesh(meshData.meshPath);
+            if (!gpuData || gpuData->subMeshes.empty()) continue;
+
+            for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
+            {
+                const auto& subMesh = gpuData->subMeshes[subMeshIndex];
+                if (frustum && frustum->isInitialized() &&
+                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
+                    continue;
+
+                // Calculate world-space center of submesh AABB
+                glm::vec3 localCenter = subMesh.boundingBox.getCenter();
+                glm::vec4 worldCenter = meshData.modelMatrix * glm::vec4(localCenter, 1.0f);
+
+                // Calculate squared distance from camera (avoid sqrt for performance)
+                glm::vec3 diff = glm::vec3(worldCenter) - currentCameraPos;
+                float distSq = glm::dot(diff, diff);
+
+                translucentItems.push_back({&meshData, &subMesh, subMeshIndex, distSq});
+            }
+        }
+
+        // Sort back-to-front (farthest first)
+        std::sort(translucentItems.begin(), translucentItems.end(),
+                  [](const TranslucentItem& a, const TranslucentItem& b)
+                  {
+                      return a.distanceSquared > b.distanceSquared;
+                  });
+
+        // Bind translucent pipeline
+        vk::Pipeline currentPipeline = translucentPipeline;
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, translucentPipeline);
+
+        // Render sorted translucent items
+        for (const auto& item : translucentItems)
+        {
+            const MeshRenderData& meshData = *item.meshData;
+            const SubMeshGPUData& subMesh = *item.subMesh;
+
+            // Get PBR values from assigned material
+            ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
+                meshData, subMesh.name, materialCache, currentTime);
+
+            // Get or create per-material descriptor set if material has textures
+            vk::DescriptorSet materialDescSet = nullptr;
+            bool hasAnyTexture = !pbrValues.albedoTexturePath.empty() ||
+                !pbrValues.normalTexturePath.empty() ||
+                !pbrValues.ormTexturePath.empty() ||
+                !pbrValues.metallicTexturePath.empty() ||
+                !pbrValues.roughnessTexturePath.empty() ||
+                !pbrValues.aoTexturePath.empty() ||
+                !pbrValues.emissionTexturePath.empty();
+
+            if (hasAnyTexture && !pbrValues.materialPath.empty())
+            {
+                MaterialTexturePaths texPaths;
+                texPaths.albedo = pbrValues.albedoTexturePath;
+                texPaths.normal = pbrValues.normalTexturePath;
+                texPaths.orm = pbrValues.ormTexturePath;
+                texPaths.metallic = pbrValues.metallicTexturePath;
+                texPaths.roughness = pbrValues.roughnessTexturePath;
+                texPaths.ao = pbrValues.aoTexturePath;
+                texPaths.emission = pbrValues.emissionTexturePath;
+
+                materialDescSet = textureCache->getOrCreateMaterialDescriptorSet(
+                    pbrValues.materialPath, texPaths);
+            }
+
+            // Bind material descriptor set if different from current
+            if (materialDescSet && materialDescSet != currentMaterialDescriptorSet)
+            {
+                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                                 pipelineLayout, 1, materialDescSet, nullptr);
+                currentMaterialDescriptorSet = materialDescSet;
+            }
+            else if (!materialDescSet && currentMaterialDescriptorSet != textureDescriptorSet)
+            {
+                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                                 pipelineLayout, 1, textureDescriptorSet, nullptr);
+                currentMaterialDescriptorSet = textureDescriptorSet;
+            }
+
+            // Setup push constants
+            MeshPushConstants pushConstants{};
+            pushConstants.model = meshData.modelMatrix;
+            pushConstants.metallic = pbrValues.metallic;
+            pushConstants.roughness = pbrValues.roughness;
+            pushConstants.ao = pbrValues.ao;
+            pushConstants.blendMode = static_cast<float>(pbrValues.blendMode);
+            pushConstants.albedo = pbrValues.albedo;
+            pushConstants.emission = pbrValues.emission;
+            pushConstants.iblDiffuse = pbrValues.iblDiffuse;
+            pushConstants.iblSpecular = pbrValues.iblSpecular;
+
+            // Pack texture indices
+            pushConstants.textureIndicesPacked[0] = packTextureIndices(
+                pbrValues.albedoTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Albedo)),
+                pbrValues.normalTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Normal)),
+                pbrValues.ormTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::ORM)),
+                pbrValues.metallicTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Metallic))
+            );
+            pushConstants.textureIndicesPacked[1] = packTextureIndices(
+                pbrValues.roughnessTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Roughness)),
+                pbrValues.aoTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::AO)),
+                pbrValues.emissionTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Emission)),
+                pbrValues.heightTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Height))
+            );
+            pushConstants.textureIndicesPacked[2] = packTextureIndices(TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE);
+            pushConstants.textureIndicesPacked[3] = packTextureIndices(TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE);
+
+            commandBuffer.pushConstants(pipelineLayout,
+                                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                        0, sizeof(MeshPushConstants), &pushConstants);
+
+            uint32_t lodLevel = selectLODLevel(meshData, subMesh);
+            const auto& lodBuffers = subMesh.getLOD(lodLevel);
+
+            if (!lodBuffers.isValid()) continue;
+
+            vk::Buffer vertexBuffers[] = {lodBuffers.vertexBuffer};
+            vk::DeviceSize offsets[] = {0};
+            commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+            if (lodBuffers.indexCount > 0)
+            {
+                commandBuffer.bindIndexBuffer(lodBuffers.indexBuffer, 0, vk::IndexType::eUint32);
+                commandBuffer.drawIndexed(lodBuffers.indexCount, 1, 0, 0, 0);
+            }
+            else
+            {
+                commandBuffer.draw(lodBuffers.vertexCount, 1, 0, 0);
+            }
+        }
+    }
 }

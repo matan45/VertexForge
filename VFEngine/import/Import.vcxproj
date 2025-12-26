@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(ProjectDir)..\..\bin\Import\Debug\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
+    <OutDir>..\..\bin\Import\Debug\x64\</OutDir>
+    <IntDir>obj\x64\Debug\</IntDir>
     <TargetName>Import</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(ProjectDir)..\..\bin\Import\Release\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
+    <OutDir>..\..\bin\Import\Release\x64\</OutDir>
+    <IntDir>obj\x64\Release\</IntDir>
     <TargetName>Import</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -68,11 +68,11 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>assimp-vc145-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>assimp-vc143-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\dependencies\assimp\lib\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <PostBuildEvent>
-      <Command>IF EXIST ..\..\dependencies\assimp\bin\Debug\assimp-vc145-mtd.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\assimp\bin\Debug\assimp-vc145-mtd.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\assimp\bin\Debug\assimp-vc145-mtd.dll ..\..\bin\Editor\Debug\x64 &gt; nul)</Command>
+      <Command>IF EXIST ..\..\dependencies\assimp\bin\Debug\assimp-vc143-mtd.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\assimp\bin\Debug\assimp-vc143-mtd.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\assimp\bin\Debug\assimp-vc143-mtd.dll ..\..\bin\Editor\Debug\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -96,11 +96,11 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <Lib>
-      <AdditionalDependencies>assimp-vc145-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>assimp-vc143-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\dependencies\assimp\lib\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <PostBuildEvent>
-      <Command>IF EXIST ..\..\dependencies\assimp\bin\Release\assimp-vc145-mt.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\assimp\bin\Release\assimp-vc145-mt.dll ..\..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\assimp\bin\Release\assimp-vc145-mt.dll ..\..\bin\Editor\Release\x64 &gt; nul)</Command>
+      <Command>IF EXIST ..\..\dependencies\assimp\bin\Release\assimp-vc143-mt.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\assimp\bin\Release\assimp-vc143-mt.dll ..\..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\assimp\bin\Release\assimp-vc143-mt.dll ..\..\bin\Editor\Release\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

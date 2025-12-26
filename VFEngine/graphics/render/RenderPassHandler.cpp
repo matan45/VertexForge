@@ -6,10 +6,12 @@
 #include "DebugRenderer.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "mesh/MeshTypes.hpp"
+#include "mesh/MeshGPUCache.hpp"
 #include "billboard/BillboardPipeline.hpp"
 #include "billboard/BillboardTypes.hpp"
 #include "occlusion/CameraRenderData.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
+#include "gpudriven/GPUDrivenRenderer.hpp"
 
 namespace render
 {
@@ -22,6 +24,7 @@ namespace render
         , billboardPipeline{std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources)}
         , cameraOcclusionManager{std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain)}
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
+        , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
     {
     }
 
@@ -51,6 +54,30 @@ namespace render
             meshPipeline->initWithDefaults();
         }
         meshPipelineInitialized = true;
+
+        // Auto-initialize GPU-driven renderer now that mesh pipeline is ready
+        initGPUDrivenRenderer();
+    }
+
+    void RenderPassHandler::initGPUDrivenRenderer()
+    {
+        if (gpuDrivenRendererInitialized)
+        {
+            return;
+        }
+
+        if (!meshPipelineInitialized)
+        {
+            return;
+        }
+
+        // Get IBL descriptor set layout and render pass from mesh pipeline
+        vk::DescriptorSetLayout iblLayout = meshPipeline->getIBLDescriptorSetLayout();
+        vk::RenderPass renderPass = meshPipeline->getRenderPass();
+
+        gpuDrivenRenderer->init(iblLayout, renderPass);
+        gpuDrivenRenderer->setEnabled(true);
+        gpuDrivenRendererInitialized = true;
     }
 
     void RenderPassHandler::reinitMeshPipelineWithDefaults()
@@ -144,6 +171,13 @@ namespace render
 
         debugRenderer->init(meshPipeline->getRenderPass());
         debugRendererInitialized = true;
+    }
+
+    void RenderPassHandler::setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane)
+    {
+        currentCameraPosition = cameraPos;
+        currentNearPlane = nearPlane;
+        currentFarPlane = farPlane;
     }
 
     void RenderPassHandler::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
@@ -268,6 +302,11 @@ namespace render
 
     void RenderPassHandler::cleanUp() const
     {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->cleanup();
+        }
+
         if (cameraOcclusionManager)
         {
             cameraOcclusionManager->cleanup();
@@ -288,7 +327,7 @@ namespace render
         {
             meshPipeline->cleanUpShader();
         }
-       
+
         meshPipeline->cleanUp();
         iblRenderer->cleanUp();
         clearColor->cleanUp();
@@ -305,11 +344,80 @@ namespace render
 
         if (needsMeshPass)
         {
+            // Separate opaque and translucent meshes
+            std::vector<mesh::MeshRenderData> opaqueObjects;
+            std::vector<mesh::MeshRenderData> translucentObjects;
+
+            for (const auto& mesh : currentMeshDrawList)
+            {
+                // Consider meshes translucent if they have alpha < 1
+                if (mesh.albedo.a < 1.0f)
+                {
+                    translucentObjects.push_back(mesh);
+                }
+                else
+                {
+                    opaqueObjects.push_back(mesh);
+                }
+            }
+
+            // Get mesh cache reference from mesh pipeline for merged buffer access
+            const mesh::MeshGPUCache& meshCache = meshPipeline->getMeshGPUCache();
+
+            // Update GPU-driven scene data for opaque objects
+            if (!opaqueObjects.empty() && gpuDrivenRendererInitialized)
+            {
+                gpuDrivenRenderer->updateScene(
+                    opaqueObjects,
+                    meshCache,
+                    currentView,
+                    currentProjection,
+                    currentCameraPosition,
+                    currentNearPlane,
+                    currentFarPlane
+                );
+            }
+
             render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
-            meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
-                                              debugRendererPtr, currentView, currentProjection);
+
+            // GPU-driven render for opaque objects
+            if (!opaqueObjects.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+            {
+                // Dispatch compute shader BEFORE render pass
+                gpuDrivenRenderer->dispatchCompute(commandBuffer);
+
+                // Get IBL descriptor set from mesh pipeline
+                vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
+
+                // Begin the render pass for GPU-driven rendering
+                meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+
+                // Draw commands INSIDE render pass
+                gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+
+                // Render translucent objects using CPU path within the same render pass
+                if (!translucentObjects.empty())
+                {
+                    meshPipeline->renderTranslucentInPass(commandBuffer, imageIndex, translucentObjects, currentFrustum);
+                }
+
+                // Render debug items if any
+                if (debugRendererPtr)
+                {
+                    debugRendererPtr->render(commandBuffer, currentMeshDrawList, currentView, currentProjection,
+                        [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+                }
+
+                meshPipeline->endRenderPass(commandBuffer);
+            }
+            else if (!translucentObjects.empty() || hasDebugItems)
+            {
+                // Only translucent objects or debug items - use CPU path
+                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, translucentObjects, currentFrustum,
+                                                  debugRendererPtr, currentView, currentProjection);
+            }
         }
-        
+
         if (billboardPipelineInitialized && !currentBillboardDrawList.empty())
         {
             billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);

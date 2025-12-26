@@ -5,6 +5,7 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
+#include "../render/material/MaterialPBRExtractor.hpp"
 #include "../render/occlusion/OcclusionCullingManager.hpp"
 #include "../render/billboard/BillboardTypes.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
@@ -20,9 +21,42 @@
 #include "../../services/events/MaterialEvents.hpp"
 #include "../../services/events/SceneEvents.hpp"
 #include "print/Logger.hpp"
+#include <cmath>
 
 namespace controllers
 {
+    // Helper function to populate SubMeshMaterialInfo from a material path
+    static void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath)
+    {
+        matInfo.materialPath = materialPath;
+
+        if (materialPath.empty())
+        {
+            return;
+        }
+
+        // Load material data from cache or file
+        auto materialData = resource::ResourceManager::getMaterial(materialPath);
+        if (!materialData)
+        {
+            materialData = resource::ResourceManager::loadMaterial(materialPath);
+        }
+
+        if (materialData)
+        {
+            // Extract PBR values from material
+            auto pbrValues = render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*materialData);
+            matInfo.albedo = pbrValues.albedo;
+            matInfo.metallic = pbrValues.metallic;
+            matInfo.roughness = pbrValues.roughness;
+            matInfo.ao = pbrValues.ao;
+            matInfo.emission = pbrValues.emission;
+            matInfo.blendMode = static_cast<uint8_t>(pbrValues.blendMode);
+            matInfo.iblDiffuse = pbrValues.iblDiffuse;
+            matInfo.iblSpecular = pbrValues.iblSpecular;
+        }
+    }
+
     OffScreenController::OffScreenController()
         : swapChain{*core::VulkanContext::getSwapChain()}
           , device{*core::VulkanContext::getDevice()}
@@ -218,6 +252,24 @@ namespace controllers
             }
         }
 
+        // Update GPU-driven renderer camera data
+        // Extract far plane from projection matrix for perspective projection
+        // For perspective: proj[2][2] = far/(near-far), proj[3][2] = near*far/(near-far)
+        // So far = proj[3][2] / (proj[2][2] + 1) when near = -proj[3][2]/proj[2][2]
+        float farPlane = 1000.0f;  // Default fallback
+        if (std::abs(projection[2][2]) > 0.0001f)
+        {
+            // For Vulkan perspective projection: proj[2][2] = -far/(far-near), proj[3][2] = -far*near/(far-near)
+            // Ratio: proj[3][2]/proj[2][2] = near
+            float nearEstimate = projection[3][2] / projection[2][2];
+            if (nearEstimate > 0.0f && std::abs(projection[2][2] + 1.0f) > 0.0001f)
+            {
+                farPlane = projection[3][2] / (projection[2][2] + 1.0f);
+                if (farPlane < 0.0f) farPlane = 1000.0f;
+            }
+        }
+        renderHandler->setGPUDrivenCameraData(cameraPos, currentNearPlane, farPlane);
+
         renderHandler->setDebugCameraMatrices(view, projection);
 
         if (renderHandler->isBillboardPipelineInitialized())
@@ -410,7 +462,7 @@ namespace controllers
                     for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
                     {
                         render::mesh::SubMeshMaterialInfo matInfo;
-                        matInfo.materialPath = materialPath;
+                        populateMaterialInfo(matInfo, materialPath);
                         renderData.submeshMaterials[submeshName] = matInfo;
                     }
                 }
@@ -467,7 +519,7 @@ namespace controllers
                     for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
                     {
                         render::mesh::SubMeshMaterialInfo matInfo;
-                        matInfo.materialPath = materialPath;
+                        populateMaterialInfo(matInfo, materialPath);
                         renderData.submeshMaterials[submeshName] = matInfo;
                     }
                 }
