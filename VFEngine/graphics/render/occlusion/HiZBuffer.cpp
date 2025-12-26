@@ -81,6 +81,52 @@ namespace render::occlusion
             mipViewInfo.subresourceRange.layerCount = 1;
             mipViews[i] = device.getLogicalDevice().createImageView(mipViewInfo);
         }
+
+        // Transition all mip levels to ShaderReadOnlyOptimal so descriptors are valid before first generate()
+        vk::CommandPoolCreateInfo poolInfo{};
+        poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
+        poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
+        vk::CommandPool tempPool = device.getLogicalDevice().createCommandPool(poolInfo);
+
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.commandPool = tempPool;
+        allocInfo.level = vk::CommandBufferLevel::ePrimary;
+        allocInfo.commandBufferCount = 1;
+        vk::CommandBuffer cmd = device.getLogicalDevice().allocateCommandBuffers(allocInfo)[0];
+
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        cmd.begin(beginInfo);
+
+        vk::ImageMemoryBarrier barrier{};
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = hiZImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = mipLevels;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = vk::AccessFlagBits::eNone;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {}, {}, {}, barrier
+        );
+
+        cmd.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+        device.getGraphicsQueue().submit(submitInfo);
+        device.getGraphicsQueue().waitIdle();
+
+        device.getLogicalDevice().destroyCommandPool(tempPool);
     }
 
     void HiZBuffer::createHiZSampler()
