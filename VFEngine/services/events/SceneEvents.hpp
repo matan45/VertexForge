@@ -167,6 +167,21 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadScene"; }
     };
 
+    // Prefab commands
+    struct SavePrefabCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        std::string filePath;
+
+        std::string_view getName() const override { return "SavePrefab"; }
+    };
+
+    struct LoadPrefabCommand : ICommand<std::optional<services::EntityHandle>> {
+        std::string filePath;
+        std::optional<services::EntityHandle> parent;  // nullopt = add to scene root
+
+        std::string_view getName() const override { return "LoadPrefab"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================
@@ -361,6 +376,20 @@ namespace events::scene {
         bool isStatic;
 
         std::string_view getName() const override { return "EntityStaticChanged"; }
+    };
+
+    struct PrefabCreatedNotification : INotification {
+        std::string filePath;
+        services::EntityHandle sourceEntity;
+
+        std::string_view getName() const override { return "PrefabCreated"; }
+    };
+
+    struct PrefabInstantiatedNotification : INotification {
+        std::string filePath;
+        services::EntityHandle rootEntity;
+
+        std::string_view getName() const override { return "PrefabInstantiated"; }
     };
 
 }

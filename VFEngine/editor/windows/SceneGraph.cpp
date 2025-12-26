@@ -160,7 +160,8 @@ namespace windows
 
         if (ImGui::BeginDragDropSource())
         {
-            ImGui::SetDragDropPayload("DND_ENTITY_HANDLE", &handle, sizeof(services::EntityHandle));
+            // Use single payload type for both entity reparenting and prefab creation
+            ImGui::SetDragDropPayload("DND_SCENE_ENTITY", &handle, sizeof(services::EntityHandle));
             ImGui::Text("Move %s", entityName.c_str());
             ImGui::EndDragDropSource();
         }
@@ -1273,7 +1274,7 @@ namespace windows
     {
         if (ImGui::BeginDragDropTarget())
         {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_ENTITY_HANDLE"))
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))
             {
                 services::EntityHandle draggedHandle = *(services::EntityHandle*)payload->Data;
 
