@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
+#include <unordered_set>
 
 namespace core {
     class Device;
@@ -17,6 +18,7 @@ namespace core {
 
 namespace render::mesh {
     class MeshGPUCache;
+    class MaterialTextureCache;
     struct MeshRenderData;
 }
 
@@ -142,6 +144,19 @@ namespace render::gpudriven {
          */
         vk::DescriptorSetLayout getBindlessTextureLayout() const;
 
+        /**
+         * Set the material texture cache for texture loading.
+         * This cache is used to load and access textures for bindless rendering.
+         */
+        void setMaterialTextureCache(mesh::MaterialTextureCache* cache) { materialTextureCache = cache; }
+
+        /**
+         * Register textures from a material with the bindless texture manager.
+         * @param materialPath Path to the material
+         * @return True if any textures were registered
+         */
+        bool registerMaterialTextures(const std::string& materialPath);
+
     private:
         core::Device& device;
         core::SwapChain& swapChain;
@@ -179,6 +194,12 @@ namespace render::gpudriven {
         // Cached for updateScene
         vk::DescriptorSetLayout cachedIBLLayout;
         vk::RenderPass cachedRenderPass;
+
+        // Material texture cache (optional, for texture loading)
+        mesh::MaterialTextureCache* materialTextureCache = nullptr;
+
+        // Registered material paths (to avoid re-registering textures each frame)
+        std::unordered_set<std::string> registeredMaterialPaths;
 
         // Helper methods
         void createCameraBuffer();

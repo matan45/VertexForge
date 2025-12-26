@@ -459,6 +459,25 @@ namespace controllers
                     const auto& materialComp = registry.get<components::MaterialComponent>(entity);
                     renderData.defaultMaterialPath = materialComp.defaultMaterial;
 
+                    // Load default material PBR values if set (applies to all submeshes without specific material)
+                    if (!materialComp.defaultMaterial.empty())
+                    {
+                        auto defaultMatData = resource::ResourceManager::getMaterial(materialComp.defaultMaterial);
+                        if (!defaultMatData)
+                        {
+                            defaultMatData = resource::ResourceManager::loadMaterial(materialComp.defaultMaterial);
+                        }
+                        if (defaultMatData)
+                        {
+                            auto pbrValues = render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*defaultMatData);
+                            renderData.albedo = pbrValues.albedo;
+                            renderData.metallic = pbrValues.metallic;
+                            renderData.roughness = pbrValues.roughness;
+                            renderData.ao = pbrValues.ao;
+                            renderData.emission = pbrValues.emission;
+                        }
+                    }
+
                     for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
                     {
                         render::mesh::SubMeshMaterialInfo matInfo;
@@ -515,6 +534,25 @@ namespace controllers
                 {
                     const auto& materialComp = registry.get<components::MaterialComponent>(entity);
                     renderData.defaultMaterialPath = materialComp.defaultMaterial;
+
+                    // Load default material PBR values if set (applies to all submeshes without specific material)
+                    if (!materialComp.defaultMaterial.empty())
+                    {
+                        auto defaultMatData = resource::ResourceManager::getMaterial(materialComp.defaultMaterial);
+                        if (!defaultMatData)
+                        {
+                            defaultMatData = resource::ResourceManager::loadMaterial(materialComp.defaultMaterial);
+                        }
+                        if (defaultMatData)
+                        {
+                            auto pbrValues = render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*defaultMatData);
+                            renderData.albedo = pbrValues.albedo;
+                            renderData.metallic = pbrValues.metallic;
+                            renderData.roughness = pbrValues.roughness;
+                            renderData.ao = pbrValues.ao;
+                            renderData.emission = pbrValues.emission;
+                        }
+                    }
 
                     for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
                     {

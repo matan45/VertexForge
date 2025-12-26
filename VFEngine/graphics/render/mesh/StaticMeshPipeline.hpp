@@ -126,6 +126,7 @@ namespace render::mesh
         vk::DescriptorSetLayout getIBLDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getIBLDescriptorSet(uint32_t /*imageIndex*/) const { return descriptorSet; }
         const MeshGPUCache& getMeshGPUCache() const { return *meshCache; }
+        MaterialTextureCache& getMaterialTextureCache() { return *textureCache; }
 
         // Render pass control for GPU-driven integration
         void beginRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

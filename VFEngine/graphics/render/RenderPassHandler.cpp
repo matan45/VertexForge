@@ -12,6 +12,8 @@
 #include "occlusion/CameraRenderData.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
+#include "material/MaterialTextureCache.hpp"
+#include "print/Logger.hpp"
 
 namespace render
 {
@@ -76,6 +78,16 @@ namespace render
         vk::RenderPass renderPass = meshPipeline->getRenderPass();
 
         gpuDrivenRenderer->init(iblLayout, renderPass);
+
+        // Set material texture cache for texture loading in GPU-driven path
+        auto& texCache = meshPipeline->getMaterialTextureCache();
+        gpuDrivenRenderer->setMaterialTextureCache(&texCache);
+
+        // Set default texture for bindless array (1x1 white fallback)
+        if (texCache.hasDefaultTexture()) {
+            gpuDrivenRenderer->setDefaultTexture(texCache.getDefaultView(), texCache.getDefaultSampler());
+        }
+
         gpuDrivenRenderer->setEnabled(true);
         gpuDrivenRendererInitialized = true;
     }

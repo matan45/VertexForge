@@ -1,6 +1,9 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../mesh/MeshGPUCache.hpp"
 #include "../mesh/MeshTypes.hpp"
+#include "../material/MaterialTextureCache.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
+#include "resource/ResourceManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -462,17 +465,59 @@ namespace render::gpudriven {
             return;
         }
 
+        // Register textures for all materials in the scene (done once per material)
+        if (materialTextureCache && bindlessTextures) {
+            for (const auto& meshRender : opaqueObjects) {
+                // Register default material textures
+                if (!meshRender.defaultMaterialPath.empty()) {
+                    registerMaterialTextures(meshRender.defaultMaterialPath);
+                }
+                // Register submesh material textures
+                for (const auto& [submeshName, subMat] : meshRender.submeshMaterials) {
+                    if (!subMat.materialPath.empty()) {
+                        registerMaterialTextures(subMat.materialPath);
+                    }
+                }
+            }
+        }
+
         // Create texture resolver callback that uses BindlessTextureManager
-        // For MVP, textures need to be pre-registered externally
-        // Future: integrate with material cache to auto-register textures
         TextureIndexResolver textureResolver = nullptr;
         if (bindlessTextures) {
             textureResolver = [this](const std::string& materialPath, TextureSlotType slot) -> uint32_t {
-                // MVP placeholder - full texture integration requires material cache access
-                // The caller should pre-register textures and this will look them up by path
-                (void)materialPath;
-                (void)slot;
-                return INVALID_TEXTURE_INDEX;
+                if (materialPath.empty()) {
+                    return INVALID_TEXTURE_INDEX;
+                }
+
+                // Get material data to find texture path
+                auto matData = resource::ResourceManager::getMaterial(materialPath);
+                if (!matData) {
+                    return INVALID_TEXTURE_INDEX;
+                }
+
+                // Extract texture paths
+                auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
+
+                // Get the appropriate texture path based on slot
+                std::string texPath;
+                switch (slot) {
+                    case TextureSlotType::Albedo:    texPath = pbrValues.albedoTexturePath; break;
+                    case TextureSlotType::Normal:    texPath = pbrValues.normalTexturePath; break;
+                    case TextureSlotType::ORM:       texPath = pbrValues.ormTexturePath; break;
+                    case TextureSlotType::Metallic:  texPath = pbrValues.metallicTexturePath; break;
+                    case TextureSlotType::Roughness: texPath = pbrValues.roughnessTexturePath; break;
+                    case TextureSlotType::AO:        texPath = pbrValues.aoTexturePath; break;
+                    case TextureSlotType::Emission:  texPath = pbrValues.emissionTexturePath; break;
+                    case TextureSlotType::Height:    texPath = pbrValues.heightTexturePath; break;
+                    default: return INVALID_TEXTURE_INDEX;
+                }
+
+                if (texPath.empty()) {
+                    return INVALID_TEXTURE_INDEX;
+                }
+
+                // Look up the registered texture index
+                return bindlessTextures->getTextureIndex(texPath);
             };
         }
 
@@ -573,6 +618,70 @@ namespace render::gpudriven {
             0,
             stats.totalObjects,
             sizeof(DrawIndexedIndirectCommand));
+    }
+
+    bool GPUDrivenRenderer::registerMaterialTextures(const std::string& materialPath)
+    {
+        if (!initialized || !bindlessTextures || !materialTextureCache) {
+            return false;
+        }
+
+        // Skip if already registered
+        if (registeredMaterialPaths.contains(materialPath)) {
+            return true;
+        }
+
+        // Load material data
+        auto matData = resource::ResourceManager::getMaterial(materialPath);
+        if (!matData) {
+            matData = resource::ResourceManager::loadMaterial(materialPath);
+        }
+        if (!matData) {
+            spdlog::warn("GPUDrivenRenderer: Failed to load material: {}", materialPath);
+            return false;
+        }
+
+        // Extract texture paths from material
+        auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
+
+        bool registered = false;
+
+        // Helper lambda to register a texture
+        auto tryRegister = [&](const std::string& texPath, const std::string& slotName) {
+            if (texPath.empty()) return;
+
+            // Load texture via MaterialTextureCache
+            if (!materialTextureCache->loadTexture(texPath)) {
+                spdlog::warn("GPUDrivenRenderer: Failed to load texture: {}", texPath);
+                return;
+            }
+
+            // Get view and sampler
+            vk::ImageView view = materialTextureCache->getViewForPath(texPath);
+            vk::Sampler sampler = materialTextureCache->getSamplerForPath(texPath);
+
+            if (view && sampler) {
+                uint32_t index = bindlessTextures->registerTexture(texPath, view, sampler);
+                spdlog::info("GPUDrivenRenderer: Registered {} texture '{}' at index {}",
+                    slotName, texPath, index);
+                registered = true;
+            }
+        };
+
+        // Register all texture slots
+        tryRegister(pbrValues.albedoTexturePath, "albedo");
+        tryRegister(pbrValues.normalTexturePath, "normal");
+        tryRegister(pbrValues.ormTexturePath, "orm");
+        tryRegister(pbrValues.metallicTexturePath, "metallic");
+        tryRegister(pbrValues.roughnessTexturePath, "roughness");
+        tryRegister(pbrValues.aoTexturePath, "ao");
+        tryRegister(pbrValues.emissionTexturePath, "emission");
+        tryRegister(pbrValues.heightTexturePath, "height");
+
+        // Mark as registered
+        registeredMaterialPaths.insert(materialPath);
+
+        return registered;
     }
 
 }
