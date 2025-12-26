@@ -701,7 +701,7 @@ namespace windows
 
                     // Calculate used memory based on totalObjects
                     uint64_t usedDrawCmd = gpu.totalObjects * 20;  // sizeof(DrawIndexedIndirectCommand)
-                    uint64_t usedPerDraw = gpu.totalObjects * 160; // sizeof(PerDrawData)
+                    uint64_t usedPerDraw = gpu.totalObjects * 224; // sizeof(PerDrawData)
                     uint64_t usedTotal = usedDrawCmd + gpu.drawCountBufferSize + usedPerDraw;
 
                     ImGui::Text("  Draw Commands:  %s / %s",

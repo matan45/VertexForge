@@ -419,9 +419,87 @@ namespace controllers
             dynamicBvhCooldown = 5;
         }
 
-        // Use BVH for spatial culling if available
-        if (sceneBVH.isBuilt() && frustumReady)
+        // Check if GPU-driven rendering is enabled - if so, skip CPU frustum culling
+        // GPU compute shader handles frustum/occlusion culling much more efficiently
+        auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
+        bool useGPUDrivenCulling = renderHandler->isGPUDrivenRendererInitialized()
+                                   && gpuDrivenRenderer
+                                   && gpuDrivenRenderer->isEnabled();
+
+        // Helper lambda to build render data from entity
+        auto buildRenderData = [&](entt::entity entity, const components::MeshComponent& meshComp,
+                                   const components::WorldTransformComponent& worldTransform) -> render::mesh::MeshRenderData
         {
+            render::mesh::MeshRenderData renderData;
+            renderData.meshPath = meshComp.meshPath;
+            renderData.modelMatrix = worldTransform.worldMatrix;
+
+            // Default PBR values
+            renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            renderData.metallic = 0.0f;
+            renderData.roughness = 0.5f;
+            renderData.ao = 1.0f;
+            renderData.emission = 0.0f;
+            renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
+
+            // Check for MaterialComponent
+            if (registry.all_of<components::MaterialComponent>(entity))
+            {
+                const auto& materialComp = registry.get<components::MaterialComponent>(entity);
+                renderData.defaultMaterialPath = materialComp.defaultMaterial;
+
+                // Load default material PBR values if set (applies to all submeshes without specific material)
+                if (!materialComp.defaultMaterial.empty())
+                {
+                    auto defaultMatData = resource::ResourceManager::getMaterial(materialComp.defaultMaterial);
+                    if (!defaultMatData)
+                    {
+                        defaultMatData = resource::ResourceManager::loadMaterial(materialComp.defaultMaterial);
+                    }
+                    if (defaultMatData)
+                    {
+                        auto pbrValues = render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*defaultMatData);
+                        renderData.albedo = pbrValues.albedo;
+                        renderData.metallic = pbrValues.metallic;
+                        renderData.roughness = pbrValues.roughness;
+                        renderData.ao = pbrValues.ao;
+                        renderData.emission = pbrValues.emission;
+                    }
+                }
+
+                for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                {
+                    render::mesh::SubMeshMaterialInfo matInfo;
+                    populateMaterialInfo(matInfo, materialPath);
+                    renderData.submeshMaterials[submeshName] = matInfo;
+                }
+            }
+
+            return renderData;
+        };
+
+        if (useGPUDrivenCulling)
+        {
+            // GPU-driven path: iterate ALL mesh entities without CPU frustum culling
+            // GPU compute shader handles frustum culling, occlusion culling, and LOD selection
+            auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
+
+            for (auto entity : view)
+            {
+                const auto& meshComp = view.get<components::MeshComponent>(entity);
+                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+                if (meshComp.meshPath.empty() || !meshPipeline->isMeshLoaded(meshComp.meshPath))
+                {
+                    continue;
+                }
+
+                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
+            }
+        }
+        else if (sceneBVH.isBuilt() && frustumReady)
+        {
+            // CPU BVH frustum culling path (used when GPU-driven is disabled)
             std::vector<uint32_t> visibleEntities;
             sceneBVH.queryFrustum(*activeFrustum, visibleEntities);
 
@@ -442,57 +520,12 @@ namespace controllers
                     continue;
                 }
 
-                render::mesh::MeshRenderData renderData;
-                renderData.meshPath = meshComp.meshPath;
-                renderData.modelMatrix = worldTransform.worldMatrix;
-
-                // Default PBR values
-                renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-                renderData.metallic = 0.0f;
-                renderData.roughness = 0.5f;
-                renderData.ao = 1.0f;
-                renderData.emission = 0.0f;
-                renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
-
-                // Check for MaterialComponent
-                if (registry.all_of<components::MaterialComponent>(entity))
-                {
-                    const auto& materialComp = registry.get<components::MaterialComponent>(entity);
-                    renderData.defaultMaterialPath = materialComp.defaultMaterial;
-
-                    // Load default material PBR values if set (applies to all submeshes without specific material)
-                    if (!materialComp.defaultMaterial.empty())
-                    {
-                        auto defaultMatData = resource::ResourceManager::getMaterial(materialComp.defaultMaterial);
-                        if (!defaultMatData)
-                        {
-                            defaultMatData = resource::ResourceManager::loadMaterial(materialComp.defaultMaterial);
-                        }
-                        if (defaultMatData)
-                        {
-                            auto pbrValues = render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*defaultMatData);
-                            renderData.albedo = pbrValues.albedo;
-                            renderData.metallic = pbrValues.metallic;
-                            renderData.roughness = pbrValues.roughness;
-                            renderData.ao = pbrValues.ao;
-                            renderData.emission = pbrValues.emission;
-                        }
-                    }
-
-                    for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
-                    {
-                        render::mesh::SubMeshMaterialInfo matInfo;
-                        populateMaterialInfo(matInfo, materialPath);
-                        renderData.submeshMaterials[submeshName] = matInfo;
-                    }
-                }
-
-                meshDrawList.push_back(renderData);
+                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
             }
         }
         else
         {
-            // Fallback: iterate all entities (BVH not ready or no frustum)
+            // Fallback: iterate all entities with per-entity frustum culling (BVH not ready)
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
 
             for (auto entity : view)
@@ -500,17 +533,12 @@ namespace controllers
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
                 const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-                if (meshComp.meshPath.empty())
+                if (meshComp.meshPath.empty() || !meshPipeline->isMeshLoaded(meshComp.meshPath))
                 {
                     continue;
                 }
 
-                if (!meshPipeline->isMeshLoaded(meshComp.meshPath))
-                {
-                    continue;
-                }
-
-                // Frustum culling fallback using active camera's frustum
+                // Per-entity frustum culling fallback
                 if (frustumReady)
                 {
                     const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
@@ -520,50 +548,7 @@ namespace controllers
                     }
                 }
 
-                render::mesh::MeshRenderData renderData;
-                renderData.meshPath = meshComp.meshPath;
-                renderData.modelMatrix = worldTransform.worldMatrix;
-
-                renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-                renderData.metallic = 0.0f;
-                renderData.roughness = 0.5f;
-                renderData.ao = 1.0f;
-                renderData.emission = 0.0f;
-                renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
-
-                if (registry.all_of<components::MaterialComponent>(entity))
-                {
-                    const auto& materialComp = registry.get<components::MaterialComponent>(entity);
-                    renderData.defaultMaterialPath = materialComp.defaultMaterial;
-
-                    // Load default material PBR values if set (applies to all submeshes without specific material)
-                    if (!materialComp.defaultMaterial.empty())
-                    {
-                        auto defaultMatData = resource::ResourceManager::getMaterial(materialComp.defaultMaterial);
-                        if (!defaultMatData)
-                        {
-                            defaultMatData = resource::ResourceManager::loadMaterial(materialComp.defaultMaterial);
-                        }
-                        if (defaultMatData)
-                        {
-                            auto pbrValues = render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*defaultMatData);
-                            renderData.albedo = pbrValues.albedo;
-                            renderData.metallic = pbrValues.metallic;
-                            renderData.roughness = pbrValues.roughness;
-                            renderData.ao = pbrValues.ao;
-                            renderData.emission = pbrValues.emission;
-                        }
-                    }
-
-                    for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
-                    {
-                        render::mesh::SubMeshMaterialInfo matInfo;
-                        populateMaterialInfo(matInfo, materialPath);
-                        renderData.submeshMaterials[submeshName] = matInfo;
-                    }
-                }
-
-                meshDrawList.push_back(renderData);
+                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
             }
         }
 

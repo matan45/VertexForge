@@ -13,7 +13,7 @@ namespace render::gpudriven {
 
     // Maximum supported draw commands per batch
     // 700,000 commands * 4 batches = 2.8M objects capacity
-    // Memory: 4 batches * 700K * (20 + 160) bytes = ~504 MB
+    // Memory: 4 batches * 700K * (20 + 224) bytes = ~683 MB
     constexpr uint32_t MAX_DRAW_COMMANDS = 700000;
 
     // Batch configuration for multi-batch indirect rendering
@@ -118,6 +118,7 @@ namespace render::gpudriven {
     // This is written alongside VkDrawIndexedIndirectCommand
     struct alignas(16) PerDrawData {
         glm::mat4 modelMatrix;           // 64 bytes
+        glm::mat4 normalMatrix;          // 64 bytes - pre-computed transpose(inverse(mat3(model)))
 
         glm::vec4 albedo;                // 16 bytes
         glm::vec4 materialParams;        // 16 bytes - metallic, roughness, ao, emission
@@ -134,9 +135,9 @@ namespace render::gpudriven {
         uint32_t padding0;               // 4 bytes
         uint32_t padding1;               // 4 bytes
         uint32_t padding2;               // 4 bytes
-        // Total: 160 bytes
+        // Total: 224 bytes
     };
-    static_assert(sizeof(PerDrawData) == 160, "PerDrawData must be 160 bytes to match GLSL");
+    static_assert(sizeof(PerDrawData) == 224, "PerDrawData must be 224 bytes to match GLSL");
 
     // Camera/view data for culling and rendering
     struct alignas(16) GPUCameraData {

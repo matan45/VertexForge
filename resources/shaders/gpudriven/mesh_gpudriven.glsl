@@ -24,6 +24,7 @@ layout(set = 0, binding = 0) uniform CameraUBO {
 // Per-draw data (written by GPU cull+LOD compute shader)
 struct PerDrawData {
     mat4 modelMatrix;           // 64 bytes
+    mat4 normalMatrix;          // 64 bytes - pre-computed transpose(inverse(mat3(model)))
 
     vec4 albedo;                // 16 bytes
     vec4 materialParams;        // 16 bytes - metallic, roughness, ao, emission
@@ -57,9 +58,9 @@ void main() {
     vec4 worldPos = drawData.modelMatrix * vec4(inPosition, 1.0);
     fragWorldPos = worldPos.xyz;
 
-    // Transform normal to world space (using normal matrix)
-    mat3 normalMatrix = transpose(inverse(mat3(drawData.modelMatrix)));
-    fragNormal = normalize(normalMatrix * inNormal);
+    // Transform normal to world space using pre-computed normal matrix
+    // (computed once per object in compute shader, not per vertex)
+    fragNormal = normalize(mat3(drawData.normalMatrix) * inNormal);
 
     fragTexCoord = inTexCoord;
     fragDrawIndex = drawIndex;
@@ -97,6 +98,7 @@ layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 // Per-draw data structure (must match vertex shader)
 struct PerDrawData {
     mat4 modelMatrix;
+    mat4 normalMatrix;
     vec4 albedo;
     vec4 materialParams;
     uvec4 textureIndices0;
@@ -127,8 +129,8 @@ const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
 // Parallax mapping settings
 const float HEIGHT_SCALE = 0.05;        // Height scale for parallax effect
-const int MIN_PARALLAX_LAYERS = 8;      // Minimum layers for parallax occlusion
-const int MAX_PARALLAX_LAYERS = 32;     // Maximum layers for parallax occlusion
+const int MIN_PARALLAX_LAYERS = 4;      // Minimum layers for parallax occlusion
+const int MAX_PARALLAX_LAYERS = 12;     // Maximum layers for parallax occlusion (reduced for performance)
 
 // Debug mode: set to 1 to visualize LOD levels with colors
 // LOD0 = Green, LOD1 = Yellow, LOD2 = Orange, LOD3 = Red

@@ -55,10 +55,11 @@ struct GPUObjectData {
 };
 
 // ============================================================================
-// Per-Draw Data (160 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
+// Per-Draw Data (224 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
 // ============================================================================
 struct PerDrawData {
     mat4 modelMatrix;           // 64 bytes
+    mat4 normalMatrix;          // 64 bytes - pre-computed transpose(inverse(mat3(model)))
 
     vec4 albedo;                // 16 bytes
     vec4 materialParams;        // 16 bytes
@@ -436,6 +437,13 @@ void main() {
 
     // Write per-draw data at global index (for vertex/fragment shaders)
     perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
+
+    // Pre-compute normal matrix (transpose of inverse of upper-left 3x3)
+    // Done once per object here instead of per-vertex in the vertex shader
+    mat3 modelMat3 = mat3(obj.modelMatrix);
+    mat3 normalMat3 = transpose(inverse(modelMat3));
+    perDrawData[globalDrawIndex].normalMatrix = mat4(normalMat3);
+
     perDrawData[globalDrawIndex].albedo = obj.albedo;
     perDrawData[globalDrawIndex].materialParams = obj.materialParams;
     perDrawData[globalDrawIndex].textureIndices0 = obj.textureIndices0;
