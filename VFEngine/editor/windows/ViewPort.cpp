@@ -77,6 +77,51 @@ namespace windows
             if (texture.isValid())
             {
                 ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
+
+                // Accept prefab drops to instantiate in viewport
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PREFAB_PATH"))
+                    {
+                        std::string prefabPath(static_cast<const char*>(payload->Data));
+
+                        // Instantiate prefab at scene root
+                        events::scene::LoadPrefabCommand loadCmd;
+                        loadCmd.filePath = prefabPath;
+                        loadCmd.parent = std::nullopt;  // Add to scene root
+                        auto result = dispatcher.execute(loadCmd);
+
+                        if (result.has_value())
+                        {
+                            // Get current transform from prefab (to preserve rotation and scale)
+                            events::scene::GetTransformQuery transformQuery;
+                            transformQuery.entity = *result;
+                            auto prefabTransform = dispatcher.query(transformQuery);
+
+                            if (prefabTransform.has_value())
+                            {
+                                // Position in front of editor camera, but keep prefab's rotation and scale
+                                glm::vec3 spawnPos = editorCamera->position + editorCamera->getForwardDirection() * 5.0f;
+
+                                services::TransformData transform;
+                                transform.position = spawnPos;
+                                transform.rotation = prefabTransform->rotation;
+                                transform.scale = prefabTransform->scale;
+
+                                events::scene::SetTransformCommand transformCmd;
+                                transformCmd.entity = *result;
+                                transformCmd.transform = transform;
+                                dispatcher.execute(transformCmd);
+                            }
+
+                            // Select the newly instantiated entity
+                            events::scene::SelectEntityCommand selectCmd;
+                            selectCmd.entity = *result;
+                            dispatcher.execute(selectCmd);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
             }
 
             drawViewportOverlay();
