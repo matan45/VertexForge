@@ -35,6 +35,11 @@ struct PerDrawData {
     uint flags;                 // 4 bytes
     float iblDiffuse;           // 4 bytes
     float iblSpecular;          // 4 bytes
+
+    uint lodLevel;              // 4 bytes - selected LOD (for debug)
+    uint padding0;              // 4 bytes
+    uint padding1;              // 4 bytes
+    uint padding2;              // 4 bytes
 };
 
 // Set 1: Per-draw data buffer
@@ -100,6 +105,10 @@ struct PerDrawData {
     uint flags;
     float iblDiffuse;
     float iblSpecular;
+    uint lodLevel;
+    uint padding0;
+    uint padding1;
+    uint padding2;
 };
 
 // Set 1: Per-draw data buffer
@@ -115,6 +124,10 @@ const float PI = 3.14159265359;
 const float ALPHA_CUTOFF = 0.5;
 const float MAX_REFLECTION_LOD = 4.0;
 const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
+
+// Debug mode: set to 1 to visualize LOD levels with colors
+// LOD0 = Green, LOD1 = Yellow, LOD2 = Orange, LOD3 = Red
+const int DEBUG_VISUALIZE_LOD = 0;
 
 // Texture slot indices (from textureIndices0/1)
 // textureIndices0: x=albedo, y=normal, z=orm, w=metallic
@@ -296,6 +309,18 @@ void main() {
 
     // Gamma correction
     color = pow(color, vec3(1.0/2.2));
+
+    // Debug: visualize LOD levels with colors
+    if (DEBUG_VISUALIZE_LOD != 0) {
+        vec3 lodColors[4] = vec3[4](
+            vec3(0.0, 1.0, 0.0),   // LOD0: Green
+            vec3(1.0, 1.0, 0.0),   // LOD1: Yellow
+            vec3(1.0, 0.5, 0.0),   // LOD2: Orange
+            vec3(1.0, 0.0, 0.0)    // LOD3: Red
+        );
+        uint lod = min(drawData.lodLevel, 3u);
+        color = mix(color, lodColors[lod], 0.5);
+    }
 
     outColor = vec4(color, alpha);
 }

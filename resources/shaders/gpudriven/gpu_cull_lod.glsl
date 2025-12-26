@@ -55,7 +55,7 @@ struct GPUObjectData {
 };
 
 // ============================================================================
-// Per-Draw Data (144 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
+// Per-Draw Data (160 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
 // ============================================================================
 struct PerDrawData {
     mat4 modelMatrix;           // 64 bytes
@@ -70,6 +70,11 @@ struct PerDrawData {
     uint flags;                 // 4 bytes
     float iblDiffuse;           // 4 bytes
     float iblSpecular;          // 4 bytes
+
+    uint lodLevel;              // 4 bytes - selected LOD (for debug)
+    uint padding0;              // 4 bytes
+    uint padding1;              // 4 bytes
+    uint padding2;              // 4 bytes
 };
 
 // ============================================================================
@@ -193,8 +198,9 @@ float projectSphereToScreen(vec4 worldSphere, mat4 projection, vec2 screenSize) 
     }
 
     // Calculate screen-space radius using projection matrix
-    // For perspective projection, the projected size is: radius * proj[1][1] / w
-    float projectedRadius = worldSphere.w * projection[1][1] / clipPos.w;
+    // For perspective projection, the projected size is: radius * |proj[1][1]| / w
+    // Note: Use abs() because Vulkan projection matrices have negative Y for Y-flip
+    float projectedRadius = worldSphere.w * abs(projection[1][1]) / clipPos.w;
 
     // Convert to pixels (projectedRadius is in NDC [-1, 1], so multiply by half screen height)
     float screenDiameter = projectedRadius * screenSize.y;
@@ -262,6 +268,16 @@ void main() {
     // Get LOD geometry data
     uvec4 lodData = getLODData(obj, lodLevel);
     uint indexCount = lodData.z;
+    uint vertexCount = lodData.w;
+
+    // Validate LOD data - fallback to lower LODs if current is invalid
+    // An invalid LOD has either 0 indexCount or indices that could exceed vertexCount
+    while (lodLevel > 0u && (indexCount == 0u || vertexCount == 0u)) {
+        lodLevel--;
+        lodData = getLODData(obj, lodLevel);
+        indexCount = lodData.z;
+        vertexCount = lodData.w;
+    }
 
     // Skip if this LOD has no geometry
     if (indexCount == 0u) {
@@ -292,4 +308,8 @@ void main() {
     perDrawData[drawIndex].flags = obj.flags;
     perDrawData[drawIndex].iblDiffuse = obj.iblParams.x;
     perDrawData[drawIndex].iblSpecular = obj.iblParams.y;
+    perDrawData[drawIndex].lodLevel = lodLevel;
+    perDrawData[drawIndex].padding0 = 0u;
+    perDrawData[drawIndex].padding1 = 0u;
+    perDrawData[drawIndex].padding2 = 0u;
 }

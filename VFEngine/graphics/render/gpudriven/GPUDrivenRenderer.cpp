@@ -524,6 +524,33 @@ namespace render::gpudriven {
         // Update object buffer with current frame's render data
         mergedBuffer->updateObjects(opaqueObjects, cache, textureResolver);
 
+        // Debug: Log all meshes' LOD data once
+        static bool debugLogged = false;
+        if (!debugLogged && mergedBuffer->getObjectCount() > 0) {
+            const auto& meshInfo = mergedBuffer->getRegisteredMeshes();
+            for (size_t mi = 0; mi < meshInfo.size(); ++mi) {
+                const auto& mesh = meshInfo[mi];
+                spdlog::info("DEBUG GPU-Driven: Mesh[{}] '{}' has {} submeshes",
+                    mi, mesh.meshPath, mesh.submeshCount);
+                for (size_t si = 0; si < mesh.submeshes.size(); ++si) {
+                    const auto& sub = mesh.submeshes[si];
+                    for (uint32_t lod = 0; lod < 4; ++lod) {
+                        spdlog::info("DEBUG GPU-Driven:   Submesh '{}' LOD{}: vertOff={}, idxOff={}, idxCount={}, vertCount={}",
+                            sub.submeshName, lod,
+                            sub.lods[lod].vertexOffset, sub.lods[lod].indexOffset,
+                            sub.lods[lod].indexCount, sub.lods[lod].vertexCount);
+                    }
+                    spdlog::info("DEBUG GPU-Driven:   boundingSphere: ({}, {}, {}) r={}",
+                        sub.boundingSphere.x, sub.boundingSphere.y,
+                        sub.boundingSphere.z, sub.boundingSphere.w);
+                }
+            }
+            spdlog::info("DEBUG GPU-Driven: Total merged buffer: {} vertices, {} indices",
+                mergedBuffer->getTotalVertexCount(), mergedBuffer->getTotalIndexCount());
+            spdlog::info("DEBUG GPU-Driven: Total objects to render: {}", mergedBuffer->getObjectCount());
+            debugLogged = true;
+        }
+
         // Update camera data for compute shader
         updateCameraData(view, projection, cameraPosition, nearPlane, farPlane);
 

@@ -123,8 +123,14 @@ namespace render::gpudriven {
         uint32_t flags;                  // 4 bytes
         float iblDiffuse;                // 4 bytes
         float iblSpecular;               // 4 bytes
-        // Total: 144 bytes
+
+        uint32_t lodLevel;               // 4 bytes - Selected LOD level (for debug visualization)
+        uint32_t padding0;               // 4 bytes
+        uint32_t padding1;               // 4 bytes
+        uint32_t padding2;               // 4 bytes
+        // Total: 160 bytes
     };
+    static_assert(sizeof(PerDrawData) == 160, "PerDrawData must be 160 bytes to match GLSL");
 
     // Camera/view data for culling and rendering
     struct alignas(16) GPUCameraData {

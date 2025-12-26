@@ -4,8 +4,12 @@
 #include "../../core/Device.hpp"
 #include "../../core/Utilities.hpp"
 #include "../../core/TransferManager.hpp"
+#include "resource/Types.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
+
+// Verify vertex stride matches actual Vertex struct
+static_assert(sizeof(resource::Vertex) == 32, "Vertex size must be 32 bytes for MergedMeshBuffer");
 
 namespace render::gpudriven {
 
