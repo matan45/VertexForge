@@ -45,8 +45,8 @@ namespace render::gpudriven {
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
 
-        indirectBuffer = std::make_unique<IndirectDrawBuffer>(device);
-        indirectBuffer->init();
+        batchManager = std::make_unique<IndirectBatchManager>(device);
+        batchManager->init(DEFAULT_BATCH_COUNT, MAX_DRAW_COMMANDS);
 
         bindlessTextures = std::make_unique<BindlessTextureManager>(device);
         bindlessTextures->init();
@@ -117,12 +117,12 @@ namespace render::gpudriven {
         // Cleanup sub-components
         if (cullPipeline) cullPipeline->cleanup();
         if (bindlessTextures) bindlessTextures->cleanup();
-        if (indirectBuffer) indirectBuffer->cleanup();
+        if (batchManager) batchManager->cleanup();
         if (mergedBuffer) mergedBuffer->cleanup();
 
         cullPipeline.reset();
         bindlessTextures.reset();
-        indirectBuffer.reset();
+        batchManager.reset();
         mergedBuffer.reset();
 
         initialized = false;
@@ -447,7 +447,12 @@ namespace render::gpudriven {
         cameraData.enableFrustumCulling = frustumCullingEnabled ? 1 : 0;
         cameraData.enableOcclusionCulling = (occlusionCullingEnabled && hiZMipLevels > 0) ? 1 : 0;
         cameraData.enableLODSelection = lodSelectionEnabled ? 1 : 0;
-        cameraData.padding = 0;
+        cameraData.batchCount = batchManager ? batchManager->getBatchCount() : 1;
+
+        cameraData.commandsPerBatch = batchManager ? batchManager->getCommandsPerBatch() : MAX_DRAW_COMMANDS;
+        cameraData.padding0 = 0;
+        cameraData.padding1 = 0;
+        cameraData.padding2 = 0;
 
         // Copy to GPU
         std::memcpy(cameraMapped, &cameraData, sizeof(GPUCameraData));
@@ -529,18 +534,18 @@ namespace render::gpudriven {
         // Update camera data for compute shader
         updateCameraData(view, projection, cameraPosition, nearPlane, farPlane, time);
 
-        // Update cull pipeline descriptors
+        // Update cull pipeline descriptors with combined batch buffers
         cullPipeline->updateDescriptors(
             mergedBuffer->getObjectBuffer(),
             cameraBuffer,
-            indirectBuffer->getDrawCommandBuffer(),
-            indirectBuffer->getPerDrawDataBuffer(),
-            indirectBuffer->getDrawCountBuffer()
+            batchManager->getCombinedDrawCommandBuffer(),
+            batchManager->getCombinedPerDrawDataBuffer(),
+            batchManager->getCombinedDrawCountBuffer()
         );
 
-        // Update per-draw data descriptor for graphics pipeline
+        // Update per-draw data descriptor for graphics pipeline (uses combined buffer)
         vk::DescriptorBufferInfo perDrawInfo{};
-        perDrawInfo.buffer = indirectBuffer->getPerDrawDataBuffer();
+        perDrawInfo.buffer = batchManager->getCombinedPerDrawDataBuffer();
         perDrawInfo.offset = 0;
         perDrawInfo.range = VK_WHOLE_SIZE;
 
@@ -565,8 +570,8 @@ namespace render::gpudriven {
             return;
         }
 
-        // Always reset draw count (clears stale data when no objects)
-        indirectBuffer->resetDrawCount(cmd);
+        // Always reset all batch draw counts (clears stale data when no objects)
+        batchManager->resetAllBatches(cmd);
 
         if (stats.totalObjects == 0)
         {
@@ -588,7 +593,7 @@ namespace render::gpudriven {
             0, nullptr);
 
         cullPipeline->dispatch(cmd, stats.totalObjects);
-        indirectBuffer->insertBarrierAfterCompute(cmd);
+        batchManager->insertBarriersAfterCompute(cmd);
     }
 
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
@@ -614,18 +619,31 @@ namespace render::gpudriven {
             descriptorSets.data(),
             0, nullptr);
 
+        // Bind merged vertex/index buffers once (shared across all batches)
         vk::Buffer vertBufs[] = { mergedBuffer->getVertexBuffer() };
         vk::DeviceSize vertOffsets[] = { 0 };
         cmd.bindVertexBuffers(0, 1, vertBufs, vertOffsets);
         cmd.bindIndexBuffer(mergedBuffer->getIndexBuffer(), 0, vk::IndexType::eUint32);
 
-        cmd.drawIndexedIndirectCount(
-            indirectBuffer->getDrawCommandBuffer(),
-            0,
-            indirectBuffer->getDrawCountBuffer(),
-            0,
-            stats.totalObjects,
-            sizeof(DrawIndexedIndirectCommand));
+        // Issue one indirect draw per batch
+        // Each batch has its own draw commands and count in the combined buffers
+        uint32_t batchCount = batchManager->getBatchCount();
+        uint32_t commandsPerBatch = batchManager->getCommandsPerBatch();
+
+        for (uint32_t batch = 0; batch < batchCount; ++batch)
+        {
+            // Calculate offsets into combined buffers for this batch
+            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch);
+            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch);
+
+            cmd.drawIndexedIndirectCount(
+                batchManager->getCombinedDrawCommandBuffer(),
+                cmdOffset,
+                batchManager->getCombinedDrawCountBuffer(),
+                countOffset,
+                commandsPerBatch,
+                sizeof(DrawIndexedIndirectCommand));
+        }
     }
 
     bool GPUDrivenRenderer::registerMaterialTextures(const std::string& materialPath)
@@ -733,27 +751,65 @@ namespace render::gpudriven {
         return bindlessTextures ? bindlessTextures->getRegisteredTextureCount() : 0;
     }
 
+    uint32_t GPUDrivenRenderer::getBatchCount() const
+    {
+        return batchManager ? batchManager->getBatchCount() : 0;
+    }
+
+    uint32_t GPUDrivenRenderer::getCommandsPerBatch() const
+    {
+        return batchManager ? batchManager->getCommandsPerBatch() : 0;
+    }
+
+    uint32_t GPUDrivenRenderer::getTotalCapacity() const
+    {
+        return batchManager ? batchManager->getTotalCapacity() : 0;
+    }
+
+    uint64_t GPUDrivenRenderer::getDrawCommandBufferSize() const
+    {
+        return batchManager ? batchManager->getCombinedDrawCommandBufferSize() : 0;
+    }
+
+    uint64_t GPUDrivenRenderer::getDrawCountBufferSize() const
+    {
+        return batchManager ? batchManager->getCombinedDrawCountBufferSize() : 0;
+    }
+
+    uint64_t GPUDrivenRenderer::getPerDrawDataBufferSize() const
+    {
+        return batchManager ? batchManager->getCombinedPerDrawDataBufferSize() : 0;
+    }
+
+    uint64_t GPUDrivenRenderer::getTotalMemoryUsage() const
+    {
+        if (!batchManager) return 0;
+        return batchManager->getCombinedDrawCommandBufferSize() +
+               batchManager->getCombinedDrawCountBufferSize() +
+               batchManager->getCombinedPerDrawDataBufferSize();
+    }
+
     void GPUDrivenRenderer::updateStatsFromGPU()
     {
-        if (!initialized || !enabled || !indirectBuffer) {
+        if (!initialized || !enabled || !batchManager) {
             return;
         }
 
-        // Read back all stats from GPU (expensive - causes sync)
-        GPUCullStats gpuStats = indirectBuffer->readBackStats();
+        // Read back and aggregate stats from all batches (expensive - causes sync)
+        GPUDrivenStats aggregated = batchManager->readBackAggregatedStats();
 
-        stats.visibleObjects = gpuStats.drawCount;
-        stats.drawCalls = (gpuStats.drawCount > 0) ? 1 : 0;
+        stats.visibleObjects = aggregated.visibleObjects;
+        stats.drawCalls = aggregated.drawCalls;  // One draw call per batch
 
-        // LOD distribution from GPU
-        stats.objectsLOD0 = gpuStats.lodCount0;
-        stats.objectsLOD1 = gpuStats.lodCount1;
-        stats.objectsLOD2 = gpuStats.lodCount2;
-        stats.objectsLOD3 = gpuStats.lodCount3;
+        // LOD distribution from GPU (aggregated across all batches)
+        stats.objectsLOD0 = aggregated.objectsLOD0;
+        stats.objectsLOD1 = aggregated.objectsLOD1;
+        stats.objectsLOD2 = aggregated.objectsLOD2;
+        stats.objectsLOD3 = aggregated.objectsLOD3;
 
-        // Culling stats directly from GPU counters
-        stats.culledByFrustum = gpuStats.culledByFrustum;
-        stats.culledByOcclusion = gpuStats.culledByOcclusion;
+        // Culling stats directly from GPU counters (aggregated)
+        stats.culledByFrustum = aggregated.culledByFrustum;
+        stats.culledByOcclusion = aggregated.culledByOcclusion;
     }
 
 }

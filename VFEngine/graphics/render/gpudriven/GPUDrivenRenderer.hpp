@@ -2,7 +2,7 @@
 
 #include "GPUDrivenTypes.hpp"
 #include "MergedMeshBuffer.hpp"
-#include "IndirectDrawBuffer.hpp"
+#include "IndirectBatchManager.hpp"
 #include "BindlessTextureManager.hpp"
 #include "GPUCullLODPipeline.hpp"
 #include <vulkan/vulkan.hpp>
@@ -194,13 +194,24 @@ namespace render::gpudriven {
         uint32_t getRegisteredMeshCount() const;
         uint32_t getRegisteredTextureCount() const;
 
+        /**
+         * Get batch manager statistics.
+         */
+        uint32_t getBatchCount() const;
+        uint32_t getCommandsPerBatch() const;
+        uint32_t getTotalCapacity() const;
+        uint64_t getDrawCommandBufferSize() const;
+        uint64_t getDrawCountBufferSize() const;
+        uint64_t getPerDrawDataBufferSize() const;
+        uint64_t getTotalMemoryUsage() const;
+
     private:
         core::Device& device;
         core::SwapChain& swapChain;
 
         // Sub-components
         std::unique_ptr<MergedMeshBuffer> mergedBuffer;
-        std::unique_ptr<IndirectDrawBuffer> indirectBuffer;
+        std::unique_ptr<IndirectBatchManager> batchManager;
         std::unique_ptr<BindlessTextureManager> bindlessTextures;
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
 

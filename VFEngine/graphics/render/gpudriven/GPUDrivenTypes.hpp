@@ -11,8 +11,14 @@ namespace render::gpudriven {
     // Maximum supported objects in GPU-driven rendering
     constexpr uint32_t MAX_GPU_OBJECTS = 65536;
 
-    // Maximum supported draw commands
-    constexpr uint32_t MAX_DRAW_COMMANDS = 65536;
+    // Maximum supported draw commands per batch
+    // 700,000 commands * 4 batches = 2.8M objects capacity
+    // Memory: 4 batches * 700K * (20 + 160) bytes = ~504 MB
+    constexpr uint32_t MAX_DRAW_COMMANDS = 700000;
+
+    // Batch configuration for multi-batch indirect rendering
+    constexpr uint32_t DEFAULT_BATCH_COUNT = 4;
+    constexpr uint32_t MAX_BATCH_COUNT = 8;
 
     // Maximum bindless textures
     constexpr uint32_t MAX_BINDLESS_TEXTURES = 4096;
@@ -153,8 +159,13 @@ namespace render::gpudriven {
         uint32_t enableFrustumCulling;   // 4 bytes - boolean
         uint32_t enableOcclusionCulling; // 4 bytes - boolean
         uint32_t enableLODSelection;     // 4 bytes - boolean
-        uint32_t padding;                // 4 bytes
-        // Total: 416 bytes
+        uint32_t batchCount;             // 4 bytes - number of batches for indirect rendering
+
+        uint32_t commandsPerBatch;       // 4 bytes - max draw commands per batch
+        uint32_t padding0;               // 4 bytes
+        uint32_t padding1;               // 4 bytes
+        uint32_t padding2;               // 4 bytes
+        // Total: 432 bytes
     };
 
     // Submesh location in merged buffer (CPU-side tracking)
@@ -224,5 +235,19 @@ namespace render::gpudriven {
         uint32_t firstInstance;
     };
     static_assert(sizeof(DrawIndexedIndirectCommand) == 20, "DrawIndexedIndirectCommand must match VkDrawIndexedIndirectCommand");
+
+    // Per-batch statistics for multi-batch indirect rendering
+    // Must match BatchDrawStats in gpu_cull_lod.glsl
+    struct alignas(32) BatchDrawStats {
+        uint32_t drawCount;          // Number of visible objects in this batch
+        uint32_t lodCount0;          // Objects using LOD0
+        uint32_t lodCount1;          // Objects using LOD1
+        uint32_t lodCount2;          // Objects using LOD2
+        uint32_t lodCount3;          // Objects using LOD3
+        uint32_t culledByFrustum;    // Objects culled by frustum
+        uint32_t culledByOcclusion;  // Objects culled by Hi-Z occlusion
+        uint32_t padding;            // Padding to 32 bytes
+    };
+    static_assert(sizeof(BatchDrawStats) == 32, "BatchDrawStats must be 32 bytes for GPU alignment");
 
 }

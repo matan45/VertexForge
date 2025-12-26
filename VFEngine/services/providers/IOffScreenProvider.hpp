@@ -55,6 +55,18 @@ namespace services {
         uint32_t mergedIndexCount = 0;
         uint32_t registeredMeshCount = 0;
         uint32_t registeredTextureCount = 0;
+
+        // Batch rendering stats
+        uint32_t batchCount = 0;
+        uint32_t commandsPerBatch = 0;
+        uint32_t totalCapacity = 0;
+        uint32_t drawCalls = 0;
+
+        // Memory usage (in bytes)
+        uint64_t drawCommandBufferSize = 0;
+        uint64_t drawCountBufferSize = 0;
+        uint64_t perDrawDataBufferSize = 0;
+        uint64_t totalMemoryUsage = 0;
     };
 
     struct CullingDebugStats {

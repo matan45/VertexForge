@@ -285,11 +285,12 @@ namespace render::gpudriven {
         perDrawInfo.offset = 0;
         perDrawInfo.range = VK_WHOLE_SIZE;
 
-        // Draw count buffer info (includes drawCount + LOD stats)
+        // Draw count buffer info (BatchDrawStats[] for multi-batch rendering)
+        // Layout: [Batch0 stats][Batch1 stats]...[BatchN stats]
         vk::DescriptorBufferInfo drawCountInfo{};
         drawCountInfo.buffer = cachedDrawCountBuffer;
         drawCountInfo.offset = 0;
-        drawCountInfo.range = VK_WHOLE_SIZE;  // Full buffer including LOD counters
+        drawCountInfo.range = VK_WHOLE_SIZE;  // All batch stats
 
         // Hi-Z image info (optional, may not be available on first frame)
         vk::DescriptorImageInfo hiZInfo{};

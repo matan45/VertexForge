@@ -657,6 +657,65 @@ namespace windows
                     {
                         ImGui::Text("Hi-Z Mip Levels: %u", gpu.hiZMipLevels);
                     }
+
+                    ImGui::Separator();
+
+                    // Batch rendering stats
+                    ImGui::Text("Indirect Batches:");
+                    ImGui::Text("  Batches:           %u", gpu.batchCount);
+                    ImGui::Text("  Commands/Batch:    %u", gpu.commandsPerBatch);
+                    ImGui::Text("  Total Capacity:    %u objects", gpu.totalCapacity);
+                    ImGui::Text("  Registered:        %u objects", gpu.totalObjects);
+                    ImGui::Text("  Draw Calls:        %u", gpu.drawCalls);
+
+                    if (gpu.totalCapacity > 0)
+                    {
+                        float utilization = static_cast<float>(gpu.totalObjects) / static_cast<float>(gpu.totalCapacity);
+                        char percentStr[32];
+                        if (utilization < 0.0001f && gpu.totalObjects > 0) {
+                            snprintf(percentStr, sizeof(percentStr), "<0.01%% (%u)", gpu.totalObjects);
+                        } else {
+                            snprintf(percentStr, sizeof(percentStr), "%.4f%%", utilization * 100.0f);
+                        }
+                        ImGui::Text("Capacity Used:");
+                        ImGui::SameLine();
+                        ImGui::ProgressBar(utilization, ImVec2(150, 0), percentStr);
+                    }
+
+                    ImGui::Separator();
+
+                    // Memory usage with capacity info
+                    ImGui::Text("GPU Memory (Used / Allocated):");
+                    auto formatMemory = [](uint64_t bytes) -> std::string {
+                        if (bytes >= 1024 * 1024 * 1024) {
+                            return std::to_string(bytes / (1024 * 1024 * 1024)) + "." +
+                                   std::to_string((bytes / (1024 * 1024 * 100)) % 10) + " GB";
+                        } else if (bytes >= 1024 * 1024) {
+                            return std::to_string(bytes / (1024 * 1024)) + "." +
+                                   std::to_string((bytes / (1024 * 100)) % 10) + " MB";
+                        } else if (bytes >= 1024) {
+                            return std::to_string(bytes / 1024) + " KB";
+                        }
+                        return std::to_string(bytes) + " B";
+                    };
+
+                    // Calculate used memory based on totalObjects
+                    uint64_t usedDrawCmd = gpu.totalObjects * 20;  // sizeof(DrawIndexedIndirectCommand)
+                    uint64_t usedPerDraw = gpu.totalObjects * 160; // sizeof(PerDrawData)
+                    uint64_t usedTotal = usedDrawCmd + gpu.drawCountBufferSize + usedPerDraw;
+
+                    ImGui::Text("  Draw Commands:  %s / %s",
+                                formatMemory(usedDrawCmd).c_str(),
+                                formatMemory(gpu.drawCommandBufferSize).c_str());
+                    ImGui::Text("  Draw Counts:    %s (fixed)",
+                                formatMemory(gpu.drawCountBufferSize).c_str());
+                    ImGui::Text("  Per-Draw Data:  %s / %s",
+                                formatMemory(usedPerDraw).c_str(),
+                                formatMemory(gpu.perDrawDataBufferSize).c_str());
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
+                                       "  Total:          %s / %s",
+                                       formatMemory(usedTotal).c_str(),
+                                       formatMemory(gpu.totalMemoryUsage).c_str());
                 }
 
                 ImGui::Unindent();

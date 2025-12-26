@@ -964,6 +964,18 @@ namespace controllers
             stats.gpuDriven.mergedIndexCount = gpuDrivenRenderer->getMergedIndexCount();
             stats.gpuDriven.registeredMeshCount = gpuDrivenRenderer->getRegisteredMeshCount();
             stats.gpuDriven.registeredTextureCount = gpuDrivenRenderer->getRegisteredTextureCount();
+
+            // Batch rendering stats
+            stats.gpuDriven.batchCount = gpuDrivenRenderer->getBatchCount();
+            stats.gpuDriven.commandsPerBatch = gpuDrivenRenderer->getCommandsPerBatch();
+            stats.gpuDriven.totalCapacity = gpuDrivenRenderer->getTotalCapacity();
+            stats.gpuDriven.drawCalls = gpuStats.drawCalls;
+
+            // Memory usage
+            stats.gpuDriven.drawCommandBufferSize = gpuDrivenRenderer->getDrawCommandBufferSize();
+            stats.gpuDriven.drawCountBufferSize = gpuDrivenRenderer->getDrawCountBufferSize();
+            stats.gpuDriven.perDrawDataBufferSize = gpuDrivenRenderer->getPerDrawDataBufferSize();
+            stats.gpuDriven.totalMemoryUsage = gpuDrivenRenderer->getTotalMemoryUsage();
         }
 
         return stats;
