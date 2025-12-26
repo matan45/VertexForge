@@ -12,6 +12,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstring>
 #include <array>
+#include <unordered_map>
+#include <memory>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -489,21 +491,31 @@ namespace render::gpudriven {
         }
 
         // Create texture resolver callback that uses BindlessTextureManager
+        // Use frame-local cache to avoid re-extracting PBR values for same material multiple times
         TextureIndexResolver textureResolver = nullptr;
         if (bindlessTextures) {
-            textureResolver = [this](const std::string& materialPath, TextureSlotType slot) -> uint32_t {
+            // Cache extracted PBR values per material path (avoids 8x extraction per material)
+            auto pbrCache = std::make_shared<std::unordered_map<std::string, mesh::ExtractedPBRValues>>();
+
+            textureResolver = [this, pbrCache](const std::string& materialPath, TextureSlotType slot) -> uint32_t {
                 if (materialPath.empty()) {
                     return INVALID_TEXTURE_INDEX;
                 }
 
-                // Get material data to find texture path
-                auto matData = resource::ResourceManager::getMaterial(materialPath);
-                if (!matData) {
-                    return INVALID_TEXTURE_INDEX;
+                // Check cache first
+                auto it = pbrCache->find(materialPath);
+                if (it == pbrCache->end()) {
+                    // Get material data to find texture path
+                    auto matData = resource::ResourceManager::getMaterial(materialPath);
+                    if (!matData) {
+                        return INVALID_TEXTURE_INDEX;
+                    }
+                    // Extract and cache PBR values (done once per material per frame)
+                    it = pbrCache->emplace(materialPath,
+                        mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData)).first;
                 }
 
-                // Extract texture paths
-                auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
+                const auto& pbrValues = it->second;
 
                 // Get the appropriate texture path based on slot
                 std::string texPath;

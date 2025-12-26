@@ -23,20 +23,30 @@
 #include "../../services/events/SceneEvents.hpp"
 #include "print/Logger.hpp"
 #include <cmath>
+#include <unordered_map>
 
 namespace controllers
 {
-    // Helper function to populate SubMeshMaterialInfo from a material path
-    static void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath)
-    {
-        matInfo.materialPath = materialPath;
+    // Frame-local cache type for extracted PBR values
+    using PBRCache = std::unordered_map<std::string, render::mesh::ExtractedPBRValues>;
 
+    // Helper function to get cached PBR values, extracting only once per material per frame
+    static const render::mesh::ExtractedPBRValues* getCachedPBRValues(
+        const std::string& materialPath, PBRCache& cache)
+    {
         if (materialPath.empty())
         {
-            return;
+            return nullptr;
         }
 
-        // Load material data from cache or file
+        // Check cache first
+        auto it = cache.find(materialPath);
+        if (it != cache.end())
+        {
+            return &it->second;
+        }
+
+        // Load material data from ResourceManager cache or file
         auto materialData = resource::ResourceManager::getMaterial(materialPath);
         if (!materialData)
         {
@@ -45,16 +55,32 @@ namespace controllers
 
         if (materialData)
         {
-            // Extract PBR values from material
-            auto pbrValues = render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*materialData);
-            matInfo.albedo = pbrValues.albedo;
-            matInfo.metallic = pbrValues.metallic;
-            matInfo.roughness = pbrValues.roughness;
-            matInfo.ao = pbrValues.ao;
-            matInfo.emission = pbrValues.emission;
-            matInfo.blendMode = static_cast<uint8_t>(pbrValues.blendMode);
-            matInfo.iblDiffuse = pbrValues.iblDiffuse;
-            matInfo.iblSpecular = pbrValues.iblSpecular;
+            // Extract and cache PBR values
+            auto [inserted, success] = cache.emplace(materialPath,
+                render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*materialData));
+            return &inserted->second;
+        }
+
+        return nullptr;
+    }
+
+    // Helper function to populate SubMeshMaterialInfo from a material path using cache
+    static void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo,
+                                     const std::string& materialPath, PBRCache& cache)
+    {
+        matInfo.materialPath = materialPath;
+
+        const auto* pbrValues = getCachedPBRValues(materialPath, cache);
+        if (pbrValues)
+        {
+            matInfo.albedo = pbrValues->albedo;
+            matInfo.metallic = pbrValues->metallic;
+            matInfo.roughness = pbrValues->roughness;
+            matInfo.ao = pbrValues->ao;
+            matInfo.emission = pbrValues->emission;
+            matInfo.blendMode = static_cast<uint8_t>(pbrValues->blendMode);
+            matInfo.iblDiffuse = pbrValues->iblDiffuse;
+            matInfo.iblSpecular = pbrValues->iblSpecular;
         }
     }
 
@@ -384,6 +410,8 @@ namespace controllers
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
 
+        // Frame-local cache for PBR values - avoids re-extracting same material multiple times
+        PBRCache pbrCache;
 
         if (sceneBVH.isStaticDirty() && frustumReady)
         {
@@ -426,7 +454,7 @@ namespace controllers
                                    && gpuDrivenRenderer
                                    && gpuDrivenRenderer->isEnabled();
 
-        // Helper lambda to build render data from entity
+        // Helper lambda to build render data from entity (uses frame-local PBR cache)
         auto buildRenderData = [&](entt::entity entity, const components::MeshComponent& meshComp,
                                    const components::WorldTransformComponent& worldTransform) -> render::mesh::MeshRenderData
         {
@@ -448,29 +476,21 @@ namespace controllers
                 const auto& materialComp = registry.get<components::MaterialComponent>(entity);
                 renderData.defaultMaterialPath = materialComp.defaultMaterial;
 
-                // Load default material PBR values if set (applies to all submeshes without specific material)
-                if (!materialComp.defaultMaterial.empty())
+                // Load default material PBR values using cache (extracts only once per material per frame)
+                const auto* pbrValues = getCachedPBRValues(materialComp.defaultMaterial, pbrCache);
+                if (pbrValues)
                 {
-                    auto defaultMatData = resource::ResourceManager::getMaterial(materialComp.defaultMaterial);
-                    if (!defaultMatData)
-                    {
-                        defaultMatData = resource::ResourceManager::loadMaterial(materialComp.defaultMaterial);
-                    }
-                    if (defaultMatData)
-                    {
-                        auto pbrValues = render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*defaultMatData);
-                        renderData.albedo = pbrValues.albedo;
-                        renderData.metallic = pbrValues.metallic;
-                        renderData.roughness = pbrValues.roughness;
-                        renderData.ao = pbrValues.ao;
-                        renderData.emission = pbrValues.emission;
-                    }
+                    renderData.albedo = pbrValues->albedo;
+                    renderData.metallic = pbrValues->metallic;
+                    renderData.roughness = pbrValues->roughness;
+                    renderData.ao = pbrValues->ao;
+                    renderData.emission = pbrValues->emission;
                 }
 
                 for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
                 {
                     render::mesh::SubMeshMaterialInfo matInfo;
-                    populateMaterialInfo(matInfo, materialPath);
+                    populateMaterialInfo(matInfo, materialPath, pbrCache);
                     renderData.submeshMaterials[submeshName] = matInfo;
                 }
             }
