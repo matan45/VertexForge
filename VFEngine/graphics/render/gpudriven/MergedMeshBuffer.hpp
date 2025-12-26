@@ -47,7 +47,8 @@ namespace render::gpudriven {
         MergedMeshBuffer& operator=(const MergedMeshBuffer&) = delete;
 
         // Initialize with maximum expected capacity
-        void init(uint32_t maxVertices = 1000000, uint32_t maxIndices = 3000000);
+        // Default: 15M vertices (~480MB), 45M indices (~180MB) = ~660MB total
+        void init(uint32_t maxVertices = 15000000, uint32_t maxIndices = 45000000);
 
         // Cleanup GPU resources
         void cleanup();

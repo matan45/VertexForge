@@ -229,6 +229,7 @@ namespace core {
 		vulkan11Features.shaderDrawParameters = VK_TRUE;
 
 		// Vulkan 1.2 features (required for drawIndirectCount and descriptor indexing)
+		// Note: Descriptor indexing features are part of Vulkan 1.2 core
 		vk::PhysicalDeviceVulkan12Features vulkan12Features{};
 		vulkan12Features.drawIndirectCount = VK_TRUE;
 		vulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
@@ -238,18 +239,9 @@ namespace core {
 		vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
 		vulkan12Features.pNext = &vulkan11Features;  // Chain Vulkan 1.1 features
 
-		// Vulkan 1.2 descriptor indexing features (deprecated, but kept for compatibility)
-		vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
-		descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-		descriptorIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
-		descriptorIndexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
-		descriptorIndexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
-		descriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-		descriptorIndexingFeatures.pNext = &vulkan12Features;  // Chain Vulkan 1.2 features
-
 		vk::PhysicalDeviceVulkan13Features vulkan13Features{};
 		vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
-		vulkan13Features.pNext = &descriptorIndexingFeatures;  // Chain descriptor indexing
+		vulkan13Features.pNext = &vulkan12Features;  // Chain Vulkan 1.2 features
 
 		vk::DeviceCreateInfo createInfo{};
 		createInfo.pNext = &vulkan13Features;

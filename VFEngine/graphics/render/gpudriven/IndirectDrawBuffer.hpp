@@ -9,6 +9,17 @@ namespace core {
 
 namespace render::gpudriven {
 
+    // Stats buffer layout - must match shader's DrawCountBuffer
+    struct GPUCullStats {
+        uint32_t drawCount;
+        uint32_t lodCount0;
+        uint32_t lodCount1;
+        uint32_t lodCount2;
+        uint32_t lodCount3;
+        uint32_t culledByFrustum;
+        uint32_t culledByOcclusion;
+    };
+
     class IndirectDrawBuffer {
     public:
         explicit IndirectDrawBuffer(core::Device& device);
@@ -39,6 +50,9 @@ namespace render::gpudriven {
 
         // Read back draw count for debugging (expensive - causes sync)
         uint32_t readBackDrawCount();
+
+        // Read back all cull stats including LOD counts (expensive - causes sync)
+        GPUCullStats readBackStats();
 
         // Statistics
         size_t getDrawCommandBufferSize() const {

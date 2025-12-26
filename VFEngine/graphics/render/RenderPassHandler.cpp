@@ -197,6 +197,51 @@ namespace render
         currentTime = time;
     }
 
+    void RenderPassHandler::setGPUDrivenOcclusionCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setOcclusionCullingEnabled(enabled);
+        }
+    }
+
+    bool RenderPassHandler::isGPUDrivenOcclusionCullingEnabled() const
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            return gpuDrivenRenderer->isOcclusionCullingEnabled();
+        }
+        return false;
+    }
+
+    void RenderPassHandler::updateGPUDrivenHiZ() const
+    {
+        if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)
+        {
+            return;
+        }
+
+        // Get active camera's Hi-Z buffer
+        occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
+        if (!cameraOcclusionManager->isHiZInitialized(activeCameraId))
+        {
+            return;
+        }
+
+        auto* camera = cameraOcclusionManager->getCamera(activeCameraId);
+        if (!camera || !camera->hiZBuffer || !camera->hiZBuffer->isInitialized())
+        {
+            return;
+        }
+
+        // Pass Hi-Z pyramid to GPU-driven renderer
+        gpuDrivenRenderer->updateHiZPyramid(
+            camera->hiZBuffer->getHiZImageView(),
+            camera->hiZBuffer->getHiZSampler(),
+            camera->hiZBuffer->getMipLevels()
+        );
+    }
+
     void RenderPassHandler::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
     {
         if (debugRenderer)
@@ -359,48 +404,53 @@ namespace render
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems);
 
+        // Separate opaque and translucent meshes
+        std::vector<mesh::MeshRenderData> opaqueObjects;
+        std::vector<mesh::MeshRenderData> translucentObjects;
+
+        for (const auto& mesh : currentMeshDrawList)
+        {
+            // Consider meshes translucent if they have alpha significantly < 1
+            // Use threshold to handle floating point imprecision
+            if (mesh.albedo.a < 0.99f)
+            {
+                translucentObjects.push_back(mesh);
+            }
+            else
+            {
+                opaqueObjects.push_back(mesh);
+            }
+        }
+
+        // Always update GPU-driven scene data (even when empty to reset stats)
+        if (gpuDrivenRendererInitialized && meshPipelineInitialized)
+        {
+            const mesh::MeshGPUCache& meshCache = meshPipeline->getMeshGPUCache();
+            gpuDrivenRenderer->updateScene(
+                opaqueObjects,
+                meshCache,
+                currentView,
+                currentProjection,
+                currentCameraPosition,
+                currentNearPlane,
+                currentFarPlane,
+                currentTime
+            );
+        }
+
         if (needsMeshPass)
         {
-            // Separate opaque and translucent meshes
-            std::vector<mesh::MeshRenderData> opaqueObjects;
-            std::vector<mesh::MeshRenderData> translucentObjects;
-
-            for (const auto& mesh : currentMeshDrawList)
-            {
-                // Consider meshes translucent if they have alpha < 1
-                if (mesh.albedo.a < 1.0f)
-                {
-                    translucentObjects.push_back(mesh);
-                }
-                else
-                {
-                    opaqueObjects.push_back(mesh);
-                }
-            }
-
             // Get mesh cache reference from mesh pipeline for merged buffer access
             const mesh::MeshGPUCache& meshCache = meshPipeline->getMeshGPUCache();
-
-            // Update GPU-driven scene data for opaque objects
-            if (!opaqueObjects.empty() && gpuDrivenRendererInitialized)
-            {
-                gpuDrivenRenderer->updateScene(
-                    opaqueObjects,
-                    meshCache,
-                    currentView,
-                    currentProjection,
-                    currentCameraPosition,
-                    currentNearPlane,
-                    currentFarPlane,
-                    currentTime
-                );
-            }
 
             render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
 
             // GPU-driven render for opaque objects
             if (!opaqueObjects.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
+                // Update Hi-Z pyramid from previous frame (for occlusion culling)
+                updateGPUDrivenHiZ();
+
                 // Dispatch compute shader BEFORE render pass
                 gpuDrivenRenderer->dispatchCompute(commandBuffer);
 

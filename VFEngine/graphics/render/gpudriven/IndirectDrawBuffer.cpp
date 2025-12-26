@@ -57,10 +57,11 @@ namespace render::gpudriven {
             core::Utilities::createBuffer(request, drawCommandBuffer, drawCommandMemory);
         }
 
-        // Draw count buffer - atomic counter incremented by compute, read by indirect count
+        // Draw count buffer - atomic counters incremented by compute, read by indirect count
+        // Layout: { drawCount, lodCount0, lodCount1, lodCount2, lodCount3 }
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = sizeof(uint32_t);
+            request.size = sizeof(GPUCullStats);
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute shader atomic
                            vk::BufferUsageFlagBits::eIndirectBuffer |       // Count for indirect
                            vk::BufferUsageFlagBits::eTransferDst |          // Reset to 0
@@ -82,7 +83,7 @@ namespace render::gpudriven {
         // Staging buffer for count reset and readback
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = sizeof(uint32_t);
+            request.size = sizeof(GPUCullStats);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc |
                            vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
@@ -90,10 +91,10 @@ namespace render::gpudriven {
             core::Utilities::createBuffer(request, stagingBuffer, stagingMemory);
 
             stagingMapped = logicalDevice.mapMemory(
-                stagingMemory, 0, sizeof(uint32_t), vk::MemoryMapFlags{}
+                stagingMemory, 0, sizeof(GPUCullStats), vk::MemoryMapFlags{}
             );
-            // Initialize to 0
-            std::memset(stagingMapped, 0, sizeof(uint32_t));
+            // Initialize all stats to 0
+            std::memset(stagingMapped, 0, sizeof(GPUCullStats));
         }
     }
 
@@ -133,14 +134,14 @@ namespace render::gpudriven {
 
     void IndirectDrawBuffer::resetDrawCount(vk::CommandBuffer cmd)
     {
-        // Ensure staging has 0
-        *static_cast<uint32_t*>(stagingMapped) = 0;
+        // Reset all stats to 0 (drawCount + LOD counts)
+        std::memset(stagingMapped, 0, sizeof(GPUCullStats));
 
-        // Copy 0 from staging to draw count buffer
+        // Copy zeros from staging to draw count buffer
         vk::BufferCopy copyRegion;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
-        copyRegion.size = sizeof(uint32_t);
+        copyRegion.size = sizeof(GPUCullStats);
         cmd.copyBuffer(stagingBuffer, drawCountBuffer, copyRegion);
 
         // Barrier to ensure copy completes before compute shader
@@ -151,7 +152,7 @@ namespace render::gpudriven {
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.buffer = drawCountBuffer;
         barrier.offset = 0;
-        barrier.size = sizeof(uint32_t);
+        barrier.size = sizeof(GPUCullStats);
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
@@ -207,6 +208,12 @@ namespace render::gpudriven {
 
     uint32_t IndirectDrawBuffer::readBackDrawCount()
     {
+        GPUCullStats stats = readBackStats();
+        return stats.drawCount;
+    }
+
+    GPUCullStats IndirectDrawBuffer::readBackStats()
+    {
         // This is expensive - causes a full GPU sync
         // Only use for debugging
 
@@ -221,7 +228,7 @@ namespace render::gpudriven {
         vk::BufferCopy copyRegion;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
-        copyRegion.size = sizeof(uint32_t);
+        copyRegion.size = sizeof(GPUCullStats);
         cmdBuffer->copyBuffer(drawCountBuffer, stagingBuffer, copyRegion);
 
         core::Utilities::endSingleTimeCommands(
@@ -230,7 +237,7 @@ namespace render::gpudriven {
         );
 
         // Read from staging
-        return *static_cast<uint32_t*>(stagingMapped);
+        return *static_cast<GPUCullStats*>(stagingMapped);
     }
 
 }

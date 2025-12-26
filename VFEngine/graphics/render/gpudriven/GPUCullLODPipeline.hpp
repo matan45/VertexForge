@@ -58,6 +58,13 @@ namespace render::gpudriven {
         );
 
         /**
+         * Update Hi-Z texture binding for occlusion culling.
+         * @param hiZView Hi-Z pyramid image view (full mip chain)
+         * @param hiZSampler Sampler for Hi-Z texture (nearest filtering)
+         */
+        void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);
+
+        /**
          * Dispatch the compute shader.
          *
          * @param cmd Command buffer to record into
@@ -97,6 +104,11 @@ namespace render::gpudriven {
         vk::Buffer cachedDrawCommandBuffer;
         vk::Buffer cachedPerDrawDataBuffer;
         vk::Buffer cachedDrawCountBuffer;
+
+        // Cached Hi-Z descriptor info
+        vk::ImageView cachedHiZView;
+        vk::Sampler cachedHiZSampler;
+        bool hiZDescriptorNeedsUpdate = false;
 
         // Helper methods
         void createDescriptorSetLayout();

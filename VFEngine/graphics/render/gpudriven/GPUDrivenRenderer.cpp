@@ -441,11 +441,11 @@ namespace render::gpudriven {
 
         cameraData.farPlane = farPlane;
         cameraData.objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0;
-        cameraData.hiZMipLevels = 0; // Not using Hi-Z in MVP
+        cameraData.hiZMipLevels = hiZMipLevels;
         cameraData.frameIndex = frameIndex++;
 
         cameraData.enableFrustumCulling = frustumCullingEnabled ? 1 : 0;
-        cameraData.enableOcclusionCulling = 0; // Disabled in MVP
+        cameraData.enableOcclusionCulling = (occlusionCullingEnabled && hiZMipLevels > 0) ? 1 : 0;
         cameraData.enableLODSelection = lodSelectionEnabled ? 1 : 0;
         cameraData.padding = 0;
 
@@ -526,33 +526,6 @@ namespace render::gpudriven {
         // Update object buffer with current frame's render data (pass time for Time node evaluation)
         mergedBuffer->updateObjects(opaqueObjects, cache, textureResolver, time);
 
-        // Debug: Log all meshes' LOD data once
-        static bool debugLogged = false;
-        if (!debugLogged && mergedBuffer->getObjectCount() > 0) {
-            const auto& meshInfo = mergedBuffer->getRegisteredMeshes();
-            for (size_t mi = 0; mi < meshInfo.size(); ++mi) {
-                const auto& mesh = meshInfo[mi];
-                spdlog::info("DEBUG GPU-Driven: Mesh[{}] '{}' has {} submeshes",
-                    mi, mesh.meshPath, mesh.submeshCount);
-                for (size_t si = 0; si < mesh.submeshes.size(); ++si) {
-                    const auto& sub = mesh.submeshes[si];
-                    for (uint32_t lod = 0; lod < 4; ++lod) {
-                        spdlog::info("DEBUG GPU-Driven:   Submesh '{}' LOD{}: vertOff={}, idxOff={}, idxCount={}, vertCount={}",
-                            sub.submeshName, lod,
-                            sub.lods[lod].vertexOffset, sub.lods[lod].indexOffset,
-                            sub.lods[lod].indexCount, sub.lods[lod].vertexCount);
-                    }
-                    spdlog::info("DEBUG GPU-Driven:   boundingSphere: ({}, {}, {}) r={}",
-                        sub.boundingSphere.x, sub.boundingSphere.y,
-                        sub.boundingSphere.z, sub.boundingSphere.w);
-                }
-            }
-            spdlog::info("DEBUG GPU-Driven: Total merged buffer: {} vertices, {} indices",
-                mergedBuffer->getTotalVertexCount(), mergedBuffer->getTotalIndexCount());
-            spdlog::info("DEBUG GPU-Driven: Total objects to render: {}", mergedBuffer->getObjectCount());
-            debugLogged = true;
-        }
-
         // Update camera data for compute shader
         updateCameraData(view, projection, cameraPosition, nearPlane, farPlane, time);
 
@@ -587,12 +560,18 @@ namespace render::gpudriven {
 
     void GPUDrivenRenderer::dispatchCompute(vk::CommandBuffer cmd)
     {
-        if (!initialized || !enabled || stats.totalObjects == 0)
+        if (!initialized || !enabled)
         {
             return;
         }
 
+        // Always reset draw count (clears stale data when no objects)
         indirectBuffer->resetDrawCount(cmd);
+
+        if (stats.totalObjects == 0)
+        {
+            return;
+        }
         mergedBuffer->uploadObjects(cmd);
 
         vk::MemoryBarrier memBarrier{
@@ -676,12 +655,11 @@ namespace render::gpudriven {
         bool registered = false;
 
         // Helper lambda to register a texture
-        auto tryRegister = [&](const std::string& texPath, const std::string& slotName) {
+        auto tryRegister = [&](const std::string& texPath) {
             if (texPath.empty()) return;
 
             // Load texture via MaterialTextureCache
             if (!materialTextureCache->loadTexture(texPath)) {
-                spdlog::warn("GPUDrivenRenderer: Failed to load texture: {}", texPath);
                 return;
             }
 
@@ -690,27 +668,92 @@ namespace render::gpudriven {
             vk::Sampler sampler = materialTextureCache->getSamplerForPath(texPath);
 
             if (view && sampler) {
-                uint32_t index = bindlessTextures->registerTexture(texPath, view, sampler);
-                spdlog::info("GPUDrivenRenderer: Registered {} texture '{}' at index {}",
-                    slotName, texPath, index);
+                bindlessTextures->registerTexture(texPath, view, sampler);
                 registered = true;
             }
         };
 
         // Register all texture slots
-        tryRegister(pbrValues.albedoTexturePath, "albedo");
-        tryRegister(pbrValues.normalTexturePath, "normal");
-        tryRegister(pbrValues.ormTexturePath, "orm");
-        tryRegister(pbrValues.metallicTexturePath, "metallic");
-        tryRegister(pbrValues.roughnessTexturePath, "roughness");
-        tryRegister(pbrValues.aoTexturePath, "ao");
-        tryRegister(pbrValues.emissionTexturePath, "emission");
-        tryRegister(pbrValues.heightTexturePath, "height");
+        tryRegister(pbrValues.albedoTexturePath);
+        tryRegister(pbrValues.normalTexturePath);
+        tryRegister(pbrValues.ormTexturePath);
+        tryRegister(pbrValues.metallicTexturePath);
+        tryRegister(pbrValues.roughnessTexturePath);
+        tryRegister(pbrValues.aoTexturePath);
+        tryRegister(pbrValues.emissionTexturePath);
+        tryRegister(pbrValues.heightTexturePath);
 
         // Mark as registered
         registeredMaterialPaths.insert(materialPath);
 
         return registered;
+    }
+
+    void GPUDrivenRenderer::updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels)
+    {
+        if (!initialized) {
+            return;
+        }
+
+        bool wasAvailable = (hiZMipLevels > 0);
+
+        cachedHiZView = hiZView;
+        cachedHiZSampler = hiZSampler;
+        hiZMipLevels = mipLevels;
+
+        // Update the cull pipeline descriptor with Hi-Z texture
+        if (cullPipeline && hiZView && hiZSampler) {
+            cullPipeline->updateHiZDescriptor(hiZView, hiZSampler);
+
+            // Auto-enable occlusion culling when Hi-Z first becomes available
+            if (!wasAvailable && mipLevels > 0 && !occlusionCullingEnabled) {
+                occlusionCullingEnabled = true;
+                spdlog::info("GPUDrivenRenderer: Hi-Z occlusion culling enabled ({} mip levels)", mipLevels);
+            }
+        }
+    }
+
+    uint32_t GPUDrivenRenderer::getMergedVertexCount() const
+    {
+        return mergedBuffer ? mergedBuffer->getTotalVertexCount() : 0;
+    }
+
+    uint32_t GPUDrivenRenderer::getMergedIndexCount() const
+    {
+        return mergedBuffer ? mergedBuffer->getTotalIndexCount() : 0;
+    }
+
+    uint32_t GPUDrivenRenderer::getRegisteredMeshCount() const
+    {
+        return mergedBuffer ? static_cast<uint32_t>(mergedBuffer->getRegisteredMeshes().size()) : 0;
+    }
+
+    uint32_t GPUDrivenRenderer::getRegisteredTextureCount() const
+    {
+        return bindlessTextures ? bindlessTextures->getRegisteredTextureCount() : 0;
+    }
+
+    void GPUDrivenRenderer::updateStatsFromGPU()
+    {
+        if (!initialized || !enabled || !indirectBuffer) {
+            return;
+        }
+
+        // Read back all stats from GPU (expensive - causes sync)
+        GPUCullStats gpuStats = indirectBuffer->readBackStats();
+
+        stats.visibleObjects = gpuStats.drawCount;
+        stats.drawCalls = (gpuStats.drawCount > 0) ? 1 : 0;
+
+        // LOD distribution from GPU
+        stats.objectsLOD0 = gpuStats.lodCount0;
+        stats.objectsLOD1 = gpuStats.lodCount1;
+        stats.objectsLOD2 = gpuStats.lodCount2;
+        stats.objectsLOD3 = gpuStats.lodCount3;
+
+        // Culling stats directly from GPU counters
+        stats.culledByFrustum = gpuStats.culledByFrustum;
+        stats.culledByOcclusion = gpuStats.culledByOcclusion;
     }
 
 }

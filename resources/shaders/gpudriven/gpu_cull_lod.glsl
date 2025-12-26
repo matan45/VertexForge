@@ -137,10 +137,19 @@ layout(std430, set = 0, binding = 3) writeonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
-// Output: Atomic draw count
+// Output: Atomic draw count and statistics
 layout(std430, set = 0, binding = 4) buffer DrawCountBuffer {
     uint drawCount;
+    uint lodCount0;  // Objects using LOD0
+    uint lodCount1;  // Objects using LOD1
+    uint lodCount2;  // Objects using LOD2
+    uint lodCount3;  // Objects using LOD3
+    uint culledByFrustum;    // Objects culled by frustum
+    uint culledByOcclusion;  // Objects culled by Hi-Z occlusion
 };
+
+// Input: Hi-Z pyramid texture (for occlusion culling)
+layout(set = 0, binding = 5) uniform sampler2D hiZTexture;
 
 // ============================================================================
 // Helper Functions
@@ -221,6 +230,86 @@ uint selectLOD(float screenPixels, vec4 thresholds) {
     return 3;                                      // LOD3 for < threshold2
 }
 
+// Project bounding sphere to screen-space AABB and test against Hi-Z pyramid
+// Returns true if object is visible (not occluded)
+bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, uint hiZMipLevels) {
+    vec3 center = worldSphere.xyz;
+    float radius = worldSphere.w;
+
+    // Calculate 8 corners of world-space AABB from bounding sphere
+    vec3 aabbMin = center - vec3(radius);
+    vec3 aabbMax = center + vec3(radius);
+
+    // Project all 8 corners to clip space
+    vec4 corners[8];
+    corners[0] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMin.z, 1.0);
+    corners[1] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMin.z, 1.0);
+    corners[2] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMin.z, 1.0);
+    corners[3] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMin.z, 1.0);
+    corners[4] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMax.z, 1.0);
+    corners[5] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMax.z, 1.0);
+    corners[6] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMax.z, 1.0);
+    corners[7] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMax.z, 1.0);
+
+    // Find screen-space AABB of projected corners
+    vec2 ndcMin = vec2(1.0);
+    vec2 ndcMax = vec2(-1.0);
+    float minDepth = 1.0;
+
+    for (int i = 0; i < 8; i++) {
+        // Handle behind-camera case
+        if (corners[i].w <= 0.0) {
+            // Some part of AABB is behind camera - consider visible
+            return true;
+        }
+
+        // Perspective divide
+        vec3 ndc = corners[i].xyz / corners[i].w;
+
+        // Update screen-space bounds
+        ndcMin = min(ndcMin, ndc.xy);
+        ndcMax = max(ndcMax, ndc.xy);
+
+        // Track minimum depth (closest point)
+        // Vulkan uses [0, 1] depth range
+        minDepth = min(minDepth, ndc.z);
+    }
+
+    // Clamp to valid screen range
+    ndcMin = clamp(ndcMin, vec2(-1.0), vec2(1.0));
+    ndcMax = clamp(ndcMax, vec2(-1.0), vec2(1.0));
+
+    // If object is completely behind near plane
+    if (minDepth < 0.0) {
+        return true; // Visible (touching near plane)
+    }
+
+    // Convert NDC to UV [0, 1]
+    vec2 uvMin = ndcMin * 0.5 + 0.5;
+    vec2 uvMax = ndcMax * 0.5 + 0.5;
+
+    // Calculate screen-space size in pixels
+    vec2 sizePixels = (uvMax - uvMin) * screenSize;
+    float maxDimension = max(sizePixels.x, sizePixels.y);
+
+    // Select Hi-Z mip level based on projected size
+    // We want to sample a mip where one texel covers approximately the AABB
+    float mipLevel = ceil(log2(maxDimension));
+    mipLevel = clamp(mipLevel, 0.0, float(hiZMipLevels - 1u));
+
+    // Sample Hi-Z at 4 corners of the screen-space AABB
+    // Use the maximum depth from all samples (conservative)
+    float hiZDepth = 0.0;
+    hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMin, mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMax, mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMin.x, uvMax.y), mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMax.x, uvMin.y), mipLevel).r);
+
+    // Object is occluded if its nearest point is behind the Hi-Z depth
+    // Add small epsilon to avoid precision issues
+    return minDepth <= hiZDepth + 0.0001;
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -247,7 +336,20 @@ void main() {
     // ========================================
     if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
+            atomicAdd(culledByFrustum, 1);
             return; // Outside frustum, skip this object
+        }
+    }
+
+    // ========================================
+    // Hi-Z Occlusion Culling
+    // ========================================
+    if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u) {
+        if (camera.hiZMipLevels > 0u) {
+            if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
+                atomicAdd(culledByOcclusion, 1);
+                return; // Occluded by Hi-Z, skip this object
+            }
         }
     }
 
@@ -290,6 +392,14 @@ void main() {
 
     // Atomically allocate a draw slot
     uint drawIndex = atomicAdd(drawCount, 1);
+
+    // Track LOD distribution statistics
+    switch (lodLevel) {
+        case 0u: atomicAdd(lodCount0, 1); break;
+        case 1u: atomicAdd(lodCount1, 1); break;
+        case 2u: atomicAdd(lodCount2, 1); break;
+        default: atomicAdd(lodCount3, 1); break;
+    }
 
     // Write draw command
     drawCommands[drawIndex].indexCount = indexCount;

@@ -82,8 +82,9 @@ namespace render::gpudriven {
         // binding 2: DrawCommandBuffer (storage, write-only)
         // binding 3: PerDrawDataBuffer (storage, write-only)
         // binding 4: DrawCountBuffer (storage, read-write for atomics)
+        // binding 5: Hi-Z pyramid texture (combined image sampler)
 
-        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
 
         // Binding 0: Object buffer (GPUObjectData[])
         bindings[0].binding = 0;
@@ -114,6 +115,12 @@ namespace render::gpudriven {
         bindings[4].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        // Binding 5: Hi-Z pyramid texture (for occlusion culling)
+        bindings[5].binding = 5;
+        bindings[5].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[5].descriptorCount = 1;
+        bindings[5].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -169,7 +176,7 @@ namespace render::gpudriven {
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
 
         // Storage buffers: object, draw commands, per-draw data, draw count (4 total)
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
@@ -178,6 +185,10 @@ namespace render::gpudriven {
         // Uniform buffer: camera data (1 total)
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
+
+        // Combined image sampler: Hi-Z texture (1 total)
+        poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[2].descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -230,9 +241,21 @@ namespace render::gpudriven {
         descriptorsNeedUpdate = true;
     }
 
+    void GPUCullLODPipeline::updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler)
+    {
+        // Check if Hi-Z descriptor changed
+        if (cachedHiZView == hiZView && cachedHiZSampler == hiZSampler && !hiZDescriptorNeedsUpdate) {
+            return;
+        }
+
+        cachedHiZView = hiZView;
+        cachedHiZSampler = hiZSampler;
+        hiZDescriptorNeedsUpdate = true;
+    }
+
     void GPUCullLODPipeline::writeDescriptors()
     {
-        if (!descriptorsNeedUpdate) {
+        if (!descriptorsNeedUpdate && !hiZDescriptorNeedsUpdate) {
             return;
         }
 
@@ -262,58 +285,91 @@ namespace render::gpudriven {
         perDrawInfo.offset = 0;
         perDrawInfo.range = VK_WHOLE_SIZE;
 
-        // Draw count buffer info
+        // Draw count buffer info (includes drawCount + LOD stats)
         vk::DescriptorBufferInfo drawCountInfo{};
         drawCountInfo.buffer = cachedDrawCountBuffer;
         drawCountInfo.offset = 0;
-        drawCountInfo.range = sizeof(uint32_t);
+        drawCountInfo.range = VK_WHOLE_SIZE;  // Full buffer including LOD counters
 
-        std::array<vk::WriteDescriptorSet, 5> writes{};
+        // Hi-Z image info (optional, may not be available on first frame)
+        vk::DescriptorImageInfo hiZInfo{};
+        hiZInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        hiZInfo.imageView = cachedHiZView;
+        hiZInfo.sampler = cachedHiZSampler;
+
+        // Determine number of writes based on whether Hi-Z is available
+        bool hasHiZ = cachedHiZView && cachedHiZSampler;
+
+        std::vector<vk::WriteDescriptorSet> writes;
+        writes.reserve(hasHiZ ? 6 : 5);
 
         // Binding 0: Object buffer
-        writes[0].dstSet = descriptorSet;
-        writes[0].dstBinding = 0;
-        writes[0].dstArrayElement = 0;
-        writes[0].descriptorCount = 1;
-        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[0].pBufferInfo = &objectInfo;
+        vk::WriteDescriptorSet objectWrite{};
+        objectWrite.dstSet = descriptorSet;
+        objectWrite.dstBinding = 0;
+        objectWrite.dstArrayElement = 0;
+        objectWrite.descriptorCount = 1;
+        objectWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        objectWrite.pBufferInfo = &objectInfo;
+        writes.push_back(objectWrite);
 
         // Binding 1: Camera buffer
-        writes[1].dstSet = descriptorSet;
-        writes[1].dstBinding = 1;
-        writes[1].dstArrayElement = 0;
-        writes[1].descriptorCount = 1;
-        writes[1].descriptorType = vk::DescriptorType::eUniformBuffer;
-        writes[1].pBufferInfo = &cameraInfo;
+        vk::WriteDescriptorSet cameraWrite{};
+        cameraWrite.dstSet = descriptorSet;
+        cameraWrite.dstBinding = 1;
+        cameraWrite.dstArrayElement = 0;
+        cameraWrite.descriptorCount = 1;
+        cameraWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+        cameraWrite.pBufferInfo = &cameraInfo;
+        writes.push_back(cameraWrite);
 
         // Binding 2: Draw command buffer
-        writes[2].dstSet = descriptorSet;
-        writes[2].dstBinding = 2;
-        writes[2].dstArrayElement = 0;
-        writes[2].descriptorCount = 1;
-        writes[2].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[2].pBufferInfo = &drawCmdInfo;
+        vk::WriteDescriptorSet drawCmdWrite{};
+        drawCmdWrite.dstSet = descriptorSet;
+        drawCmdWrite.dstBinding = 2;
+        drawCmdWrite.dstArrayElement = 0;
+        drawCmdWrite.descriptorCount = 1;
+        drawCmdWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        drawCmdWrite.pBufferInfo = &drawCmdInfo;
+        writes.push_back(drawCmdWrite);
 
         // Binding 3: Per-draw data buffer
-        writes[3].dstSet = descriptorSet;
-        writes[3].dstBinding = 3;
-        writes[3].dstArrayElement = 0;
-        writes[3].descriptorCount = 1;
-        writes[3].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[3].pBufferInfo = &perDrawInfo;
+        vk::WriteDescriptorSet perDrawWrite{};
+        perDrawWrite.dstSet = descriptorSet;
+        perDrawWrite.dstBinding = 3;
+        perDrawWrite.dstArrayElement = 0;
+        perDrawWrite.descriptorCount = 1;
+        perDrawWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        perDrawWrite.pBufferInfo = &perDrawInfo;
+        writes.push_back(perDrawWrite);
 
         // Binding 4: Draw count buffer
-        writes[4].dstSet = descriptorSet;
-        writes[4].dstBinding = 4;
-        writes[4].dstArrayElement = 0;
-        writes[4].descriptorCount = 1;
-        writes[4].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[4].pBufferInfo = &drawCountInfo;
+        vk::WriteDescriptorSet drawCountWrite{};
+        drawCountWrite.dstSet = descriptorSet;
+        drawCountWrite.dstBinding = 4;
+        drawCountWrite.dstArrayElement = 0;
+        drawCountWrite.descriptorCount = 1;
+        drawCountWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        drawCountWrite.pBufferInfo = &drawCountInfo;
+        writes.push_back(drawCountWrite);
+
+        // Binding 5: Hi-Z texture (if available)
+        if (hasHiZ) {
+            vk::WriteDescriptorSet hiZWrite{};
+            hiZWrite.dstSet = descriptorSet;
+            hiZWrite.dstBinding = 5;
+            hiZWrite.dstArrayElement = 0;
+            hiZWrite.descriptorCount = 1;
+            hiZWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            hiZWrite.pImageInfo = &hiZInfo;
+            writes.push_back(hiZWrite);
+        }
 
         vkDevice.updateDescriptorSets(writes, {});
         descriptorsNeedUpdate = false;
+        hiZDescriptorNeedsUpdate = false;
 
-        spdlog::debug("GPUCullLODPipeline: Updated descriptors");
+        spdlog::debug("GPUCullLODPipeline: Updated descriptors (Hi-Z: {})", hasHiZ ? "yes" : "no");
     }
 
     void GPUCullLODPipeline::dispatch(vk::CommandBuffer cmd, uint32_t objectCount)

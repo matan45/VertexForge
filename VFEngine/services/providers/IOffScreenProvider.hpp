@@ -31,6 +31,32 @@ namespace services {
         uint32_t occludedCount = 0;
     };
 
+    // GPU-driven rendering statistics
+    struct GPUDrivenDebugStats {
+        bool enabled = false;
+        bool frustumCullingEnabled = false;
+        bool occlusionCullingEnabled = false;
+        bool lodSelectionEnabled = false;
+        uint32_t hiZMipLevels = 0;
+
+        uint32_t totalObjects = 0;
+        uint32_t visibleObjects = 0;
+        uint32_t culledByFrustum = 0;
+        uint32_t culledByOcclusion = 0;
+
+        // LOD distribution
+        uint32_t objectsLOD0 = 0;
+        uint32_t objectsLOD1 = 0;
+        uint32_t objectsLOD2 = 0;
+        uint32_t objectsLOD3 = 0;
+
+        // Merged buffer stats
+        uint32_t mergedVertexCount = 0;
+        uint32_t mergedIndexCount = 0;
+        uint32_t registeredMeshCount = 0;
+        uint32_t registeredTextureCount = 0;
+    };
+
     struct CullingDebugStats {
         std::vector<CameraCullingStats> cameraStats;
         CameraId activeCameraId = 0;
@@ -40,6 +66,9 @@ namespace services {
         size_t dynamicBvhEntityCount = 0;
         size_t staticBvhNodeCount = 0;
         size_t dynamicBvhNodeCount = 0;
+
+        // GPU-driven rendering statistics
+        GPUDrivenDebugStats gpuDriven;
     };
 
     class IOffScreenProvider {

@@ -132,9 +132,31 @@ namespace render::gpudriven {
         bool isLODSelectionEnabled() const { return lodSelectionEnabled; }
 
         /**
+         * Enable/disable Hi-Z occlusion culling.
+         */
+        void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
+        bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
+
+        /**
+         * Update Hi-Z pyramid texture for occlusion culling.
+         * Call this each frame after the Hi-Z pyramid is generated.
+         *
+         * @param hiZView Hi-Z pyramid image view (full mip chain)
+         * @param hiZSampler Sampler for Hi-Z texture (nearest filtering)
+         * @param mipLevels Number of mip levels in the Hi-Z pyramid
+         */
+        void updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels);
+
+        /**
          * Get rendering statistics.
          */
         const GPUDrivenStats& getStats() const { return stats; }
+
+        /**
+         * Update stats by reading back draw count from GPU.
+         * This is expensive (causes GPU-CPU sync) - only call when debug stats are needed.
+         */
+        void updateStatsFromGPU();
 
         /**
          * Check if renderer is initialized.
@@ -158,6 +180,19 @@ namespace render::gpudriven {
          * @return True if any textures were registered
          */
         bool registerMaterialTextures(const std::string& materialPath);
+
+        /**
+         * Get Hi-Z mip levels (0 if not available).
+         */
+        uint32_t getHiZMipLevels() const { return hiZMipLevels; }
+
+        /**
+         * Get merged buffer statistics.
+         */
+        uint32_t getMergedVertexCount() const;
+        uint32_t getMergedIndexCount() const;
+        uint32_t getRegisteredMeshCount() const;
+        uint32_t getRegisteredTextureCount() const;
 
     private:
         core::Device& device;
@@ -188,7 +223,13 @@ namespace render::gpudriven {
         bool enabled = false;
         bool frustumCullingEnabled = true;
         bool lodSelectionEnabled = true;
+        bool occlusionCullingEnabled = false;  // Disabled by default until Hi-Z is set
         uint32_t frameIndex = 0;
+
+        // Hi-Z occlusion state
+        vk::ImageView cachedHiZView;
+        vk::Sampler cachedHiZSampler;
+        uint32_t hiZMipLevels = 0;
 
         // Statistics
         GPUDrivenStats stats{};

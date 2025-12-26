@@ -12,6 +12,7 @@
 #include "../render/tools/FrustumDebugRenderer.hpp"
 #include "../render/tools/AudioSphereDebugRenderer.hpp"
 #include "../render/DebugRenderer.hpp"
+#include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "material/MaterialTypes.hpp"
@@ -934,6 +935,36 @@ namespace controllers
         stats.dynamicBvhEntityCount = sceneBVH.getDynamicEntityCount();
         stats.staticBvhNodeCount = sceneBVH.getStaticNodeCount();
         stats.dynamicBvhNodeCount = sceneBVH.getDynamicNodeCount();
+
+        // GPU-driven rendering statistics
+        auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
+        if (gpuDrivenRenderer && renderHandler->isGPUDrivenRendererInitialized())
+        {
+            // Update stats from GPU (reads back draw count - expensive but needed for debug)
+            gpuDrivenRenderer->updateStatsFromGPU();
+
+            stats.gpuDriven.enabled = gpuDrivenRenderer->isEnabled();
+            stats.gpuDriven.frustumCullingEnabled = gpuDrivenRenderer->isFrustumCullingEnabled();
+            stats.gpuDriven.occlusionCullingEnabled = gpuDrivenRenderer->isOcclusionCullingEnabled();
+            stats.gpuDriven.lodSelectionEnabled = gpuDrivenRenderer->isLODSelectionEnabled();
+            stats.gpuDriven.hiZMipLevels = gpuDrivenRenderer->getHiZMipLevels();
+
+            const auto& gpuStats = gpuDrivenRenderer->getStats();
+            stats.gpuDriven.totalObjects = gpuStats.totalObjects;
+            stats.gpuDriven.visibleObjects = gpuStats.visibleObjects;
+            stats.gpuDriven.culledByFrustum = gpuStats.culledByFrustum;
+            stats.gpuDriven.culledByOcclusion = gpuStats.culledByOcclusion;
+            stats.gpuDriven.objectsLOD0 = gpuStats.objectsLOD0;
+            stats.gpuDriven.objectsLOD1 = gpuStats.objectsLOD1;
+            stats.gpuDriven.objectsLOD2 = gpuStats.objectsLOD2;
+            stats.gpuDriven.objectsLOD3 = gpuStats.objectsLOD3;
+
+            // Merged buffer stats
+            stats.gpuDriven.mergedVertexCount = gpuDrivenRenderer->getMergedVertexCount();
+            stats.gpuDriven.mergedIndexCount = gpuDrivenRenderer->getMergedIndexCount();
+            stats.gpuDriven.registeredMeshCount = gpuDrivenRenderer->getRegisteredMeshCount();
+            stats.gpuDriven.registeredTextureCount = gpuDrivenRenderer->getRegisteredTextureCount();
+        }
 
         return stats;
     }

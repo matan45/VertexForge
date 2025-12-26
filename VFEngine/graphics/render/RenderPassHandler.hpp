@@ -82,6 +82,9 @@ namespace render
         // Private helper to initialize GPU-driven renderer (called from initMeshPipeline)
         void initGPUDrivenRenderer();
 
+        // Private helper to pass Hi-Z pyramid to GPU-driven renderer
+        void updateGPUDrivenHiZ() const;
+
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
                                    core::OffscreenResources& offscreenResources);
@@ -128,6 +131,13 @@ namespace render
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
+
+        /**
+         * Enable/disable Hi-Z occlusion culling for GPU-driven renderer.
+         * Occlusion culling uses previous frame's Hi-Z pyramid.
+         */
+        void setGPUDrivenOcclusionCullingEnabled(bool enabled);
+        bool isGPUDrivenOcclusionCullingEnabled() const;
 
         // Camera management (delegates to CameraOcclusionManager)
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);

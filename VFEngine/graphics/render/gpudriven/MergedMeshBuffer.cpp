@@ -9,6 +9,7 @@
 #include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
+#include <cmath>
 
 // Verify vertex stride matches actual Vertex struct
 static_assert(sizeof(resource::Vertex) == 32, "Vertex size must be 32 bytes for MergedMeshBuffer");
@@ -229,6 +230,13 @@ namespace render::gpudriven {
             loc.aabbMax = subMesh.boundingBox.max;
             loc.calculateBoundingSphere();
 
+            // Validate bounding sphere
+            if (loc.boundingSphere.w <= 0.0f || std::isnan(loc.boundingSphere.w) || std::isinf(loc.boundingSphere.w)) {
+                loggerWarning("MergedMeshBuffer: Invalid bounding sphere for submesh '{}' - radius={}, setting to 1.0",
+                    loc.submeshName, loc.boundingSphere.w);
+                loc.boundingSphere.w = 1.0f;  // Default radius
+            }
+
             // Process each LOD level
             for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
                 const auto& lodBuffers = subMesh.lodLevels[lod];
@@ -247,11 +255,13 @@ namespace render::gpudriven {
 
                 // Check capacity
                 if (totalVertexCount + lodBuffers.vertexCount > maxVertexCount) {
-                    loggerError("MergedMeshBuffer: vertex capacity exceeded");
+                    loggerError("MergedMeshBuffer: vertex capacity exceeded - need {} more vertices, but only {} available (used {}/{})",
+                        lodBuffers.vertexCount, maxVertexCount - totalVertexCount, totalVertexCount, maxVertexCount);
                     return nullptr;
                 }
                 if (totalIndexCount + lodBuffers.indexCount > maxIndexCount) {
-                    loggerError("MergedMeshBuffer: index capacity exceeded");
+                    loggerError("MergedMeshBuffer: index capacity exceeded - need {} more indices, but only {} available (used {}/{})",
+                        lodBuffers.indexCount, maxIndexCount - totalIndexCount, totalIndexCount, maxIndexCount);
                     return nullptr;
                 }
 
