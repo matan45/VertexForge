@@ -156,15 +156,13 @@ namespace windows
 
 			// Capture the drop zone rect BEFORE columns are set up in drawAssetGrid()
 			ImVec2 dropZoneStart = ImGui::GetCursorScreenPos();
-			ImVec2 contentSize = ImGui::GetContentRegionAvail();
+			ImVec2 contentSize = ImGui::GetWindowSize();
 			ImRect dropRect(dropZoneStart, ImVec2(dropZoneStart.x + contentSize.x, dropZoneStart.y + contentSize.y));
 
 			drawAssetGrid();
-
-			// Reset columns BEFORE setting up drop target
+			
 			ImGui::Columns(1);
-
-			// Accept entity drops anywhere in the content panel to create prefabs
+			
 			if (ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("ContentFolderDropZone")))
 			{
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))

@@ -1560,24 +1560,13 @@ namespace services {
                     }
                 }
 
-                // IBL loading (rare in prefabs, but handle it)
-                if (entity.hasComponent<components::IBLComponent>()) {
-                    const auto& iblComp = entity.getComponent<components::IBLComponent>();
-                    if (!iblComp.fileName.empty()) {
-                        events::render::SetIBLCommand setIblCmd;
-                        setIblCmd.hdrPath = iblComp.fileName;
-                        dispatcher.execute(setIblCmd);
-                    }
-                }
-
                 // Recurse into children
                 for (auto& child : entity.getChildren()) {
                     triggerResourceLoading(child);
                 }
             };
             triggerResourceLoading(*result);
-
-            // Publish notification
+            
             events::scene::PrefabInstantiatedNotification notification;
             notification.filePath = filePath;
             notification.rootEntity = handle;

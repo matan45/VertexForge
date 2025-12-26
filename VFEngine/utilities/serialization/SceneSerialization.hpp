@@ -14,13 +14,12 @@ namespace serialization
 	// Progress callback for scene loading
 	// Parameters: currentEntityName, entitiesLoaded, totalEntities
 	using SceneLoadProgressCallback = std::function<void(const std::string&, size_t, size_t)>;
-
-	// Forward declaration for friend access
+	
 	class PrefabSerialization;
 
 	class SceneSerialization
 	{
-		friend class PrefabSerialization; // Allow PrefabSerialization to access private component serializers
+		friend class PrefabSerialization;
 
 	public:
 		static scene::SceneGraphSystem loadScene(std::string_view filename);
