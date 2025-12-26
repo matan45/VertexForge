@@ -37,7 +37,7 @@ namespace render
         clearColor->init();
     }
 
-    void RenderPassHandler::initMeshPipeline()
+    void RenderPassHandler::initMeshPipeline(bool enableGPUDriven)
     {
         if (meshPipelineInitialized)
         {
@@ -58,7 +58,11 @@ namespace render
         meshPipelineInitialized = true;
 
         // Auto-initialize GPU-driven renderer now that mesh pipeline is ready
-        initGPUDrivenRenderer();
+        // Skip for material preview to allow custom per-material shaders
+        if (enableGPUDriven)
+        {
+            initGPUDrivenRenderer();
+        }
     }
 
     void RenderPassHandler::initGPUDrivenRenderer()
@@ -422,10 +426,16 @@ namespace render
 
                 meshPipeline->endRenderPass(commandBuffer);
             }
-            else if (!translucentObjects.empty() || hasDebugItems)
+            else if (!opaqueObjects.empty() || !translucentObjects.empty() || hasDebugItems)
             {
-                // Only translucent objects or debug items - use CPU path
-                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, translucentObjects, currentFrustum,
+                // CPU fallback path - render all objects (opaque + translucent)
+                // This is used when GPU-driven rendering is not available (e.g., material preview)
+                std::vector<mesh::MeshRenderData> allObjects;
+                allObjects.reserve(opaqueObjects.size() + translucentObjects.size());
+                allObjects.insert(allObjects.end(), opaqueObjects.begin(), opaqueObjects.end());
+                allObjects.insert(allObjects.end(), translucentObjects.begin(), translucentObjects.end());
+
+                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, allObjects, currentFrustum,
                                                   debugRendererPtr, currentView, currentProjection);
             }
         }

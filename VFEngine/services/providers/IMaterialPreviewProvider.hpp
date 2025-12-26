@@ -14,10 +14,11 @@ namespace services {
         float emission = 0.0f;
 
         std::string albedoTexturePath;
+        std::string normalTexturePath;
+        std::string ormTexturePath;          // Packed ORM texture (R=AO, G=Roughness, B=Metallic)
         std::string metallicTexturePath;
         std::string roughnessTexturePath;
         std::string aoTexturePath;
-        std::string normalTexturePath;
         std::string emissionTexturePath;
         std::string heightTexturePath;
 

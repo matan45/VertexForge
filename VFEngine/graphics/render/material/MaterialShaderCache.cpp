@@ -33,7 +33,6 @@ namespace render::mesh
         const material::MaterialData& materialData)
     {
         if (!initialized) {
-            loggerWarning("MaterialShaderCache not initialized");
             return nullptr;
         }
 

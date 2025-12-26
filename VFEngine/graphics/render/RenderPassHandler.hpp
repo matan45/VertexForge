@@ -95,7 +95,7 @@ namespace render
         mesh::StaticMeshPipeline* getMeshPipeline() const { return meshPipeline.get(); }
         bool isMeshPipelineInitialized() const { return meshPipelineInitialized; }
         
-        void initMeshPipeline();
+        void initMeshPipeline(bool enableGPUDriven = true);
 
         // (called when IBL is removed)
         void reinitMeshPipelineWithDefaults();
