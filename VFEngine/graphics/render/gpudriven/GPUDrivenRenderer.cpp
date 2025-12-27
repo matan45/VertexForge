@@ -1,6 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../mesh/MeshGPUCache.hpp"
 #include "../mesh/MeshTypes.hpp"
+#include "../mesh/MeshStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "resource/ResourceManager.hpp"
@@ -46,6 +47,12 @@ namespace render::gpudriven {
         // Initialize sub-components
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
+
+        // Create mesh stream manager (streaming enabled by default)
+        if (meshStreamingEnabled) {
+            meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
+            spdlog::info("GPUDrivenRenderer: Mesh streaming enabled by default");
+        }
 
         batchManager = std::make_unique<IndirectBatchManager>(device);
         batchManager->init(DEFAULT_BATCH_COUNT, MAX_DRAW_COMMANDS);
@@ -122,6 +129,7 @@ namespace render::gpudriven {
         if (batchManager) batchManager->cleanup();
         if (mergedBuffer) mergedBuffer->cleanup();
 
+        meshStreamManager.reset();
         cullPipeline.reset();
         bindlessTextures.reset();
         batchManager.reset();
@@ -474,6 +482,18 @@ namespace render::gpudriven {
             return;
         }
 
+        // Update mesh streaming if enabled
+        if (meshStreamingEnabled && meshStreamManager) {
+            // Request streaming for all meshes in the scene
+            for (const auto& meshRender : opaqueObjects) {
+                meshStreamManager->requestMesh(meshRender.meshPath);
+            }
+
+            // Update streaming (process priority queue, upload data)
+            glm::mat4 viewProj = projection * view;
+            meshStreamManager->update(cameraPosition, viewProj, 0.016f); // Assume ~60fps delta
+        }
+
         // Register textures for all materials in the scene (done once per material)
         if (materialTextureCache && bindlessTextures) {
             for (const auto& meshRender : opaqueObjects) {
@@ -822,6 +842,35 @@ namespace render::gpudriven {
         // Culling stats directly from GPU counters (aggregated)
         stats.culledByFrustum = aggregated.culledByFrustum;
         stats.culledByOcclusion = aggregated.culledByOcclusion;
+    }
+
+    // ===== MESH STREAMING SUPPORT =====
+
+    void GPUDrivenRenderer::setMeshStreamingEnabled(bool enabled)
+    {
+        if (enabled == meshStreamingEnabled) {
+            return;
+        }
+
+        meshStreamingEnabled = enabled;
+
+        if (enabled && mergedBuffer && !meshStreamManager) {
+            // Create streaming manager
+            meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
+            spdlog::info("GPUDrivenRenderer: Mesh streaming enabled");
+        } else if (!enabled && meshStreamManager) {
+            // Destroy streaming manager
+            meshStreamManager.reset();
+            spdlog::info("GPUDrivenRenderer: Mesh streaming disabled");
+        }
+    }
+
+    MergedMeshBuffer::StreamingStats GPUDrivenRenderer::getStreamingStats() const
+    {
+        if (mergedBuffer) {
+            return mergedBuffer->getStreamingStats();
+        }
+        return {};
     }
 
 }

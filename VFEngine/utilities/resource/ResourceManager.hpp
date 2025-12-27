@@ -14,6 +14,7 @@ namespace fs = std::filesystem;
 #include "../material/MaterialTypes.hpp"
 #include "Types.hpp"
 #include "ShaderResource.hpp"
+#include "MeshStreamHandle.hpp"
 
 namespace resource {
 	class ResourceManager
@@ -39,8 +40,11 @@ namespace resource {
 		static std::future <std::shared_ptr<MeshesData>> loadMeshAsync(std::string_view path);
 		static std::future <std::shared_ptr<std::vector<ShaderModel>>> loadShaderAsync(std::string_view path);
 		static std::future <std::shared_ptr<material::MaterialData>> loadMaterialAsync(std::string_view path);
-		
+
 		static std::shared_ptr<material::MaterialData> loadMaterial(std::string_view path);
+
+		// Mesh streaming support
+		static std::unique_ptr<MeshStreamHandle> openMeshStream(std::string_view path);
 		
 		static std::shared_ptr<material::MaterialData> getMaterial(std::string_view path);
 

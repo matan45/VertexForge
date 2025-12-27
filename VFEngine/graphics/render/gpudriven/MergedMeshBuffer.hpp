@@ -13,6 +13,11 @@ namespace core {
     class TransferManager;
 }
 
+namespace resource {
+    struct MeshStreamHeader;
+    struct Vertex;
+}
+
 namespace render::mesh {
     class MeshGPUCache;
     struct MeshGPUData;
@@ -86,9 +91,10 @@ namespace render::gpudriven {
         uint32_t getObjectCount() const { return currentObjectCount; }
         uint32_t getMaxObjects() const { return maxObjectCount; }
 
-        // Get submesh location for a specific mesh/submesh
+        // Get submesh location for a specific mesh/submesh (requires index for unique lookup)
         const SubmeshLocation* getSubmeshLocation(const std::string& meshPath,
-                                                   const std::string& submeshName) const;
+                                                   const std::string& submeshName,
+                                                   uint32_t submeshIndex) const;
 
         // Get all registered meshes
         const std::vector<MergedMeshInfo>& getRegisteredMeshes() const { return registeredMeshes; }
@@ -101,6 +107,51 @@ namespace render::gpudriven {
         size_t getVertexBufferSize() const { return totalVertexCount * vertexStride; }
         size_t getIndexBufferSize() const { return totalIndexCount * sizeof(uint32_t); }
         size_t getObjectBufferSize() const { return maxObjectCount * sizeof(GPUObjectData); }
+
+        // ===== STREAMING SUPPORT =====
+
+        // Reserve space for a mesh based on stream header info (no geometry yet)
+        // Allocates buffer space for all LODs but doesn't upload data
+        // Returns the mesh info with submesh locations (LOD states = NotRequested)
+        MergedMeshInfo* reserveMesh(const std::string& meshPath,
+                                     const resource::MeshStreamHeader& header);
+
+        // Upload a single LOD level for a submesh
+        // Called as streaming data arrives
+        // vertexData must be array of resource::Vertex (32 bytes each)
+        bool uploadLOD(const std::string& meshPath,
+                       const std::string& submeshName,
+                       uint32_t submeshIndex,
+                       uint32_t lodLevel,
+                       const resource::Vertex* vertexData, uint32_t vertexCount,
+                       const uint32_t* indexData, uint32_t indexCount);
+
+        // Mark a LOD as ready for rendering
+        void markLODReady(const std::string& meshPath,
+                          const std::string& submeshName,
+                          uint32_t submeshIndex,
+                          uint32_t lodLevel);
+
+        // Check if mesh has any renderable LOD data
+        bool hasRenderableData(const std::string& meshPath) const;
+
+        // Get mutable submesh location (for streaming state updates)
+        SubmeshLocation* getSubmeshLocationMutable(const std::string& meshPath,
+                                                    const std::string& submeshName,
+                                                    uint32_t submeshIndex);
+
+        // Get streaming statistics
+        struct StreamingStats {
+            uint32_t totalMeshes = 0;
+            uint32_t meshesWithRenderableData = 0;
+            uint32_t totalLODsReady = 0;
+            uint32_t totalLODsPending = 0;
+            size_t usedVertexBytes = 0;
+            size_t usedIndexBytes = 0;
+            size_t reservedVertexBytes = 0;
+            size_t reservedIndexBytes = 0;
+        };
+        StreamingStats getStreamingStats() const;
 
     private:
         core::Device& device;
@@ -148,6 +199,29 @@ namespace render::gpudriven {
         bool initialized = false;
         bool dirty = true;
 
+        // ===== FREE-LIST ALLOCATOR FOR STREAMING =====
+        struct FreeBlock {
+            uint32_t offset;
+            uint32_t size;
+        };
+        std::vector<FreeBlock> vertexFreeList;
+        std::vector<FreeBlock> indexFreeList;
+
+        // Track reserved (allocated but not yet uploaded) space
+        uint32_t reservedVertexCount = 0;
+        uint32_t reservedIndexCount = 0;
+
+        // Allocate contiguous space from buffer, returns offset or UINT32_MAX on failure
+        uint32_t allocateVertexSpace(uint32_t count);
+        uint32_t allocateIndexSpace(uint32_t count);
+
+        // Free previously allocated space (adds to free list)
+        void freeVertexSpace(uint32_t offset, uint32_t count);
+        void freeIndexSpace(uint32_t offset, uint32_t count);
+
+        // Merge adjacent free blocks
+        void defragmentFreeList(std::vector<FreeBlock>& freeList);
+
         // Helper functions
         void createBuffers();
         void destroyBuffers();
@@ -157,8 +231,17 @@ namespace render::gpudriven {
         void appendVertexData(const void* data, uint32_t vertexCount);
         void appendIndexData(const uint32_t* data, uint32_t indexCount, int32_t vertexOffset);
 
-        // Build submesh location key
-        static std::string makeSubmeshKey(const std::string& meshPath, const std::string& submeshName) {
+        // Upload data to specific offset in buffer (for streaming)
+        void uploadVertexDataAt(uint32_t offset, const void* data, uint32_t vertexCount);
+        void uploadIndexDataAt(uint32_t offset, const uint32_t* data, uint32_t indexCount);
+
+        // Build submesh location key (includes index for uniqueness when names are duplicated)
+        static std::string makeSubmeshKey(const std::string& meshPath, const std::string& submeshName, uint32_t submeshIndex) {
+            return meshPath + ":" + submeshName + "#" + std::to_string(submeshIndex);
+        }
+
+        // Legacy key format (for backward compatibility with non-streaming path)
+        static std::string makeSubmeshKeyByName(const std::string& meshPath, const std::string& submeshName) {
             return meshPath + ":" + submeshName;
         }
     };

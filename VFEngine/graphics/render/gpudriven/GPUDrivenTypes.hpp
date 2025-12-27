@@ -8,6 +8,16 @@
 
 namespace render::gpudriven {
 
+    // Streaming state for individual LOD levels
+    enum class LODStreamState : uint8_t {
+        NotRequested,   // LOD not yet requested for streaming
+        Queued,         // In priority queue waiting to stream
+        Streaming,      // Currently loading from disk
+        Uploading,      // Data loaded, GPU transfer in progress
+        Ready,          // Fully available for rendering
+        Evicted         // Unloaded to make room (can reload)
+    };
+
     // Maximum supported objects in GPU-driven rendering
     constexpr uint32_t MAX_GPU_OBJECTS = 65536;
 
@@ -74,7 +84,7 @@ namespace render::gpudriven {
         // Object flags and indices
         uint32_t flags;                  // 4 bytes - visibility flags, blend mode, etc.
         uint32_t entityId;               // 4 bytes - for picking/selection
-        uint32_t padding0;               // 4 bytes
+        uint32_t availableLODMask;       // 4 bytes - bits 0-3: which LODs are ready for streaming
         uint32_t padding1;               // 4 bytes
         // Total: 256 bytes
 
@@ -181,6 +191,9 @@ namespace render::gpudriven {
         glm::vec3 aabbMax;
         glm::vec4 boundingSphere;        // xyz = center, w = radius
 
+        // Streaming state per LOD level
+        std::array<LODStreamState, LOD_LEVEL_COUNT> lodStates{};
+
         // Calculate bounding sphere from AABB
         void calculateBoundingSphere() {
             glm::vec3 center = (aabbMin + aabbMax) * 0.5f;
@@ -194,6 +207,46 @@ namespace render::gpudriven {
                 if (lod.indexCount > 0) return true;
             }
             return false;
+        }
+
+        // Check if any LOD is ready for rendering
+        bool hasRenderableLOD() const {
+            for (const auto& state : lodStates) {
+                if (state == LODStreamState::Ready) return true;
+            }
+            return false;
+        }
+
+        // Get the best available LOD that is ready for rendering
+        // Returns LOD_LEVEL_COUNT if no LOD is ready
+        uint32_t getBestAvailableLOD(uint32_t requestedLOD) const {
+            // First try to find a LOD >= requested (lower detail is acceptable)
+            for (uint32_t lod = requestedLOD; lod < LOD_LEVEL_COUNT; ++lod) {
+                if (lodStates[lod] == LODStreamState::Ready) return lod;
+            }
+            // Fallback to any ready LOD (prefer lower index = higher detail)
+            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
+                if (lodStates[lod] == LODStreamState::Ready) return lod;
+            }
+            return LOD_LEVEL_COUNT; // None ready
+        }
+
+        // Get bitmask of available LODs (for GPU)
+        uint32_t getAvailableLODMask() const {
+            uint32_t mask = 0;
+            for (uint32_t i = 0; i < LOD_LEVEL_COUNT; ++i) {
+                if (lodStates[i] == LODStreamState::Ready) {
+                    mask |= (1u << i);
+                }
+            }
+            return mask;
+        }
+
+        // Mark all LODs as ready (for non-streaming loads)
+        void markAllLODsReady() {
+            for (auto& state : lodStates) {
+                state = LODStreamState::Ready;
+            }
         }
     };
 

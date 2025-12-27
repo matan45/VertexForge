@@ -19,6 +19,7 @@ namespace core {
 namespace render::mesh {
     class MeshGPUCache;
     class MaterialTextureCache;
+    class MeshStreamManager;
     struct MeshRenderData;
 }
 
@@ -175,6 +176,24 @@ namespace render::gpudriven {
         void setMaterialTextureCache(mesh::MaterialTextureCache* cache) { materialTextureCache = cache; }
 
         /**
+         * Get the mesh stream manager for streaming mesh data.
+         * Returns nullptr if streaming is not enabled.
+         */
+        mesh::MeshStreamManager* getMeshStreamManager() { return meshStreamManager.get(); }
+
+        /**
+         * Enable/disable mesh streaming support.
+         * When enabled, meshes are loaded progressively (LOD3 first, then refine).
+         */
+        void setMeshStreamingEnabled(bool enabled);
+        bool isMeshStreamingEnabled() const { return meshStreamingEnabled; }
+
+        /**
+         * Get streaming statistics.
+         */
+        MergedMeshBuffer::StreamingStats getStreamingStats() const;
+
+        /**
          * Register textures from a material with the bindless texture manager.
          * @param materialPath Path to the material
          * @return True if any textures were registered
@@ -254,6 +273,10 @@ namespace render::gpudriven {
 
         // Registered material paths (to avoid re-registering textures each frame)
         std::unordered_set<std::string> registeredMaterialPaths;
+
+        // Mesh streaming support (enabled by default)
+        std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
+        bool meshStreamingEnabled = true;
 
         // Helper methods
         void createCameraBuffer();

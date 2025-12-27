@@ -50,7 +50,7 @@ struct GPUObjectData {
 
     uint flags;                 // 4 bytes
     uint entityId;              // 4 bytes
-    uint padding0;              // 4 bytes
+    uint availableLODMask;      // 4 bytes - bits 0-3: which LODs are ready for streaming
     uint padding1;              // 4 bytes
 };
 
@@ -244,6 +244,36 @@ uint selectLOD(float screenPixels, vec4 thresholds) {
     return 3;                                      // LOD3 for < threshold2
 }
 
+// Find the best available LOD given streaming constraints
+// Returns 0xFFFFFFFF if no LOD is available
+uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
+    // If all LODs are available (mask = 0xF or 15), just use target
+    if (availableMask == 0xFu) {
+        return targetLOD;
+    }
+
+    // If no LODs are available, return invalid
+    if (availableMask == 0u) {
+        return 0xFFFFFFFFu;
+    }
+
+    // First try to find a LOD >= target (prefer lower quality if target not ready)
+    for (uint lod = targetLOD; lod < 4u; ++lod) {
+        if ((availableMask & (1u << lod)) != 0u) {
+            return lod;
+        }
+    }
+
+    // Fallback to any available LOD (prefer higher quality / lower index)
+    for (uint lod = 0u; lod < 4u; ++lod) {
+        if ((availableMask & (1u << lod)) != 0u) {
+            return lod;
+        }
+    }
+
+    return 0xFFFFFFFFu; // No LOD available (shouldn't reach here)
+}
+
 // Project bounding sphere to screen-space AABB and test against Hi-Z pyramid
 // Returns true if object is visible (not occluded)
 bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, uint hiZMipLevels) {
@@ -371,9 +401,9 @@ void main() {
     }
 
     // ========================================
-    // LOD Selection
+    // LOD Selection (with Streaming Support)
     // ========================================
-    uint lodLevel = 0;
+    uint targetLOD = 0;
 
     if (camera.enableLODSelection != 0u) {
         // Transform sphere to view space for accurate projection
@@ -381,7 +411,16 @@ void main() {
         viewSphere.w = worldSphere.w; // Keep radius
 
         float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-        lodLevel = selectLOD(screenPixels, obj.lodThresholds);
+        targetLOD = selectLOD(screenPixels, obj.lodThresholds);
+    }
+
+    // Find best available LOD considering streaming state
+    // availableLODMask bits: bit 0 = LOD0 ready, bit 1 = LOD1 ready, etc.
+    uint lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);
+
+    // Skip object if no LOD is available (mesh still streaming)
+    if (lodLevel == 0xFFFFFFFFu) {
+        return;
     }
 
     // Get LOD geometry data
@@ -389,16 +428,20 @@ void main() {
     uint indexCount = lodData.z;
     uint vertexCount = lodData.w;
 
-    // Validate LOD data - fallback to lower LODs if current is invalid
-    // An invalid LOD has either 0 indexCount or indices that could exceed vertexCount
+    // Additional validation: fallback to lower LODs if geometry data is invalid
+    // (This handles edge cases where LOD is marked ready but has no geometry)
     while (lodLevel > 0u && (indexCount == 0u || vertexCount == 0u)) {
         lodLevel--;
+        // Check if this lower LOD is available
+        if ((obj.availableLODMask & (1u << lodLevel)) == 0u) {
+            continue;  // This LOD not available, try next
+        }
         lodData = getLODData(obj, lodLevel);
         indexCount = lodData.z;
         vertexCount = lodData.w;
     }
 
-    // Skip if this LOD has no geometry
+    // Skip if no valid LOD has geometry
     if (indexCount == 0u) {
         return;
     }

@@ -106,6 +106,7 @@
     <ClInclude Include="resource\AudioResource.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
     <ClInclude Include="resource\MeshResource.hpp" />
+    <ClInclude Include="resource\MeshStreamHandle.hpp" />
     <ClInclude Include="resource\ResourceManager.hpp" />
     <ClInclude Include="resource\ShaderResource.hpp" />
     <ClInclude Include="resource\TextureResource.hpp" />
@@ -135,6 +136,7 @@
     <ClCompile Include="resource\AnimationResource.cpp" />
     <ClCompile Include="resource\AudioResource.cpp" />
     <ClCompile Include="resource\MeshResource.cpp" />
+    <ClCompile Include="resource\MeshStreamHandle.cpp" />
     <ClCompile Include="resource\ResourceManager.cpp" />
     <ClCompile Include="resource\ShaderResource.cpp" />
     <ClCompile Include="resource\TextureResource.cpp" />

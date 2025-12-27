@@ -410,8 +410,8 @@ namespace controllers
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Frame-local cache for PBR values - avoids re-extracting same material multiple times
-        PBRCache pbrCache;
+        // Persistent cache for PBR values - avoids reloading materials every frame
+        static PBRCache pbrCache;
 
         if (sceneBVH.isStaticDirty() && frustumReady)
         {
