@@ -829,8 +829,21 @@ namespace render::gpudriven {
                 } else {
                     obj.albedo = meshRender.albedo;
                     emissionStrength = meshRender.emission;
-                    obj.iblParams = glm::vec4(1.0f, 0.5f, 0.0f, 0.0f);
                     materialPath = meshRender.defaultMaterialPath;
+
+                    // Extract IBL values from default material if available
+                    float iblDiffuse = 1.0f;
+                    float iblSpecular = 0.5f;
+                    if (!materialPath.empty()) {
+                        auto matData = resource::ResourceManager::getMaterial(materialPath);
+                        if (matData) {
+                            auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
+                            iblDiffuse = pbrValues.iblDiffuse;
+                            iblSpecular = pbrValues.iblSpecular;
+                        }
+                    }
+                    obj.iblParams = glm::vec4(iblDiffuse, iblSpecular, 0.0f, 0.0f);
+
                     obj.materialParams = glm::vec4(
                         meshRender.metallic,
                         meshRender.roughness,

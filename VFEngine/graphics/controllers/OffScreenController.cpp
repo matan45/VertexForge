@@ -132,6 +132,9 @@ namespace controllers
             {
                 resource::ResourceManager::invalidateMaterialCache(notification.materialPath);
 
+                // Invalidate PBR value cache for this material
+                pbrCache.erase(notification.materialPath);
+
                 // Invalidate GPU shader/pipeline cache
                 auto* renderHandler = offScreen->getRenderPassHandler();
                 if (renderHandler && renderHandler->isMeshPipelineInitialized())
@@ -410,8 +413,7 @@ namespace controllers
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Persistent cache for PBR values - avoids reloading materials every frame
-        static PBRCache pbrCache;
+        // pbrCache is now a member variable, invalidated when materials are saved
 
         if (sceneBVH.isStaticDirty() && frustumReady)
         {
