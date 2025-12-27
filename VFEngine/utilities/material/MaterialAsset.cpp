@@ -108,7 +108,6 @@ namespace material
         {
         case BlendMode::Opaque: return "opaque";
         case BlendMode::Masked: return "masked";
-        case BlendMode::Translucent: return "translucent";
         default: return "opaque";
         }
     }
@@ -117,7 +116,6 @@ namespace material
     static BlendMode stringToBlendMode(const std::string& str)
     {
         if (str == "masked") return BlendMode::Masked;
-        if (str == "translucent") return BlendMode::Translucent;
         return BlendMode::Opaque;
     }
 

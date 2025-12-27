@@ -21,7 +21,6 @@ namespace render::mesh
         std::shared_ptr<core::Shader> shader;
         vk::Pipeline opaquePipeline;
         vk::Pipeline maskedPipeline;
-        vk::Pipeline translucentPipeline;
         std::string vertexShaderHash;
         std::string fragmentShaderHash;
         bool valid = false;

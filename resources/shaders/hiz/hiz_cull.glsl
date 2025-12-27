@@ -8,7 +8,6 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 // Occlusion flags (must match OcclusionFlags in OcclusionCullingManager.hpp)
 const uint FLAG_NONE        = 0u;
-const uint FLAG_TRANSPARENT = 1u << 0;  // Object is translucent - always visible, never occludes
 const uint FLAG_NO_OCCLUDE  = 1u << 1;  // Object should never occlude others
 const uint FLAG_NO_CULL     = 1u << 2;  // Object should never be culled (always visible)
 
@@ -141,9 +140,8 @@ void main() {
     // Extract flags from aabbMax.w (stored as float, reinterpret as uint)
     uint flags = floatBitsToUint(obj.aabbMax.w);
 
-    // Transparent objects and NO_CULL objects are always visible
-    // They should not be culled by Hi-Z (they don't contribute to depth buffer)
-    if ((flags & (FLAG_TRANSPARENT | FLAG_NO_CULL)) != 0u) {
+    // NO_CULL objects are always visible
+    if ((flags & FLAG_NO_CULL) != 0u) {
         visibility[objectIndex] = 1u;
         return;
     }

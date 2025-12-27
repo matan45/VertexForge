@@ -47,6 +47,7 @@ namespace render::mesh
     // Forward declare blend mode for use in render data
     using BlendMode = ::material::BlendMode;
 
+    // GPU buffers for a single LOD level (used by preview windows)
     struct LODGPUBuffers
     {
         vk::Buffer vertexBuffer;
@@ -59,6 +60,7 @@ namespace render::mesh
         bool isValid() const { return indexCount > 0 || vertexCount > 0; }
     };
 
+    // Submesh with GPU buffers per LOD (used by preview windows)
     struct SubMeshGPUData
     {
         std::string name; // Submesh name for material assignment
@@ -72,6 +74,7 @@ namespace render::mesh
     };
 
 
+    // Mesh with GPU buffers (used by preview windows)
     struct MeshGPUData
     {
         std::vector<SubMeshGPUData> subMeshes;
@@ -84,6 +87,75 @@ namespace render::mesh
                 if (subMeshes[i].name == name) return static_cast<int>(i);
             }
             return -1;
+        }
+    };
+
+    // ===== METADATA-ONLY STRUCTURES (no GPU buffers) =====
+    // Used by MeshMetadataCache for GPU-driven streaming path
+
+    // LOD level metadata (vertex/index counts only, no buffers)
+    struct LODMetadata
+    {
+        uint32_t vertexCount = 0;
+        uint32_t indexCount = 0;
+
+        bool isValid() const { return vertexCount > 0 || indexCount > 0; }
+    };
+
+    // Submesh metadata (name, bounding box, LOD counts)
+    struct SubMeshMetadata
+    {
+        std::string name;
+        std::array<LODMetadata, resource::LOD_LEVEL_COUNT> lodLevels;
+        math::AABB boundingBox;
+
+        const LODMetadata& getLOD(uint32_t level) const
+        {
+            return lodLevels[std::min(level, resource::LOD_LEVEL_COUNT - 1)];
+        }
+
+        uint32_t getTotalVertexCount() const
+        {
+            uint32_t total = 0;
+            for (const auto& lod : lodLevels) total += lod.vertexCount;
+            return total;
+        }
+
+        uint32_t getTotalIndexCount() const
+        {
+            uint32_t total = 0;
+            for (const auto& lod : lodLevels) total += lod.indexCount;
+            return total;
+        }
+    };
+
+    // Mesh metadata (submeshes, combined bounding box)
+    struct MeshMetadata
+    {
+        std::vector<SubMeshMetadata> subMeshes;
+        math::AABB boundingBox;
+
+        int findSubmeshIndex(const std::string& name) const
+        {
+            for (size_t i = 0; i < subMeshes.size(); ++i)
+            {
+                if (subMeshes[i].name == name) return static_cast<int>(i);
+            }
+            return -1;
+        }
+
+        uint32_t getTotalVertexCount() const
+        {
+            uint32_t total = 0;
+            for (const auto& sub : subMeshes) total += sub.getTotalVertexCount();
+            return total;
+        }
+
+        uint32_t getTotalIndexCount() const
+        {
+            uint32_t total = 0;
+            for (const auto& sub : subMeshes) total += sub.getTotalIndexCount();
+            return total;
         }
     };
 

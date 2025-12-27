@@ -19,7 +19,6 @@ const float LOD_THRESHOLD_2 = 100.0;
 const uint FLAG_VISIBLE       = 1u << 0;
 const uint FLAG_CAST_SHADOW   = 1u << 1;
 const uint FLAG_RECEIVE_SHADOW = 1u << 2;
-const uint FLAG_TRANSPARENT   = 1u << 3;
 const uint FLAG_ALPHA_MASK    = 1u << 4;
 const uint FLAG_DOUBLE_SIDED  = 1u << 5;
 const uint FLAG_NO_CULL       = 1u << 6;
@@ -367,11 +366,6 @@ void main() {
     }
 
     GPUObjectData obj = objects[objectIndex];
-
-    // Skip if object is flagged as transparent (handled separately on CPU)
-    if ((obj.flags & FLAG_TRANSPARENT) != 0u) {
-        return;
-    }
 
     // Transform bounding sphere to world space
     vec4 worldSphere = transformBoundingSphere(obj.boundingSphere, obj.modelMatrix);

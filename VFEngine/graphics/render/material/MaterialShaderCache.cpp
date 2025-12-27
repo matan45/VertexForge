@@ -209,42 +209,6 @@ namespace render::mesh
         }
         data.maskedPipeline = result.value;
 
-        // Translucent pipeline with alpha blending
-        vk::PipelineColorBlendAttachmentState translucentBlendAttachment{};
-        translucentBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-                                                    vk::ColorComponentFlagBits::eG |
-                                                    vk::ColorComponentFlagBits::eB |
-                                                    vk::ColorComponentFlagBits::eA;
-        translucentBlendAttachment.blendEnable = VK_TRUE;
-        translucentBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-        translucentBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-        translucentBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
-        translucentBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-        translucentBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
-        translucentBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
-
-        vk::PipelineColorBlendStateCreateInfo translucentBlending{};
-        translucentBlending.logicOpEnable = VK_FALSE;
-        translucentBlending.attachmentCount = 1;
-        translucentBlending.pAttachments = &translucentBlendAttachment;
-
-        vk::PipelineDepthStencilStateCreateInfo translucentDepthStencil{};
-        translucentDepthStencil.depthTestEnable = VK_TRUE;
-        translucentDepthStencil.depthWriteEnable = VK_FALSE;
-        translucentDepthStencil.depthCompareOp = vk::CompareOp::eLess;
-        translucentDepthStencil.depthBoundsTestEnable = VK_FALSE;
-        translucentDepthStencil.stencilTestEnable = VK_FALSE;
-
-        pipelineInfo.pDepthStencilState = &translucentDepthStencil;
-        pipelineInfo.pColorBlendState = &translucentBlending;
-
-        result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess) {
-            loggerError("Failed to create translucent pipeline");
-            return false;
-        }
-        data.translucentPipeline = result.value;
-
         return true;
     }
 
@@ -258,8 +222,6 @@ namespace render::mesh
                 device.getLogicalDevice().destroyPipeline(it->second.opaquePipeline);
             if (it->second.maskedPipeline)
                 device.getLogicalDevice().destroyPipeline(it->second.maskedPipeline);
-            if (it->second.translucentPipeline)
-                device.getLogicalDevice().destroyPipeline(it->second.translucentPipeline);
 
             if (it->second.shader)
                 it->second.shader->cleanUp();
@@ -280,8 +242,6 @@ namespace render::mesh
                 device.getLogicalDevice().destroyPipeline(data.opaquePipeline);
             if (data.maskedPipeline)
                 device.getLogicalDevice().destroyPipeline(data.maskedPipeline);
-            if (data.translucentPipeline)
-                device.getLogicalDevice().destroyPipeline(data.translucentPipeline);
 
             if (data.shader)
                 data.shader->cleanUp();

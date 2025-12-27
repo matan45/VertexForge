@@ -404,31 +404,11 @@ namespace render
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems);
 
-        // Separate opaque and translucent meshes
-        std::vector<mesh::MeshRenderData> opaqueObjects;
-        std::vector<mesh::MeshRenderData> translucentObjects;
-
-        for (const auto& mesh : currentMeshDrawList)
-        {
-            // Consider meshes translucent if they have alpha significantly < 1
-            // Use threshold to handle floating point imprecision
-            if (mesh.albedo.a < 0.99f)
-            {
-                translucentObjects.push_back(mesh);
-            }
-            else
-            {
-                opaqueObjects.push_back(mesh);
-            }
-        }
-
         // Always update GPU-driven scene data (even when empty to reset stats)
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
         {
-            const mesh::MeshGPUCache& meshCache = meshPipeline->getMeshGPUCache();
             gpuDrivenRenderer->updateScene(
-                opaqueObjects,
-                meshCache,
+                currentMeshDrawList,
                 currentView,
                 currentProjection,
                 currentCameraPosition,
@@ -440,13 +420,10 @@ namespace render
 
         if (needsMeshPass)
         {
-            // Get mesh cache reference from mesh pipeline for merged buffer access
-            const mesh::MeshGPUCache& meshCache = meshPipeline->getMeshGPUCache();
-
             render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
 
-            // GPU-driven render for opaque objects
-            if (!opaqueObjects.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+            // GPU-driven rendering
+            if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
                 // Update Hi-Z pyramid from previous frame (for occlusion culling)
                 updateGPUDrivenHiZ();
@@ -463,12 +440,6 @@ namespace render
                 // Draw commands INSIDE render pass
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
-                // Render translucent objects using CPU path within the same render pass
-                if (!translucentObjects.empty())
-                {
-                    meshPipeline->renderTranslucentInPass(commandBuffer, imageIndex, translucentObjects, currentFrustum);
-                }
-
                 // Render debug items if any
                 if (debugRendererPtr)
                 {
@@ -478,16 +449,10 @@ namespace render
 
                 meshPipeline->endRenderPass(commandBuffer);
             }
-            else if (!opaqueObjects.empty() || !translucentObjects.empty() || hasDebugItems)
+            else if (!currentMeshDrawList.empty() || hasDebugItems)
             {
-                // CPU fallback path - render all objects (opaque + translucent)
-                // This is used when GPU-driven rendering is not available (e.g., material preview)
-                std::vector<mesh::MeshRenderData> allObjects;
-                allObjects.reserve(opaqueObjects.size() + translucentObjects.size());
-                allObjects.insert(allObjects.end(), opaqueObjects.begin(), opaqueObjects.end());
-                allObjects.insert(allObjects.end(), translucentObjects.begin(), translucentObjects.end());
-
-                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, allObjects, currentFrustum,
+                // CPU fallback path (used when GPU-driven rendering is not available)
+                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
                                                   debugRendererPtr, currentView, currentProjection);
             }
         }

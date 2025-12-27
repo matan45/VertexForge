@@ -1,5 +1,5 @@
 #include "MergedMeshBuffer.hpp"
-#include "../mesh/MeshGPUCache.hpp"
+#include "../mesh/MeshMetadataCache.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
@@ -163,192 +163,6 @@ namespace render::gpudriven {
         }
     }
 
-    void MergedMeshBuffer::rebuildFromCache(const mesh::MeshGPUCache& cache)
-    {
-        if (!initialized) {
-            loggerError("MergedMeshBuffer not initialized");
-            return;
-        }
-
-        // Clear existing data
-        registeredMeshes.clear();
-        meshPathToIndex.clear();
-        allSubmeshLocations.clear();
-        submeshKeyToIndex.clear();
-        totalVertexCount = 0;
-        totalIndexCount = 0;
-
-        // Get all loaded mesh IDs
-        auto meshIds = cache.getLoadedMeshIds();
-
-        for (const auto& meshPath : meshIds) {
-            const auto* meshData = cache.getMesh(meshPath);
-            if (meshData) {
-                registerMesh(meshPath, *meshData);
-            }
-        }
-
-        // Wait for all transfers to complete
-        transferManager->waitAll();
-        dirty = false;
-
-        loggerInfo("MergedMeshBuffer rebuilt: {} meshes, {} submeshes, {} vertices, {} indices",
-                   registeredMeshes.size(), allSubmeshLocations.size(),
-                   totalVertexCount, totalIndexCount);
-    }
-
-    MergedMeshInfo* MergedMeshBuffer::registerMesh(const std::string& meshPath,
-                                                    const mesh::MeshGPUData& meshData)
-    {
-        if (!initialized) {
-            loggerError("MergedMeshBuffer not initialized");
-            return nullptr;
-        }
-
-        // Check if already registered
-        auto it = meshPathToIndex.find(meshPath);
-        if (it != meshPathToIndex.end()) {
-            return &registeredMeshes[it->second];
-        }
-
-        MergedMeshInfo meshInfo;
-        meshInfo.meshPath = meshPath;
-        meshInfo.firstSubmeshIndex = static_cast<uint32_t>(allSubmeshLocations.size());
-        meshInfo.submeshCount = 0;
-
-        bool boundingBoxInit = false;
-
-        // Process each submesh
-        for (size_t subIdx = 0; subIdx < meshData.subMeshes.size(); ++subIdx) {
-            const auto& subMesh = meshData.subMeshes[subIdx];
-
-            SubmeshLocation loc;
-            loc.meshPath = meshPath;
-            loc.submeshName = subMesh.name;
-            loc.submeshIndex = static_cast<uint32_t>(subIdx);
-
-            // Copy bounding box
-            loc.aabbMin = subMesh.boundingBox.min;
-            loc.aabbMax = subMesh.boundingBox.max;
-            loc.calculateBoundingSphere();
-
-            // Validate bounding sphere
-            if (loc.boundingSphere.w <= 0.0f || std::isnan(loc.boundingSphere.w) || std::isinf(loc.boundingSphere.w)) {
-                loggerWarning("MergedMeshBuffer: Invalid bounding sphere for submesh '{}' - radius={}, setting to 1.0",
-                    loc.submeshName, loc.boundingSphere.w);
-                loc.boundingSphere.w = 1.0f;  // Default radius
-            }
-
-            // Process each LOD level
-            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
-                const auto& lodBuffers = subMesh.lodLevels[lod];
-
-                LODDrawInfo& lodInfo = loc.lods[lod];
-
-                if (lodBuffers.vertexCount == 0) {
-                    // Empty LOD, use previous or skip
-                    if (lod > 0) {
-                        lodInfo = loc.lods[lod - 1];
-                    } else {
-                        lodInfo = {0, 0, 0, 0};
-                    }
-                    continue;
-                }
-
-                // Check capacity
-                if (totalVertexCount + lodBuffers.vertexCount > maxVertexCount) {
-                    loggerError("MergedMeshBuffer: vertex capacity exceeded - need {} more vertices, but only {} available (used {}/{})",
-                        lodBuffers.vertexCount, maxVertexCount - totalVertexCount, totalVertexCount, maxVertexCount);
-                    return nullptr;
-                }
-                if (totalIndexCount + lodBuffers.indexCount > maxIndexCount) {
-                    loggerError("MergedMeshBuffer: index capacity exceeded - need {} more indices, but only {} available (used {}/{})",
-                        lodBuffers.indexCount, maxIndexCount - totalIndexCount, totalIndexCount, maxIndexCount);
-                    return nullptr;
-                }
-
-                // Record offsets BEFORE adding data
-                lodInfo.vertexOffset = totalVertexCount;
-                lodInfo.indexOffset = totalIndexCount;
-                lodInfo.vertexCount = lodBuffers.vertexCount;
-                lodInfo.indexCount = lodBuffers.indexCount;
-
-                // We need to copy data from the existing GPU buffers
-                // Since we don't have direct access to the data, we need to read it back
-                // For now, we'll accumulate offsets; actual data copy happens via
-                // buffer-to-buffer copies on the GPU
-
-                // Copy vertex buffer contents
-                if (lodBuffers.vertexBuffer) {
-                    // Use transfer manager to copy from source buffer to merged buffer
-                    vk::BufferCopy copyRegion;
-                    copyRegion.srcOffset = 0;
-                    copyRegion.dstOffset = totalVertexCount * vertexStride;
-                    copyRegion.size = lodBuffers.vertexCount * vertexStride;
-
-                    // We need a command buffer for buffer-to-buffer copy
-                    auto cmdBuffer = core::Utilities::beginSingleTimeCommands(
-                        device.getLogicalDevice(),
-                        device.getStagingCommandPool()
-                    );
-                    cmdBuffer->copyBuffer(lodBuffers.vertexBuffer, vertexBuffer, copyRegion);
-                    core::Utilities::endSingleTimeCommands(
-                        device.getGraphicsQueue(),
-                        cmdBuffer
-                    );
-                }
-
-                // Copy index buffer contents
-                if (lodBuffers.indexBuffer && lodBuffers.indexCount > 0) {
-                    vk::BufferCopy copyRegion;
-                    copyRegion.srcOffset = 0;
-                    copyRegion.dstOffset = totalIndexCount * sizeof(uint32_t);
-                    copyRegion.size = lodBuffers.indexCount * sizeof(uint32_t);
-
-                    auto cmdBuffer = core::Utilities::beginSingleTimeCommands(
-                        device.getLogicalDevice(),
-                        device.getStagingCommandPool()
-                    );
-                    cmdBuffer->copyBuffer(lodBuffers.indexBuffer, indexBuffer, copyRegion);
-                    core::Utilities::endSingleTimeCommands(
-                        device.getGraphicsQueue(),
-                        cmdBuffer
-                    );
-                }
-
-                totalVertexCount += lodBuffers.vertexCount;
-                totalIndexCount += lodBuffers.indexCount;
-            }
-
-            // Update mesh bounding box
-            if (!boundingBoxInit) {
-                meshInfo.aabbMin = loc.aabbMin;
-                meshInfo.aabbMax = loc.aabbMax;
-                boundingBoxInit = true;
-            } else {
-                meshInfo.aabbMin = glm::min(meshInfo.aabbMin, loc.aabbMin);
-                meshInfo.aabbMax = glm::max(meshInfo.aabbMax, loc.aabbMax);
-            }
-
-            // Mark all LODs as ready (non-streaming registration has complete data)
-            loc.markAllLODsReady();
-
-            // Store submesh location (include index for uniqueness when names are duplicated)
-            std::string key = makeSubmeshKey(meshPath, subMesh.name, static_cast<uint32_t>(subIdx));
-            submeshKeyToIndex[key] = allSubmeshLocations.size();
-            allSubmeshLocations.push_back(std::move(loc));
-            meshInfo.submeshes.push_back(allSubmeshLocations.back());
-            meshInfo.submeshCount++;
-        }
-
-        // Store mesh info
-        meshPathToIndex[meshPath] = registeredMeshes.size();
-        registeredMeshes.push_back(std::move(meshInfo));
-
-        dirty = true;
-        return &registeredMeshes.back();
-    }
-
     void MergedMeshBuffer::unregisterMesh(const std::string& meshPath)
     {
         auto it = meshPathToIndex.find(meshPath);
@@ -371,191 +185,6 @@ namespace render::gpudriven {
 
         dirty = true;
         loggerInfo("Unregistered mesh from MergedMeshBuffer: {}", meshPath);
-    }
-
-    void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
-                                          const mesh::MeshGPUCache& cache,
-                                          const TextureIndexResolver& textureResolver,
-                                          float time)
-    {
-        currentObjectCount = 0;
-
-        for (const auto& meshRender : renderData) {
-            // Get submesh locations for this mesh
-            auto meshIt = meshPathToIndex.find(meshRender.meshPath);
-            if (meshIt == meshPathToIndex.end()) {
-                // Mesh not in merged buffer, try to register it dynamically
-                const auto* meshData = cache.getMesh(meshRender.meshPath);
-                if (!meshData) continue;
-
-                // Dynamic registration - add mesh to merged buffer on-the-fly
-                MergedMeshInfo* registered = registerMesh(meshRender.meshPath, *meshData);
-                if (!registered) {
-                    loggerWarning("MergedMeshBuffer: Failed to dynamically register mesh: {}", meshRender.meshPath);
-                    continue;
-                }
-
-                // Re-lookup after registration
-                meshIt = meshPathToIndex.find(meshRender.meshPath);
-                if (meshIt == meshPathToIndex.end()) continue;
-            }
-
-            const auto& meshInfo = registeredMeshes[meshIt->second];
-
-            // Create one GPUObjectData per submesh
-            // IMPORTANT: Read from allSubmeshLocations (authoritative) not meshInfo.submeshes (copy)
-            // This ensures lodStates updates from markLODReady are visible
-            for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx) {
-                const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
-                if (currentObjectCount >= maxObjectCount) {
-                    loggerWarning("MergedMeshBuffer: max object count reached");
-                    break;
-                }
-
-                GPUObjectData& obj = cpuObjectData[currentObjectCount];
-
-                // Transform
-                obj.modelMatrix = meshRender.modelMatrix;
-
-                // Bounding volumes (in local space)
-                obj.boundingSphere = submeshLoc.boundingSphere;
-
-                // LOD data
-                obj.lod0Data = glm::uvec4(
-                    submeshLoc.lods[0].vertexOffset,
-                    submeshLoc.lods[0].indexOffset,
-                    submeshLoc.lods[0].indexCount,
-                    submeshLoc.lods[0].vertexCount
-                );
-                obj.lod1Data = glm::uvec4(
-                    submeshLoc.lods[1].vertexOffset,
-                    submeshLoc.lods[1].indexOffset,
-                    submeshLoc.lods[1].indexCount,
-                    submeshLoc.lods[1].vertexCount
-                );
-                obj.lod2Data = glm::uvec4(
-                    submeshLoc.lods[2].vertexOffset,
-                    submeshLoc.lods[2].indexOffset,
-                    submeshLoc.lods[2].indexCount,
-                    submeshLoc.lods[2].vertexCount
-                );
-                obj.lod3Data = glm::uvec4(
-                    submeshLoc.lods[3].vertexOffset,
-                    submeshLoc.lods[3].indexOffset,
-                    submeshLoc.lods[3].indexCount,
-                    submeshLoc.lods[3].vertexCount
-                );
-
-                // LOD thresholds (with bias)
-                float bias = meshRender.lodBias;
-                obj.lodThresholds = glm::vec4(
-                    LOD_THRESHOLD_0 * std::pow(2.0f, -bias),
-                    LOD_THRESHOLD_1 * std::pow(2.0f, -bias),
-                    LOD_THRESHOLD_2 * std::pow(2.0f, -bias),
-                    bias
-                );
-
-                // Material data
-                // Check for submesh-specific material
-                const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
-                float emissionStrength = 0.0f;
-                std::string materialPath;
-
-                if (subMat) {
-                    obj.albedo = subMat->albedo;
-                    emissionStrength = subMat->emission;
-                    obj.iblParams = glm::vec4(subMat->iblDiffuse, subMat->iblSpecular, 0.0f, 0.0f);
-                    materialPath = subMat->materialPath;
-
-                    obj.materialParams = glm::vec4(
-                        subMat->metallic,
-                        subMat->roughness,
-                        subMat->ao,
-                        emissionStrength
-                    );
-                } else {
-                    obj.albedo = meshRender.albedo;
-                    emissionStrength = meshRender.emission;
-                    obj.iblParams = glm::vec4(1.0f, 0.5f, 0.0f, 0.0f);
-                    materialPath = meshRender.defaultMaterialPath;
-
-                    obj.materialParams = glm::vec4(
-                        meshRender.metallic,
-                        meshRender.roughness,
-                        meshRender.ao,
-                        emissionStrength
-                    );
-                }
-
-                // Evaluate dynamic emission strength from Time nodes in material graph
-                if (!materialPath.empty() && time > 0.0f) {
-                    auto matData = resource::ResourceManager::getMaterial(materialPath);
-                    if (matData) {
-                        const auto* outputNode = matData->graph.findOutputNode();
-                        if (outputNode) {
-                            float dynamicEmission = mesh::MaterialPBRExtractor::evaluateEmissionStrength(
-                                matData->graph, outputNode->id, time);
-                            if (dynamicEmission != 0.0f) {
-                                // Override with dynamic emission
-                                obj.materialParams.w = dynamicEmission;
-                            }
-                        }
-                    }
-                }
-
-                // Texture indices - resolve via callback if provided
-                // (materialPath already set above for emission evaluation)
-                if (textureResolver) {
-                    if (!materialPath.empty()) {
-                        // Resolve each texture slot
-                        obj.textureIndices0 = glm::uvec4(
-                            textureResolver(materialPath, TextureSlotType::Albedo),
-                            textureResolver(materialPath, TextureSlotType::Normal),
-                            textureResolver(materialPath, TextureSlotType::ORM),
-                            textureResolver(materialPath, TextureSlotType::Metallic)
-                        );
-                        obj.textureIndices1 = glm::uvec4(
-                            textureResolver(materialPath, TextureSlotType::Roughness),
-                            textureResolver(materialPath, TextureSlotType::AO),
-                            textureResolver(materialPath, TextureSlotType::Emission),
-                            textureResolver(materialPath, TextureSlotType::Height)
-                        );
-                    } else {
-                        obj.textureIndices0 = glm::uvec4(INVALID_TEXTURE_INDEX);
-                        obj.textureIndices1 = glm::uvec4(INVALID_TEXTURE_INDEX);
-                    }
-                } else {
-                    // No resolver - use invalid indices
-                    obj.textureIndices0 = glm::uvec4(INVALID_TEXTURE_INDEX);
-                    obj.textureIndices1 = glm::uvec4(INVALID_TEXTURE_INDEX);
-                }
-
-                // Flags
-                obj.flags = ObjectFlags::Visible | ObjectFlags::CastShadow | ObjectFlags::ReceiveShadow;
-                if (subMat && subMat->blendMode == 2) {
-                    obj.flags |= ObjectFlags::Transparent;
-                } else if (subMat && subMat->blendMode == 1) {
-                    obj.flags |= ObjectFlags::AlphaMask;
-                }
-
-                // Check for uniform scale (enables fast normal matrix path in shader)
-                float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
-                float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
-                float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));
-                constexpr float uniformScaleEpsilon = 0.001f;
-                if (std::abs(scaleX - scaleY) < uniformScaleEpsilon &&
-                    std::abs(scaleY - scaleZ) < uniformScaleEpsilon) {
-                    obj.flags |= ObjectFlags::UniformScale;
-                }
-
-                obj.entityId = currentObjectCount; // Simple ID for now
-
-                // Set available LOD mask for streaming support
-                obj.availableLODMask = submeshLoc.getAvailableLODMask();
-
-                currentObjectCount++;
-            }
-        }
     }
 
     void MergedMeshBuffer::uploadObjects(vk::CommandBuffer cmd)
@@ -998,6 +627,273 @@ namespace render::gpudriven {
         }
 
         return stats;
+    }
+
+    // ===== METADATA-BASED REGISTRATION (for streaming path) =====
+
+    MergedMeshInfo* MergedMeshBuffer::registerMeshFromMetadata(const std::string& meshPath,
+                                                                 const mesh::MeshMetadata& metadata)
+    {
+        if (!initialized) {
+            loggerError("MergedMeshBuffer not initialized");
+            return nullptr;
+        }
+
+        // Check if already registered
+        auto it = meshPathToIndex.find(meshPath);
+        if (it != meshPathToIndex.end()) {
+            return &registeredMeshes[it->second];
+        }
+
+        MergedMeshInfo meshInfo;
+        meshInfo.meshPath = meshPath;
+        meshInfo.firstSubmeshIndex = static_cast<uint32_t>(allSubmeshLocations.size());
+        meshInfo.submeshCount = 0;
+
+        // Reserve space for all submeshes
+        for (size_t subIdx = 0; subIdx < metadata.subMeshes.size(); ++subIdx) {
+            const auto& subMeta = metadata.subMeshes[subIdx];
+
+            SubmeshLocation loc;
+            loc.meshPath = meshPath;
+            loc.submeshName = subMeta.name;
+            loc.submeshIndex = static_cast<uint32_t>(subIdx);
+
+            // Copy bounding box from metadata
+            loc.aabbMin = subMeta.boundingBox.min;
+            loc.aabbMax = subMeta.boundingBox.max;
+            loc.calculateBoundingSphere();
+
+            // Validate bounding sphere
+            if (loc.boundingSphere.w <= 0.0f || std::isnan(loc.boundingSphere.w) || std::isinf(loc.boundingSphere.w)) {
+                // Bounding box may not be set yet (header-only parse), use default
+                loc.boundingSphere.w = 1.0f;
+            }
+
+            // Allocate space for each LOD level
+            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
+                const auto& lodMeta = subMeta.lodLevels[lod];
+                LODDrawInfo& lodInfo = loc.lods[lod];
+
+                if (lodMeta.vertexCount > 0) {
+                    // Allocate vertex space
+                    uint32_t vertOffset = allocateVertexSpace(lodMeta.vertexCount);
+                    if (vertOffset == UINT32_MAX) {
+                        loggerError("MergedMeshBuffer: Failed to allocate {} vertices for {} LOD{}",
+                                    lodMeta.vertexCount, meshPath, lod);
+                        return nullptr;
+                    }
+
+                    // Allocate index space
+                    uint32_t idxOffset = allocateIndexSpace(lodMeta.indexCount);
+                    if (idxOffset == UINT32_MAX) {
+                        freeVertexSpace(vertOffset, lodMeta.vertexCount);
+                        loggerError("MergedMeshBuffer: Failed to allocate {} indices for {} LOD{}",
+                                    lodMeta.indexCount, meshPath, lod);
+                        return nullptr;
+                    }
+
+                    lodInfo.vertexOffset = vertOffset;
+                    lodInfo.indexOffset = idxOffset;
+                    lodInfo.vertexCount = lodMeta.vertexCount;
+                    lodInfo.indexCount = lodMeta.indexCount;
+
+                    loc.lodStates[lod] = LODStreamState::NotRequested;
+                } else if (lod > 0) {
+                    // Copy from previous LOD
+                    lodInfo = loc.lods[lod - 1];
+                    loc.lodStates[lod] = loc.lodStates[lod - 1];
+                } else {
+                    lodInfo = {0, 0, 0, 0};
+                    loc.lodStates[lod] = LODStreamState::NotRequested;
+                }
+            }
+
+            // Update mesh bounding box
+            if (meshInfo.submeshCount == 0) {
+                meshInfo.aabbMin = loc.aabbMin;
+                meshInfo.aabbMax = loc.aabbMax;
+            } else {
+                meshInfo.aabbMin = glm::min(meshInfo.aabbMin, loc.aabbMin);
+                meshInfo.aabbMax = glm::max(meshInfo.aabbMax, loc.aabbMax);
+            }
+
+            // Store submesh location
+            std::string key = makeSubmeshKey(meshPath, subMeta.name, static_cast<uint32_t>(subIdx));
+            submeshKeyToIndex[key] = allSubmeshLocations.size();
+            allSubmeshLocations.push_back(std::move(loc));
+            meshInfo.submeshes.push_back(allSubmeshLocations.back());
+            meshInfo.submeshCount++;
+        }
+
+        // Store mesh info
+        meshPathToIndex[meshPath] = registeredMeshes.size();
+        registeredMeshes.push_back(std::move(meshInfo));
+
+        dirty = true;
+        loggerInfo("MergedMeshBuffer: Reserved space for mesh {} ({} submeshes, metadata path)",
+                    meshPath, metadata.subMeshes.size());
+        return &registeredMeshes.back();
+    }
+
+    void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
+                                          const TextureIndexResolver& textureResolver,
+                                          float time)
+    {
+        currentObjectCount = 0;
+
+        for (const auto& meshRender : renderData) {
+            // Get submesh locations for this mesh
+            auto meshIt = meshPathToIndex.find(meshRender.meshPath);
+            if (meshIt == meshPathToIndex.end()) {
+                // Mesh not registered - skip silently (streaming may not have loaded it yet)
+                continue;
+            }
+
+            const auto& meshInfo = registeredMeshes[meshIt->second];
+
+            // Create one GPUObjectData per submesh
+            for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx) {
+                const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
+
+                // Skip submeshes with no renderable LODs
+                if (!submeshLoc.hasRenderableLOD()) {
+                    continue;
+                }
+
+                if (currentObjectCount >= maxObjectCount) {
+                    loggerWarning("MergedMeshBuffer: max object count reached");
+                    break;
+                }
+
+                GPUObjectData& obj = cpuObjectData[currentObjectCount];
+
+                // Transform
+                obj.modelMatrix = meshRender.modelMatrix;
+
+                // Bounding volumes
+                obj.boundingSphere = submeshLoc.boundingSphere;
+
+                // LOD data
+                obj.lod0Data = glm::uvec4(
+                    submeshLoc.lods[0].vertexOffset,
+                    submeshLoc.lods[0].indexOffset,
+                    submeshLoc.lods[0].indexCount,
+                    submeshLoc.lods[0].vertexCount
+                );
+                obj.lod1Data = glm::uvec4(
+                    submeshLoc.lods[1].vertexOffset,
+                    submeshLoc.lods[1].indexOffset,
+                    submeshLoc.lods[1].indexCount,
+                    submeshLoc.lods[1].vertexCount
+                );
+                obj.lod2Data = glm::uvec4(
+                    submeshLoc.lods[2].vertexOffset,
+                    submeshLoc.lods[2].indexOffset,
+                    submeshLoc.lods[2].indexCount,
+                    submeshLoc.lods[2].vertexCount
+                );
+                obj.lod3Data = glm::uvec4(
+                    submeshLoc.lods[3].vertexOffset,
+                    submeshLoc.lods[3].indexOffset,
+                    submeshLoc.lods[3].indexCount,
+                    submeshLoc.lods[3].vertexCount
+                );
+
+                // LOD thresholds
+                float bias = meshRender.lodBias;
+                obj.lodThresholds = glm::vec4(
+                    LOD_THRESHOLD_0 * std::pow(2.0f, -bias),
+                    LOD_THRESHOLD_1 * std::pow(2.0f, -bias),
+                    LOD_THRESHOLD_2 * std::pow(2.0f, -bias),
+                    bias
+                );
+
+                // Material data
+                const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
+                float emissionStrength = 0.0f;
+                std::string materialPath;
+
+                if (subMat) {
+                    obj.albedo = subMat->albedo;
+                    emissionStrength = subMat->emission;
+                    obj.iblParams = glm::vec4(subMat->iblDiffuse, subMat->iblSpecular, 0.0f, 0.0f);
+                    materialPath = subMat->materialPath;
+                    obj.materialParams = glm::vec4(
+                        subMat->metallic,
+                        subMat->roughness,
+                        subMat->ao,
+                        emissionStrength
+                    );
+                } else {
+                    obj.albedo = meshRender.albedo;
+                    emissionStrength = meshRender.emission;
+                    obj.iblParams = glm::vec4(1.0f, 0.5f, 0.0f, 0.0f);
+                    materialPath = meshRender.defaultMaterialPath;
+                    obj.materialParams = glm::vec4(
+                        meshRender.metallic,
+                        meshRender.roughness,
+                        meshRender.ao,
+                        emissionStrength
+                    );
+                }
+
+                // Evaluate dynamic emission
+                if (!materialPath.empty() && time > 0.0f) {
+                    auto matData = resource::ResourceManager::getMaterial(materialPath);
+                    if (matData) {
+                        const auto* outputNode = matData->graph.findOutputNode();
+                        if (outputNode) {
+                            float dynamicEmission = mesh::MaterialPBRExtractor::evaluateEmissionStrength(
+                                matData->graph, outputNode->id, time);
+                            if (dynamicEmission != 0.0f) {
+                                obj.materialParams.w = dynamicEmission;
+                            }
+                        }
+                    }
+                }
+
+                // Texture indices
+                if (textureResolver && !materialPath.empty()) {
+                    obj.textureIndices0 = glm::uvec4(
+                        textureResolver(materialPath, TextureSlotType::Albedo),
+                        textureResolver(materialPath, TextureSlotType::Normal),
+                        textureResolver(materialPath, TextureSlotType::ORM),
+                        textureResolver(materialPath, TextureSlotType::Metallic)
+                    );
+                    obj.textureIndices1 = glm::uvec4(
+                        textureResolver(materialPath, TextureSlotType::Roughness),
+                        textureResolver(materialPath, TextureSlotType::AO),
+                        textureResolver(materialPath, TextureSlotType::Emission),
+                        textureResolver(materialPath, TextureSlotType::Height)
+                    );
+                } else {
+                    obj.textureIndices0 = glm::uvec4(INVALID_TEXTURE_INDEX);
+                    obj.textureIndices1 = glm::uvec4(INVALID_TEXTURE_INDEX);
+                }
+
+                // Flags
+                obj.flags = ObjectFlags::Visible | ObjectFlags::CastShadow | ObjectFlags::ReceiveShadow;
+                if (subMat && subMat->blendMode == 1) {
+                    obj.flags |= ObjectFlags::AlphaMask;
+                }
+
+                // Uniform scale check
+                float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
+                float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
+                float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));
+                constexpr float uniformScaleEpsilon = 0.001f;
+                if (std::abs(scaleX - scaleY) < uniformScaleEpsilon &&
+                    std::abs(scaleY - scaleZ) < uniformScaleEpsilon) {
+                    obj.flags |= ObjectFlags::UniformScale;
+                }
+
+                obj.entityId = currentObjectCount;
+                obj.availableLODMask = submeshLoc.getAvailableLODMask();
+
+                currentObjectCount++;
+            }
+        }
     }
 
 }

@@ -141,7 +141,6 @@ const int DEBUG_VISUALIZE_LOD = 0;
 // textureIndices1: x=roughness, y=ao, z=emission, w=height
 
 // Object flags (must match ObjectFlags namespace in GPUDrivenTypes.hpp)
-const uint FLAG_TRANSPARENT = 1u << 3;
 const uint FLAG_ALPHA_MASK  = 1u << 4;
 
 // Helper: Check if texture index is valid

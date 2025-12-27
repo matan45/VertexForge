@@ -17,7 +17,6 @@ namespace core {
 }
 
 namespace render::mesh {
-    class MeshGPUCache;
     class MaterialTextureCache;
     class MeshStreamManager;
     struct MeshRenderData;
@@ -57,12 +56,6 @@ namespace render::gpudriven {
         void cleanup();
 
         /**
-         * Rebuild merged mesh buffers from the mesh cache.
-         * Call this when meshes are loaded/unloaded.
-         */
-        void rebuildMergedBuffer(const mesh::MeshGPUCache& cache);
-
-        /**
          * Register a texture for bindless access.
          * @return Bindless texture index
          */
@@ -76,9 +69,10 @@ namespace render::gpudriven {
         /**
          * Update scene data for rendering.
          * Call this each frame with the list of opaque objects to render.
+         * Meshes are streamed via MeshStreamManager - all referenced meshes must be
+         * registered through the streaming system before this call.
          *
-         * @param opaqueObjects List of mesh render data (opaque only, translucent handled separately)
-         * @param cache Mesh GPU cache for looking up mesh data
+         * @param opaqueObjects List of mesh render data (opaque only)
          * @param view Camera view matrix
          * @param projection Camera projection matrix
          * @param cameraPosition Camera world position
@@ -88,7 +82,6 @@ namespace render::gpudriven {
          */
         void updateScene(
             const std::vector<mesh::MeshRenderData>& opaqueObjects,
-            const mesh::MeshGPUCache& cache,
             const glm::mat4& view,
             const glm::mat4& projection,
             const glm::vec3& cameraPosition,

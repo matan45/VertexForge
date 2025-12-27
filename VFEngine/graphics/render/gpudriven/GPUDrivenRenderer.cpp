@@ -1,5 +1,4 @@
 #include "GPUDrivenRenderer.hpp"
-#include "../mesh/MeshGPUCache.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../mesh/MeshStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
@@ -327,17 +326,6 @@ namespace render::gpudriven {
         spdlog::debug("GPUDrivenRenderer: Created graphics pipeline");
     }
 
-    void GPUDrivenRenderer::rebuildMergedBuffer(const mesh::MeshGPUCache& cache)
-    {
-        if (!initialized || !mergedBuffer) {
-            return;
-        }
-
-        mergedBuffer->rebuildFromCache(cache);
-        spdlog::info("GPUDrivenRenderer: Rebuilt merged buffer with {} vertices, {} indices",
-            mergedBuffer->getTotalVertexCount(), mergedBuffer->getTotalIndexCount());
-    }
-
     uint32_t GPUDrivenRenderer::registerTexture(const std::string& path, vk::ImageView view, vk::Sampler sampler)
     {
         if (!initialized || !bindlessTextures) {
@@ -470,7 +458,6 @@ namespace render::gpudriven {
 
     void GPUDrivenRenderer::updateScene(
         const std::vector<mesh::MeshRenderData>& opaqueObjects,
-        const mesh::MeshGPUCache& cache,
         const glm::mat4& view,
         const glm::mat4& projection,
         const glm::vec3& cameraPosition,
@@ -482,9 +469,8 @@ namespace render::gpudriven {
             return;
         }
 
-        // Update mesh streaming if enabled
-        if (meshStreamingEnabled && meshStreamManager) {
-            // Request streaming for all meshes in the scene
+        // Update mesh streaming - request all meshes in the scene
+        if (meshStreamManager) {
             for (const auto& meshRender : opaqueObjects) {
                 meshStreamManager->requestMesh(meshRender.meshPath);
             }
@@ -561,7 +547,7 @@ namespace render::gpudriven {
         }
 
         // Update object buffer with current frame's render data (pass time for Time node evaluation)
-        mergedBuffer->updateObjects(opaqueObjects, cache, textureResolver, time);
+        mergedBuffer->updateObjects(opaqueObjects, textureResolver, time);
 
         // Update camera data for compute shader
         updateCameraData(view, projection, cameraPosition, nearPlane, farPlane, time);

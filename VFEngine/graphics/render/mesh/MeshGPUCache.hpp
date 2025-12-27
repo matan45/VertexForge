@@ -21,6 +21,16 @@ namespace resource
 
 namespace render::mesh
 {
+    /**
+     * MeshGPUCache - Per-mesh GPU buffer storage for preview windows
+     *
+     * Used by:
+     * - Material preview (MaterialPreviewController)
+     * - Mesh preview (MeshPreviewController)
+     * - CPU fallback rendering (StaticMeshPipeline::recordCommandBuffer)
+     *
+     * For main scene rendering, use MeshStreamManager + MergedMeshBuffer instead.
+     */
     class MeshGPUCache
     {
     private:

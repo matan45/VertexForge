@@ -116,7 +116,6 @@ namespace render::gpudriven {
         constexpr uint32_t Visible       = 1 << 0;   // Object is currently visible
         constexpr uint32_t CastShadow    = 1 << 1;   // Object casts shadows
         constexpr uint32_t ReceiveShadow = 1 << 2;   // Object receives shadows
-        constexpr uint32_t Transparent   = 1 << 3;   // Object uses alpha blending
         constexpr uint32_t AlphaMask     = 1 << 4;   // Object uses alpha masking
         constexpr uint32_t DoubleSided   = 1 << 5;   // Object is double-sided
         constexpr uint32_t NoCull        = 1 << 6;   // Never cull this object

@@ -19,8 +19,8 @@ namespace resource {
 }
 
 namespace render::mesh {
-    class MeshGPUCache;
-    struct MeshGPUData;
+    class MeshMetadataCache;
+    struct MeshMetadata;
     struct MeshRenderData;
 }
 
@@ -58,25 +58,21 @@ namespace render::gpudriven {
         // Cleanup GPU resources
         void cleanup();
 
-        // Rebuild merged buffer from current MeshGPUCache contents
-        // This merges all loaded meshes into single vertex/index buffers
-        void rebuildFromCache(const mesh::MeshGPUCache& cache);
-
-        // Register a mesh from the cache into the merged buffer
-        // Returns the mesh info with submesh locations
-        MergedMeshInfo* registerMesh(const std::string& meshPath, const mesh::MeshGPUData& meshData);
-
         // Unregister a mesh (marks its space as free, doesn't defrag)
         void unregisterMesh(const std::string& meshPath);
 
-        // Update object buffer from render data list
-        // This is called each frame to update transforms and prepare for GPU culling
+        // Update object buffer from render data list (streaming path)
+        // All meshes must be registered via reserveMesh() or registerMeshFromMetadata()
         // The textureResolver callback is used to convert texture paths to bindless indices
         // The time parameter is used to evaluate Time nodes in material shader graphs
         void updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
-                          const mesh::MeshGPUCache& cache,
                           const TextureIndexResolver& textureResolver = nullptr,
                           float time = 0.0f);
+
+        // Register mesh from metadata (reserves space, streaming will upload geometry)
+        // Returns the mesh info with submesh locations (LOD states = NotRequested)
+        MergedMeshInfo* registerMeshFromMetadata(const std::string& meshPath,
+                                                   const mesh::MeshMetadata& metadata);
 
         // Upload object buffer changes to GPU
         void uploadObjects(vk::CommandBuffer cmd);

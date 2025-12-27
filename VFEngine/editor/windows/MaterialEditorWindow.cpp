@@ -572,9 +572,9 @@ namespace windows {
         
         if (materialData) {
             ImGui::Text("Blend Mode");
-            const char* blendModes[] = { "Opaque", "Masked", "Translucent" };
+            const char* blendModes[] = { "Opaque", "Masked" };
             int blendMode = static_cast<int>(materialData->blendMode);
-            if (ImGui::Combo("##BlendMode", &blendMode, blendModes, 3)) {
+            if (ImGui::Combo("##BlendMode", &blendMode, blendModes, 2)) {
                 materialData->blendMode = static_cast<material::BlendMode>(blendMode);
                 isDirty = true;
             }
