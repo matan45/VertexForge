@@ -22,6 +22,7 @@ layout(set = 0, binding = 0) uniform CameraUBO {
 } camera;
 
 // Per-draw data (written by GPU cull+LOD compute shader)
+// Must match GPUDrivenTypes.hpp PerDrawData
 struct PerDrawData {
     mat4 modelMatrix;           // 64 bytes
     mat4 normalMatrix;          // 64 bytes - pre-computed transpose(inverse(mat3(model)))
@@ -38,7 +39,7 @@ struct PerDrawData {
     float iblSpecular;          // 4 bytes
 
     uint lodLevel;              // 4 bytes - selected LOD (for debug)
-    uint padding0;              // 4 bytes
+    uint shaderGroupIndex;      // 4 bytes - 0 = default PBR, 1+ = custom shaders
     uint padding1;              // 4 bytes
     uint padding2;              // 4 bytes
 };
@@ -95,7 +96,7 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Per-draw data structure (must match vertex shader)
+// Per-draw data structure (must match vertex shader and GPUDrivenTypes.hpp)
 struct PerDrawData {
     mat4 modelMatrix;
     mat4 normalMatrix;
@@ -108,7 +109,7 @@ struct PerDrawData {
     float iblDiffuse;
     float iblSpecular;
     uint lodLevel;
-    uint padding0;
+    uint shaderGroupIndex;  // 0 = default PBR, 1+ = custom shaders
     uint padding1;
     uint padding2;
 };
@@ -239,6 +240,10 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
 
 void main() {
     PerDrawData drawData = perDrawData[fragDrawIndex];
+
+    // Note: No shader group filtering needed here - compute shader outputs
+    // to separate buffer sections per (batch, shaderGroup), so each pipeline
+    // only receives draw commands for its own shader group.
 
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);

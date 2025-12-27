@@ -5,6 +5,7 @@
 #include "IndirectBatchManager.hpp"
 #include "BindlessTextureManager.hpp"
 #include "GPUCullLODPipeline.hpp"
+#include "GPUDrivenShaderCache.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -199,6 +200,12 @@ namespace render::gpudriven {
         uint32_t getHiZMipLevels() const { return hiZMipLevels; }
 
         /**
+         * Update render pass and IBL layout (call when swapchain is recreated or mesh pipeline reinit).
+         * This invalidates cached custom shader pipelines.
+         */
+        void updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout = nullptr);
+
+        /**
          * Get merged buffer statistics.
          */
         uint32_t getMergedVertexCount() const;
@@ -226,6 +233,7 @@ namespace render::gpudriven {
         std::unique_ptr<IndirectBatchManager> batchManager;
         std::unique_ptr<BindlessTextureManager> bindlessTextures;
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
+        std::unique_ptr<GPUDrivenShaderCache> customShaderCache;
 
         // Graphics pipeline resources
         std::unique_ptr<core::Shader> meshShader;

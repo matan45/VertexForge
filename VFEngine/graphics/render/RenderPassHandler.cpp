@@ -108,6 +108,14 @@ namespace render
         meshPipeline->cleanUpForReinit();
 
         meshPipeline->initWithDefaults();
+
+        // Update GPU-driven renderer with new render pass and IBL layout
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->updateRenderPass(
+                meshPipeline->getRenderPass(),
+                meshPipeline->getIBLDescriptorSetLayout());
+        }
     }
 
     void RenderPassHandler::reinitMeshPipelineWithIBL()
@@ -130,6 +138,14 @@ namespace render
         const auto& prefilter = iblRenderer->getPrefilterImage();
         const auto& brdfLUT = iblRenderer->getBrdfLUTImage();
         meshPipeline->init(irradiance, prefilter, brdfLUT);
+
+        // Update GPU-driven renderer with new render pass and IBL layout
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->updateRenderPass(
+                meshPipeline->getRenderPass(),
+                meshPipeline->getIBLDescriptorSetLayout());
+        }
     }
 
     void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes)
@@ -336,6 +352,13 @@ namespace render
         if (meshPipelineInitialized)
         {
             meshPipeline->recreate();
+
+            // Update GPU-driven renderer with new render pass
+            // Note: IBL layout doesn't change during recreate, only render pass
+            if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            {
+                gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
+            }
         }
 
         if (debugRendererInitialized)

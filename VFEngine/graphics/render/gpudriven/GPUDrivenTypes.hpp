@@ -33,6 +33,10 @@ namespace render::gpudriven {
     // Maximum bindless textures
     constexpr uint32_t MAX_BINDLESS_TEXTURES = 4096;
 
+    // Maximum shader groups for custom material shaders
+    // Group 0 = default PBR shader, Groups 1-15 = custom shaders
+    constexpr uint32_t MAX_SHADER_GROUPS = 16;
+
     // LOD level count (matches existing system)
     constexpr uint32_t LOD_LEVEL_COUNT = 4;
 
@@ -85,7 +89,7 @@ namespace render::gpudriven {
         uint32_t flags;                  // 4 bytes - visibility flags, blend mode, etc.
         uint32_t entityId;               // 4 bytes - for picking/selection
         uint32_t availableLODMask;       // 4 bytes - bits 0-3: which LODs are ready for streaming
-        uint32_t padding1;               // 4 bytes
+        uint32_t shaderGroupIndex;       // 4 bytes - 0 = default PBR, 1+ = custom shaders
         // Total: 256 bytes
 
         // Helper to set LOD data from LODDrawInfo
@@ -142,7 +146,7 @@ namespace render::gpudriven {
         float iblSpecular;               // 4 bytes
 
         uint32_t lodLevel;               // 4 bytes - Selected LOD level (for debug visualization)
-        uint32_t padding0;               // 4 bytes
+        uint32_t shaderGroupIndex;       // 4 bytes - 0 = default PBR, 1+ = custom shaders
         uint32_t padding1;               // 4 bytes
         uint32_t padding2;               // 4 bytes
         // Total: 224 bytes
@@ -173,7 +177,7 @@ namespace render::gpudriven {
         uint32_t batchCount;             // 4 bytes - number of batches for indirect rendering
 
         uint32_t commandsPerBatch;       // 4 bytes - max draw commands per batch
-        uint32_t padding0;               // 4 bytes
+        uint32_t shaderGroupCount;       // 4 bytes - number of shader groups (for buffer indexing)
         uint32_t padding1;               // 4 bytes
         uint32_t padding2;               // 4 bytes
         // Total: 432 bytes

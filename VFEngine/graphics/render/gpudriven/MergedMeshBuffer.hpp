@@ -42,6 +42,10 @@ namespace render::gpudriven {
     // Returns INVALID_TEXTURE_INDEX if texture is not registered
     using TextureIndexResolver = std::function<uint32_t(const std::string& materialPath, TextureSlotType slot)>;
 
+    // Callback to resolve material path to shader group index
+    // Returns 0 for default PBR shader, 1+ for custom shaders
+    using ShaderGroupResolver = std::function<uint32_t(const std::string& materialPath)>;
+
     class MergedMeshBuffer {
     public:
         explicit MergedMeshBuffer(core::Device& device);
@@ -64,9 +68,11 @@ namespace render::gpudriven {
         // Update object buffer from render data list (streaming path)
         // All meshes must be registered via reserveMesh() or registerMeshFromMetadata()
         // The textureResolver callback is used to convert texture paths to bindless indices
+        // The shaderGroupResolver callback is used to convert material paths to shader group indices
         // The time parameter is used to evaluate Time nodes in material shader graphs
         void updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
                           const TextureIndexResolver& textureResolver = nullptr,
+                          const ShaderGroupResolver& shaderGroupResolver = nullptr,
                           float time = 0.0f);
 
         // Register mesh from metadata (reserves space, streaming will upload geometry)

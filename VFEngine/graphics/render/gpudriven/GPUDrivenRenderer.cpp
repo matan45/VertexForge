@@ -54,7 +54,7 @@ namespace render::gpudriven {
         }
 
         batchManager = std::make_unique<IndirectBatchManager>(device);
-        batchManager->init(DEFAULT_BATCH_COUNT, MAX_DRAW_COMMANDS);
+        batchManager->init(DEFAULT_BATCH_COUNT, MAX_DRAW_COMMANDS, MAX_SHADER_GROUPS);
 
         bindlessTextures = std::make_unique<BindlessTextureManager>(device);
         bindlessTextures->init();
@@ -70,6 +70,15 @@ namespace render::gpudriven {
 
         // Create graphics pipeline for GPU-driven rendering
         createGraphicsPipeline(iblDescriptorSetLayout, renderPass);
+
+        // Initialize custom shader cache for GPU-driven compatible material shaders
+        customShaderCache = std::make_unique<GPUDrivenShaderCache>(device, swapChain);
+        customShaderCache->init(
+            iblDescriptorSetLayout,
+            perDrawDataLayout,
+            bindlessTextures->getDescriptorSetLayout(),
+            renderPass
+        );
 
         initialized = true;
         spdlog::info("GPUDrivenRenderer: Initialized successfully");
@@ -123,6 +132,7 @@ namespace render::gpudriven {
         }
 
         // Cleanup sub-components
+        if (customShaderCache) customShaderCache->cleanup();
         if (cullPipeline) cullPipeline->cleanup();
         if (bindlessTextures) bindlessTextures->cleanup();
         if (batchManager) batchManager->cleanup();
@@ -448,7 +458,7 @@ namespace render::gpudriven {
         cameraData.batchCount = batchManager ? batchManager->getBatchCount() : 1;
 
         cameraData.commandsPerBatch = batchManager ? batchManager->getCommandsPerBatch() : MAX_DRAW_COMMANDS;
-        cameraData.padding0 = 0;
+        cameraData.shaderGroupCount = batchManager ? batchManager->getShaderGroupCount() : MAX_SHADER_GROUPS;
         cameraData.padding1 = 0;
         cameraData.padding2 = 0;
 
@@ -546,8 +556,49 @@ namespace render::gpudriven {
             };
         }
 
+        // Create shader group resolver for custom material shaders
+        // Returns 0 for default PBR, 1+ for custom shaders
+        ShaderGroupResolver shaderGroupResolver = nullptr;
+        if (customShaderCache) {
+            // Clear active groups from last frame
+            customShaderCache->clearActiveGroups();
+
+            // Cache material data lookups per material path
+            auto matDataCache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>>();
+
+            shaderGroupResolver = [this, matDataCache](const std::string& materialPath) -> uint32_t {
+                if (materialPath.empty()) {
+                    return 0;  // Default shader
+                }
+
+                // Check cache first
+                auto it = matDataCache->find(materialPath);
+                std::shared_ptr<material::MaterialData> matData;
+                if (it == matDataCache->end()) {
+                    matData = resource::ResourceManager::getMaterial(materialPath);
+                    (*matDataCache)[materialPath] = matData;
+                } else {
+                    matData = it->second;
+                }
+
+                if (!matData) {
+                    return 0;  // Default shader
+                }
+
+                // Check if material has custom shaders
+                if (matData->cachedVertexShader.empty() || matData->cachedFragmentShader.empty()) {
+                    return 0;  // Default shader
+                }
+
+                // Get or create shader group for this custom material
+                uint32_t group = customShaderCache->getOrCreateShaderGroup(materialPath, *matData);
+                customShaderCache->markGroupActive(group);
+                return group;
+            };
+        }
+
         // Update object buffer with current frame's render data (pass time for Time node evaluation)
-        mergedBuffer->updateObjects(opaqueObjects, textureResolver, time);
+        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, time);
 
         // Update camera data for compute shader
         updateCameraData(view, projection, cameraPosition, nearPlane, farPlane, time);
@@ -621,46 +672,76 @@ namespace render::gpudriven {
             return;
         }
 
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-
-        std::array<vk::DescriptorSet, 3> descriptorSets = {
-            iblDescriptorSet,
-            perDrawDataDescriptorSet,
-            bindlessTextures->getDescriptorSet()
-        };
-
-        cmd.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            graphicsPipelineLayout,
-            0,
-            static_cast<uint32_t>(descriptorSets.size()),
-            descriptorSets.data(),
-            0, nullptr);
-
-        // Bind merged vertex/index buffers once (shared across all batches)
+        // Bind merged vertex/index buffers once (shared across all pipelines and batches)
         vk::Buffer vertBufs[] = { mergedBuffer->getVertexBuffer() };
         vk::DeviceSize vertOffsets[] = { 0 };
         cmd.bindVertexBuffers(0, 1, vertBufs, vertOffsets);
         cmd.bindIndexBuffer(mergedBuffer->getIndexBuffer(), 0, vk::IndexType::eUint32);
 
-        // Issue one indirect draw per batch
-        // Each batch has its own draw commands and count in the combined buffers
         uint32_t batchCount = batchManager->getBatchCount();
-        uint32_t commandsPerBatch = batchManager->getCommandsPerBatch();
+        uint32_t commandsPerSection = batchManager->getCommandsPerSection();
 
-        for (uint32_t batch = 0; batch < batchCount; ++batch)
+        // Get active shader groups (always includes group 0 = default)
+        const std::set<uint32_t>& activeGroups = customShaderCache ?
+            customShaderCache->getActiveGroups() :
+            std::set<uint32_t>{0};
+
+        // Multi-pipeline rendering: each shader group has its own buffer sections
+        // No fragment discard needed - compute shader outputs to group-specific sections
+        for (uint32_t shaderGroup : activeGroups)
         {
-            // Calculate offsets into combined buffers for this batch
-            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch);
-            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch);
+            vk::Pipeline pipeline;
+            vk::PipelineLayout layout;
 
-            cmd.drawIndexedIndirectCount(
-                batchManager->getCombinedDrawCommandBuffer(),
-                cmdOffset,
-                batchManager->getCombinedDrawCountBuffer(),
-                countOffset,
-                commandsPerBatch,
-                sizeof(DrawIndexedIndirectCommand));
+            if (shaderGroup == 0) {
+                // Default PBR pipeline
+                pipeline = graphicsPipeline;
+                layout = graphicsPipelineLayout;
+            } else {
+                // Custom shader pipeline
+                if (customShaderCache) {
+                    pipeline = customShaderCache->getPipeline(shaderGroup, false);
+                }
+                if (!pipeline) {
+                    spdlog::warn("GPUDrivenRenderer: No pipeline for shader group {}, skipping", shaderGroup);
+                    continue;
+                }
+                // Custom pipelines use the same layout (shared in shader cache)
+                layout = graphicsPipelineLayout;
+            }
+
+            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+
+            std::array<vk::DescriptorSet, 3> descriptorSets = {
+                iblDescriptorSet,
+                perDrawDataDescriptorSet,
+                bindlessTextures->getDescriptorSet()
+            };
+
+            cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
+                layout,
+                0,
+                static_cast<uint32_t>(descriptorSets.size()),
+                descriptorSets.data(),
+                0, nullptr);
+
+            // Draw all batches for this shader group
+            // Each (batch, shaderGroup) pair has its own section in the buffers
+            for (uint32_t batch = 0; batch < batchCount; ++batch)
+            {
+                // Get offsets for this (batch, shaderGroup) section
+                vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, shaderGroup);
+                vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, shaderGroup);
+
+                cmd.drawIndexedIndirectCount(
+                    batchManager->getCombinedDrawCommandBuffer(),
+                    cmdOffset,
+                    batchManager->getCombinedDrawCountBuffer(),
+                    countOffset,
+                    commandsPerSection,
+                    sizeof(DrawIndexedIndirectCommand));
+            }
         }
     }
 
@@ -857,6 +938,52 @@ namespace render::gpudriven {
             return mergedBuffer->getStreamingStats();
         }
         return {};
+    }
+
+    void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)
+    {
+        if (!initialized) return;
+
+        // Check if anything actually changed
+        bool renderPassChanged = (cachedRenderPass != newRenderPass);
+        bool iblLayoutChanged = (newIBLLayout && cachedIBLLayout != newIBLLayout);
+
+        if (!renderPassChanged && !iblLayoutChanged) return;
+
+        spdlog::info("GPUDrivenRenderer: Updating render pass/IBL layout, recreating pipelines");
+
+        vk::Device vkDevice = device.getLogicalDevice();
+        vkDevice.waitIdle();
+
+        // Destroy old graphics pipeline and layout
+        if (graphicsPipeline) {
+            vkDevice.destroyPipeline(graphicsPipeline);
+            graphicsPipeline = nullptr;
+        }
+        if (graphicsPipelineLayout) {
+            vkDevice.destroyPipelineLayout(graphicsPipelineLayout);
+            graphicsPipelineLayout = nullptr;
+        }
+
+        // Clean up old shader
+        if (meshShader) {
+            meshShader->cleanUp();
+            meshShader.reset();
+        }
+
+        // Update cached values
+        cachedRenderPass = newRenderPass;
+        if (newIBLLayout) {
+            cachedIBLLayout = newIBLLayout;
+        }
+
+        // Recreate main graphics pipeline with new render pass and IBL layout
+        createGraphicsPipeline(cachedIBLLayout, cachedRenderPass);
+
+        // Update custom shader cache with new render pass and IBL layout
+        if (customShaderCache) {
+            customShaderCache->updateRenderPass(newRenderPass, newIBLLayout);
+        }
     }
 
 }

@@ -738,6 +738,7 @@ namespace render::gpudriven {
 
     void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
                                           const TextureIndexResolver& textureResolver,
+                                          const ShaderGroupResolver& shaderGroupResolver,
                                           float time)
     {
         currentObjectCount = 0;
@@ -890,6 +891,13 @@ namespace render::gpudriven {
 
                 obj.entityId = currentObjectCount;
                 obj.availableLODMask = submeshLoc.getAvailableLODMask();
+
+                // Shader group for custom material shaders
+                if (shaderGroupResolver && !materialPath.empty()) {
+                    obj.shaderGroupIndex = shaderGroupResolver(materialPath);
+                } else {
+                    obj.shaderGroupIndex = 0;  // Default PBR shader
+                }
 
                 currentObjectCount++;
             }

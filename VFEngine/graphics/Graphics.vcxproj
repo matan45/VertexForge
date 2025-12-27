@@ -125,6 +125,7 @@
     <ClInclude Include="render\gpudriven\BindlessTextureManager.hpp" />
     <ClInclude Include="render\gpudriven\GPUCullLODPipeline.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenRenderer.hpp" />
+    <ClInclude Include="render\gpudriven\GPUDrivenShaderCache.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenTypes.hpp" />
     <ClInclude Include="render\gpudriven\IndirectBatchManager.hpp" />
     <ClInclude Include="render\gpudriven\IndirectDrawBuffer.hpp" />
@@ -179,6 +180,7 @@
     <ClCompile Include="render\gpudriven\BindlessTextureManager.cpp" />
     <ClCompile Include="render\gpudriven\GPUCullLODPipeline.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
+    <ClCompile Include="render\gpudriven\GPUDrivenShaderCache.cpp" />
     <ClCompile Include="render\gpudriven\IndirectBatchManager.cpp" />
     <ClCompile Include="render\gpudriven\IndirectDrawBuffer.cpp" />
     <ClCompile Include="render\gpudriven\MergedMeshBuffer.cpp" />

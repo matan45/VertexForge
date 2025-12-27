@@ -51,7 +51,7 @@ struct GPUObjectData {
     uint flags;                 // 4 bytes
     uint entityId;              // 4 bytes
     uint availableLODMask;      // 4 bytes - bits 0-3: which LODs are ready for streaming
-    uint padding1;              // 4 bytes
+    uint shaderGroupIndex;      // 4 bytes - 0 = default PBR, 1+ = custom shaders
 };
 
 // ============================================================================
@@ -73,7 +73,7 @@ struct PerDrawData {
     float iblSpecular;          // 4 bytes
 
     uint lodLevel;              // 4 bytes - selected LOD (for debug)
-    uint padding0;              // 4 bytes
+    uint shaderGroupIndex;      // 4 bytes - 0 = default PBR, 1+ = custom shaders
     uint padding1;              // 4 bytes
     uint padding2;              // 4 bytes
 };
@@ -113,8 +113,8 @@ struct CameraData {
     uint enableLODSelection;
     uint batchCount;            // Number of indirect draw batches
 
-    uint commandsPerBatch;      // Max draw commands per batch
-    uint padding0;
+    uint commandsPerBatch;      // Max draw commands per batch (total, for backwards compat)
+    uint shaderGroupCount;      // Number of shader groups (buffer sections per batch)
     uint padding1;
     uint padding2;
 };
@@ -132,6 +132,16 @@ layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
 layout(set = 0, binding = 1) uniform CameraUBO {
     CameraData camera;
 };
+
+// Helper: commands per (batch, shaderGroup) section
+uint getCommandsPerSection() {
+    return camera.commandsPerBatch / camera.shaderGroupCount;
+}
+
+// Helper: calculate section index for (batch, shaderGroup)
+uint getSectionIndex(uint batch, uint shaderGroup) {
+    return batch * camera.shaderGroupCount + shaderGroup;
+}
 
 // Output: Draw commands
 layout(std430, set = 0, binding = 2) writeonly buffer DrawCommandBuffer {
@@ -156,10 +166,11 @@ struct BatchDrawStats {
     uint padding;            // Padding to 32 bytes
 };
 
-// Output: Atomic draw count and statistics per batch
-// Layout: [Batch0 stats][Batch1 stats]...[BatchN stats]
+// Output: Atomic draw count and statistics per section (batch, shaderGroup)
+// Layout: [Batch0_Group0][Batch0_Group1]...[BatchN_GroupM]
+// Section index = batch * shaderGroupCount + shaderGroup
 layout(std430, set = 0, binding = 4) buffer DrawCountBuffer {
-    BatchDrawStats batchStats[];
+    BatchDrawStats batchStats[];  // One per section (batchCount * shaderGroupCount)
 };
 
 // Input: Hi-Z pyramid texture (for occlusion culling)
@@ -370,15 +381,18 @@ void main() {
     // Transform bounding sphere to world space
     vec4 worldSphere = transformBoundingSphere(obj.boundingSphere, obj.modelMatrix);
 
-    // Calculate which batch this object belongs to (round-robin distribution)
+    // Calculate batch (round-robin) and section (batch * shaderGroupCount + shaderGroup)
     uint batchIndex = objectIndex % camera.batchCount;
+    uint shaderGroup = obj.shaderGroupIndex;
+    uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
+    uint commandsPerSection = getCommandsPerSection();
 
     // ========================================
     // Frustum Culling
     // ========================================
     if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
-            atomicAdd(batchStats[batchIndex].culledByFrustum, 1);
+            atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
             return; // Outside frustum, skip this object
         }
     }
@@ -389,7 +403,7 @@ void main() {
     if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u) {
         if (camera.hiZMipLevels > 0u) {
             if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
-                atomicAdd(batchStats[batchIndex].culledByOcclusion, 1);
+                atomicAdd(batchStats[sectionIndex].culledByOcclusion, 1);
                 return; // Occluded by Hi-Z, skip this object
             }
         }
@@ -442,29 +456,29 @@ void main() {
     }
 
     // ========================================
-    // Emit Draw Command (Batch-Aware)
+    // Emit Draw Command (Section-Aware: batch x shaderGroup)
     // ========================================
 
-    // Atomically allocate a draw slot within this batch
-    uint localDrawIndex = atomicAdd(batchStats[batchIndex].drawCount, 1);
+    // Atomically allocate a draw slot within this section
+    uint localDrawIndex = atomicAdd(batchStats[sectionIndex].drawCount, 1);
 
-    // Bounds check - if batch is full, decrement and skip
-    if (localDrawIndex >= camera.commandsPerBatch) {
-        atomicAdd(batchStats[batchIndex].drawCount, uint(-1));
+    // Bounds check - if section is full, decrement and skip
+    if (localDrawIndex >= commandsPerSection) {
+        atomicAdd(batchStats[sectionIndex].drawCount, uint(-1));
         return;
     }
 
-    // Track LOD distribution statistics per batch
+    // Track LOD distribution statistics per section
     switch (lodLevel) {
-        case 0u: atomicAdd(batchStats[batchIndex].lodCount0, 1); break;
-        case 1u: atomicAdd(batchStats[batchIndex].lodCount1, 1); break;
-        case 2u: atomicAdd(batchStats[batchIndex].lodCount2, 1); break;
-        default: atomicAdd(batchStats[batchIndex].lodCount3, 1); break;
+        case 0u: atomicAdd(batchStats[sectionIndex].lodCount0, 1); break;
+        case 1u: atomicAdd(batchStats[sectionIndex].lodCount1, 1); break;
+        case 2u: atomicAdd(batchStats[sectionIndex].lodCount2, 1); break;
+        default: atomicAdd(batchStats[sectionIndex].lodCount3, 1); break;
     }
 
     // Calculate global indices into combined buffers
-    // Layout: [Batch0 commands][Batch1 commands]...[BatchN commands]
-    uint globalDrawIndex = batchIndex * camera.commandsPerBatch + localDrawIndex;
+    // Layout: [Batch0_Group0][Batch0_Group1]...[BatchN_GroupM]
+    uint globalDrawIndex = sectionIndex * commandsPerSection + localDrawIndex;
 
     // Write draw command at global index
     drawCommands[globalDrawIndex].indexCount = indexCount;
@@ -502,7 +516,7 @@ void main() {
     perDrawData[globalDrawIndex].iblDiffuse = obj.iblParams.x;
     perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
     perDrawData[globalDrawIndex].lodLevel = lodLevel;
-    perDrawData[globalDrawIndex].padding0 = 0u;
+    perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
     perDrawData[globalDrawIndex].padding1 = 0u;
     perDrawData[globalDrawIndex].padding2 = 0u;
 }

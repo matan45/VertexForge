@@ -16,7 +16,7 @@ namespace render::gpudriven {
         cleanup();
     }
 
-    void IndirectBatchManager::init(uint32_t batchCount, uint32_t commandsPerBatch)
+    void IndirectBatchManager::init(uint32_t batchCount, uint32_t commandsPerBatch, uint32_t shaderGroupCount)
     {
         if (initialized) {
             loggerWarning("IndirectBatchManager already initialized");
@@ -29,15 +29,26 @@ namespace render::gpudriven {
             batchCount = DEFAULT_BATCH_COUNT;
         }
 
+        // Validate shader group count
+        if (shaderGroupCount == 0 || shaderGroupCount > MAX_SHADER_GROUPS) {
+            loggerError("Invalid shader group count: {}. Must be 1-{}", shaderGroupCount, MAX_SHADER_GROUPS);
+            shaderGroupCount = MAX_SHADER_GROUPS;
+        }
+
         this->batchCount = batchCount;
         this->commandsPerBatch = commandsPerBatch;
+        this->shaderGroupCount = shaderGroupCount;
+        // Each (batch, shaderGroup) section gets equal share of commands
+        this->commandsPerSection = commandsPerBatch / shaderGroupCount;
+
         createBuffers();
         initialized = true;
 
-        loggerInfo("IndirectBatchManager initialized: {} batches x {} commands = {} total capacity",
-                   this->batchCount, this->commandsPerBatch, getTotalCapacity());
+        loggerInfo("IndirectBatchManager initialized: {} batches x {} shader groups x {} commands/section = {} total capacity",
+                   this->batchCount, this->shaderGroupCount, this->commandsPerSection, getTotalCapacity());
+        loggerInfo("  Sections (batch*group pairs): {}", getSectionCount());
         loggerInfo("  Draw command buffer: {} MB", getCombinedDrawCommandBufferSize() / (1024.0f * 1024.0f));
-        loggerInfo("  Draw count buffer: {} bytes", getCombinedDrawCountBufferSize());
+        loggerInfo("  Draw count buffer: {} KB", getCombinedDrawCountBufferSize() / 1024.0f);
         loggerInfo("  Per-draw data buffer: {} MB", getCombinedPerDrawDataBufferSize() / (1024.0f * 1024.0f));
     }
 
@@ -224,6 +235,7 @@ namespace render::gpudriven {
     {
         // This is expensive - causes a full GPU sync
         // Only use for debugging
+        // Returns stats for all sections (batchCount * shaderGroupCount)
 
         device.getLogicalDevice().waitIdle();
 
@@ -244,8 +256,8 @@ namespace render::gpudriven {
             cmdBuffer
         );
 
-        // Read from staging into vector
-        std::vector<BatchDrawStats> stats(batchCount);
+        // Read from staging into vector - one entry per section (batch * shaderGroup)
+        std::vector<BatchDrawStats> stats(getSectionCount());
         std::memcpy(stats.data(), stagingMapped, getCombinedDrawCountBufferSize());
 
         return stats;
@@ -253,19 +265,20 @@ namespace render::gpudriven {
 
     GPUDrivenStats IndirectBatchManager::readBackAggregatedStats()
     {
-        auto batchStats = readBackAllStats();
+        auto sectionStats = readBackAllStats();
 
         GPUDrivenStats aggregated{};
-        aggregated.drawCalls = batchCount;  // One draw call per batch
+        // One draw call per active (batch, shaderGroup) section
+        aggregated.drawCalls = getSectionCount();
 
-        for (const auto& batch : batchStats) {
-            aggregated.visibleObjects += batch.drawCount;
-            aggregated.objectsLOD0 += batch.lodCount0;
-            aggregated.objectsLOD1 += batch.lodCount1;
-            aggregated.objectsLOD2 += batch.lodCount2;
-            aggregated.objectsLOD3 += batch.lodCount3;
-            aggregated.culledByFrustum += batch.culledByFrustum;
-            aggregated.culledByOcclusion += batch.culledByOcclusion;
+        for (const auto& section : sectionStats) {
+            aggregated.visibleObjects += section.drawCount;
+            aggregated.objectsLOD0 += section.lodCount0;
+            aggregated.objectsLOD1 += section.lodCount1;
+            aggregated.objectsLOD2 += section.lodCount2;
+            aggregated.objectsLOD3 += section.lodCount3;
+            aggregated.culledByFrustum += section.culledByFrustum;
+            aggregated.culledByOcclusion += section.culledByOcclusion;
         }
 
         return aggregated;
