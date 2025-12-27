@@ -25,6 +25,7 @@ const uint FLAG_DOUBLE_SIDED  = 1u << 5;
 const uint FLAG_NO_CULL       = 1u << 6;
 const uint FLAG_NO_OCCLUDE    = 1u << 7;
 const uint FLAG_SELECTED      = 1u << 8;
+const uint FLAG_UNIFORM_SCALE = 1u << 9;
 
 // ============================================================================
 // GPU Object Data (256 bytes, must match GPUObjectData in GPUDrivenTypes.hpp)
@@ -484,7 +485,18 @@ void main() {
     // Pre-compute normal matrix (transpose of inverse of upper-left 3x3)
     // Done once per object here instead of per-vertex in the vertex shader
     mat3 modelMat3 = mat3(obj.modelMatrix);
-    mat3 normalMat3 = transpose(inverse(modelMat3));
+    mat3 normalMat3;
+
+    if ((obj.flags & FLAG_UNIFORM_SCALE) != 0u) {
+        // Fast path: for uniform scale, normalMatrix = modelMatrix / scale
+        // This avoids expensive inverse() computation (~27 ops)
+        float scale = length(modelMat3[0]);
+        normalMat3 = modelMat3 * (1.0 / scale);
+    } else {
+        // General case: full inverse for non-uniform scale
+        normalMat3 = transpose(inverse(modelMat3));
+    }
+
     perDrawData[globalDrawIndex].normalMatrix = mat4(normalMat3);
 
     perDrawData[globalDrawIndex].albedo = obj.albedo;

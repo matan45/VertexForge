@@ -122,6 +122,7 @@ namespace render::gpudriven {
         constexpr uint32_t NoCull        = 1 << 6;   // Never cull this object
         constexpr uint32_t NoOcclude     = 1 << 7;   // Object shouldn't occlude others
         constexpr uint32_t Selected      = 1 << 8;   // Object is selected (editor)
+        constexpr uint32_t UniformScale  = 1 << 9;   // Object has uniform scale (fast normal matrix path)
     }
 
     // Per-draw data output by culling shader, consumed by vertex/fragment shaders

@@ -538,6 +538,16 @@ namespace render::gpudriven {
                     obj.flags |= ObjectFlags::AlphaMask;
                 }
 
+                // Check for uniform scale (enables fast normal matrix path in shader)
+                float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
+                float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
+                float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));
+                constexpr float uniformScaleEpsilon = 0.001f;
+                if (std::abs(scaleX - scaleY) < uniformScaleEpsilon &&
+                    std::abs(scaleY - scaleZ) < uniformScaleEpsilon) {
+                    obj.flags |= ObjectFlags::UniformScale;
+                }
+
                 obj.entityId = currentObjectCount; // Simple ID for now
 
                 // Set available LOD mask for streaming support
