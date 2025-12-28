@@ -254,8 +254,7 @@ namespace material {
     // Blend modes for materials
     enum class BlendMode : uint8_t {
         Opaque,
-        Masked,
-        Translucent
+        Masked
     };
 
     // Complete material data

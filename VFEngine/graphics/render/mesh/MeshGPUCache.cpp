@@ -39,7 +39,7 @@ namespace render::mesh
 
         core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexBufferRequest.size = vertexBufferSize;
-        vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc;
         vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::Utilities::createBuffer(vertexBufferRequest, lodBuffers.vertexBuffer, lodBuffers.vertexBufferMemory);
         
@@ -55,7 +55,7 @@ namespace render::mesh
 
             core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
             indexBufferRequest.size = indexBufferSize;
-            indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc;
             indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::Utilities::createBuffer(indexBufferRequest, lodBuffers.indexBuffer, lodBuffers.indexBufferMemory);
             

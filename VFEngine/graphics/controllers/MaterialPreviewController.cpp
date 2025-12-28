@@ -406,8 +406,9 @@ namespace controllers
         offScreen->init();
 
         // Initialize mesh pipeline with default IBL textures
+        // Disable GPU-driven rendering to allow custom per-material shaders
         auto* renderHandler = offScreen->getRenderPassHandler();
-        renderHandler->initMeshPipeline();
+        renderHandler->initMeshPipeline(false);
 
         // Generate and upload procedural sphere
         auto* meshPipeline = renderHandler->getMeshPipeline();
@@ -456,7 +457,9 @@ namespace controllers
     {
         materialParams = params;
 
-        if (!initialized) return;
+        if (!initialized) {
+            return;
+        }
 
         // Inject material into mesh pipeline cache for custom shader support
         // Only inject when useCustomShader is true (after explicit compile)
@@ -468,7 +471,7 @@ namespace controllers
                 meshPipeline->injectMaterialForPreview(params.materialPath, params.materialData);
             }
         }
-        
+
         std::array<std::string, TextureManagerImpl::MAX_TEXTURES> texturePaths = {
             params.albedoTexturePath,      // 0: Albedo
             params.normalTexturePath,      // 1: Normal
@@ -511,8 +514,12 @@ namespace controllers
             }
         }
 
-        // Update bindings if needed
-        if (textureManager->texturesNeedUpdate && textureManager->defaultTexture.valid)
+        // Always update bindings when using custom shader (after compile/save)
+        // or when new textures were loaded
+        bool shouldUpdateBindings = (params.useCustomShader || textureManager->texturesNeedUpdate)
+                                    && textureManager->defaultTexture.valid;
+
+        if (shouldUpdateBindings)
         {
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
             if (meshPipeline)

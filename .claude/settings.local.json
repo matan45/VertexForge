@@ -9,7 +9,9 @@
       "mcp__mcp-atlassian__jira_get_all_projects",
       "mcp__mcp-atlassian__confluence_get_page",
       "mcp__mcp-atlassian__jira_get_issue",
-      "WebSearch"
+      "WebSearch",
+      "Bash(cmd /c:*)",
+      "Bash(powershell -Command:*)"
     ],
     "deny": [],
     "ask": []

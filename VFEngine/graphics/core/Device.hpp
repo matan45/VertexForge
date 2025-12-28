@@ -10,6 +10,14 @@ namespace window {
 }
 
 namespace core {
+
+	// GPU memory information for resource allocation decisions
+	struct DeviceMemoryInfo {
+		vk::DeviceSize deviceLocalHeapSize = 0;      // Total device-local VRAM
+		vk::DeviceSize hostVisibleHeapSize = 0;      // Host-visible memory
+		bool hasUnifiedMemory = false;               // APU/integrated GPU
+	};
+
 	class Device
 	{
 	private:
@@ -66,6 +74,9 @@ namespace core {
 
 		// Shared staging command pool for one-time transfer operations (texture uploads, buffer copies)
 		const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
+
+		// Query device memory information for resource allocation decisions
+		DeviceMemoryInfo getDeviceMemoryInfo() const;
 
 	};
 

@@ -5,12 +5,14 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
+#include "../render/material/MaterialPBRExtractor.hpp"
 #include "../render/occlusion/OcclusionCullingManager.hpp"
 #include "../render/billboard/BillboardTypes.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
 #include "../render/tools/FrustumDebugRenderer.hpp"
 #include "../render/tools/AudioSphereDebugRenderer.hpp"
 #include "../render/DebugRenderer.hpp"
+#include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "material/MaterialTypes.hpp"
@@ -20,9 +22,68 @@
 #include "../../services/events/MaterialEvents.hpp"
 #include "../../services/events/SceneEvents.hpp"
 #include "print/Logger.hpp"
+#include <cmath>
+#include <unordered_map>
 
 namespace controllers
 {
+    // Frame-local cache type for extracted PBR values
+    using PBRCache = std::unordered_map<std::string, render::mesh::ExtractedPBRValues>;
+
+    // Helper function to get cached PBR values, extracting only once per material per frame
+    static const render::mesh::ExtractedPBRValues* getCachedPBRValues(
+        const std::string& materialPath, PBRCache& cache)
+    {
+        if (materialPath.empty())
+        {
+            return nullptr;
+        }
+
+        // Check cache first
+        auto it = cache.find(materialPath);
+        if (it != cache.end())
+        {
+            return &it->second;
+        }
+
+        // Load material data from ResourceManager cache or file
+        auto materialData = resource::ResourceManager::getMaterial(materialPath);
+        if (!materialData)
+        {
+            materialData = resource::ResourceManager::loadMaterial(materialPath);
+        }
+
+        if (materialData)
+        {
+            // Extract and cache PBR values
+            auto [inserted, success] = cache.emplace(materialPath,
+                render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*materialData));
+            return &inserted->second;
+        }
+
+        return nullptr;
+    }
+
+    // Helper function to populate SubMeshMaterialInfo from a material path using cache
+    static void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo,
+                                     const std::string& materialPath, PBRCache& cache)
+    {
+        matInfo.materialPath = materialPath;
+
+        const auto* pbrValues = getCachedPBRValues(materialPath, cache);
+        if (pbrValues)
+        {
+            matInfo.albedo = pbrValues->albedo;
+            matInfo.metallic = pbrValues->metallic;
+            matInfo.roughness = pbrValues->roughness;
+            matInfo.ao = pbrValues->ao;
+            matInfo.emission = pbrValues->emission;
+            matInfo.blendMode = static_cast<uint8_t>(pbrValues->blendMode);
+            matInfo.iblDiffuse = pbrValues->iblDiffuse;
+            matInfo.iblSpecular = pbrValues->iblSpecular;
+        }
+    }
+
     OffScreenController::OffScreenController()
         : swapChain{*core::VulkanContext::getSwapChain()}
           , device{*core::VulkanContext::getDevice()}
@@ -70,6 +131,9 @@ namespace controllers
             [this](const events::material::MaterialFileSavedNotification& notification)
             {
                 resource::ResourceManager::invalidateMaterialCache(notification.materialPath);
+
+                // Invalidate PBR value cache for this material
+                pbrCache.erase(notification.materialPath);
 
                 // Invalidate GPU shader/pipeline cache
                 auto* renderHandler = offScreen->getRenderPassHandler();
@@ -218,6 +282,24 @@ namespace controllers
             }
         }
 
+        // Update GPU-driven renderer camera data
+        // Extract far plane from projection matrix for perspective projection
+        // For perspective: proj[2][2] = far/(near-far), proj[3][2] = near*far/(near-far)
+        // So far = proj[3][2] / (proj[2][2] + 1) when near = -proj[3][2]/proj[2][2]
+        float farPlane = 1000.0f;  // Default fallback
+        if (std::abs(projection[2][2]) > 0.0001f)
+        {
+            // For Vulkan perspective projection: proj[2][2] = -far/(far-near), proj[3][2] = -far*near/(far-near)
+            // Ratio: proj[3][2]/proj[2][2] = near
+            float nearEstimate = projection[3][2] / projection[2][2];
+            if (nearEstimate > 0.0f && std::abs(projection[2][2] + 1.0f) > 0.0001f)
+            {
+                farPlane = projection[3][2] / (projection[2][2] + 1.0f);
+                if (farPlane < 0.0f) farPlane = 1000.0f;
+            }
+        }
+        renderHandler->setGPUDrivenCameraData(cameraPos, currentNearPlane, farPlane, time);
+
         renderHandler->setDebugCameraMatrices(view, projection);
 
         if (renderHandler->isBillboardPipelineInitialized())
@@ -331,6 +413,7 @@ namespace controllers
         std::vector<render::mesh::MeshRenderData> meshDrawList;
         auto& registry = scene::EntityRegistry::getRegistry();
 
+        // pbrCache is now a member variable, invalidated when materials are saved
 
         if (sceneBVH.isStaticDirty() && frustumReady)
         {
@@ -366,9 +449,79 @@ namespace controllers
             dynamicBvhCooldown = 5;
         }
 
-        // Use BVH for spatial culling if available
-        if (sceneBVH.isBuilt() && frustumReady)
+        // Check if GPU-driven rendering is enabled - if so, skip CPU frustum culling
+        // GPU compute shader handles frustum/occlusion culling much more efficiently
+        auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
+        bool useGPUDrivenCulling = renderHandler->isGPUDrivenRendererInitialized()
+                                   && gpuDrivenRenderer
+                                   && gpuDrivenRenderer->isEnabled();
+
+        // Helper lambda to build render data from entity (uses frame-local PBR cache)
+        auto buildRenderData = [&](entt::entity entity, const components::MeshComponent& meshComp,
+                                   const components::WorldTransformComponent& worldTransform) -> render::mesh::MeshRenderData
         {
+            render::mesh::MeshRenderData renderData;
+            renderData.meshPath = meshComp.meshPath;
+            renderData.modelMatrix = worldTransform.worldMatrix;
+
+            // Default PBR values
+            renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            renderData.metallic = 0.0f;
+            renderData.roughness = 0.5f;
+            renderData.ao = 1.0f;
+            renderData.emission = 0.0f;
+            renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
+
+            // Check for MaterialComponent
+            if (registry.all_of<components::MaterialComponent>(entity))
+            {
+                const auto& materialComp = registry.get<components::MaterialComponent>(entity);
+                renderData.defaultMaterialPath = materialComp.defaultMaterial;
+
+                // Load default material PBR values using cache (extracts only once per material per frame)
+                const auto* pbrValues = getCachedPBRValues(materialComp.defaultMaterial, pbrCache);
+                if (pbrValues)
+                {
+                    renderData.albedo = pbrValues->albedo;
+                    renderData.metallic = pbrValues->metallic;
+                    renderData.roughness = pbrValues->roughness;
+                    renderData.ao = pbrValues->ao;
+                    renderData.emission = pbrValues->emission;
+                }
+
+                for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                {
+                    render::mesh::SubMeshMaterialInfo matInfo;
+                    populateMaterialInfo(matInfo, materialPath, pbrCache);
+                    renderData.submeshMaterials[submeshName] = matInfo;
+                }
+            }
+
+            return renderData;
+        };
+
+        if (useGPUDrivenCulling)
+        {
+            // GPU-driven path: iterate ALL mesh entities without CPU frustum culling
+            // GPU compute shader handles frustum culling, occlusion culling, and LOD selection
+            auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
+
+            for (auto entity : view)
+            {
+                const auto& meshComp = view.get<components::MeshComponent>(entity);
+                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+                if (meshComp.meshPath.empty() || !meshPipeline->isMeshLoaded(meshComp.meshPath))
+                {
+                    continue;
+                }
+
+                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
+            }
+        }
+        else if (sceneBVH.isBuilt() && frustumReady)
+        {
+            // CPU BVH frustum culling path (used when GPU-driven is disabled)
             std::vector<uint32_t> visibleEntities;
             sceneBVH.queryFrustum(*activeFrustum, visibleEntities);
 
@@ -389,38 +542,12 @@ namespace controllers
                     continue;
                 }
 
-                render::mesh::MeshRenderData renderData;
-                renderData.meshPath = meshComp.meshPath;
-                renderData.modelMatrix = worldTransform.worldMatrix;
-
-                // Default PBR values
-                renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-                renderData.metallic = 0.0f;
-                renderData.roughness = 0.5f;
-                renderData.ao = 1.0f;
-                renderData.emission = 0.0f;
-                renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
-
-                // Check for MaterialComponent
-                if (registry.all_of<components::MaterialComponent>(entity))
-                {
-                    const auto& materialComp = registry.get<components::MaterialComponent>(entity);
-                    renderData.defaultMaterialPath = materialComp.defaultMaterial;
-
-                    for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
-                    {
-                        render::mesh::SubMeshMaterialInfo matInfo;
-                        matInfo.materialPath = materialPath;
-                        renderData.submeshMaterials[submeshName] = matInfo;
-                    }
-                }
-
-                meshDrawList.push_back(renderData);
+                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
             }
         }
         else
         {
-            // Fallback: iterate all entities (BVH not ready or no frustum)
+            // Fallback: iterate all entities with per-entity frustum culling (BVH not ready)
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
 
             for (auto entity : view)
@@ -428,17 +555,12 @@ namespace controllers
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
                 const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-                if (meshComp.meshPath.empty())
+                if (meshComp.meshPath.empty() || !meshPipeline->isMeshLoaded(meshComp.meshPath))
                 {
                     continue;
                 }
 
-                if (!meshPipeline->isMeshLoaded(meshComp.meshPath))
-                {
-                    continue;
-                }
-
-                // Frustum culling fallback using active camera's frustum
+                // Per-entity frustum culling fallback
                 if (frustumReady)
                 {
                     const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
@@ -448,31 +570,7 @@ namespace controllers
                     }
                 }
 
-                render::mesh::MeshRenderData renderData;
-                renderData.meshPath = meshComp.meshPath;
-                renderData.modelMatrix = worldTransform.worldMatrix;
-
-                renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-                renderData.metallic = 0.0f;
-                renderData.roughness = 0.5f;
-                renderData.ao = 1.0f;
-                renderData.emission = 0.0f;
-                renderData.showBoundingBox = (!playModeActive && showDebugRendering) ? meshComp.showBoundingBox : false;
-
-                if (registry.all_of<components::MaterialComponent>(entity))
-                {
-                    const auto& materialComp = registry.get<components::MaterialComponent>(entity);
-                    renderData.defaultMaterialPath = materialComp.defaultMaterial;
-
-                    for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
-                    {
-                        render::mesh::SubMeshMaterialInfo matInfo;
-                        matInfo.materialPath = materialPath;
-                        renderData.submeshMaterials[submeshName] = matInfo;
-                    }
-                }
-
-                meshDrawList.push_back(renderData);
+                meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
             }
         }
 
@@ -844,6 +942,48 @@ namespace controllers
         stats.dynamicBvhEntityCount = sceneBVH.getDynamicEntityCount();
         stats.staticBvhNodeCount = sceneBVH.getStaticNodeCount();
         stats.dynamicBvhNodeCount = sceneBVH.getDynamicNodeCount();
+
+        // GPU-driven rendering statistics
+        auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
+        if (gpuDrivenRenderer && renderHandler->isGPUDrivenRendererInitialized())
+        {
+            // Update stats from GPU (reads back draw count - expensive but needed for debug)
+            gpuDrivenRenderer->updateStatsFromGPU();
+
+            stats.gpuDriven.enabled = gpuDrivenRenderer->isEnabled();
+            stats.gpuDriven.frustumCullingEnabled = gpuDrivenRenderer->isFrustumCullingEnabled();
+            stats.gpuDriven.occlusionCullingEnabled = gpuDrivenRenderer->isOcclusionCullingEnabled();
+            stats.gpuDriven.lodSelectionEnabled = gpuDrivenRenderer->isLODSelectionEnabled();
+            stats.gpuDriven.hiZMipLevels = gpuDrivenRenderer->getHiZMipLevels();
+
+            const auto& gpuStats = gpuDrivenRenderer->getStats();
+            stats.gpuDriven.totalObjects = gpuStats.totalObjects;
+            stats.gpuDriven.visibleObjects = gpuStats.visibleObjects;
+            stats.gpuDriven.culledByFrustum = gpuStats.culledByFrustum;
+            stats.gpuDriven.culledByOcclusion = gpuStats.culledByOcclusion;
+            stats.gpuDriven.objectsLOD0 = gpuStats.objectsLOD0;
+            stats.gpuDriven.objectsLOD1 = gpuStats.objectsLOD1;
+            stats.gpuDriven.objectsLOD2 = gpuStats.objectsLOD2;
+            stats.gpuDriven.objectsLOD3 = gpuStats.objectsLOD3;
+
+            // Merged buffer stats
+            stats.gpuDriven.mergedVertexCount = gpuDrivenRenderer->getMergedVertexCount();
+            stats.gpuDriven.mergedIndexCount = gpuDrivenRenderer->getMergedIndexCount();
+            stats.gpuDriven.registeredMeshCount = gpuDrivenRenderer->getRegisteredMeshCount();
+            stats.gpuDriven.registeredTextureCount = gpuDrivenRenderer->getRegisteredTextureCount();
+
+            // Batch rendering stats
+            stats.gpuDriven.batchCount = gpuDrivenRenderer->getBatchCount();
+            stats.gpuDriven.commandsPerBatch = gpuDrivenRenderer->getCommandsPerBatch();
+            stats.gpuDriven.totalCapacity = gpuDrivenRenderer->getTotalCapacity();
+            stats.gpuDriven.drawCalls = gpuStats.drawCalls;
+
+            // Memory usage
+            stats.gpuDriven.drawCommandBufferSize = gpuDrivenRenderer->getDrawCommandBufferSize();
+            stats.gpuDriven.drawCountBufferSize = gpuDrivenRenderer->getDrawCountBufferSize();
+            stats.gpuDriven.perDrawDataBufferSize = gpuDrivenRenderer->getPerDrawDataBufferSize();
+            stats.gpuDriven.totalMemoryUsage = gpuDrivenRenderer->getTotalMemoryUsage();
+        }
 
         return stats;
     }

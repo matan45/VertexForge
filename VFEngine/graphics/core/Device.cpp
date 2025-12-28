@@ -223,9 +223,25 @@ namespace core {
 
 		vk::PhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
-		
+
+		// Vulkan 1.1 features (required for gl_BaseInstance in shaders)
+		vk::PhysicalDeviceVulkan11Features vulkan11Features{};
+		vulkan11Features.shaderDrawParameters = VK_TRUE;
+
+		// Vulkan 1.2 features (required for drawIndirectCount and descriptor indexing)
+		// Note: Descriptor indexing features are part of Vulkan 1.2 core
+		vk::PhysicalDeviceVulkan12Features vulkan12Features{};
+		vulkan12Features.drawIndirectCount = VK_TRUE;
+		vulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+		vulkan12Features.runtimeDescriptorArray = VK_TRUE;
+		vulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
+		vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
+		vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+		vulkan12Features.pNext = &vulkan11Features;  // Chain Vulkan 1.1 features
+
 		vk::PhysicalDeviceVulkan13Features vulkan13Features{};
 		vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
+		vulkan13Features.pNext = &vulkan12Features;  // Chain Vulkan 1.2 features
 
 		vk::DeviceCreateInfo createInfo{};
 		createInfo.pNext = &vulkan13Features;
@@ -353,6 +369,44 @@ namespace core {
 		}
 
 		return true;
+	}
+
+	DeviceMemoryInfo Device::getDeviceMemoryInfo() const
+	{
+		DeviceMemoryInfo info{};
+
+		vk::PhysicalDeviceMemoryProperties memProps = physicalDevice.getMemoryProperties();
+
+		// Find the largest device-local and host-visible heaps
+		for (uint32_t i = 0; i < memProps.memoryHeapCount; ++i) {
+			const auto& heap = memProps.memoryHeaps[i];
+
+			if (heap.flags & vk::MemoryHeapFlagBits::eDeviceLocal) {
+				if (heap.size > info.deviceLocalHeapSize) {
+					info.deviceLocalHeapSize = heap.size;
+				}
+			}
+		}
+
+		// Check memory types to find host-visible memory and detect unified memory
+		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+			const auto& memType = memProps.memoryTypes[i];
+			const auto& heap = memProps.memoryHeaps[memType.heapIndex];
+
+			// Host-visible memory
+			if (memType.propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) {
+				if (heap.size > info.hostVisibleHeapSize) {
+					info.hostVisibleHeapSize = heap.size;
+				}
+
+				// Unified memory: device-local AND host-visible in same type
+				if (memType.propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) {
+					info.hasUnifiedMemory = true;
+				}
+			}
+		}
+
+		return info;
 	}
 
 }

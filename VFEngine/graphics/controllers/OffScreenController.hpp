@@ -4,12 +4,14 @@
 #include "scene/SceneBVH.hpp"
 #include "../render/occlusion/CameraRenderData.hpp"
 #include "../../services/providers/IOffScreenProvider.hpp"
+#include "../render/material/MaterialPBRExtractor.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
 #include <vector>
 #include <cstdint>
 #include <optional>
+#include <unordered_map>
 
 namespace events { struct SubscriptionToken; }
 
@@ -51,6 +53,9 @@ namespace controllers
 
         // Culling stats for debug visualization
         mutable services::CullingDebugStats lastCullingStats;
+
+        // Persistent cache for PBR values - avoids reloading materials every frame
+        std::unordered_map<std::string, render::mesh::ExtractedPBRValues> pbrCache;
 
     public:
         explicit OffScreenController();

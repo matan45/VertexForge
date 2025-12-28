@@ -6,10 +6,14 @@
 #include "DebugRenderer.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "mesh/MeshTypes.hpp"
+#include "mesh/MeshGPUCache.hpp"
 #include "billboard/BillboardPipeline.hpp"
 #include "billboard/BillboardTypes.hpp"
 #include "occlusion/CameraRenderData.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
+#include "gpudriven/GPUDrivenRenderer.hpp"
+#include "material/MaterialTextureCache.hpp"
+#include "print/Logger.hpp"
 
 namespace render
 {
@@ -22,6 +26,7 @@ namespace render
         , billboardPipeline{std::make_unique<billboard::BillboardPipeline>(device, swapChain, offscreenResources)}
         , cameraOcclusionManager{std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain)}
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
+        , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
     {
     }
 
@@ -32,7 +37,7 @@ namespace render
         clearColor->init();
     }
 
-    void RenderPassHandler::initMeshPipeline()
+    void RenderPassHandler::initMeshPipeline(bool enableGPUDriven)
     {
         if (meshPipelineInitialized)
         {
@@ -51,6 +56,44 @@ namespace render
             meshPipeline->initWithDefaults();
         }
         meshPipelineInitialized = true;
+
+        // Auto-initialize GPU-driven renderer now that mesh pipeline is ready
+        // Skip for material preview to allow custom per-material shaders
+        if (enableGPUDriven)
+        {
+            initGPUDrivenRenderer();
+        }
+    }
+
+    void RenderPassHandler::initGPUDrivenRenderer()
+    {
+        if (gpuDrivenRendererInitialized)
+        {
+            return;
+        }
+
+        if (!meshPipelineInitialized)
+        {
+            return;
+        }
+
+        // Get IBL descriptor set layout and render pass from mesh pipeline
+        vk::DescriptorSetLayout iblLayout = meshPipeline->getIBLDescriptorSetLayout();
+        vk::RenderPass renderPass = meshPipeline->getRenderPass();
+
+        gpuDrivenRenderer->init(iblLayout, renderPass);
+
+        // Set material texture cache for texture loading in GPU-driven path
+        auto& texCache = meshPipeline->getMaterialTextureCache();
+        gpuDrivenRenderer->setMaterialTextureCache(&texCache);
+
+        // Set default texture for bindless array (1x1 white fallback)
+        if (texCache.hasDefaultTexture()) {
+            gpuDrivenRenderer->setDefaultTexture(texCache.getDefaultView(), texCache.getDefaultSampler());
+        }
+
+        gpuDrivenRenderer->setEnabled(true);
+        gpuDrivenRendererInitialized = true;
     }
 
     void RenderPassHandler::reinitMeshPipelineWithDefaults()
@@ -65,6 +108,14 @@ namespace render
         meshPipeline->cleanUpForReinit();
 
         meshPipeline->initWithDefaults();
+
+        // Update GPU-driven renderer with new render pass and IBL layout
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->updateRenderPass(
+                meshPipeline->getRenderPass(),
+                meshPipeline->getIBLDescriptorSetLayout());
+        }
     }
 
     void RenderPassHandler::reinitMeshPipelineWithIBL()
@@ -87,6 +138,14 @@ namespace render
         const auto& prefilter = iblRenderer->getPrefilterImage();
         const auto& brdfLUT = iblRenderer->getBrdfLUTImage();
         meshPipeline->init(irradiance, prefilter, brdfLUT);
+
+        // Update GPU-driven renderer with new render pass and IBL layout
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->updateRenderPass(
+                meshPipeline->getRenderPass(),
+                meshPipeline->getIBLDescriptorSetLayout());
+        }
     }
 
     void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes)
@@ -144,6 +203,59 @@ namespace render
 
         debugRenderer->init(meshPipeline->getRenderPass());
         debugRendererInitialized = true;
+    }
+
+    void RenderPassHandler::setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time)
+    {
+        currentCameraPosition = cameraPos;
+        currentNearPlane = nearPlane;
+        currentFarPlane = farPlane;
+        currentTime = time;
+    }
+
+    void RenderPassHandler::setGPUDrivenOcclusionCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setOcclusionCullingEnabled(enabled);
+        }
+    }
+
+    bool RenderPassHandler::isGPUDrivenOcclusionCullingEnabled() const
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            return gpuDrivenRenderer->isOcclusionCullingEnabled();
+        }
+        return false;
+    }
+
+    void RenderPassHandler::updateGPUDrivenHiZ() const
+    {
+        if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)
+        {
+            return;
+        }
+
+        // Get active camera's Hi-Z buffer
+        occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
+        if (!cameraOcclusionManager->isHiZInitialized(activeCameraId))
+        {
+            return;
+        }
+
+        auto* camera = cameraOcclusionManager->getCamera(activeCameraId);
+        if (!camera || !camera->hiZBuffer || !camera->hiZBuffer->isInitialized())
+        {
+            return;
+        }
+
+        // Pass Hi-Z pyramid to GPU-driven renderer
+        gpuDrivenRenderer->updateHiZPyramid(
+            camera->hiZBuffer->getHiZImageView(),
+            camera->hiZBuffer->getHiZSampler(),
+            camera->hiZBuffer->getMipLevels()
+        );
     }
 
     void RenderPassHandler::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
@@ -240,6 +352,13 @@ namespace render
         if (meshPipelineInitialized)
         {
             meshPipeline->recreate();
+
+            // Update GPU-driven renderer with new render pass
+            // Note: IBL layout doesn't change during recreate, only render pass
+            if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            {
+                gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
+            }
         }
 
         if (debugRendererInitialized)
@@ -268,6 +387,11 @@ namespace render
 
     void RenderPassHandler::cleanUp() const
     {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->cleanup();
+        }
+
         if (cameraOcclusionManager)
         {
             cameraOcclusionManager->cleanup();
@@ -288,7 +412,7 @@ namespace render
         {
             meshPipeline->cleanUpShader();
         }
-       
+
         meshPipeline->cleanUp();
         iblRenderer->cleanUp();
         clearColor->cleanUp();
@@ -303,13 +427,59 @@ namespace render
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems);
 
+        // Always update GPU-driven scene data (even when empty to reset stats)
+        if (gpuDrivenRendererInitialized && meshPipelineInitialized)
+        {
+            gpuDrivenRenderer->updateScene(
+                currentMeshDrawList,
+                currentView,
+                currentProjection,
+                currentCameraPosition,
+                currentNearPlane,
+                currentFarPlane,
+                currentTime
+            );
+        }
+
         if (needsMeshPass)
         {
             render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
-            meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
-                                              debugRendererPtr, currentView, currentProjection);
+
+            // GPU-driven rendering
+            if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+            {
+                // Update Hi-Z pyramid from previous frame (for occlusion culling)
+                updateGPUDrivenHiZ();
+
+                // Dispatch compute shader BEFORE render pass
+                gpuDrivenRenderer->dispatchCompute(commandBuffer);
+
+                // Get IBL descriptor set from mesh pipeline
+                vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
+
+                // Begin the render pass for GPU-driven rendering
+                meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+
+                // Draw commands INSIDE render pass
+                gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+
+                // Render debug items if any
+                if (debugRendererPtr)
+                {
+                    debugRendererPtr->render(commandBuffer, currentMeshDrawList, currentView, currentProjection,
+                        [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+                }
+
+                meshPipeline->endRenderPass(commandBuffer);
+            }
+            else if (!currentMeshDrawList.empty() || hasDebugItems)
+            {
+                // CPU fallback path (used when GPU-driven rendering is not available)
+                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
+                                                  debugRendererPtr, currentView, currentProjection);
+            }
         }
-        
+
         if (billboardPipelineInitialized && !currentBillboardDrawList.empty())
         {
             billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);

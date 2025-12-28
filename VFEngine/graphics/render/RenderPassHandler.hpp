@@ -12,6 +12,11 @@ namespace core
     class SwapChain;
 }
 
+namespace render::gpudriven
+{
+    class GPUDrivenRenderer;
+}
+
 namespace render
 {
     class ClearColor;
@@ -49,6 +54,7 @@ namespace render
         std::unique_ptr<billboard::BillboardPipeline> billboardPipeline;
         std::unique_ptr<DebugRenderer> debugRenderer;
         std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
+        std::unique_ptr<gpudriven::GPUDrivenRenderer> gpuDrivenRenderer;
 
         core::OffscreenResources& offscreenResources;
 
@@ -66,6 +72,19 @@ namespace render
         mutable glm::mat4 currentView{1.0f};
         mutable glm::mat4 currentProjection{1.0f};
 
+        // GPU-driven rendering state
+        bool gpuDrivenRendererInitialized = false;
+        mutable glm::vec3 currentCameraPosition{0.0f};
+        mutable float currentNearPlane = 0.1f;
+        mutable float currentFarPlane = 1000.0f;
+        mutable float currentTime = 0.0f;
+
+        // Private helper to initialize GPU-driven renderer (called from initMeshPipeline)
+        void initGPUDrivenRenderer();
+
+        // Private helper to pass Hi-Z pyramid to GPU-driven renderer
+        void updateGPUDrivenHiZ() const;
+
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
                                    core::OffscreenResources& offscreenResources);
@@ -80,7 +99,7 @@ namespace render
         mesh::StaticMeshPipeline* getMeshPipeline() const { return meshPipeline.get(); }
         bool isMeshPipelineInitialized() const { return meshPipelineInitialized; }
         
-        void initMeshPipeline();
+        void initMeshPipeline(bool enableGPUDriven = true);
 
         // (called when IBL is removed)
         void reinitMeshPipelineWithDefaults();
@@ -107,6 +126,18 @@ namespace render
 
         // Camera occlusion manager access
         occlusion::CameraOcclusionManager* getCameraOcclusionManager() const { return cameraOcclusionManager.get(); }
+
+        // GPU-driven rendering methods
+        gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
+        bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
+        void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
+
+        /**
+         * Enable/disable Hi-Z occlusion culling for GPU-driven renderer.
+         * Occlusion culling uses previous frame's Hi-Z pyramid.
+         */
+        void setGPUDrivenOcclusionCullingEnabled(bool enabled);
+        bool isGPUDrivenOcclusionCullingEnabled() const;
 
         // Camera management (delegates to CameraOcclusionManager)
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);

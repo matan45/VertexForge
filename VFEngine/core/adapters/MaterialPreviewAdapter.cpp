@@ -46,10 +46,11 @@ namespace core {
         controllerParams.ao = params.ao;
         controllerParams.emission = params.emission;
         controllerParams.albedoTexturePath = params.albedoTexturePath;
+        controllerParams.normalTexturePath = params.normalTexturePath;
+        controllerParams.ormTexturePath = params.ormTexturePath;
         controllerParams.metallicTexturePath = params.metallicTexturePath;
         controllerParams.roughnessTexturePath = params.roughnessTexturePath;
         controllerParams.aoTexturePath = params.aoTexturePath;
-        controllerParams.normalTexturePath = params.normalTexturePath;
         controllerParams.emissionTexturePath = params.emissionTexturePath;
         controllerParams.heightTexturePath = params.heightTexturePath;
         controllerParams.materialPath = params.materialPath;
@@ -79,10 +80,11 @@ namespace core {
         result.ao = controllerParams.ao;
         result.emission = controllerParams.emission;
         result.albedoTexturePath = controllerParams.albedoTexturePath;
+        result.normalTexturePath = controllerParams.normalTexturePath;
+        result.ormTexturePath = controllerParams.ormTexturePath;
         result.metallicTexturePath = controllerParams.metallicTexturePath;
         result.roughnessTexturePath = controllerParams.roughnessTexturePath;
         result.aoTexturePath = controllerParams.aoTexturePath;
-        result.normalTexturePath = controllerParams.normalTexturePath;
         result.emissionTexturePath = controllerParams.emissionTexturePath;
         result.heightTexturePath = controllerParams.heightTexturePath;
         result.materialPath = controllerParams.materialPath;

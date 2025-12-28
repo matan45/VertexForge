@@ -28,6 +28,11 @@ namespace render::mesh
             device.getLogicalDevice().destroyPipeline(wireframePipeline);
             wireframePipeline = nullptr;
         }
+        if (wireframePipelineLayout)
+        {
+            device.getLogicalDevice().destroyPipelineLayout(wireframePipelineLayout);
+            wireframePipelineLayout = nullptr;
+        }
 
         createPipeline(renderPass);
     }

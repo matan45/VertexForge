@@ -133,7 +133,11 @@ namespace resource
                 return MeshResource::loadMesh(p);
             });
     }
-    
+
+    std::unique_ptr<MeshStreamHandle> ResourceManager::openMeshStream(std::string_view path)
+    {
+        return MeshStreamResource::openStream(path);
+    }
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {

@@ -103,7 +103,6 @@ namespace render::mesh
         device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         device.getLogicalDevice().destroyPipeline(maskedPipeline);
-        device.getLogicalDevice().destroyPipeline(translucentPipeline);
 
         createRenderPass();
         createGraphicsPipeline();
@@ -516,38 +515,6 @@ namespace render::mesh
 
         // Create masked pipeline (same as opaque - shader will handle alpha discard)
         maskedPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
-
-        // Create translucent pipeline with alpha blending
-        vk::PipelineColorBlendAttachmentState translucentBlendAttachment{};
-        translucentBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-            vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB |
-            vk::ColorComponentFlagBits::eA;
-        translucentBlendAttachment.blendEnable = VK_TRUE;
-        translucentBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-        translucentBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-        translucentBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
-        translucentBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-        translucentBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
-        translucentBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
-
-        vk::PipelineColorBlendStateCreateInfo translucentBlending{};
-        translucentBlending.logicOpEnable = VK_FALSE;
-        translucentBlending.attachmentCount = 1;
-        translucentBlending.pAttachments = &translucentBlendAttachment;
-
-        // Translucent: depth test enabled but depth write disabled
-        vk::PipelineDepthStencilStateCreateInfo translucentDepthStencil{};
-        translucentDepthStencil.depthTestEnable = VK_TRUE;
-        translucentDepthStencil.depthWriteEnable = VK_FALSE; // Don't write to depth buffer
-        translucentDepthStencil.depthCompareOp = vk::CompareOp::eLess;
-        translucentDepthStencil.depthBoundsTestEnable = VK_FALSE;
-        translucentDepthStencil.stencilTestEnable = VK_FALSE;
-
-        pipelineInfo.pDepthStencilState = &translucentDepthStencil;
-        pipelineInfo.pColorBlendState = &translucentBlending;
-
-        translucentPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 
     void StaticMeshPipeline::createFramebuffers()
@@ -575,7 +542,7 @@ namespace render::mesh
     void StaticMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                              const glm::vec3& cameraPos, float time) const
     {
-        // Store for AABB wireframe rendering, translucent sorting, and animation
+        // Store for AABB wireframe rendering and animation
         currentView = view;
         currentProjection = projection;
         currentCameraPos = cameraPos;
@@ -620,8 +587,6 @@ namespace render::mesh
             device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         if (maskedPipeline)
             device.getLogicalDevice().destroyPipeline(maskedPipeline);
-        if (translucentPipeline)
-            device.getLogicalDevice().destroyPipeline(translucentPipeline);
         if (pipelineLayout)
             device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
         if (descriptorPool)
@@ -887,10 +852,6 @@ namespace render::mesh
                             {
                                 targetPipeline = matPipeline->maskedPipeline;
                             }
-                            else if (pbrValues.blendMode == material::BlendMode::Translucent)
-                            {
-                                targetPipeline = matPipeline->translucentPipeline;
-                            }
                             else
                             {
                                 targetPipeline = matPipeline->opaquePipeline;
@@ -907,10 +868,6 @@ namespace render::mesh
                 if (pbrValues.blendMode == material::BlendMode::Masked)
                 {
                     targetPipeline = maskedPipeline;
-                }
-                else if (pbrValues.blendMode == material::BlendMode::Translucent)
-                {
-                    targetPipeline = translucentPipeline;
                 }
                 else
                 {
@@ -1016,7 +973,9 @@ namespace render::mesh
                                         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                                         0, sizeof(MeshPushConstants), &pushConstants);
 
-            uint32_t lodLevel = selectLODLevel(meshData, subMesh);
+            // Use forced LOD if set, otherwise LOD 0 (fallback path uses highest quality)
+            uint32_t lodLevel = (meshData.forceLODLevel >= 0 && meshData.forceLODLevel < static_cast<int>(resource::LOD_LEVEL_COUNT))
+                ? static_cast<uint32_t>(meshData.forceLODLevel) : 0;
             const auto& lodBuffers = subMesh.getLOD(lodLevel);
 
             if (!lodBuffers.isValid()) return;
@@ -1038,50 +997,20 @@ namespace render::mesh
 
         vk::Pipeline currentPipeline = nullptr;
 
-        // Pass 1: Render opaque objects
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-        currentPipeline = graphicsPipeline;
-        for (const auto& meshData : meshDrawList)
-        {
-            const MeshGPUData* gpuData = getMesh(meshData.meshPath);
-            if (!gpuData || gpuData->subMeshes.empty()) continue;
-
-            for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
-            {
-                const auto& subMesh = gpuData->subMeshes[subMeshIndex];
-                if (frustum && frustum->isInitialized() &&
-                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
-                    continue;
-                renderSubmesh(meshData, subMesh, subMeshIndex, material::BlendMode::Opaque, currentPipeline);
-            }
-        }
-
-        // Pass 2: Render masked objects (alpha testing)
-        for (const auto& meshData : meshDrawList)
-        {
-            const MeshGPUData* gpuData = getMesh(meshData.meshPath);
-            if (!gpuData || gpuData->subMeshes.empty()) continue;
-
-            for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
-            {
-                const auto& subMesh = gpuData->subMeshes[subMeshIndex];
-                if (frustum && frustum->isInitialized() &&
-                    !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
-                    continue;
-                renderSubmesh(meshData, subMesh, subMeshIndex, material::BlendMode::Masked, currentPipeline);
-            }
-        }
-
-        // Pass 3: Render translucent objects (alpha blending) - sorted back-to-front
-        // Collect translucent submeshes with distance from camera
-        struct TranslucentItem
+        // Helper struct for material-sorted rendering
+        struct SortedSubmesh
         {
             const MeshRenderData* meshData;
             const SubMeshGPUData* subMesh;
             size_t subMeshIndex;
-            float distanceSquared;
+            std::string materialPath;  // For sorting by material
         };
-        std::vector<TranslucentItem> translucentItems;
+
+        // Collect and sort opaque/masked submeshes by material to minimize descriptor set switches
+        std::vector<SortedSubmesh> opaqueSubmeshes;
+        std::vector<SortedSubmesh> maskedSubmeshes;
+        opaqueSubmeshes.reserve(256);  // Pre-allocate for typical scene
+        maskedSubmeshes.reserve(64);
 
         for (const auto& meshData : meshDrawList)
         {
@@ -1091,39 +1020,48 @@ namespace render::mesh
             for (size_t subMeshIndex = 0; subMeshIndex < gpuData->subMeshes.size(); ++subMeshIndex)
             {
                 const auto& subMesh = gpuData->subMeshes[subMeshIndex];
+
+                // Frustum culling
                 if (frustum && frustum->isInitialized() &&
                     !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
                     continue;
 
-                // Check if this submesh is translucent
+                // Get material path for sorting
                 ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
                     meshData, subMesh.name, materialCache, currentTime);
-                if (pbrValues.blendMode != material::BlendMode::Translucent) continue;
 
-                // Calculate world-space center of submesh AABB
-                glm::vec3 localCenter = subMesh.boundingBox.getCenter();
-                glm::vec4 worldCenter = meshData.modelMatrix * glm::vec4(localCenter, 1.0f);
-
-                // Calculate squared distance from camera (avoid sqrt for performance)
-                glm::vec3 diff = glm::vec3(worldCenter) - currentCameraPos;
-                float distSq = glm::dot(diff, diff);
-
-                translucentItems.push_back({&meshData, &subMesh, subMeshIndex, distSq});
+                if (pbrValues.blendMode == material::BlendMode::Opaque)
+                {
+                    opaqueSubmeshes.push_back({&meshData, &subMesh, subMeshIndex, pbrValues.materialPath});
+                }
+                else if (pbrValues.blendMode == material::BlendMode::Masked)
+                {
+                    maskedSubmeshes.push_back({&meshData, &subMesh, subMeshIndex, pbrValues.materialPath});
+                }
             }
         }
 
-        // Sort back-to-front (farthest first)
-        std::sort(translucentItems.begin(), translucentItems.end(),
-                  [](const TranslucentItem& a, const TranslucentItem& b)
-                  {
-                      return a.distanceSquared > b.distanceSquared;
-                  });
+        // Sort by material path to group same-material submeshes together
+        auto materialSortComparator = [](const SortedSubmesh& a, const SortedSubmesh& b) {
+            return a.materialPath < b.materialPath;
+        };
+        std::sort(opaqueSubmeshes.begin(), opaqueSubmeshes.end(), materialSortComparator);
+        std::sort(maskedSubmeshes.begin(), maskedSubmeshes.end(), materialSortComparator);
 
-        // Render sorted translucent items
-        for (const auto& item : translucentItems)
+        // Pass 1: Render opaque objects (sorted by material)
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        currentPipeline = graphicsPipeline;
+        for (const auto& item : opaqueSubmeshes)
         {
             renderSubmesh(*item.meshData, *item.subMesh, item.subMeshIndex,
-                          material::BlendMode::Translucent, currentPipeline);
+                         material::BlendMode::Opaque, currentPipeline);
+        }
+
+        // Pass 2: Render masked objects (sorted by material)
+        for (const auto& item : maskedSubmeshes)
+        {
+            renderSubmesh(*item.meshData, *item.subMesh, item.subMeshIndex,
+                         material::BlendMode::Masked, currentPipeline);
         }
 
         if (debugRenderer && debugRenderer->hasItemsToRender())
@@ -1133,43 +1071,6 @@ namespace render::mesh
         }
 
         commandBuffer.endRenderPass();
-    }
-
-    uint32_t StaticMeshPipeline::selectLODLevel(const MeshRenderData& meshData, const SubMeshGPUData& subMesh) const
-    {
-        // If a specific LOD level is forced, use it
-        if (meshData.forceLODLevel >= 0 && meshData.forceLODLevel < static_cast<int>(resource::LOD_LEVEL_COUNT))
-        {
-            return static_cast<uint32_t>(meshData.forceLODLevel);
-        }
-
-        glm::vec3 localCenter = subMesh.boundingBox.getCenter();
-        glm::vec4 worldCenter = meshData.modelMatrix * glm::vec4(localCenter, 1.0f);
-
-        glm::vec3 extents = subMesh.boundingBox.getExtents();
-        float boundingRadius = glm::length(extents);
-
-
-        glm::vec4 viewPos = currentView * worldCenter;
-        glm::vec4 clipPos = currentProjection * viewPos;
-
-        // Avoid division by zero for objects at or behind camera
-        float w = std::max(clipPos.w, 0.01f);
-
-        // Calculate screen-space size in pixels
-        // Project the bounding radius to screen space
-        float ndcRadius = boundingRadius / w;
-        float screenHeight = static_cast<float>(swapChain.getSwapchainExtent().height);
-        float screenPixels = ndcRadius * screenHeight;
-
-        // Apply LOD bias
-        screenPixels *= std::pow(2.0f, -meshData.lodBias);
-
-        // Select LOD level based on screen-space size thresholds
-        if (screenPixels > LOD_THRESHOLD_0) return 0;
-        if (screenPixels > LOD_THRESHOLD_1) return 1;
-        if (screenPixels > LOD_THRESHOLD_2) return 2;
-        return 3;
     }
 
     void StaticMeshPipeline::prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const
@@ -1241,5 +1142,28 @@ namespace render::mesh
                 }
             }
         }
+    }
+
+    void StaticMeshPipeline::beginRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = framebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+
+        // Clear values for depth only - color uses loadOp::eLoad to preserve skybox
+        std::array<vk::ClearValue, 2> clearValues{};
+        clearValues[0].color = vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
+        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    }
+
+    void StaticMeshPipeline::endRenderPass(const vk::CommandBuffer& commandBuffer) const
+    {
+        commandBuffer.endRenderPass();
     }
 }

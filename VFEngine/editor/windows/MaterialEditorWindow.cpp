@@ -98,6 +98,9 @@ namespace windows {
             events::material::MaterialFileSavedNotification notification;
             notification.materialPath = materialPath;
             events::EventDispatcher::instance().publish(notification);
+
+            // Refresh preview after cache invalidation to re-bind textures
+            updatePreviewMaterial(true);
         } else {
             vfLogError("Failed to save material: {}", materialPath);
         }
@@ -410,7 +413,14 @@ namespace windows {
             return std::nullopt;
         };
         
-        auto getConnectedTexturePath = [this, pbrOutput](const std::string& pinName) -> std::string {
+        // Helper to clean texture paths (remove null characters that may be present from file dialog)
+        auto cleanPath = [](const std::string& path) -> std::string {
+            std::string clean = path;
+            clean.erase(std::remove(clean.begin(), clean.end(), '\0'), clean.end());
+            return clean;
+        };
+
+        auto getConnectedTexturePath = [this, pbrOutput, &cleanPath](const std::string& pinName) -> std::string {
             for (const auto& link : materialData->graph.links) {
                 if (link.targetNodeId == pbrOutput->id && link.targetPin == pinName) {
                     for (const auto& node : materialData->graph.nodes) {
@@ -419,7 +429,25 @@ namespace windows {
                              node.type == material::NodeType::OrmSample)) {
                             auto it = node.properties.find("texturePath");
                             if (it != node.properties.end() && std::holds_alternative<std::string>(it->second)) {
-                                return std::get<std::string>(it->second);
+                                return cleanPath(std::get<std::string>(it->second));
+                            }
+                        }
+                    }
+                }
+            }
+            return "";
+        };
+
+        // Helper to check if an OrmSample is connected to any PBR output pin
+        auto getOrmTexturePath = [this, pbrOutput, &cleanPath]() -> std::string {
+            // Look for any link from an OrmSample to PBR output
+            for (const auto& link : materialData->graph.links) {
+                if (link.targetNodeId == pbrOutput->id) {
+                    for (const auto& node : materialData->graph.nodes) {
+                        if (node.id == link.sourceNodeId && node.type == material::NodeType::OrmSample) {
+                            auto it = node.properties.find("texturePath");
+                            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second)) {
+                                return cleanPath(std::get<std::string>(it->second));
                             }
                         }
                     }
@@ -447,11 +475,30 @@ namespace windows {
 
         // Extract texture paths from connected TextureSample nodes
         params.albedoTexturePath = getConnectedTexturePath("Albedo");
-        params.metallicTexturePath = getConnectedTexturePath("Metallic");
-        params.roughnessTexturePath = getConnectedTexturePath("Roughness");
-        params.aoTexturePath = getConnectedTexturePath("AO");
         params.normalTexturePath = getConnectedTexturePath("Normal");
         params.emissionTexturePath = getConnectedTexturePath("Emission");
+
+        // Height/Displacement texture (try both pin names)
+        params.heightTexturePath = getConnectedTexturePath("Displacement");
+        if (params.heightTexturePath.empty()) {
+            params.heightTexturePath = getConnectedTexturePath("Height");
+        }
+
+        // Check for ORM sample first - it provides Metallic, Roughness, and AO in one texture
+        std::string ormPath = getOrmTexturePath();
+        if (!ormPath.empty()) {
+            // ORM sample is connected - use slot 2 for packed texture
+            params.ormTexturePath = ormPath;
+            // Clear individual paths since ORM provides all three
+            params.metallicTexturePath.clear();
+            params.roughnessTexturePath.clear();
+            params.aoTexturePath.clear();
+        } else {
+            // No ORM sample - check for individual textures
+            params.metallicTexturePath = getConnectedTexturePath("Metallic");
+            params.roughnessTexturePath = getConnectedTexturePath("Roughness");
+            params.aoTexturePath = getConnectedTexturePath("AO");
+        }
 
         // Pass material path for custom shader pipeline lookup
         params.materialPath = materialPath;
@@ -525,9 +572,9 @@ namespace windows {
         
         if (materialData) {
             ImGui::Text("Blend Mode");
-            const char* blendModes[] = { "Opaque", "Masked", "Translucent" };
+            const char* blendModes[] = { "Opaque", "Masked" };
             int blendMode = static_cast<int>(materialData->blendMode);
-            if (ImGui::Combo("##BlendMode", &blendMode, blendModes, 3)) {
+            if (ImGui::Combo("##BlendMode", &blendMode, blendModes, 2)) {
                 materialData->blendMode = static_cast<material::BlendMode>(blendMode);
                 isDirty = true;
             }
@@ -711,6 +758,8 @@ namespace windows {
                         };
                         std::string selectedPath = fileDialog.openFileDialog(filters);
                         if (!selectedPath.empty()) {
+                            // Remove any null characters from the path
+                            selectedPath.erase(std::remove(selectedPath.begin(), selectedPath.end(), '\0'), selectedPath.end());
                             propValue = selectedPath;
                             changed = true;
                         }

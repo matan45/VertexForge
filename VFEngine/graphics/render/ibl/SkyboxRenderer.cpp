@@ -248,7 +248,61 @@ namespace render::ibl
 
     void SkyboxRenderer::recreate()
     {
-        // Recreate logic if needed for swapchain recreation
+        // Destroy old framebuffers
+        for (auto const& frame : framebuffers)
+        {
+            device.getLogicalDevice().destroyFramebuffer(frame);
+        }
+        framebuffers.clear();
+
+        // Destroy and recreate render pass
+        device.getLogicalDevice().destroyRenderPass(renderPass);
+
+        // Recreate render pass
+        vk::AttachmentDescription colorAttachment{};
+        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.samples = vk::SampleCountFlagBits::e1;
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;  // Preserve clear color
+        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::AttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+        vk::SubpassDescription subpass{};
+        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
+
+        vk::RenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+
+        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+
+        // Recreate framebuffers
+        framebuffers.resize(offscreenResources.colorImages.size());
+
+        for (uint32_t i = 0; i < framebuffers.size(); i++)
+        {
+            vk::ImageView viewImage = offscreenResources.colorImages[i].colorImageView;
+
+            vk::FramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments = &viewImage;
+            framebufferInfo.width = swapChain.getSwapchainExtent().width;
+            framebufferInfo.height = swapChain.getSwapchainExtent().height;
+            framebufferInfo.layers = 1;
+
+            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
+        }
     }
 
     void SkyboxRenderer::recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const

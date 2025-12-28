@@ -28,6 +28,11 @@ namespace render::mesh
             device.getLogicalDevice().destroyPipeline(gridPipeline);
             gridPipeline = nullptr;
         }
+        if (gridPipelineLayout)
+        {
+            device.getLogicalDevice().destroyPipelineLayout(gridPipelineLayout);
+            gridPipelineLayout = nullptr;
+        }
 
         createPipeline(renderPass);
     }

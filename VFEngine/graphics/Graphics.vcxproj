@@ -55,7 +55,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
@@ -76,7 +76,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.321.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -122,6 +122,14 @@
     <ClInclude Include="render\RenderPassHandler.hpp" />
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
+    <ClInclude Include="render\gpudriven\BindlessTextureManager.hpp" />
+    <ClInclude Include="render\gpudriven\GPUCullLODPipeline.hpp" />
+    <ClInclude Include="render\gpudriven\GPUDrivenRenderer.hpp" />
+    <ClInclude Include="render\gpudriven\GPUDrivenShaderCache.hpp" />
+    <ClInclude Include="render\gpudriven\GPUDrivenTypes.hpp" />
+    <ClInclude Include="render\gpudriven\IndirectBatchManager.hpp" />
+    <ClInclude Include="render\gpudriven\IndirectDrawBuffer.hpp" />
+    <ClInclude Include="render\gpudriven\MergedMeshBuffer.hpp" />
     <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
     <ClInclude Include="render\ibl\EnvironmentCubemapGenerator.hpp" />
     <ClInclude Include="render\ibl\IBLTypes.hpp" />
@@ -129,12 +137,13 @@
     <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
     <ClInclude Include="render\ibl\SkyboxRenderer.hpp" />
     <ClInclude Include="render\material\MaterialPBRExtractor.hpp" />
-    <ClInclude Include="render\material\MaterialPipeline.hpp" />
     <ClInclude Include="render\material\MaterialShaderCache.hpp" />
     <ClInclude Include="render\material\MaterialTextureCache.hpp" />
     <ClInclude Include="render\mesh\DefaultIBLTextureFactory.hpp" />
     <ClInclude Include="render\mesh\MaterialCacheManager.hpp" />
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
+    <ClInclude Include="render\mesh\MeshMetadataCache.hpp" />
+    <ClInclude Include="render\mesh\MeshStreamManager.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
     <ClInclude Include="render\occlusion\CameraRenderData.hpp" />
@@ -168,18 +177,26 @@
     <ClCompile Include="render\OffScreenViewPort.cpp" />
     <ClCompile Include="render\RenderPassHandler.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
+    <ClCompile Include="render\gpudriven\BindlessTextureManager.cpp" />
+    <ClCompile Include="render\gpudriven\GPUCullLODPipeline.cpp" />
+    <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
+    <ClCompile Include="render\gpudriven\GPUDrivenShaderCache.cpp" />
+    <ClCompile Include="render\gpudriven\IndirectBatchManager.cpp" />
+    <ClCompile Include="render\gpudriven\IndirectDrawBuffer.cpp" />
+    <ClCompile Include="render\gpudriven\MergedMeshBuffer.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
     <ClCompile Include="render\ibl\EnvironmentCubemapGenerator.cpp" />
     <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
     <ClCompile Include="render\material\MaterialPBRExtractor.cpp" />
-    <ClCompile Include="render\material\MaterialPipeline.cpp" />
     <ClCompile Include="render\material\MaterialShaderCache.cpp" />
     <ClCompile Include="render\material\MaterialTextureCache.cpp" />
     <ClCompile Include="render\mesh\DefaultIBLTextureFactory.cpp" />
     <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
+    <ClCompile Include="render\mesh\MeshMetadataCache.cpp" />
+    <ClCompile Include="render\mesh\MeshStreamManager.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
@@ -191,6 +208,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
+    <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
+    <None Include="..\..\resources\shaders\gpudriven\mesh_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_cull.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_generate.glsl" />
     <None Include="..\..\resources\shaders\ibl\brdf.glsl" />

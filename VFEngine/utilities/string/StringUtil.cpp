@@ -26,16 +26,32 @@ std::string StringUtil::wstringToUtf8(std::wstring_view wstr)
 
 std::string StringUtil::WideStringToString(PWSTR wideStr)
 {
+    if (!wideStr || !*wideStr) {
+        return std::string();
+    }
+    // Note: -1 means null-terminated input, and sizeNeeded includes the null terminator
     int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, NULL, 0, NULL, NULL);
-    std::string strTo(sizeNeeded, 0);
+    if (sizeNeeded <= 1) {
+        return std::string();
+    }
+    // Allocate size - 1 to exclude the null terminator from std::string
+    std::string strTo(sizeNeeded - 1, 0);
     WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, &strTo[0], sizeNeeded, NULL, NULL);
     return strTo;
 }
 
 std::wstring StringUtil::utf8ToWstring(const std::string& utf8Str)
 {
+    if (utf8Str.empty()) {
+        return std::wstring();
+    }
+    // Note: -1 means null-terminated input, and wideSize includes the null terminator
     int wideSize = MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, nullptr, 0);
-    std::wstring wideString(wideSize, 0);
+    if (wideSize <= 1) {
+        return std::wstring();
+    }
+    // Allocate size - 1 to exclude the null terminator from std::wstring
+    std::wstring wideString(wideSize - 1, 0);
     MultiByteToWideChar(CP_UTF8, 0, utf8Str.c_str(), -1, &wideString[0], wideSize);
     return wideString;
 }

@@ -2,6 +2,7 @@
 #include "material/MaterialManager.hpp"
 #include "resource/ResourceManager.hpp"
 #include <cmath>
+#include <vector>
 
 namespace render::mesh
 {
@@ -137,7 +138,32 @@ namespace render::mesh
                 const auto* sourceNode = graph.findNode(link.sourceNodeId);
                 if (!sourceNode) continue;
 
+                // Handle TextureSample nodes - always return texture path
                 if (sourceNode->type == material::NodeType::TextureSample) {
+                    auto it = sourceNode->properties.find("texturePath");
+                    if (it != sourceNode->properties.end() &&
+                        std::holds_alternative<std::string>(it->second)) {
+                        return std::get<std::string>(it->second);
+                    }
+                }
+                // Skip OrmSample nodes here - they should be handled via getOrmTexturePath
+            }
+        }
+        return "";
+    }
+
+    // Helper to find ORM texture path from OrmSample nodes connected to PBR output
+    std::string getOrmTexturePath(
+        const material::ShaderGraph& graph,
+        uint32_t targetNodeId)
+    {
+        // Look for any link from an OrmSample node to the PBR output node
+        for (const auto& link : graph.links) {
+            if (link.targetNodeId == targetNodeId) {
+                const auto* sourceNode = graph.findNode(link.sourceNodeId);
+                if (!sourceNode) continue;
+
+                if (sourceNode->type == material::NodeType::OrmSample) {
                     auto it = sourceNode->properties.find("texturePath");
                     if (it != sourceNode->properties.end() &&
                         std::holds_alternative<std::string>(it->second)) {
@@ -258,12 +284,14 @@ namespace render::mesh
         // Extract texture paths from connected TextureSample nodes
         pbr.albedoTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Albedo");
         pbr.normalTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Normal");
-        pbr.ormTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "ORM");
         pbr.metallicTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Metallic");
         pbr.roughnessTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Roughness");
         pbr.aoTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "AO");
         pbr.emissionTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Emission");
         pbr.heightTexturePath = getConnectedTexturePath(matData.graph, outputNode->id, "Height");
+
+        // Find ORM texture from OrmSample nodes (checks ORM, Roughness, Metallic, AO pins)
+        pbr.ormTexturePath = getOrmTexturePath(matData.graph, outputNode->id);
 
         // Get blend mode from material
         pbr.blendMode = matData.blendMode;
