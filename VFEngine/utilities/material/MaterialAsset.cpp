@@ -747,7 +747,6 @@ namespace material
             {
                 vfLogWarning("Loaded material '{}' with {} warning(s)", material.name, warningCount);
             }
-            vfLogInfo("Loaded material: {} from {}", material.name, path);
             return material;
         }
         catch (const json::exception& e)

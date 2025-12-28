@@ -613,7 +613,7 @@ namespace windows
                         for (size_t i = 0; i < meshData.meshes.size(); ++i)
                         {
                             const auto& submesh = meshData.meshes[i];
-                            names.push_back(submesh.name.empty() ? "Submesh_" + std::to_string(i) : submesh.name);
+                            names.push_back(submesh.name.empty() ? "SubMesh_" + std::to_string(i) : submesh.name);
                         }
                         cacheIt = submeshNameCache.emplace(meshPath, std::move(names)).first;
                     }

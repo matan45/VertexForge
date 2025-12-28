@@ -17,6 +17,10 @@ namespace core {
     class Shader;
 }
 
+namespace material {
+    struct MaterialData;
+}
+
 namespace render::mesh {
     class MaterialTextureCache;
     class MeshStreamManager;
@@ -274,6 +278,9 @@ namespace render::gpudriven {
 
         // Registered material paths (to avoid re-registering textures each frame)
         std::unordered_set<std::string> registeredMaterialPaths;
+
+        // Cached material data (keeps materials alive to prevent weak_ptr expiration)
+        std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> loadedMaterials;
 
         // Mesh streaming support (enabled by default)
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;

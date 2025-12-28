@@ -16,11 +16,90 @@ namespace render::gpudriven {
         cleanup();
     }
 
-    void IndirectBatchManager::init(uint32_t batchCount, uint32_t commandsPerBatch, uint32_t shaderGroupCount)
+    vk::DeviceSize IndirectBatchManager::calculateRequiredMemory(uint32_t batchCount,
+                                                                   uint32_t commandsPerBatch,
+                                                                   uint32_t shaderGroupCount)
+    {
+        uint32_t commandsPerSection = commandsPerBatch / shaderGroupCount;
+        uint32_t totalSections = batchCount * shaderGroupCount;
+
+        vk::DeviceSize drawCommandSize = totalSections * commandsPerSection * sizeof(DrawIndexedIndirectCommand);
+        vk::DeviceSize drawCountSize = totalSections * sizeof(BatchDrawStats);
+        vk::DeviceSize perDrawDataSize = totalSections * commandsPerSection * sizeof(PerDrawData);
+        vk::DeviceSize stagingSize = drawCountSize;
+
+        return drawCommandSize + drawCountSize + perDrawDataSize + stagingSize;
+    }
+
+    bool IndirectBatchManager::initWithAutoConfig()
     {
         if (initialized) {
             loggerWarning("IndirectBatchManager already initialized");
-            return;
+            return true;
+        }
+
+        // Query available VRAM
+        auto memInfo = device.getDeviceMemoryInfo();
+        vk::DeviceSize availableVRAM = memInfo.deviceLocalHeapSize;
+
+        loggerInfo("IndirectBatchManager: Detected {} MB device-local VRAM{}",
+                   availableVRAM / (1024 * 1024),
+                   memInfo.hasUnifiedMemory ? " (unified memory)" : "");
+
+        // Select configuration based on available VRAM
+        // Reserve ~25% of VRAM budget for indirect buffers (rest for textures, meshes, etc.)
+        vk::DeviceSize budgetForIndirect = availableVRAM / 4;
+
+        uint32_t selectedBatchCount = DEFAULT_BATCH_COUNT;
+        uint32_t selectedCommands = MAX_DRAW_COMMANDS;
+        uint32_t selectedGroups = MAX_SHADER_GROUPS;
+
+        // Device tiers based on VRAM
+        constexpr vk::DeviceSize GB = 1024ull * 1024ull * 1024ull;
+
+        if (availableVRAM < 4 * GB) {
+            // Low-end: < 4GB VRAM
+            selectedBatchCount = 2;
+            selectedCommands = 100000;
+            selectedGroups = 8;
+            loggerInfo("IndirectBatchManager: Using LOW-END configuration (< 4GB VRAM)");
+        } else if (availableVRAM < 8 * GB) {
+            // Mid-range: 4-8GB VRAM
+            selectedBatchCount = 4;
+            selectedCommands = 300000;
+            selectedGroups = 16;
+            loggerInfo("IndirectBatchManager: Using MID-RANGE configuration (4-8GB VRAM)");
+        } else {
+            // High-end: >= 8GB VRAM
+            selectedBatchCount = DEFAULT_BATCH_COUNT;
+            selectedCommands = MAX_DRAW_COMMANDS;
+            selectedGroups = MAX_SHADER_GROUPS;
+            loggerInfo("IndirectBatchManager: Using HIGH-END configuration (>= 8GB VRAM)");
+        }
+
+        // Verify the selected config fits in budget
+        vk::DeviceSize requiredMemory = calculateRequiredMemory(selectedBatchCount, selectedCommands, selectedGroups);
+        if (requiredMemory > budgetForIndirect) {
+            loggerWarning("IndirectBatchManager: Selected config requires {} MB but budget is {} MB, reducing further",
+                         requiredMemory / (1024 * 1024), budgetForIndirect / (1024 * 1024));
+
+            // Scale down commands proportionally
+            float scale = static_cast<float>(budgetForIndirect) / static_cast<float>(requiredMemory);
+            selectedCommands = static_cast<uint32_t>(selectedCommands * scale * 0.9f); // 10% safety margin
+            selectedCommands = std::max(selectedCommands, 10000u); // Minimum viable
+        }
+
+        loggerInfo("IndirectBatchManager: Allocating {} MB for indirect buffers",
+                   calculateRequiredMemory(selectedBatchCount, selectedCommands, selectedGroups) / (1024 * 1024));
+
+        return init(selectedBatchCount, selectedCommands, selectedGroups);
+    }
+
+    bool IndirectBatchManager::init(uint32_t batchCount, uint32_t commandsPerBatch, uint32_t shaderGroupCount)
+    {
+        if (initialized) {
+            loggerWarning("IndirectBatchManager already initialized");
+            return true;
         }
 
         // Validate batch count
@@ -41,15 +120,24 @@ namespace render::gpudriven {
         // Each (batch, shaderGroup) section gets equal share of commands
         this->commandsPerSection = commandsPerBatch / shaderGroupCount;
 
-        createBuffers();
+        if (!createBuffers()) {
+            loggerError("IndirectBatchManager: Failed to allocate GPU buffers");
+            return false;
+        }
+
         initialized = true;
 
         loggerInfo("IndirectBatchManager initialized: {} batches x {} shader groups x {} commands/section = {} total capacity",
                    this->batchCount, this->shaderGroupCount, this->commandsPerSection, getTotalCapacity());
         loggerInfo("  Sections (batch*group pairs): {}", getSectionCount());
-        loggerInfo("  Draw command buffer: {} MB", getCombinedDrawCommandBufferSize() / (1024.0f * 1024.0f));
-        loggerInfo("  Draw count buffer: {} KB", getCombinedDrawCountBufferSize() / 1024.0f);
-        loggerInfo("  Per-draw data buffer: {} MB", getCombinedPerDrawDataBufferSize() / (1024.0f * 1024.0f));
+        loggerInfo("  Draw command buffer: {:.1f} MB", getCombinedDrawCommandBufferSize() / (1024.0f * 1024.0f));
+        loggerInfo("  Draw count buffer: {:.1f} KB", getCombinedDrawCountBufferSize() / 1024.0f);
+        loggerInfo("  Per-draw data buffer: {:.1f} MB", getCombinedPerDrawDataBufferSize() / (1024.0f * 1024.0f));
+        loggerInfo("  Total GPU memory: {:.1f} MB",
+                   (getCombinedDrawCommandBufferSize() + getCombinedDrawCountBufferSize() +
+                    getCombinedPerDrawDataBufferSize()) / (1024.0f * 1024.0f));
+
+        return true;
     }
 
     void IndirectBatchManager::cleanup()
@@ -63,62 +151,79 @@ namespace render::gpudriven {
         loggerInfo("IndirectBatchManager cleaned up");
     }
 
-    void IndirectBatchManager::createBuffers()
+    bool IndirectBatchManager::createBuffers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
-        // Combined draw command buffer - all batches contiguous
-        // Written by compute shader, read by vkCmdDrawIndexedIndirectCount
-        {
-            core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = getCombinedDrawCommandBufferSize();
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |      // Compute shader writes
-                           vk::BufferUsageFlagBits::eIndirectBuffer |       // Indirect draw reads
-                           vk::BufferUsageFlagBits::eTransferDst;           // Clear/reset
-            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, combinedDrawCommandBuffer, combinedDrawCommandMemory);
-        }
+        try {
+            // Combined draw command buffer - all batches contiguous
+            // Written by compute shader, read by vkCmdDrawIndexedIndirectCount
+            {
+                core::BufferInfoRequest request(logicalDevice, physicalDevice);
+                request.size = getCombinedDrawCommandBufferSize();
+                request.usage = vk::BufferUsageFlagBits::eStorageBuffer |      // Compute shader writes
+                               vk::BufferUsageFlagBits::eIndirectBuffer |       // Indirect draw reads
+                               vk::BufferUsageFlagBits::eTransferDst;           // Clear/reset
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::Utilities::createBuffer(request, combinedDrawCommandBuffer, combinedDrawCommandMemory);
+            }
 
-        // Combined draw count buffer - BatchDrawStats for each batch
-        // Layout: [Batch0 stats][Batch1 stats]...[BatchN stats]
-        {
-            core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = getCombinedDrawCountBufferSize();
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute shader atomic
-                           vk::BufferUsageFlagBits::eIndirectBuffer |       // Count for indirect
-                           vk::BufferUsageFlagBits::eTransferDst |          // Reset to 0
-                           vk::BufferUsageFlagBits::eTransferSrc;           // Readback for debug
-            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, combinedDrawCountBuffer, combinedDrawCountMemory);
-        }
+            // Combined draw count buffer - BatchDrawStats for each batch
+            // Layout: [Batch0 stats][Batch1 stats]...[BatchN stats]
+            {
+                core::BufferInfoRequest request(logicalDevice, physicalDevice);
+                request.size = getCombinedDrawCountBufferSize();
+                request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute shader atomic
+                               vk::BufferUsageFlagBits::eIndirectBuffer |       // Count for indirect
+                               vk::BufferUsageFlagBits::eTransferDst |          // Reset to 0
+                               vk::BufferUsageFlagBits::eTransferSrc;           // Readback for debug
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::Utilities::createBuffer(request, combinedDrawCountBuffer, combinedDrawCountMemory);
+            }
 
-        // Combined per-draw data buffer - all batches contiguous
-        // Written by compute shader, read by vertex/fragment shaders
-        {
-            core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = getCombinedPerDrawDataBufferSize();
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute writes, VS/FS reads
-                           vk::BufferUsageFlagBits::eTransferDst;           // Clear if needed
-            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, combinedPerDrawDataBuffer, combinedPerDrawDataMemory);
-        }
+            // Combined per-draw data buffer - all batches contiguous
+            // Written by compute shader, read by vertex/fragment shaders
+            {
+                core::BufferInfoRequest request(logicalDevice, physicalDevice);
+                request.size = getCombinedPerDrawDataBufferSize();
+                request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute writes, VS/FS reads
+                               vk::BufferUsageFlagBits::eTransferDst;           // Clear if needed
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::Utilities::createBuffer(request, combinedPerDrawDataBuffer, combinedPerDrawDataMemory);
+            }
 
-        // Staging buffer for count reset and readback (needs to hold all batch stats)
-        {
-            core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = getCombinedDrawCountBufferSize();
-            request.usage = vk::BufferUsageFlagBits::eTransferSrc |
-                           vk::BufferUsageFlagBits::eTransferDst;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(request, stagingBuffer, stagingMemory);
+            // Staging buffer for count reset and readback (needs to hold all batch stats)
+            {
+                core::BufferInfoRequest request(logicalDevice, physicalDevice);
+                request.size = getCombinedDrawCountBufferSize();
+                request.usage = vk::BufferUsageFlagBits::eTransferSrc |
+                               vk::BufferUsageFlagBits::eTransferDst;
+                request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                    vk::MemoryPropertyFlagBits::eHostCoherent;
+                core::Utilities::createBuffer(request, stagingBuffer, stagingMemory);
 
-            stagingMapped = logicalDevice.mapMemory(
-                stagingMemory, 0, getCombinedDrawCountBufferSize(), vk::MemoryMapFlags{}
-            );
-            // Initialize all stats to 0
-            std::memset(stagingMapped, 0, getCombinedDrawCountBufferSize());
+                stagingMapped = logicalDevice.mapMemory(
+                    stagingMemory, 0, getCombinedDrawCountBufferSize(), vk::MemoryMapFlags{}
+                );
+                // Initialize all stats to 0
+                std::memset(stagingMapped, 0, getCombinedDrawCountBufferSize());
+            }
+
+            return true;
+
+        } catch (const vk::OutOfDeviceMemoryError& e) {
+            loggerError("IndirectBatchManager: Out of device memory - {}", e.what());
+            destroyBuffers();
+            return false;
+        } catch (const vk::OutOfHostMemoryError& e) {
+            loggerError("IndirectBatchManager: Out of host memory - {}", e.what());
+            destroyBuffers();
+            return false;
+        } catch (const vk::SystemError& e) {
+            loggerError("IndirectBatchManager: Vulkan error during buffer creation - {}", e.what());
+            destroyBuffers();
+            return false;
         }
     }
 

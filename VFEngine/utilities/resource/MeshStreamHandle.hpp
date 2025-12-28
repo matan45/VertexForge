@@ -114,6 +114,7 @@ namespace resource {
         // Safety limits (same as MeshResource)
         static constexpr uint32_t maxVertexCount = 10'000'000;
         static constexpr uint32_t maxIndexCount = 30'000'000;
+        static constexpr uint32_t maxSubmeshCount = 10'000;
     };
 
     // Static factory for creating stream handles

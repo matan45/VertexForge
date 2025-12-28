@@ -36,10 +36,18 @@ namespace render::gpudriven {
          * @param batchCount Number of batches (1-8, default 4)
          * @param commandsPerBatch Max draw commands per batch (default MAX_DRAW_COMMANDS)
          * @param shaderGroupCount Number of shader groups for multi-pipeline rendering (default MAX_SHADER_GROUPS)
+         * @return true if initialization succeeded, false if allocation failed
          */
-        void init(uint32_t batchCount = DEFAULT_BATCH_COUNT,
+        bool init(uint32_t batchCount = DEFAULT_BATCH_COUNT,
                   uint32_t commandsPerBatch = MAX_DRAW_COMMANDS,
                   uint32_t shaderGroupCount = MAX_SHADER_GROUPS);
+
+        /**
+         * Initialize with automatic settings based on available VRAM.
+         * Queries device memory and selects appropriate batch/command counts.
+         * @return true if initialization succeeded, false if allocation failed
+         */
+        bool initWithAutoConfig();
 
         /**
          * Cleanup all GPU resources.
@@ -122,6 +130,14 @@ namespace render::gpudriven {
          */
         GPUDrivenStats readBackAggregatedStats();
 
+        /**
+         * Calculate total GPU memory required for given configuration.
+         * @return Total bytes that will be allocated
+         */
+        static vk::DeviceSize calculateRequiredMemory(uint32_t batchCount,
+                                                       uint32_t commandsPerBatch,
+                                                       uint32_t shaderGroupCount);
+
     private:
         core::Device& device;
 
@@ -146,7 +162,7 @@ namespace render::gpudriven {
         uint32_t commandsPerSection = 0;  // commands per (batch, shaderGroup) section
         bool initialized = false;
 
-        void createBuffers();
+        bool createBuffers();
         void destroyBuffers();
     };
 

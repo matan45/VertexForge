@@ -13,6 +13,7 @@
 #include <cstring>
 #include <array>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
@@ -54,7 +55,14 @@ namespace render::gpudriven {
         }
 
         batchManager = std::make_unique<IndirectBatchManager>(device);
-        batchManager->init(DEFAULT_BATCH_COUNT, MAX_DRAW_COMMANDS, MAX_SHADER_GROUPS);
+        if (!batchManager->initWithAutoConfig()) {
+            spdlog::error("GPUDrivenRenderer: Failed to initialize batch manager - GPU memory allocation failed");
+            // Fall back to minimal configuration
+            if (!batchManager->init(2, 50000, 8)) {
+                spdlog::critical("GPUDrivenRenderer: Even minimal batch configuration failed - GPU-driven rendering unavailable");
+                batchManager.reset();
+            }
+        }
 
         bindlessTextures = std::make_unique<BindlessTextureManager>(device);
         bindlessTextures->init();
@@ -521,8 +529,12 @@ namespace render::gpudriven {
                 // Check cache first
                 auto it = pbrCache->find(materialPath);
                 if (it == pbrCache->end()) {
-                    // Get material data to find texture path
+                    // Get or load material data to find texture path
                     auto matData = resource::ResourceManager::getMaterial(materialPath);
+                    if (!matData) {
+                        // Material weak_ptr expired, reload it
+                        matData = resource::ResourceManager::loadMaterial(materialPath);
+                    }
                     if (!matData) {
                         return INVALID_TEXTURE_INDEX;
                     }
@@ -756,7 +768,7 @@ namespace render::gpudriven {
             return true;
         }
 
-        // Load material data
+        // Load material data and cache it to prevent weak_ptr expiration
         auto matData = resource::ResourceManager::getMaterial(materialPath);
         if (!matData) {
             matData = resource::ResourceManager::loadMaterial(materialPath);
@@ -765,6 +777,8 @@ namespace render::gpudriven {
             spdlog::warn("GPUDrivenRenderer: Failed to load material: {}", materialPath);
             return false;
         }
+        // Keep material alive by storing in our cache
+        loadedMaterials[materialPath] = matData;
 
         // Extract texture paths from material
         auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
@@ -800,8 +814,11 @@ namespace render::gpudriven {
         tryRegister(pbrValues.emissionTexturePath);
         tryRegister(pbrValues.heightTexturePath);
 
-        // Mark as registered
-        registeredMaterialPaths.insert(materialPath);
+        // Only mark as registered if at least one texture was successfully registered
+        if (registered) {
+            registeredMaterialPaths.insert(materialPath);
+        }
+        // If no textures were registered, don't add to registeredMaterialPaths - allow retry on next frame
 
         return registered;
     }

@@ -371,4 +371,42 @@ namespace core {
 		return true;
 	}
 
+	DeviceMemoryInfo Device::getDeviceMemoryInfo() const
+	{
+		DeviceMemoryInfo info{};
+
+		vk::PhysicalDeviceMemoryProperties memProps = physicalDevice.getMemoryProperties();
+
+		// Find the largest device-local and host-visible heaps
+		for (uint32_t i = 0; i < memProps.memoryHeapCount; ++i) {
+			const auto& heap = memProps.memoryHeaps[i];
+
+			if (heap.flags & vk::MemoryHeapFlagBits::eDeviceLocal) {
+				if (heap.size > info.deviceLocalHeapSize) {
+					info.deviceLocalHeapSize = heap.size;
+				}
+			}
+		}
+
+		// Check memory types to find host-visible memory and detect unified memory
+		for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+			const auto& memType = memProps.memoryTypes[i];
+			const auto& heap = memProps.memoryHeaps[memType.heapIndex];
+
+			// Host-visible memory
+			if (memType.propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) {
+				if (heap.size > info.hostVisibleHeapSize) {
+					info.hostVisibleHeapSize = heap.size;
+				}
+
+				// Unified memory: device-local AND host-visible in same type
+				if (memType.propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) {
+					info.hasUnifiedMemory = true;
+				}
+			}
+		}
+
+		return info;
+	}
+
 }

@@ -83,6 +83,12 @@ namespace resource {
             return false;
         }
 
+        if (header.numSubmeshes > maxSubmeshCount) {
+            vfLogError("MeshStreamHandle: Submesh count {} exceeds limit {}",
+                       header.numSubmeshes, maxSubmeshCount);
+            return false;
+        }
+
         header.submeshes.resize(header.numSubmeshes);
 
         // Parse each submesh to record file offsets
