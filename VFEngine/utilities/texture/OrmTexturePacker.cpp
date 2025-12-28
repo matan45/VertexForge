@@ -128,10 +128,11 @@ namespace texture
                                        : OrmTexturePacker::DEFAULT_METALLIC;
 
                 // ORM format: R=AO, G=Roughness, B=Metallic, A=255 (unused, full opacity)
-                ormMip.data[outIdx + 0] = ao;
-                ormMip.data[outIdx + 1] = roughness;
-                ormMip.data[outIdx + 2] = metallic;
-                ormMip.data[outIdx + 3] = 255; // Unused alpha, set to opaque
+                // Store in BGRA order for .vfImage format (TGAReader swaps B↔R when loading)
+                ormMip.data[outIdx + 0] = metallic;  // B (will become R=AO after load swap)
+                ormMip.data[outIdx + 1] = roughness; // G (unchanged)
+                ormMip.data[outIdx + 2] = ao;        // R (will become B=Metallic after load swap)
+                ormMip.data[outIdx + 3] = 255;       // A (unused)
             }
 
             if (progressCallback && (y % (height / 10 + 1) == 0))
@@ -193,6 +194,7 @@ namespace texture
                     }
 
                     uint32_t dstIdx = (y * newWidth + x) * 4;
+                    // Preserve BGRA order from source (sumR=B=Metallic, sumG=G=Roughness, sumB=R=AO)
                     newMip.data[dstIdx + 0] = static_cast<uint8_t>(sumR / samples);
                     newMip.data[dstIdx + 1] = static_cast<uint8_t>(sumG / samples);
                     newMip.data[dstIdx + 2] = static_cast<uint8_t>(sumB / samples);
