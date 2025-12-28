@@ -253,6 +253,25 @@ namespace windows
                     cmd.transform = transform;
                     dispatcher.execute(cmd);
                 }
+
+                // Static flag - affects BVH placement, physics, and lights
+                events::scene::IsEntityStaticQuery staticQuery;
+                staticQuery.entity = handle;
+                bool isStatic = dispatcher.query(staticQuery);
+
+                if (ImGui::Checkbox("Is Static", &isStatic))
+                {
+                    events::scene::SetEntityStaticCommand cmd;
+                    cmd.entity = handle;
+                    cmd.isStatic = isStatic;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(
+                        "Static entities are placed in a BVH that rebuilds less frequently.\n"
+                        "Uncheck for entities that move often (affects rendering, physics, and lights).");
+                }
             }
         }
     }
@@ -482,23 +501,6 @@ namespace windows
                 cmd.meshData.meshPath = meshOpt->meshPath;
                 cmd.meshData.showBoundingBox = showBoundingBox;
                 dispatcher.execute(cmd);
-            }
-
-            events::scene::IsEntityStaticQuery staticQuery;
-            staticQuery.entity = handle;
-            bool isStatic = dispatcher.query(staticQuery);
-
-            if (ImGui::Checkbox("Is Static", &isStatic))
-            {
-                events::scene::SetEntityStaticCommand cmd;
-                cmd.entity = handle;
-                cmd.isStatic = isStatic;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip(
-                    "Static meshes are placed in a BVH tree that rebuilds less frequently.\nUncheck for meshes that move often.");
             }
 
             ImGui::Unindent(10.0f);
