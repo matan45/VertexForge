@@ -1,6 +1,7 @@
 #include "Utilities.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
+#include <glm/glm.hpp>
 
 namespace core {
 
@@ -329,6 +330,135 @@ namespace core {
 		// Cleanup staging buffer
 		device.destroyBuffer(stagingBuffer);
 		device.freeMemory(stagingMemory);
+	}
+
+	WireframePipelineResult Utilities::createWireframePipeline(const WireframePipelineConfig& config)
+	{
+		WireframePipelineResult result{};
+
+		// Push constant range for vertex + fragment stages
+		vk::PushConstantRange pushConstantRange{};
+		pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = config.pushConstantSize;
+
+		vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.setLayoutCount = 0;
+		pipelineLayoutInfo.pSetLayouts = nullptr;
+		pipelineLayoutInfo.pushConstantRangeCount = 1;
+		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+		result.pipelineLayout = config.device.createPipelineLayout(pipelineLayoutInfo);
+
+		// Vertex input - simple vec3 positions
+		vk::VertexInputBindingDescription bindingDescription{};
+		bindingDescription.binding = 0;
+		bindingDescription.stride = sizeof(glm::vec3);
+		bindingDescription.inputRate = vk::VertexInputRate::eVertex;
+
+		vk::VertexInputAttributeDescription attributeDescription{};
+		attributeDescription.binding = 0;
+		attributeDescription.location = 0;
+		attributeDescription.format = vk::Format::eR32G32B32Sfloat;
+		attributeDescription.offset = 0;
+
+		vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
+		vertexInputInfo.vertexBindingDescriptionCount = 1;
+		vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+		vertexInputInfo.vertexAttributeDescriptionCount = 1;
+		vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+
+		vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+		inputAssembly.topology = vk::PrimitiveTopology::eLineList;
+		inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+		vk::Viewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = static_cast<float>(config.extent.width);
+		viewport.height = static_cast<float>(config.extent.height);
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		vk::Rect2D scissor{};
+		scissor.offset = vk::Offset2D{0, 0};
+		scissor.extent = config.extent;
+
+		vk::PipelineViewportStateCreateInfo viewportState{};
+		viewportState.viewportCount = 1;
+		viewportState.pViewports = &viewport;
+		viewportState.scissorCount = 1;
+		viewportState.pScissors = &scissor;
+
+		vk::PipelineRasterizationStateCreateInfo rasterizer{};
+		rasterizer.depthClampEnable = VK_FALSE;
+		rasterizer.rasterizerDiscardEnable = VK_FALSE;
+		rasterizer.polygonMode = vk::PolygonMode::eFill;
+		rasterizer.lineWidth = 1.0f;
+		rasterizer.cullMode = vk::CullModeFlagBits::eNone;
+		rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
+		rasterizer.depthBiasEnable = VK_FALSE;
+
+		vk::PipelineMultisampleStateCreateInfo multisampling{};
+		multisampling.sampleShadingEnable = VK_FALSE;
+		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+		depthStencil.depthTestEnable = VK_TRUE;
+		depthStencil.depthWriteEnable = VK_FALSE;
+		depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
+		depthStencil.depthBoundsTestEnable = VK_FALSE;
+		depthStencil.stencilTestEnable = VK_FALSE;
+
+		vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
+		colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
+			vk::ColorComponentFlagBits::eG |
+			vk::ColorComponentFlagBits::eB |
+			vk::ColorComponentFlagBits::eA;
+
+		if (config.enableBlending)
+		{
+			colorBlendAttachment.blendEnable = VK_TRUE;
+			colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+			colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+			colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
+			colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+			colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+			colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+		}
+		else
+		{
+			colorBlendAttachment.blendEnable = VK_FALSE;
+		}
+
+		vk::PipelineColorBlendStateCreateInfo colorBlending{};
+		colorBlending.logicOpEnable = VK_FALSE;
+		colorBlending.attachmentCount = 1;
+		colorBlending.pAttachments = &colorBlendAttachment;
+
+		vk::GraphicsPipelineCreateInfo pipelineInfo{};
+		pipelineInfo.stageCount = static_cast<uint32_t>(config.shaderStages.size());
+		pipelineInfo.pStages = config.shaderStages.data();
+		pipelineInfo.pVertexInputState = &vertexInputInfo;
+		pipelineInfo.pInputAssemblyState = &inputAssembly;
+		pipelineInfo.pViewportState = &viewportState;
+		pipelineInfo.pRasterizationState = &rasterizer;
+		pipelineInfo.pMultisampleState = &multisampling;
+		pipelineInfo.pDepthStencilState = &depthStencil;
+		pipelineInfo.pColorBlendState = &colorBlending;
+		pipelineInfo.layout = result.pipelineLayout;
+		pipelineInfo.renderPass = config.renderPass;
+		pipelineInfo.subpass = 0;
+
+		auto createResult = config.device.createGraphicsPipeline(nullptr, pipelineInfo);
+		if (createResult.result != vk::Result::eSuccess)
+		{
+			config.device.destroyPipelineLayout(result.pipelineLayout);
+			throw std::runtime_error("Failed to create wireframe graphics pipeline");
+		}
+		result.pipeline = createResult.value;
+
+		return result;
 	}
 
 }

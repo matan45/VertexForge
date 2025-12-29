@@ -3,43 +3,43 @@
 #include <glm/glm.hpp>
 #include "../core/OffScreen.hpp"
 
-namespace core {
-	class Device;
-	class SwapChain;
+namespace core
+{
+    class Device;
+    class SwapChain;
 }
 
 
-namespace render {
+namespace render
+{
+    class ClearColor
+    {
+    private:
+        core::Device& device;
+        core::SwapChain& swapChain;
 
-	class ClearColor
-	{
-	private:
-		core::Device& device;
-		core::SwapChain& swapChain;
+        vk::RenderPass renderPass;
+        std::vector<vk::Framebuffer> framebuffers;
 
-		vk::RenderPass renderPass;
-		std::vector<vk::Framebuffer> framebuffers;
+        core::OffscreenResources& offscreenResources;
 
-		core::OffscreenResources& offscreenResources;
-		
-		glm::vec4 clearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
+        glm::vec4 clearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
 
-	public:
-		explicit ClearColor(core::Device& device, core::SwapChain& swapChain, core::OffscreenResources& offscreenResources);
-		~ClearColor() = default;
+    public:
+        explicit ClearColor(core::Device& device, core::SwapChain& swapChain,
+                            core::OffscreenResources& offscreenResources);
+        ~ClearColor() = default;
 
-		void init();
-		void recreate();
-		void cleanUp() const;
-		
-		const glm::vec4& getClearColor() const { return clearColorValue; }
+        void init();
+        void recreate();
+        void cleanUp() const;
 
-		void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        const glm::vec4& getClearColor() const { return clearColorValue; }
 
-	private:
-		void createFrameBuffers();
-		void createRenderPass();
-	};
+        void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
+    private:
+        void createFrameBuffers();
+        void createRenderPass();
+    };
 }
-

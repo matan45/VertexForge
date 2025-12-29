@@ -27,7 +27,6 @@ namespace render::mesh
 
 namespace render
 {
-   
     class DebugRenderer
     {
     private:
@@ -47,23 +46,21 @@ namespace render
 
         bool initialized = false;
         bool showGrid = true;
+        bool hasBoundingBoxesToRender = false;
 
     public:
-        DebugRenderer(core::Device& device, core::SwapChain& swapChain);
+        explicit DebugRenderer(core::Device& device, core::SwapChain& swapChain);
         ~DebugRenderer();
 
         void init(vk::RenderPass renderPass);
         void recreate(vk::RenderPass renderPass);
         void cleanUp();
         void cleanUpShaders();
-
-        // Set camera frustum draw list for current frame
+        
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
-
-        // Set audio sphere draw list for current frame
+        
         void setAudioSphereDrawList(std::vector<mesh::AudioSphereRenderData>&& spheres);
-
-        // Render all debug visualizations
+        
         void render(const vk::CommandBuffer& commandBuffer,
                     const std::vector<mesh::MeshRenderData>& meshDrawList,
                     const glm::mat4& view,
@@ -71,19 +68,14 @@ namespace render
                     const std::function<const mesh::MeshGPUData*(const std::string&)>& getMeshFunc) const;
 
         bool isInitialized() const { return initialized; }
-
-        // Check if there are any debug items to render (grid, frustums, spheres, etc.)
-        // Note: AABB rendering depends on meshDrawList passed to render(), so we track it separately
-        bool hasItemsToRender() const { return showGrid || !cameraFrustumDrawList.empty() || !audioSphereDrawList.empty() || hasBoundingBoxesToRender; }
-
-        // Set flag indicating if any meshes have showBoundingBox enabled
+        
+        bool hasItemsToRender() const;
+        
         void setHasBoundingBoxes(bool hasBoundingBoxes) { hasBoundingBoxesToRender = hasBoundingBoxes; }
 
         // Grid visibility control
         void setShowGrid(bool show);
         bool getShowGrid() const { return showGrid; }
-
-    private:
-        bool hasBoundingBoxesToRender = false;
+        
     };
 }

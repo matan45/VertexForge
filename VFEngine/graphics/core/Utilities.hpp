@@ -139,6 +139,22 @@ namespace core
 		}
 	};
 
+	struct WireframePipelineConfig
+	{
+		vk::Device device;
+		vk::RenderPass renderPass;
+		vk::Extent2D extent;
+		uint32_t pushConstantSize;
+		const std::vector<vk::PipelineShaderStageCreateInfo>& shaderStages;
+		bool enableBlending = false;
+	};
+
+	struct WireframePipelineResult
+	{
+		vk::Pipeline pipeline;
+		vk::PipelineLayout pipelineLayout;
+	};
+
 	class Utilities
 	{
 	private:
@@ -179,5 +195,9 @@ namespace core
 			vk::DeviceSize size,
 			vk::DeviceSize offset = 0
 		);
+
+		// Create a simple wireframe pipeline for debug rendering (grid, AABB, frustum, etc.)
+		// Uses vec3 position vertex input, line list topology, no depth write
+		static WireframePipelineResult createWireframePipeline(const WireframePipelineConfig& config);
 	};
 }
