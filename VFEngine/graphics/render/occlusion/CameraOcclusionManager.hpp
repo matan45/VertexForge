@@ -28,11 +28,11 @@ namespace render::occlusion
         // Occlusion culling resources
         std::unique_ptr<HiZBuffer> hiZBuffer;
         std::unique_ptr<OcclusionCullingManager> occlusionManager;
-        
+
         math::Frustum frustum;
         glm::mat4 viewProj{1.0f};
         float nearPlane = 0.1f;
-        
+
         bool useOcclusionCulling = true;
         bool hiZInitialized = false;
         bool occlusionInitialized = false;
@@ -52,7 +52,7 @@ namespace render::occlusion
         bool isValid() const { return cameraId != INVALID_CAMERA_ID; }
         bool isMainCamera() const { return cameraId == MAIN_CAMERA_ID; }
     };
-    
+
     class CameraOcclusionManager
     {
     private:
@@ -64,35 +64,35 @@ namespace render::occlusion
     public:
         explicit CameraOcclusionManager(core::Device& device, core::SwapChain& swapChain);
         ~CameraOcclusionManager();
-        
+
         CameraRenderData* createCamera(CameraId id, bool enableOcclusion = true);
         CameraRenderData* getCamera(CameraId id);
         void removeCamera(CameraId id);
         bool hasCamera(CameraId id) const;
-        
+
         void setActiveCamera(CameraId id);
         CameraId getActiveCameraId() const { return activeCameraId; }
-        
+
         void initCameraHiZ(CameraId id, vk::Image depthImage, vk::ImageView depthView, vk::Format depthFormat);
         void recreateCameraHiZ(CameraId id, vk::Image depthImage, vk::ImageView depthView, vk::Format depthFormat);
         void initCameraOcclusionCulling(CameraId id);
-        
+
         void updateCamera(CameraId id, const glm::mat4& viewProj, float nearPlane);
         void updateCameraFrustum(CameraId id, const math::Frustum& frustum);
-        
+
         void updateOcclusionObjects(CameraId id, const std::vector<GPUObjectData>& objects);
-        
+
         std::vector<uint32_t> getVisibilityResults(CameraId id);
-        
+
         void generateHiZ(CameraId id, vk::CommandBuffer cmd);
-        
+
         void runOcclusionCulling(CameraId id, vk::CommandBuffer cmd);
-        
+
         void cleanup();
-        
+
         bool isHiZInitialized(CameraId id);
         bool isOcclusionInitialized(CameraId id);
-        
+
         const std::unordered_map<CameraId, std::unique_ptr<CameraRenderData>>& getAllCameras() const { return cameras; }
     };
 }

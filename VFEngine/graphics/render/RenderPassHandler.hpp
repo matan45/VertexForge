@@ -1,6 +1,6 @@
 #pragma once
 #include "../core/OffScreen.hpp"
-#include "occlusion/CameraRenderData.hpp"
+#include "occlusion/CameraOcclusionManager.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
 #include <memory>

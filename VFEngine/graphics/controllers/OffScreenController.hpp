@@ -2,7 +2,7 @@
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
 #include "scene/SceneBVH.hpp"
-#include "../render/occlusion/CameraRenderData.hpp"
+#include "../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../services/providers/IOffScreenProvider.hpp"
 #include "../render/material/MaterialPBRExtractor.hpp"
 #include <memory>

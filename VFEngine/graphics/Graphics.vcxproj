@@ -146,7 +146,7 @@
     <ClInclude Include="render\mesh\MeshStreamManager.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
-    <ClInclude Include="render\occlusion\CameraRenderData.hpp" />
+    <ClInclude Include="render\occlusion\CameraOcclusionManager.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
     <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
     <ClInclude Include="render\tools\AABBDebugRenderer.hpp" />
