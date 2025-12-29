@@ -2,6 +2,7 @@
 #include "../mesh/MeshTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/Utilities.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
 #include <functional>
@@ -32,35 +33,35 @@ namespace render::mesh
         const std::string& materialPath,
         const material::MaterialData& materialData)
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             return nullptr;
         }
-
-        // Check if material has cached shaders
-        if (materialData.cachedVertexShader.empty() || materialData.cachedFragmentShader.empty()) {
-            return nullptr;  // No custom shader, use default pipeline
+        
+        if (materialData.cachedVertexShader.empty() || materialData.cachedFragmentShader.empty())
+        {
+            return nullptr;
         }
-
-        // Check if already cached
+        
         auto it = cache.find(materialPath);
-        if (it != cache.end()) {
-            // Check if shader source changed
+        if (it != cache.end())
+        {
             std::string vsHash = hashShaderSource(materialData.cachedVertexShader);
             std::string fsHash = hashShaderSource(materialData.cachedFragmentShader);
 
             if (it->second.vertexShaderHash == vsHash &&
                 it->second.fragmentShaderHash == fsHash &&
-                it->second.valid) {
+                it->second.valid)
+            {
                 return &it->second;
             }
-
-            // Shader changed, invalidate and recompile
+            
             invalidate(materialPath);
         }
-
-        // Create new pipeline
+        
         MaterialPipelineData data;
-        if (compileAndCreatePipeline(materialPath, materialData, data)) {
+        if (compileAndCreatePipeline(materialPath, materialData, data))
+        {
             cache[materialPath] = std::move(data);
             return &cache[materialPath];
         }
@@ -73,31 +74,28 @@ namespace render::mesh
         const material::MaterialData& materialData,
         MaterialPipelineData& outData)
     {
-        // Create shader object
         outData.shader = std::make_shared<core::Shader>(device);
-
-        // Compile from source
+        
         bool success = outData.shader->compileFromSources(
             materialData.cachedVertexShader,
             materialData.cachedFragmentShader,
             materialData.name
         );
 
-        if (!success || outData.shader->getShaderStages().empty()) {
+        if (!success || outData.shader->getShaderStages().empty())
+        {
             lastCompilationError = outData.shader->getLastCompilationError();
             loggerError("Failed to compile material shader: {}", materialPath);
             return false;
         }
-
-        // Clear error on success
+        
         lastCompilationError.clear();
-
-        // Store hashes for change detection
+        
         outData.vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
         outData.fragmentShaderHash = hashShaderSource(materialData.cachedFragmentShader);
-
-        // Create pipelines
-        if (!createPipelines(outData)) {
+        
+        if (!createPipelines(outData))
+        {
             loggerError("Failed to create pipeline for material: {}", materialPath);
             return false;
         }
@@ -109,113 +107,46 @@ namespace render::mesh
 
     bool MaterialShaderCache::createPipelines(MaterialPipelineData& data)
     {
-        // Vertex input state - using MeshVertexInput helper
         auto bindingDescription = MeshVertexInput::getBindingDescription();
         auto attributeDescriptions = MeshVertexInput::getAttributeDescriptions();
 
-        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+        try
+        {
+            core::GraphicsPipelineConfig config{
+                .device = device.getLogicalDevice(),
+                .renderPass = renderPass,
+                .extent = swapchainExtent,
+                .shaderStages = data.shader->getShaderStages(),
+                .vertexBindings = {bindingDescription},
+                .vertexAttributes = {attributeDescriptions.begin(), attributeDescriptions.end()},
+                .existingPipelineLayout = pipelineLayout,
+                .cullMode = vk::CullModeFlagBits::eBack,
+                .depthTestEnable = true,
+                .depthWriteEnable = true,
+                .depthCompareOp = vk::CompareOp::eLess
+            };
 
-        // Input assembly
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
+            auto opaqueResult = core::Utilities::createGraphicsPipeline(config);
+            data.opaquePipeline = opaqueResult.pipeline;
 
-        // Viewport and scissor
-        vk::Viewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapchainExtent.width);
-        viewport.height = static_cast<float>(swapchainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
+            // Masked pipeline (same as opaque for now)
+            auto maskedResult = core::Utilities::createGraphicsPipeline(config);
+            data.maskedPipeline = maskedResult.pipeline;
 
-        vk::Rect2D scissor{};
-        scissor.offset = vk::Offset2D(0, 0);
-        scissor.extent = swapchainExtent;
-
-        vk::PipelineViewportStateCreateInfo viewportState{};
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
-
-        // Rasterizer
-        vk::PipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = vk::PolygonMode::eFill;
-        rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = vk::CullModeFlagBits::eBack;
-        rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
-        rasterizer.depthBiasEnable = VK_FALSE;
-
-        // Multisampling
-        vk::PipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-        // Depth testing
-        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_TRUE;
-        depthStencil.depthCompareOp = vk::CompareOp::eLess;
-        depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.stencilTestEnable = VK_FALSE;
-
-        // Color blending - opaque
-        vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-                                              vk::ColorComponentFlagBits::eG |
-                                              vk::ColorComponentFlagBits::eB |
-                                              vk::ColorComponentFlagBits::eA;
-        colorBlendAttachment.blendEnable = VK_FALSE;
-
-        vk::PipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.attachmentCount = 1;
-        colorBlending.pAttachments = &colorBlendAttachment;
-
-        // Create opaque pipeline
-        vk::GraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.stageCount = static_cast<uint32_t>(data.shader->getShaderStages().size());
-        pipelineInfo.pStages = data.shader->getShaderStages().data();
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
-
-        auto result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess) {
-            loggerError("Failed to create opaque pipeline");
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("Failed to create material pipeline: {}", e.what());
             return false;
         }
-        data.opaquePipeline = result.value;
-
-        // Masked pipeline (same as opaque)
-        result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess) {
-            loggerError("Failed to create masked pipeline");
-            return false;
-        }
-        data.maskedPipeline = result.value;
-
-        return true;
     }
 
     void MaterialShaderCache::invalidate(const std::string& materialPath)
     {
         auto it = cache.find(materialPath);
-        if (it != cache.end()) {
+        if (it != cache.end())
+        {
             device.getLogicalDevice().waitIdle();
 
             if (it->second.opaquePipeline)
@@ -237,7 +168,8 @@ namespace render::mesh
 
         device.getLogicalDevice().waitIdle();
 
-        for (auto& [path, data] : cache) {
+        for (auto& [path, data] : cache)
+        {
             if (data.opaquePipeline)
                 device.getLogicalDevice().destroyPipeline(data.opaquePipeline);
             if (data.maskedPipeline)

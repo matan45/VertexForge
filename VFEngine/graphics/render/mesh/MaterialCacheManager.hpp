@@ -40,7 +40,6 @@ namespace render::mesh
         
         void clear();
         
-        std::unique_lock<std::shared_mutex> acquireExclusiveLock() const { return std::unique_lock(cacheMutex); }
         std::shared_lock<std::shared_mutex> acquireSharedLock() const { return std::shared_lock(cacheMutex); }
         
         const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& getCache() const

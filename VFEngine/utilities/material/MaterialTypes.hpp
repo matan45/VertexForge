@@ -7,64 +7,66 @@
 #include <optional>
 #include <cstdint>
 
-namespace material {
-
-    // Material format version for serialization compatibility
+namespace material
+{
     constexpr const char* MATERIAL_FORMAT_VERSION = "1.1";
-    constexpr const char* MATERIAL_FORMAT_VERSION_LEGACY = "1.0";
 
-    // Maximum number of textures per material (expanded for ORM packing and additional maps)
     constexpr int MAX_MATERIAL_TEXTURES = 16;
 
-    // Texture slot indices for the material system
-    // Supports both packed ORM workflow and legacy individual textures
-    enum class TextureSlot : uint8_t {
-        // Core PBR textures
-        Albedo = 0,             // RGB color, A for opacity
-        Normal = 1,             // Tangent-space normal map
-        ORM = 2,                // Packed: R=AO, G=Roughness, B=Metallic
-
-        // Legacy individual textures (backward compatibility)
-        Metallic = 3,           // Individual metallic map
-        Roughness = 4,          // Individual roughness map
-        AO = 5,                 // Individual ambient occlusion map
-
-        // Additional textures
-        Emission = 6,           // RGB emission color
-        Height = 7,             // Height/displacement map
-        DetailNormal = 8,       // Secondary normal map for detail
-        DetailAlbedo = 9,       // Secondary albedo for detail
-        Subsurface = 10,        // Subsurface scattering
-        Anisotropy = 11,        // Anisotropic direction/strength
-        Clearcoat = 12,         // Clearcoat layer
-        ClearcoatNormal = 13,   // Clearcoat normal map
-
-        // Reserved for future use
-        Reserved1 = 14,
-        Reserved2 = 15,
+    enum class TextureSlot : uint8_t
+    {
+        Albedo = 0,
+        Normal = 1,
+        ORM = 2,
+        Metallic = 3,
+        Roughness = 4,
+        AO = 5,
+        Emission = 6,
+        Height = 7,
 
         Count = 16
     };
 
-    // Helper to convert TextureSlot to index
-    constexpr int toIndex(TextureSlot slot) {
+    constexpr int toIndex(TextureSlot slot)
+    {
         return static_cast<int>(slot);
     }
 
-    // Parameter types for material properties
-    enum class ParameterType : uint8_t {
+    enum class ParameterType : uint8_t
+    {
         Scalar,
         Vec2,
         Vec3,
         Vec4,
-        Color  // Same as Vec4 but with color picker UI
+        Color
     };
 
-    // Value variant for material parameters
+    inline std::string paramTypeToString(ParameterType type)
+    {
+        switch (type)
+        {
+        case ParameterType::Scalar: return "scalar";
+        case ParameterType::Vec2: return "vec2";
+        case ParameterType::Vec3: return "vec3";
+        case ParameterType::Vec4: return "vec4";
+        case ParameterType::Color: return "color";
+        default: return "scalar";
+        }
+    }
+
+    inline ParameterType stringToParamType(const std::string& str)
+    {
+        if (str == "vec2") return ParameterType::Vec2;
+        if (str == "vec3") return ParameterType::Vec3;
+        if (str == "vec4") return ParameterType::Vec4;
+        if (str == "color") return ParameterType::Color;
+        return ParameterType::Scalar;
+    }
+
     using ParameterValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4>;
 
-    // Material parameter definition
-    struct MaterialParameter {
+    struct MaterialParameter
+    {
         ParameterType type = ParameterType::Scalar;
         std::string name;
         ParameterValue value;
@@ -72,54 +74,67 @@ namespace material {
         float max = 1.0f;
 
         MaterialParameter() = default;
+
         MaterialParameter(const std::string& paramName, float val, float minVal = 0.0f, float maxVal = 1.0f)
-            : type(ParameterType::Scalar), name(paramName), value(val), min(minVal), max(maxVal) {}
+            : type(ParameterType::Scalar), name(paramName), value(val), min(minVal), max(maxVal)
+        {
+        }
+
         MaterialParameter(const std::string& paramName, const glm::vec2& val)
-            : type(ParameterType::Vec2), name(paramName), value(val) {}
+            : type(ParameterType::Vec2), name(paramName), value(val)
+        {
+        }
+
         MaterialParameter(const std::string& paramName, const glm::vec3& val, bool isColor = false)
-            : type(isColor ? ParameterType::Color : ParameterType::Vec3), name(paramName), value(glm::vec4(val, 1.0f)) {}
+            : type(isColor ? ParameterType::Color : ParameterType::Vec3), name(paramName), value(glm::vec4(val, 1.0f))
+        {
+        }
+
         MaterialParameter(const std::string& paramName, const glm::vec4& val)
-            : type(ParameterType::Vec4), name(paramName), value(val) {}
+            : type(ParameterType::Vec4), name(paramName), value(val)
+        {
+        }
     };
 
-    // Pin types for shader graph nodes
-    enum class PinType : uint8_t {
+    enum class PinType : uint8_t
+    {
         Float,
         Vec2,
         Vec3,
         Vec4,
-        Texture2D  // For future texture support
+        Texture2D
     };
 
-    // Helper to convert PinType to string
-    inline std::string pinTypeToString(PinType type) {
-        switch (type) {
-            case PinType::Float:     return "Float";
-            case PinType::Vec2:      return "Vec2";
-            case PinType::Vec3:      return "Vec3";
-            case PinType::Vec4:      return "Vec4";
-            case PinType::Texture2D: return "Texture2D";
-            default:                 return "Unknown";
+    inline std::string pinTypeToString(PinType type)
+    {
+        switch (type)
+        {
+        case PinType::Float: return "Float";
+        case PinType::Vec2: return "Vec2";
+        case PinType::Vec3: return "Vec3";
+        case PinType::Vec4: return "Vec4";
+        case PinType::Texture2D: return "Texture2D";
+        default: return "Unknown";
         }
     }
 
-    // Pin direction
-    enum class PinKind : uint8_t {
+    enum class PinKind : uint8_t
+    {
         Input,
         Output
     };
 
-    // Node pin definition
-    struct NodePin {
+    struct NodePin
+    {
         uint32_t id = 0;
         std::string name;
         PinType type = PinType::Float;
         PinKind kind = PinKind::Input;
-        std::optional<ParameterValue> defaultValue;  // Default value if not connected
+        std::optional<ParameterValue> defaultValue; // Default value if not connected
     };
 
-    // Shader node types
-    enum class NodeType : uint8_t {
+    enum class NodeType : uint8_t
+    {
         // Output
         PBROutput,
 
@@ -151,7 +166,7 @@ namespace material {
         Length,
 
         // Mix/Blend
-        MixColor,       // Mix two Vec3 colors by alpha factor
+        MixColor, // Mix two Vec3 colors by alpha factor
 
         // Utilities
         MakeVec2,
@@ -169,7 +184,7 @@ namespace material {
 
         // Texture
         TextureSample,
-        OrmSample,          // Specialized ORM texture sampler with AO/Roughness/Metallic/Emissive outputs
+        OrmSample, // Specialized ORM texture sampler with AO/Roughness/Metallic/Emissive outputs
 
         // Type Conversions
         FloatToVec2,
@@ -186,26 +201,134 @@ namespace material {
         Vec4ToVec3
     };
 
-    // Node property variant (for node-specific settings)
+    inline std::string nodeTypeToString(NodeType type)
+    {
+        switch (type)
+        {
+        case NodeType::PBROutput: return "PBROutput";
+        case NodeType::ConstantScalar: return "ConstantScalar";
+        case NodeType::ConstantVec2: return "ConstantVec2";
+        case NodeType::ConstantVec3: return "ConstantVec3";
+        case NodeType::ConstantColor: return "ConstantColor";
+        case NodeType::Add: return "Add";
+        case NodeType::Subtract: return "Subtract";
+        case NodeType::Multiply: return "Multiply";
+        case NodeType::Divide: return "Divide";
+        case NodeType::Power: return "Power";
+        case NodeType::Lerp: return "Lerp";
+        case NodeType::Clamp: return "Clamp";
+        case NodeType::Saturate: return "Saturate";
+        case NodeType::OneMinus: return "OneMinus";
+        case NodeType::Abs: return "Abs";
+        case NodeType::Floor: return "Floor";
+        case NodeType::Ceil: return "Ceil";
+        case NodeType::Fract: return "Fract";
+        case NodeType::Sin: return "Sin";
+        case NodeType::Cos: return "Cos";
+        case NodeType::Dot: return "Dot";
+        case NodeType::Cross: return "Cross";
+        case NodeType::Normalize: return "Normalize";
+        case NodeType::Length: return "Length";
+        case NodeType::MakeVec2: return "MakeVec2";
+        case NodeType::MakeVec3: return "MakeVec3";
+        case NodeType::MakeVec4: return "MakeVec4";
+        case NodeType::SplitVec2: return "SplitVec2";
+        case NodeType::SplitVec3: return "SplitVec3";
+        case NodeType::SplitVec4: return "SplitVec4";
+        case NodeType::Fresnel: return "Fresnel";
+        case NodeType::VertexNormal: return "VertexNormal";
+        case NodeType::VertexUV: return "VertexUV";
+        case NodeType::Time: return "Time";
+        case NodeType::TextureSample: return "TextureSample";
+        case NodeType::OrmSample: return "OrmSample";
+        case NodeType::MixColor: return "MixColor";
+        case NodeType::FloatToVec2: return "FloatToVec2";
+        case NodeType::FloatToVec3: return "FloatToVec3";
+        case NodeType::FloatToVec4: return "FloatToVec4";
+        case NodeType::Vec2ToFloat: return "Vec2ToFloat";
+        case NodeType::Vec3ToFloat: return "Vec3ToFloat";
+        case NodeType::Vec4ToFloat: return "Vec4ToFloat";
+        case NodeType::Vec2ToVec3: return "Vec2ToVec3";
+        case NodeType::Vec2ToVec4: return "Vec2ToVec4";
+        case NodeType::Vec3ToVec2: return "Vec3ToVec2";
+        case NodeType::Vec3ToVec4: return "Vec3ToVec4";
+        case NodeType::Vec4ToVec2: return "Vec4ToVec2";
+        case NodeType::Vec4ToVec3: return "Vec4ToVec3";
+        default: return "Unknown";
+        }
+    }
+
+    inline NodeType stringToNodeType(const std::string& str)
+    {
+        if (str == "PBROutput") return NodeType::PBROutput;
+        if (str == "ConstantScalar") return NodeType::ConstantScalar;
+        if (str == "ConstantVec2") return NodeType::ConstantVec2;
+        if (str == "ConstantVec3") return NodeType::ConstantVec3;
+        if (str == "ConstantColor") return NodeType::ConstantColor;
+        if (str == "Add") return NodeType::Add;
+        if (str == "Subtract") return NodeType::Subtract;
+        if (str == "Multiply") return NodeType::Multiply;
+        if (str == "Divide") return NodeType::Divide;
+        if (str == "Power") return NodeType::Power;
+        if (str == "Lerp") return NodeType::Lerp;
+        if (str == "Clamp") return NodeType::Clamp;
+        if (str == "Saturate") return NodeType::Saturate;
+        if (str == "OneMinus") return NodeType::OneMinus;
+        if (str == "Abs") return NodeType::Abs;
+        if (str == "Floor") return NodeType::Floor;
+        if (str == "Ceil") return NodeType::Ceil;
+        if (str == "Fract") return NodeType::Fract;
+        if (str == "Sin") return NodeType::Sin;
+        if (str == "Cos") return NodeType::Cos;
+        if (str == "Dot") return NodeType::Dot;
+        if (str == "Cross") return NodeType::Cross;
+        if (str == "Normalize") return NodeType::Normalize;
+        if (str == "Length") return NodeType::Length;
+        if (str == "MakeVec2") return NodeType::MakeVec2;
+        if (str == "MakeVec3") return NodeType::MakeVec3;
+        if (str == "MakeVec4") return NodeType::MakeVec4;
+        if (str == "SplitVec2") return NodeType::SplitVec2;
+        if (str == "SplitVec3") return NodeType::SplitVec3;
+        if (str == "SplitVec4") return NodeType::SplitVec4;
+        if (str == "Fresnel") return NodeType::Fresnel;
+        if (str == "VertexNormal") return NodeType::VertexNormal;
+        if (str == "VertexUV") return NodeType::VertexUV;
+        if (str == "Time") return NodeType::Time;
+        if (str == "TextureSample") return NodeType::TextureSample;
+        if (str == "OrmSample") return NodeType::OrmSample;
+        if (str == "MixColor") return NodeType::MixColor;
+        if (str == "FloatToVec2") return NodeType::FloatToVec2;
+        if (str == "FloatToVec3") return NodeType::FloatToVec3;
+        if (str == "FloatToVec4") return NodeType::FloatToVec4;
+        if (str == "Vec2ToFloat") return NodeType::Vec2ToFloat;
+        if (str == "Vec3ToFloat") return NodeType::Vec3ToFloat;
+        if (str == "Vec4ToFloat") return NodeType::Vec4ToFloat;
+        if (str == "Vec2ToVec3") return NodeType::Vec2ToVec3;
+        if (str == "Vec2ToVec4") return NodeType::Vec2ToVec4;
+        if (str == "Vec3ToVec2") return NodeType::Vec3ToVec2;
+        if (str == "Vec3ToVec4") return NodeType::Vec3ToVec4;
+        if (str == "Vec4ToVec2") return NodeType::Vec4ToVec2;
+        if (str == "Vec4ToVec3") return NodeType::Vec4ToVec3;
+        return NodeType::ConstantScalar;
+    }
+
     using NodeProperty = std::variant<float, glm::vec2, glm::vec3, glm::vec4, std::string>;
 
-    // Shader graph node
-    struct ShaderNode {
+    struct ShaderNode
+    {
         uint32_t id = 0;
         NodeType type = NodeType::ConstantScalar;
-        glm::vec2 position{ 0.0f };
-        std::string name;  // Display name
+        glm::vec2 position{0.0f};
+        std::string name;
 
-        // Node-specific properties (e.g., constant values, parameter names)
         std::map<std::string, NodeProperty> properties;
 
-        // Pins (populated based on node type)
         std::vector<NodePin> inputs;
         std::vector<NodePin> outputs;
     };
 
-    // Link between nodes
-    struct NodeLink {
+    struct NodeLink
+    {
         uint32_t id = 0;
         uint32_t sourceNodeId = 0;
         uint32_t targetNodeId = 0;
@@ -213,37 +336,44 @@ namespace material {
         std::string targetPin;
     };
 
-    // Shader graph containing all nodes and links
-    struct ShaderGraph {
+    struct ShaderGraph
+    {
         std::vector<ShaderNode> nodes;
         std::vector<NodeLink> links;
         uint32_t nextNodeId = 1;
         uint32_t nextLinkId = 1;
         uint32_t nextPinId = 1;
 
-        // Find the PBR output node (should always exist)
-        const ShaderNode* findOutputNode() const {
-            for (const auto& node : nodes) {
-                if (node.type == NodeType::PBROutput) {
+        const ShaderNode* findOutputNode() const
+        {
+            for (const auto& node : nodes)
+            {
+                if (node.type == NodeType::PBROutput)
+                {
                     return &node;
                 }
             }
             return nullptr;
         }
 
-        // Find node by ID
-        ShaderNode* findNode(uint32_t nodeId) {
-            for (auto& node : nodes) {
-                if (node.id == nodeId) {
+        ShaderNode* findNode(uint32_t nodeId)
+        {
+            for (auto& node : nodes)
+            {
+                if (node.id == nodeId)
+                {
                     return &node;
                 }
             }
             return nullptr;
         }
 
-        const ShaderNode* findNode(uint32_t nodeId) const {
-            for (const auto& node : nodes) {
-                if (node.id == nodeId) {
+        const ShaderNode* findNode(uint32_t nodeId) const
+        {
+            for (const auto& node : nodes)
+            {
+                if (node.id == nodeId)
+                {
                     return &node;
                 }
             }
@@ -251,30 +381,41 @@ namespace material {
         }
     };
 
-    // Blend modes for materials
-    enum class BlendMode : uint8_t {
+    enum class BlendMode : uint8_t
+    {
         Opaque,
         Masked
     };
 
-    // Complete material data
-    struct MaterialData {
+    inline std::string blendModeToString(BlendMode mode)
+    {
+        switch (mode)
+        {
+        case BlendMode::Opaque: return "opaque";
+        case BlendMode::Masked: return "masked";
+        default: return "opaque";
+        }
+    }
+
+    inline BlendMode stringToBlendMode(const std::string& str)
+    {
+        if (str == "masked") return BlendMode::Masked;
+        return BlendMode::Opaque;
+    }
+
+    struct MaterialData
+    {
         std::string uuid;
         std::string name;
         BlendMode blendMode = BlendMode::Opaque;
 
-        // Shader graph
         ShaderGraph graph;
 
-        // Exposed parameters (for runtime modification, not serialized to file)
         std::map<std::string, MaterialParameter> parameters;
 
-        // Cached generated shader code
         std::string cachedVertexShader;
         std::string cachedFragmentShader;
 
-        // Check if shader needs regeneration
         bool needsRecompile = true;
     };
-
 }
