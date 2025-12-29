@@ -492,10 +492,8 @@ namespace render::gpudriven {
             for (const auto& meshRender : opaqueObjects) {
                 meshStreamManager->requestMesh(meshRender.meshPath);
             }
-
-            // Update streaming (process priority queue, upload data)
-            glm::mat4 viewProj = projection * view;
-            meshStreamManager->update(cameraPosition, viewProj, 0.016f); // Assume ~60fps delta
+            
+            meshStreamManager->update(cameraPosition); // Assume ~60fps delta
         }
 
         // Register textures for all materials in the scene (done once per material)
@@ -530,11 +528,7 @@ namespace render::gpudriven {
                 auto it = pbrCache->find(materialPath);
                 if (it == pbrCache->end()) {
                     // Get or load material data to find texture path
-                    auto matData = resource::ResourceManager::getMaterial(materialPath);
-                    if (!matData) {
-                        // Material weak_ptr expired, reload it
-                        matData = resource::ResourceManager::loadMaterial(materialPath);
-                    }
+                    auto matData = resource::ResourceManager::loadMaterial(materialPath);
                     if (!matData) {
                         return INVALID_TEXTURE_INDEX;
                     }
@@ -587,7 +581,7 @@ namespace render::gpudriven {
                 auto it = matDataCache->find(materialPath);
                 std::shared_ptr<material::MaterialData> matData;
                 if (it == matDataCache->end()) {
-                    matData = resource::ResourceManager::getMaterial(materialPath);
+                    matData = resource::ResourceManager::loadMaterial(materialPath);
                     (*matDataCache)[materialPath] = matData;
                 } else {
                     matData = it->second;
@@ -769,10 +763,7 @@ namespace render::gpudriven {
         }
 
         // Load material data and cache it to prevent weak_ptr expiration
-        auto matData = resource::ResourceManager::getMaterial(materialPath);
-        if (!matData) {
-            matData = resource::ResourceManager::loadMaterial(materialPath);
-        }
+        auto matData = resource::ResourceManager::loadMaterial(materialPath);
         if (!matData) {
             spdlog::warn("GPUDrivenRenderer: Failed to load material: {}", materialPath);
             return false;

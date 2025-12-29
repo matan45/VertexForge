@@ -226,16 +226,6 @@ namespace resource
         return material;
     }
 
-    std::shared_ptr<material::MaterialData> ResourceManager::getMaterial(std::string_view path)
-    {
-        std::scoped_lock lock(cacheMutex);
-        auto it = materialCache.find(std::string(path));
-        if (it != materialCache.end()) {
-            return it->second.lock();
-        }
-        return nullptr;
-    }
-
     void ResourceManager::invalidateMaterialCache(std::string_view path)
     {
         std::scoped_lock lock(cacheMutex);

@@ -131,6 +131,7 @@
     <ClInclude Include="render\gpudriven\IndirectDrawBuffer.hpp" />
     <ClInclude Include="render\gpudriven\MergedMeshBuffer.hpp" />
     <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
+    <ClInclude Include="render\ibl\DefaultIBLTextureFactory.hpp" />
     <ClInclude Include="render\ibl\EnvironmentCubemapGenerator.hpp" />
     <ClInclude Include="render\ibl\IBLTypes.hpp" />
     <ClInclude Include="render\ibl\IrradianceGenerator.hpp" />
@@ -139,10 +140,8 @@
     <ClInclude Include="render\material\MaterialPBRExtractor.hpp" />
     <ClInclude Include="render\material\MaterialShaderCache.hpp" />
     <ClInclude Include="render\material\MaterialTextureCache.hpp" />
-    <ClInclude Include="render\mesh\DefaultIBLTextureFactory.hpp" />
     <ClInclude Include="render\mesh\MaterialCacheManager.hpp" />
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
-    <ClInclude Include="render\mesh\MeshMetadataCache.hpp" />
     <ClInclude Include="render\mesh\MeshStreamManager.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
@@ -185,6 +184,7 @@
     <ClCompile Include="render\gpudriven\IndirectDrawBuffer.cpp" />
     <ClCompile Include="render\gpudriven\MergedMeshBuffer.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
+    <ClCompile Include="render\ibl\DefaultIBLTextureFactory.cpp" />
     <ClCompile Include="render\ibl\EnvironmentCubemapGenerator.cpp" />
     <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
@@ -192,10 +192,8 @@
     <ClCompile Include="render\material\MaterialPBRExtractor.cpp" />
     <ClCompile Include="render\material\MaterialShaderCache.cpp" />
     <ClCompile Include="render\material\MaterialTextureCache.cpp" />
-    <ClCompile Include="render\mesh\DefaultIBLTextureFactory.cpp" />
     <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
-    <ClCompile Include="render\mesh\MeshMetadataCache.cpp" />
     <ClCompile Include="render\mesh\MeshStreamManager.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />

@@ -19,7 +19,6 @@ namespace resource {
 }
 
 namespace render::mesh {
-    class MeshMetadataCache;
     struct MeshMetadata;
     struct MeshRenderData;
 }

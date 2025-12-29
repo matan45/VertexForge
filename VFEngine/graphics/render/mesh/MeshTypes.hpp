@@ -30,13 +30,11 @@ namespace render::mesh
     inline uint8_t unpackTextureIndex(uint32_t packed, int slot) {
         return static_cast<uint8_t>((packed >> (slot * 8)) & 0xFF);
     }
-
-    // Convert float texture index (-1 = none) to packed uint8 (255 = none)
+    
     inline uint8_t floatToPackedIndex(float idx) {
         return (idx < 0.0f) ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(idx);
     }
-
-    // Convert packed uint8 index (255 = none) to float (-1 = none)
+    
     inline float packedToFloatIndex(uint8_t idx) {
         return (idx == TEXTURE_INDEX_NONE) ? -1.0f : static_cast<float>(idx);
     }
@@ -60,7 +58,7 @@ namespace render::mesh
         bool isValid() const { return indexCount > 0 || vertexCount > 0; }
     };
 
-    // Submesh with GPU buffers per LOD (used by preview windows)
+    
     struct SubMeshGPUData
     {
         std::string name; // Submesh name for material assignment
@@ -89,11 +87,7 @@ namespace render::mesh
             return -1;
         }
     };
-
-    // ===== METADATA-ONLY STRUCTURES (no GPU buffers) =====
-    // Used by MeshMetadataCache for GPU-driven streaming path
-
-    // LOD level metadata (vertex/index counts only, no buffers)
+    
     struct LODMetadata
     {
         uint32_t vertexCount = 0;
@@ -101,8 +95,7 @@ namespace render::mesh
 
         bool isValid() const { return vertexCount > 0 || indexCount > 0; }
     };
-
-    // Submesh metadata (name, bounding box, LOD counts)
+    
     struct SubMeshMetadata
     {
         std::string name;

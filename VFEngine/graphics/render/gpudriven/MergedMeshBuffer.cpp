@@ -1,5 +1,4 @@
 #include "MergedMeshBuffer.hpp"
-#include "../mesh/MeshMetadataCache.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
@@ -835,7 +834,7 @@ namespace render::gpudriven {
                     float iblDiffuse = 1.0f;
                     float iblSpecular = 0.5f;
                     if (!materialPath.empty()) {
-                        auto matData = resource::ResourceManager::getMaterial(materialPath);
+                        auto matData = resource::ResourceManager::loadMaterial(materialPath);
                         if (matData) {
                             auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
                             iblDiffuse = pbrValues.iblDiffuse;
@@ -854,7 +853,7 @@ namespace render::gpudriven {
 
                 // Evaluate dynamic emission
                 if (!materialPath.empty() && time > 0.0f) {
-                    auto matData = resource::ResourceManager::getMaterial(materialPath);
+                    auto matData = resource::ResourceManager::loadMaterial(materialPath);
                     if (matData) {
                         const auto* outputNode = matData->graph.findOutputNode();
                         if (outputNode) {

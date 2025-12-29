@@ -3,7 +3,7 @@
 #include "../../core/Utilities.hpp"
 #include <cstring>
 
-namespace render::mesh
+namespace render::ibl
 {
     DefaultIBLTextureFactory::DefaultIBLTextureFactory(core::Device& device)
         : device(device)
@@ -17,33 +17,9 @@ namespace render::mesh
 
     void DefaultIBLTextureFactory::createDefaultTextures(vk::CommandPool commandPool)
     {
-        // Completely uniform IBL for smooth shading - no cubemap face boundaries visible
-        // All faces identical to eliminate any banding from face transitions
-        std::array<std::array<float, 4>, 6> studioIrradiance = {{
-            {0.8f, 0.8f, 0.85f, 1.0f},   // +X
-            {0.8f, 0.8f, 0.85f, 1.0f},   // -X
-            {0.8f, 0.8f, 0.85f, 1.0f},   // +Y
-            {0.8f, 0.8f, 0.85f, 1.0f},   // -Y
-            {0.8f, 0.8f, 0.85f, 1.0f},   // +Z
-            {0.8f, 0.8f, 0.85f, 1.0f}    // -Z
-        }};
-
-        std::array<std::array<float, 4>, 6> studioPrefilter = {{
-            {0.6f, 0.6f, 0.65f, 1.0f},   // +X
-            {0.6f, 0.6f, 0.65f, 1.0f},   // -X
-            {0.6f, 0.6f, 0.65f, 1.0f},   // +Y
-            {0.6f, 0.6f, 0.65f, 1.0f},   // -Y
-            {0.6f, 0.6f, 0.65f, 1.0f},   // +Z
-            {0.6f, 0.6f, 0.65f, 1.0f}    // -Z
-        }};
-
-        // Irradiance: studio ambient lighting
         createCubemap(commandPool, irradiance, studioIrradiance);
-        // Prefilter: studio reflections
         createCubemap(commandPool, prefilter, studioPrefilter);
-        // BRDF LUT: 2D texture
         create2DTexture(commandPool, brdfLUT);
-
         texturesCreated = true;
     }
 
@@ -76,36 +52,21 @@ namespace render::mesh
 
     void DefaultIBLTextureFactory::createCubemap(
         vk::CommandPool commandPool,
-        ibl::ImageData& imageData,
+        ImageData& imageData,
         const std::array<std::array<float, 4>, 6>& faceColors)
     {
-        const uint32_t size = 1;
-        const uint32_t mipLevels = 1;
+        constexpr uint32_t size = 1;
+        constexpr uint32_t mipLevels = 1;
 
-        // Create image
-        vk::ImageCreateInfo imageInfo{};
-        imageInfo.imageType = vk::ImageType::e2D;
-        imageInfo.extent = vk::Extent3D{size, size, 1};
-        imageInfo.mipLevels = mipLevels;
-        imageInfo.arrayLayers = 6;  // Cubemap
-        imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
-        imageInfo.tiling = vk::ImageTiling::eOptimal;
-        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-        imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-        imageInfo.samples = vk::SampleCountFlagBits::e1;
-        imageInfo.sharingMode = vk::SharingMode::eExclusive;
-        imageInfo.flags = vk::ImageCreateFlagBits::eCubeCompatible;
-
-        imageData.image = device.getLogicalDevice().createImage(imageInfo);
-
-        // Allocate memory
-        vk::MemoryRequirements memRequirements = device.getLogicalDevice().getImageMemoryRequirements(imageData.image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
-            memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        imageData.imageMemory = device.getLogicalDevice().allocateMemory(allocInfo);
-        device.getLogicalDevice().bindImageMemory(imageData.image, imageData.imageMemory, 0);
+        // Create cubemap image
+        core::ImageInfoRequest imageRequest(device.getLogicalDevice(), device.getPhysicalDevice(),
+            size, size, 6, mipLevels);
+        imageRequest.format = vk::Format::eR32G32B32A32Sfloat;
+        imageRequest.tiling = vk::ImageTiling::eOptimal;
+        imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        imageRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        imageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
+        core::Utilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
 
         // Create staging buffer with color data for all 6 faces
         std::vector<float> pixels(6 * 4);  // 6 faces * 4 components (RGBA)
@@ -197,18 +158,12 @@ namespace render::mesh
         device.getLogicalDevice().freeMemory(stagingMemory);
 
         // Create image view
-        vk::ImageViewCreateInfo viewInfo{};
-        viewInfo.image = imageData.image;
-        viewInfo.viewType = vk::ImageViewType::eCube;
-        viewInfo.format = vk::Format::eR32G32B32A32Sfloat;
-        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = mipLevels;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 6;
-        imageData.imageView = device.getLogicalDevice().createImageView(viewInfo);
+        core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), imageData.image,
+            vk::Format::eR32G32B32A32Sfloat, vk::ImageAspectFlagBits::eColor,
+            vk::ImageViewType::eCube, 6, mipLevels);
+        core::Utilities::createImageView(viewRequest, imageData.imageView);
 
-        // Create sampler - use nearest filtering for 1x1 cubemap to prevent face blending
+        // Create sampler - use nearest filtering for 1x1 cubemap
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eNearest;
         samplerInfo.minFilter = vk::Filter::eNearest;
@@ -216,9 +171,7 @@ namespace render::mesh
         samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.mipLodBias = 0.0f;
         samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
         samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
         imageData.sampler = device.getLogicalDevice().createSampler(samplerInfo);
@@ -226,35 +179,20 @@ namespace render::mesh
 
     void DefaultIBLTextureFactory::create2DTexture(
         vk::CommandPool commandPool,
-        ibl::ImageData& imageData)
+        ImageData& imageData)
     {
-        const uint32_t size = 1;
+        constexpr uint32_t size = 1;
 
-        vk::ImageCreateInfo imageInfo{};
-        imageInfo.imageType = vk::ImageType::e2D;
-        imageInfo.extent = vk::Extent3D{size, size, 1};
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
-        imageInfo.tiling = vk::ImageTiling::eOptimal;
-        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-        imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-        imageInfo.samples = vk::SampleCountFlagBits::e1;
-        imageInfo.sharingMode = vk::SharingMode::eExclusive;
+        // Create 2D image
+        core::ImageInfoRequest imageRequest(device.getLogicalDevice(), device.getPhysicalDevice(),
+            size, size, 1, 1);
+        imageRequest.format = vk::Format::eR32G32B32A32Sfloat;
+        imageRequest.tiling = vk::ImageTiling::eOptimal;
+        imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        imageRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::Utilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
 
-        imageData.image = device.getLogicalDevice().createImage(imageInfo);
-
-        vk::MemoryRequirements memRequirements = device.getLogicalDevice().getImageMemoryRequirements(imageData.image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = core::Utilities::findMemoryType(device.getPhysicalDevice(),
-            memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        imageData.imageMemory = device.getLogicalDevice().allocateMemory(allocInfo);
-        device.getLogicalDevice().bindImageMemory(imageData.image, imageData.imageMemory, 0);
-
-        // Default BRDF LUT value: (scale=1.0, bias=0.0) for specular = prefilteredColor * F
-        std::array<float, 4> pixel = {1.0f, 0.0f, 0.0f, 1.0f};
-        vk::DeviceSize imageSize = sizeof(pixel);
+        vk::DeviceSize imageSize = sizeof(defaultBrdfPixel);
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingMemory;
 
@@ -266,7 +204,7 @@ namespace render::mesh
 
         void* data;
         [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        memcpy(data, pixel.data(), imageSize);
+        memcpy(data, defaultBrdfPixel.data(), imageSize);
         device.getLogicalDevice().unmapMemory(stagingMemory);
 
         vk::CommandBufferAllocateInfo cmdAllocInfo{};
@@ -325,17 +263,12 @@ namespace render::mesh
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingMemory);
 
-        vk::ImageViewCreateInfo viewInfo{};
-        viewInfo.image = imageData.image;
-        viewInfo.viewType = vk::ImageViewType::e2D;
-        viewInfo.format = vk::Format::eR32G32B32A32Sfloat;
-        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-        imageData.imageView = device.getLogicalDevice().createImageView(viewInfo);
+        // Create image view
+        core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), imageData.image,
+            vk::Format::eR32G32B32A32Sfloat);
+        core::Utilities::createImageView(viewRequest, imageData.imageView);
 
+        // Create sampler
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eLinear;
         samplerInfo.minFilter = vk::Filter::eLinear;
@@ -343,9 +276,7 @@ namespace render::mesh
         samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-        samplerInfo.mipLodBias = 0.0f;
         samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 1.0f;
         samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
         imageData.sampler = device.getLogicalDevice().createSampler(samplerInfo);

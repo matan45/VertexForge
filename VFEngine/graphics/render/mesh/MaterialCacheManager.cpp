@@ -31,30 +31,13 @@ namespace render::mesh
         {
             return it->second;
         }
-
-        // Load and cache
+        
         auto matData = resource::ResourceManager::loadMaterial(materialPath);
         if (matData)
         {
             materialCache[materialPath] = matData;
         }
         return matData;
-    }
-
-    std::shared_ptr<material::MaterialData> MaterialCacheManager::getCachedMaterial(const std::string& materialPath) const
-    {
-        if (materialPath.empty())
-        {
-            return nullptr;
-        }
-
-        std::shared_lock lock(cacheMutex);
-        auto it = materialCache.find(materialPath);
-        if (it != materialCache.end())
-        {
-            return it->second;
-        }
-        return nullptr;
     }
 
     void MaterialCacheManager::invalidate(const std::string& materialPath)
@@ -74,7 +57,6 @@ namespace render::mesh
         }
         else
         {
-            // Clear specific material immediately
             materialCache.erase(materialPath);
 
             // Also invalidate the compiled shader for this material
@@ -92,7 +74,7 @@ namespace render::mesh
     }
 
     void MaterialCacheManager::injectForPreview(const std::string& materialPath,
-                                                 std::shared_ptr<material::MaterialData> materialData)
+                                                std::shared_ptr<material::MaterialData> materialData)
     {
         if (materialPath.empty() || !materialData)
         {

@@ -13,22 +13,14 @@ namespace material {
     bool MaterialManager::reloadMaterial(std::string_view path) {
         std::string pathStr(path);
 
-        // Load fresh data from disk
-        auto newData = MaterialAsset::load(path);
-        if (!newData) {
+        // Invalidate cache and reload fresh from disk
+        resource::ResourceManager::invalidateMaterialCache(path);
+        auto material = resource::ResourceManager::loadMaterial(path);
+        if (!material) {
             vfLogError("Failed to reload material: {}", path);
             return false;
         }
-
-        // Try to update existing cached material in-place
-        auto existing = resource::ResourceManager::getMaterial(path);
-        if (existing) {
-            *existing = std::move(*newData);
-            existing->needsRecompile = true;
-        } else {
-            // Not in cache, invalidate and let next load get fresh data
-            resource::ResourceManager::invalidateMaterialCache(path);
-        }
+        material->needsRecompile = true;
 
         // Notify callbacks
         notifyMaterialChanged(pathStr);
@@ -45,11 +37,11 @@ namespace material {
 
         std::string pathStr(path);
 
-        // Update cached material if it exists
-        auto existing = resource::ResourceManager::getMaterial(path);
-        if (existing) {
-            *existing = material;
-            existing->needsRecompile = true;
+        // Invalidate cache and reload to update cached version
+        resource::ResourceManager::invalidateMaterialCache(path);
+        auto cached = resource::ResourceManager::loadMaterial(path);
+        if (cached) {
+            cached->needsRecompile = true;
         }
 
         // Notify callbacks

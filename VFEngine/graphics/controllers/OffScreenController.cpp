@@ -47,11 +47,7 @@ namespace controllers
         }
 
         // Load material data from ResourceManager cache or file
-        auto materialData = resource::ResourceManager::getMaterial(materialPath);
-        if (!materialData)
-        {
-            materialData = resource::ResourceManager::loadMaterial(materialPath);
-        }
+        auto materialData = resource::ResourceManager::loadMaterial(materialPath);
 
         if (materialData)
         {
@@ -130,17 +126,9 @@ namespace controllers
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
             [this](const events::material::MaterialFileSavedNotification& notification)
             {
-                resource::ResourceManager::invalidateMaterialCache(notification.materialPath);
-
-                // Invalidate PBR value cache for this material
+                // Invalidate local PBR value cache for this material
+                // (ResourceManager and MaterialCacheManager are invalidated via MaterialManager callback)
                 pbrCache.erase(notification.materialPath);
-
-                // Invalidate GPU shader/pipeline cache
-                auto* renderHandler = offScreen->getRenderPassHandler();
-                if (renderHandler && renderHandler->isMeshPipelineInitialized())
-                {
-                    renderHandler->getMeshPipeline()->invalidateMaterialCache(notification.materialPath);
-                }
             });
         materialSavedSubscription = std::make_unique<events::SubscriptionToken>(token);
 
