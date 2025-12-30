@@ -2,7 +2,8 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 
 namespace render::mesh
 {
@@ -95,7 +96,7 @@ namespace render::mesh
             .enableBlending = true
         };
 
-        auto result = core::Utilities::createWireframePipeline(config);
+        auto result = core::PipelineUtilities::createWireframePipeline(config);
         gridPipeline = result.pipeline;
         gridPipelineLayout = result.pipelineLayout;
     }
@@ -137,9 +138,9 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferMemory);
 
-        core::Utilities::copyToBuffer(
+        core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),
@@ -154,9 +155,9 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createBuffer(indexRequest, indexBuffer, indexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, indexBuffer, indexBufferMemory);
 
-        core::Utilities::copyToBuffer(
+        core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),

@@ -1,7 +1,7 @@
 #include "HiZBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "../../core/Shader.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
@@ -51,7 +51,7 @@ namespace render::occlusion
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::Utilities::createImage(imageRequest, hiZImage, hiZMemory);
+        core::ImageUtilities::createImage(imageRequest, hiZImage, hiZMemory);
 
         // Create full mip chain view using utilities
         core::ImageViewInfoRequest viewRequest(
@@ -63,7 +63,7 @@ namespace render::occlusion
             1, // layerCount
             mipLevels
         );
-        core::Utilities::createImageView(viewRequest, hiZImageView);
+        core::ImageUtilities::createImageView(viewRequest, hiZImageView);
 
         // Create per-mip views for compute shader (need manual creation for baseMipLevel)
         mipViews.resize(mipLevels);

@@ -2,6 +2,7 @@
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/CommandPool.hpp"
+#include "../core/ImageUtilities.hpp"
 #include "../core/Utilities.hpp"
 #include "../core/RenderManager.hpp"
 #include "../render/RenderPassHandler.hpp"
@@ -182,16 +183,16 @@ namespace render
 
         core::DepthImage depth;
         // Create depth image
-        core::Utilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageMemory);
+        core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageMemory);
         core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
 
         imageDepthRequest.format = depthFormat;
         imageDepthRequest.aspectFlags = vk::ImageAspectFlagBits::eDepth;
-        core::Utilities::createImageView(imageDepthRequest, depth.depthImageView);
+        core::ImageUtilities::createImageView(imageDepthRequest, depth.depthImageView);
 
         vk::UniqueCommandBuffer trasitionDepthImage = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool->getCommandPool());
-        core::Utilities::transitionImageLayout(trasitionDepthImage.get(), depth.depthImage, vk::ImageLayout::eUndefined,
+        core::ImageUtilities::transitionImageLayout(trasitionDepthImage.get(), depth.depthImage, vk::ImageLayout::eUndefined,
                                                vk::ImageLayout::eDepthStencilAttachmentOptimal,
                                                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionDepthImage);
@@ -204,14 +205,14 @@ namespace render
         {
             core::ColorImage color;
             // Create color image for off-screen rendering
-            core::Utilities::createImage(imageColorInfo, color.colorImage, color.colorImageMemory);
+            core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageMemory);
             core::ImageViewInfoRequest imageColorViewRequest(device.getLogicalDevice(), color.colorImage);
             imageColorViewRequest.format = colorFormat;
-            core::Utilities::createImageView(imageColorViewRequest, color.colorImageView);
+            core::ImageUtilities::createImageView(imageColorViewRequest, color.colorImageView);
 
             vk::UniqueCommandBuffer trasitionColorImage = core::Utilities::beginSingleTimeCommands(
                 device.getLogicalDevice(), commandPool->getCommandPool());
-            core::Utilities::transitionImageLayout(trasitionColorImage.get(), color.colorImage,
+            core::ImageUtilities::transitionImageLayout(trasitionColorImage.get(), color.colorImage,
                                                    vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
                                                    vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionColorImage);

@@ -2,7 +2,7 @@
 #include "IndirectBatchManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstring>
 
@@ -30,7 +30,7 @@ namespace render::gpudriven
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                             vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::Utilities::createBuffer(request, buffer, memory);
+        core::BufferUtilities::createBuffer(request, buffer, memory);
         mapped = logicalDevice.mapMemory(memory, 0, sizeof(GPUCameraData), vk::MemoryMapFlags{});
     }
 
@@ -44,7 +44,7 @@ namespace render::gpudriven
             mapped = nullptr;
         }
 
-        core::Utilities::destroyBuffer(logicalDevice, buffer, memory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, buffer, memory);
     }
 
     void GPUDrivenCameraBuffer::update(const CameraUpdateParams& params)

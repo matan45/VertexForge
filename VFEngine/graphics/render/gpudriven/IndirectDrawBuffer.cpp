@@ -1,5 +1,6 @@
 #include "IndirectDrawBuffer.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
@@ -54,7 +55,7 @@ namespace render::gpudriven
                 vk::BufferUsageFlagBits::eIndirectBuffer | // Indirect draw reads
                 vk::BufferUsageFlagBits::eTransferDst; // Clear/reset
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, drawCommandBuffer, drawCommandMemory);
+            core::BufferUtilities::createBuffer(request, drawCommandBuffer, drawCommandMemory);
         }
         
         {
@@ -65,7 +66,7 @@ namespace render::gpudriven
                 vk::BufferUsageFlagBits::eTransferDst | // Reset to 0
                 vk::BufferUsageFlagBits::eTransferSrc; // Readback for debug
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, drawCountBuffer, drawCountMemory);
+            core::BufferUtilities::createBuffer(request, drawCountBuffer, drawCountMemory);
         }
         
         {
@@ -74,7 +75,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | // Compute writes, VS/FS reads
                 vk::BufferUsageFlagBits::eTransferDst; // Clear if needed
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, perDrawDataBuffer, perDrawDataMemory);
+            core::BufferUtilities::createBuffer(request, perDrawDataBuffer, perDrawDataMemory);
         }
         
         {
@@ -84,7 +85,7 @@ namespace render::gpudriven
                 vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(request, stagingBuffer, stagingMemory);
+            core::BufferUtilities::createBuffer(request, stagingBuffer, stagingMemory);
 
             stagingMapped = logicalDevice.mapMemory(
                 stagingMemory, 0, sizeof(GPUCullStats), vk::MemoryMapFlags{}
@@ -104,10 +105,10 @@ namespace render::gpudriven
             stagingMapped = nullptr;
         }
 
-        core::Utilities::destroyBuffer(logicalDevice, stagingBuffer, stagingMemory);
-        core::Utilities::destroyBuffer(logicalDevice, perDrawDataBuffer, perDrawDataMemory);
-        core::Utilities::destroyBuffer(logicalDevice, drawCountBuffer, drawCountMemory);
-        core::Utilities::destroyBuffer(logicalDevice, drawCommandBuffer, drawCommandMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, perDrawDataBuffer, perDrawDataMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, drawCountBuffer, drawCountMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, drawCommandBuffer, drawCommandMemory);
     }
 
     void IndirectDrawBuffer::resetDrawCount(vk::CommandBuffer cmd)

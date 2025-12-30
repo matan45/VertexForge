@@ -1,6 +1,6 @@
 #include "MeshGPUCache.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../../core/TransferManager.hpp"
 #include "resource/MeshResource.hpp"
 #include "resource/ResourceManager.hpp"
@@ -43,7 +43,7 @@ namespace render::mesh
         vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst |
             vk::BufferUsageFlagBits::eTransferSrc;
         vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createBuffer(vertexBufferRequest, lodBuffers.vertexBuffer, lodBuffers.vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexBufferRequest, lodBuffers.vertexBuffer, lodBuffers.vertexBufferMemory);
 
         transferManager->copyToBufferAsync(
             lodBuffers.vertexBuffer,
@@ -60,7 +60,7 @@ namespace render::mesh
             indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst |
                 vk::BufferUsageFlagBits::eTransferSrc;
             indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(indexBufferRequest, lodBuffers.indexBuffer, lodBuffers.indexBufferMemory);
+            core::BufferUtilities::createBuffer(indexBufferRequest, lodBuffers.indexBuffer, lodBuffers.indexBufferMemory);
 
             transferManager->copyToBufferAsync(
                 lodBuffers.indexBuffer,

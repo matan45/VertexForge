@@ -3,7 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 
 namespace render::billboard
 {
@@ -252,7 +252,7 @@ namespace render::billboard
             .blendEnable = true
         };
 
-        auto result = core::Utilities::createGraphicsPipeline(config);
+        auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         graphicsPipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;
     }

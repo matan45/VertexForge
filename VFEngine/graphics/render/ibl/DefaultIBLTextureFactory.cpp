@@ -1,5 +1,7 @@
 #include "DefaultIBLTextureFactory.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include <cstring>
 
@@ -66,7 +68,7 @@ namespace render::ibl
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         imageRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         imageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
-        core::Utilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
+        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
 
         // Create staging buffer with color data for all 6 faces
         std::vector<float> pixels(6 * 4);  // 6 faces * 4 components (RGBA)
@@ -85,7 +87,7 @@ namespace render::ibl
         stagingRequest.size = imageSize;
         stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
         stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
 
         void* data;
         [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
@@ -161,7 +163,7 @@ namespace render::ibl
         core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), imageData.image,
             vk::Format::eR32G32B32A32Sfloat, vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::eCube, 6, mipLevels);
-        core::Utilities::createImageView(viewRequest, imageData.imageView);
+        core::ImageUtilities::createImageView(viewRequest, imageData.imageView);
 
         // Create sampler - use nearest filtering for 1x1 cubemap
         vk::SamplerCreateInfo samplerInfo{};
@@ -190,7 +192,7 @@ namespace render::ibl
         imageRequest.tiling = vk::ImageTiling::eOptimal;
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         imageRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
+        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
 
         vk::DeviceSize imageSize = sizeof(defaultBrdfPixel);
         vk::Buffer stagingBuffer;
@@ -200,7 +202,7 @@ namespace render::ibl
         stagingRequest.size = imageSize;
         stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
         stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
 
         void* data;
         [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
@@ -266,7 +268,7 @@ namespace render::ibl
         // Create image view
         core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), imageData.image,
             vk::Format::eR32G32B32A32Sfloat);
-        core::Utilities::createImageView(viewRequest, imageData.imageView);
+        core::ImageUtilities::createImageView(viewRequest, imageData.imageView);
 
         // Create sampler
         vk::SamplerCreateInfo samplerInfo{};

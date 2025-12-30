@@ -10,7 +10,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "resource/MeshResource.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialManager.hpp"
@@ -228,7 +228,7 @@ namespace render::mesh
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
         bufferRequest.size = sizeof(CameraUBO);
-        core::Utilities::createBuffer(bufferRequest, cameraUBO, cameraUBOMemory);
+        core::BufferUtilities::createBuffer(bufferRequest, cameraUBO, cameraUBOMemory);
     }
 
     void StaticMeshPipeline::createDescriptorSet(const ibl::ImageData& irradianceMap,

@@ -1,5 +1,6 @@
 #include "SwapChain.hpp"
 #include "Device.hpp"
+#include "MemoryUtilities.hpp"
 #include "Utilities.hpp"
 #include "print/Logger.hpp"
 
@@ -155,7 +156,7 @@ namespace core {
 
 		vk::MemoryAllocateInfo allocInfo{};
 		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = Utilities::findMemoryType(device.getPhysicalDevice(), memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		allocInfo.memoryTypeIndex = MemoryUtilities::findMemoryType(device.getPhysicalDevice(), memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 		try {
 			swapchainDepthStencil.depthStencilMemory = device.getLogicalDevice().allocateMemoryUnique(allocInfo);

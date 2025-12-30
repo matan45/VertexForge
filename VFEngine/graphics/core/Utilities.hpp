@@ -27,7 +27,6 @@ namespace core
 			return transferFamily.has_value();
 		}
 
-		// Check if transfer queue is separate from graphics queue
 		bool hasDedicatedTransferQueue() const
 		{
 			return transferFamily.has_value() &&
@@ -43,163 +42,6 @@ namespace core
 		std::vector<vk::PresentModeKHR> presentModes;
 	};
 
-	struct ImageInfoRequest
-	{
-		const vk::Device& logicalDevice;
-		const vk::PhysicalDevice& physicalDevice;
-		uint32_t width;
-		uint32_t height;
-		uint32_t layers;
-		uint32_t mipLevels;
-		vk::Format format;
-		vk::ImageTiling tiling;
-		vk::ImageUsageFlags usage;
-		vk::MemoryPropertyFlags properties;
-		vk::ImageCreateFlags imageFlags;
-
-		explicit ImageInfoRequest(
-			const vk::Device& logicalDevice,
-			const vk::PhysicalDevice& physicalDevice,
-			uint32_t width = 1,
-			uint32_t height = 1,
-			uint32_t layers = 1,
-			uint32_t mipLevels = 1,
-			vk::Format format = vk::Format::eR8G8B8A8Unorm,
-			vk::ImageTiling tiling = vk::ImageTiling::eOptimal,
-			vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlags properties = vk::MemoryPropertyFlagBits::eDeviceLocal,
-			vk::ImageCreateFlags imageFlags = {}
-		)
-			: logicalDevice{ logicalDevice },
-			physicalDevice{ physicalDevice },
-			width{ width },
-			height{ height },
-			layers{ layers },
-			mipLevels{ mipLevels },
-			format{ format },
-			tiling{ tiling },
-			usage{ usage },
-			properties{ properties },
-			imageFlags{ imageFlags }
-		{
-		}
-	};
-
-	struct ImageViewInfoRequest
-	{
-		const vk::Device& logicalDevice;
-		const vk::Image& image;
-		vk::Format format;
-		vk::ImageAspectFlags aspectFlags;
-		vk::ImageViewType imageType;
-		uint32_t layerCount;
-		uint32_t mipLevels;
-
-		explicit ImageViewInfoRequest(
-			const vk::Device& logicalDevice,
-			const vk::Image& image,
-			vk::Format format = vk::Format::eR8G8B8A8Unorm,
-			vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor,
-			vk::ImageViewType imageType = vk::ImageViewType::e2D,
-			uint32_t layerCount = 1,
-			uint32_t mipLevels = 1
-		)
-			: logicalDevice{ logicalDevice },
-			image{ image },
-			format{ format },
-			aspectFlags{ aspectFlags },
-			imageType{ imageType },
-			layerCount{ layerCount },
-			mipLevels{ mipLevels }
-		{
-		}
-	};
-
-	struct BufferInfoRequest
-	{
-		const vk::Device& logicalDevice;
-		const vk::PhysicalDevice& physicalDevice;
-		vk::DeviceSize size;
-		vk::BufferUsageFlags usage;
-		vk::MemoryPropertyFlags properties;
-
-		explicit BufferInfoRequest(
-			const vk::Device& logicalDevice,
-			const vk::PhysicalDevice& physicalDevice,
-			vk::DeviceSize size = 1024, // Default size of 1024 bytes (1 KB)
-			vk::BufferUsageFlags usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-			vk::MemoryPropertyFlags properties = vk::MemoryPropertyFlagBits::eDeviceLocal
-		)
-			: logicalDevice{ logicalDevice },
-			physicalDevice{ physicalDevice },
-			size{ size },
-			usage{ usage },
-			properties{ properties }
-		{
-		}
-	};
-
-	struct WireframePipelineConfig
-	{
-		vk::Device device;
-		vk::RenderPass renderPass;
-		vk::Extent2D extent;
-		uint32_t pushConstantSize;
-		const std::vector<vk::PipelineShaderStageCreateInfo>& shaderStages;
-		bool enableBlending = false;
-	};
-
-	struct WireframePipelineResult
-	{
-		vk::Pipeline pipeline;
-		vk::PipelineLayout pipelineLayout;
-	};
-
-	struct GraphicsPipelineConfig
-	{
-		vk::Device device;
-		vk::RenderPass renderPass;
-		vk::Extent2D extent;
-		const std::vector<vk::PipelineShaderStageCreateInfo>& shaderStages;
-
-		// Vertex input
-		std::vector<vk::VertexInputBindingDescription> vertexBindings;
-		std::vector<vk::VertexInputAttributeDescription> vertexAttributes;
-
-		// Topology
-		vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
-
-		// Pipeline layout - provide existing OR set descriptorSetLayouts to create new
-		vk::PipelineLayout existingPipelineLayout = nullptr;
-		std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;  // Only used if existingPipelineLayout is null
-
-		// Push constants (only used if existingPipelineLayout is null)
-		uint32_t pushConstantSize = 0;
-		vk::ShaderStageFlags pushConstantStages = vk::ShaderStageFlagBits::eVertex;
-
-		// Rasterization
-		vk::CullModeFlags cullMode = vk::CullModeFlagBits::eNone;
-		vk::PolygonMode polygonMode = vk::PolygonMode::eFill;
-
-		// Depth
-		bool depthTestEnable = true;
-		bool depthWriteEnable = false;
-		vk::CompareOp depthCompareOp = vk::CompareOp::eLess;
-
-		// Blending
-		bool blendEnable = false;
-		vk::BlendFactor srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-		vk::BlendFactor dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-		vk::BlendFactor srcAlphaBlendFactor = vk::BlendFactor::eOne;
-		vk::BlendFactor dstAlphaBlendFactor = vk::BlendFactor::eZero;
-	};
-
-	struct GraphicsPipelineResult
-	{
-		vk::Pipeline pipeline;
-		vk::PipelineLayout pipelineLayout;
-	};
-
 	class Utilities
 	{
 	private:
@@ -211,45 +53,10 @@ namespace core
 			const vk::SurfaceKHR& surface);
 		static SwapchainSupportDetails querySwapchainSupport(const vk::PhysicalDevice& device,
 			const vk::SurfaceKHR& surface);
-		static uint32_t findMemoryType(const vk::PhysicalDevice& device, uint32_t typeFilter,
-			vk::MemoryPropertyFlags properties);
 
 		static vk::UniqueCommandBuffer beginSingleTimeCommands(const vk::Device& device,
 			const vk::CommandPool& commandPool);
 		static void endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer,
 			const vk::Fence& renderFence = nullptr);
-
-		static void transitionImageLayout(const vk::CommandBuffer& commandBuffer, vk::Image image,
-			vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
-			vk::ImageAspectFlags aspectMask, uint32_t layer = 1, uint32_t numMips = 1);
-
-		static void createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer,
-			vk::DeviceMemory& bufferMemory);
-		static void createImage(const ImageInfoRequest& imageInfo, vk::Image& image, vk::DeviceMemory& imageMemory);
-		static void createImageView(const ImageViewInfoRequest& imageInfoView, vk::ImageView& imageView);
-
-		// Copy data to a buffer at a specific offset using a staging buffer
-		// Useful for streaming uploads where chunks are uploaded incrementally
-		static void copyToBuffer(
-			const vk::Device& device,
-			const vk::PhysicalDevice& physicalDevice,
-			const vk::Queue& queue,
-			const vk::CommandPool& commandPool,
-			vk::Buffer dstBuffer,
-			const void* srcData,
-			vk::DeviceSize size,
-			vk::DeviceSize offset = 0
-		);
-
-		// Create a simple wireframe pipeline for debug rendering (grid, AABB, frustum, etc.)
-		// Uses vec3 position vertex input, line list topology, no depth write
-		static WireframePipelineResult createWireframePipeline(const WireframePipelineConfig& config);
-
-		// Create a flexible graphics pipeline with configurable vertex input, blending, depth, etc.
-		// Suitable for billboard, particle, UI, and other custom rendering pipelines
-		static GraphicsPipelineResult createGraphicsPipeline(const GraphicsPipelineConfig& config);
-
-		// Destroy a buffer and free its memory, setting handles to null
-		static void destroyBuffer(const vk::Device& device, vk::Buffer& buffer, vk::DeviceMemory& memory);
 	};
 }

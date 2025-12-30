@@ -3,7 +3,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Logger.hpp"
 #include <array>
 
@@ -203,7 +203,7 @@ namespace render::gpudriven
 
         try
         {
-            auto result = core::Utilities::createGraphicsPipeline(config);
+            auto result = core::PipelineUtilities::createGraphicsPipeline(config);
             graphicsPipeline = result.pipeline;
             loggerInfo("GPUDrivenPipeline: Created graphics pipeline");
         }

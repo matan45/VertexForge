@@ -1,6 +1,8 @@
 #include "PrefilteredEnvGenerator.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
 
@@ -27,7 +29,7 @@ namespace render::ibl
         cubeMapImageRequest.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled |
             vk::ImageUsageFlagBits::eColorAttachment;
         cubeMapImageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
-        core::Utilities::createImage(cubeMapImageRequest, prefilterImage.image,
+        core::ImageUtilities::createImage(cubeMapImageRequest, prefilterImage.image,
             prefilterImage.imageMemory);
 
         core::ImageViewInfoRequest cubeMapImageViewRequest(device.getLogicalDevice(), prefilterImage.image);
@@ -35,7 +37,7 @@ namespace render::ibl
         cubeMapImageViewRequest.layerCount = 6;
         cubeMapImageViewRequest.mipLevels = mipLevels;
         cubeMapImageViewRequest.imageType = vk::ImageViewType::eCube;
-        core::Utilities::createImageView(cubeMapImageViewRequest, prefilterImage.imageView);
+        core::ImageUtilities::createImageView(cubeMapImageViewRequest, prefilterImage.imageView);
 
         vk::SamplerCreateInfo samplerInfo;
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -121,7 +123,7 @@ namespace render::ibl
         cubeVertexBufferInfo.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         cubeVertexBufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(cubeVertexBufferInfo, cubeVertexBuffer, cubeVertexBufferMemory);
+        core::BufferUtilities::createBuffer(cubeVertexBufferInfo, cubeVertexBuffer, cubeVertexBufferMemory);
 
         void* data;
         if (vk::Result result = device.getLogicalDevice().mapMemory(cubeVertexBufferMemory, 0,
@@ -203,7 +205,7 @@ namespace render::ibl
         uboBufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
         uboBufferRequest.size = sizeof(UniformBufferObject);
-        core::Utilities::createBuffer(uboBufferRequest, uboUniformBuffer, uboUniformBufferMemory);
+        core::BufferUtilities::createBuffer(uboBufferRequest, uboUniformBuffer, uboUniformBufferMemory);
 
         vk::DescriptorBufferInfo uboBufferInfo;
         uboBufferInfo.buffer = uboUniformBuffer;
@@ -307,11 +309,11 @@ namespace render::ibl
         imageRequest.width = CUBE_MAP_SIZE;
         imageRequest.height = CUBE_MAP_SIZE;
         imageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc;
-        core::Utilities::createImage(imageRequest, imageHelper.image, imageHelper.memory);
+        core::ImageUtilities::createImage(imageRequest, imageHelper.image, imageHelper.memory);
 
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), imageHelper.image);
         imageViewRequest.format = vk::Format::eR16G16B16A16Sfloat;
-        core::Utilities::createImageView(imageViewRequest, imageHelper.view);
+        core::ImageUtilities::createImageView(imageViewRequest, imageHelper.view);
 
         vk::FramebufferCreateInfo framebufferInfo{};
         framebufferInfo.renderPass = renderPass;
@@ -327,7 +329,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer commandBufferInitHelperImageTransition = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(commandBufferInitHelperImageTransition.get(), imageHelper.image,
+        core::ImageUtilities::transitionImageLayout(commandBufferInitHelperImageTransition.get(), imageHelper.image,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageAspectFlagBits::eColor);
@@ -337,7 +339,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer commandBufferInitCubeImage = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(commandBufferInitCubeImage.get(), prefilterImage.image,
+        core::ImageUtilities::transitionImageLayout(commandBufferInitCubeImage.get(), prefilterImage.image,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor, 6, mipLevels);
@@ -393,7 +395,7 @@ namespace render::ibl
                 faceCommandBuffer.get().endRenderPass();
 
                 // Ensure synchronization between rendering and copying by transitioning the image layout
-                core::Utilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
+                core::ImageUtilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
                     vk::ImageLayout::eColorAttachmentOptimal,
                     vk::ImageLayout::eTransferSrcOptimal,
                     vk::ImageAspectFlagBits::eColor);
@@ -422,7 +424,7 @@ namespace render::ibl
                     vk::ImageLayout::eTransferDstOptimal, 1, &copyRegion);
 
                 // Transition the image back to color attachment layout for the next face
-                core::Utilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
+                core::ImageUtilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
                     vk::ImageLayout::eTransferSrcOptimal,
                     vk::ImageLayout::eColorAttachmentOptimal,
                     vk::ImageAspectFlagBits::eColor);
@@ -444,7 +446,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer commandBufferEndTransition = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(commandBufferEndTransition.get(), prefilterImage.image,
+        core::ImageUtilities::transitionImageLayout(commandBufferEndTransition.get(), prefilterImage.image,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor, 6, mipLevels);

@@ -1,6 +1,8 @@
 #include "BillboardAtlasManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Texture.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
@@ -59,7 +61,7 @@ namespace render::billboard
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::Utilities::createImage(imageInfo, defaultAtlasImage, defaultAtlasImageMemory);
+        core::ImageUtilities::createImage(imageInfo, defaultAtlasImage, defaultAtlasImageMemory);
 
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),
@@ -68,7 +70,7 @@ namespace render::billboard
             vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2D
         );
-        core::Utilities::createImageView(viewInfo, defaultAtlasImageView);
+        core::ImageUtilities::createImageView(viewInfo, defaultAtlasImageView);
 
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -105,7 +107,7 @@ namespace render::billboard
 
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingMemory;
-        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
 
         auto cleanupStaging = [&]() {
             if (stagingBuffer) device.getLogicalDevice().destroyBuffer(stagingBuffer);
@@ -124,7 +126,7 @@ namespace render::billboard
 
             auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), device.getStagingCommandPool());
 
-            core::Utilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
+            core::ImageUtilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
                 vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
                 vk::ImageAspectFlagBits::eColor);
 
@@ -141,7 +143,7 @@ namespace render::billboard
 
             cmd->copyBufferToImage(stagingBuffer, defaultAtlasImage, vk::ImageLayout::eTransferDstOptimal, region);
 
-            core::Utilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
+            core::ImageUtilities::transitionImageLayout(cmd.get(), defaultAtlasImage,
                 vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
 

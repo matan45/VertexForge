@@ -2,7 +2,7 @@
 #include "../mesh/MeshTypes.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../../core/TransferManager.hpp"
 #include "resource/Types.hpp"
 #include "resource/ResourceManager.hpp"
@@ -91,7 +91,7 @@ namespace render::gpudriven
                 vk::BufferUsageFlagBits::eTransferDst |
                 vk::BufferUsageFlagBits::eStorageBuffer; // For compute access if needed
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, vertexBuffer, vertexBufferMemory);
+            core::BufferUtilities::createBuffer(request, vertexBuffer, vertexBufferMemory);
         }
 
         // Create merged index buffer (device-local)
@@ -102,7 +102,7 @@ namespace render::gpudriven
                 vk::BufferUsageFlagBits::eTransferDst |
                 vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, indexBuffer, indexBufferMemory);
+            core::BufferUtilities::createBuffer(request, indexBuffer, indexBufferMemory);
         }
 
         // Create object buffer (device-local storage buffer)
@@ -112,7 +112,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, objectBuffer, objectBufferMemory);
+            core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferMemory);
         }
 
         // Create staging buffer for object updates (host-visible, persistently mapped)
@@ -122,7 +122,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
+            core::BufferUtilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
 
             // Persistently map staging buffer
             objectStagingMapped = logicalDevice.mapMemory(
@@ -141,10 +141,10 @@ namespace render::gpudriven
             objectStagingMapped = nullptr;
         }
 
-        core::Utilities::destroyBuffer(logicalDevice, objectStagingBuffer, objectStagingMemory);
-        core::Utilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
-        core::Utilities::destroyBuffer(logicalDevice, indexBuffer, indexBufferMemory);
-        core::Utilities::destroyBuffer(logicalDevice, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectStagingBuffer, objectStagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, indexBuffer, indexBufferMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, vertexBuffer, vertexBufferMemory);
     }
 
     void MergedMeshBuffer::unregisterMesh(const std::string& meshPath)
@@ -233,8 +233,8 @@ namespace render::gpudriven
             logicalDevice.unmapMemory(objectStagingMemory);
             objectStagingMapped = nullptr;
         }
-        core::Utilities::destroyBuffer(logicalDevice, objectStagingBuffer, objectStagingMemory);
-        core::Utilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectStagingBuffer, objectStagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
 
         maxObjectCount = newMaxObjects;
         cpuObjectData.resize(maxObjectCount);
@@ -248,7 +248,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, objectBuffer, objectBufferMemory);
+            core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferMemory);
         }
 
         {
@@ -257,7 +257,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
+            core::BufferUtilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
             objectStagingMapped = logicalDevice.mapMemory(objectStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 

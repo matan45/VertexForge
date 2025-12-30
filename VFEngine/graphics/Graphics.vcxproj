@@ -104,9 +104,13 @@
     <ClInclude Include="controllers\OffScreenController.hpp" />
     <ClInclude Include="controllers\RenderController.hpp" />
     <ClInclude Include="controllers\TextureController.hpp" />
+    <ClInclude Include="core\BufferUtilities.hpp" />
     <ClInclude Include="core\CommandPool.hpp" />
     <ClInclude Include="core\Device.hpp" />
+    <ClInclude Include="core\ImageUtilities.hpp" />
+    <ClInclude Include="core\MemoryUtilities.hpp" />
     <ClInclude Include="core\OffScreen.hpp" />
+    <ClInclude Include="core\PipelineUtilities.hpp" />
     <ClInclude Include="core\RenderManager.hpp" />
     <ClInclude Include="core\Shader.hpp" />
     <ClInclude Include="core\SwapChain.hpp" />
@@ -165,8 +169,12 @@
     <ClCompile Include="controllers\OffScreenController.cpp" />
     <ClCompile Include="controllers\RenderController.cpp" />
     <ClCompile Include="controllers\TextureController.cpp" />
+    <ClCompile Include="core\BufferUtilities.cpp" />
     <ClCompile Include="core\CommandPool.cpp" />
     <ClCompile Include="core\Device.cpp" />
+    <ClCompile Include="core\ImageUtilities.cpp" />
+    <ClCompile Include="core\MemoryUtilities.cpp" />
+    <ClCompile Include="core\PipelineUtilities.cpp" />
     <ClCompile Include="core\RenderManager.cpp" />
     <ClCompile Include="core\Shader.cpp" />
     <ClCompile Include="core\SwapChain.cpp" />

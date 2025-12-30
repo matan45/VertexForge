@@ -2,7 +2,7 @@
 #include "HiZBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
@@ -42,7 +42,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::Utilities::createBuffer(objectRequest, objectBuffer, objectBufferMemory);
+        core::BufferUtilities::createBuffer(objectRequest, objectBuffer, objectBufferMemory);
 
         core::BufferInfoRequest visRequest(
             device.getLogicalDevice(),
@@ -51,7 +51,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::Utilities::createBuffer(visRequest, visibilityBuffer, visibilityBufferMemory);
+        core::BufferUtilities::createBuffer(visRequest, visibilityBuffer, visibilityBufferMemory);
 
         core::BufferInfoRequest cameraRequest(
             device.getLogicalDevice(),
@@ -60,7 +60,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eUniformBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::Utilities::createBuffer(cameraRequest, cameraBuffer, cameraBufferMemory);
+        core::BufferUtilities::createBuffer(cameraRequest, cameraBuffer, cameraBufferMemory);
 
         core::BufferInfoRequest stagingRequest(
             device.getLogicalDevice(),
@@ -69,7 +69,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingBufferMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingBufferMemory);
 
         needsDescriptorUpdate = true;
     }
@@ -193,7 +193,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::Utilities::createBuffer(uploadRequest, uploadStaging, uploadStagingMemory);
+        core::BufferUtilities::createBuffer(uploadRequest, uploadStaging, uploadStagingMemory);
 
         void* data = device.getLogicalDevice().mapMemory(uploadStagingMemory, 0, uploadSize);
         std::memcpy(data, objects.data(), uploadSize);

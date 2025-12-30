@@ -1,5 +1,8 @@
 #include "Texture.hpp"
 #include "Device.hpp"
+#include "BufferUtilities.hpp"
+#include "ImageUtilities.hpp"
+#include "Utilities.hpp"
 #include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
@@ -72,7 +75,7 @@ namespace core
         bufferInfo.size = dataSize;
         bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
         bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        Utilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+        BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
         // Copy pixel data to staging buffer
         void* data;
@@ -95,12 +98,12 @@ namespace core
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        Utilities::createImage(imageInfo, image, imageMemory);
+        ImageUtilities::createImage(imageInfo, image, imageMemory);
 
         // Transition to transfer destination
         vk::UniqueCommandBuffer commandTransitionA = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool.get());
-        Utilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
+        ImageUtilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
                                          vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor);
         Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionA);
 
@@ -133,7 +136,7 @@ namespace core
         // Transition to shader read
         vk::UniqueCommandBuffer commandTransitionB = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool.get());
-        Utilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
+        ImageUtilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
                                          vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor);
         Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionB);
 
@@ -147,7 +150,7 @@ namespace core
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
         imageViewRequest.format = vk::Format::eR32G32B32A32Sfloat;
         imageViewRequest.mipLevels = 1;
-        Utilities::createImageView(imageViewRequest, imageView);
+        ImageUtilities::createImageView(imageViewRequest, imageView);
         if (isEditor)
         {
             isEditorTexture = true;
@@ -185,7 +188,7 @@ namespace core
         bufferInfo.size = totalSize;
         bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
         bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        Utilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+        BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
         // Copy all mip levels to staging buffer
         void* data;
@@ -216,12 +219,12 @@ namespace core
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        Utilities::createImage(imageInfo, image, imageMemory);
+        ImageUtilities::createImage(imageInfo, image, imageMemory);
 
         // Transition all mip levels to transfer destination
         vk::UniqueCommandBuffer commandTransitionA = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool.get());
-        Utilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
+        ImageUtilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
                                          vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor,
                                          1, texturePtr->mipLevels);
         Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionA);
@@ -267,7 +270,7 @@ namespace core
         // Transition all mip levels to shader read
         vk::UniqueCommandBuffer commandTransitionB = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool.get());
-        Utilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
+        ImageUtilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
                                          vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor,
                                          1, texturePtr->mipLevels);
         Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionB);
@@ -283,7 +286,7 @@ namespace core
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
         imageViewRequest.format = format;
         imageViewRequest.mipLevels = texturePtr->mipLevels;
-        Utilities::createImageView(imageViewRequest, imageView);
+        ImageUtilities::createImageView(imageViewRequest, imageView);
         if (isEditor)
         {
             isEditorTexture = true;

@@ -3,7 +3,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/SwapChain.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "GPUDrivenTypes.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
@@ -194,11 +194,11 @@ namespace render::gpudriven
 
         try
         {
-            auto opaqueResult = core::Utilities::createGraphicsPipeline(config);
+            auto opaqueResult = core::PipelineUtilities::createGraphicsPipeline(config);
             data.opaquePipeline = opaqueResult.pipeline;
 
             // Masked pipeline (same as opaque for now)
-            auto maskedResult = core::Utilities::createGraphicsPipeline(config);
+            auto maskedResult = core::PipelineUtilities::createGraphicsPipeline(config);
             data.maskedPipeline = maskedResult.pipeline;
 
             return true;

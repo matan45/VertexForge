@@ -1,7 +1,8 @@
 #include "MaterialTextureCache.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Texture.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
 
@@ -269,7 +270,7 @@ namespace render::mesh
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::Utilities::createImage(imageInfo, defaultTexture.image, defaultTexture.memory);
+        core::ImageUtilities::createImage(imageInfo, defaultTexture.image, defaultTexture.memory);
 
         // Create staging buffer and copy
         constexpr vk::DeviceSize imageSize = sizeof(DEFAULT_TEXTURE_PIXELS);
@@ -281,7 +282,7 @@ namespace render::mesh
         stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
         stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
 
         void* data;
         [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
@@ -351,7 +352,7 @@ namespace render::mesh
             vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2D
         );
-        core::Utilities::createImageView(viewInfo, defaultTexture.view);
+        core::ImageUtilities::createImageView(viewInfo, defaultTexture.view);
         
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eLinear;
