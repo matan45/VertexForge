@@ -22,24 +22,6 @@ namespace services {
         bool streaming = false;
     };
 
-    // Data structs for entity audio components (used by SceneService)
-    struct AudioSource2DData {
-        std::string audioFilePath;
-        float volume = 1.0f;
-        float pitch = 1.0f;
-        bool loop = false;
-    };
-
-    struct AudioSource3DData {
-        std::string audioFilePath;
-        float volume = 1.0f;
-        float pitch = 1.0f;
-        bool loop = false;
-        float minDistance = 1.0f;
-        float maxDistance = 100.0f;
-        bool showDebugSpheres = false;
-    };
-
     class IAudioService {
     public:
         virtual ~IAudioService() = default;

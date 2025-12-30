@@ -1,4 +1,4 @@
-#include "SceneGraph.hpp"
+#include "EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -12,17 +12,17 @@
 
 namespace windows
 {
-    SceneGraph::SceneGraph()
+    EntityDetailsPanel::EntityDetailsPanel()
     {
         subscribeToEvents();
     }
 
-    SceneGraph::~SceneGraph()
+    EntityDetailsPanel::~EntityDetailsPanel()
     {
         events::EventDispatcher::instance().unsubscribe(sceneClearedToken);
     }
 
-    void SceneGraph::subscribeToEvents()
+    void EntityDetailsPanel::subscribeToEvents()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -33,85 +33,20 @@ namespace windows
             });
     }
 
-    void SceneGraph::onSceneCleared()
+    void EntityDetailsPanel::onSceneCleared()
     {
-        selectedHandle = services::EntityHandle::invalid();
         submeshNameCache.clear();
         audioPreviewHandles.clear();
     }
 
-    void SceneGraph::draw()
+    void EntityDetailsPanel::draw()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Sync local selection with global selection (e.g., from viewport picking)
+        // Query current selection from global state
         events::scene::GetSelectedEntityQuery selectedQuery;
-        auto globalSelected = dispatcher.query(selectedQuery);
-        selectedHandle = globalSelected.value_or(services::EntityHandle::invalid());
+        auto selectedHandle = dispatcher.query(selectedQuery).value_or(services::EntityHandle::invalid());
 
-        // Detect selection change and auto-expand to show selected entity
-        if (selectedHandle.id != lastSelectedHandle.id && selectedHandle.isValid())
-        {
-            expandToSelection(selectedHandle);
-        }
-        lastSelectedHandle = selectedHandle;
-
-        if (ImGui::Begin("SceneGraph"))
-        {
-            // Query root entity through event system
-            events::scene::GetSceneHierarchyQuery hierarchyQuery;
-            auto hierarchy = dispatcher.query(hierarchyQuery);
-
-            if (!hierarchy.entities.empty())
-            {
-                // Root is first entity
-                auto rootHandle = hierarchy.entities[0].handle;
-                drawEntityNode(rootHandle);
-            }
-
-            // Right-click context menu for adding/removing entities
-            if (ImGui::BeginPopupContextWindow())
-            {
-                if (ImGui::MenuItem("Add New Entity"))
-                {
-                    // Get root for default parent
-                    events::scene::GetSceneHierarchyQuery rootQuery;
-                    auto rootHierarchy = dispatcher.query(rootQuery);
-                    services::EntityHandle parentHandle = selectedHandle.isValid()
-                                                              ? selectedHandle
-                                                              : (rootHierarchy.entities.empty()
-                                                                     ? services::EntityHandle::invalid()
-                                                                     : rootHierarchy.entities[0].handle);
-
-                    events::scene::CreateEntityCommand cmd;
-                    cmd.name = "New Entity";
-                    cmd.parent = parentHandle.isValid() ? std::optional{parentHandle} : std::nullopt;
-                    dispatcher.execute(cmd);
-                }
-
-                // Prevent deleting the root entity
-                if (selectedHandle.isValid())
-                {
-                    events::scene::GetSceneHierarchyQuery rootCheckQuery;
-                    auto rootCheckHierarchy = dispatcher.query(rootCheckQuery);
-                    bool isRoot = !rootCheckHierarchy.entities.empty() &&
-                        rootCheckHierarchy.entities[0].handle.id == selectedHandle.id;
-
-                    if (!isRoot && ImGui::MenuItem("Remove Selected Entity"))
-                    {
-                        events::scene::DeleteEntityCommand cmd;
-                        cmd.entity = selectedHandle;
-                        dispatcher.execute(cmd);
-                        selectedHandle = services::EntityHandle::invalid();
-                    }
-                }
-
-                ImGui::EndPopup();
-            }
-        }
-        ImGui::End();
-
-        // Show the selected entity's components in the "Details" window
         if (ImGui::Begin("Details"))
         {
             if (selectedHandle.isValid())
@@ -122,68 +57,7 @@ namespace windows
         ImGui::End();
     }
 
-    void SceneGraph::drawEntityNode(services::EntityHandle handle)
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        ImGui::PushID(static_cast<int>(handle.id));
-
-        // Query entity data
-        events::scene::GetEntityQuery entityQuery;
-        entityQuery.entity = handle;
-        auto entityDataOpt = dispatcher.query(entityQuery);
-
-        static const std::string unknownName = "Unknown";
-        const std::string& entityName = entityDataOpt.has_value() ? entityDataOpt->name : unknownName;
-
-        if (expandedHandles.count(handle.id) > 0)
-        {
-            ImGui::SetNextItemOpen(true);
-            expandedHandles.erase(handle.id); // Only expand once
-        }
-
-        ImGuiTreeNodeFlags flags = (selectedHandle.id == handle.id) ? ImGuiTreeNodeFlags_Selected : 0;
-        flags |= ImGuiTreeNodeFlags_OpenOnArrow;
-
-        bool nodeOpen = ImGui::TreeNodeEx((void*)handle.id, flags, "%s", entityName.c_str());
-
-        // Select the entity when clicked
-        if (ImGui::IsItemClicked())
-        {
-            selectedHandle = handle;
-
-            // Publish selection through command
-            events::scene::SelectEntityCommand cmd;
-            cmd.entity = handle;
-            dispatcher.execute(cmd);
-        }
-
-        if (ImGui::BeginDragDropSource())
-        {
-            // Use single payload type for both entity reparenting and prefab creation
-            ImGui::SetDragDropPayload("DND_SCENE_ENTITY", &handle, sizeof(services::EntityHandle));
-            ImGui::Text("Move %s", entityName.c_str());
-            ImGui::EndDragDropSource();
-        }
-
-        dragDropEntity(handle);
-
-        // If the entity has children, recursively draw them
-        if (nodeOpen)
-        {
-            if (entityDataOpt.has_value())
-            {
-                for (const auto& child : entityDataOpt->children)
-                {
-                    drawEntityNode(child);
-                }
-            }
-            ImGui::TreePop();
-        }
-        ImGui::PopID();
-    }
-
-    void SceneGraph::drawDetails(services::EntityHandle handle)
+    void EntityDetailsPanel::drawDetails(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -211,7 +85,7 @@ namespace windows
         drawAddComponentButton(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D);
     }
 
-    void SceneGraph::drawEntityName(services::EntityHandle handle, const std::string& currentName)
+    void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -227,7 +101,7 @@ namespace windows
         }
     }
 
-    void SceneGraph::drawTransformComponent(services::EntityHandle handle)
+    void EntityDetailsPanel::drawTransformComponent(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -276,7 +150,7 @@ namespace windows
         }
     }
 
-    bool SceneGraph::drawCameraComponent(services::EntityHandle handle)
+    bool EntityDetailsPanel::drawCameraComponent(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -356,7 +230,7 @@ namespace windows
         return true;
     }
 
-    void SceneGraph::drawIBLComponent(services::EntityHandle handle)
+    void EntityDetailsPanel::drawIBLComponent(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -413,7 +287,7 @@ namespace windows
         }
     }
 
-    bool SceneGraph::drawMeshComponent(services::EntityHandle handle)
+    bool EntityDetailsPanel::drawMeshComponent(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -518,7 +392,7 @@ namespace windows
         return true;
     }
 
-    void SceneGraph::drawMaterialComponent(services::EntityHandle handle)
+    void EntityDetailsPanel::drawMaterialComponent(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -693,7 +567,7 @@ namespace windows
         ImGui::PopID();
     }
 
-    bool SceneGraph::drawAudioSource2DComponent(services::EntityHandle handle)
+    bool EntityDetailsPanel::drawAudioSource2DComponent(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -915,7 +789,7 @@ namespace windows
         return true;
     }
 
-    bool SceneGraph::drawAudioSource3DComponent(services::EntityHandle handle)
+    bool EntityDetailsPanel::drawAudioSource3DComponent(services::EntityHandle handle)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -1180,7 +1054,7 @@ namespace windows
         return true;
     }
 
-    void SceneGraph::drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D)
+    void EntityDetailsPanel::drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -1272,41 +1146,19 @@ namespace windows
         ImGui::PopStyleVar(2);
     }
 
-    void SceneGraph::dragDropEntity(services::EntityHandle handle)
-    {
-        if (ImGui::BeginDragDropTarget())
-        {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))
-            {
-                services::EntityHandle draggedHandle = *(services::EntityHandle*)payload->Data;
-
-                if (draggedHandle.id != handle.id)
-                {
-                    auto& dispatcher = events::EventDispatcher::instance();
-
-                    events::scene::ReparentEntityCommand cmd;
-                    cmd.entity = draggedHandle;
-                    cmd.newParent = handle;
-                    dispatcher.execute(cmd);
-                }
-            }
-            ImGui::EndDragDropTarget();
-        }
-    }
-
-    void SceneGraph::pushComponentHeaderStyle()
+    void EntityDetailsPanel::pushComponentHeaderStyle()
     {
         ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.28f, 0.28f, 0.28f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
     }
 
-    void SceneGraph::popComponentHeaderStyle()
+    void EntityDetailsPanel::popComponentHeaderStyle()
     {
         ImGui::PopStyleColor(3);
     }
 
-    void SceneGraph::pushRemoveButtonStyle()
+    void EntityDetailsPanel::pushRemoveButtonStyle()
     {
         ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22.0f);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -1315,38 +1167,9 @@ namespace windows
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
     }
 
-    void SceneGraph::popRemoveButtonStyle()
+    void EntityDetailsPanel::popRemoveButtonStyle()
     {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
-    }
-
-    void SceneGraph::expandToSelection(services::EntityHandle handle)
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        // Clear previous expansion state
-        expandedHandles.clear();
-
-        // Walk up the parent chain and collect all ancestors
-        services::EntityHandle current = handle;
-        while (current.isValid())
-        {
-            events::scene::GetEntityQuery entityQuery;
-            entityQuery.entity = current;
-            auto entityDataOpt = dispatcher.query(entityQuery);
-
-            if (!entityDataOpt.has_value() || !entityDataOpt->parent.has_value())
-            {
-                break; // Reached root or invalid entity
-            }
-
-            // Add parent to expand set
-            services::EntityHandle parentHandle = entityDataOpt->parent.value();
-            expandedHandles.insert(parentHandle.id);
-
-            // Move up to parent
-            current = parentHandle;
-        }
     }
 }

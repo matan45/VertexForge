@@ -1,7 +1,8 @@
 #include "WindowImguiHandler.hpp"
 #include "../windows/ConsoleLog.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
-#include "../windows/SceneGraph.hpp"
+#include "../windows/SceneHierarchyPanel.hpp"
+#include "../windows/EntityDetailsPanel.hpp"
 #include "../windows/ViewPort.hpp"
 #include "../windows/MainImguiWindow.hpp"
 #include "../windows/ContentBrowser.hpp"
@@ -23,7 +24,8 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(mainWindow);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ConsoleLog>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ContentBrowser>());
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneGraph>());
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneHierarchyPanel>());
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::EntityDetailsPanel>());
         controllers::imguiHandler::ImguiWindowHandler::add(viewPort);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ImportProgressWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneLoadingProgressWindow>());

@@ -1,4 +1,9 @@
 #include "SceneServiceImpl.hpp"
+#include "components/CameraComponentService.hpp"
+#include "components/MeshComponentService.hpp"
+#include "components/MaterialComponentService.hpp"
+#include "components/AudioComponentService.hpp"
+#include "components/IBLComponentService.hpp"
 #include "../../utilities/scene/SceneGraphSystem.hpp"
 #include "../../utilities/scene/Entity.hpp"
 #include "../../utilities/scene/EntityRegistry.hpp"
@@ -18,7 +23,14 @@
 namespace services {
 
     SceneServiceImpl::SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
-        : sceneGraph(std::move(sceneGraph)) {}
+        : sceneGraph(sceneGraph)
+        , cameraService(std::make_unique<CameraComponentService>(sceneGraph))
+        , meshService(std::make_unique<MeshComponentService>(sceneGraph))
+        , materialService(std::make_unique<MaterialComponentService>(sceneGraph))
+        , audioService(std::make_unique<AudioComponentService>(sceneGraph))
+        , iblService(std::make_unique<IBLComponentService>(sceneGraph)) {}
+
+    SceneServiceImpl::~SceneServiceImpl() = default;
 
     EntityHandle SceneServiceImpl::createEntity(const std::string& name,
         std::optional<EntityHandle> parent) {
@@ -344,446 +356,93 @@ namespace services {
     }
 
     std::optional<CameraData> SceneServiceImpl::getCameraData(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return std::nullopt;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::CameraComponent>()) {
-            return std::nullopt;
-        }
-
-        auto& comp = sceneEntity.getComponent<components::CameraComponent>();
-        CameraData data;
-        data.fieldOfView = comp.fieldOfView;
-        data.nearPlane = comp.nearPlane;
-        data.farPlane = comp.farPlane;
-        data.aspectRatio = comp.aspectRatio;
-        data.isPerspective = comp.isPerspective;
-        data.isPrimary = comp.isPrimary;
-        data.showFrustum = comp.showFrustum;
-        data.orthoSize = comp.orthoSize;
-
-        return data;
+        return cameraService->getCameraData(entity);
     }
 
     bool SceneServiceImpl::setCameraData(EntityHandle entity, const CameraData& camera) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::CameraComponent>()) {
-            return false;
-        }
-
-        auto& comp = sceneEntity.getComponent<components::CameraComponent>();
-        comp.fieldOfView = camera.fieldOfView;
-        comp.nearPlane = camera.nearPlane;
-        comp.farPlane = camera.farPlane;
-        comp.aspectRatio = camera.aspectRatio;
-        comp.isPerspective = camera.isPerspective;
-        comp.showFrustum = camera.showFrustum;
-        comp.orthoSize = camera.orthoSize;
-
-        // If setting this camera as primary, clear isPrimary from all other cameras
-        if (camera.isPrimary && !comp.isPrimary) {
-            auto view = registry.view<components::CameraComponent>();
-            for (auto otherEntity : view) {
-                if (otherEntity != internal::fromHandle(entity)) {
-                    auto& otherComp = view.get<components::CameraComponent>(otherEntity);
-                    otherComp.isPrimary = false;
-                }
-            }
-        }
-        comp.isPrimary = camera.isPrimary;
-        comp.updateProjectionMatrix();
-
-        return true;
+        return cameraService->setCameraData(entity, camera);
     }
 
     std::optional<EntityHandle> SceneServiceImpl::getPrimaryCamera() const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::CameraComponent>();
-
-        // Find camera with isPrimary = true
-        for (auto entity : view) {
-            const auto& comp = view.get<components::CameraComponent>(entity);
-            if (comp.isPrimary) {
-                return internal::toHandle(entity);
-            }
-        }
-
-        // Fallback to first camera if no primary is set
-        auto cameras = getEntitiesWithComponent(ComponentTypeId::Camera);
-        if (cameras.empty()) {
-            return std::nullopt;
-        }
-        return cameras[0];
+        return cameraService->getPrimaryCamera();
     }
 
     bool SceneServiceImpl::addCameraComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        
-        if (!sceneEntity.hasComponent<components::TransformComponent>()) {
-            auto& transform = sceneEntity.addComponent<components::TransformComponent>();
-            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.getMatrix();
-        }
-        else if (!sceneEntity.hasComponent<components::WorldTransformComponent>()) {
-            auto& transform = sceneEntity.getComponent<components::TransformComponent>();
-            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = transform.getMatrix();
-        }
-
-        if (!sceneEntity.hasComponent<components::CameraComponent>()) {
-            sceneEntity.addComponent<components::CameraComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Camera));
-            return true;
-        }
-
-        return false;
-    }
-
-    void SceneServiceImpl::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = static_cast<components::BillboardIconType>(iconType);
-            billboard.editorOnly = true;
-            billboard.selectable = true;
-        }
-    }
-
-    void SceneServiceImpl::autoDetachBillboard(EntityHandle entity, uint32_t iconType) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::BillboardComponent>()) {
-            auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            // Only remove if it matches the expected icon type (auto-attached billboard)
-            if (billboard.iconType == static_cast<components::BillboardIconType>(iconType)) {
-                sceneEntity.removeComponent<components::BillboardComponent>();
-            }
-        }
+        return cameraService->addCameraComponent(entity);
     }
 
     bool SceneServiceImpl::removeCameraComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::CameraComponent>()) {
-            sceneEntity.removeComponent<components::CameraComponent>();
-            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Camera));
-            return true;
-        }
-
-        return false;
+        return cameraService->removeCameraComponent(entity);
     }
 
     std::optional<IBLData> SceneServiceImpl::getIBLData(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return std::nullopt;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::IBLComponent>()) {
-            return std::nullopt;
-        }
-
-        auto& comp = sceneEntity.getComponent<components::IBLComponent>();
-        IBLData data;
-        data.fileName = comp.fileName;
-
-        return data;
+        return iblService->getIBLData(entity);
     }
 
     bool SceneServiceImpl::setIBLData(EntityHandle entity, const IBLData& ibl) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::IBLComponent>()) {
-            auto& comp = sceneEntity.getComponent<components::IBLComponent>();
-            comp.fileName = ibl.fileName;
-        }
-        else {
-            sceneEntity.addComponent<components::IBLComponent>(ibl.fileName);
-        }
-
-        return true;
+        return iblService->setIBLData(entity, ibl);
     }
 
     bool SceneServiceImpl::removeIBLComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::IBLComponent>()) {
-            sceneEntity.removeComponent<components::IBLComponent>();
-            return true;
-        }
-
-        return false;
+        return iblService->removeIBLComponent(entity);
     }
 
     std::optional<MeshData> SceneServiceImpl::getMeshData(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return std::nullopt;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MeshComponent>()) {
-            return std::nullopt;
-        }
-
-        auto& comp = sceneEntity.getComponent<components::MeshComponent>();
-        MeshData data;
-        data.meshPath = comp.meshPath;
-        data.showBoundingBox = comp.showBoundingBox;
-
-        return data;
+        return meshService->getMeshData(entity);
     }
 
     bool SceneServiceImpl::setMeshData(EntityHandle entity, const MeshData& mesh) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::MeshComponent>()) {
-            auto& comp = sceneEntity.getComponent<components::MeshComponent>();
-            comp.meshPath = mesh.meshPath;
-            comp.showBoundingBox = mesh.showBoundingBox;
-        }
-        else {
-            auto& comp = sceneEntity.addComponent<components::MeshComponent>();
-            comp.meshPath = mesh.meshPath;
-            comp.showBoundingBox = mesh.showBoundingBox;
-        }
-
-        // Publish notification to allow preloading of mesh assets
-        if (!mesh.meshPath.empty()) {
-            events::scene::MeshDataChangedNotification notification;
-            notification.entity = entity;
-            notification.meshPath = mesh.meshPath;
-            events::EventDispatcher::instance().publish(notification);
-        }
-
-        return true;
+        return meshService->setMeshData(entity, mesh);
     }
 
     bool SceneServiceImpl::addMeshComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MeshComponent>()) {
-            sceneEntity.addComponent<components::MeshComponent>();
-            return true;
-        }
-
-        return false;  // Already has mesh component
+        return meshService->addMeshComponent(entity);
     }
 
     bool SceneServiceImpl::removeMeshComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::MeshComponent>()) {
-            sceneEntity.removeComponent<components::MeshComponent>();
-            
-            events::scene::MeshDataChangedNotification notification;
-            notification.entity = entity;
-            notification.meshPath = "";
-            events::EventDispatcher::instance().publish(notification);
-
-            return true;
-        }
-
-        return false;
+        return meshService->removeMeshComponent(entity);
     }
 
     bool SceneServiceImpl::hasMeshComponent(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        return sceneEntity.hasComponent<components::MeshComponent>();
+        return meshService->hasMeshComponent(entity);
     }
 
     // ========== MATERIAL COMPONENT OPERATIONS ==========
 
     bool SceneServiceImpl::addMaterialComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
-            sceneEntity.addComponent<components::MaterialComponent>();
-            return true;
-        }
-        return false;
+        return materialService->addMaterialComponent(entity);
     }
 
     bool SceneServiceImpl::removeMaterialComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::MaterialComponent>()) {
-            sceneEntity.removeComponent<components::MaterialComponent>();
-            return true;
-        }
-        return false;
+        return materialService->removeMaterialComponent(entity);
     }
 
     bool SceneServiceImpl::hasMaterialComponent(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        return sceneEntity.hasComponent<components::MaterialComponent>();
+        return materialService->hasMaterialComponent(entity);
     }
 
     std::optional<MaterialData> SceneServiceImpl::getMaterialData(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return std::nullopt;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
-            return std::nullopt;
-        }
-
-        const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        MaterialData data;
-        data.defaultMaterial = comp.defaultMaterial;
-        data.subMeshMaterials = comp.subMeshMaterials;
-        data.parameterOverrides = comp.parameterOverrides;
-        return data;
+        return materialService->getMaterialData(entity);
     }
 
     bool SceneServiceImpl::setMaterialData(EntityHandle entity, const MaterialData& material) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
-            sceneEntity.addComponent<components::MaterialComponent>();
-        }
-
-        auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        comp.defaultMaterial = material.defaultMaterial;
-        comp.subMeshMaterials = material.subMeshMaterials;
-        comp.parameterOverrides = material.parameterOverrides;
-        return true;
+        return materialService->setMaterialData(entity, material);
     }
 
     bool SceneServiceImpl::setDefaultMaterial(EntityHandle entity, const std::string& materialPath) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
-            sceneEntity.addComponent<components::MaterialComponent>();
-        }
-
-        auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        comp.setDefaultMaterial(materialPath);
-        return true;
+        return materialService->setDefaultMaterial(entity, materialPath);
     }
 
     bool SceneServiceImpl::setSubMeshMaterial(EntityHandle entity, const std::string& submeshName, const std::string& materialPath) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
-            sceneEntity.addComponent<components::MaterialComponent>();
-        }
-
-        auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        if (materialPath.empty()) {
-            // Clear the assignment
-            comp.subMeshMaterials.erase(submeshName);
-        } else {
-            comp.setSubMeshMaterial(submeshName, materialPath);
-        }
-        return true;
+        return materialService->setSubMeshMaterial(entity, submeshName, materialPath);
     }
 
     std::string SceneServiceImpl::getSubMeshMaterial(EntityHandle entity, const std::string& submeshName) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return "";
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
-            return "";
-        }
-
-        const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        return comp.getMaterialForSubmesh(submeshName);
+        return materialService->getSubMeshMaterial(entity, submeshName);
     }
 
     std::map<std::string, std::string> SceneServiceImpl::getAllSubMeshMaterials(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return {};
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::MaterialComponent>()) {
-            return {};
-        }
-
-        const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        return comp.subMeshMaterials;
+        return materialService->getAllSubMeshMaterials(entity);
     }
 
     std::vector<EntityHandle> SceneServiceImpl::getChildren(EntityHandle entity) const {
@@ -810,175 +469,45 @@ namespace services {
     // ========== 2D AUDIO SOURCE COMPONENT OPERATIONS ==========
 
     bool SceneServiceImpl::addAudioSource2DComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
-            sceneEntity.addComponent<components::AudioSource2DComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
-            return true;
-        }
-        return false;
+        return audioService->addAudioSource2DComponent(entity);
     }
 
     bool SceneServiceImpl::removeAudioSource2DComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
-            sceneEntity.removeComponent<components::AudioSource2DComponent>();
-            // Only remove billboard if no other audio component exists
-            if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
-                autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
-            }
-            return true;
-        }
-        return false;
+        return audioService->removeAudioSource2DComponent(entity);
     }
 
     bool SceneServiceImpl::hasAudioSource2DComponent(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        return sceneEntity.hasComponent<components::AudioSource2DComponent>();
+        return audioService->hasAudioSource2DComponent(entity);
     }
 
     std::optional<AudioSource2DData> SceneServiceImpl::getAudioSource2DData(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return std::nullopt;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
-            return std::nullopt;
-        }
-
-        const auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
-        AudioSource2DData data;
-        data.audioFilePath = comp.audioFilePath;
-        data.volume = comp.volume;
-        data.pitch = comp.pitch;
-        data.loop = comp.loop;
-        return data;
+        return audioService->getAudioSource2DData(entity);
     }
 
     bool SceneServiceImpl::setAudioSource2DData(EntityHandle entity, const AudioSource2DData& audioData) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
-            sceneEntity.addComponent<components::AudioSource2DComponent>();
-        }
-
-        auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
-        comp.audioFilePath = audioData.audioFilePath;
-        comp.volume = audioData.volume;
-        comp.pitch = audioData.pitch;
-        comp.loop = audioData.loop;
-        return true;
+        return audioService->setAudioSource2DData(entity, audioData);
     }
 
     // ========== 3D AUDIO SOURCE COMPONENT OPERATIONS ==========
 
     bool SceneServiceImpl::addAudioSource3DComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
-            sceneEntity.addComponent<components::AudioSource3DComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
-            return true;
-        }
-        return false;
+        return audioService->addAudioSource3DComponent(entity);
     }
 
     bool SceneServiceImpl::removeAudioSource3DComponent(EntityHandle entity) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
-            sceneEntity.removeComponent<components::AudioSource3DComponent>();
-            // Only remove billboard if no other audio component exists
-            if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
-                autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
-            }
-            return true;
-        }
-        return false;
+        return audioService->removeAudioSource3DComponent(entity);
     }
 
     bool SceneServiceImpl::hasAudioSource3DComponent(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        return sceneEntity.hasComponent<components::AudioSource3DComponent>();
+        return audioService->hasAudioSource3DComponent(entity);
     }
 
     std::optional<AudioSource3DData> SceneServiceImpl::getAudioSource3DData(EntityHandle entity) const {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return std::nullopt;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
-            return std::nullopt;
-        }
-
-        const auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
-        AudioSource3DData data;
-        data.audioFilePath = comp.audioFilePath;
-        data.volume = comp.volume;
-        data.pitch = comp.pitch;
-        data.loop = comp.loop;
-        data.minDistance = comp.minDistance;
-        data.maxDistance = comp.maxDistance;
-        data.showDebugSpheres = comp.showDebugSpheres;
-        return data;
+        return audioService->getAudioSource3DData(entity);
     }
 
     bool SceneServiceImpl::setAudioSource3DData(EntityHandle entity, const AudioSource3DData& audioData) {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
-            return false;
-        }
-
-        scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
-            sceneEntity.addComponent<components::AudioSource3DComponent>();
-        }
-
-        auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
-        comp.audioFilePath = audioData.audioFilePath;
-        comp.volume = audioData.volume;
-        comp.pitch = audioData.pitch;
-        comp.loop = audioData.loop;
-        comp.minDistance = audioData.minDistance;
-        comp.maxDistance = audioData.maxDistance;
-        comp.showDebugSpheres = audioData.showDebugSpheres;
-        return true;
+        return audioService->setAudioSource3DData(entity, audioData);
     }
 
     bool SceneServiceImpl::setEntityStatic(EntityHandle entity, bool isStatic) {
@@ -1228,7 +757,14 @@ namespace services {
     void SceneServiceImpl::registerEventHandlers() {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Command handlers
+        // Register component service handlers
+        cameraService->registerEventHandlers(dispatcher);
+        meshService->registerEventHandlers(dispatcher);
+        materialService->registerEventHandlers(dispatcher);
+        audioService->registerEventHandlers(dispatcher);
+        iblService->registerEventHandlers(dispatcher);
+
+        // Core entity command handlers
         dispatcher.registerCommandHandler<events::scene::CreateEntityCommand>(
             [this](const events::scene::CreateEntityCommand& cmd) {
                 return createEntity(cmd.name, cmd.parent);
@@ -1259,7 +795,7 @@ namespace services {
                 setSelectedEntity(cmd.entity);
             });
 
-        // Query handlers
+        // Core entity query handlers
         dispatcher.registerQueryHandler<events::scene::GetEntityQuery>(
             [this](const events::scene::GetEntityQuery& query) {
                 return getEntity(query.entity);
@@ -1285,61 +821,12 @@ namespace services {
                 return findEntitiesByName(query.name);
             });
 
-        dispatcher.registerQueryHandler<events::scene::GetPrimaryCameraQuery>(
-            [this](const events::scene::GetPrimaryCameraQuery&) {
-                return getPrimaryCamera();
-            });
-
         dispatcher.registerQueryHandler<events::scene::GetRootEntityQuery>(
             [this](const events::scene::GetRootEntityQuery&) {
                 return getRoot();
             });
 
-        dispatcher.registerCommandHandler<events::scene::SetIBLDataCommand>(
-            [this](const events::scene::SetIBLDataCommand& cmd) {
-                return setIBLData(cmd.entity, cmd.iblData);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::RemoveIBLComponentCommand>(
-            [this](const events::scene::RemoveIBLComponentCommand& cmd) {
-                return removeIBLComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::AddCameraComponentCommand>(
-            [this](const events::scene::AddCameraComponentCommand& cmd) {
-                return addCameraComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::RemoveCameraComponentCommand>(
-            [this](const events::scene::RemoveCameraComponentCommand& cmd) {
-                return removeCameraComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::SetCameraDataCommand>(
-            [this](const events::scene::SetCameraDataCommand& cmd) {
-                return setCameraData(cmd.entity, cmd.cameraData);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::GetCameraDataQuery>(
-            [this](const events::scene::GetCameraDataQuery& query) {
-                return getCameraData(query.entity);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::HasCameraComponentQuery>(
-            [this](const events::scene::HasCameraComponentQuery& query) {
-                return hasComponent(query.entity, ComponentTypeId::Camera);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::HasIBLComponentQuery>(
-            [this](const events::scene::HasIBLComponentQuery& query) {
-                return hasComponent(query.entity, ComponentTypeId::IBL);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::GetIBLDataQuery>(
-            [this](const events::scene::GetIBLDataQuery& query) {
-                return getIBLData(query.entity);
-            });
-
+        // Scene lifecycle handlers
         dispatcher.registerCommandHandler<events::scene::NewSceneCommand>(
             [this](const events::scene::NewSceneCommand&) {
                 return newScene();
@@ -1354,31 +841,6 @@ namespace services {
             [this](const events::scene::LoadSceneCommand& cmd) {
                 return loadScene(cmd.filePath);
             });
-        
-        dispatcher.registerCommandHandler<events::scene::AddMeshComponentCommand>(
-            [this](const events::scene::AddMeshComponentCommand& cmd) {
-                return addMeshComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::RemoveMeshComponentCommand>(
-            [this](const events::scene::RemoveMeshComponentCommand& cmd) {
-                return removeMeshComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::SetMeshDataCommand>(
-            [this](const events::scene::SetMeshDataCommand& cmd) {
-                return setMeshData(cmd.entity, cmd.meshData);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::HasMeshComponentQuery>(
-            [this](const events::scene::HasMeshComponentQuery& query) {
-                return hasMeshComponent(query.entity);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::GetMeshDataQuery>(
-            [this](const events::scene::GetMeshDataQuery& query) {
-                return getMeshData(query.entity);
-            });
 
         // Static entity handlers
         dispatcher.registerCommandHandler<events::scene::SetEntityStaticCommand>(
@@ -1389,105 +851,6 @@ namespace services {
         dispatcher.registerQueryHandler<events::scene::IsEntityStaticQuery>(
             [this](const events::scene::IsEntityStaticQuery& query) {
                 return isEntityStatic(query.entity);
-            });
-
-        // Material command handlers
-        dispatcher.registerCommandHandler<events::material::AddMaterialComponentCommand>(
-            [this](const events::material::AddMaterialComponentCommand& cmd) {
-                return addMaterialComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::material::RemoveMaterialComponentCommand>(
-            [this](const events::material::RemoveMaterialComponentCommand& cmd) {
-                return removeMaterialComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::material::SetMaterialDataCommand>(
-            [this](const events::material::SetMaterialDataCommand& cmd) {
-                return setMaterialData(cmd.entity, cmd.materialData);
-            });
-
-        dispatcher.registerCommandHandler<events::material::SetDefaultMaterialCommand>(
-            [this](const events::material::SetDefaultMaterialCommand& cmd) {
-                return setDefaultMaterial(cmd.entity, cmd.materialPath);
-            });
-
-        dispatcher.registerCommandHandler<events::material::SetSubMeshMaterialCommand>(
-            [this](const events::material::SetSubMeshMaterialCommand& cmd) {
-                return setSubMeshMaterial(cmd.entity, cmd.submeshName, cmd.materialPath);
-            });
-
-        // Material query handlers
-        dispatcher.registerQueryHandler<events::material::HasMaterialComponentQuery>(
-            [this](const events::material::HasMaterialComponentQuery& query) {
-                return hasMaterialComponent(query.entity);
-            });
-
-        dispatcher.registerQueryHandler<events::material::GetMaterialDataQuery>(
-            [this](const events::material::GetMaterialDataQuery& query) {
-                return getMaterialData(query.entity);
-            });
-
-        dispatcher.registerQueryHandler<events::material::GetSubMeshMaterialQuery>(
-            [this](const events::material::GetSubMeshMaterialQuery& query) {
-                return getSubMeshMaterial(query.entity, query.submeshName);
-            });
-
-        dispatcher.registerQueryHandler<events::material::GetAllSubMeshMaterialsQuery>(
-            [this](const events::material::GetAllSubMeshMaterialsQuery& query) {
-                return getAllSubMeshMaterials(query.entity);
-            });
-
-        // 2D Audio Source component handlers
-        dispatcher.registerCommandHandler<events::scene::AddAudioSource2DComponentCommand>(
-            [this](const events::scene::AddAudioSource2DComponentCommand& cmd) {
-                return addAudioSource2DComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::RemoveAudioSource2DComponentCommand>(
-            [this](const events::scene::RemoveAudioSource2DComponentCommand& cmd) {
-                return removeAudioSource2DComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::SetAudioSource2DDataCommand>(
-            [this](const events::scene::SetAudioSource2DDataCommand& cmd) {
-                return setAudioSource2DData(cmd.entity, cmd.audioData);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::HasAudioSource2DComponentQuery>(
-            [this](const events::scene::HasAudioSource2DComponentQuery& query) {
-                return hasAudioSource2DComponent(query.entity);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::GetAudioSource2DDataQuery>(
-            [this](const events::scene::GetAudioSource2DDataQuery& query) {
-                return getAudioSource2DData(query.entity);
-            });
-
-        // 3D Audio Source component handlers
-        dispatcher.registerCommandHandler<events::scene::AddAudioSource3DComponentCommand>(
-            [this](const events::scene::AddAudioSource3DComponentCommand& cmd) {
-                return addAudioSource3DComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::RemoveAudioSource3DComponentCommand>(
-            [this](const events::scene::RemoveAudioSource3DComponentCommand& cmd) {
-                return removeAudioSource3DComponent(cmd.entity);
-            });
-
-        dispatcher.registerCommandHandler<events::scene::SetAudioSource3DDataCommand>(
-            [this](const events::scene::SetAudioSource3DDataCommand& cmd) {
-                return setAudioSource3DData(cmd.entity, cmd.audioData);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::HasAudioSource3DComponentQuery>(
-            [this](const events::scene::HasAudioSource3DComponentQuery& query) {
-                return hasAudioSource3DComponent(query.entity);
-            });
-
-        dispatcher.registerQueryHandler<events::scene::GetAudioSource3DDataQuery>(
-            [this](const events::scene::GetAudioSource3DDataQuery& query) {
-                return getAudioSource3DData(query.entity);
             });
 
         // Prefab handlers
