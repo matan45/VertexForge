@@ -602,5 +602,17 @@ namespace core {
 		return result;
 	}
 
+	void Utilities::destroyBuffer(const vk::Device& device, vk::Buffer& buffer, vk::DeviceMemory& memory)
+	{
+		if (buffer) {
+			device.destroyBuffer(buffer);
+			buffer = nullptr;
+		}
+		if (memory) {
+			device.freeMemory(memory);
+			memory = nullptr;
+		}
+	}
+
 }
 

@@ -1,11 +1,12 @@
 #include "GPUCullLODPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
-#include <spdlog/spdlog.h>
+#include "GPUDrivenTypes.hpp"
+#include "print/Logger.hpp"
 #include <array>
 
-namespace render::gpudriven {
-
+namespace render::gpudriven
+{
     GPUCullLODPipeline::GPUCullLODPipeline(core::Device& device)
         : device(device)
     {
@@ -18,11 +19,12 @@ namespace render::gpudriven {
 
     void GPUCullLODPipeline::init()
     {
-        if (initialized) {
+        if (initialized)
+        {
             return;
         }
 
-        spdlog::info("GPUCullLODPipeline: Initializing...");
+        loggerInfo("GPUCullLODPipeline: Initializing...");
 
         createDescriptorSetLayout();
         createPipelineLayout();
@@ -31,45 +33,51 @@ namespace render::gpudriven {
         allocateDescriptorSet();
 
         initialized = true;
-        spdlog::info("GPUCullLODPipeline: Initialized successfully");
+        loggerInfo("GPUCullLODPipeline: Initialized successfully");
     }
 
     void GPUCullLODPipeline::cleanup()
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             return;
         }
 
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        if (descriptorPool) {
+        if (descriptorPool)
+        {
             vkDevice.destroyDescriptorPool(descriptorPool);
             descriptorPool = nullptr;
         }
 
-        if (computePipeline) {
+        if (computePipeline)
+        {
             vkDevice.destroyPipeline(computePipeline);
             computePipeline = nullptr;
         }
 
-        if (pipelineLayout) {
+        if (pipelineLayout)
+        {
             vkDevice.destroyPipelineLayout(pipelineLayout);
             pipelineLayout = nullptr;
         }
 
-        if (descriptorSetLayout) {
+        if (descriptorSetLayout)
+        {
             vkDevice.destroyDescriptorSetLayout(descriptorSetLayout);
             descriptorSetLayout = nullptr;
         }
 
-        if (shader) {
+        if (shader)
+        {
             shader->cleanUp();
             shader.reset();
         }
 
         initialized = false;
-        spdlog::info("GPUCullLODPipeline: Cleaned up");
+        loggerInfo("GPUCullLODPipeline: Cleaned up");
     }
 
     void GPUCullLODPipeline::createDescriptorSetLayout()
@@ -127,7 +135,7 @@ namespace render::gpudriven {
         layoutInfo.pBindings = bindings.data();
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        spdlog::debug("GPUCullLODPipeline: Created descriptor set layout");
+        loggerWarning("GPUCullLODPipeline: Created descriptor set layout");
     }
 
     void GPUCullLODPipeline::createPipelineLayout()
@@ -141,20 +149,20 @@ namespace render::gpudriven {
         layoutInfo.pPushConstantRanges = nullptr;
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
-        spdlog::debug("GPUCullLODPipeline: Created pipeline layout");
+        loggerWarning("GPUCullLODPipeline: Created pipeline layout");
     }
 
     void GPUCullLODPipeline::createComputePipeline()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Load and compile shader
         shader = std::make_unique<core::Shader>(device);
         shader->readShader("../../resources/shaders/gpudriven/gpu_cull_lod.glsl");
 
         const auto& stages = shader->getShaderStages();
-        if (stages.empty()) {
-            spdlog::error("GPUCullLODPipeline: Failed to load shader: {}", shader->getLastCompilationError());
+        if (stages.empty())
+        {
+            loggerError("GPUCullLODPipeline: Failed to load shader: {}", shader->getLastCompilationError());
             return;
         }
 
@@ -163,13 +171,14 @@ namespace render::gpudriven {
         pipelineInfo.layout = pipelineLayout;
 
         auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess) {
-            spdlog::error("GPUCullLODPipeline: Failed to create compute pipeline");
+        if (result.result != vk::Result::eSuccess)
+        {
+            loggerError("GPUCullLODPipeline: Failed to create compute pipeline");
             return;
         }
 
         computePipeline = result.value;
-        spdlog::debug("GPUCullLODPipeline: Created compute pipeline");
+        loggerWarning("GPUCullLODPipeline: Created compute pipeline");
     }
 
     void GPUCullLODPipeline::createDescriptorPool()
@@ -178,15 +187,12 @@ namespace render::gpudriven {
 
         std::array<vk::DescriptorPoolSize, 3> poolSizes{};
 
-        // Storage buffers: object, draw commands, per-draw data, draw count (4 total)
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
         poolSizes[0].descriptorCount = 4;
 
-        // Uniform buffer: camera data (1 total)
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
 
-        // Combined image sampler: Hi-Z texture (1 total)
         poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[2].descriptorCount = 1;
 
@@ -196,7 +202,7 @@ namespace render::gpudriven {
         poolInfo.pPoolSizes = poolSizes.data();
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        spdlog::debug("GPUCullLODPipeline: Created descriptor pool");
+        loggerWarning("GPUCullLODPipeline: Created descriptor pool");
     }
 
     void GPUCullLODPipeline::allocateDescriptorSet()
@@ -211,7 +217,7 @@ namespace render::gpudriven {
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        spdlog::debug("GPUCullLODPipeline: Allocated descriptor set");
+        loggerWarning("GPUCullLODPipeline: Allocated descriptor set");
     }
 
     void GPUCullLODPipeline::updateDescriptors(
@@ -227,7 +233,8 @@ namespace render::gpudriven {
             cachedDrawCommandBuffer == drawCommandBuffer &&
             cachedPerDrawDataBuffer == perDrawDataBuffer &&
             cachedDrawCountBuffer == drawCountBuffer &&
-            !descriptorsNeedUpdate) {
+            !descriptorsNeedUpdate)
+        {
             return;
         }
 
@@ -243,8 +250,8 @@ namespace render::gpudriven {
 
     void GPUCullLODPipeline::updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler)
     {
-        // Check if Hi-Z descriptor changed
-        if (cachedHiZView == hiZView && cachedHiZSampler == hiZSampler && !hiZDescriptorNeedsUpdate) {
+        if (cachedHiZView == hiZView && cachedHiZSampler == hiZSampler && !hiZDescriptorNeedsUpdate)
+        {
             return;
         }
 
@@ -255,56 +262,48 @@ namespace render::gpudriven {
 
     void GPUCullLODPipeline::writeDescriptors()
     {
-        if (!descriptorsNeedUpdate && !hiZDescriptorNeedsUpdate) {
+        if (!descriptorsNeedUpdate && !hiZDescriptorNeedsUpdate)
+        {
             return;
         }
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Object buffer info
         vk::DescriptorBufferInfo objectInfo{};
         objectInfo.buffer = cachedObjectBuffer;
         objectInfo.offset = 0;
         objectInfo.range = VK_WHOLE_SIZE;
 
-        // Camera buffer info
         vk::DescriptorBufferInfo cameraInfo{};
         cameraInfo.buffer = cachedCameraBuffer;
         cameraInfo.offset = 0;
         cameraInfo.range = sizeof(GPUCameraData);
 
-        // Draw command buffer info
         vk::DescriptorBufferInfo drawCmdInfo{};
         drawCmdInfo.buffer = cachedDrawCommandBuffer;
         drawCmdInfo.offset = 0;
         drawCmdInfo.range = VK_WHOLE_SIZE;
 
-        // Per-draw data buffer info
         vk::DescriptorBufferInfo perDrawInfo{};
         perDrawInfo.buffer = cachedPerDrawDataBuffer;
         perDrawInfo.offset = 0;
         perDrawInfo.range = VK_WHOLE_SIZE;
 
-        // Draw count buffer info (BatchDrawStats[] for multi-batch rendering)
-        // Layout: [Batch0 stats][Batch1 stats]...[BatchN stats]
         vk::DescriptorBufferInfo drawCountInfo{};
         drawCountInfo.buffer = cachedDrawCountBuffer;
         drawCountInfo.offset = 0;
-        drawCountInfo.range = VK_WHOLE_SIZE;  // All batch stats
+        drawCountInfo.range = VK_WHOLE_SIZE; // All batch stats
 
-        // Hi-Z image info (optional, may not be available on first frame)
         vk::DescriptorImageInfo hiZInfo{};
         hiZInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         hiZInfo.imageView = cachedHiZView;
         hiZInfo.sampler = cachedHiZSampler;
 
-        // Determine number of writes based on whether Hi-Z is available
         bool hasHiZ = cachedHiZView && cachedHiZSampler;
 
         std::vector<vk::WriteDescriptorSet> writes;
         writes.reserve(hasHiZ ? 6 : 5);
 
-        // Binding 0: Object buffer
         vk::WriteDescriptorSet objectWrite{};
         objectWrite.dstSet = descriptorSet;
         objectWrite.dstBinding = 0;
@@ -314,7 +313,6 @@ namespace render::gpudriven {
         objectWrite.pBufferInfo = &objectInfo;
         writes.push_back(objectWrite);
 
-        // Binding 1: Camera buffer
         vk::WriteDescriptorSet cameraWrite{};
         cameraWrite.dstSet = descriptorSet;
         cameraWrite.dstBinding = 1;
@@ -324,7 +322,6 @@ namespace render::gpudriven {
         cameraWrite.pBufferInfo = &cameraInfo;
         writes.push_back(cameraWrite);
 
-        // Binding 2: Draw command buffer
         vk::WriteDescriptorSet drawCmdWrite{};
         drawCmdWrite.dstSet = descriptorSet;
         drawCmdWrite.dstBinding = 2;
@@ -334,7 +331,6 @@ namespace render::gpudriven {
         drawCmdWrite.pBufferInfo = &drawCmdInfo;
         writes.push_back(drawCmdWrite);
 
-        // Binding 3: Per-draw data buffer
         vk::WriteDescriptorSet perDrawWrite{};
         perDrawWrite.dstSet = descriptorSet;
         perDrawWrite.dstBinding = 3;
@@ -344,7 +340,6 @@ namespace render::gpudriven {
         perDrawWrite.pBufferInfo = &perDrawInfo;
         writes.push_back(perDrawWrite);
 
-        // Binding 4: Draw count buffer
         vk::WriteDescriptorSet drawCountWrite{};
         drawCountWrite.dstSet = descriptorSet;
         drawCountWrite.dstBinding = 4;
@@ -354,8 +349,8 @@ namespace render::gpudriven {
         drawCountWrite.pBufferInfo = &drawCountInfo;
         writes.push_back(drawCountWrite);
 
-        // Binding 5: Hi-Z texture (if available)
-        if (hasHiZ) {
+        if (hasHiZ)
+        {
             vk::WriteDescriptorSet hiZWrite{};
             hiZWrite.dstSet = descriptorSet;
             hiZWrite.dstBinding = 5;
@@ -370,25 +365,22 @@ namespace render::gpudriven {
         descriptorsNeedUpdate = false;
         hiZDescriptorNeedsUpdate = false;
 
-        spdlog::debug("GPUCullLODPipeline: Updated descriptors (Hi-Z: {})", hasHiZ ? "yes" : "no");
+        loggerWarning("GPUCullLODPipeline: Updated descriptors (Hi-Z: {})", hasHiZ ? "yes" : "no");
     }
 
     void GPUCullLODPipeline::dispatch(vk::CommandBuffer cmd, uint32_t objectCount)
     {
-        if (!initialized || objectCount == 0) {
+        if (!initialized || objectCount == 0)
+        {
             return;
         }
 
-        // Ensure descriptors are written before dispatch
         writeDescriptors();
 
-        // Bind pipeline and descriptors
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 0, descriptorSet, {});
 
-        // Calculate workgroup count
         uint32_t groupCount = (objectCount + CULL_WORKGROUP_SIZE - 1) / CULL_WORKGROUP_SIZE;
         cmd.dispatch(groupCount, 1, 1);
     }
-
 }

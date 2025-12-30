@@ -102,7 +102,6 @@ namespace render::mesh
 
     void AudioSphereDebugRenderer::createBuffers()
     {
-        // Create a unit sphere wireframe with 3 rings (XY, XZ, YZ planes)
         std::vector<glm::vec3> vertices;
         std::vector<uint32_t> indices;
 

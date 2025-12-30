@@ -1,7 +1,8 @@
 #include "BindlessTextureManager.hpp"
 #include "../../core/Device.hpp"
+#include "print/Logger.hpp"
 #include <stdexcept>
-#include <spdlog/spdlog.h>
+
 
 namespace render::gpudriven {
 
@@ -21,14 +22,14 @@ namespace render::gpudriven {
             return;
         }
 
-        spdlog::info("BindlessTextureManager: Initializing with max {} textures", MAX_BINDLESS_TEXTURES);
+        loggerInfo("BindlessTextureManager: Initializing with max {} textures", MAX_BINDLESS_TEXTURES);
 
         createDescriptorSetLayout();
         createDescriptorPool();
         allocateDescriptorSet();
 
         initialized = true;
-        spdlog::info("BindlessTextureManager: Initialized successfully");
+        loggerInfo("BindlessTextureManager: Initialized successfully");
     }
 
     void BindlessTextureManager::cleanup()
@@ -55,7 +56,7 @@ namespace render::gpudriven {
         initialized = false;
         defaultTextureSet = false;
 
-        spdlog::info("BindlessTextureManager: Cleaned up");
+        loggerInfo("BindlessTextureManager: Cleaned up");
     }
 
     void BindlessTextureManager::createDescriptorSetLayout()
@@ -88,7 +89,7 @@ namespace render::gpudriven {
         layoutInfo.pBindings = &textureBinding;
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        spdlog::debug("BindlessTextureManager: Created descriptor set layout");
+        loggerWarning("BindlessTextureManager: Created descriptor set layout");
     }
 
     void BindlessTextureManager::createDescriptorPool()
@@ -106,7 +107,7 @@ namespace render::gpudriven {
         poolInfo.pPoolSizes = &poolSize;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        spdlog::debug("BindlessTextureManager: Created descriptor pool");
+        loggerWarning("BindlessTextureManager: Created descriptor pool");
     }
 
     void BindlessTextureManager::allocateDescriptorSet()
@@ -129,7 +130,7 @@ namespace render::gpudriven {
         std::vector<vk::DescriptorSet> sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        spdlog::debug("BindlessTextureManager: Allocated descriptor set");
+        loggerWarning("BindlessTextureManager: Allocated descriptor set");
     }
 
     void BindlessTextureManager::setDefaultTexture(vk::ImageView imageView, vk::Sampler sampler)
@@ -142,7 +143,7 @@ namespace render::gpudriven {
         updateDescriptor(0, imageView, sampler);
         defaultTextureSet = true;
 
-        spdlog::debug("BindlessTextureManager: Set default texture at index 0");
+        loggerWarning("BindlessTextureManager: Set default texture at index 0");
     }
 
     uint32_t BindlessTextureManager::registerTexture(const std::string& path, vk::ImageView imageView, vk::Sampler sampler)
@@ -150,8 +151,7 @@ namespace render::gpudriven {
         if (!initialized) {
             throw std::runtime_error("BindlessTextureManager: Cannot register texture before initialization");
         }
-
-        // Check if already registered
+        
         auto it = texturePathToIndex.find(path);
         if (it != texturePathToIndex.end()) {
             return it->second;
@@ -159,18 +159,16 @@ namespace render::gpudriven {
 
         // Check capacity
         if (nextTextureIndex >= MAX_BINDLESS_TEXTURES) {
-            spdlog::error("BindlessTextureManager: Maximum texture count ({}) exceeded", MAX_BINDLESS_TEXTURES);
+            loggerError("BindlessTextureManager: Maximum texture count ({}) exceeded", MAX_BINDLESS_TEXTURES);
             return INVALID_TEXTURE_INDEX;
         }
-
-        // Register at next available index
+        
         uint32_t index = nextTextureIndex++;
         texturePathToIndex[path] = index;
-
-        // Update the descriptor
+        
         updateDescriptor(index, imageView, sampler);
 
-        spdlog::debug("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
+        loggerWarning("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
         return index;
     }
 
@@ -181,11 +179,6 @@ namespace render::gpudriven {
             return it->second;
         }
         return INVALID_TEXTURE_INDEX;
-    }
-
-    bool BindlessTextureManager::isTextureRegistered(const std::string& path) const
-    {
-        return texturePathToIndex.find(path) != texturePathToIndex.end();
     }
 
     void BindlessTextureManager::updateDescriptor(uint32_t index, vk::ImageView imageView, vk::Sampler sampler)

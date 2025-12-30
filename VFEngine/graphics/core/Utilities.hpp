@@ -248,5 +248,8 @@ namespace core
 		// Create a flexible graphics pipeline with configurable vertex input, blending, depth, etc.
 		// Suitable for billboard, particle, UI, and other custom rendering pipelines
 		static GraphicsPipelineResult createGraphicsPipeline(const GraphicsPipelineConfig& config);
+
+		// Destroy a buffer and free its memory, setting handles to null
+		static void destroyBuffer(const vk::Device& device, vk::Buffer& buffer, vk::DeviceMemory& memory);
 	};
 }

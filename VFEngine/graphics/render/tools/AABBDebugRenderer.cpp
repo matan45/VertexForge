@@ -101,30 +101,8 @@ namespace render::mesh
 
     void AABBDebugRenderer::createBuffers()
     {
-        // Unit cube vertices (8 corners, from -1 to 1)
-        std::vector<glm::vec3> vertices = {
-            {-1.0f, -1.0f, -1.0f},  // 0: back-bottom-left
-            { 1.0f, -1.0f, -1.0f},  // 1: back-bottom-right
-            { 1.0f,  1.0f, -1.0f},  // 2: back-top-right
-            {-1.0f,  1.0f, -1.0f},  // 3: back-top-left
-            {-1.0f, -1.0f,  1.0f},  // 4: front-bottom-left
-            { 1.0f, -1.0f,  1.0f},  // 5: front-bottom-right
-            { 1.0f,  1.0f,  1.0f},  // 6: front-top-right
-            {-1.0f,  1.0f,  1.0f},  // 7: front-top-left
-        };
-
-        // Line indices for 12 edges of the cube
-        std::vector<uint32_t> indices = {
-            // Back face edges
-            0, 1,  1, 2,  2, 3,  3, 0,
-            // Front face edges
-            4, 5,  5, 6,  6, 7,  7, 4,
-            // Connecting edges
-            0, 4,  1, 5,  2, 6,  3, 7
-        };
-
         // Create vertex buffer
-        vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * vertices.size();
+        vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * kUnitCubeVertices.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
@@ -137,12 +115,12 @@ namespace render::mesh
             device.getGraphicsQueue(),
             device.getStagingCommandPool(),
             vertexBuffer,
-            vertices.data(),
+            kUnitCubeVertices.data(),
             vertexBufferSize
         );
 
         // Create index buffer
-        vk::DeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
+        vk::DeviceSize indexBufferSize = sizeof(uint32_t) * kUnitCubeLineIndices.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
@@ -155,7 +133,7 @@ namespace render::mesh
             device.getGraphicsQueue(),
             device.getStagingCommandPool(),
             indexBuffer,
-            indices.data(),
+            kUnitCubeLineIndices.data(),
             indexBufferSize
         );
     }
@@ -178,6 +156,10 @@ namespace render::mesh
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
         commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint32);
 
+        const glm::mat4 viewProjection = projection * view;
+        constexpr glm::vec4 greenColor{0.0f, 1.0f, 0.0f, 1.0f};
+        constexpr glm::vec4 yellowColor{1.0f, 1.0f, 0.0f, 1.0f};
+
         for (const auto& meshData : meshDrawList)
         {
             if (!meshData.showBoundingBox)
@@ -191,61 +173,38 @@ namespace render::mesh
                 continue;
             }
 
-            // Render combined mesh AABB (green)
-            {
-                const math::AABB& aabb = gpuData->boundingBox;
-                glm::vec3 center = aabb.getCenter();
-                glm::vec3 extents = aabb.getExtents();
+            renderAABB(commandBuffer, gpuData->boundingBox, meshData.modelMatrix, viewProjection, greenColor);
 
-                // Scale and translate unit cube [-1,1] to AABB bounds
-                glm::mat4 aabbModel = meshData.modelMatrix;
-                aabbModel = glm::translate(aabbModel, center);
-                aabbModel = glm::scale(aabbModel, extents);
-
-                // Calculate MVP
-                glm::mat4 mvp = projection * view * aabbModel;
-
-                AABBPushConstants aabbPushConstants{};
-                aabbPushConstants.mvp = mvp;
-                aabbPushConstants.color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green wireframe
-
-                commandBuffer.pushConstants(wireframePipelineLayout,
-                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                    0, sizeof(AABBPushConstants), &aabbPushConstants);
-
-                // Draw unit cube wireframe (24 indices for 12 lines)
-                commandBuffer.drawIndexed(24, 1, 0, 0, 0);
-            }
-
-            // Render per-submesh AABBs (yellow) - only if there are multiple submeshes
             if (gpuData->subMeshes.size() > 1)
             {
                 for (const auto& subMesh : gpuData->subMeshes)
                 {
-                    const math::AABB& aabb = subMesh.boundingBox;
-                    glm::vec3 center = aabb.getCenter();
-                    glm::vec3 extents = aabb.getExtents();
-
-                    // Scale and translate unit cube [-1,1] to AABB bounds
-                    glm::mat4 aabbModel = meshData.modelMatrix;
-                    aabbModel = glm::translate(aabbModel, center);
-                    aabbModel = glm::scale(aabbModel, extents);
-
-                    // Calculate MVP
-                    glm::mat4 mvp = projection * view * aabbModel;
-
-                    AABBPushConstants aabbPushConstants{};
-                    aabbPushConstants.mvp = mvp;
-                    aabbPushConstants.color = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow wireframe
-
-                    commandBuffer.pushConstants(wireframePipelineLayout,
-                        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                        0, sizeof(AABBPushConstants), &aabbPushConstants);
-
-                    // Draw unit cube wireframe (24 indices for 12 lines)
-                    commandBuffer.drawIndexed(24, 1, 0, 0, 0);
+                    renderAABB(commandBuffer, subMesh.boundingBox, meshData.modelMatrix, viewProjection, yellowColor);
                 }
             }
         }
+    }
+
+    void AABBDebugRenderer::renderAABB(const vk::CommandBuffer& commandBuffer,
+                                        const math::AABB& aabb,
+                                        const glm::mat4& modelMatrix,
+                                        const glm::mat4& viewProjection,
+                                        const glm::vec4& color) const
+    {
+        glm::vec3 center = aabb.getCenter();
+        glm::vec3 extents = aabb.getExtents();
+
+        glm::mat4 aabbModel = glm::scale(glm::translate(modelMatrix, center), extents);
+        glm::mat4 mvp = viewProjection * aabbModel;
+
+        AABBPushConstants pushConstants{};
+        pushConstants.mvp = mvp;
+        pushConstants.color = color;
+
+        commandBuffer.pushConstants(wireframePipelineLayout,
+            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+            0, sizeof(AABBPushConstants), &pushConstants);
+
+        commandBuffer.drawIndexed(static_cast<uint32_t>(kUnitCubeLineIndices.size()), 1, 0, 0, 0);
     }
 }

@@ -236,44 +236,22 @@ namespace render::gpudriven {
             stagingMapped = nullptr;
         }
 
-        if (stagingBuffer) {
-            logicalDevice.destroyBuffer(stagingBuffer);
-            logicalDevice.freeMemory(stagingMemory);
-            stagingBuffer = nullptr;
-        }
-
-        if (combinedPerDrawDataBuffer) {
-            logicalDevice.destroyBuffer(combinedPerDrawDataBuffer);
-            logicalDevice.freeMemory(combinedPerDrawDataMemory);
-            combinedPerDrawDataBuffer = nullptr;
-        }
-
-        if (combinedDrawCountBuffer) {
-            logicalDevice.destroyBuffer(combinedDrawCountBuffer);
-            logicalDevice.freeMemory(combinedDrawCountMemory);
-            combinedDrawCountBuffer = nullptr;
-        }
-
-        if (combinedDrawCommandBuffer) {
-            logicalDevice.destroyBuffer(combinedDrawCommandBuffer);
-            logicalDevice.freeMemory(combinedDrawCommandMemory);
-            combinedDrawCommandBuffer = nullptr;
-        }
+        core::Utilities::destroyBuffer(logicalDevice, stagingBuffer, stagingMemory);
+        core::Utilities::destroyBuffer(logicalDevice, combinedPerDrawDataBuffer, combinedPerDrawDataMemory);
+        core::Utilities::destroyBuffer(logicalDevice, combinedDrawCountBuffer, combinedDrawCountMemory);
+        core::Utilities::destroyBuffer(logicalDevice, combinedDrawCommandBuffer, combinedDrawCommandMemory);
     }
 
     void IndirectBatchManager::resetAllBatches(vk::CommandBuffer cmd)
     {
-        // Reset all batch stats to 0
         std::memset(stagingMapped, 0, getCombinedDrawCountBufferSize());
-
-        // Copy zeros from staging to draw count buffer
+        
         vk::BufferCopy copyRegion;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = getCombinedDrawCountBufferSize();
         cmd.copyBuffer(stagingBuffer, combinedDrawCountBuffer, copyRegion);
-
-        // Barrier to ensure copy completes before compute shader
+        
         vk::BufferMemoryBarrier barrier;
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
@@ -295,10 +273,9 @@ namespace render::gpudriven {
 
     void IndirectBatchManager::insertBarriersAfterCompute(vk::CommandBuffer cmd)
     {
-        // Barrier between compute shader writes and indirect draw reads
+        
         std::array<vk::BufferMemoryBarrier, 3> barriers;
-
-        // Draw command buffer: compute write -> indirect read
+        
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -306,9 +283,7 @@ namespace render::gpudriven {
         barriers[0].buffer = combinedDrawCommandBuffer;
         barriers[0].offset = 0;
         barriers[0].size = VK_WHOLE_SIZE;
-
-        // Draw count buffer: compute write -> indirect read
-        // Note: We need to read drawCount from each batch, so use whole buffer
+        
         barriers[1].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[1].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -316,8 +291,7 @@ namespace render::gpudriven {
         barriers[1].buffer = combinedDrawCountBuffer;
         barriers[1].offset = 0;
         barriers[1].size = VK_WHOLE_SIZE;
-
-        // Per-draw data buffer: compute write -> vertex/fragment shader read
+        
         barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderRead;
         barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;

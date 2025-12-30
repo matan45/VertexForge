@@ -5,12 +5,7 @@
 #include "../material/MaterialPBRExtractor.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/SwapChain.hpp"
-#include "../../core/Shader.hpp"
-#include "../../core/Utilities.hpp"
-#include <spdlog/spdlog.h>
-#include <glm/gtc/matrix_transform.hpp>
-#include <cstring>
+#include "print/Logger.hpp"
 #include <array>
 #include <unordered_map>
 #include <unordered_set>
@@ -39,7 +34,7 @@ namespace render::gpudriven {
             return;
         }
 
-        spdlog::info("GPUDrivenRenderer: Initializing...");
+        loggerInfo("GPUDrivenRenderer: Initializing...");
 
         cachedIBLLayout = iblDescriptorSetLayout;
         cachedRenderPass = renderPass;
@@ -51,15 +46,15 @@ namespace render::gpudriven {
         // Create mesh stream manager (streaming enabled by default)
         if (meshStreamingEnabled) {
             meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
-            spdlog::info("GPUDrivenRenderer: Mesh streaming enabled by default");
+            loggerInfo("GPUDrivenRenderer: Mesh streaming enabled by default");
         }
 
         batchManager = std::make_unique<IndirectBatchManager>(device);
         if (!batchManager->initWithAutoConfig()) {
-            spdlog::error("GPUDrivenRenderer: Failed to initialize batch manager - GPU memory allocation failed");
+            loggerError("GPUDrivenRenderer: Failed to initialize batch manager - GPU memory allocation failed");
             // Fall back to minimal configuration
             if (!batchManager->init(2, 50000, 8)) {
-                spdlog::critical("GPUDrivenRenderer: Even minimal batch configuration failed - GPU-driven rendering unavailable");
+                loggerError("GPUDrivenRenderer: Even minimal batch configuration failed - GPU-driven rendering unavailable");
                 batchManager.reset();
             }
         }
@@ -71,25 +66,24 @@ namespace render::gpudriven {
         cullPipeline->init();
 
         // Create camera UBO for compute shader
-        createCameraBuffer();
-
-        // Create per-draw data descriptor set
-        createPerDrawDataDescriptor();
+        cameraBuffer = std::make_unique<GPUDrivenCameraBuffer>(device, swapChain);
+        cameraBuffer->init();
 
         // Create graphics pipeline for GPU-driven rendering
-        createGraphicsPipeline(iblDescriptorSetLayout, renderPass);
+        pipeline = std::make_unique<GPUDrivenPipeline>(device, swapChain);
+        pipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(), renderPass);
 
         // Initialize custom shader cache for GPU-driven compatible material shaders
         customShaderCache = std::make_unique<GPUDrivenShaderCache>(device, swapChain);
         customShaderCache->init(
             iblDescriptorSetLayout,
-            perDrawDataLayout,
+            pipeline->getPerDrawDataLayout(),
             bindlessTextures->getDescriptorSetLayout(),
             renderPass
         );
 
         initialized = true;
-        spdlog::info("GPUDrivenRenderer: Initialized successfully");
+        loggerInfo("GPUDrivenRenderer: Initialized successfully");
     }
 
     void GPUDrivenRenderer::cleanup()
@@ -101,256 +95,25 @@ namespace render::gpudriven {
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        // Cleanup graphics pipeline
-        if (graphicsPipeline) {
-            vkDevice.destroyPipeline(graphicsPipeline);
-            graphicsPipeline = nullptr;
-        }
-
-        if (graphicsPipelineLayout) {
-            vkDevice.destroyPipelineLayout(graphicsPipelineLayout);
-            graphicsPipelineLayout = nullptr;
-        }
-
-        if (perDrawDataPool) {
-            vkDevice.destroyDescriptorPool(perDrawDataPool);
-            perDrawDataPool = nullptr;
-        }
-
-        if (perDrawDataLayout) {
-            vkDevice.destroyDescriptorSetLayout(perDrawDataLayout);
-            perDrawDataLayout = nullptr;
-        }
-
-        // Cleanup camera buffer
-        if (cameraMapped) {
-            vkDevice.unmapMemory(cameraBufferMemory);
-            cameraMapped = nullptr;
-        }
-        if (cameraBuffer) {
-            vkDevice.destroyBuffer(cameraBuffer);
-            vkDevice.freeMemory(cameraBufferMemory);
-            cameraBuffer = nullptr;
-        }
-
-        // Cleanup shader
-        if (meshShader) {
-            meshShader->cleanUp();
-            meshShader.reset();
-        }
-
         // Cleanup sub-components
         if (customShaderCache) customShaderCache->cleanup();
+        if (pipeline) pipeline->cleanup();
+        if (cameraBuffer) cameraBuffer->cleanup();
         if (cullPipeline) cullPipeline->cleanup();
         if (bindlessTextures) bindlessTextures->cleanup();
         if (batchManager) batchManager->cleanup();
         if (mergedBuffer) mergedBuffer->cleanup();
 
         meshStreamManager.reset();
+        pipeline.reset();
+        cameraBuffer.reset();
         cullPipeline.reset();
         bindlessTextures.reset();
         batchManager.reset();
         mergedBuffer.reset();
 
         initialized = false;
-        spdlog::info("GPUDrivenRenderer: Cleaned up");
-    }
-
-    void GPUDrivenRenderer::createCameraBuffer()
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        core::BufferInfoRequest request(
-            vkDevice,
-            device.getPhysicalDevice(),
-            sizeof(GPUCameraData),
-            vk::BufferUsageFlagBits::eUniformBuffer,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-        );
-
-        core::Utilities::createBuffer(request, cameraBuffer, cameraBufferMemory);
-
-        // Map persistently
-        cameraMapped = vkDevice.mapMemory(cameraBufferMemory, 0, sizeof(GPUCameraData));
-
-        spdlog::debug("GPUDrivenRenderer: Created camera buffer");
-    }
-
-    void GPUDrivenRenderer::createPerDrawDataDescriptor()
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        // Create descriptor set layout for per-draw data (Set 1)
-        vk::DescriptorSetLayoutBinding perDrawBinding{};
-        perDrawBinding.binding = 0;
-        perDrawBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
-        perDrawBinding.descriptorCount = 1;
-        perDrawBinding.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
-
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &perDrawBinding;
-
-        perDrawDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-
-        // Create descriptor pool
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 1;
-
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-
-        perDrawDataPool = vkDevice.createDescriptorPool(poolInfo);
-
-        // Allocate descriptor set
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = perDrawDataPool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &perDrawDataLayout;
-
-        auto sets = vkDevice.allocateDescriptorSets(allocInfo);
-        perDrawDataDescriptorSet = sets[0];
-
-        spdlog::debug("GPUDrivenRenderer: Created per-draw data descriptor");
-    }
-
-    void GPUDrivenRenderer::createGraphicsPipeline(vk::DescriptorSetLayout iblLayout, vk::RenderPass renderPass)
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        // Load GPU-driven mesh shader
-        meshShader = std::make_unique<core::Shader>(device);
-        meshShader->readShader("../../resources/shaders/gpudriven/mesh_gpudriven.glsl");
-
-        const auto& stages = meshShader->getShaderStages();
-        if (stages.empty()) {
-            spdlog::error("GPUDrivenRenderer: Failed to load mesh shader: {}", meshShader->getLastCompilationError());
-            return;
-        }
-
-        // Create pipeline layout with 3 descriptor sets:
-        // Set 0: IBL (camera UBO + irradiance + prefilter + brdfLUT) - reuse existing layout
-        // Set 1: Per-draw data storage buffer
-        // Set 2: Bindless textures
-        std::array<vk::DescriptorSetLayout, 3> setLayouts = {
-            iblLayout,
-            perDrawDataLayout,
-            bindlessTextures->getDescriptorSetLayout()
-        };
-
-        vk::PipelineLayoutCreateInfo layoutInfo{};
-        layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-        layoutInfo.pSetLayouts = setLayouts.data();
-        layoutInfo.pushConstantRangeCount = 0;
-        layoutInfo.pPushConstantRanges = nullptr;
-
-        graphicsPipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
-
-        // Vertex input state
-        auto bindingDescription = mesh::MeshVertexInput::getBindingDescription();
-        auto attributeDescriptions = mesh::MeshVertexInput::getAttributeDescriptions();
-
-        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-        // Input assembly
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        // Viewport and scissor (dynamic state would be better, but matching existing pattern)
-        vk::Viewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapChain.getSwapchainExtent().width);
-        viewport.height = static_cast<float>(swapChain.getSwapchainExtent().height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        vk::Rect2D scissor{};
-        scissor.offset = vk::Offset2D(0, 0);
-        scissor.extent = swapChain.getSwapchainExtent();
-
-        vk::PipelineViewportStateCreateInfo viewportState{};
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
-
-        // Rasterizer
-        vk::PipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = vk::PolygonMode::eFill;
-        rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = vk::CullModeFlagBits::eBack;
-        rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
-        rasterizer.depthBiasEnable = VK_FALSE;
-
-        // Multisampling
-        vk::PipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-        // Depth testing
-        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_TRUE;
-        depthStencil.depthCompareOp = vk::CompareOp::eLess;
-        depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.stencilTestEnable = VK_FALSE;
-
-        // Color blending - no blending (opaque only for GPU-driven)
-        vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-            vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB |
-            vk::ColorComponentFlagBits::eA;
-        colorBlendAttachment.blendEnable = VK_FALSE;
-
-        vk::PipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.attachmentCount = 1;
-        colorBlending.pAttachments = &colorBlendAttachment;
-
-        // Create pipeline
-        vk::GraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
-        pipelineInfo.pStages = stages.data();
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.layout = graphicsPipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
-
-        auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess) {
-            spdlog::error("GPUDrivenRenderer: Failed to create graphics pipeline");
-            return;
-        }
-
-        graphicsPipeline = result.value;
-        spdlog::debug("GPUDrivenRenderer: Created graphics pipeline");
-    }
-
-    uint32_t GPUDrivenRenderer::registerTexture(const std::string& path, vk::ImageView view, vk::Sampler sampler)
-    {
-        if (!initialized || !bindlessTextures) {
-            return INVALID_TEXTURE_INDEX;
-        }
-
-        return bindlessTextures->registerTexture(path, view, sampler);
+        loggerInfo("GPUDrivenRenderer: Cleaned up");
     }
 
     void GPUDrivenRenderer::setDefaultTexture(vk::ImageView view, vk::Sampler sampler)
@@ -360,118 +123,6 @@ namespace render::gpudriven {
         }
 
         bindlessTextures->setDefaultTexture(view, sampler);
-    }
-
-    vk::DescriptorSetLayout GPUDrivenRenderer::getBindlessTextureLayout() const
-    {
-        if (bindlessTextures) {
-            return bindlessTextures->getDescriptorSetLayout();
-        }
-        return nullptr;
-    }
-
-    void GPUDrivenRenderer::extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6])
-    {
-        // Extract frustum planes from view-projection matrix (Gribb/Hartmann method)
-        // Each plane is represented as (A, B, C, D) where Ax + By + Cz + D = 0
-
-        // Left plane
-        planes[0] = glm::vec4(
-            viewProjection[0][3] + viewProjection[0][0],
-            viewProjection[1][3] + viewProjection[1][0],
-            viewProjection[2][3] + viewProjection[2][0],
-            viewProjection[3][3] + viewProjection[3][0]
-        );
-
-        // Right plane
-        planes[1] = glm::vec4(
-            viewProjection[0][3] - viewProjection[0][0],
-            viewProjection[1][3] - viewProjection[1][0],
-            viewProjection[2][3] - viewProjection[2][0],
-            viewProjection[3][3] - viewProjection[3][0]
-        );
-
-        // Bottom plane
-        planes[2] = glm::vec4(
-            viewProjection[0][3] + viewProjection[0][1],
-            viewProjection[1][3] + viewProjection[1][1],
-            viewProjection[2][3] + viewProjection[2][1],
-            viewProjection[3][3] + viewProjection[3][1]
-        );
-
-        // Top plane
-        planes[3] = glm::vec4(
-            viewProjection[0][3] - viewProjection[0][1],
-            viewProjection[1][3] - viewProjection[1][1],
-            viewProjection[2][3] - viewProjection[2][1],
-            viewProjection[3][3] - viewProjection[3][1]
-        );
-
-        // Near plane
-        planes[4] = glm::vec4(
-            viewProjection[0][3] + viewProjection[0][2],
-            viewProjection[1][3] + viewProjection[1][2],
-            viewProjection[2][3] + viewProjection[2][2],
-            viewProjection[3][3] + viewProjection[3][2]
-        );
-
-        // Far plane
-        planes[5] = glm::vec4(
-            viewProjection[0][3] - viewProjection[0][2],
-            viewProjection[1][3] - viewProjection[1][2],
-            viewProjection[2][3] - viewProjection[2][2],
-            viewProjection[3][3] - viewProjection[3][2]
-        );
-
-        // Normalize all planes
-        for (int i = 0; i < 6; i++) {
-            float length = glm::length(glm::vec3(planes[i]));
-            planes[i] /= length;
-        }
-    }
-
-    void GPUDrivenRenderer::updateCameraData(
-        const glm::mat4& view,
-        const glm::mat4& projection,
-        const glm::vec3& cameraPosition,
-        float nearPlane,
-        float farPlane,
-        float time)
-    {
-        glm::mat4 viewProjection = projection * view;
-
-        cameraData.view = view;
-        cameraData.projection = projection;
-        cameraData.viewProjection = viewProjection;
-        cameraData.invViewProjection = glm::inverse(viewProjection);
-
-        cameraData.cameraPosition = glm::vec4(cameraPosition, nearPlane);
-        cameraData.screenParams = glm::vec4(
-            static_cast<float>(swapChain.getSwapchainExtent().width),
-            static_cast<float>(swapChain.getSwapchainExtent().height),
-            1.0f / static_cast<float>(swapChain.getSwapchainExtent().width),
-            1.0f / static_cast<float>(swapChain.getSwapchainExtent().height)
-        );
-
-        extractFrustumPlanes(viewProjection, cameraData.frustumPlanes);
-
-        cameraData.farPlane = farPlane;
-        cameraData.objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0;
-        cameraData.hiZMipLevels = hiZMipLevels;
-        cameraData.frameIndex = frameIndex++;
-
-        cameraData.enableFrustumCulling = frustumCullingEnabled ? 1 : 0;
-        cameraData.enableOcclusionCulling = (occlusionCullingEnabled && hiZMipLevels > 0) ? 1 : 0;
-        cameraData.enableLODSelection = lodSelectionEnabled ? 1 : 0;
-        cameraData.batchCount = batchManager ? batchManager->getBatchCount() : 1;
-
-        cameraData.commandsPerBatch = batchManager ? batchManager->getCommandsPerBatch() : MAX_DRAW_COMMANDS;
-        cameraData.shaderGroupCount = batchManager ? batchManager->getShaderGroupCount() : MAX_SHADER_GROUPS;
-        cameraData.padding1 = 0;
-        cameraData.padding2 = 0;
-
-        // Copy to GPU
-        std::memcpy(cameraMapped, &cameraData, sizeof(GPUCameraData));
     }
 
     void GPUDrivenRenderer::updateScene(
@@ -607,32 +258,33 @@ namespace render::gpudriven {
         mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, time);
 
         // Update camera data for compute shader
-        updateCameraData(view, projection, cameraPosition, nearPlane, farPlane, time);
+        CameraUpdateParams cameraParams{
+            .view = view,
+            .projection = projection,
+            .cameraPosition = cameraPosition,
+            .nearPlane = nearPlane,
+            .farPlane = farPlane,
+            .time = time,
+            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
+            .hiZMipLevels = hiZMipLevels,
+            .frustumCullingEnabled = frustumCullingEnabled,
+            .occlusionCullingEnabled = occlusionCullingEnabled,
+            .lodSelectionEnabled = lodSelectionEnabled,
+            .batchManager = batchManager.get()
+        };
+        cameraBuffer->update(cameraParams);
 
         // Update cull pipeline descriptors with combined batch buffers
         cullPipeline->updateDescriptors(
             mergedBuffer->getObjectBuffer(),
-            cameraBuffer,
+            cameraBuffer->getBuffer(),
             batchManager->getCombinedDrawCommandBuffer(),
             batchManager->getCombinedPerDrawDataBuffer(),
             batchManager->getCombinedDrawCountBuffer()
         );
 
         // Update per-draw data descriptor for graphics pipeline (uses combined buffer)
-        vk::DescriptorBufferInfo perDrawInfo{};
-        perDrawInfo.buffer = batchManager->getCombinedPerDrawDataBuffer();
-        perDrawInfo.offset = 0;
-        perDrawInfo.range = VK_WHOLE_SIZE;
-
-        vk::WriteDescriptorSet perDrawWrite{};
-        perDrawWrite.dstSet = perDrawDataDescriptorSet;
-        perDrawWrite.dstBinding = 0;
-        perDrawWrite.dstArrayElement = 0;
-        perDrawWrite.descriptorCount = 1;
-        perDrawWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
-        perDrawWrite.pBufferInfo = &perDrawInfo;
-
-        device.getLogicalDevice().updateDescriptorSets(perDrawWrite, {});
+        pipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
 
         // Update stats
         stats.totalObjects = mergedBuffer->getObjectCount();
@@ -696,31 +348,31 @@ namespace render::gpudriven {
         // No fragment discard needed - compute shader outputs to group-specific sections
         for (uint32_t shaderGroup : activeGroups)
         {
-            vk::Pipeline pipeline;
+            vk::Pipeline activePipeline;
             vk::PipelineLayout layout;
 
             if (shaderGroup == 0) {
                 // Default PBR pipeline
-                pipeline = graphicsPipeline;
-                layout = graphicsPipelineLayout;
+                activePipeline = pipeline->getPipeline();
+                layout = pipeline->getPipelineLayout();
             } else {
                 // Custom shader pipeline
                 if (customShaderCache) {
-                    pipeline = customShaderCache->getPipeline(shaderGroup, false);
+                    activePipeline = customShaderCache->getPipeline(shaderGroup, false);
                 }
-                if (!pipeline) {
-                    spdlog::warn("GPUDrivenRenderer: No pipeline for shader group {}, skipping", shaderGroup);
+                if (!activePipeline) {
+                    loggerWarning("GPUDrivenRenderer: No pipeline for shader group {}, skipping", shaderGroup);
                     continue;
                 }
                 // Custom pipelines use the same layout (shared in shader cache)
-                layout = graphicsPipelineLayout;
+                layout = pipeline->getPipelineLayout();
             }
 
-            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
             std::array<vk::DescriptorSet, 3> descriptorSets = {
                 iblDescriptorSet,
-                perDrawDataDescriptorSet,
+                pipeline->getPerDrawDataDescriptorSet(),
                 bindlessTextures->getDescriptorSet()
             };
 
@@ -765,7 +417,7 @@ namespace render::gpudriven {
         // Load material data and cache it to prevent weak_ptr expiration
         auto matData = resource::ResourceManager::loadMaterial(materialPath);
         if (!matData) {
-            spdlog::warn("GPUDrivenRenderer: Failed to load material: {}", materialPath);
+            loggerWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);
             return false;
         }
         // Keep material alive by storing in our cache
@@ -833,7 +485,7 @@ namespace render::gpudriven {
             // Auto-enable occlusion culling when Hi-Z first becomes available
             if (!wasAvailable && mipLevels > 0 && !occlusionCullingEnabled) {
                 occlusionCullingEnabled = true;
-                spdlog::info("GPUDrivenRenderer: Hi-Z occlusion culling enabled ({} mip levels)", mipLevels);
+                loggerInfo("GPUDrivenRenderer: Hi-Z occlusion culling enabled ({} mip levels)", mipLevels);
             }
         }
     }
@@ -919,35 +571,6 @@ namespace render::gpudriven {
         stats.culledByOcclusion = aggregated.culledByOcclusion;
     }
 
-    // ===== MESH STREAMING SUPPORT =====
-
-    void GPUDrivenRenderer::setMeshStreamingEnabled(bool enabled)
-    {
-        if (enabled == meshStreamingEnabled) {
-            return;
-        }
-
-        meshStreamingEnabled = enabled;
-
-        if (enabled && mergedBuffer && !meshStreamManager) {
-            // Create streaming manager
-            meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
-            spdlog::info("GPUDrivenRenderer: Mesh streaming enabled");
-        } else if (!enabled && meshStreamManager) {
-            // Destroy streaming manager
-            meshStreamManager.reset();
-            spdlog::info("GPUDrivenRenderer: Mesh streaming disabled");
-        }
-    }
-
-    MergedMeshBuffer::StreamingStats GPUDrivenRenderer::getStreamingStats() const
-    {
-        if (mergedBuffer) {
-            return mergedBuffer->getStreamingStats();
-        }
-        return {};
-    }
-
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)
     {
         if (!initialized) return;
@@ -958,26 +581,7 @@ namespace render::gpudriven {
 
         if (!renderPassChanged && !iblLayoutChanged) return;
 
-        spdlog::info("GPUDrivenRenderer: Updating render pass/IBL layout, recreating pipelines");
-
-        vk::Device vkDevice = device.getLogicalDevice();
-        vkDevice.waitIdle();
-
-        // Destroy old graphics pipeline and layout
-        if (graphicsPipeline) {
-            vkDevice.destroyPipeline(graphicsPipeline);
-            graphicsPipeline = nullptr;
-        }
-        if (graphicsPipelineLayout) {
-            vkDevice.destroyPipelineLayout(graphicsPipelineLayout);
-            graphicsPipelineLayout = nullptr;
-        }
-
-        // Clean up old shader
-        if (meshShader) {
-            meshShader->cleanUp();
-            meshShader.reset();
-        }
+        loggerInfo("GPUDrivenRenderer: Updating render pass/IBL layout, recreating pipelines");
 
         // Update cached values
         cachedRenderPass = newRenderPass;
@@ -986,7 +590,9 @@ namespace render::gpudriven {
         }
 
         // Recreate main graphics pipeline with new render pass and IBL layout
-        createGraphicsPipeline(cachedIBLLayout, cachedRenderPass);
+        if (pipeline) {
+            pipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(), cachedRenderPass);
+        }
 
         // Update custom shader cache with new render pass and IBL layout
         if (customShaderCache) {

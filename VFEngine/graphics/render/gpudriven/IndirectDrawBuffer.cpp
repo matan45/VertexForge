@@ -4,8 +4,8 @@
 #include "print/Logger.hpp"
 #include <cstring>
 
-namespace render::gpudriven {
-
+namespace render::gpudriven
+{
     IndirectDrawBuffer::IndirectDrawBuffer(core::Device& device)
         : device(device)
     {
@@ -18,7 +18,8 @@ namespace render::gpudriven {
 
     void IndirectDrawBuffer::init(uint32_t maxCommands)
     {
-        if (initialized) {
+        if (initialized)
+        {
             loggerWarning("IndirectDrawBuffer already initialized");
             return;
         }
@@ -45,55 +46,50 @@ namespace render::gpudriven {
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
-
-        // Draw command buffer - written by compute shader, read by vkCmdDrawIndexedIndirectCount
+        
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxDrawCommands * sizeof(DrawIndexedIndirectCommand);
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |      // Compute shader writes
-                           vk::BufferUsageFlagBits::eIndirectBuffer |       // Indirect draw reads
-                           vk::BufferUsageFlagBits::eTransferDst;           // Clear/reset
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | // Compute shader writes
+                vk::BufferUsageFlagBits::eIndirectBuffer | // Indirect draw reads
+                vk::BufferUsageFlagBits::eTransferDst; // Clear/reset
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::Utilities::createBuffer(request, drawCommandBuffer, drawCommandMemory);
         }
-
-        // Draw count buffer - atomic counters incremented by compute, read by indirect count
-        // Layout: { drawCount, lodCount0, lodCount1, lodCount2, lodCount3 }
+        
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = sizeof(GPUCullStats);
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute shader atomic
-                           vk::BufferUsageFlagBits::eIndirectBuffer |       // Count for indirect
-                           vk::BufferUsageFlagBits::eTransferDst |          // Reset to 0
-                           vk::BufferUsageFlagBits::eTransferSrc;           // Readback for debug
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | // Compute shader atomic
+                vk::BufferUsageFlagBits::eIndirectBuffer | // Count for indirect
+                vk::BufferUsageFlagBits::eTransferDst | // Reset to 0
+                vk::BufferUsageFlagBits::eTransferSrc; // Readback for debug
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::Utilities::createBuffer(request, drawCountBuffer, drawCountMemory);
         }
-
-        // Per-draw data buffer - written by compute shader, read by vertex/fragment shaders
+        
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxDrawCommands * sizeof(PerDrawData);
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute writes, VS/FS reads
-                           vk::BufferUsageFlagBits::eTransferDst;           // Clear if needed
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | // Compute writes, VS/FS reads
+                vk::BufferUsageFlagBits::eTransferDst; // Clear if needed
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::Utilities::createBuffer(request, perDrawDataBuffer, perDrawDataMemory);
         }
-
-        // Staging buffer for count reset and readback
+        
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = sizeof(GPUCullStats);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc |
-                           vk::BufferUsageFlagBits::eTransferDst;
+                vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                vk::MemoryPropertyFlagBits::eHostCoherent;
+                vk::MemoryPropertyFlagBits::eHostCoherent;
             core::Utilities::createBuffer(request, stagingBuffer, stagingMemory);
 
             stagingMapped = logicalDevice.mapMemory(
                 stagingMemory, 0, sizeof(GPUCullStats), vk::MemoryMapFlags{}
             );
-            // Initialize all stats to 0
+            
             std::memset(stagingMapped, 0, sizeof(GPUCullStats));
         }
     }
@@ -102,34 +98,16 @@ namespace render::gpudriven {
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (stagingMapped) {
+        if (stagingMapped)
+        {
             logicalDevice.unmapMemory(stagingMemory);
             stagingMapped = nullptr;
         }
 
-        if (stagingBuffer) {
-            logicalDevice.destroyBuffer(stagingBuffer);
-            logicalDevice.freeMemory(stagingMemory);
-            stagingBuffer = nullptr;
-        }
-
-        if (perDrawDataBuffer) {
-            logicalDevice.destroyBuffer(perDrawDataBuffer);
-            logicalDevice.freeMemory(perDrawDataMemory);
-            perDrawDataBuffer = nullptr;
-        }
-
-        if (drawCountBuffer) {
-            logicalDevice.destroyBuffer(drawCountBuffer);
-            logicalDevice.freeMemory(drawCountMemory);
-            drawCountBuffer = nullptr;
-        }
-
-        if (drawCommandBuffer) {
-            logicalDevice.destroyBuffer(drawCommandBuffer);
-            logicalDevice.freeMemory(drawCommandMemory);
-            drawCommandBuffer = nullptr;
-        }
+        core::Utilities::destroyBuffer(logicalDevice, stagingBuffer, stagingMemory);
+        core::Utilities::destroyBuffer(logicalDevice, perDrawDataBuffer, perDrawDataMemory);
+        core::Utilities::destroyBuffer(logicalDevice, drawCountBuffer, drawCountMemory);
+        core::Utilities::destroyBuffer(logicalDevice, drawCommandBuffer, drawCommandMemory);
     }
 
     void IndirectDrawBuffer::resetDrawCount(vk::CommandBuffer cmd)
@@ -166,10 +144,8 @@ namespace render::gpudriven {
 
     void IndirectDrawBuffer::insertBarrierAfterCompute(vk::CommandBuffer cmd)
     {
-        // Barrier between compute shader writes and indirect draw reads
         std::array<vk::BufferMemoryBarrier, 3> barriers;
-
-        // Draw command buffer: compute write -> indirect read
+        
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -177,8 +153,7 @@ namespace render::gpudriven {
         barriers[0].buffer = drawCommandBuffer;
         barriers[0].offset = 0;
         barriers[0].size = VK_WHOLE_SIZE;
-
-        // Draw count buffer: compute write -> indirect read
+        
         barriers[1].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[1].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -186,8 +161,7 @@ namespace render::gpudriven {
         barriers[1].buffer = drawCountBuffer;
         barriers[1].offset = 0;
         barriers[1].size = sizeof(uint32_t);
-
-        // Per-draw data buffer: compute write -> vertex/fragment shader read
+        
         barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderRead;
         barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -239,5 +213,4 @@ namespace render::gpudriven {
         // Read from staging
         return *static_cast<GPUCullStats*>(stagingMapped);
     }
-
 }
