@@ -177,6 +177,12 @@ namespace render::gpudriven
     {
         if (currentObjectCount == 0) return;
 
+        if (currentObjectCount > maxObjectCount)
+        {
+            loggerError("MergedMeshBuffer: object count {} exceeds max {}", currentObjectCount, maxObjectCount);
+            return;
+        }
+
         // Copy CPU data to staging buffer
         size_t copySize = currentObjectCount * sizeof(GPUObjectData);
         std::memcpy(objectStagingMapped, cpuObjectData.data(), copySize);

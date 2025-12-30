@@ -24,9 +24,11 @@ namespace render::gpudriven {
         uint32_t commandsPerSection = commandsPerBatch / shaderGroupCount;
         uint32_t totalSections = batchCount * shaderGroupCount;
 
-        vk::DeviceSize drawCommandSize = totalSections * commandsPerSection * sizeof(DrawIndexedIndirectCommand);
-        vk::DeviceSize drawCountSize = totalSections * sizeof(BatchDrawStats);
-        vk::DeviceSize perDrawDataSize = totalSections * commandsPerSection * sizeof(PerDrawData);
+        // Use 64-bit arithmetic to prevent overflow in size calculations
+        vk::DeviceSize totalCommands = static_cast<vk::DeviceSize>(totalSections) * commandsPerSection;
+        vk::DeviceSize drawCommandSize = totalCommands * sizeof(DrawIndexedIndirectCommand);
+        vk::DeviceSize drawCountSize = static_cast<vk::DeviceSize>(totalSections) * sizeof(BatchDrawStats);
+        vk::DeviceSize perDrawDataSize = totalCommands * sizeof(PerDrawData);
         vk::DeviceSize stagingSize = drawCountSize;
 
         return drawCommandSize + drawCountSize + perDrawDataSize + stagingSize;

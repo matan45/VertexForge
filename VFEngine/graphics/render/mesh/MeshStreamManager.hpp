@@ -90,7 +90,8 @@ namespace render::mesh
         std::priority_queue<StreamingRequest> streamingQueue;
         
         std::vector<std::future<StreamingResult>> pendingReads;
-        
+        mutable std::mutex pendingReadsMutex;
+
         struct PendingUpload
         {
             std::string meshPath;

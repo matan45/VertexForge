@@ -18,6 +18,7 @@ namespace render::mesh
 
     MeshStreamManager::~MeshStreamManager()
     {
+        std::lock_guard<std::mutex> lock(pendingReadsMutex);
         for (auto& future : pendingReads)
         {
             if (future.valid())
@@ -155,7 +156,10 @@ namespace render::mesh
         stats.bytesStreamedThisFrame = bytesStreamedThisFrame;
         stats.totalBytesStreamed += bytesStreamedThisFrame;
         stats.meshesTracked = static_cast<uint32_t>(meshStates.size());
-        stats.lodsStreaming = static_cast<uint32_t>(pendingReads.size());
+        {
+            std::lock_guard<std::mutex> lock(pendingReadsMutex);
+            stats.lodsStreaming = static_cast<uint32_t>(pendingReads.size());
+        }
         stats.lodsUploading = static_cast<uint32_t>(pendingUploads.size());
         
         stats.meshesReady = 0;
@@ -170,6 +174,8 @@ namespace render::mesh
 
     void MeshStreamManager::processStreamingQueue()
     {
+        std::lock_guard<std::mutex> lock(pendingReadsMutex);
+
         // Limit concurrent reads
         while (pendingReads.size() < maxPendingReads &&
             !streamingQueue.empty() &&
@@ -237,7 +243,7 @@ namespace render::mesh
         auto it = meshStates.find(result.meshPath);
         if (it == meshStates.end() || !it->second.handle) return;
 
-        for (uint32_t lod = 2; lod < 4; --lod)
+        for (int lod = 2; lod >= 0; --lod)
         {
             auto* loc = mergedBuffer.getSubmeshLocationMutable(
                 result.meshPath, result.submeshName, result.submeshIndex);
@@ -262,6 +268,8 @@ namespace render::mesh
 
     void MeshStreamManager::processPendingReads()
     {
+        std::lock_guard<std::mutex> lock(pendingReadsMutex);
+
         for (auto it = pendingReads.begin(); it != pendingReads.end();)
         {
             if (it->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
@@ -388,6 +396,7 @@ namespace render::mesh
 
     void MeshStreamManager::waitForPendingTransfers()
     {
+        std::lock_guard<std::mutex> lock(pendingReadsMutex);
         for (auto& future : pendingReads)
         {
             if (future.valid())
