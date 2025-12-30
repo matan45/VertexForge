@@ -2,7 +2,8 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include <cmath>
 
 namespace render::mesh
@@ -87,115 +88,21 @@ namespace render::mesh
 
     void AudioSphereDebugRenderer::createPipeline(vk::RenderPass renderPass)
     {
-        vk::PushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(AudioSpherePushConstants);
+        core::WireframePipelineConfig config{
+            .device = device.getLogicalDevice(),
+            .renderPass = renderPass,
+            .extent = swapChain.getSwapchainExtent(),
+            .pushConstantSize = sizeof(AudioSpherePushConstants),
+            .shaderStages = wireframeShader->getShaderStages()
+        };
 
-        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.setLayoutCount = 0;
-        pipelineLayoutInfo.pSetLayouts = nullptr;
-        pipelineLayoutInfo.pushConstantRangeCount = 1;
-        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-
-        wireframePipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
-
-        vk::VertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(glm::vec3);
-        bindingDescription.inputRate = vk::VertexInputRate::eVertex;
-
-        vk::VertexInputAttributeDescription attributeDescription{};
-        attributeDescription.binding = 0;
-        attributeDescription.location = 0;
-        attributeDescription.format = vk::Format::eR32G32B32Sfloat;
-        attributeDescription.offset = 0;
-
-        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.vertexAttributeDescriptionCount = 1;
-        vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
-
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.topology = vk::PrimitiveTopology::eLineList;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        vk::Viewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapChain.getSwapchainExtent().width);
-        viewport.height = static_cast<float>(swapChain.getSwapchainExtent().height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        vk::Rect2D scissor{};
-        scissor.offset = vk::Offset2D{0, 0};
-        scissor.extent = swapChain.getSwapchainExtent();
-
-        vk::PipelineViewportStateCreateInfo viewportState{};
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
-
-        vk::PipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = vk::PolygonMode::eFill;
-        rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
-        rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
-        rasterizer.depthBiasEnable = VK_FALSE;
-
-        vk::PipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_FALSE;
-        depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
-        depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.stencilTestEnable = VK_FALSE;
-
-        vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
-            vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB |
-            vk::ColorComponentFlagBits::eA;
-        colorBlendAttachment.blendEnable = VK_FALSE;
-
-        vk::PipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.attachmentCount = 1;
-        colorBlending.pAttachments = &colorBlendAttachment;
-
-        vk::GraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.stageCount = static_cast<uint32_t>(wireframeShader->getShaderStages().size());
-        pipelineInfo.pStages = wireframeShader->getShaderStages().data();
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.layout = wireframePipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
-
-        auto result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess)
-        {
-            throw std::runtime_error("Failed to create audio sphere wireframe graphics pipeline");
-        }
-        wireframePipeline = result.value;
+        auto result = core::PipelineUtilities::createWireframePipeline(config);
+        wireframePipeline = result.pipeline;
+        wireframePipelineLayout = result.pipelineLayout;
     }
 
     void AudioSphereDebugRenderer::createBuffers()
     {
-        // Create a unit sphere wireframe with 3 rings (XY, XZ, YZ planes)
         std::vector<glm::vec3> vertices;
         std::vector<uint32_t> indices;
 
@@ -250,9 +157,9 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferMemory);
 
-        core::Utilities::copyToBuffer(
+        core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),
@@ -268,9 +175,9 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createBuffer(indexRequest, indexBuffer, indexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, indexBuffer, indexBufferMemory);
 
-        core::Utilities::copyToBuffer(
+        core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),

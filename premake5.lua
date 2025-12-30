@@ -40,6 +40,7 @@ project "Editor"
 	  "dependencies/spdlog/include",
 	  "dependencies/glm",
 	  "dependencies/entt/single_include",
+	  "dependencies/json/single_include",
 	  "VFEngine/utilities",
 	  "VFEngine/core/bootstrap",          -- For EditorBootstrap
 	  "VFEngine/core/controllers",        -- For ImguiWindow base class
@@ -182,8 +183,9 @@ project "Graphics"
       "dependencies/glm",
 	  "dependencies/entt/single_include",
       "dependencies/stb",
-      "VFEngine/utilities",           -- Utilities headers
-      "VFEngine/window/controllers",           -- Utilities headers
+      "dependencies/json/single_include",
+      "VFEngine/utilities",
+      "VFEngine/window/controllers",
 	  "dependencies/IconFontCppHeaders",
       vulkanLibPath.."/Include"
    }

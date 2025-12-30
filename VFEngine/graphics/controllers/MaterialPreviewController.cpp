@@ -1,5 +1,7 @@
 #include "MaterialPreviewController.hpp"
 #include "../core/Device.hpp"
+#include "../core/BufferUtilities.hpp"
+#include "../core/ImageUtilities.hpp"
 #include "../core/Utilities.hpp"
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
@@ -185,7 +187,7 @@ namespace controllers
         bufferInfo.size = imageSize;
         bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
         bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+        core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
         // Copy data to staging buffer
         void* data;
@@ -201,7 +203,7 @@ namespace controllers
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::Utilities::createImage(imageInfo, defaultTexture.image, defaultTexture.memory);
+        core::ImageUtilities::createImage(imageInfo, defaultTexture.image, defaultTexture.memory);
 
         // Transition and copy
         vk::CommandPoolCreateInfo poolInfo{};
@@ -210,7 +212,7 @@ namespace controllers
         auto commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
 
         auto cmdA = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-        core::Utilities::transitionImageLayout(cmdA.get(), defaultTexture.image, vk::ImageLayout::eUndefined,
+        core::ImageUtilities::transitionImageLayout(cmdA.get(), defaultTexture.image, vk::ImageLayout::eUndefined,
                                                vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
 
@@ -228,7 +230,7 @@ namespace controllers
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdCopy);
 
         auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-        core::Utilities::transitionImageLayout(cmdB.get(), defaultTexture.image, vk::ImageLayout::eTransferDstOptimal,
+        core::ImageUtilities::transitionImageLayout(cmdB.get(), defaultTexture.image, vk::ImageLayout::eTransferDstOptimal,
                                                vk::ImageLayout::eShaderReadOnlyOptimal,
                                                vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
@@ -253,7 +255,7 @@ namespace controllers
         // Create image view
         core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), defaultTexture.image);
         viewRequest.format = vk::Format::eR8G8B8A8Srgb;
-        core::Utilities::createImageView(viewRequest, defaultTexture.imageView);
+        core::ImageUtilities::createImageView(viewRequest, defaultTexture.imageView);
 
         defaultTexture.valid = true;
         loggerInfo("Created default white texture for material preview");
@@ -290,7 +292,7 @@ namespace controllers
             bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
             bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+            core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
             // Copy data to staging buffer
             void* data;
@@ -306,7 +308,7 @@ namespace controllers
             imageInfo.tiling = vk::ImageTiling::eOptimal;
             imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
             imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createImage(imageInfo, tex.image, tex.memory);
+            core::ImageUtilities::createImage(imageInfo, tex.image, tex.memory);
 
             // Create command pool for transfer
             vk::CommandPoolCreateInfo poolInfo{};
@@ -316,7 +318,7 @@ namespace controllers
 
             // Transition to transfer dst
             auto cmdA = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-            core::Utilities::transitionImageLayout(cmdA.get(), tex.image, vk::ImageLayout::eUndefined,
+            core::ImageUtilities::transitionImageLayout(cmdA.get(), tex.image, vk::ImageLayout::eUndefined,
                                                    vk::ImageLayout::eTransferDstOptimal,
                                                    vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
@@ -335,7 +337,7 @@ namespace controllers
 
             // Transition to shader read
             auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-            core::Utilities::transitionImageLayout(cmdB.get(), tex.image, vk::ImageLayout::eTransferDstOptimal,
+            core::ImageUtilities::transitionImageLayout(cmdB.get(), tex.image, vk::ImageLayout::eTransferDstOptimal,
                                                    vk::ImageLayout::eShaderReadOnlyOptimal,
                                                    vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
@@ -359,7 +361,7 @@ namespace controllers
             // Create image view
             core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), tex.image);
             viewRequest.format = vk::Format::eR8G8B8A8Srgb;
-            core::Utilities::createImageView(viewRequest, tex.imageView);
+            core::ImageUtilities::createImageView(viewRequest, tex.imageView);
 
             tex.valid = true;
             loggerInfo("Loaded texture for preview: {}", path);

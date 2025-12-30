@@ -12,139 +12,8 @@ namespace material
 {
     using json = nlohmann::json;
     namespace fs = std::filesystem;
-    
-    static std::string nodeTypeToString(NodeType type)
-    {
-        switch (type)
-        {
-        case NodeType::PBROutput: return "PBROutput";
-        case NodeType::ConstantScalar: return "ConstantScalar";
-        case NodeType::ConstantVec2: return "ConstantVec2";
-        case NodeType::ConstantVec3: return "ConstantVec3";
-        case NodeType::ConstantColor: return "ConstantColor";
-        case NodeType::Add: return "Add";
-        case NodeType::Subtract: return "Subtract";
-        case NodeType::Multiply: return "Multiply";
-        case NodeType::Divide: return "Divide";
-        case NodeType::Power: return "Power";
-        case NodeType::Lerp: return "Lerp";
-        case NodeType::Clamp: return "Clamp";
-        case NodeType::Saturate: return "Saturate";
-        case NodeType::OneMinus: return "OneMinus";
-        case NodeType::Abs: return "Abs";
-        case NodeType::Floor: return "Floor";
-        case NodeType::Ceil: return "Ceil";
-        case NodeType::Fract: return "Fract";
-        case NodeType::Sin: return "Sin";
-        case NodeType::Cos: return "Cos";
-        case NodeType::Dot: return "Dot";
-        case NodeType::Cross: return "Cross";
-        case NodeType::Normalize: return "Normalize";
-        case NodeType::Length: return "Length";
-        case NodeType::MakeVec2: return "MakeVec2";
-        case NodeType::MakeVec3: return "MakeVec3";
-        case NodeType::MakeVec4: return "MakeVec4";
-        case NodeType::SplitVec2: return "SplitVec2";
-        case NodeType::SplitVec3: return "SplitVec3";
-        case NodeType::SplitVec4: return "SplitVec4";
-        case NodeType::Fresnel: return "Fresnel";
-        case NodeType::VertexNormal: return "VertexNormal";
-        case NodeType::VertexUV: return "VertexUV";
-        case NodeType::Time: return "Time";
-        case NodeType::TextureSample: return "TextureSample";
-        case NodeType::OrmSample: return "OrmSample";
-        case NodeType::MixColor: return "MixColor";
-        default: return "Unknown";
-        }
-    }
 
-    // Helper: Convert string to NodeType
-    static NodeType stringToNodeType(const std::string& str)
-    {
-        if (str == "PBROutput") return NodeType::PBROutput;
-        if (str == "ConstantScalar") return NodeType::ConstantScalar;
-        if (str == "ConstantVec2") return NodeType::ConstantVec2;
-        if (str == "ConstantVec3") return NodeType::ConstantVec3;
-        if (str == "ConstantColor") return NodeType::ConstantColor;
-        if (str == "Add") return NodeType::Add;
-        if (str == "Subtract") return NodeType::Subtract;
-        if (str == "Multiply") return NodeType::Multiply;
-        if (str == "Divide") return NodeType::Divide;
-        if (str == "Power") return NodeType::Power;
-        if (str == "Lerp") return NodeType::Lerp;
-        if (str == "Clamp") return NodeType::Clamp;
-        if (str == "Saturate") return NodeType::Saturate;
-        if (str == "OneMinus") return NodeType::OneMinus;
-        if (str == "Abs") return NodeType::Abs;
-        if (str == "Floor") return NodeType::Floor;
-        if (str == "Ceil") return NodeType::Ceil;
-        if (str == "Fract") return NodeType::Fract;
-        if (str == "Sin") return NodeType::Sin;
-        if (str == "Cos") return NodeType::Cos;
-        if (str == "Dot") return NodeType::Dot;
-        if (str == "Cross") return NodeType::Cross;
-        if (str == "Normalize") return NodeType::Normalize;
-        if (str == "Length") return NodeType::Length;
-        if (str == "MakeVec2") return NodeType::MakeVec2;
-        if (str == "MakeVec3") return NodeType::MakeVec3;
-        if (str == "MakeVec4") return NodeType::MakeVec4;
-        if (str == "SplitVec2") return NodeType::SplitVec2;
-        if (str == "SplitVec3") return NodeType::SplitVec3;
-        if (str == "SplitVec4") return NodeType::SplitVec4;
-        if (str == "Fresnel") return NodeType::Fresnel;
-        if (str == "VertexNormal") return NodeType::VertexNormal;
-        if (str == "VertexUV") return NodeType::VertexUV;
-        if (str == "Time") return NodeType::Time;
-        if (str == "TextureSample") return NodeType::TextureSample;
-        if (str == "OrmSample") return NodeType::OrmSample;
-        if (str == "MixColor") return NodeType::MixColor;
-        return NodeType::ConstantScalar; // Default
-    }
-
-    // Helper: Convert BlendMode to string
-    static std::string blendModeToString(BlendMode mode)
-    {
-        switch (mode)
-        {
-        case BlendMode::Opaque: return "opaque";
-        case BlendMode::Masked: return "masked";
-        default: return "opaque";
-        }
-    }
-
-    // Helper: Convert string to BlendMode
-    static BlendMode stringToBlendMode(const std::string& str)
-    {
-        if (str == "masked") return BlendMode::Masked;
-        return BlendMode::Opaque;
-    }
-
-    // Helper: Convert ParameterType to string
-    static std::string paramTypeToString(ParameterType type)
-    {
-        switch (type)
-        {
-        case ParameterType::Scalar: return "scalar";
-        case ParameterType::Vec2: return "vec2";
-        case ParameterType::Vec3: return "vec3";
-        case ParameterType::Vec4: return "vec4";
-        case ParameterType::Color: return "color";
-        default: return "scalar";
-        }
-    }
-
-    // Helper: Convert string to ParameterType
-    static ParameterType stringToParamType(const std::string& str)
-    {
-        if (str == "vec2") return ParameterType::Vec2;
-        if (str == "vec3") return ParameterType::Vec3;
-        if (str == "vec4") return ParameterType::Vec4;
-        if (str == "color") return ParameterType::Color;
-        return ParameterType::Scalar;
-    }
-
-    // Serialize node property to JSON
-    static json serializeProperty(const NodeProperty& prop)
+    json MaterialAsset::serializeProperty(const NodeProperty& prop)
     {
         return std::visit([](auto&& arg) -> json
         {
@@ -173,8 +42,7 @@ namespace material
         }, prop);
     }
 
-    // Deserialize node property from JSON with validation
-    static NodeProperty deserializeProperty(const json& j, const std::string& context = "")
+    NodeProperty MaterialAsset::deserializeProperty(const json& j, const std::string& context)
     {
         try
         {
@@ -230,8 +98,7 @@ namespace material
         return 0.0f; // Default
     }
 
-    // Serialize parameter value to JSON
-    static json serializeParamValue(const ParameterValue& val)
+    json MaterialAsset::serializeParamValue(const ParameterValue& val)
     {
         return std::visit([](auto&& arg) -> json
         {
@@ -256,8 +123,7 @@ namespace material
         }, val);
     }
 
-    // Deserialize parameter value from JSON based on type with validation
-    static ParameterValue deserializeParamValue(const json& j, ParameterType type, const std::string& paramName = "")
+    ParameterValue MaterialAsset::deserializeParamValue(const json& j, ParameterType type, const std::string& paramName)
     {
         try
         {
@@ -385,7 +251,7 @@ namespace material
         try
         {
             // Check version compatibility
-            std::string fileVersion = j.value("version", MATERIAL_FORMAT_VERSION_LEGACY);
+            std::string fileVersion = j.value("version", MATERIAL_FORMAT_VERSION);
             bool needsMigration = (fileVersion != MATERIAL_FORMAT_VERSION);
             if (needsMigration)
             {
@@ -724,7 +590,8 @@ namespace material
                         if (isOutdated || needsMigration)
                         {
                             // Force recompile for version upgrade
-                            logWarningLimited("Material has outdated cached shader (texture array size changed), clearing for recompile");
+                            logWarningLimited(
+                                "Material has outdated cached shader (texture array size changed), clearing for recompile");
                             material.needsRecompile = true;
                             material.cachedVertexShader.clear();
                             material.cachedFragmentShader.clear();
@@ -735,12 +602,6 @@ namespace material
                 {
                     logWarningLimited("'cachedShader' field is not an object, ignoring cached shaders");
                 }
-            }
-
-            // Apply version migration if needed
-            if (needsMigration)
-            {
-                migrateFromVersion(material, fileVersion);
             }
 
             if (warningCount > 0)
@@ -764,7 +625,7 @@ namespace material
     bool MaterialAsset::save(std::string_view path, const MaterialData& material)
     {
         json j;
-        
+
         j["version"] = MATERIAL_FORMAT_VERSION;
         j["uuid"] = material.uuid;
         j["name"] = material.name;
@@ -860,39 +721,5 @@ namespace material
         material.graph.nodes.push_back(std::move(outputNode));
 
         return material;
-    }
-
-    void MaterialAsset::migrateFromVersion(MaterialData& material, const std::string& fromVersion)
-    {
-        vfLogInfo("Migrating material '{}' from version {} to {}",
-                  material.name, fromVersion, MATERIAL_FORMAT_VERSION);
-
-        // Migration from v1.0 to v1.1:
-        // - Texture slot layout changed:
-        //   v1.0: 0=albedo, 1=metallic, 2=roughness, 3=ao, 4=normal, 5=emission
-        //   v1.1: 0=albedo, 1=normal, 2=ORM, 3=metallic, 4=roughness, 5=ao, 6=emission
-        // - TextureSample nodes have textureIndex property that needs remapping
-        //
-        // Note: The actual texture indices in TextureSample nodes are determined
-        // by the ShaderGraphCompiler based on where they connect to PBROutput.
-        // The pbrPinToIndex mapping in ShaderGraphCompiler handles the slot assignment.
-        // So we mainly need to force shader recompilation (done above) and let
-        // the compiler use the new slot mapping.
-
-        if (fromVersion == MATERIAL_FORMAT_VERSION_LEGACY || fromVersion == "1.0")
-        {
-            // For v1.0 materials, the main migration is forcing shader recompile
-            // which is already done by setting needsRecompile = true.
-            // The texture index mapping will be handled by ShaderGraphCompiler
-            // when it recompiles with the new pbrPinToIndex mapping.
-
-            // Mark material as needing recompile (should already be set, but ensure it)
-            material.needsRecompile = true;
-            material.cachedVertexShader.clear();
-            material.cachedFragmentShader.clear();
-
-            vfLogInfo("  - Cleared cached shaders for recompilation with new texture slot layout");
-            vfLogInfo("  - New layout: 0=Albedo, 1=Normal, 2=ORM, 3=Metallic, 4=Roughness, 5=AO, 6=Emission");
-        }
     }
 }

@@ -113,6 +113,11 @@
     <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
     <ClInclude Include="impl\WindowStateServiceImpl.hpp" />
+    <ClInclude Include="impl\components\AudioComponentService.hpp" />
+    <ClInclude Include="impl\components\CameraComponentService.hpp" />
+    <ClInclude Include="impl\components\IBLComponentService.hpp" />
+    <ClInclude Include="impl\components\MaterialComponentService.hpp" />
+    <ClInclude Include="impl\components\MeshComponentService.hpp" />
     <ClInclude Include="interfaces\IAnimationService.hpp" />
     <ClInclude Include="interfaces\IAudioService.hpp" />
     <ClInclude Include="interfaces\IEditorModeService.hpp" />
@@ -142,6 +147,11 @@
     <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
     <ClCompile Include="impl\WindowStateServiceImpl.cpp" />
+    <ClCompile Include="impl\components\AudioComponentService.cpp" />
+    <ClCompile Include="impl\components\CameraComponentService.cpp" />
+    <ClCompile Include="impl\components\IBLComponentService.cpp" />
+    <ClCompile Include="impl\components\MaterialComponentService.cpp" />
+    <ClCompile Include="impl\components\MeshComponentService.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

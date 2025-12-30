@@ -159,4 +159,22 @@ namespace services
         glm::vec3 deltaPosition{0.0f};
         glm::vec2 deltaRotation{0.0f};
     };
+
+    // Audio component data structs
+    struct AudioSource2DData {
+        std::string audioFilePath;
+        float volume = 1.0f;
+        float pitch = 1.0f;
+        bool loop = false;
+    };
+
+    struct AudioSource3DData {
+        std::string audioFilePath;
+        float volume = 1.0f;
+        float pitch = 1.0f;
+        bool loop = false;
+        float minDistance = 1.0f;
+        float maxDistance = 100.0f;
+        bool showDebugSpheres = false;
+    };
 }

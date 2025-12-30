@@ -1,0 +1,147 @@
+#include "GPUDrivenCameraBuffer.hpp"
+#include "IndirectBatchManager.hpp"
+#include "../../core/Device.hpp"
+#include "../../core/SwapChain.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include <glm/gtc/matrix_transform.hpp>
+#include <cstring>
+
+namespace render::gpudriven
+{
+    GPUDrivenCameraBuffer::GPUDrivenCameraBuffer(core::Device& device, core::SwapChain& swapChain)
+        : device(device)
+        , swapChain(swapChain)
+    {
+    }
+
+    GPUDrivenCameraBuffer::~GPUDrivenCameraBuffer()
+    {
+        cleanup();
+    }
+
+    void GPUDrivenCameraBuffer::init()
+    {
+        const auto& logicalDevice = device.getLogicalDevice();
+        const auto& physicalDevice = device.getPhysicalDevice();
+
+        core::BufferInfoRequest request(logicalDevice, physicalDevice);
+        request.size = sizeof(GPUCameraData);
+        request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+        request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                            vk::MemoryPropertyFlagBits::eHostCoherent;
+
+        core::BufferUtilities::createBuffer(request, buffer, memory);
+        mapped = logicalDevice.mapMemory(memory, 0, sizeof(GPUCameraData), vk::MemoryMapFlags{});
+    }
+
+    void GPUDrivenCameraBuffer::cleanup()
+    {
+        const auto& logicalDevice = device.getLogicalDevice();
+
+        if (mapped)
+        {
+            logicalDevice.unmapMemory(memory);
+            mapped = nullptr;
+        }
+
+        core::BufferUtilities::destroyBuffer(logicalDevice, buffer, memory);
+    }
+
+    void GPUDrivenCameraBuffer::update(const CameraUpdateParams& params)
+    {
+        glm::mat4 viewProjection = params.projection * params.view;
+
+        data.view = params.view;
+        data.projection = params.projection;
+        data.viewProjection = viewProjection;
+        data.invViewProjection = glm::inverse(viewProjection);
+
+        data.cameraPosition = glm::vec4(params.cameraPosition, params.nearPlane);
+        data.screenParams = glm::vec4(
+            static_cast<float>(swapChain.getSwapchainExtent().width),
+            static_cast<float>(swapChain.getSwapchainExtent().height),
+            1.0f / static_cast<float>(swapChain.getSwapchainExtent().width),
+            1.0f / static_cast<float>(swapChain.getSwapchainExtent().height)
+        );
+
+        extractFrustumPlanes(viewProjection, data.frustumPlanes);
+
+        data.farPlane = params.farPlane;
+        data.objectCount = params.objectCount;
+        data.hiZMipLevels = params.hiZMipLevels;
+        data.frameIndex = frameIndex++;
+
+        data.enableFrustumCulling = params.frustumCullingEnabled ? 1 : 0;
+        data.enableOcclusionCulling = (params.occlusionCullingEnabled && params.hiZMipLevels > 0) ? 1 : 0;
+        data.enableLODSelection = params.lodSelectionEnabled ? 1 : 0;
+        data.batchCount = params.batchManager ? params.batchManager->getBatchCount() : 1;
+
+        data.commandsPerBatch = params.batchManager ? params.batchManager->getCommandsPerBatch() : MAX_DRAW_COMMANDS;
+        data.shaderGroupCount = params.batchManager ? params.batchManager->getShaderGroupCount() : MAX_SHADER_GROUPS;
+        data.padding1 = 0;
+        data.padding2 = 0;
+
+        std::memcpy(mapped, &data, sizeof(GPUCameraData));
+    }
+
+    void GPUDrivenCameraBuffer::extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6])
+    {
+        // Extract frustum planes from view-projection matrix (Gribb/Hartmann method)
+        // Each plane is represented as (A, B, C, D) where Ax + By + Cz + D = 0
+
+        // Left plane
+        planes[0] = glm::vec4(
+            viewProjection[0][3] + viewProjection[0][0],
+            viewProjection[1][3] + viewProjection[1][0],
+            viewProjection[2][3] + viewProjection[2][0],
+            viewProjection[3][3] + viewProjection[3][0]
+        );
+
+        // Right plane
+        planes[1] = glm::vec4(
+            viewProjection[0][3] - viewProjection[0][0],
+            viewProjection[1][3] - viewProjection[1][0],
+            viewProjection[2][3] - viewProjection[2][0],
+            viewProjection[3][3] - viewProjection[3][0]
+        );
+
+        // Bottom plane
+        planes[2] = glm::vec4(
+            viewProjection[0][3] + viewProjection[0][1],
+            viewProjection[1][3] + viewProjection[1][1],
+            viewProjection[2][3] + viewProjection[2][1],
+            viewProjection[3][3] + viewProjection[3][1]
+        );
+
+        // Top plane
+        planes[3] = glm::vec4(
+            viewProjection[0][3] - viewProjection[0][1],
+            viewProjection[1][3] - viewProjection[1][1],
+            viewProjection[2][3] - viewProjection[2][1],
+            viewProjection[3][3] - viewProjection[3][1]
+        );
+
+        // Near plane
+        planes[4] = glm::vec4(
+            viewProjection[0][3] + viewProjection[0][2],
+            viewProjection[1][3] + viewProjection[1][2],
+            viewProjection[2][3] + viewProjection[2][2],
+            viewProjection[3][3] + viewProjection[3][2]
+        );
+
+        // Far plane
+        planes[5] = glm::vec4(
+            viewProjection[0][3] - viewProjection[0][2],
+            viewProjection[1][3] - viewProjection[1][2],
+            viewProjection[2][3] - viewProjection[2][2],
+            viewProjection[3][3] - viewProjection[3][2]
+        );
+
+        // Normalize all planes
+        for (int i = 0; i < 6; i++)
+        {
+            float length = glm::length(glm::vec3(planes[i]));
+            planes[i] /= length;
+        }
+    }
+}

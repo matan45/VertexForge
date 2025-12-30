@@ -10,12 +10,6 @@ namespace windows
 {
     class SceneLoadingProgressWindow : public controllers::imguiHandler::ImguiWindow
     {
-    public:
-        SceneLoadingProgressWindow();
-        ~SceneLoadingProgressWindow() override;
-
-        void draw() override;
-
     private:
         std::atomic<bool> showWindow{false};
         std::atomic<float> currentProgress{0.0f};
@@ -29,5 +23,10 @@ namespace windows
         events::SubscriptionToken startToken;
         events::SubscriptionToken progressToken;
         events::SubscriptionToken completeToken;
+    public:
+        explicit SceneLoadingProgressWindow();
+        ~SceneLoadingProgressWindow() override;
+
+        void draw() override;
     };
 }

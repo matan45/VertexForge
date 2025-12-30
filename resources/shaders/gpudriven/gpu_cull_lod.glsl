@@ -15,15 +15,10 @@ const float LOD_THRESHOLD_0 = 400.0;
 const float LOD_THRESHOLD_1 = 200.0;
 const float LOD_THRESHOLD_2 = 100.0;
 
-// Object flags (must match ObjectFlags namespace)
-const uint FLAG_VISIBLE       = 1u << 0;
-const uint FLAG_CAST_SHADOW   = 1u << 1;
-const uint FLAG_RECEIVE_SHADOW = 1u << 2;
+// Object flags (must match ObjectFlags namespace in GPUDrivenTypes.hpp)
 const uint FLAG_ALPHA_MASK    = 1u << 4;
-const uint FLAG_DOUBLE_SIDED  = 1u << 5;
 const uint FLAG_NO_CULL       = 1u << 6;
 const uint FLAG_NO_OCCLUDE    = 1u << 7;
-const uint FLAG_SELECTED      = 1u << 8;
 const uint FLAG_UNIFORM_SCALE = 1u << 9;
 
 // ============================================================================

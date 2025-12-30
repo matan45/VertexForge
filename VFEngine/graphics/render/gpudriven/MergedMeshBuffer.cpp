@@ -1,9 +1,8 @@
 #include "MergedMeshBuffer.hpp"
-#include "../mesh/MeshMetadataCache.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../../core/TransferManager.hpp"
 #include "resource/Types.hpp"
 #include "resource/ResourceManager.hpp"
@@ -11,13 +10,12 @@
 #include "print/Logger.hpp"
 #include <cstring>
 #include <cmath>
-#include <algorithm>
 
 // Verify vertex stride matches actual Vertex struct
 static_assert(sizeof(resource::Vertex) == 32, "Vertex size must be 32 bytes for MergedMeshBuffer");
 
-namespace render::gpudriven {
-
+namespace render::gpudriven
+{
     MergedMeshBuffer::MergedMeshBuffer(core::Device& device)
         : device(device)
     {
@@ -37,7 +35,8 @@ namespace render::gpudriven {
 
     void MergedMeshBuffer::init(uint32_t maxVertices, uint32_t maxIndices)
     {
-        if (initialized) {
+        if (initialized)
+        {
             loggerWarning("MergedMeshBuffer already initialized");
             return;
         }
@@ -47,6 +46,9 @@ namespace render::gpudriven {
         maxObjectCount = MAX_GPU_OBJECTS;
 
         cpuObjectData.resize(maxObjectCount);
+
+        vertexAllocator.reset(maxVertexCount);
+        indexAllocator.reset(maxIndexCount);
 
         createBuffers();
         initialized = true;
@@ -86,10 +88,10 @@ namespace render::gpudriven {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxVertexCount * vertexStride;
             request.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-                           vk::BufferUsageFlagBits::eTransferDst |
-                           vk::BufferUsageFlagBits::eStorageBuffer; // For compute access if needed
+                vk::BufferUsageFlagBits::eTransferDst |
+                vk::BufferUsageFlagBits::eStorageBuffer; // For compute access if needed
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, vertexBuffer, vertexBufferMemory);
+            core::BufferUtilities::createBuffer(request, vertexBuffer, vertexBufferMemory);
         }
 
         // Create merged index buffer (device-local)
@@ -97,10 +99,10 @@ namespace render::gpudriven {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxIndexCount * sizeof(uint32_t);
             request.usage = vk::BufferUsageFlagBits::eIndexBuffer |
-                           vk::BufferUsageFlagBits::eTransferDst |
-                           vk::BufferUsageFlagBits::eStorageBuffer;
+                vk::BufferUsageFlagBits::eTransferDst |
+                vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, indexBuffer, indexBufferMemory);
+            core::BufferUtilities::createBuffer(request, indexBuffer, indexBufferMemory);
         }
 
         // Create object buffer (device-local storage buffer)
@@ -108,9 +110,9 @@ namespace render::gpudriven {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxObjectCount * sizeof(GPUObjectData);
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
-                           vk::BufferUsageFlagBits::eTransferDst;
+                vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, objectBuffer, objectBufferMemory);
+            core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferMemory);
         }
 
         // Create staging buffer for object updates (host-visible, persistently mapped)
@@ -119,8 +121,8 @@ namespace render::gpudriven {
             request.size = maxObjectCount * sizeof(GPUObjectData);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
+                vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
 
             // Persistently map staging buffer
             objectStagingMapped = logicalDevice.mapMemory(
@@ -133,40 +135,23 @@ namespace render::gpudriven {
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (objectStagingMapped) {
+        if (objectStagingMapped)
+        {
             logicalDevice.unmapMemory(objectStagingMemory);
             objectStagingMapped = nullptr;
         }
 
-        if (objectStagingBuffer) {
-            logicalDevice.destroyBuffer(objectStagingBuffer);
-            logicalDevice.freeMemory(objectStagingMemory);
-            objectStagingBuffer = nullptr;
-        }
-
-        if (objectBuffer) {
-            logicalDevice.destroyBuffer(objectBuffer);
-            logicalDevice.freeMemory(objectBufferMemory);
-            objectBuffer = nullptr;
-        }
-
-        if (indexBuffer) {
-            logicalDevice.destroyBuffer(indexBuffer);
-            logicalDevice.freeMemory(indexBufferMemory);
-            indexBuffer = nullptr;
-        }
-
-        if (vertexBuffer) {
-            logicalDevice.destroyBuffer(vertexBuffer);
-            logicalDevice.freeMemory(vertexBufferMemory);
-            vertexBuffer = nullptr;
-        }
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectStagingBuffer, objectStagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, indexBuffer, indexBufferMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, vertexBuffer, vertexBufferMemory);
     }
 
     void MergedMeshBuffer::unregisterMesh(const std::string& meshPath)
     {
         auto it = meshPathToIndex.find(meshPath);
-        if (it == meshPathToIndex.end()) {
+        if (it == meshPathToIndex.end())
+        {
             return;
         }
 
@@ -174,7 +159,8 @@ namespace render::gpudriven {
         // A full rebuild would be needed to defragment
         const auto& meshInfo = registeredMeshes[it->second];
 
-        for (const auto& submesh : meshInfo.submeshes) {
+        for (const auto& submesh : meshInfo.submeshes)
+        {
             std::string key = makeSubmeshKey(meshPath, submesh.submeshName, submesh.submeshIndex);
             submeshKeyToIndex.erase(key);
         }
@@ -190,6 +176,12 @@ namespace render::gpudriven {
     void MergedMeshBuffer::uploadObjects(vk::CommandBuffer cmd)
     {
         if (currentObjectCount == 0) return;
+
+        if (currentObjectCount > maxObjectCount)
+        {
+            loggerError("MergedMeshBuffer: object count {} exceeds max {}", currentObjectCount, maxObjectCount);
+            return;
+        }
 
         // Copy CPU data to staging buffer
         size_t copySize = currentObjectCount * sizeof(GPUObjectData);
@@ -223,12 +215,13 @@ namespace render::gpudriven {
     }
 
     const SubmeshLocation* MergedMeshBuffer::getSubmeshLocation(const std::string& meshPath,
-                                                                 const std::string& submeshName,
-                                                                 uint32_t submeshIndex) const
+                                                                const std::string& submeshName,
+                                                                uint32_t submeshIndex) const
     {
         std::string key = makeSubmeshKey(meshPath, submeshName, submeshIndex);
         auto it = submeshKeyToIndex.find(key);
-        if (it != submeshKeyToIndex.end()) {
+        if (it != submeshKeyToIndex.end())
+        {
             return &allSubmeshLocations[it->second];
         }
         return nullptr;
@@ -238,48 +231,40 @@ namespace render::gpudriven {
     {
         if (newMaxObjects <= maxObjectCount) return;
 
-        device.getLogicalDevice().waitIdle();
+        const auto& logicalDevice = device.getLogicalDevice();
+        logicalDevice.waitIdle();
 
-        // Destroy old buffers
-        if (objectStagingMapped) {
-            device.getLogicalDevice().unmapMemory(objectStagingMemory);
+        if (objectStagingMapped)
+        {
+            logicalDevice.unmapMemory(objectStagingMemory);
             objectStagingMapped = nullptr;
         }
-        if (objectStagingBuffer) {
-            device.getLogicalDevice().destroyBuffer(objectStagingBuffer);
-            device.getLogicalDevice().freeMemory(objectStagingMemory);
-        }
-        if (objectBuffer) {
-            device.getLogicalDevice().destroyBuffer(objectBuffer);
-            device.getLogicalDevice().freeMemory(objectBufferMemory);
-        }
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectStagingBuffer, objectStagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
 
         maxObjectCount = newMaxObjects;
         cpuObjectData.resize(maxObjectCount);
 
-        // Recreate buffers
-        const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        vk::DeviceSize bufferSize = maxObjectCount * sizeof(GPUObjectData);
 
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = maxObjectCount * sizeof(GPUObjectData);
+            request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
-                           vk::BufferUsageFlagBits::eTransferDst;
+                vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::Utilities::createBuffer(request, objectBuffer, objectBufferMemory);
+            core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferMemory);
         }
 
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = maxObjectCount * sizeof(GPUObjectData);
+            request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::Utilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
-            objectStagingMapped = logicalDevice.mapMemory(
-                objectStagingMemory, 0, request.size, vk::MemoryMapFlags{}
-            );
+                vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
+            objectStagingMapped = logicalDevice.mapMemory(objectStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 
         loggerInfo("MergedMeshBuffer: resized object buffer to {} objects", maxObjectCount);
@@ -287,99 +272,8 @@ namespace render::gpudriven {
 
     // ===== STREAMING SUPPORT IMPLEMENTATION =====
 
-    uint32_t MergedMeshBuffer::allocateVertexSpace(uint32_t count) {
-        if (count == 0) return 0;
-
-        // First try to find a free block that fits
-        for (auto it = vertexFreeList.begin(); it != vertexFreeList.end(); ++it) {
-            if (it->size >= count) {
-                uint32_t offset = it->offset;
-                if (it->size == count) {
-                    vertexFreeList.erase(it);
-                } else {
-                    it->offset += count;
-                    it->size -= count;
-                }
-                return offset;
-            }
-        }
-
-        // No free block found, allocate from end if space available
-        if (totalVertexCount + reservedVertexCount + count <= maxVertexCount) {
-            uint32_t offset = totalVertexCount + reservedVertexCount;
-            reservedVertexCount += count;
-            return offset;
-        }
-
-        return UINT32_MAX; // Allocation failed
-    }
-
-    uint32_t MergedMeshBuffer::allocateIndexSpace(uint32_t count) {
-        if (count == 0) return 0;
-
-        // First try to find a free block that fits
-        for (auto it = indexFreeList.begin(); it != indexFreeList.end(); ++it) {
-            if (it->size >= count) {
-                uint32_t offset = it->offset;
-                if (it->size == count) {
-                    indexFreeList.erase(it);
-                } else {
-                    it->offset += count;
-                    it->size -= count;
-                }
-                return offset;
-            }
-        }
-
-        // No free block found, allocate from end if space available
-        if (totalIndexCount + reservedIndexCount + count <= maxIndexCount) {
-            uint32_t offset = totalIndexCount + reservedIndexCount;
-            reservedIndexCount += count;
-            return offset;
-        }
-
-        return UINT32_MAX; // Allocation failed
-    }
-
-    void MergedMeshBuffer::freeVertexSpace(uint32_t offset, uint32_t count) {
-        if (count == 0) return;
-        vertexFreeList.push_back({offset, count});
-        defragmentFreeList(vertexFreeList);
-    }
-
-    void MergedMeshBuffer::freeIndexSpace(uint32_t offset, uint32_t count) {
-        if (count == 0) return;
-        indexFreeList.push_back({offset, count});
-        defragmentFreeList(indexFreeList);
-    }
-
-    void MergedMeshBuffer::defragmentFreeList(std::vector<FreeBlock>& freeList) {
-        if (freeList.size() < 2) return;
-
-        // Sort by offset
-        std::sort(freeList.begin(), freeList.end(),
-            [](const FreeBlock& a, const FreeBlock& b) { return a.offset < b.offset; });
-
-        // Merge adjacent blocks
-        std::vector<FreeBlock> merged;
-        merged.push_back(freeList[0]);
-
-        for (size_t i = 1; i < freeList.size(); ++i) {
-            FreeBlock& last = merged.back();
-            const FreeBlock& current = freeList[i];
-
-            if (last.offset + last.size == current.offset) {
-                // Adjacent, merge
-                last.size += current.size;
-            } else {
-                merged.push_back(current);
-            }
-        }
-
-        freeList = std::move(merged);
-    }
-
-    void MergedMeshBuffer::uploadVertexDataAt(uint32_t offset, const void* data, uint32_t vertexCount) {
+    void MergedMeshBuffer::uploadVertexDataAt(uint32_t offset, const void* data, uint32_t vertexCount)
+    {
         if (!data || vertexCount == 0) return;
 
         size_t dataSize = vertexCount * vertexStride;
@@ -388,7 +282,8 @@ namespace render::gpudriven {
         transferManager->copyToBufferAsync(vertexBuffer, data, dataSize, dstOffset);
     }
 
-    void MergedMeshBuffer::uploadIndexDataAt(uint32_t offset, const uint32_t* data, uint32_t indexCount) {
+    void MergedMeshBuffer::uploadIndexDataAt(uint32_t offset, const uint32_t* data, uint32_t indexCount)
+    {
         if (!data || indexCount == 0) return;
 
         size_t dataSize = indexCount * sizeof(uint32_t);
@@ -397,16 +292,63 @@ namespace render::gpudriven {
         transferManager->copyToBufferAsync(indexBuffer, data, dataSize, dstOffset);
     }
 
+    bool MergedMeshBuffer::allocateLODSpace(SubmeshLocation& loc, uint32_t lodLevel,
+                                            uint32_t vertexCount, uint32_t indexCount,
+                                            const std::string& meshPath)
+    {
+        if (vertexCount == 0)
+        {
+            if (lodLevel > 0)
+            {
+                loc.lods[lodLevel] = loc.lods[lodLevel - 1];
+                loc.lodStates[lodLevel] = loc.lodStates[lodLevel - 1];
+            }
+            else
+            {
+                loc.lods[lodLevel] = {0, 0, 0, 0};
+                loc.lodStates[lodLevel] = LODStreamState::NotRequested;
+            }
+            return true;
+        }
+
+        uint32_t vertOffset = vertexAllocator.allocate(vertexCount);
+        if (vertOffset == FreeListAllocator::ALLOCATION_FAILED)
+        {
+            loggerError("MergedMeshBuffer: Failed to allocate {} vertices for {} LOD{}",
+                        vertexCount, meshPath, lodLevel);
+            return false;
+        }
+
+        uint32_t idxOffset = indexAllocator.allocate(indexCount);
+        if (idxOffset == FreeListAllocator::ALLOCATION_FAILED)
+        {
+            vertexAllocator.free(vertOffset, vertexCount);
+            loggerError("MergedMeshBuffer: Failed to allocate {} indices for {} LOD{}",
+                        indexCount, meshPath, lodLevel);
+            return false;
+        }
+
+        loc.lods[lodLevel].vertexOffset = vertOffset;
+        loc.lods[lodLevel].indexOffset = idxOffset;
+        loc.lods[lodLevel].vertexCount = vertexCount;
+        loc.lods[lodLevel].indexCount = indexCount;
+        loc.lodStates[lodLevel] = LODStreamState::NotRequested;
+
+        return true;
+    }
+
     MergedMeshInfo* MergedMeshBuffer::reserveMesh(const std::string& meshPath,
-                                                   const resource::MeshStreamHeader& header) {
-        if (!initialized) {
+                                                  const resource::MeshStreamHeader& header)
+    {
+        if (!initialized)
+        {
             loggerError("MergedMeshBuffer not initialized");
             return nullptr;
         }
 
-        // Check if already registered
         auto it = meshPathToIndex.find(meshPath);
-        if (it != meshPathToIndex.end()) {
+        if (it != meshPathToIndex.end())
+        {
             return &registeredMeshes[it->second];
         }
 
@@ -415,62 +357,27 @@ namespace render::gpudriven {
         meshInfo.firstSubmeshIndex = static_cast<uint32_t>(allSubmeshLocations.size());
         meshInfo.submeshCount = 0;
 
-        // Reserve space for all submeshes and LODs
-        for (uint32_t subIdx = 0; subIdx < header.numSubmeshes; ++subIdx) {
+        for (uint32_t subIdx = 0; subIdx < header.numSubmeshes; ++subIdx)
+        {
             const auto& submeshStreamInfo = header.submeshes[subIdx];
 
             SubmeshLocation loc;
             loc.meshPath = meshPath;
             loc.submeshName = submeshStreamInfo.name;
             loc.submeshIndex = subIdx;
-
-            // Initialize bounding box (will be computed when LOD0 is uploaded)
             loc.aabbMin = glm::vec3(0.0f);
             loc.aabbMax = glm::vec3(0.0f);
             loc.boundingSphere = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
-            // Allocate space for each LOD level
-            for (uint32_t lodIdx = 0; lodIdx < LOD_LEVEL_COUNT; ++lodIdx) {
+            for (uint32_t lodIdx = 0; lodIdx < LOD_LEVEL_COUNT; ++lodIdx)
+            {
                 const auto& lodFileInfo = submeshStreamInfo.lods[lodIdx];
-                LODDrawInfo& lodInfo = loc.lods[lodIdx];
-
-                if (lodFileInfo.vertexCount > 0) {
-                    // Allocate vertex space
-                    uint32_t vertOffset = allocateVertexSpace(lodFileInfo.vertexCount);
-                    if (vertOffset == UINT32_MAX) {
-                        loggerError("MergedMeshBuffer: Failed to allocate {} vertices for {} LOD{}",
-                                    lodFileInfo.vertexCount, meshPath, lodIdx);
-                        return nullptr;
-                    }
-
-                    // Allocate index space
-                    uint32_t idxOffset = allocateIndexSpace(lodFileInfo.indexCount);
-                    if (idxOffset == UINT32_MAX) {
-                        // Rollback vertex allocation
-                        freeVertexSpace(vertOffset, lodFileInfo.vertexCount);
-                        loggerError("MergedMeshBuffer: Failed to allocate {} indices for {} LOD{}",
-                                    lodFileInfo.indexCount, meshPath, lodIdx);
-                        return nullptr;
-                    }
-
-                    lodInfo.vertexOffset = vertOffset;
-                    lodInfo.indexOffset = idxOffset;
-                    lodInfo.vertexCount = lodFileInfo.vertexCount;
-                    lodInfo.indexCount = lodFileInfo.indexCount;
-
-                    // Mark as not yet uploaded
-                    loc.lodStates[lodIdx] = LODStreamState::NotRequested;
-                } else if (lodIdx > 0) {
-                    // Copy from previous LOD
-                    lodInfo = loc.lods[lodIdx - 1];
-                    loc.lodStates[lodIdx] = loc.lodStates[lodIdx - 1];
-                } else {
-                    lodInfo = {0, 0, 0, 0};
-                    loc.lodStates[lodIdx] = LODStreamState::NotRequested;
+                if (!allocateLODSpace(loc, lodIdx, lodFileInfo.vertexCount, lodFileInfo.indexCount, meshPath))
+                {
+                    return nullptr;
                 }
             }
 
-            // Store submesh location (include index for uniqueness when names are duplicated)
             std::string key = makeSubmeshKey(meshPath, submeshStreamInfo.name, subIdx);
             submeshKeyToIndex[key] = allSubmeshLocations.size();
             allSubmeshLocations.push_back(std::move(loc));
@@ -478,36 +385,40 @@ namespace render::gpudriven {
             meshInfo.submeshCount++;
         }
 
-        // Store mesh info
         meshPathToIndex[meshPath] = registeredMeshes.size();
         registeredMeshes.push_back(std::move(meshInfo));
 
         dirty = true;
         loggerInfo("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes",
-                    meshPath, header.numSubmeshes);
+                   meshPath, header.numSubmeshes);
         return &registeredMeshes.back();
     }
 
     bool MergedMeshBuffer::uploadLOD(const std::string& meshPath,
-                                      const std::string& submeshName,
-                                      uint32_t submeshIndex,
-                                      uint32_t lodLevel,
-                                      const resource::Vertex* vertexData, uint32_t vertexCount,
-                                      const uint32_t* indexData, uint32_t indexCount) {
-        if (!initialized || lodLevel >= LOD_LEVEL_COUNT) {
+                                     const std::string& submeshName,
+                                     uint32_t submeshIndex,
+                                     uint32_t lodLevel,
+                                     const resource::Vertex* vertexData, uint32_t vertexCount,
+                                     const uint32_t* indexData, uint32_t indexCount)
+    {
+        if (!initialized || lodLevel >= LOD_LEVEL_COUNT)
+        {
             return false;
         }
 
         SubmeshLocation* loc = getSubmeshLocationMutable(meshPath, submeshName, submeshIndex);
-        if (!loc) {
-            loggerError("MergedMeshBuffer::uploadLOD: Submesh not found: {}:{}#{}", meshPath, submeshName, submeshIndex);
+        if (!loc)
+        {
+            loggerError("MergedMeshBuffer::uploadLOD: Submesh not found: {}:{}#{}", meshPath, submeshName,
+                        submeshIndex);
             return false;
         }
 
         const auto& lodInfo = loc->lods[lodLevel];
 
         // Validate counts match reservation
-        if (lodInfo.vertexCount != vertexCount || lodInfo.indexCount != indexCount) {
+        if (lodInfo.vertexCount != vertexCount || lodInfo.indexCount != indexCount)
+        {
             loggerError("MergedMeshBuffer::uploadLOD: Count mismatch for {}:{} LOD{}: "
                         "expected {}v/{}i, got {}v/{}i",
                         meshPath, submeshName, lodLevel,
@@ -517,26 +428,29 @@ namespace render::gpudriven {
         }
 
         // Upload vertex data
-        if (vertexData && vertexCount > 0) {
+        if (vertexData && vertexCount > 0)
+        {
             uploadVertexDataAt(lodInfo.vertexOffset, vertexData, vertexCount);
         }
 
         // Upload index data
-        if (indexData && indexCount > 0) {
+        if (indexData && indexCount > 0)
+        {
             uploadIndexDataAt(lodInfo.indexOffset, indexData, indexCount);
         }
 
         // Update state to uploading
         loc->lodStates[lodLevel] = LODStreamState::Uploading;
 
-        // Compute bounding box from first LOD that uploads (any LOD works, earlier is better for culling)
-        // Only update if not already computed (aabbMin == aabbMax == 0 is uninitialized)
+       
         bool boundsNotComputed = (loc->aabbMin == glm::vec3(0.0f) && loc->aabbMax == glm::vec3(0.0f));
-        if (vertexData && vertexCount > 0 && boundsNotComputed) {
+        if (vertexData && vertexCount > 0 && boundsNotComputed)
+        {
             glm::vec3 minBounds(std::numeric_limits<float>::max());
             glm::vec3 maxBounds(std::numeric_limits<float>::lowest());
 
-            for (uint32_t i = 0; i < vertexCount; ++i) {
+            for (uint32_t i = 0; i < vertexCount; ++i)
+            {
                 const auto& v = vertexData[i];
                 minBounds = glm::min(minBounds, v.position);
                 maxBounds = glm::max(maxBounds, v.position);
@@ -551,37 +465,37 @@ namespace render::gpudriven {
     }
 
     void MergedMeshBuffer::markLODReady(const std::string& meshPath,
-                                         const std::string& submeshName,
-                                         uint32_t submeshIndex,
-                                         uint32_t lodLevel) {
+                                        const std::string& submeshName,
+                                        uint32_t submeshIndex,
+                                        uint32_t lodLevel)
+    {
         if (lodLevel >= LOD_LEVEL_COUNT) return;
 
         SubmeshLocation* loc = getSubmeshLocationMutable(meshPath, submeshName, submeshIndex);
-        if (loc) {
+        if (loc)
+        {
             loc->lodStates[lodLevel] = LODStreamState::Ready;
 
-            // Update totalVertexCount/totalIndexCount if this was reserved space
-            // This is approximate - for precise tracking we'd need per-LOD upload flags
-            if (reservedVertexCount >= loc->lods[lodLevel].vertexCount) {
-                reservedVertexCount -= loc->lods[lodLevel].vertexCount;
-                totalVertexCount += loc->lods[lodLevel].vertexCount;
-            }
-            if (reservedIndexCount >= loc->lods[lodLevel].indexCount) {
-                reservedIndexCount -= loc->lods[lodLevel].indexCount;
-                totalIndexCount += loc->lods[lodLevel].indexCount;
-            }
+            vertexAllocator.markUsed(loc->lods[lodLevel].vertexCount);
+            indexAllocator.markUsed(loc->lods[lodLevel].indexCount);
+
+            totalVertexCount = vertexAllocator.getUsedCount();
+            totalIndexCount = indexAllocator.getUsedCount();
 
             dirty = true;
         }
     }
 
-    bool MergedMeshBuffer::hasRenderableData(const std::string& meshPath) const {
+    bool MergedMeshBuffer::hasRenderableData(const std::string& meshPath) const
+    {
         auto it = meshPathToIndex.find(meshPath);
         if (it == meshPathToIndex.end()) return false;
 
         const auto& meshInfo = registeredMeshes[it->second];
-        for (const auto& submesh : meshInfo.submeshes) {
-            if (submesh.hasRenderableLOD()) {
+        for (const auto& submesh : meshInfo.submeshes)
+        {
+            if (submesh.hasRenderableLOD())
+            {
                 return true;
             }
         }
@@ -589,39 +503,49 @@ namespace render::gpudriven {
     }
 
     SubmeshLocation* MergedMeshBuffer::getSubmeshLocationMutable(const std::string& meshPath,
-                                                                   const std::string& submeshName,
-                                                                   uint32_t submeshIndex) {
+                                                                 const std::string& submeshName,
+                                                                 uint32_t submeshIndex)
+    {
         std::string key = makeSubmeshKey(meshPath, submeshName, submeshIndex);
         auto it = submeshKeyToIndex.find(key);
-        if (it != submeshKeyToIndex.end()) {
+        if (it != submeshKeyToIndex.end())
+        {
             return &allSubmeshLocations[it->second];
         }
         return nullptr;
     }
 
-    MergedMeshBuffer::StreamingStats MergedMeshBuffer::getStreamingStats() const {
+    StreamingStats MergedMeshBuffer::getStreamingStats() const
+    {
         StreamingStats stats;
         stats.totalMeshes = static_cast<uint32_t>(registeredMeshes.size());
-        stats.usedVertexBytes = totalVertexCount * vertexStride;
-        stats.usedIndexBytes = totalIndexCount * sizeof(uint32_t);
-        stats.reservedVertexBytes = reservedVertexCount * vertexStride;
-        stats.reservedIndexBytes = reservedIndexCount * sizeof(uint32_t);
+        stats.usedVertexBytes = vertexAllocator.getUsedCount() * vertexStride;
+        stats.usedIndexBytes = indexAllocator.getUsedCount() * sizeof(uint32_t);
+        stats.reservedVertexBytes = vertexAllocator.getReservedCount() * vertexStride;
+        stats.reservedIndexBytes = indexAllocator.getReservedCount() * sizeof(uint32_t);
 
-        for (const auto& meshInfo : registeredMeshes) {
-            if (meshInfo.meshPath.empty()) continue; // Unregistered
+        for (const auto& meshInfo : registeredMeshes)
+        {
+            if (meshInfo.meshPath.empty()) continue;
 
             bool hasRenderable = false;
-            for (const auto& submesh : meshInfo.submeshes) {
-                for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
-                    if (submesh.lodStates[lod] == LODStreamState::Ready) {
+            for (const auto& submesh : meshInfo.submeshes)
+            {
+                for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+                {
+                    if (submesh.lodStates[lod] == LODStreamState::Ready)
+                    {
                         stats.totalLODsReady++;
                         hasRenderable = true;
-                    } else if (submesh.lodStates[lod] != LODStreamState::NotRequested) {
+                    }
+                    else if (submesh.lodStates[lod] != LODStreamState::NotRequested)
+                    {
                         stats.totalLODsPending++;
                     }
                 }
             }
-            if (hasRenderable) {
+            if (hasRenderable)
+            {
                 stats.meshesWithRenderableData++;
             }
         }
@@ -632,16 +556,17 @@ namespace render::gpudriven {
     // ===== METADATA-BASED REGISTRATION (for streaming path) =====
 
     MergedMeshInfo* MergedMeshBuffer::registerMeshFromMetadata(const std::string& meshPath,
-                                                                 const mesh::MeshMetadata& metadata)
+                                                               const mesh::MeshMetadata& metadata)
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             loggerError("MergedMeshBuffer not initialized");
             return nullptr;
         }
 
-        // Check if already registered
         auto it = meshPathToIndex.find(meshPath);
-        if (it != meshPathToIndex.end()) {
+        if (it != meshPathToIndex.end())
+        {
             return &registeredMeshes[it->second];
         }
 
@@ -650,75 +575,43 @@ namespace render::gpudriven {
         meshInfo.firstSubmeshIndex = static_cast<uint32_t>(allSubmeshLocations.size());
         meshInfo.submeshCount = 0;
 
-        // Reserve space for all submeshes
-        for (size_t subIdx = 0; subIdx < metadata.subMeshes.size(); ++subIdx) {
+        for (size_t subIdx = 0; subIdx < metadata.subMeshes.size(); ++subIdx)
+        {
             const auto& subMeta = metadata.subMeshes[subIdx];
 
             SubmeshLocation loc;
             loc.meshPath = meshPath;
             loc.submeshName = subMeta.name;
             loc.submeshIndex = static_cast<uint32_t>(subIdx);
-
-            // Copy bounding box from metadata
             loc.aabbMin = subMeta.boundingBox.min;
             loc.aabbMax = subMeta.boundingBox.max;
             loc.calculateBoundingSphere();
 
-            // Validate bounding sphere
-            if (loc.boundingSphere.w <= 0.0f || std::isnan(loc.boundingSphere.w) || std::isinf(loc.boundingSphere.w)) {
-                // Bounding box may not be set yet (header-only parse), use default
+            if (loc.boundingSphere.w <= 0.0f || std::isnan(loc.boundingSphere.w) || std::isinf(loc.boundingSphere.w))
+            {
                 loc.boundingSphere.w = 1.0f;
             }
 
-            // Allocate space for each LOD level
-            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
+            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+            {
                 const auto& lodMeta = subMeta.lodLevels[lod];
-                LODDrawInfo& lodInfo = loc.lods[lod];
-
-                if (lodMeta.vertexCount > 0) {
-                    // Allocate vertex space
-                    uint32_t vertOffset = allocateVertexSpace(lodMeta.vertexCount);
-                    if (vertOffset == UINT32_MAX) {
-                        loggerError("MergedMeshBuffer: Failed to allocate {} vertices for {} LOD{}",
-                                    lodMeta.vertexCount, meshPath, lod);
-                        return nullptr;
-                    }
-
-                    // Allocate index space
-                    uint32_t idxOffset = allocateIndexSpace(lodMeta.indexCount);
-                    if (idxOffset == UINT32_MAX) {
-                        freeVertexSpace(vertOffset, lodMeta.vertexCount);
-                        loggerError("MergedMeshBuffer: Failed to allocate {} indices for {} LOD{}",
-                                    lodMeta.indexCount, meshPath, lod);
-                        return nullptr;
-                    }
-
-                    lodInfo.vertexOffset = vertOffset;
-                    lodInfo.indexOffset = idxOffset;
-                    lodInfo.vertexCount = lodMeta.vertexCount;
-                    lodInfo.indexCount = lodMeta.indexCount;
-
-                    loc.lodStates[lod] = LODStreamState::NotRequested;
-                } else if (lod > 0) {
-                    // Copy from previous LOD
-                    lodInfo = loc.lods[lod - 1];
-                    loc.lodStates[lod] = loc.lodStates[lod - 1];
-                } else {
-                    lodInfo = {0, 0, 0, 0};
-                    loc.lodStates[lod] = LODStreamState::NotRequested;
+                if (!allocateLODSpace(loc, lod, lodMeta.vertexCount, lodMeta.indexCount, meshPath))
+                {
+                    return nullptr;
                 }
             }
 
-            // Update mesh bounding box
-            if (meshInfo.submeshCount == 0) {
+            if (meshInfo.submeshCount == 0)
+            {
                 meshInfo.aabbMin = loc.aabbMin;
                 meshInfo.aabbMax = loc.aabbMax;
-            } else {
+            }
+            else
+            {
                 meshInfo.aabbMin = glm::min(meshInfo.aabbMin, loc.aabbMin);
                 meshInfo.aabbMax = glm::max(meshInfo.aabbMax, loc.aabbMax);
             }
 
-            // Store submesh location
             std::string key = makeSubmeshKey(meshPath, subMeta.name, static_cast<uint32_t>(subIdx));
             submeshKeyToIndex[key] = allSubmeshLocations.size();
             allSubmeshLocations.push_back(std::move(loc));
@@ -726,195 +619,185 @@ namespace render::gpudriven {
             meshInfo.submeshCount++;
         }
 
-        // Store mesh info
         meshPathToIndex[meshPath] = registeredMeshes.size();
         registeredMeshes.push_back(std::move(meshInfo));
 
         dirty = true;
         loggerInfo("MergedMeshBuffer: Reserved space for mesh {} ({} submeshes, metadata path)",
-                    meshPath, metadata.subMeshes.size());
+                   meshPath, metadata.subMeshes.size());
         return &registeredMeshes.back();
     }
 
+    void MergedMeshBuffer::populateObjectData(GPUObjectData& obj,
+                                              const mesh::MeshRenderData& meshRender,
+                                              const SubmeshLocation& submeshLoc,
+                                              const TextureIndexResolver& textureResolver,
+                                              const ShaderGroupResolver& shaderGroupResolver,
+                                              float time)
+    {
+        obj.modelMatrix = meshRender.modelMatrix;
+        obj.boundingSphere = submeshLoc.boundingSphere;
+
+        // LOD data
+        for (uint32_t i = 0; i < LOD_LEVEL_COUNT; ++i)
+        {
+            glm::uvec4& lodData = (i == 0)
+                                      ? obj.lod0Data
+                                      : (i == 1)
+                                      ? obj.lod1Data
+                                      : (i == 2)
+                                      ? obj.lod2Data
+                                      : obj.lod3Data;
+            lodData = glm::uvec4(
+                submeshLoc.lods[i].vertexOffset,
+                submeshLoc.lods[i].indexOffset,
+                submeshLoc.lods[i].indexCount,
+                submeshLoc.lods[i].vertexCount
+            );
+        }
+
+        float bias = meshRender.lodBias;
+        obj.lodThresholds = glm::vec4(
+            LOD_THRESHOLD_0 * std::pow(2.0f, -bias),
+            LOD_THRESHOLD_1 * std::pow(2.0f, -bias),
+            LOD_THRESHOLD_2 * std::pow(2.0f, -bias),
+            bias
+        );
+
+        // Material data
+        const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
+        std::string materialPath;
+
+        if (subMat)
+        {
+            obj.albedo = subMat->albedo;
+            obj.iblParams = glm::vec4(subMat->iblDiffuse, subMat->iblSpecular, 0.0f, 0.0f);
+            obj.materialParams = glm::vec4(subMat->metallic, subMat->roughness, subMat->ao, subMat->emission);
+            materialPath = subMat->materialPath;
+        }
+        else
+        {
+            obj.albedo = meshRender.albedo;
+            materialPath = meshRender.defaultMaterialPath;
+
+            float iblDiffuse = 1.0f, iblSpecular = 0.5f;
+            if (!materialPath.empty())
+            {
+                auto matData = resource::ResourceManager::loadMaterial(materialPath);
+                if (matData)
+                {
+                    auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
+                    iblDiffuse = pbrValues.iblDiffuse;
+                    iblSpecular = pbrValues.iblSpecular;
+                }
+            }
+            obj.iblParams = glm::vec4(iblDiffuse, iblSpecular, 0.0f, 0.0f);
+            obj.materialParams = glm::vec4(meshRender.metallic, meshRender.roughness, meshRender.ao,
+                                           meshRender.emission);
+        }
+
+        // Dynamic emission
+        if (!materialPath.empty() && time > 0.0f)
+        {
+            auto matData = resource::ResourceManager::loadMaterial(materialPath);
+            if (matData)
+            {
+                const auto* outputNode = matData->graph.findOutputNode();
+                if (outputNode)
+                {
+                    float dynamicEmission = mesh::MaterialPBRExtractor::evaluateEmissionStrength(
+                        matData->graph, outputNode->id, time);
+                    if (dynamicEmission != 0.0f)
+                    {
+                        obj.materialParams.w = dynamicEmission;
+                    }
+                }
+            }
+        }
+
+        // Texture indices
+        if (textureResolver && !materialPath.empty())
+        {
+            obj.textureIndices0 = glm::uvec4(
+                textureResolver(materialPath, TextureSlotType::Albedo),
+                textureResolver(materialPath, TextureSlotType::Normal),
+                textureResolver(materialPath, TextureSlotType::ORM),
+                textureResolver(materialPath, TextureSlotType::Metallic)
+            );
+            obj.textureIndices1 = glm::uvec4(
+                textureResolver(materialPath, TextureSlotType::Roughness),
+                textureResolver(materialPath, TextureSlotType::AO),
+                textureResolver(materialPath, TextureSlotType::Emission),
+                textureResolver(materialPath, TextureSlotType::Height)
+            );
+        }
+        else
+        {
+            obj.textureIndices0 = glm::uvec4(INVALID_TEXTURE_INDEX);
+            obj.textureIndices1 = glm::uvec4(INVALID_TEXTURE_INDEX);
+        }
+
+        // Flags
+        obj.flags = 0;
+        if (subMat && subMat->blendMode == 1)
+        {
+            obj.flags |= ObjectFlags::AlphaMask;
+        }
+
+        float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
+        float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
+        float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));
+        constexpr float uniformScaleEpsilon = 0.001f;
+        if (std::abs(scaleX - scaleY) < uniformScaleEpsilon &&
+            std::abs(scaleY - scaleZ) < uniformScaleEpsilon)
+        {
+            obj.flags |= ObjectFlags::UniformScale;
+        }
+
+        obj.availableLODMask = submeshLoc.getAvailableLODMask();
+        obj.shaderGroupIndex = (shaderGroupResolver && !materialPath.empty())
+                                   ? shaderGroupResolver(materialPath)
+                                   : 0;
+    }
+
     void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
-                                          const TextureIndexResolver& textureResolver,
-                                          const ShaderGroupResolver& shaderGroupResolver,
-                                          float time)
+                                         const TextureIndexResolver& textureResolver,
+                                         const ShaderGroupResolver& shaderGroupResolver,
+                                         float time)
     {
         currentObjectCount = 0;
 
-        for (const auto& meshRender : renderData) {
-            // Get submesh locations for this mesh
+        for (const auto& meshRender : renderData)
+        {
             auto meshIt = meshPathToIndex.find(meshRender.meshPath);
-            if (meshIt == meshPathToIndex.end()) {
-                // Mesh not registered - skip silently (streaming may not have loaded it yet)
+            if (meshIt == meshPathToIndex.end())
+            {
                 continue;
             }
 
             const auto& meshInfo = registeredMeshes[meshIt->second];
 
-            // Create one GPUObjectData per submesh
-            for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx) {
+            for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
+            {
                 const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
 
-                // Skip submeshes with no renderable LODs
-                if (!submeshLoc.hasRenderableLOD()) {
+                if (!submeshLoc.hasRenderableLOD())
+                {
                     continue;
                 }
 
-                if (currentObjectCount >= maxObjectCount) {
+                if (currentObjectCount >= maxObjectCount)
+                {
                     loggerWarning("MergedMeshBuffer: max object count reached");
-                    break;
+                    return;
                 }
 
                 GPUObjectData& obj = cpuObjectData[currentObjectCount];
-
-                // Transform
-                obj.modelMatrix = meshRender.modelMatrix;
-
-                // Bounding volumes
-                obj.boundingSphere = submeshLoc.boundingSphere;
-
-                // LOD data
-                obj.lod0Data = glm::uvec4(
-                    submeshLoc.lods[0].vertexOffset,
-                    submeshLoc.lods[0].indexOffset,
-                    submeshLoc.lods[0].indexCount,
-                    submeshLoc.lods[0].vertexCount
-                );
-                obj.lod1Data = glm::uvec4(
-                    submeshLoc.lods[1].vertexOffset,
-                    submeshLoc.lods[1].indexOffset,
-                    submeshLoc.lods[1].indexCount,
-                    submeshLoc.lods[1].vertexCount
-                );
-                obj.lod2Data = glm::uvec4(
-                    submeshLoc.lods[2].vertexOffset,
-                    submeshLoc.lods[2].indexOffset,
-                    submeshLoc.lods[2].indexCount,
-                    submeshLoc.lods[2].vertexCount
-                );
-                obj.lod3Data = glm::uvec4(
-                    submeshLoc.lods[3].vertexOffset,
-                    submeshLoc.lods[3].indexOffset,
-                    submeshLoc.lods[3].indexCount,
-                    submeshLoc.lods[3].vertexCount
-                );
-
-                // LOD thresholds
-                float bias = meshRender.lodBias;
-                obj.lodThresholds = glm::vec4(
-                    LOD_THRESHOLD_0 * std::pow(2.0f, -bias),
-                    LOD_THRESHOLD_1 * std::pow(2.0f, -bias),
-                    LOD_THRESHOLD_2 * std::pow(2.0f, -bias),
-                    bias
-                );
-
-                // Material data
-                const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
-                float emissionStrength = 0.0f;
-                std::string materialPath;
-
-                if (subMat) {
-                    obj.albedo = subMat->albedo;
-                    emissionStrength = subMat->emission;
-                    obj.iblParams = glm::vec4(subMat->iblDiffuse, subMat->iblSpecular, 0.0f, 0.0f);
-                    materialPath = subMat->materialPath;
-                    obj.materialParams = glm::vec4(
-                        subMat->metallic,
-                        subMat->roughness,
-                        subMat->ao,
-                        emissionStrength
-                    );
-                } else {
-                    obj.albedo = meshRender.albedo;
-                    emissionStrength = meshRender.emission;
-                    materialPath = meshRender.defaultMaterialPath;
-
-                    // Extract IBL values from default material if available
-                    float iblDiffuse = 1.0f;
-                    float iblSpecular = 0.5f;
-                    if (!materialPath.empty()) {
-                        auto matData = resource::ResourceManager::getMaterial(materialPath);
-                        if (matData) {
-                            auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
-                            iblDiffuse = pbrValues.iblDiffuse;
-                            iblSpecular = pbrValues.iblSpecular;
-                        }
-                    }
-                    obj.iblParams = glm::vec4(iblDiffuse, iblSpecular, 0.0f, 0.0f);
-
-                    obj.materialParams = glm::vec4(
-                        meshRender.metallic,
-                        meshRender.roughness,
-                        meshRender.ao,
-                        emissionStrength
-                    );
-                }
-
-                // Evaluate dynamic emission
-                if (!materialPath.empty() && time > 0.0f) {
-                    auto matData = resource::ResourceManager::getMaterial(materialPath);
-                    if (matData) {
-                        const auto* outputNode = matData->graph.findOutputNode();
-                        if (outputNode) {
-                            float dynamicEmission = mesh::MaterialPBRExtractor::evaluateEmissionStrength(
-                                matData->graph, outputNode->id, time);
-                            if (dynamicEmission != 0.0f) {
-                                obj.materialParams.w = dynamicEmission;
-                            }
-                        }
-                    }
-                }
-
-                // Texture indices
-                if (textureResolver && !materialPath.empty()) {
-                    obj.textureIndices0 = glm::uvec4(
-                        textureResolver(materialPath, TextureSlotType::Albedo),
-                        textureResolver(materialPath, TextureSlotType::Normal),
-                        textureResolver(materialPath, TextureSlotType::ORM),
-                        textureResolver(materialPath, TextureSlotType::Metallic)
-                    );
-                    obj.textureIndices1 = glm::uvec4(
-                        textureResolver(materialPath, TextureSlotType::Roughness),
-                        textureResolver(materialPath, TextureSlotType::AO),
-                        textureResolver(materialPath, TextureSlotType::Emission),
-                        textureResolver(materialPath, TextureSlotType::Height)
-                    );
-                } else {
-                    obj.textureIndices0 = glm::uvec4(INVALID_TEXTURE_INDEX);
-                    obj.textureIndices1 = glm::uvec4(INVALID_TEXTURE_INDEX);
-                }
-
-                // Flags
-                obj.flags = ObjectFlags::Visible | ObjectFlags::CastShadow | ObjectFlags::ReceiveShadow;
-                if (subMat && subMat->blendMode == 1) {
-                    obj.flags |= ObjectFlags::AlphaMask;
-                }
-
-                // Uniform scale check
-                float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
-                float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
-                float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));
-                constexpr float uniformScaleEpsilon = 0.001f;
-                if (std::abs(scaleX - scaleY) < uniformScaleEpsilon &&
-                    std::abs(scaleY - scaleZ) < uniformScaleEpsilon) {
-                    obj.flags |= ObjectFlags::UniformScale;
-                }
-
+                populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, time);
                 obj.entityId = currentObjectCount;
-                obj.availableLODMask = submeshLoc.getAvailableLODMask();
-
-                // Shader group for custom material shaders
-                if (shaderGroupResolver && !materialPath.empty()) {
-                    obj.shaderGroupIndex = shaderGroupResolver(materialPath);
-                } else {
-                    obj.shaderGroupIndex = 0;  // Default PBR shader
-                }
 
                 currentObjectCount++;
             }
         }
     }
-
 }

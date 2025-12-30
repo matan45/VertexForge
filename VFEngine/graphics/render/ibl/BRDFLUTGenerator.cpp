@@ -1,6 +1,8 @@
 #include "BRDFLUTGenerator.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
 
@@ -21,12 +23,12 @@ namespace render::ibl
         brdfLUTImageRequest.width = CUBE_MAP_SIZE;
         brdfLUTImageRequest.height = CUBE_MAP_SIZE;
         brdfLUTImageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
-        core::Utilities::createImage(brdfLUTImageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
+        core::ImageUtilities::createImage(brdfLUTImageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
 
         // BRDF LUT image view
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), brdfLUTImage.image);
         imageViewRequest.format = vk::Format::eR16G16Sfloat;
-        core::Utilities::createImageView(imageViewRequest, brdfLUTImage.imageView);
+        core::ImageUtilities::createImageView(imageViewRequest, brdfLUTImage.imageView);
 
         vk::SamplerCreateInfo samplerInfo;
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -105,7 +107,7 @@ namespace render::ibl
         quadBufferInfo.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         quadBufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(quadBufferInfo, quadVertexBuffer, quadVertexBufferMemory);
+        core::BufferUtilities::createBuffer(quadBufferInfo, quadVertexBuffer, quadVertexBufferMemory);
 
         void* data;
         if (vk::Result result = device.getLogicalDevice().mapMemory(quadVertexBufferMemory, 0, quadBufferInfo.size, {},
@@ -224,7 +226,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer transitionCommandBuffer = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(
+        core::ImageUtilities::transitionImageLayout(
             transitionCommandBuffer.get(),
             brdfLUTImage.image,
             vk::ImageLayout::eColorAttachmentOptimal,

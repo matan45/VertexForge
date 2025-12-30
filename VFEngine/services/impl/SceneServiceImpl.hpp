@@ -13,10 +13,28 @@ namespace scene {
 
 namespace services {
 
+    // Forward declarations for component services
+    class CameraComponentService;
+    class MeshComponentService;
+    class MaterialComponentService;
+    class AudioComponentService;
+    class IBLComponentService;
+
     class SceneServiceImpl : public ISceneService {
+    private:
+        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+        std::optional<EntityHandle> selectedEntity;
+
+        // Component services
+        std::unique_ptr<CameraComponentService> cameraService;
+        std::unique_ptr<MeshComponentService> meshService;
+        std::unique_ptr<MaterialComponentService> materialService;
+        std::unique_ptr<AudioComponentService> audioService;
+        std::unique_ptr<IBLComponentService> iblService;
+
     public:
         explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
-        ~SceneServiceImpl() override = default;
+        ~SceneServiceImpl() override;
         
         void registerEventHandlers() override;
 
@@ -117,8 +135,6 @@ namespace services {
                                                std::optional<EntityHandle> parent = std::nullopt);
 
     private:
-        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
-        std::optional<EntityHandle> selectedEntity;
         
         EntityData buildEntityData(entt::entity entity) const;
 

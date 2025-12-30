@@ -1,7 +1,7 @@
 #include "HiZBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "../../core/Shader.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
@@ -26,7 +26,7 @@ namespace render::occlusion
         depthFormat = format;
         width = swapChain.getSwapchainExtent().width;
         height = swapChain.getSwapchainExtent().height;
-        
+
         mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
 
         createHiZImage();
@@ -40,19 +40,18 @@ namespace render::occlusion
 
     void HiZBuffer::createHiZImage()
     {
-        // Create Hi-Z image using utilities
         core::ImageInfoRequest imageRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             width, height,
-            1,  // layers
+            1, // layers
             mipLevels,
             vk::Format::eR32Sfloat,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::Utilities::createImage(imageRequest, hiZImage, hiZMemory);
+        core::ImageUtilities::createImage(imageRequest, hiZImage, hiZMemory);
 
         // Create full mip chain view using utilities
         core::ImageViewInfoRequest viewRequest(
@@ -61,10 +60,10 @@ namespace render::occlusion
             vk::Format::eR32Sfloat,
             vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2D,
-            1,  // layerCount
+            1, // layerCount
             mipLevels
         );
-        core::Utilities::createImageView(viewRequest, hiZImageView);
+        core::ImageUtilities::createImageView(viewRequest, hiZImageView);
 
         // Create per-mip views for compute shader (need manual creation for baseMipLevel)
         mipViews.resize(mipLevels);
@@ -146,7 +145,7 @@ namespace render::occlusion
         samplerInfo.maxLod = static_cast<float>(mipLevels);
 
         hiZSampler = device.getLogicalDevice().createSampler(samplerInfo);
-        
+
         vk::SamplerCreateInfo depthSamplerInfo = samplerInfo;
         depthSamplerInfo.maxLod = 0.0f;
         depthSampler = device.getLogicalDevice().createSampler(depthSamplerInfo);
@@ -163,14 +162,14 @@ namespace render::occlusion
             loggerError("Failed to load Hi-Z compute shader: {}", shader->getLastCompilationError());
             return;
         }
-        
+
         std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
-        
+
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
-        
+
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageImage;
         bindings[1].descriptorCount = 1;
@@ -180,19 +179,19 @@ namespace render::occlusion
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
-        
+
         vk::PushConstantRange pushConstant{};
         pushConstant.stageFlags = vk::ShaderStageFlagBits::eCompute;
         pushConstant.offset = 0;
-        pushConstant.size = sizeof(int32_t) * 6; // outputSize(2) + inputSize(2) + isFirstMip + padding
-        
+        pushConstant.size = sizeof(HiZPushConstants);
+
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
         pipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
-        
+
         vk::ComputePipelineCreateInfo pipelineInfo{};
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
@@ -214,14 +213,14 @@ namespace render::occlusion
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
-        
+
         std::vector<vk::DescriptorSetLayout> layouts(mipLevels, descriptorSetLayout);
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = mipLevels;
         allocInfo.pSetLayouts = layouts.data();
         descriptorSets = device.getLogicalDevice().allocateDescriptorSets(allocInfo);
-        
+
         for (uint32_t i = 0; i < mipLevels; ++i)
         {
             vk::DescriptorImageInfo inputInfo{};
@@ -251,32 +250,117 @@ namespace render::occlusion
         }
     }
 
+    void HiZBuffer::transitionDepthToShaderRead(vk::CommandBuffer cmd)
+    {
+        vk::ImageMemoryBarrier barrier{};
+        barrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = sourceDepthImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
+            vk::ImageAspectFlagBits::eStencil;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eLateFragmentTests,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {}, {}, {}, barrier
+        );
+    }
+
+    void HiZBuffer::transitionDepthToAttachment(vk::CommandBuffer cmd)
+    {
+        vk::ImageMemoryBarrier barrier{};
+        barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = sourceDepthImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
+            vk::ImageAspectFlagBits::eStencil;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+            vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eEarlyFragmentTests,
+            {}, {}, {}, barrier
+        );
+    }
+
+    void HiZBuffer::generateMipLevel(vk::CommandBuffer cmd, uint32_t mipIndex,
+                                      uint32_t inputWidth, uint32_t inputHeight,
+                                      uint32_t outputWidth, uint32_t outputHeight)
+    {
+        // Transition output mip to general for writing
+        vk::ImageMemoryBarrier barrier{};
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eGeneral;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = hiZImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        barrier.subresourceRange.baseMipLevel = mipIndex;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = vk::AccessFlagBits::eNone;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {}, {}, {}, barrier
+        );
+
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
+                               0, descriptorSets[mipIndex], {});
+
+        HiZPushConstants pushData{
+            .outputWidth = static_cast<int32_t>(outputWidth),
+            .outputHeight = static_cast<int32_t>(outputHeight),
+            .inputWidth = static_cast<int32_t>(inputWidth),
+            .inputHeight = static_cast<int32_t>(inputHeight),
+            .isFirstMip = (mipIndex == 0) ? 1 : 0,
+            .padding = 0
+        };
+
+        cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
+                          0, sizeof(pushData), &pushData);
+
+        uint32_t groupsX = (outputWidth + 7) / 8;
+        uint32_t groupsY = (outputHeight + 7) / 8;
+        cmd.dispatch(groupsX, groupsY, 1);
+
+        // Transition to shader read for next mip level
+        barrier.oldLayout = vk::ImageLayout::eGeneral;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {}, {}, {}, barrier
+        );
+    }
+
     void HiZBuffer::generate(vk::CommandBuffer cmd)
     {
         if (!initialized) return;
-        
-        {
-            vk::ImageMemoryBarrier depthBarrier{};
-            depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-            depthBarrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            depthBarrier.image = sourceDepthImage;
-            depthBarrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
-                vk::ImageAspectFlagBits::eStencil;
-            depthBarrier.subresourceRange.baseMipLevel = 0;
-            depthBarrier.subresourceRange.levelCount = 1;
-            depthBarrier.subresourceRange.baseArrayLayer = 0;
-            depthBarrier.subresourceRange.layerCount = 1;
-            depthBarrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-            depthBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
-            cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eLateFragmentTests,
-                vk::PipelineStageFlagBits::eComputeShader,
-                {}, {}, {}, depthBarrier
-            );
-        }
+        transitionDepthToShaderRead(cmd);
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
 
@@ -285,102 +369,16 @@ namespace render::occlusion
 
         for (uint32_t i = 0; i < mipLevels; ++i)
         {
-            uint32_t outputWidth = std::max(1u, mipWidth / 2);
-            uint32_t outputHeight = std::max(1u, mipHeight / 2);
+            uint32_t outputWidth = (i == 0) ? mipWidth : std::max(1u, mipWidth / 2);
+            uint32_t outputHeight = (i == 0) ? mipHeight : std::max(1u, mipHeight / 2);
 
-            if (i == 0)
-            {
-                outputWidth = mipWidth;
-                outputHeight = mipHeight;
-            }
-
-            // Transition output mip to general for writing
-            vk::ImageMemoryBarrier barrier{};
-            barrier.oldLayout = vk::ImageLayout::eUndefined;
-            barrier.newLayout = vk::ImageLayout::eGeneral;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = hiZImage;
-            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-            barrier.subresourceRange.baseMipLevel = i;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.baseArrayLayer = 0;
-            barrier.subresourceRange.layerCount = 1;
-            barrier.srcAccessMask = vk::AccessFlagBits::eNone;
-            barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
-
-            cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eTopOfPipe,
-                vk::PipelineStageFlagBits::eComputeShader,
-                {}, {}, {}, barrier
-            );
-
-            // Bind descriptor set and push constants
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
-                                   0, descriptorSets[i], {});
-            
-            struct HiZPushConstants
-            {
-                int32_t outputWidth;
-                int32_t outputHeight;
-                int32_t inputWidth;
-                int32_t inputHeight;
-                int32_t isFirstMip;
-                int32_t padding;
-            } pushData;
-            pushData.outputWidth = static_cast<int32_t>(outputWidth);
-            pushData.outputHeight = static_cast<int32_t>(outputHeight);
-            pushData.inputWidth = static_cast<int32_t>(mipWidth);
-            pushData.inputHeight = static_cast<int32_t>(mipHeight);
-            pushData.isFirstMip = (i == 0) ? 1 : 0;
-            pushData.padding = 0;
-
-            cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
-                              0, sizeof(pushData), &pushData);
-            
-            uint32_t groupsX = (outputWidth + 7) / 8;
-            uint32_t groupsY = (outputHeight + 7) / 8;
-            cmd.dispatch(groupsX, groupsY, 1);
-            
-            barrier.oldLayout = vk::ImageLayout::eGeneral;
-            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-            cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eComputeShader,
-                vk::PipelineStageFlagBits::eComputeShader,
-                {}, {}, {}, barrier
-            );
+            generateMipLevel(cmd, i, mipWidth, mipHeight, outputWidth, outputHeight);
 
             mipWidth = outputWidth;
             mipHeight = outputHeight;
         }
 
-        // Transition depth buffer back to depth attachment layout for next frame's rendering
-        {
-            vk::ImageMemoryBarrier depthBarrier{};
-            depthBarrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            depthBarrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-            depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            depthBarrier.image = sourceDepthImage;
-            depthBarrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
-                vk::ImageAspectFlagBits::eStencil;
-            depthBarrier.subresourceRange.baseMipLevel = 0;
-            depthBarrier.subresourceRange.levelCount = 1;
-            depthBarrier.subresourceRange.baseArrayLayer = 0;
-            depthBarrier.subresourceRange.layerCount = 1;
-            depthBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
-            depthBarrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-
-            cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eComputeShader,
-                vk::PipelineStageFlagBits::eEarlyFragmentTests,
-                {}, {}, {}, depthBarrier
-            );
-        }
+        transitionDepthToAttachment(cmd);
     }
 
     void HiZBuffer::cleanup()

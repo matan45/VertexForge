@@ -3,7 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
 
 namespace render::ibl
@@ -69,7 +69,7 @@ namespace render::ibl
         vertexCubeVerticesBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         vertexCubeVerticesBufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(vertexCubeVerticesBufferRequest, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexCubeVerticesBufferRequest, vertexBuffer, vertexBufferMemory);
 
         void* data;
         if (vk::Result result = device.getLogicalDevice().mapMemory(vertexBufferMemory, 0,
@@ -122,7 +122,7 @@ namespace render::ibl
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
         bufferRequest.size = sizeof(UniformBufferObject);
-        core::Utilities::createBuffer(bufferRequest, uniformBuffer, uniformBufferMemory);
+        core::BufferUtilities::createBuffer(bufferRequest, uniformBuffer, uniformBufferMemory);
 
         vk::DescriptorSetAllocateInfo allocInfo;
         allocInfo.descriptorPool = descriptorPool;

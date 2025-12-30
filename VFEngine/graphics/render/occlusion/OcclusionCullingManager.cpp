@@ -2,7 +2,7 @@
 #include "HiZBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
-#include "../../core/Utilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
@@ -34,7 +34,7 @@ namespace render::occlusion
     void OcclusionCullingManager::createBuffers(uint32_t maxObjects)
     {
         maxObjectCount = maxObjects;
-        
+
         core::BufferInfoRequest objectRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
@@ -42,8 +42,8 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::Utilities::createBuffer(objectRequest, objectBuffer, objectBufferMemory);
-        
+        core::BufferUtilities::createBuffer(objectRequest, objectBuffer, objectBufferMemory);
+
         core::BufferInfoRequest visRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
@@ -51,8 +51,8 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::Utilities::createBuffer(visRequest, visibilityBuffer, visibilityBufferMemory);
-        
+        core::BufferUtilities::createBuffer(visRequest, visibilityBuffer, visibilityBufferMemory);
+
         core::BufferInfoRequest cameraRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
@@ -60,8 +60,8 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eUniformBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::Utilities::createBuffer(cameraRequest, cameraBuffer, cameraBufferMemory);
-        
+        core::BufferUtilities::createBuffer(cameraRequest, cameraBuffer, cameraBufferMemory);
+
         core::BufferInfoRequest stagingRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
@@ -69,7 +69,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::Utilities::createBuffer(stagingRequest, stagingBuffer, stagingBufferMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingBufferMemory);
 
         needsDescriptorUpdate = true;
     }
@@ -85,24 +85,24 @@ namespace render::occlusion
             loggerError("Failed to load occlusion culling shader: {}", shader->getLastCompilationError());
             return;
         }
-        
+
         std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
-        
+
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
-        
+
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
-        
+
         bindings[2].binding = 2;
         bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eCompute;
-        
+
         bindings[3].binding = 3;
         bindings[3].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[3].descriptorCount = 1;
@@ -112,12 +112,12 @@ namespace render::occlusion
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
-        
+
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
         pipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
-        
+
         vk::ComputePipelineCreateInfo pipelineInfo{};
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
@@ -141,7 +141,7 @@ namespace render::occlusion
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
-        
+
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
@@ -154,14 +154,14 @@ namespace render::occlusion
     void OcclusionCullingManager::resizeBuffers(uint32_t newMaxObjects)
     {
         device.getLogicalDevice().waitIdle();
-        
+
         device.getLogicalDevice().destroyBuffer(objectBuffer);
         device.getLogicalDevice().freeMemory(objectBufferMemory);
         device.getLogicalDevice().destroyBuffer(visibilityBuffer);
         device.getLogicalDevice().freeMemory(visibilityBufferMemory);
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingBufferMemory);
-        
+
         createBuffers(newMaxObjects);
 
         loggerInfo("Occlusion culling buffers resized to {} objects", newMaxObjects);
@@ -174,14 +174,14 @@ namespace render::occlusion
             currentObjectCount = 0;
             return;
         }
-        
+
         if (objects.size() > maxObjectCount)
         {
             resizeBuffers(static_cast<uint32_t>(objects.size() * 2));
         }
 
         currentObjectCount = static_cast<uint32_t>(objects.size());
-        
+
         vk::Buffer uploadStaging;
         vk::DeviceMemory uploadStagingMemory;
         vk::DeviceSize uploadSize = sizeof(GPUObjectData) * objects.size();
@@ -193,12 +193,12 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::Utilities::createBuffer(uploadRequest, uploadStaging, uploadStagingMemory);
-        
+        core::BufferUtilities::createBuffer(uploadRequest, uploadStaging, uploadStagingMemory);
+
         void* data = device.getLogicalDevice().mapMemory(uploadStagingMemory, 0, uploadSize);
         std::memcpy(data, objects.data(), uploadSize);
         device.getLogicalDevice().unmapMemory(uploadStagingMemory);
-        
+
         vk::CommandBufferAllocateInfo cmdAllocInfo{};
         cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
         cmdAllocInfo.commandPool = device.getStagingCommandPool();
@@ -239,7 +239,7 @@ namespace render::occlusion
         cameraData.objectCount = currentObjectCount;
         cameraData.hiZMipLevels = hiZBuffer ? hiZBuffer->getMipLevels() : 1;
         cameraData.padding = 0;
-        
+
         void* data = device.getLogicalDevice().mapMemory(cameraBufferMemory, 0, sizeof(CullCameraData));
         std::memcpy(data, &cameraData, sizeof(CullCameraData));
         device.getLogicalDevice().unmapMemory(cameraBufferMemory);
@@ -251,7 +251,7 @@ namespace render::occlusion
         {
             return;
         }
-        
+
         if (needsDescriptorUpdate)
         {
             vk::DescriptorImageInfo hiZInfo{};
@@ -303,7 +303,7 @@ namespace render::occlusion
             device.getLogicalDevice().updateDescriptorSets(writes, {});
             needsDescriptorUpdate = false;
         }
-        
+
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, cullPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 0, descriptorSet, {});
 
@@ -333,7 +333,7 @@ namespace render::occlusion
         {
             return {};
         }
-        
+
         vk::CommandBufferAllocateInfo cmdAllocInfo{};
         cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
         cmdAllocInfo.commandPool = device.getStagingCommandPool();

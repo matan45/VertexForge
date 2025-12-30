@@ -35,6 +35,19 @@ namespace render
 
     class IBL
     {
+    private:
+        core::Device& device;
+        core::SwapChain& swapChain;
+        core::OffscreenResources& offscreenResources;
+        std::shared_ptr<core::Texture> hdrTexture;
+        bool isDisplay = false;
+        bool iblInitialized = false;
+
+        std::unique_ptr<ibl::EnvironmentCubemapGenerator> envCubemapGen;
+        std::unique_ptr<ibl::IrradianceGenerator> irradianceGen;
+        std::unique_ptr<ibl::BRDFLUTGenerator> brdfLUTGen;
+        std::unique_ptr<ibl::PrefilteredEnvGenerator> prefilteredGen;
+        std::unique_ptr<ibl::SkyboxRenderer> skyboxRenderer;
     public:
         explicit IBL(core::Device& device, core::SwapChain& swapChain,
                      core::OffscreenResources& offscreenResources);
@@ -59,19 +72,6 @@ namespace render
 
         // Check if IBL textures have been generated (init() was called)
         bool isInitialized() const { return iblInitialized; }
-
-    private:
-        core::Device& device;
-        core::SwapChain& swapChain;
-        core::OffscreenResources& offscreenResources;
-        std::shared_ptr<core::Texture> hdrTexture;
-        bool isDisplay = false;
-        bool iblInitialized = false;
-
-        std::unique_ptr<ibl::EnvironmentCubemapGenerator> envCubemapGen;
-        std::unique_ptr<ibl::IrradianceGenerator> irradianceGen;
-        std::unique_ptr<ibl::BRDFLUTGenerator> brdfLUTGen;
-        std::unique_ptr<ibl::PrefilteredEnvGenerator> prefilteredGen;
-        std::unique_ptr<ibl::SkyboxRenderer> skyboxRenderer;
+        
     };
 }

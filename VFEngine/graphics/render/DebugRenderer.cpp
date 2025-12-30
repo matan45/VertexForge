@@ -86,34 +86,36 @@ namespace render
     }
 
     void DebugRenderer::render(const vk::CommandBuffer& commandBuffer,
-                                const std::vector<mesh::MeshRenderData>& meshDrawList,
-                                const glm::mat4& view,
-                                const glm::mat4& projection,
-                                const std::function<const mesh::MeshGPUData*(const std::string&)>& getMeshFunc) const
+                               const std::vector<mesh::MeshRenderData>& meshDrawList,
+                               const glm::mat4& view,
+                               const glm::mat4& projection,
+                               const std::function<const mesh::MeshGPUData*(const std::string&)>& getMeshFunc) const
     {
-        // Render grid first (behind other debug visuals)
         if (gridRenderer && showGrid)
         {
             gridRenderer->render(commandBuffer, view, projection);
         }
-
-        // Render AABB wireframes for meshes with showBoundingBox enabled
+        
         if (aabbRenderer)
         {
             aabbRenderer->render(commandBuffer, meshDrawList, view, projection, getMeshFunc);
         }
-
-        // Render camera frustum wireframes for cameras with showFrustum enabled
+        
         if (frustumRenderer && !cameraFrustumDrawList.empty())
         {
             frustumRenderer->render(commandBuffer, cameraFrustumDrawList, view, projection);
         }
-
-        // Render audio sphere wireframes for audio sources with showDebugSpheres enabled
+        
         if (audioSphereRenderer && !audioSphereDrawList.empty())
         {
             audioSphereRenderer->render(commandBuffer, audioSphereDrawList, view, projection);
         }
+    }
+
+    bool DebugRenderer::hasItemsToRender() const
+    {
+        return showGrid || !cameraFrustumDrawList.empty() || !audioSphereDrawList.empty() ||
+            hasBoundingBoxesToRender;
     }
 
     void DebugRenderer::setShowGrid(bool show)

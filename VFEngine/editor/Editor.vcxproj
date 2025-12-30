@@ -58,7 +58,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
@@ -78,7 +78,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\services;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -112,12 +112,13 @@
     <ClInclude Include="windows\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
     <ClInclude Include="windows\ContentBrowser.hpp" />
+    <ClInclude Include="windows\EntityDetailsPanel.hpp" />
     <ClInclude Include="windows\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\ImportProgressWindow.hpp" />
     <ClInclude Include="windows\MainImguiWindow.hpp" />
     <ClInclude Include="windows\MaterialEditorWindow.hpp" />
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
-    <ClInclude Include="windows\SceneGraph.hpp" />
+    <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
     <ClInclude Include="windows\SceneLoadingProgressWindow.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
   </ItemGroup>
@@ -136,12 +137,13 @@
     <ClCompile Include="windows\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\ConsoleLog.cpp" />
     <ClCompile Include="windows\ContentBrowser.cpp" />
+    <ClCompile Include="windows\EntityDetailsPanel.cpp" />
     <ClCompile Include="windows\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\ImportProgressWindow.cpp" />
     <ClCompile Include="windows\MainImguiWindow.cpp" />
     <ClCompile Include="windows\MaterialEditorWindow.cpp" />
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
-    <ClCompile Include="windows\SceneGraph.cpp" />
+    <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
     <ClCompile Include="windows\SceneLoadingProgressWindow.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
   </ItemGroup>

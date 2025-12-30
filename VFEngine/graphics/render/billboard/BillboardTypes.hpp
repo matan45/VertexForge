@@ -7,11 +7,11 @@
 
 namespace render::billboard
 {
-    // Billboard vertex - simple quad with position and UV
+    
     struct BillboardVertex
     {
         glm::vec2 position;   // Quad corner offset (-0.5 to 0.5)
-        glm::vec2 texCoord;   // UV coordinates
+        glm::vec2 texCoord;  
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -42,7 +42,7 @@ namespace render::billboard
         }
     };
 
-    // Per-instance data for instanced rendering
+   
     struct BillboardInstanceData
     {
         glm::vec3 worldPosition;  // World position of billboard center
@@ -50,7 +50,7 @@ namespace render::billboard
         glm::vec2 size;           // Size in pixels (screen-space) or world units
         uint32_t sizeMode;        // 0 = ScreenSpace, 1 = WorldSpace
         uint32_t entityId;        // Entity ID for picking
-        glm::vec4 colorTint;      // RGBA color tint
+        glm::vec4 colorTint;      
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -100,16 +100,15 @@ namespace render::billboard
         alignas(16) glm::vec3 cameraPos;
         float padding;
     };
-
-    // Push constants for billboard rendering
+    
     struct BillboardPushConstants
     {
-        glm::vec2 viewportSize;     // Viewport dimensions for screen-space sizing
+        glm::vec2 viewportSize;    
         float atlasGridSize;        // Number of tiles per row/column in atlas (e.g., 4 for 4x4)
         float padding;
     };
 
-    // Render data passed from scene to pipeline
+   
     struct BillboardRenderData
     {
         glm::vec3 worldPosition;
@@ -123,9 +122,9 @@ namespace render::billboard
     // Atlas configuration
     struct AtlasConfig
     {
-        static constexpr uint32_t GRID_SIZE = 4;           // 4x4 grid
-        static constexpr uint32_t TILE_SIZE = 64;          // 64x64 pixels per tile
-        static constexpr uint32_t ATLAS_SIZE = GRID_SIZE * TILE_SIZE;  // 256x256 total
-        static constexpr uint32_t MAX_ICONS = GRID_SIZE * GRID_SIZE;   // 16 icons max
+        static constexpr uint32_t GRID_SIZE = 4;           
+        static constexpr uint32_t TILE_SIZE = 64;        
+        static constexpr uint32_t ATLAS_SIZE = GRID_SIZE * TILE_SIZE;  
+        static constexpr uint32_t MAX_ICONS = GRID_SIZE * GRID_SIZE;  
     };
 }

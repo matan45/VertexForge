@@ -1,5 +1,5 @@
 #include "TransferManager.hpp"
-#include "Utilities.hpp"
+#include "BufferUtilities.hpp"
 #include <cstring>
 
 namespace core {
@@ -44,7 +44,7 @@ namespace core {
 		BufferInfoRequest stagingInfo(device, physicalDevice, size,
 			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		Utilities::createBuffer(stagingInfo, op.stagingBuffer, op.stagingMemory);
+		BufferUtilities::createBuffer(stagingInfo, op.stagingBuffer, op.stagingMemory);
 
 		void* mappedData = device.mapMemory(op.stagingMemory, 0, size, {});
 		std::memcpy(mappedData, srcData, static_cast<size_t>(size));

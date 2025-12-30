@@ -43,10 +43,7 @@ namespace resource {
 
 		static std::shared_ptr<material::MaterialData> loadMaterial(std::string_view path);
 
-		// Mesh streaming support
 		static std::unique_ptr<MeshStreamHandle> openMeshStream(std::string_view path);
-		
-		static std::shared_ptr<material::MaterialData> getMaterial(std::string_view path);
 
 		// Invalidate material cache entry (for reload support)
 		static void invalidateMaterialCache(std::string_view path);

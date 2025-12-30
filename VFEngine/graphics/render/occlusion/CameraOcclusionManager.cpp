@@ -1,4 +1,4 @@
-#include "CameraRenderData.hpp"
+#include "CameraOcclusionManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "print/Logger.hpp"
@@ -79,7 +79,7 @@ namespace render::occlusion
     }
 
     void CameraOcclusionManager::initCameraHiZ(CameraId id, vk::Image depthImage,
-                                                vk::ImageView depthView, vk::Format depthFormat)
+                                               vk::ImageView depthView, vk::Format depthFormat)
     {
         auto* camera = getCamera(id);
         if (!camera)
@@ -108,7 +108,7 @@ namespace render::occlusion
     }
 
     void CameraOcclusionManager::recreateCameraHiZ(CameraId id, vk::Image depthImage,
-                                                    vk::ImageView depthView, vk::Format depthFormat)
+                                                   vk::ImageView depthView, vk::Format depthFormat)
     {
         auto* camera = getCamera(id);
         if (!camera)
@@ -121,13 +121,13 @@ namespace render::occlusion
         {
             return;
         }
-        
+
         if (camera->hiZBuffer)
         {
             camera->hiZBuffer->cleanup();
         }
         camera->hiZInitialized = false;
-        
+
         if (camera->occlusionManager)
         {
             camera->occlusionManager->cleanup();

@@ -13,8 +13,8 @@ namespace render
     IBL::IBL(core::Device& device, core::SwapChain& swapChain,
              core::OffscreenResources& offscreenResources)
         : device{device}
-        , swapChain{swapChain}
-        , offscreenResources{offscreenResources}
+          , swapChain{swapChain}
+          , offscreenResources{offscreenResources}
     {
         // Create sub-components
         envCubemapGen = std::make_unique<ibl::EnvironmentCubemapGenerator>(device);

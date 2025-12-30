@@ -29,12 +29,16 @@ namespace render
     class DebugRenderer;
 }
 
+namespace render::ibl
+{
+    class DefaultIBLTextureFactory;
+}
+
 namespace render::mesh
 {
     class MaterialShaderCache;
     class MeshGPUCache;
     class MaterialTextureCache;
-    class DefaultIBLTextureFactory;
     class MaterialCacheManager;
 }
 
@@ -49,12 +53,10 @@ namespace render::mesh
 
         // Shaders
         std::shared_ptr<core::Shader> meshShader;
-
-        // Vulkan resources
+        
         vk::RenderPass renderPass;
-        vk::Pipeline graphicsPipeline; // Opaque pipeline
-        vk::Pipeline maskedPipeline; // Masked pipeline (alpha testing)
-        vk::PipelineLayout pipelineLayout; // Shared layout for all pipelines
+        vk::Pipeline graphicsPipeline;
+        vk::PipelineLayout pipelineLayout;
 
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -67,11 +69,11 @@ namespace render::mesh
         bool textureDescriptorsInitialized = false;
 
         std::vector<vk::Framebuffer> framebuffers;
-        
+
         std::unique_ptr<MeshGPUCache> meshCache;
-        
+
         std::unique_ptr<MaterialTextureCache> textureCache;
-        
+
         std::unique_ptr<MaterialShaderCache> materialShaderCache;
 
         vk::Buffer cameraUBO;
@@ -82,14 +84,14 @@ namespace render::mesh
         mutable glm::mat4 currentProjection{1.0f};
         mutable glm::vec3 currentCameraPos{0.0f};
         mutable float currentTime{0.0f};
-        
+
         std::unique_ptr<MaterialCacheManager> materialCacheManager;
 
         // Prepare textures for frame rendering
         void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
-        
+
         bool usingDefaultTextures = false;
-        std::unique_ptr<DefaultIBLTextureFactory> defaultIBLFactory;
+        std::unique_ptr<ibl::DefaultIBLTextureFactory> defaultIBLFactory;
 
     public:
         explicit StaticMeshPipeline(core::Device& device, core::SwapChain& swapChain,
@@ -162,9 +164,9 @@ namespace render::mesh
         const MeshGPUData* getMesh(const std::string& meshId) const;
 
         bool isMeshLoaded(const std::string& meshId) const;
-        
+
         const math::AABB* getMeshBoundingBox(const std::string& meshId) const;
-        
+
         material::BlendMode getMaterialBlendMode(const std::string& materialPath) const;
 
         std::vector<std::string> getLoadedMeshIds() const;
@@ -194,5 +196,36 @@ namespace render::mesh
         void createTextureDescriptorSetLayout();
         void createTextureDescriptorPool();
         void initializeDefaultTextureDescriptors();
+
+        // Rendering helper structures and methods
+        struct SortedSubmesh
+        {
+            const MeshRenderData* meshData;
+            const SubMeshGPUData* subMesh;
+            size_t subMeshIndex;
+            std::string materialPath;
+        };
+
+        struct RenderState
+        {
+            vk::Pipeline currentPipeline = nullptr;
+            vk::DescriptorSet currentMaterialDescriptorSet = nullptr;
+        };
+
+        void collectSortedSubmeshes(
+            const std::vector<MeshRenderData>& meshDrawList,
+            const math::Frustum* frustum,
+            const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& materialCache,
+            std::vector<SortedSubmesh>& opaqueSubmeshes,
+            std::vector<SortedSubmesh>& maskedSubmeshes) const;
+
+        void renderSubmesh(
+            const vk::CommandBuffer& commandBuffer,
+            const MeshRenderData& meshData,
+            const SubMeshGPUData& subMesh,
+            size_t subMeshIndex,
+            material::BlendMode targetBlendMode,
+            const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& materialCache,
+            RenderState& state) const;
     };
 }

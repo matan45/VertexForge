@@ -1,6 +1,6 @@
 #pragma once
 #include "../core/OffScreen.hpp"
-#include "occlusion/CameraRenderData.hpp"
+#include "occlusion/CameraOcclusionManager.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -95,10 +95,10 @@ namespace render
         void recreate();
 
         IBL* getIBL() const { return iblRenderer.get(); }
-        
+
         mesh::StaticMeshPipeline* getMeshPipeline() const { return meshPipeline.get(); }
         bool isMeshPipelineInitialized() const { return meshPipelineInitialized; }
-        
+
         void initMeshPipeline(bool enableGPUDriven = true);
 
         // (called when IBL is removed)
@@ -106,7 +106,7 @@ namespace render
 
         //(called when IBL is set/changed)
         void reinitMeshPipelineWithIBL();
-        
+
         void setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
 
@@ -131,11 +131,7 @@ namespace render
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
-
-        /**
-         * Enable/disable Hi-Z occlusion culling for GPU-driven renderer.
-         * Occlusion culling uses previous frame's Hi-Z pyramid.
-         */
+        
         void setGPUDrivenOcclusionCullingEnabled(bool enabled);
         bool isGPUDrivenOcclusionCullingEnabled() const;
 
@@ -147,7 +143,8 @@ namespace render
         occlusion::CameraId getActiveCameraId() const;
 
         // Hi-Z occlusion culling methods
-        void initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView, vk::Format depthFormat);
+        void initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView,
+                     vk::Format depthFormat);
         bool isHiZInitialized(occlusion::CameraId cameraId) const;
 
         // GPU occlusion culling methods

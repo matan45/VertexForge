@@ -2,6 +2,8 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/Texture.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
 
@@ -25,14 +27,14 @@ namespace render::ibl
         cubeMapImageRequest.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled |
             vk::ImageUsageFlagBits::eColorAttachment;
         cubeMapImageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
-        core::Utilities::createImage(cubeMapImageRequest, imageIrradianceCube.image,
+        core::ImageUtilities::createImage(cubeMapImageRequest, imageIrradianceCube.image,
             imageIrradianceCube.imageMemory);
 
         core::ImageViewInfoRequest cubeMapImageViewRequest(device.getLogicalDevice(), imageIrradianceCube.image);
         cubeMapImageViewRequest.format = vk::Format::eR16G16B16A16Sfloat;
         cubeMapImageViewRequest.layerCount = 6;
         cubeMapImageViewRequest.imageType = vk::ImageViewType::eCube;
-        core::Utilities::createImageView(cubeMapImageViewRequest, imageIrradianceCube.imageView);
+        core::ImageUtilities::createImageView(cubeMapImageViewRequest, imageIrradianceCube.imageView);
 
         vk::SamplerCreateInfo samplerInfo;
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -121,7 +123,7 @@ namespace render::ibl
         vertexCubeVerticesBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         vertexCubeVerticesBufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::Utilities::createBuffer(vertexCubeVerticesBufferRequest, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexCubeVerticesBufferRequest, vertexBuffer, vertexBufferMemory);
 
         void* data;
         if (vk::Result result = device.getLogicalDevice().mapMemory(vertexBufferMemory, 0,
@@ -202,7 +204,7 @@ namespace render::ibl
         uboBufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
         uboBufferRequest.size = sizeof(UniformBufferObject);
-        core::Utilities::createBuffer(uboBufferRequest, uboUniformBuffer, uboUniformBufferMemory);
+        core::BufferUtilities::createBuffer(uboBufferRequest, uboUniformBuffer, uboUniformBufferMemory);
 
         vk::DescriptorBufferInfo uboBufferInfo;
         uboBufferInfo.buffer = uboUniformBuffer;
@@ -293,11 +295,11 @@ namespace render::ibl
         imageRequest.width = IRRADIANCE_MAP_SIZE;
         imageRequest.height = IRRADIANCE_MAP_SIZE;
         imageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc;
-        core::Utilities::createImage(imageRequest, imageHelper.image, imageHelper.memory);
+        core::ImageUtilities::createImage(imageRequest, imageHelper.image, imageHelper.memory);
 
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), imageHelper.image);
         imageViewRequest.format = vk::Format::eR16G16B16A16Sfloat;
-        core::Utilities::createImageView(imageViewRequest, imageHelper.view);
+        core::ImageUtilities::createImageView(imageViewRequest, imageHelper.view);
 
         // Create frame buffers for each face.
         vk::FramebufferCreateInfo framebufferInfo{};
@@ -314,7 +316,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer commandBufferInitHelperImageTransition = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(commandBufferInitHelperImageTransition.get(), imageHelper.image,
+        core::ImageUtilities::transitionImageLayout(commandBufferInitHelperImageTransition.get(), imageHelper.image,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageAspectFlagBits::eColor);
@@ -325,7 +327,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer commandBufferInitCubeImage = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(commandBufferInitCubeImage.get(), imageIrradianceCube.image,
+        core::ImageUtilities::transitionImageLayout(commandBufferInitCubeImage.get(), imageIrradianceCube.image,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor, 6);
@@ -370,7 +372,7 @@ namespace render::ibl
             faceCommandBuffer.get().endRenderPass();
 
             // Ensure synchronization between rendering and copying by transitioning the image layout
-            core::Utilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
+            core::ImageUtilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
                 vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageLayout::eTransferSrcOptimal,
                 vk::ImageAspectFlagBits::eColor);
@@ -399,7 +401,7 @@ namespace render::ibl
                 vk::ImageLayout::eTransferDstOptimal, 1, &copyRegion);
 
             // Transition the image back to color attachment layout for the next face
-            core::Utilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
+            core::ImageUtilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
                 vk::ImageLayout::eTransferSrcOptimal,
                 vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageAspectFlagBits::eColor);
@@ -420,7 +422,7 @@ namespace render::ibl
         vk::UniqueCommandBuffer commandBufferEndTransition = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        core::Utilities::transitionImageLayout(commandBufferEndTransition.get(), imageIrradianceCube.image,
+        core::ImageUtilities::transitionImageLayout(commandBufferEndTransition.get(), imageIrradianceCube.image,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor, 6);
