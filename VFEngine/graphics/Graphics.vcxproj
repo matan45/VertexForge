@@ -104,6 +104,12 @@
     <ClInclude Include="controllers\OffScreenController.hpp" />
     <ClInclude Include="controllers\RenderController.hpp" />
     <ClInclude Include="controllers\TextureController.hpp" />
+    <ClInclude Include="controllers\offscreen\CameraController.hpp" />
+    <ClInclude Include="controllers\offscreen\CullingStatsCollector.hpp" />
+    <ClInclude Include="controllers\offscreen\FramePreparationSystem.hpp" />
+    <ClInclude Include="controllers\offscreen\IBLController.hpp" />
+    <ClInclude Include="controllers\offscreen\MeshAssetManager.hpp" />
+    <ClInclude Include="controllers\offscreen\SceneBVHManager.hpp" />
     <ClInclude Include="core\BufferUtilities.hpp" />
     <ClInclude Include="core\CommandPool.hpp" />
     <ClInclude Include="core\Device.hpp" />
@@ -169,6 +175,12 @@
     <ClCompile Include="controllers\OffScreenController.cpp" />
     <ClCompile Include="controllers\RenderController.cpp" />
     <ClCompile Include="controllers\TextureController.cpp" />
+    <ClCompile Include="controllers\offscreen\CameraController.cpp" />
+    <ClCompile Include="controllers\offscreen\CullingStatsCollector.cpp" />
+    <ClCompile Include="controllers\offscreen\FramePreparationSystem.cpp" />
+    <ClCompile Include="controllers\offscreen\IBLController.cpp" />
+    <ClCompile Include="controllers\offscreen\MeshAssetManager.cpp" />
+    <ClCompile Include="controllers\offscreen\SceneBVHManager.cpp" />
     <ClCompile Include="core\BufferUtilities.cpp" />
     <ClCompile Include="core\CommandPool.cpp" />
     <ClCompile Include="core\Device.cpp" />

@@ -1,17 +1,13 @@
 #pragma once
 #include <glm/glm.hpp>
-#include "math/Frustum.hpp"
-#include "scene/SceneBVH.hpp"
-#include "../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../services/providers/IOffScreenProvider.hpp"
-#include "../render/material/MaterialPBRExtractor.hpp"
+#include "../render/occlusion/CameraOcclusionManager.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
 #include <vector>
 #include <cstdint>
 #include <optional>
-#include <unordered_map>
 
 namespace events { struct SubscriptionToken; }
 
@@ -26,6 +22,16 @@ namespace render
     class OffScreenViewPort;
 }
 
+namespace controllers::offscreen
+{
+    class IBLController;
+    class MeshAssetManager;
+    class CameraController;
+    class SceneBVHManager;
+    class FramePreparationSystem;
+    class CullingStatsCollector;
+}
+
 namespace controllers
 {
     class OffScreenController
@@ -34,28 +40,23 @@ namespace controllers
         core::SwapChain& swapChain;
         core::Device& device;
         std::unique_ptr<render::OffScreenViewPort> offScreen;
-        math::Frustum currentFrustum;  // Current camera frustum for culling
-        scene::SceneBVH sceneBVH;     
+
+        // Extracted managers
+        std::unique_ptr<offscreen::IBLController> iblController;
+        std::unique_ptr<offscreen::MeshAssetManager> meshAssetManager;
+        std::unique_ptr<offscreen::CameraController> cameraController;
+        std::unique_ptr<offscreen::SceneBVHManager> bvhManager;
+        std::unique_ptr<offscreen::FramePreparationSystem> framePreparation;
+        std::unique_ptr<offscreen::CullingStatsCollector> statsCollector;
+
+        // Event subscription for material cache invalidation
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
-        std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
-        std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
-        std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
+
+        // UI state flags
         bool showBillboardIcons = true;
         bool showDebugRendering = true;
         bool showGrid = true;
         bool playModeActive = false;
-
-        // Occlusion culling state
-        glm::mat4 currentViewProj{1.0f};
-        float currentNearPlane = 0.1f;
-        bool occlusionCullingEnabled = true;
-        bool occlusionCullingReady = false;
-
-        // Culling stats for debug visualization
-        mutable services::CullingDebugStats lastCullingStats;
-
-        // Persistent cache for PBR values - avoids reloading materials every frame
-        std::unordered_map<std::string, render::mesh::ExtractedPBRValues> pbrCache;
 
     public:
         explicit OffScreenController();
@@ -79,31 +80,27 @@ namespace controllers
         std::vector<std::string> getLoadedMeshes() const;
         std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 
-       
         // Called each frame to sync CameraComponents with occlusion system
         void prepareCameras();
-        
-        void prepareFrameMeshes();
-        
-        void prepareFrameBillboards();
-        
-        void prepareFrameCameraFrustums();
 
+        void prepareFrameMeshes();
+        void prepareFrameBillboards();
+        void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();
 
         // Billboard visibility toggle
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
         bool getShowBillboardIcons() const { return showBillboardIcons; }
-        
+
         bool loadBillboardAtlas(const std::string& atlasPath);
 
         // BVH management
-        void rebuildBVH();     
-        void markBVHDirty();     
+        void rebuildBVH();
+        void markBVHDirty();
 
         // Occlusion culling control (main camera)
-        void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
-        bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
+        void setOcclusionCullingEnabled(bool enabled);
+        bool isOcclusionCullingEnabled() const;
 
         // Multi-camera support for occlusion culling
         void createCamera(render::occlusion::CameraId id, bool enableOcclusion = false);
@@ -128,8 +125,5 @@ namespace controllers
         void setShowGrid(bool show);
         bool getShowGrid() const { return showGrid; }
         void prepareGrid();
-
-    private:
-        void updateOcclusionCullingData();
     };
 }
