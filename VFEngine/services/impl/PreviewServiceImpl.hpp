@@ -47,6 +47,12 @@ namespace services {
         [[nodiscard]] ViewportTextureHandle renderMaterialPreview(PreviewInstanceId instanceId) override;
         [[nodiscard]] std::string getMaterialShaderError(PreviewInstanceId instanceId) const override;
 
+        // Async material preview loading
+        void initMaterialPreviewAsync(PreviewInstanceId instanceId) override;
+        [[nodiscard]] IBLLoadingProgress getIBLLoadingProgress(PreviewInstanceId instanceId) const override;
+        void cancelIBLLoading(PreviewInstanceId instanceId) override;
+        void processMaterialAsyncLoading() override;
+
         // === Mesh Preview (IPreviewService) ===
         void initMeshPreview(PreviewInstanceId instanceId) override;
         void cleanUpMeshPreview(PreviewInstanceId instanceId) override;
@@ -61,6 +67,12 @@ namespace services {
         void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                const glm::vec3& cameraPos) override;
         [[nodiscard]] ViewportTextureHandle renderMeshPreview(PreviewInstanceId instanceId) override;
+
+        // Async mesh loading
+        void loadPreviewMeshAsync(PreviewInstanceId instanceId, const std::string& meshPath) override;
+        void cancelMeshLoading(PreviewInstanceId instanceId) override;
+        [[nodiscard]] MeshLoadingProgress getMeshLoadingProgress(PreviewInstanceId instanceId) const override;
+        void processAsyncLoading() override;
 
     private:
         IMaterialPreviewProvider* materialProvider;

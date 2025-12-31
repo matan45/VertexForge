@@ -1,0 +1,319 @@
+#include "AsyncTextureLoader.hpp"
+#include "resource/TextureResource.hpp"
+#include "../../core/controllers/EditorTextureController.hpp"
+#include "../../core/controllers/texture/EditorTexture.hpp"
+#include "print/Logger.hpp"
+
+namespace loaders
+{
+    void AsyncTextureLoader::startLoad(void* instanceId, const std::string& texturePath, bool isHDR)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        // Check if already loading for this instance
+        if (pendingLoads.find(instanceId) != pendingLoads.end())
+        {
+            loggerWarning("AsyncTextureLoader: Already loading texture for instance {:p}", instanceId);
+            return;
+        }
+
+        auto pending = std::make_unique<PendingTextureLoad>();
+        pending->instanceId = instanceId;
+        pending->texturePath = texturePath;
+        pending->isHDR = isHDR;
+        pending->state = services::LoadingState::Loading;
+        pending->statusMessage = isHDR ? "Loading HDR texture..." : "Loading texture...";
+        pending->progress = 0.1f;
+
+        // Start async file I/O
+        pending->cpuDataFuture = std::async(std::launch::async, [texturePath, isHDR]() -> TextureDataVariant {
+            if (isHDR)
+            {
+                return resource::TextureResource::loadHDR(texturePath);
+            }
+            else
+            {
+                return resource::TextureResource::loadTexture(texturePath);
+            }
+        });
+
+        pendingLoads[instanceId] = std::move(pending);
+        loggerInfo("AsyncTextureLoader: Started async load for {} (HDR: {})", texturePath, isHDR);
+    }
+
+    void AsyncTextureLoader::cancelLoad(void* instanceId)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        auto it = pendingLoads.find(instanceId);
+        if (it == pendingLoads.end())
+        {
+            return;
+        }
+
+        it->second->cancelled.store(true);
+        it->second->state = services::LoadingState::Cancelled;
+        it->second->statusMessage = "Cancelled";
+
+        if (gpuUploadReadyInstance == instanceId)
+        {
+            gpuUploadReadyInstance = nullptr;
+        }
+    }
+
+    bool AsyncTextureLoader::hasPendingLoad(void* instanceId) const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        return pendingLoads.find(instanceId) != pendingLoads.end();
+    }
+
+    bool AsyncTextureLoader::update()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        bool hasGPUWork = false;
+
+        for (auto& [id, pending] : pendingLoads)
+        {
+            if (pending->cancelled.load())
+            {
+                continue;
+            }
+
+            if (pending->state == services::LoadingState::Loading)
+            {
+                // Check if future is ready (non-blocking)
+                if (pending->cpuDataFuture.valid() &&
+                    pending->cpuDataFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+                {
+                    try
+                    {
+                        auto data = pending->cpuDataFuture.get();
+                        pending->cpuData = std::make_shared<TextureDataVariant>(std::move(data));
+                        pending->state = services::LoadingState::GPUUploadPending;
+                        pending->statusMessage = "Creating GPU texture...";
+                        pending->progress = 0.5f;
+
+                        if (!hasGPUWork && gpuUploadReadyInstance == nullptr)
+                        {
+                            gpuUploadReadyInstance = id;
+                            hasGPUWork = true;
+                        }
+                    }
+                    catch (const std::exception& e)
+                    {
+                        pending->state = services::LoadingState::Error;
+                        pending->errorMessage = e.what();
+                        pending->statusMessage = "Failed to load texture";
+                        loggerError("AsyncTextureLoader: Failed to load {}: {}", pending->texturePath, e.what());
+                    }
+                }
+            }
+            else if (pending->state == services::LoadingState::GPUUploadPending)
+            {
+                if (!hasGPUWork && gpuUploadReadyInstance == nullptr)
+                {
+                    gpuUploadReadyInstance = id;
+                    hasGPUWork = true;
+                }
+            }
+        }
+
+        return hasGPUWork;
+    }
+
+    void* AsyncTextureLoader::getReadyForGPUUpload() const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        return gpuUploadReadyInstance;
+    }
+
+    bool AsyncTextureLoader::processGPUUpload(void* instanceId)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        auto it = pendingLoads.find(instanceId);
+        if (it == pendingLoads.end())
+        {
+            return false;
+        }
+
+        PendingTextureLoad* pending = it->second.get();
+
+        if (pending->state != services::LoadingState::GPUUploadPending || !pending->cpuData)
+        {
+            return false;
+        }
+
+        if (pending->cancelled.load())
+        {
+            if (gpuUploadReadyInstance == instanceId)
+            {
+                gpuUploadReadyInstance = nullptr;
+            }
+            return false;
+        }
+
+        try
+        {
+            std::unique_ptr<dto::EditorTexture> texture;
+
+            if (pending->isHDR)
+            {
+                texture = controllers::EditorTextureController::loadHdrTexture(pending->texturePath);
+            }
+            else
+            {
+                texture = controllers::EditorTextureController::loadTexture(pending->texturePath);
+            }
+
+            if (!texture)
+            {
+                pending->state = services::LoadingState::Error;
+                pending->errorMessage = "Failed to create GPU texture";
+                pending->statusMessage = "GPU texture creation failed";
+                loggerError("AsyncTextureLoader: Failed to create GPU texture for {}", pending->texturePath);
+
+                if (gpuUploadReadyInstance == instanceId)
+                {
+                    gpuUploadReadyInstance = nullptr;
+                }
+                return false;
+            }
+
+            pending->width = texture->getWidth();
+            pending->height = texture->getHeight();
+            pending->texture = std::move(texture);
+            pending->state = services::LoadingState::Complete;
+            pending->statusMessage = "Complete";
+            pending->progress = 1.0f;
+            pending->cpuData.reset();
+
+            if (gpuUploadReadyInstance == instanceId)
+            {
+                gpuUploadReadyInstance = nullptr;
+            }
+
+            loggerInfo("AsyncTextureLoader: GPU upload complete for {}", pending->texturePath);
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            pending->state = services::LoadingState::Error;
+            pending->errorMessage = e.what();
+            pending->statusMessage = "GPU upload failed";
+            loggerError("AsyncTextureLoader: GPU upload failed for {}: {}", pending->texturePath, e.what());
+
+            if (gpuUploadReadyInstance == instanceId)
+            {
+                gpuUploadReadyInstance = nullptr;
+            }
+            return false;
+        }
+    }
+
+    services::TextureLoadingProgress AsyncTextureLoader::getProgress(void* instanceId) const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        services::TextureLoadingProgress progress;
+
+        auto it = pendingLoads.find(instanceId);
+        if (it == pendingLoads.end())
+        {
+            progress.state = services::LoadingState::Idle;
+            return progress;
+        }
+
+        const auto& pending = it->second;
+        progress.state = pending->state;
+        progress.progress = pending->progress;
+        progress.statusMessage = pending->statusMessage;
+        progress.errorMessage = pending->errorMessage;
+        progress.width = pending->width;
+        progress.height = pending->height;
+        progress.isHDR = pending->isHDR;
+
+        return progress;
+    }
+
+    bool AsyncTextureLoader::isLoadComplete(void* instanceId) const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        auto it = pendingLoads.find(instanceId);
+        if (it == pendingLoads.end())
+        {
+            return false;
+        }
+
+        return it->second->state == services::LoadingState::Complete;
+    }
+
+    std::unique_ptr<dto::EditorTexture> AsyncTextureLoader::takeTexture(void* instanceId)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        auto it = pendingLoads.find(instanceId);
+        if (it == pendingLoads.end())
+        {
+            return nullptr;
+        }
+
+        if (it->second->state != services::LoadingState::Complete)
+        {
+            return nullptr;
+        }
+
+        return std::move(it->second->texture);
+    }
+
+    uint32_t AsyncTextureLoader::getWidth(void* instanceId) const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        auto it = pendingLoads.find(instanceId);
+        if (it == pendingLoads.end())
+        {
+            return 0;
+        }
+
+        return it->second->width;
+    }
+
+    uint32_t AsyncTextureLoader::getHeight(void* instanceId) const
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        auto it = pendingLoads.find(instanceId);
+        if (it == pendingLoads.end())
+        {
+            return 0;
+        }
+
+        return it->second->height;
+    }
+
+    void AsyncTextureLoader::clearCompleted()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        for (auto it = pendingLoads.begin(); it != pendingLoads.end();)
+        {
+            if (it->second->state == services::LoadingState::Complete ||
+                it->second->state == services::LoadingState::Error ||
+                it->second->state == services::LoadingState::Cancelled)
+            {
+                if (gpuUploadReadyInstance == it->first)
+                {
+                    gpuUploadReadyInstance = nullptr;
+                }
+                it = pendingLoads.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+}

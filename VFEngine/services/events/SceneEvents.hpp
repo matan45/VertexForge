@@ -167,6 +167,17 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadScene"; }
     };
 
+    // Async scene loading - starts loading without blocking
+    struct LoadSceneAsyncCommand : ICommand<> {
+        std::string filePath;
+
+        std::string_view getName() const override { return "LoadSceneAsync"; }
+    };
+
+    struct CancelSceneLoadingCommand : ICommand<> {
+        std::string_view getName() const override { return "CancelSceneLoading"; }
+    };
+
     // Prefab commands
     struct SavePrefabCommand : ICommand<bool> {
         services::EntityHandle entity;

@@ -59,6 +59,23 @@ namespace services {
                 return getMaterialShaderError(query.instanceId);
             });
 
+        // Async Material Preview Commands
+        dispatcher.registerCommandHandler<events::preview::InitMaterialPreviewAsyncCommand>(
+            [this](const events::preview::InitMaterialPreviewAsyncCommand& cmd) {
+                initMaterialPreviewAsync(cmd.instanceId);
+            });
+
+        dispatcher.registerCommandHandler<events::preview::CancelIBLLoadingCommand>(
+            [this](const events::preview::CancelIBLLoadingCommand& cmd) {
+                cancelIBLLoading(cmd.instanceId);
+            });
+
+        // Async Material Preview Queries
+        dispatcher.registerQueryHandler<events::preview::GetIBLLoadingProgressQuery>(
+            [this](const events::preview::GetIBLLoadingProgressQuery& query) {
+                return getIBLLoadingProgress(query.instanceId);
+            });
+
         // Mesh Preview Commands
         dispatcher.registerCommandHandler<events::preview::InitMeshPreviewCommand>(
             [this](const events::preview::InitMeshPreviewCommand& cmd) {
@@ -122,6 +139,23 @@ namespace services {
             [this](const events::preview::RenderMeshPreviewQuery& query) {
                 return renderMeshPreview(query.instanceId);
             });
+
+        // Async Mesh Loading Commands
+        dispatcher.registerCommandHandler<events::preview::LoadPreviewMeshAsyncCommand>(
+            [this](const events::preview::LoadPreviewMeshAsyncCommand& cmd) {
+                loadPreviewMeshAsync(cmd.instanceId, cmd.meshPath);
+            });
+
+        dispatcher.registerCommandHandler<events::preview::CancelMeshLoadingCommand>(
+            [this](const events::preview::CancelMeshLoadingCommand& cmd) {
+                cancelMeshLoading(cmd.instanceId);
+            });
+
+        // Async Mesh Loading Queries
+        dispatcher.registerQueryHandler<events::preview::GetMeshLoadingProgressQuery>(
+            [this](const events::preview::GetMeshLoadingProgressQuery& query) {
+                return getMeshLoadingProgress(query.instanceId);
+            });
     }
 
     // === Material Preview ===
@@ -159,6 +193,24 @@ namespace services {
 
     std::string PreviewServiceImpl::getMaterialShaderError(PreviewInstanceId instanceId) const {
         return materialProvider->getMaterialShaderError(instanceId);
+    }
+
+    // === Async Material Preview ===
+
+    void PreviewServiceImpl::initMaterialPreviewAsync(PreviewInstanceId instanceId) {
+        materialProvider->initMaterialPreviewAsync(instanceId);
+    }
+
+    IBLLoadingProgress PreviewServiceImpl::getIBLLoadingProgress(PreviewInstanceId instanceId) const {
+        return materialProvider->getIBLLoadingProgress(instanceId);
+    }
+
+    void PreviewServiceImpl::cancelIBLLoading(PreviewInstanceId instanceId) {
+        materialProvider->cancelIBLLoading(instanceId);
+    }
+
+    void PreviewServiceImpl::processMaterialAsyncLoading() {
+        materialProvider->processAsyncLoading();
     }
 
     // === Mesh Preview ===
@@ -212,6 +264,24 @@ namespace services {
         ViewportTextureHandle handle;
         handle.imguiDescriptorSet = meshProvider->renderMeshPreview(instanceId);
         return handle;
+    }
+
+    // === Async Mesh Loading ===
+
+    void PreviewServiceImpl::loadPreviewMeshAsync(PreviewInstanceId instanceId, const std::string& meshPath) {
+        meshProvider->loadPreviewMeshAsync(instanceId, meshPath);
+    }
+
+    void PreviewServiceImpl::cancelMeshLoading(PreviewInstanceId instanceId) {
+        meshProvider->cancelMeshLoading(instanceId);
+    }
+
+    MeshLoadingProgress PreviewServiceImpl::getMeshLoadingProgress(PreviewInstanceId instanceId) const {
+        return meshProvider->getMeshLoadingProgress(instanceId);
+    }
+
+    void PreviewServiceImpl::processAsyncLoading() {
+        meshProvider->processAsyncLoading();
     }
 
 }

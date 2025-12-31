@@ -107,10 +107,22 @@ namespace core
     {
         if (coreInterface)
         {
-            // Wrap the callback to also update audio each frame
+            // Wrap the callback to also update audio and async loading each frame
             coreInterface->setFrameCallback([this, cb = std::move(callback)]() {
                 if (audioAdapter) {
                     audioAdapter->update();
+                }
+                // Process async mesh loading for all preview instances
+                if (meshPreviewAdapter) {
+                    meshPreviewAdapter->processAsyncLoading();
+                }
+                // Process async material/IBL loading for all preview instances
+                if (materialPreviewAdapter) {
+                    materialPreviewAdapter->processAsyncLoading();
+                }
+                // Process async texture loading for editor textures (HDR preview, etc.)
+                if (textureAdapter) {
+                    textureAdapter->processAsyncLoading();
                 }
                 if (cb) {
                     cb();

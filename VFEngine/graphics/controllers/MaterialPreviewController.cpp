@@ -7,6 +7,7 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
+#include "../loaders/AsyncIBLLoader.hpp"
 #include "geometry/SphereGenerator.hpp"
 #include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
@@ -684,5 +685,105 @@ namespace controllers
             return meshPipeline->getLastShaderCompilationError();
         }
         return "";
+    }
+
+    void MaterialPreviewController::initAsync()
+    {
+        if (initialized)
+        {
+            return;
+        }
+
+        // Recreate offScreen if it was cleaned up (supports re-initialization)
+        if (!offScreen)
+        {
+            offScreen = std::make_unique<render::OffScreenViewPort>(device, swapChain);
+        }
+
+        offScreen->init();
+
+        // Initialize mesh pipeline with default IBL textures
+        // Disable GPU-driven rendering to allow custom per-material shaders
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        renderHandler->initMeshPipeline(false);
+
+        // Generate and upload procedural sphere
+        auto* meshPipeline = renderHandler->getMeshPipeline();
+        if (meshPipeline)
+        {
+            geometry::SphereParams sphereParams;
+            sphereParams.radius = 1.0f;
+            sphereParams.latitudeSegments = 32;
+            sphereParams.longitudeSegments = 32;
+
+            resource::MeshesData sphereData = geometry::SphereGenerator::generateMeshesData(sphereParams);
+            std::string result = meshPipeline->uploadMesh(SPHERE_MESH_ID, sphereData);
+            sphereLoaded = !result.empty();
+
+            if (sphereLoaded)
+            {
+                loggerInfo("Material preview sphere created (async init)");
+            }
+            else
+            {
+                loggerError("Failed to create material preview sphere (async init)");
+            }
+        }
+
+        // Create default white texture for empty slots
+        createDefaultTextureImpl(device, textureManager->defaultTexture);
+
+        // Create async IBL loader for future HDR loading (if needed)
+        asyncIBLLoader = std::make_unique<loaders::AsyncIBLLoader>(device);
+
+        initialized = true;
+    }
+
+    bool MaterialPreviewController::updateAsyncLoading()
+    {
+        if (!asyncIBLLoader)
+        {
+            return false;  // No async loading in progress
+        }
+
+        if (!asyncIBLLoader->hasActiveLoad())
+        {
+            return false;  // No active load
+        }
+
+        // Process one frame of IBL loading
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* ibl = renderHandler->getIBL();
+
+        bool complete = asyncIBLLoader->processFrame(ibl);
+
+        if (complete && asyncIBLLoader->isComplete())
+        {
+            // IBL finished loading, reinit mesh pipeline with IBL textures
+            renderHandler->reinitMeshPipelineWithIBL();
+            loggerInfo("Material preview IBL loading complete");
+        }
+
+        return !complete;  // Return true if still loading
+    }
+
+    services::IBLLoadingProgress MaterialPreviewController::getIBLLoadingProgress() const
+    {
+        if (!asyncIBLLoader)
+        {
+            services::IBLLoadingProgress progress;
+            progress.state = services::LoadingState::Idle;
+            return progress;
+        }
+
+        return asyncIBLLoader->getProgress();
+    }
+
+    void MaterialPreviewController::cancelIBLLoading()
+    {
+        if (asyncIBLLoader)
+        {
+            asyncIBLLoader->cancelLoad();
+        }
     }
 }

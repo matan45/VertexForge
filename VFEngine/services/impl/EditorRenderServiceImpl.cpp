@@ -254,6 +254,61 @@ namespace services
                 releaseEditorTexture(handle);
             });
 
+        // Async texture loading handlers
+        dispatcher.registerCommandHandler<events::render::LoadEditorTextureAsyncCommand>(
+            [this](const events::render::LoadEditorTextureAsyncCommand& cmd)
+            {
+                if (textureProvider)
+                {
+                    textureProvider->loadTextureAsync(cmd.instanceId, cmd.path, cmd.isHDR);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::CancelTextureLoadingCommand>(
+            [this](const events::render::CancelTextureLoadingCommand& cmd)
+            {
+                if (textureProvider)
+                {
+                    textureProvider->cancelTextureLoading(cmd.instanceId);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetTextureLoadingProgressQuery>(
+            [this](const events::render::GetTextureLoadingProgressQuery& query)
+            {
+                if (textureProvider)
+                {
+                    return textureProvider->getTextureLoadingProgress(query.instanceId);
+                }
+                return TextureLoadingProgress{};
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetLoadedTextureHandleQuery>(
+            [this](const events::render::GetLoadedTextureHandleQuery& query)
+            {
+                EditorTextureHandle result;
+                if (!textureProvider)
+                {
+                    return result;
+                }
+
+                auto textureData = textureProvider->getLoadedTexture(query.instanceId);
+                if (!textureData.valid)
+                {
+                    return result;
+                }
+
+                result.imguiDescriptorSet = textureData.descriptorSet;
+                result.width = static_cast<uint32_t>(textureData.width);
+                result.height = static_cast<uint32_t>(textureData.height);
+                result.mipLevels = static_cast<uint32_t>(textureData.mipLevels);
+                result.mipDescriptorSets = textureData.mipDescriptorSets;
+
+                loadedTextures[result.imguiDescriptorSet] = result;
+
+                return result;
+            });
+
         dispatcher.registerQueryHandler<events::render::GetViewportTextureQuery>(
             [this](const events::render::GetViewportTextureQuery&)
             {

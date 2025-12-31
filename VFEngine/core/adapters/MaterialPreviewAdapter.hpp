@@ -25,6 +25,12 @@ namespace core
         void* renderMaterialPreview(services::PreviewInstanceId instanceId) override;
         std::string getMaterialShaderError(services::PreviewInstanceId instanceId) const override;
 
+        // Async IBL loading
+        void initMaterialPreviewAsync(services::PreviewInstanceId instanceId) override;
+        services::IBLLoadingProgress getIBLLoadingProgress(services::PreviewInstanceId instanceId) const override;
+        void cancelIBLLoading(services::PreviewInstanceId instanceId) override;
+        void processAsyncLoading() override;
+
     private:
         controllers::MaterialPreviewController* getController(services::PreviewInstanceId instanceId) const;
     };

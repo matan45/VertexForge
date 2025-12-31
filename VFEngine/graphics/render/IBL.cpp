@@ -7,6 +7,7 @@
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Texture.hpp"
+#include "resource/Types.hpp"
 #include "print/Logger.hpp"
 
 namespace render
@@ -45,6 +46,48 @@ namespace render
         prefilteredGen->generate(envCubemapGen->getImageData(), device.getStagingCommandPool());
         skyboxRenderer->init(envCubemapGen->getImageData());
 
+        iblInitialized = true;
+    }
+
+    void IBL::initHDRTexture(const resource::HDRData& hdrData)
+    {
+        hdrTexture = std::make_shared<core::Texture>(device);
+        hdrTexture->loadHDRFromData(hdrData, false);
+    }
+
+    void IBL::generateEnvironmentCubemap()
+    {
+        if (!hdrTexture)
+        {
+            loggerError("HDR texture not initialized");
+            return;
+        }
+        envCubemapGen->generate(*hdrTexture, device.getStagingCommandPool());
+    }
+
+    void IBL::generateIrradiance()
+    {
+        if (!hdrTexture)
+        {
+            loggerError("HDR texture not initialized");
+            return;
+        }
+        irradianceGen->generate(*hdrTexture, device.getStagingCommandPool());
+    }
+
+    void IBL::generateBRDFLUT()
+    {
+        brdfLUTGen->generate(device.getStagingCommandPool());
+    }
+
+    void IBL::generatePrefiltered()
+    {
+        prefilteredGen->generate(envCubemapGen->getImageData(), device.getStagingCommandPool());
+    }
+
+    void IBL::initSkybox()
+    {
+        skyboxRenderer->init(envCubemapGen->getImageData());
         iblInitialized = true;
     }
 

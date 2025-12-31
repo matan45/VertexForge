@@ -4,6 +4,7 @@
 #include "events/RenderEvents.hpp"
 #include <glm/glm.hpp>
 #include <filesystem>
+#include <cmath>
 
 namespace windows
 {
@@ -17,9 +18,18 @@ namespace windows
 
     ImagePreviewWindow::~ImagePreviewWindow()
     {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Cancel any pending async load
+        if (loadingProgress.isLoading())
+        {
+            events::render::CancelTextureLoadingCommand cancelCmd;
+            cancelCmd.instanceId = this;
+            dispatcher.execute(cancelCmd);
+        }
+
         if (imageHandle.isValid())
         {
-            auto& dispatcher = events::EventDispatcher::instance();
             events::render::ReleaseEditorTextureCommand releaseCmd;
             releaseCmd.handle = imageHandle.imguiDescriptorSet;
             dispatcher.execute(releaseCmd);
@@ -36,8 +46,21 @@ namespace windows
         // Load image on first draw
         if (needsInit)
         {
-            loadImage();
+            if (useAsyncLoading)
+            {
+                loadImageAsync();
+            }
+            else
+            {
+                loadImage();
+            }
             needsInit = false;
+        }
+
+        // Update async loading state
+        if (useAsyncLoading)
+        {
+            updateAsyncLoading();
         }
 
         ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -61,7 +84,17 @@ namespace windows
                 float viewportWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("ImagePanel", ImVec2(viewportWidth, contentSize.y), true,
                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-                drawImagePanel();
+
+                // Show loading indicator or image
+                if (loadingProgress.isLoading())
+                {
+                    ImVec2 size = ImGui::GetContentRegionAvail();
+                    drawLoadingIndicator(size.x, size.y);
+                }
+                else
+                {
+                    drawImagePanel();
+                }
                 ImGui::EndChild();
             }
         }
@@ -75,6 +108,99 @@ namespace windows
         loadCmd.path = imagePath;
         loadCmd.isHDR = isHDR;
         imageHandle = dispatcher.execute(loadCmd);
+    }
+
+    void ImagePreviewWindow::loadImageAsync()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::render::LoadEditorTextureAsyncCommand loadCmd;
+        loadCmd.instanceId = this;
+        loadCmd.path = imagePath;
+        loadCmd.isHDR = isHDR;
+        dispatcher.execute(loadCmd);
+
+        loadingProgress.state = services::LoadingState::Pending;
+        loadingProgress.statusMessage = isHDR ? "Loading HDR texture..." : "Loading texture...";
+    }
+
+    void ImagePreviewWindow::updateAsyncLoading()
+    {
+        if (!loadingProgress.isLoading())
+        {
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Query current progress
+        events::render::GetTextureLoadingProgressQuery progressQuery;
+        progressQuery.instanceId = this;
+        loadingProgress = dispatcher.query(progressQuery);
+
+        // If complete, get the texture handle
+        if (loadingProgress.state == services::LoadingState::Complete)
+        {
+            events::render::GetLoadedTextureHandleQuery handleQuery;
+            handleQuery.instanceId = this;
+            imageHandle = dispatcher.query(handleQuery);
+        }
+    }
+
+    void ImagePreviewWindow::drawLoadingIndicator(float width, float height)
+    {
+        ImVec2 center(width * 0.5f, height * 0.5f);
+
+        // Draw spinner
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImVec2 windowPos = ImGui::GetWindowPos();
+        ImVec2 spinnerCenter(windowPos.x + center.x, windowPos.y + center.y - 30.0f);
+
+        float radius = 20.0f;
+        float thickness = 4.0f;
+        ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+
+        float time = static_cast<float>(ImGui::GetTime());
+        int segments = 12;
+
+        for (int i = 0; i < segments; i++)
+        {
+            float angle = (i / static_cast<float>(segments)) * 2.0f * 3.14159f;
+            float alpha = std::fmod(time * 2.0f + i / static_cast<float>(segments), 1.0f);
+            alpha = 0.2f + 0.8f * alpha;
+
+            ImVec2 p1(spinnerCenter.x + std::cos(angle) * (radius - thickness),
+                      spinnerCenter.y + std::sin(angle) * (radius - thickness));
+            ImVec2 p2(spinnerCenter.x + std::cos(angle) * radius,
+                      spinnerCenter.y + std::sin(angle) * radius);
+
+            drawList->AddLine(p1, p2, IM_COL32(255, 255, 255, static_cast<int>(alpha * 255)), thickness);
+        }
+
+        // Status text
+        ImGui::SetCursorPos(ImVec2(0, center.y + 10.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+
+        std::string statusText = loadingProgress.statusMessage;
+        ImVec2 textSize = ImGui::CalcTextSize(statusText.c_str());
+        ImGui::SetCursorPosX((width - textSize.x) * 0.5f);
+        ImGui::Text("%s", statusText.c_str());
+
+        // Progress bar
+        ImGui::SetCursorPosX((width - 200.0f) * 0.5f);
+        ImGui::ProgressBar(loadingProgress.progress, ImVec2(200.0f, 20.0f), "");
+
+        ImGui::PopStyleColor();
+
+        // Error message if any
+        if (loadingProgress.state == services::LoadingState::Error)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+            std::string errorText = "Error: " + loadingProgress.errorMessage;
+            textSize = ImGui::CalcTextSize(errorText.c_str());
+            ImGui::SetCursorPosX((width - textSize.x) * 0.5f);
+            ImGui::TextWrapped("%s", errorText.c_str());
+            ImGui::PopStyleColor();
+        }
     }
 
     void ImagePreviewWindow::drawImagePanel()

@@ -110,4 +110,37 @@ namespace core {
         return controller ? controller->getLastShaderCompilationError() : "";
     }
 
+    void MaterialPreviewAdapter::initMaterialPreviewAsync(services::PreviewInstanceId instanceId) {
+        auto& controller = controllers[instanceId];
+        if (!controller) {
+            controller = std::make_unique<::controllers::MaterialPreviewController>();
+        }
+        controller->initAsync();
+    }
+
+    services::IBLLoadingProgress MaterialPreviewAdapter::getIBLLoadingProgress(services::PreviewInstanceId instanceId) const {
+        auto* controller = getController(instanceId);
+        if (!controller) {
+            services::IBLLoadingProgress progress;
+            progress.state = services::LoadingState::Idle;
+            return progress;
+        }
+        return controller->getIBLLoadingProgress();
+    }
+
+    void MaterialPreviewAdapter::cancelIBLLoading(services::PreviewInstanceId instanceId) {
+        auto* controller = getController(instanceId);
+        if (controller) {
+            controller->cancelIBLLoading();
+        }
+    }
+
+    void MaterialPreviewAdapter::processAsyncLoading() {
+        for (auto& [instanceId, controller] : controllers) {
+            if (controller) {
+                controller->updateAsyncLoading();
+            }
+        }
+    }
+
 }

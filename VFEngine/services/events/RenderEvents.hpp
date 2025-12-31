@@ -1,6 +1,7 @@
 #pragma once
 #include "EventTypes.hpp"
 #include "../data/DTOs.hpp"
+#include "../data/AsyncLoadingTypes.hpp"
 #include "../providers/IOffScreenProvider.hpp"
 #include <glm/glm.hpp>
 #include <optional>
@@ -48,6 +49,48 @@ namespace events::render {
         void* handle;
 
         std::string_view getName() const override { return "ReleaseEditorTexture"; }
+    };
+
+    // Async texture loading - starts loading without blocking
+    struct LoadEditorTextureAsyncCommand : ICommand<> {
+        void* instanceId;     // Caller's ID for tracking
+        std::string path;
+        bool isHDR = false;
+
+        std::string_view getName() const override { return "LoadEditorTextureAsync"; }
+    };
+
+    struct CancelTextureLoadingCommand : ICommand<> {
+        void* instanceId;
+
+        std::string_view getName() const override { return "CancelTextureLoading"; }
+    };
+
+    struct GetTextureLoadingProgressQuery : IQuery<services::TextureLoadingProgress> {
+        void* instanceId;
+
+        std::string_view getName() const override { return "GetTextureLoadingProgress"; }
+    };
+
+    struct GetLoadedTextureHandleQuery : IQuery<services::EditorTextureHandle> {
+        void* instanceId;
+
+        std::string_view getName() const override { return "GetLoadedTextureHandle"; }
+    };
+
+    // Async IBL loading for scene - starts loading without blocking
+    struct SetIBLAsyncCommand : ICommand<> {
+        std::string hdrPath;
+
+        std::string_view getName() const override { return "SetIBLAsync"; }
+    };
+
+    struct CancelIBLLoadingCommand : ICommand<> {
+        std::string_view getName() const override { return "CancelIBLLoading"; }
+    };
+
+    struct GetSceneIBLLoadingProgressQuery : IQuery<services::IBLLoadingProgress> {
+        std::string_view getName() const override { return "GetSceneIBLLoadingProgress"; }
     };
 
     // ============================================

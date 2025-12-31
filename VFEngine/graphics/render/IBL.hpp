@@ -4,6 +4,11 @@
 #include <memory>
 #include <string_view>
 
+namespace resource
+{
+    struct HDRData;
+}
+
 namespace core
 {
     class Device;
@@ -59,6 +64,17 @@ namespace render
         void recreate();
         void remove();
         void cleanUp();
+
+        // Staged initialization for async loading (each method is one frame of work)
+        void initHDRTexture(const resource::HDRData& hdrData);
+        void generateEnvironmentCubemap();
+        void generateIrradiance();
+        void generateBRDFLUT();
+        void generatePrefiltered();
+        void initSkybox();
+
+        // Access to HDR texture for staged init
+        core::Texture* getHDRTexture() const { return hdrTexture.get(); }
 
         // Set camera matrices for skybox rendering (works with EditorCamera or CameraComponent)
         void setCameraMatrices(const glm::mat4& view, const glm::mat4& projection);

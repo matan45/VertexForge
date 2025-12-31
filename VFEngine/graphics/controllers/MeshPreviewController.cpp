@@ -4,6 +4,7 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "../render/mesh/MeshTypes.hpp"
+#include "../loaders/AsyncMeshLoader.hpp"
 #include "resource/Types.hpp"
 #include "print/Logger.hpp"
 
@@ -13,6 +14,7 @@ namespace controllers
         : swapChain{ *core::VulkanContext::getSwapChain() }
         , device{ *core::VulkanContext::getDevice() }
         , offScreen{ std::make_unique<render::OffScreenViewPort>(device, swapChain) }
+        , asyncLoader{ std::make_unique<loaders::AsyncMeshLoader>() }
     {
     }
 
@@ -114,6 +116,98 @@ namespace controllers
         loadedMeshPath.clear();
         meshBounds = math::AABB();
         highlightedSubMesh = -1;
+    }
+
+    void MeshPreviewController::loadMeshAsync(const std::string& meshPath)
+    {
+        if (!initialized)
+        {
+            init();
+        }
+
+        // Cancel any existing load
+        if (!pendingMeshPath.empty())
+        {
+            asyncLoader->cancelLoad(pendingMeshPath);
+        }
+
+        // Unload any existing mesh
+        if (!loadedMeshPath.empty())
+        {
+            unloadMesh();
+        }
+
+        pendingMeshPath = meshPath;
+        asyncLoader->startLoad(meshPath);
+    }
+
+    void MeshPreviewController::cancelMeshLoading()
+    {
+        if (!pendingMeshPath.empty())
+        {
+            asyncLoader->cancelLoad(pendingMeshPath);
+            pendingMeshPath.clear();
+        }
+    }
+
+    services::MeshLoadingProgress MeshPreviewController::getMeshLoadingProgress() const
+    {
+        if (pendingMeshPath.empty())
+        {
+            services::MeshLoadingProgress progress;
+            if (!loadedMeshPath.empty())
+            {
+                progress.state = services::LoadingState::Complete;
+                progress.progress = 1.0f;
+                progress.statusMessage = "Loaded";
+            }
+            return progress;
+        }
+
+        return asyncLoader->getProgress(pendingMeshPath);
+    }
+
+    bool MeshPreviewController::updateAsyncLoading()
+    {
+        if (pendingMeshPath.empty())
+        {
+            return false;  // No async loading in progress
+        }
+
+        // Check for pending GPU work
+        if (!asyncLoader->update())
+        {
+            return false;  // Still loading from disk or no work ready
+        }
+
+        // Process GPU upload if ready
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        auto* meshPipeline = renderHandler->getMeshPipeline();
+
+        if (!meshPipeline)
+        {
+            return false;
+        }
+
+        auto result = asyncLoader->processGPUUpload(meshPipeline);
+
+        if (result.success)
+        {
+            loadedMeshPath = pendingMeshPath;
+            meshBounds = result.bounds;
+            pendingMeshPath.clear();
+            asyncLoader->clearCompleted();
+            return true;  // Loading completed successfully
+        }
+        else if (asyncLoader->getProgress(pendingMeshPath).isDone())
+        {
+            // Loading failed or was cancelled
+            pendingMeshPath.clear();
+            asyncLoader->clearCompleted();
+            return true;  // Loading finished (with error)
+        }
+
+        return false;
     }
 
     std::vector<services::SubMeshInfo> MeshPreviewController::getSubMeshInfo() const

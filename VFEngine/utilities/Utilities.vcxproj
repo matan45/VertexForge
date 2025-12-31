@@ -15,6 +15,7 @@
     <IgnoreWarnCompileDuplicatedFilename>true</IgnoreWarnCompileDuplicatedFilename>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>Utilities</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -117,6 +118,7 @@
     <ClInclude Include="scene\LevelHandler.hpp" />
     <ClInclude Include="scene\SceneBVH.hpp" />
     <ClInclude Include="scene\SceneGraphSystem.hpp" />
+    <ClInclude Include="serialization\AsyncSceneLoader.hpp" />
     <ClInclude Include="serialization\JsonConverters.hpp" />
     <ClInclude Include="serialization\PrefabSerialization.hpp" />
     <ClInclude Include="serialization\SceneSerialization.hpp" />
@@ -144,6 +146,7 @@
     <ClCompile Include="scene\LevelHandler.cpp" />
     <ClCompile Include="scene\SceneBVH.cpp" />
     <ClCompile Include="scene\SceneGraphSystem.cpp" />
+    <ClCompile Include="serialization\AsyncSceneLoader.cpp" />
     <ClCompile Include="serialization\PrefabSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="string\StringUtil.cpp" />

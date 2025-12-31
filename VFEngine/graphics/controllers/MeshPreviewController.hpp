@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
 #include "../../services/data/DTOs.hpp"
+#include "../../services/data/AsyncLoadingTypes.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -15,6 +16,11 @@ namespace core
 namespace render
 {
     class OffScreenViewPort;
+}
+
+namespace loaders
+{
+    class AsyncMeshLoader;
 }
 
 namespace controllers
@@ -34,6 +40,10 @@ namespace controllers
         int forceLODLevel = -1;       // -1 = auto, 0-3 = force specific LOD
         bool initialized = false;
 
+        // Async loading support
+        std::unique_ptr<loaders::AsyncMeshLoader> asyncLoader;
+        std::string pendingMeshPath;  // Path of mesh being loaded async
+
     public:
         explicit MeshPreviewController();
         ~MeshPreviewController();
@@ -41,9 +51,18 @@ namespace controllers
         void init();
         void cleanUp();
 
-        
+
         bool loadMesh(const std::string& meshPath, math::AABB& outBounds);
         void unloadMesh();
+
+        // Async loading API
+        void loadMeshAsync(const std::string& meshPath);
+        void cancelMeshLoading();
+        services::MeshLoadingProgress getMeshLoadingProgress() const;
+
+        // Call each frame to process async loading work
+        // Returns true if loading completed this frame (check getMeshLoadingProgress for result)
+        bool updateAsyncLoading();
 
         std::vector<services::SubMeshInfo> getSubMeshInfo() const;
         std::vector<services::LODInfo> getLODInfo() const;

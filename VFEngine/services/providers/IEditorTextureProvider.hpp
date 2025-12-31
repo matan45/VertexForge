@@ -1,11 +1,12 @@
 #pragma once
+#include "../data/AsyncLoadingTypes.hpp"
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace services {
 
-    
+
     struct EditorTextureData {
         void* descriptorSet = nullptr;  // ImGui descriptor set for rendering (all mips with trilinear)
         int width = 0;
@@ -16,16 +17,22 @@ namespace services {
         bool valid = false;
     };
 
-   
+
     class IEditorTextureProvider {
     public:
         virtual ~IEditorTextureProvider() = default;
-        
+
+        // Synchronous loading (blocking)
         virtual EditorTextureData loadTexture(std::string_view path) = 0;
-        
         virtual EditorTextureData loadHdrTexture(std::string_view path) = 0;
-        
         virtual void releaseTexture(void* descriptorSet) = 0;
+
+        // Async loading (non-blocking)
+        virtual void loadTextureAsync(void* instanceId, std::string_view path, bool isHDR) = 0;
+        virtual void cancelTextureLoading(void* instanceId) = 0;
+        virtual TextureLoadingProgress getTextureLoadingProgress(void* instanceId) const = 0;
+        virtual EditorTextureData getLoadedTexture(void* instanceId) = 0;
+        virtual void processAsyncLoading() = 0;
     };
 
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "PreviewInstanceId.hpp"
+#include "../data/AsyncLoadingTypes.hpp"
 #include <string>
 #include <any>
 
@@ -52,6 +53,12 @@ namespace services {
         virtual void* renderMaterialPreview(PreviewInstanceId instanceId) = 0;
 
         virtual std::string getMaterialShaderError(PreviewInstanceId instanceId) const = 0;
+
+        // Async IBL loading
+        virtual void initMaterialPreviewAsync(PreviewInstanceId instanceId) = 0;
+        virtual IBLLoadingProgress getIBLLoadingProgress(PreviewInstanceId instanceId) const = 0;
+        virtual void cancelIBLLoading(PreviewInstanceId instanceId) = 0;
+        virtual void processAsyncLoading() = 0;
     };
 
 }

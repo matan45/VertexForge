@@ -90,4 +90,34 @@ namespace core {
         return controller ? controller->render() : nullptr;
     }
 
+    void MeshPreviewAdapter::loadPreviewMeshAsync(services::PreviewInstanceId instanceId, const std::string& meshPath) {
+        auto* controller = getController(instanceId);
+        if (controller) {
+            controller->loadMeshAsync(meshPath);
+        }
+    }
+
+    void MeshPreviewAdapter::cancelMeshLoading(services::PreviewInstanceId instanceId) {
+        auto* controller = getController(instanceId);
+        if (controller) {
+            controller->cancelMeshLoading();
+        }
+    }
+
+    services::MeshLoadingProgress MeshPreviewAdapter::getMeshLoadingProgress(services::PreviewInstanceId instanceId) const {
+        auto* controller = getController(instanceId);
+        if (!controller) {
+            return services::MeshLoadingProgress{};
+        }
+        return controller->getMeshLoadingProgress();
+    }
+
+    void MeshPreviewAdapter::processAsyncLoading() {
+        for (auto& [instanceId, controller] : controllers) {
+            if (controller) {
+                controller->updateAsyncLoading();
+            }
+        }
+    }
+
 }

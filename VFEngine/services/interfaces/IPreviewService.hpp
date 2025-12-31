@@ -1,6 +1,7 @@
 #pragma once
 #include "../providers/IPreviewProvider.hpp"
 #include "../data/DTOs.hpp"
+#include "../data/AsyncLoadingTypes.hpp"
 #include <math/Frustum.hpp>
 #include <string>
 #include <vector>
@@ -32,6 +33,12 @@ namespace services
 
         [[nodiscard]] virtual std::string getMaterialShaderError(PreviewInstanceId instanceId) const = 0;
 
+        // Async material preview loading
+        virtual void initMaterialPreviewAsync(PreviewInstanceId instanceId) = 0;
+        [[nodiscard]] virtual IBLLoadingProgress getIBLLoadingProgress(PreviewInstanceId instanceId) const = 0;
+        virtual void cancelIBLLoading(PreviewInstanceId instanceId) = 0;
+        virtual void processMaterialAsyncLoading() = 0;
+
         virtual void initMeshPreview(PreviewInstanceId instanceId) = 0;
 
         virtual void cleanUpMeshPreview(PreviewInstanceId instanceId) = 0;
@@ -60,5 +67,11 @@ namespace services
                                       const glm::vec3& cameraPos) = 0;
 
         [[nodiscard]] virtual ViewportTextureHandle renderMeshPreview(PreviewInstanceId instanceId) = 0;
+
+        // Async mesh loading
+        virtual void loadPreviewMeshAsync(PreviewInstanceId instanceId, const std::string& meshPath) = 0;
+        virtual void cancelMeshLoading(PreviewInstanceId instanceId) = 0;
+        [[nodiscard]] virtual MeshLoadingProgress getMeshLoadingProgress(PreviewInstanceId instanceId) const = 0;
+        virtual void processAsyncLoading() = 0;
     };
 }

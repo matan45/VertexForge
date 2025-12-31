@@ -2,6 +2,7 @@
 #include "../interfaces/ISceneService.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../data/EntityConversion.hpp"
+#include "../data/AsyncLoadingTypes.hpp"
 #include <entt/entt.hpp>
 #include <memory>
 #include <optional>
@@ -9,6 +10,10 @@
 
 namespace scene {
     class SceneGraphSystem;
+}
+
+namespace serialization {
+    class AsyncSceneLoader;
 }
 
 namespace services {
@@ -31,6 +36,10 @@ namespace services {
         std::unique_ptr<MaterialComponentService> materialService;
         std::unique_ptr<AudioComponentService> audioService;
         std::unique_ptr<IBLComponentService> iblService;
+
+        // Async scene loading
+        std::unique_ptr<serialization::AsyncSceneLoader> asyncSceneLoader;
+        bool asyncSceneLoadInProgress = false;
 
     public:
         explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -128,6 +137,12 @@ namespace services {
         bool newScene();
         bool saveScene(const std::string& filePath);
         bool loadScene(const std::string& filePath);
+
+        // Async Scene Loading
+        void loadSceneAsync(const std::string& filePath);
+        void cancelSceneLoading();
+        bool isSceneLoading() const;
+        void updateAsyncSceneLoading();
 
         // Prefab Operations
         bool savePrefab(EntityHandle entity, const std::string& filePath);

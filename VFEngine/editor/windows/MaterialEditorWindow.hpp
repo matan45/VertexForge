@@ -1,5 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
+#include "data/AsyncLoadingTypes.hpp"
 #include <material/MaterialTypes.hpp>
 #include <memory>
 #include <string>
@@ -47,6 +48,10 @@ namespace windows
         float previewPanelWidth = 250.0f;
         bool isDraggingPreview = false; // Track if drag started in preview
 
+        // Async loading state
+        services::IBLLoadingProgress iblLoadingProgress;
+        bool useAsyncLoading = true;
+
     public:
         explicit MaterialEditorWindow(const std::string& materialPath);
         ~MaterialEditorWindow() override;
@@ -76,5 +81,9 @@ namespace windows
 
         void drawOrmPackDialog();
         void packOrmTextures();
+
+        // Async loading
+        void updateAsyncLoading();
+        void drawLoadingIndicator(float width, float height);
     };
 }

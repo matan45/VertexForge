@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/DTOs.hpp"
+#include "data/AsyncLoadingTypes.hpp"
 #include <string>
 
 namespace windows
@@ -19,11 +20,15 @@ namespace windows
         bool isOpen = true;
         bool needsInit = true;
 
+        // Async loading state
+        services::TextureLoadingProgress loadingProgress;
+        bool useAsyncLoading = true;
+
         // Zoom/pan state
         float zoom = 1.0f;
         float panX = 0.0f;
         float panY = 0.0f;
-        
+
         int selectedMipLevel = 0;
 
     public:
@@ -37,7 +42,10 @@ namespace windows
 
     private:
         void loadImage();
+        void loadImageAsync();
+        void updateAsyncLoading();
         void drawImagePanel();
         void drawInfoPanel();
+        void drawLoadingIndicator(float width, float height);
     };
 }

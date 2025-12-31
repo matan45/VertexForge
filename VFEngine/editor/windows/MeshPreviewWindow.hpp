@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/DTOs.hpp"
+#include "data/AsyncLoadingTypes.hpp"
 #include <math/Frustum.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -36,6 +37,10 @@ namespace windows
         bool isOpen = true;
         bool needsInit = true;
 
+        // Async loading state
+        services::MeshLoadingProgress loadingProgress;
+        bool useAsyncLoading = true;  // Toggle for async vs sync loading
+
     public:
         explicit MeshPreviewWindow(const std::string& meshFilePath);
         ~MeshPreviewWindow() override;
@@ -47,7 +52,10 @@ namespace windows
 
     private:
         void initRenderer();
+        void updateAsyncLoading();
         void drawViewport(float width, float height);
         void drawSubMeshPanel();
+        void drawLoadingIndicator(float width, float height);
+        void onLoadingComplete();
     };
 }

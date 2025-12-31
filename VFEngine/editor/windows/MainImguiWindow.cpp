@@ -263,7 +263,8 @@ namespace windows
                 std::string loadPath = fileDialog.openFileDialog(fileTypes);
                 if (!loadPath.empty())
                 {
-                    events::scene::LoadSceneCommand cmd;
+                    // Use async loading to keep UI responsive
+                    events::scene::LoadSceneAsyncCommand cmd;
                     cmd.filePath = loadPath;
                     events::EventDispatcher::instance().execute(cmd);
                 }

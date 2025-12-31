@@ -29,6 +29,12 @@ namespace core
                               const glm::vec3& cameraPos) override;
         void* renderMeshPreview(services::PreviewInstanceId instanceId) override;
 
+        // Async loading API
+        void loadPreviewMeshAsync(services::PreviewInstanceId instanceId, const std::string& meshPath) override;
+        void cancelMeshLoading(services::PreviewInstanceId instanceId) override;
+        services::MeshLoadingProgress getMeshLoadingProgress(services::PreviewInstanceId instanceId) const override;
+        void processAsyncLoading() override;
+
     private:
         controllers::MeshPreviewController* getController(services::PreviewInstanceId instanceId) const;
     };

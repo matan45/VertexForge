@@ -10,6 +10,7 @@
 #include "../../utilities/components/Components.hpp"
 #include "../../utilities/serialization/SceneSerialization.hpp"
 #include "../../utilities/serialization/PrefabSerialization.hpp"
+#include "../../utilities/serialization/AsyncSceneLoader.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../events/RenderEvents.hpp"
@@ -28,7 +29,8 @@ namespace services {
         , meshService(std::make_unique<MeshComponentService>(sceneGraph))
         , materialService(std::make_unique<MaterialComponentService>(sceneGraph))
         , audioService(std::make_unique<AudioComponentService>(sceneGraph))
-        , iblService(std::make_unique<IBLComponentService>(sceneGraph)) {}
+        , iblService(std::make_unique<IBLComponentService>(sceneGraph))
+        , asyncSceneLoader(std::make_unique<serialization::AsyncSceneLoader>()) {}
 
     SceneServiceImpl::~SceneServiceImpl() = default;
 
@@ -701,6 +703,78 @@ namespace services {
         return success;
     }
 
+    void SceneServiceImpl::loadSceneAsync(const std::string& filePath) {
+        if (!asyncSceneLoader) {
+            asyncSceneLoader = std::make_unique<serialization::AsyncSceneLoader>();
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Publish loading started notification
+        events::scene::SceneLoadingStartedNotification startNotif;
+        startNotif.scenePath = filePath;
+        dispatcher.publish(startNotif);
+
+        // Set up progress callback
+        auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total) {
+            events::scene::SceneLoadingProgressUpdatedNotification progressNotif;
+            progressNotif.currentEntityName = entityName;
+            progressNotif.progress = total > 0 ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
+            dispatcher.publish(progressNotif);
+        };
+
+        // Set up completion callback
+        auto completionCallback = [this, filePath, &dispatcher](bool success, const std::string& errorMessage) {
+            events::scene::SceneLoadingCompletedNotification completeNotif;
+            completeNotif.scenePath = filePath;
+            completeNotif.success = success;
+            completeNotif.errorMessage = errorMessage;
+            dispatcher.publish(completeNotif);
+
+            if (success) {
+                // Clear selection on successful load
+                selectedEntity.reset();
+
+                // Get IBL path and set it
+                // Note: IBL loading is still synchronous here as it requires OffScreen controller changes
+                // The main scene entity loading is async with progress feedback
+                std::string iblPath = asyncSceneLoader->getIBLPath();
+                if (!iblPath.empty()) {
+                    events::render::SetIBLCommand setIblCmd;
+                    setIblCmd.hdrPath = iblPath;
+                    dispatcher.execute(setIblCmd);
+                }
+
+                // Publish scene loaded notification
+                events::scene::SceneLoadedNotification loadedNotif;
+                loadedNotif.scenePath = filePath;
+                dispatcher.publish(loadedNotif);
+            }
+
+            asyncSceneLoadInProgress = false;
+        };
+
+        asyncSceneLoadInProgress = true;
+        asyncSceneLoader->startLoad(filePath, sceneGraph, progressCallback, completionCallback);
+    }
+
+    void SceneServiceImpl::cancelSceneLoading() {
+        if (asyncSceneLoader) {
+            asyncSceneLoader->cancel();
+            asyncSceneLoadInProgress = false;
+        }
+    }
+
+    bool SceneServiceImpl::isSceneLoading() const {
+        return asyncSceneLoadInProgress && asyncSceneLoader && asyncSceneLoader->isLoading();
+    }
+
+    void SceneServiceImpl::updateAsyncSceneLoading() {
+        if (asyncSceneLoadInProgress && asyncSceneLoader) {
+            asyncSceneLoader->update();
+        }
+    }
+
     EntityData SceneServiceImpl::buildEntityData(entt::entity entity) const {
         scene::Entity sceneEntity(entity);
 
@@ -840,6 +914,17 @@ namespace services {
         dispatcher.registerCommandHandler<events::scene::LoadSceneCommand>(
             [this](const events::scene::LoadSceneCommand& cmd) {
                 return loadScene(cmd.filePath);
+            });
+
+        // Async scene loading handlers
+        dispatcher.registerCommandHandler<events::scene::LoadSceneAsyncCommand>(
+            [this](const events::scene::LoadSceneAsyncCommand& cmd) {
+                loadSceneAsync(cmd.filePath);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::CancelSceneLoadingCommand>(
+            [this](const events::scene::CancelSceneLoadingCommand&) {
+                cancelSceneLoading();
             });
 
         // Static entity handlers
