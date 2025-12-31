@@ -17,6 +17,7 @@ namespace windows
     class ImagePreviewWindow;
     class AudioPreviewWindow;
     class MaterialEditorWindow;
+    class PrefabPreviewWindow;
 
     enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Material, Prefab, Other };
     
@@ -84,6 +85,7 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<ImagePreviewWindow>> openImagePreviews;
         std::unordered_map<std::string, std::weak_ptr<AudioPreviewWindow>> openAudioPreviews;
         std::unordered_map<std::string, std::weak_ptr<MaterialEditorWindow>> openMaterialEditors;
+        std::unordered_map<std::string, std::weak_ptr<PrefabPreviewWindow>> openPrefabPreviews;
 
         static constexpr float THUMBNAIL_SIZE = 64.0f;
         static constexpr float PADDING = 16.0f;

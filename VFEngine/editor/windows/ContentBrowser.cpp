@@ -3,6 +3,7 @@
 #include "ImagePreviewWindow.hpp"
 #include "AudioPreviewWindow.hpp"
 #include "MaterialEditorWindow.hpp"
+#include "PrefabPreviewWindow.hpp"
 #include <material/MaterialAsset.hpp>
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
@@ -496,6 +497,22 @@ namespace windows
 					auto editorWindow = std::make_shared<MaterialEditorWindow>(path);
 					controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
 					openMaterialEditors[path] = editorWindow;
+				}
+
+				showFileWindow = false;
+			}
+			else if (selectedType == AssetType::Prefab)
+			{
+				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
+
+				// Check if preview window already exists and is still open
+				auto it = openPrefabPreviews.find(path);
+				if (it == openPrefabPreviews.end() || it->second.expired())
+				{
+					// Create new prefab preview window
+					auto previewWindow = std::make_shared<PrefabPreviewWindow>(path);
+					controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+					openPrefabPreviews[path] = previewWindow;
 				}
 
 				showFileWindow = false;

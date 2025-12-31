@@ -119,6 +119,7 @@
     <ClInclude Include="windows\MainImguiWindow.hpp" />
     <ClInclude Include="windows\MaterialEditorWindow.hpp" />
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
+    <ClInclude Include="windows\PrefabPreviewWindow.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
     <ClInclude Include="windows\SceneLoadingProgressWindow.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
@@ -144,6 +145,7 @@
     <ClCompile Include="windows\MainImguiWindow.cpp" />
     <ClCompile Include="windows\MaterialEditorWindow.cpp" />
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
+    <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
     <ClCompile Include="windows\SceneLoadingProgressWindow.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
