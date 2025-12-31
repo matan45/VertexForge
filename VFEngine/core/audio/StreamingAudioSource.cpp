@@ -89,18 +89,10 @@ namespace core::audio
     {
         if (!streamHandle || !streamHandle->isOpen())
         {
-            loggerError("StreamingAudioSource::initBuffers - stream handle invalid or not open");
             return false;
         }
 
         const auto& header = streamHandle->getHeader();
-
-        loggerInfo("StreamingAudioSource::initBuffers - Header info:");
-        loggerInfo("  sampleRate: {}", header.sampleRate);
-        loggerInfo("  channels: {}", header.channels);
-        loggerInfo("  frames: {}", header.frames);
-        loggerInfo("  dataSize: {}", header.dataSize);
-        loggerInfo("  bufferDurationSeconds: {}", config.bufferDurationSeconds);
 
         // Calculate samples per buffer based on duration
         // samples = sampleRate * channels * duration
@@ -114,12 +106,8 @@ namespace core::audio
             samplesPerBuffer++;
         }
 
-        loggerInfo("  samplesPerBuffer: {}", samplesPerBuffer);
-
         // Pre-allocate read buffer to avoid repeated allocations
         readBuffer.resize(samplesPerBuffer);
-
-        loggerInfo("  readBuffer allocated, size: {}", readBuffer.size());
 
         // Create OpenAL source
         alGenSources(1, &sourceId);
@@ -127,8 +115,6 @@ namespace core::audio
         {
             return false;
         }
-
-        loggerInfo("  OpenAL source created: {}", sourceId);
 
         // Create buffers
         bufferIds.resize(config.bufferCount);
@@ -141,25 +127,16 @@ namespace core::audio
             return false;
         }
 
-        loggerInfo("  OpenAL buffers created: {} buffers", config.bufferCount);
-
         // Fill initial buffers with audio data
-        int filledCount = 0;
         for (ALuint bufferId : bufferIds)
         {
-            loggerInfo("  Filling buffer {} ...", bufferId);
             if (!fillBuffer(bufferId))
             {
-                loggerInfo("  fillBuffer returned false for buffer {}, breaking", bufferId);
                 // Not enough data to fill all buffers - that's OK for short files
                 break;
             }
-            loggerInfo("  Queueing buffer {} ...", bufferId);
             queueBuffer(bufferId);
-            filledCount++;
         }
-
-        loggerInfo("  Total buffers filled and queued: {}", filledCount);
 
         return true;
     }
@@ -207,31 +184,20 @@ namespace core::audio
 
     bool StreamingAudioSource::fillBuffer(ALuint bufferId)
     {
-        loggerInfo("    fillBuffer({}) - start", bufferId);
-
         if (!streamHandle)
         {
-            loggerError("    fillBuffer - streamHandle is null");
             return false;
         }
 
         if (streamHandle->isEOF())
         {
-            loggerInfo("    fillBuffer - stream is at EOF");
             return false;
         }
 
-        loggerInfo("    fillBuffer - calling readSamples with samplesPerBuffer={}", samplesPerBuffer);
-        loggerInfo("    fillBuffer - readBuffer.size() before read: {}", readBuffer.size());
-
         size_t samplesRead = streamHandle->readSamples(readBuffer, samplesPerBuffer);
-
-        loggerInfo("    fillBuffer - samplesRead: {}", samplesRead);
-        loggerInfo("    fillBuffer - readBuffer.size() after read: {}", readBuffer.size());
 
         if (samplesRead == 0)
         {
-            loggerInfo("    fillBuffer - samplesRead is 0, returning false");
             return false;
         }
 
@@ -240,13 +206,6 @@ namespace core::audio
 
         const auto& header = streamHandle->getHeader();
         ALenum format = getFormat();
-
-        loggerInfo("    fillBuffer - calling alBufferData:");
-        loggerInfo("      bufferId: {}", bufferId);
-        loggerInfo("      format: {} (MONO16={}, STEREO16={})", format, AL_FORMAT_MONO16, AL_FORMAT_STEREO16);
-        loggerInfo("      data ptr: {}", (void*)readBuffer.data());
-        loggerInfo("      size (bytes): {}", samplesRead * sizeof(short));
-        loggerInfo("      sampleRate: {}", header.sampleRate);
 
         alBufferData(
             bufferId,
@@ -258,11 +217,9 @@ namespace core::audio
 
         if (AudioSystem::checkError("alBufferData"))
         {
-            loggerError("    fillBuffer - alBufferData failed");
             return false;
         }
 
-        loggerInfo("    fillBuffer({}) - success", bufferId);
         return true;
     }
 
@@ -283,25 +240,16 @@ namespace core::audio
         ALint processedCount = 0;
         alGetSourcei(sourceId, AL_BUFFERS_PROCESSED, &processedCount);
 
-        if (processedCount > 0)
-        {
-            loggerInfo("processFinishedBuffers - {} buffers processed", processedCount);
-        }
-
         while (processedCount-- > 0)
         {
             // Unqueue the processed buffer
             ALuint bufferId;
-            loggerInfo("  Unqueueing buffer...");
             alSourceUnqueueBuffers(sourceId, 1, &bufferId);
 
             if (AudioSystem::checkError("alSourceUnqueueBuffers"))
             {
-                loggerError("  alSourceUnqueueBuffers failed");
                 break;
             }
-
-            loggerInfo("  Unqueued buffer {}", bufferId);
 
             // Update samples played count using actual samples in this buffer
             auto it = bufferSampleCounts.find(bufferId);
@@ -311,20 +259,13 @@ namespace core::audio
             // Try to refill the buffer
             if (!streamHandle->isEOF())
             {
-                loggerInfo("  Refilling buffer {}...", bufferId);
                 if (fillBuffer(bufferId))
                 {
-                    loggerInfo("  Re-queueing buffer {}...", bufferId);
                     queueBuffer(bufferId);
-                }
-                else
-                {
-                    loggerInfo("  fillBuffer returned false");
                 }
             }
             else if (looping)
             {
-                loggerInfo("  EOF reached, looping - resetting stream");
                 // Reset stream and refill
                 streamHandle->reset();
                 totalSamplesPlayed = 0;
@@ -334,10 +275,6 @@ namespace core::audio
                     queueBuffer(bufferId);
                 }
             }
-            else
-            {
-                loggerInfo("  EOF reached, not looping");
-            }
         }
 
         // Check if playback has stopped due to buffer underrun or end of stream
@@ -346,20 +283,17 @@ namespace core::audio
 
         if (sourceState == AL_STOPPED)
         {
-            loggerInfo("processFinishedBuffers - source stopped");
             // Check if there are still buffers queued
             ALint queuedCount = 0;
             alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
 
             if (queuedCount > 0)
             {
-                loggerInfo("  {} buffers still queued, restarting playback", queuedCount);
                 // Buffer underrun - restart playback
                 alSourcePlay(sourceId);
             }
             else
             {
-                loggerInfo("  No buffers queued, playback finished");
                 // No more buffers - playback finished
                 state = StreamingState::Finished;
             }
@@ -368,19 +302,13 @@ namespace core::audio
 
     void StreamingAudioSource::play()
     {
-        loggerInfo("StreamingAudioSource::play() - start, sourceId={}", sourceId);
-
         if (sourceId == 0)
         {
-            loggerError("StreamingAudioSource::play() - sourceId is 0, returning");
             return;
         }
 
-        loggerInfo("  current state: {}", static_cast<int>(state));
-
         if (state == StreamingState::Finished)
         {
-            loggerInfo("  state is Finished, resetting for replay");
             // Reset for replay
             streamHandle->reset();
             totalSamplesPlayed = 0;
@@ -393,22 +321,11 @@ namespace core::audio
             }
         }
 
-        // Check queued buffer count before playing
-        ALint queuedCount = 0;
-        alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
-        loggerInfo("  buffers queued before play: {}", queuedCount);
-
-        loggerInfo("  calling alSourcePlay({})", sourceId);
         alSourcePlay(sourceId);
 
         if (!AudioSystem::checkError("alSourcePlay"))
         {
             state = StreamingState::Playing;
-            loggerInfo("  alSourcePlay succeeded, state set to Playing");
-        }
-        else
-        {
-            loggerError("  alSourcePlay failed");
         }
     }
 
@@ -575,14 +492,10 @@ namespace core::audio
 
     float StreamingAudioSource::getDuration() const
     {
-        loggerInfo("StreamingAudioSource::getDuration() called");
         if (!streamHandle)
         {
-            loggerInfo("  streamHandle is null, returning 0");
             return 0.0f;
         }
-        float dur = streamHandle->getDuration();
-        loggerInfo("  returning duration: {}", dur);
-        return dur;
+        return streamHandle->getDuration();
     }
 }
