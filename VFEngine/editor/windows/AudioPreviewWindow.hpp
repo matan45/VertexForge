@@ -5,6 +5,8 @@
 #include <string>
 #include <optional>
 #include <vector>
+#include <future>
+#include <atomic>
 
 namespace windows
 {
@@ -13,6 +15,19 @@ namespace windows
     {
         float minVal;
         float maxVal;
+    };
+
+    // Audio loading result from background thread
+    struct AudioLoadResult
+    {
+        bool success = false;
+        std::string errorMessage;
+        uint32_t totalDurationInSeconds = 0;
+        uint32_t channels = 0;
+        uint32_t sampleRate = 0;
+        uint32_t frames = 0;
+        size_t dataSizeBytes = 0;
+        std::vector<WaveformPoint> waveformCache;
     };
 
     class AudioPreviewWindow : public controllers::imguiHandler::ImguiWindow
@@ -38,6 +53,13 @@ namespace windows
         bool isOpen = true;
         bool needsInit = true;
 
+        // Async loading state
+        std::future<AudioLoadResult> loadFuture;
+        std::atomic<bool> loadingInProgress{false};
+        std::atomic<bool> loadingCancelled{false};
+        float loadingProgress = 0.0f;
+        std::string loadingStatus = "Starting...";
+
         // Playback state
         bool isPlaying = false;
         float playbackPosition = 0.0f;
@@ -55,9 +77,12 @@ namespace windows
         const std::string& getAudioPath() const { return audioPath; }
 
     private:
-        void loadAudio();
-        void generateWaveformCache(const resource::AudioData& data);
+        void startAsyncLoad();
+        void updateAsyncLoading();
+        AudioLoadResult loadAudioBackground(const std::string& path);
+        static std::vector<WaveformPoint> generateWaveformCache(const resource::AudioData& data, uint32_t channels);
         void drawInfoPanel();
         void drawWaveformPanel();
+        void drawLoadingIndicator();
     };
 }

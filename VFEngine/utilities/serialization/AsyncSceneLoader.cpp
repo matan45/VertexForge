@@ -82,10 +82,18 @@ namespace serialization
 
     bool AsyncSceneLoader::update()
     {
-        std::lock_guard<std::mutex> lock(mutex);
+        Phase currentPhase;
+        bool isCancelled;
 
-        if (cancelled.load())
         {
+            std::lock_guard<std::mutex> lock(mutex);
+            currentPhase = phase;
+            isCancelled = cancelled.load();
+        }
+
+        if (isCancelled)
+        {
+            std::lock_guard<std::mutex> lock(mutex);
             if (phase != Phase::Cancelled && phase != Phase::Idle)
             {
                 finishLoading(false, "Loading cancelled");
@@ -94,33 +102,47 @@ namespace serialization
             return false;
         }
 
-        switch (phase)
+        switch (currentPhase)
         {
             case Phase::ParsingJSON:
             {
-                // Check if JSON parsing is complete
-                if (jsonParseFuture.valid() &&
-                    jsonParseFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+                // Check if JSON parsing is complete (non-blocking)
+                bool futureReady = false;
+                {
+                    std::lock_guard<std::mutex> lock(mutex);
+                    futureReady = jsonParseFuture.valid() &&
+                        jsonParseFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready;
+                }
+
+                if (futureReady)
                 {
                     bool success = false;
-                    try
+                    std::string error;
                     {
-                        success = jsonParseFuture.get();
-                    }
-                    catch (const std::exception& e)
-                    {
-                        errorMessage = e.what();
-                        finishLoading(false, errorMessage);
-                        return false;
+                        std::lock_guard<std::mutex> lock(mutex);
+                        try
+                        {
+                            success = jsonParseFuture.get();
+                            error = errorMessage;
+                        }
+                        catch (const std::exception& e)
+                        {
+                            error = e.what();
+                            errorMessage = error;
+                        }
                     }
 
                     if (!success)
                     {
-                        finishLoading(false, errorMessage);
+                        std::lock_guard<std::mutex> lock(mutex);
+                        finishLoading(false, error);
                         return false;
                     }
 
-                    phase = Phase::ClearingScene;
+                    {
+                        std::lock_guard<std::mutex> lock(mutex);
+                        phase = Phase::ClearingScene;
+                    }
                 }
                 return true;
             }
@@ -128,13 +150,19 @@ namespace serialization
             case Phase::ClearingScene:
             {
                 // loadSceneInto already clears the scene, so just move to next phase
+                std::lock_guard<std::mutex> lock(mutex);
                 phase = Phase::DeserializingScene;
                 return true;
             }
 
             case Phase::DeserializingScene:
             {
-                if (!deserializeScene())
+                // deserializeScene is called WITHOUT holding the lock
+                // because it has callbacks that need to update state
+                bool success = deserializeScene();
+
+                std::lock_guard<std::mutex> lock(mutex);
+                if (!success)
                 {
                     finishLoading(false, errorMessage);
                     return false;

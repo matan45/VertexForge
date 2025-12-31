@@ -45,11 +45,6 @@ namespace handlers
             {
                 windowStateService->update();
             }
-            // Update async scene loading
-            if (sceneService)
-            {
-                sceneService->updateAsyncSceneLoading();
-            }
         });
 
         // Subscribe to window events from Services

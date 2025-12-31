@@ -5,6 +5,7 @@
 #include "events/AudioEvents.hpp"
 #include <filesystem>
 #include <algorithm>
+#include <cmath>
 
 namespace windows
 {
@@ -17,6 +18,13 @@ namespace windows
 
     AudioPreviewWindow::~AudioPreviewWindow()
     {
+        // Cancel loading if in progress
+        loadingCancelled.store(true);
+        if (loadFuture.valid())
+        {
+            loadFuture.wait();
+        }
+
         // Stop any playing audio when window closes
         if (currentAudioHandle.isValid())
         {
@@ -33,12 +41,15 @@ namespace windows
             return;
         }
 
-        // Load audio on first draw
+        // Start async load on first draw
         if (needsInit)
         {
-            loadAudio();
+            startAsyncLoad();
             needsInit = false;
         }
+
+        // Update async loading state
+        updateAsyncLoading();
 
         ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
 
@@ -59,62 +70,136 @@ namespace windows
 
                 // Waveform panel on the right
                 float waveformWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
-                ImGui::BeginChild("WaveformPanel", ImVec2(waveformWidth, contentSize.y), true);
-                drawWaveformPanel();
+                ImGui::BeginChild("WaveformPanel", ImVec2(waveformWidth, contentSize.y), true,
+                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+                if (loadingInProgress.load())
+                {
+                    drawLoadingIndicator();
+                }
+                else
+                {
+                    drawWaveformPanel();
+                }
+
                 ImGui::EndChild();
             }
         }
         ImGui::End();
     }
 
-    void AudioPreviewWindow::loadAudio()
+    void AudioPreviewWindow::startAsyncLoad()
     {
-        try
-        {
-            resource::AudioData data = resource::AudioResource::loadAudio(audioPath);
+        loadingInProgress.store(true);
+        loadingCancelled.store(false);
+        loadingProgress = 0.0f;
+        loadingStatus = "Loading audio file...";
 
-            // Store metadata
-            totalDurationInSeconds = data.totalDurationInSeconds;
-            channels = data.channels;
-            sampleRate = data.sampleRate;
-            frames = data.frames;
-            dataSizeBytes = data.data.size() * sizeof(short);
-
-            // Generate waveform cache from raw data
-            generateWaveformCache(data);
-
-            // Raw audio data is now discarded (data goes out of scope)
-            audioLoaded = true;
-        }
-        catch (...)
-        {
-            loadFailed = true;
-        }
+        loadFuture = std::async(std::launch::async, [this]() {
+            return loadAudioBackground(audioPath);
+        });
     }
 
-    void AudioPreviewWindow::generateWaveformCache(const resource::AudioData& data)
+    void AudioPreviewWindow::updateAsyncLoading()
     {
-        if (data.data.empty() || channels == 0)
+        if (!loadingInProgress.load() || !loadFuture.valid())
         {
             return;
         }
 
-        waveformCache.clear();
-        waveformCache.reserve(WAVEFORM_RESOLUTION);
+        // Check if loading is complete (non-blocking)
+        if (loadFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+        {
+            AudioLoadResult result = loadFuture.get();
 
-        size_t numSamples = data.data.size() / channels;
+            if (result.success)
+            {
+                // Apply loaded data
+                totalDurationInSeconds = result.totalDurationInSeconds;
+                channels = result.channels;
+                sampleRate = result.sampleRate;
+                frames = result.frames;
+                dataSizeBytes = result.dataSizeBytes;
+                waveformCache = std::move(result.waveformCache);
+                audioLoaded = true;
+            }
+            else
+            {
+                loadFailed = true;
+            }
+
+            loadingInProgress.store(false);
+        }
+    }
+
+    AudioLoadResult AudioPreviewWindow::loadAudioBackground(const std::string& path)
+    {
+        AudioLoadResult result;
+
+        try
+        {
+            if (loadingCancelled.load())
+            {
+                result.errorMessage = "Cancelled";
+                return result;
+            }
+
+            resource::AudioData data = resource::AudioResource::loadAudio(path);
+
+            if (loadingCancelled.load())
+            {
+                result.errorMessage = "Cancelled";
+                return result;
+            }
+
+            // Store metadata
+            result.totalDurationInSeconds = data.totalDurationInSeconds;
+            result.channels = data.channels;
+            result.sampleRate = data.sampleRate;
+            result.frames = data.frames;
+            result.dataSizeBytes = data.data.size() * sizeof(short);
+
+            // Generate waveform cache from raw data
+            result.waveformCache = generateWaveformCache(data, data.channels);
+
+            result.success = true;
+        }
+        catch (const std::exception& e)
+        {
+            result.errorMessage = e.what();
+        }
+        catch (...)
+        {
+            result.errorMessage = "Unknown error";
+        }
+
+        return result;
+    }
+
+    std::vector<WaveformPoint> AudioPreviewWindow::generateWaveformCache(const resource::AudioData& data, uint32_t numChannels)
+    {
+        std::vector<WaveformPoint> cache;
+
+        if (data.data.empty() || numChannels == 0)
+        {
+            return cache;
+        }
+
+        cache.reserve(WAVEFORM_RESOLUTION);
+
+        size_t numSamples = data.data.size() / numChannels;
         size_t samplesPerPoint = std::max(size_t(1), numSamples / WAVEFORM_RESOLUTION);
 
         for (size_t i = 0; i < WAVEFORM_RESOLUTION; ++i)
         {
-            size_t sampleStart = i * samplesPerPoint * channels;
-            size_t sampleEnd = std::min(sampleStart + samplesPerPoint * channels, data.data.size());
+            size_t sampleStart = i * samplesPerPoint * numChannels;
+            size_t sampleEnd = std::min(sampleStart + samplesPerPoint * numChannels, data.data.size());
 
             short minVal = 0, maxVal = 0;
-            for (size_t j = sampleStart; j < sampleEnd; j += channels)
+            for (size_t j = sampleStart; j < sampleEnd; j += numChannels)
             {
                 // Check all channels to get accurate amplitude
-                for (uint32_t ch = 0; ch < channels && j + ch < sampleEnd; ++ch)
+                for (uint32_t ch = 0; ch < numChannels && j + ch < sampleEnd; ++ch)
                 {
                     short sample = data.data[j + ch];
                     minVal = std::min(minVal, sample);
@@ -125,8 +210,69 @@ namespace windows
             WaveformPoint point;
             point.minVal = static_cast<float>(minVal) / 32768.0f;
             point.maxVal = static_cast<float>(maxVal) / 32768.0f;
-            waveformCache.push_back(point);
+            cache.push_back(point);
         }
+
+        return cache;
+    }
+
+    void AudioPreviewWindow::drawLoadingIndicator()
+    {
+        ImVec2 availSize = ImGui::GetContentRegionAvail();
+        ImVec2 windowPos = ImGui::GetCursorScreenPos();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // Semi-transparent dark overlay
+        drawList->AddRectFilled(
+            windowPos,
+            ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y),
+            IM_COL32(30, 30, 30, 255)
+        );
+
+        // Center content
+        float contentWidth = 200.0f;
+        float contentHeight = 80.0f;
+        float centerX = windowPos.x + (availSize.x - contentWidth) * 0.5f;
+        float centerY = windowPos.y + (availSize.y - contentHeight) * 0.5f;
+
+        // Spinner animation
+        float time = static_cast<float>(ImGui::GetTime());
+        float spinnerRadius = 16.0f;
+        float spinnerThickness = 3.0f;
+        ImVec2 spinnerCenter(centerX + contentWidth * 0.5f, centerY + 20.0f);
+
+        // Draw spinner arc
+        int numSegments = 24;
+        float startAngle = time * 4.0f;
+        float arcLength = 3.14159f * 1.3f;
+
+        for (int i = 0; i < numSegments; ++i)
+        {
+            float t1 = static_cast<float>(i) / static_cast<float>(numSegments);
+            float t2 = static_cast<float>(i + 1) / static_cast<float>(numSegments);
+            float angle1 = startAngle + t1 * arcLength;
+            float angle2 = startAngle + t2 * arcLength;
+
+            // Fade alpha along the arc
+            int alpha = static_cast<int>(255 * (1.0f - t1 * 0.7f));
+            ImU32 segColor = IM_COL32(100, 180, 255, alpha);
+
+            ImVec2 p1(spinnerCenter.x + cosf(angle1) * spinnerRadius,
+                      spinnerCenter.y + sinf(angle1) * spinnerRadius);
+            ImVec2 p2(spinnerCenter.x + cosf(angle2) * spinnerRadius,
+                      spinnerCenter.y + sinf(angle2) * spinnerRadius);
+
+            drawList->AddLine(p1, p2, segColor, spinnerThickness);
+        }
+
+        // Status message
+        const char* statusText = loadingStatus.c_str();
+        ImVec2 textSize = ImGui::CalcTextSize(statusText);
+        ImVec2 textPos(centerX + (contentWidth - textSize.x) * 0.5f, centerY + 50.0f);
+        drawList->AddText(textPos, IM_COL32(200, 200, 200, 255), statusText);
+
+        // Reserve space
+        ImGui::Dummy(availSize);
     }
 
     void AudioPreviewWindow::drawInfoPanel()

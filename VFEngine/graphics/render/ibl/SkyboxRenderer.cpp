@@ -387,18 +387,35 @@ namespace render::ibl
         {
             device.getLogicalDevice().destroyFramebuffer(frame);
         }
+        framebuffers.clear();
+
         device.getLogicalDevice().destroyBuffer(vertexBuffer);
         device.getLogicalDevice().freeMemory(vertexBufferMemory);
+        vertexBuffer = nullptr;
+        vertexBufferMemory = nullptr;
 
         device.getLogicalDevice().destroyBuffer(uniformBuffer);
         device.getLogicalDevice().freeMemory(uniformBufferMemory);
+        uniformBuffer = nullptr;
+        uniformBufferMemory = nullptr;
 
         device.getLogicalDevice().destroyRenderPass(renderPass);
+        renderPass = nullptr;
+
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
+        graphicsPipeline = nullptr;
+
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
+        pipelineLayout = nullptr;
+
         device.getLogicalDevice().freeDescriptorSets(descriptorPool, descriptorSet);
+        descriptorSet = nullptr;
+
         device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
+        descriptorPool = nullptr;
+
         device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
+        descriptorSetLayout = nullptr;
 
         initialized = false;
     }

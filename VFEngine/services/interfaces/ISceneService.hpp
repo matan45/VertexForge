@@ -232,12 +232,6 @@ namespace services {
         virtual std::string getEntityName(EntityHandle entity) const = 0;
 
         virtual void setEntityName(EntityHandle entity, const std::string& name) = 0;
-
-        // ============================================
-        // Async Scene Loading (call each frame)
-        // ============================================
-
-        virtual void updateAsyncSceneLoading() = 0;
     };
 
 }

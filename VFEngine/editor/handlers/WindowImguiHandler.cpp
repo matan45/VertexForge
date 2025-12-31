@@ -7,7 +7,6 @@
 #include "../windows/MainImguiWindow.hpp"
 #include "../windows/ContentBrowser.hpp"
 #include "../windows/ImportProgressWindow.hpp"
-#include "../windows/SceneLoadingProgressWindow.hpp"
 
 namespace handlers
 {
@@ -28,7 +27,6 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::EntityDetailsPanel>());
         controllers::imguiHandler::ImguiWindowHandler::add(viewPort);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ImportProgressWindow>());
-        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneLoadingProgressWindow>());
     }
 
     void WindowImguiHandler::cleanUp() const

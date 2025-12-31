@@ -16,19 +16,29 @@ namespace core::audio {
     AudioHandle StreamingAudioManager::playStreaming(const std::string& path,
                                                       const AudioSourceConfig& config,
                                                       const StreamingConfig& streamConfig) {
+        loggerInfo("StreamingAudioManager::playStreaming - path: {}", path);
+        loggerInfo("  config: volume={}, pitch={}, loop={}", config.volume, config.pitch, config.loop);
+        loggerInfo("  streamConfig: bufferCount={}, bufferDuration={}",
+                   streamConfig.bufferCount, streamConfig.bufferDurationSeconds);
+
         auto source = std::make_unique<StreamingAudioSource>();
 
+        loggerInfo("  Opening streaming source...");
         if (!source->open(path, streamConfig)) {
             loggerError("Failed to open streaming audio: {}", path);
             return InvalidAudioHandle;
         }
 
+        loggerInfo("  Applying config...");
         source->applyConfig(config);
+
+        loggerInfo("  Starting playback...");
         source->play();
 
         AudioHandle handle = generateHandle();
         activeSources[handle] = std::move(source);
 
+        loggerInfo("  Playback started, handle: {}", handle);
         return handle;
     }
 

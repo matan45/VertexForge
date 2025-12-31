@@ -45,8 +45,17 @@ namespace resource
 
     size_t AudioStreamHandle::readSamples(std::vector<short>& buffer, size_t sampleCount)
     {
-        if (!file.is_open() || sampleCount == 0)
+        vfLogInfo("      readSamples - start, sampleCount={}", sampleCount);
+
+        if (!file.is_open())
         {
+            vfLogError("      readSamples - file not open");
+            return 0;
+        }
+
+        if (sampleCount == 0)
+        {
+            vfLogInfo("      readSamples - sampleCount is 0");
             return 0;
         }
 
@@ -57,30 +66,44 @@ namespace resource
                                       : 0;
         size_t samplesToRead = std::min(sampleCount, remainingSamples);
 
+        vfLogInfo("      readSamples - totalSamples={}, currentPos={}, remaining={}, toRead={}",
+                  totalSamples, currentSamplePosition, remainingSamples, samplesToRead);
+
         if (samplesToRead == 0)
         {
+            vfLogInfo("      readSamples - samplesToRead is 0, returning");
             return 0;
         }
+
+        vfLogInfo("      readSamples - buffer.size() before: {}", buffer.size());
 
         // Only grow buffer if needed (avoid shrinking to prevent repeated allocations)
         if (buffer.size() < samplesToRead)
         {
+            vfLogInfo("      readSamples - resizing buffer from {} to {}", buffer.size(), samplesToRead);
             buffer.resize(samplesToRead);
         }
+
+        vfLogInfo("      readSamples - calling readVectorLE with count={}", samplesToRead);
 
         // Read samples using endian-safe method
         endian::readVectorLE<short>(file, buffer, samplesToRead);
 
+        vfLogInfo("      readSamples - buffer.size() after readVectorLE: {}", buffer.size());
+
         // Check for read errors
         if (file.fail() && !file.eof())
         {
-            vfLogError("Error reading audio stream data");
+            vfLogError("      readSamples - Error reading audio stream data");
             return 0;
         }
+
+        vfLogInfo("      readSamples - file.fail()={}, file.eof()={}", file.fail(), file.eof());
 
         // Update position
         currentSamplePosition += samplesToRead;
 
+        vfLogInfo("      readSamples - returning {}", samplesToRead);
         return samplesToRead;
     }
 
@@ -210,9 +233,11 @@ namespace resource
         handle->header.dataStartOffset = handle->file.tellg();
         handle->currentSamplePosition = 0;
 
-        vfLogInfo("Opened audio stream: {} ({}Hz, {} channels, {} seconds)",
+        vfLogInfo("Opened audio stream: {} ({}Hz, {} channels, {} frames, {} seconds, dataSize={})",
                   path, handle->header.sampleRate, handle->header.channels,
-                  handle->header.totalDurationSeconds);
+                  handle->header.frames, handle->header.totalDurationSeconds, handle->header.dataSize);
+        vfLogInfo("  dataStartOffset: {}", static_cast<long long>(handle->header.dataStartOffset));
+        vfLogInfo("  totalSamples (frames*channels): {}", handle->header.frames * handle->header.channels);
 
         return handle;
     }
