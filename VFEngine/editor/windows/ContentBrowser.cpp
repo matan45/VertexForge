@@ -3,6 +3,7 @@
 #include "ImagePreviewWindow.hpp"
 #include "AudioPreviewWindow.hpp"
 #include "MaterialEditorWindow.hpp"
+#include "MaterialInstanceEditorWindow.hpp"
 #include "PrefabPreviewWindow.hpp"
 #include <material/MaterialAsset.hpp>
 #include "resource/ResourceManager.hpp"
@@ -267,6 +268,10 @@ namespace windows
 				{
 					asset.type = Material;
 				}
+				else if (extension == ".vfMatInstance")
+				{
+					asset.type = MaterialInstance;
+				}
 				else if (extension == ".vfPrefab")
 				{
 					asset.type = Prefab;
@@ -367,6 +372,7 @@ namespace windows
 			icon = AtlasIcon::Glsl;
 			break;
 		case Material:
+		case MaterialInstance:
 			icon = AtlasIcon::Material;
 			break;
 		case Prefab:
@@ -411,6 +417,14 @@ namespace windows
 			{
 				ImGui::SetDragDropPayload("DND_PREFAB_PATH", asset.path.c_str(), asset.path.size() + 1);
 				ImGui::Text("Instantiate %s", asset.name.c_str());
+				ImGui::EndDragDropSource();
+			}
+
+			// Add drag-drop source for texture files
+			if (asset.type == AssetType::Texture && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+			{
+				ImGui::SetDragDropPayload("DND_TEXTURE_PATH", asset.path.c_str(), asset.path.size() + 1);
+				ImGui::Text("Texture: %s", asset.name.c_str());
 				ImGui::EndDragDropSource();
 			}
 
@@ -497,6 +511,22 @@ namespace windows
 					auto editorWindow = std::make_shared<MaterialEditorWindow>(path);
 					controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
 					openMaterialEditors[path] = editorWindow;
+				}
+
+				showFileWindow = false;
+			}
+			else if (selectedType == AssetType::MaterialInstance)
+			{
+				std::string path = StringUtil::wstringToUtf8(selectedFile.wstring());
+
+				// Check if instance editor window already exists and is still open
+				auto it = openInstanceEditors.find(path);
+				if (it == openInstanceEditors.end() || it->second.expired())
+				{
+					// Create new material instance editor window
+					auto editorWindow = std::make_shared<MaterialInstanceEditorWindow>(path);
+					controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
+					openInstanceEditors[path] = editorWindow;
 				}
 
 				showFileWindow = false;

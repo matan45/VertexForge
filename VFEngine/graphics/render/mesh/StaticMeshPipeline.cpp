@@ -896,18 +896,31 @@ namespace render::mesh
         pushConstants.ao = pbrValues.ao;
         pushConstants.blendMode = static_cast<float>(pbrValues.blendMode);
 
-        // Pack texture indices
+        // Pack texture indices - check both pbrValues paths AND explicit meshData.textureIndices
+        // meshData.textureIndices is used for preview rendering where textures are set explicitly
+        auto getTexIdx = [&](material::TextureSlot slot, const std::string& pbrPath) -> uint8_t {
+            if (!pbrPath.empty()) {
+                return static_cast<uint8_t>(material::toIndex(slot));
+            }
+            // Also check explicit texture index from meshData (for preview)
+            float explicitIdx = meshData.textureIndices[material::toIndex(slot)];
+            if (explicitIdx >= 0.0f) {
+                return static_cast<uint8_t>(explicitIdx);
+            }
+            return TEXTURE_INDEX_NONE;
+        };
+
         pushConstants.textureIndicesPacked[0] = packTextureIndices(
-            pbrValues.albedoTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Albedo)),
-            pbrValues.normalTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Normal)),
-            pbrValues.ormTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::ORM)),
-            pbrValues.metallicTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Metallic))
+            getTexIdx(material::TextureSlot::Albedo, pbrValues.albedoTexturePath),
+            getTexIdx(material::TextureSlot::Normal, pbrValues.normalTexturePath),
+            getTexIdx(material::TextureSlot::ORM, pbrValues.ormTexturePath),
+            getTexIdx(material::TextureSlot::Metallic, pbrValues.metallicTexturePath)
         );
         pushConstants.textureIndicesPacked[1] = packTextureIndices(
-            pbrValues.roughnessTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Roughness)),
-            pbrValues.aoTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::AO)),
-            pbrValues.emissionTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Emission)),
-            pbrValues.heightTexturePath.empty() ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(material::toIndex(material::TextureSlot::Height))
+            getTexIdx(material::TextureSlot::Roughness, pbrValues.roughnessTexturePath),
+            getTexIdx(material::TextureSlot::AO, pbrValues.aoTexturePath),
+            getTexIdx(material::TextureSlot::Emission, pbrValues.emissionTexturePath),
+            getTexIdx(material::TextureSlot::Height, pbrValues.heightTexturePath)
         );
         pushConstants.textureIndicesPacked[2] = packTextureIndices(TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE);
         pushConstants.textureIndicesPacked[3] = packTextureIndices(TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE, TEXTURE_INDEX_NONE);

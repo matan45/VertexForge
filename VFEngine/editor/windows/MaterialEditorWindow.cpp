@@ -1,10 +1,12 @@
 #include "MaterialEditorWindow.hpp"
+#include "MaterialInstanceEditorWindow.hpp"
 #include "../graph/ShaderGraphEditor.hpp"
 #include "../graph/ShaderGraphCompiler.hpp"
 #include "../graph/nodes/ShaderNode.hpp"
 #include "../camera/OrbitCamera.hpp"
 #include <material/MaterialManager.hpp>
 #include <material/MaterialAsset.hpp>
+#include <material/MaterialInstanceTypes.hpp>
 #include <resource/ResourceManager.hpp>
 #include <texture/OrmTexturePacker.hpp>
 #include <nfd/FileDialog.hpp>
@@ -41,10 +43,8 @@ namespace windows {
         if (graphEditor) {
             graphEditor->cleanUp();
         }
-        // Clean up material preview via service (using 'this' as instanceId)
-        services::events::preview::CleanUpMaterialPreviewCommand cleanupCmd;
-        cleanupCmd.instanceId = services::PreviewInstanceId(this);
-        events::EventDispatcher::instance().execute(cleanupCmd);
+        // Preview cleanup is handled in draw() when window closes
+        // to ensure cleanup happens before ImGui tries to render freed resources
     }
 
     void MaterialEditorWindow::initEditor() {
@@ -132,7 +132,17 @@ namespace windows {
     }
 
     void MaterialEditorWindow::draw() {
-        if (!isOpen) return;
+        // Handle cleanup when window is closing - must happen BEFORE any ImGui rendering
+        // that might reference preview resources (like ImGui::Image with preview descriptor set)
+        if (!isOpen) {
+            if (!previewNeedsInit) {
+                services::events::preview::CleanUpMaterialPreviewCommand cleanupCmd;
+                cleanupCmd.instanceId = services::PreviewInstanceId(this);
+                events::EventDispatcher::instance().execute(cleanupCmd);
+                previewNeedsInit = true;  // Mark as cleaned up
+            }
+            return;
+        }
 
         if (needsInit) {
             initEditor();
@@ -252,6 +262,27 @@ namespace windows {
         ImGui::SameLine();
         if (ImGui::Button("Compile")) {
             compileMaterial();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Create Instance")) {
+            // Generate instance path from material path
+            std::string instancePath = material::getDefaultInstancePath(materialPath);
+
+            // Create the instance
+            auto& manager = material::MaterialManager::instance();
+            std::string instanceName = materialData ? materialData->name + " Instance" : "New Instance";
+            auto instance = manager.createInstance(instanceName, materialPath, instancePath);
+
+            if (instance) {
+                // TODO: Open MaterialInstanceEditorWindow
+                // For now, just log success
+                vfLogInfo("Created material instance: {}", instancePath);
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("Create a new material instance based on this material");
+            ImGui::EndTooltip();
         }
 
         // Compile status (fixed width to prevent layout shifts)

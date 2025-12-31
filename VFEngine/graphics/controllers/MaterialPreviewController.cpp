@@ -168,8 +168,7 @@ namespace controllers
 
     MaterialPreviewController::~MaterialPreviewController()
     {
-        device.getLogicalDevice().waitIdle();
-        cleanUp();
+        cleanUp();  // cleanUp() handles waitIdle() internally
     }
 
     static void createDefaultTextureImpl(core::Device& device, PreviewTextureGPU& defaultTexture)
@@ -517,9 +516,14 @@ namespace controllers
             }
         }
 
-        // Always update bindings when using custom shader (after compile/save)
-        // or when new textures were loaded
-        bool shouldUpdateBindings = (params.useCustomShader || textureManager->texturesNeedUpdate)
+        // Always update bindings when using custom shader (after compile/save),
+        // when new textures were loaded, or when any texture slot has a path
+        bool hasAnyTexture = false;
+        for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES && !hasAnyTexture; ++i)
+        {
+            hasAnyTexture = !textureManager->textureSlots[i].empty();
+        }
+        bool shouldUpdateBindings = (params.useCustomShader || textureManager->texturesNeedUpdate || hasAnyTexture)
                                     && textureManager->defaultTexture.valid;
 
         if (shouldUpdateBindings)
@@ -555,6 +559,9 @@ namespace controllers
 
     void MaterialPreviewController::cleanUp()
     {
+        // Wait for GPU to finish all operations before cleanup
+        device.getLogicalDevice().waitIdle();
+
         if (initialized && sphereLoaded)
         {
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();

@@ -36,6 +36,7 @@ namespace windows
         // Window state
         bool isOpen = true;
         bool needsInit = true;
+        bool previewCleanedUp = false;
 
         // Async loading state
         services::MeshLoadingProgress loadingProgress;

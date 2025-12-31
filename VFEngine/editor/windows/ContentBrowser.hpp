@@ -17,9 +17,10 @@ namespace windows
     class ImagePreviewWindow;
     class AudioPreviewWindow;
     class MaterialEditorWindow;
+    class MaterialInstanceEditorWindow;
     class PrefabPreviewWindow;
 
-    enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Material, Prefab, Other };
+    enum class AssetType { Texture, HDR, Model, Audio, Animation, Shader, Scene, Material, MaterialInstance, Prefab, Other };
     
     enum class AtlasIcon : uint32_t
     {
@@ -85,6 +86,7 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<ImagePreviewWindow>> openImagePreviews;
         std::unordered_map<std::string, std::weak_ptr<AudioPreviewWindow>> openAudioPreviews;
         std::unordered_map<std::string, std::weak_ptr<MaterialEditorWindow>> openMaterialEditors;
+        std::unordered_map<std::string, std::weak_ptr<MaterialInstanceEditorWindow>> openInstanceEditors;
         std::unordered_map<std::string, std::weak_ptr<PrefabPreviewWindow>> openPrefabPreviews;
 
         static constexpr float THUMBNAIL_SIZE = 64.0f;

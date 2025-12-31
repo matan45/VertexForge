@@ -2,6 +2,7 @@
 
 #include "../mesh/MeshTypes.hpp"
 #include "material/MaterialTypes.hpp"
+#include "material/MaterialInstanceTypes.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <unordered_map>
@@ -41,6 +42,14 @@ namespace render::mesh
     {
     public:
         static ExtractedPBRValues extractPBRFromMaterial(const material::MaterialData& matData);
+
+        // Extract PBR from material instance (applies overrides to parent values)
+        static ExtractedPBRValues extractPBRFromInstance(
+            const material::MaterialInstanceData& instance,
+            const material::MaterialData& parentMaterial);
+
+        // Unified extraction - handles both .vfMat and .vfMatInstance paths
+        static ExtractedPBRValues extractPBRFromPath(const std::string& materialOrInstancePath);
 
         static ExtractedPBRValues getPBRForSubmesh(
             const MeshRenderData& meshData,

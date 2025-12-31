@@ -19,27 +19,35 @@ namespace windows
 
     MeshPreviewWindow::~MeshPreviewWindow()
     {
-        // Cancel any ongoing async loading
-        if (loadingProgress.isLoading())
-        {
-            services::events::preview::CancelMeshLoadingCommand cancelCmd;
-            cancelCmd.instanceId = services::PreviewInstanceId(this);
-            events::EventDispatcher::instance().execute(cancelCmd);
-        }
-
-        services::events::preview::UnloadPreviewMeshCommand unloadCmd;
-        unloadCmd.instanceId = services::PreviewInstanceId(this);
-        events::EventDispatcher::instance().execute(unloadCmd);
-
-        services::events::preview::CleanUpMeshPreviewCommand cleanupCmd;
-        cleanupCmd.instanceId = services::PreviewInstanceId(this);
-        events::EventDispatcher::instance().execute(cleanupCmd);
+        // Preview cleanup is handled in draw() when window closes
+        // to ensure cleanup happens before ImGui tries to render freed resources
     }
 
     void MeshPreviewWindow::draw()
     {
+        // Handle cleanup when window is closing - must happen BEFORE any ImGui rendering
         if (!isOpen)
         {
+            if (!previewCleanedUp)
+            {
+                // Cancel any ongoing async loading
+                if (loadingProgress.isLoading())
+                {
+                    services::events::preview::CancelMeshLoadingCommand cancelCmd;
+                    cancelCmd.instanceId = services::PreviewInstanceId(this);
+                    events::EventDispatcher::instance().execute(cancelCmd);
+                }
+
+                services::events::preview::UnloadPreviewMeshCommand unloadCmd;
+                unloadCmd.instanceId = services::PreviewInstanceId(this);
+                events::EventDispatcher::instance().execute(unloadCmd);
+
+                services::events::preview::CleanUpMeshPreviewCommand cleanupCmd;
+                cleanupCmd.instanceId = services::PreviewInstanceId(this);
+                events::EventDispatcher::instance().execute(cleanupCmd);
+
+                previewCleanedUp = true;
+            }
             return;
         }
 
