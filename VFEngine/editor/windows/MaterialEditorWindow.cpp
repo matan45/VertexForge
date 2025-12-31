@@ -274,9 +274,10 @@ namespace windows {
             auto instance = manager.createInstance(instanceName, materialPath, instancePath);
 
             if (instance) {
-                // TODO: Open MaterialInstanceEditorWindow
-                // For now, just log success
-                vfLogInfo("Created material instance: {}", instancePath);
+                // Notify Content Browser to refresh
+                events::resource::ImportCompletedNotification notification;
+                notification.outputPath = instancePath;
+                events::EventDispatcher::instance().publish(notification);
             }
         }
         if (ImGui::IsItemHovered()) {

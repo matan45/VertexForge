@@ -14,12 +14,13 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
+#include "../../render/material/MaterialPBRExtractor.hpp"
 
 namespace controllers::offscreen
 {
     namespace
     {
-        // Helper function to get cached PBR values
+        // Helper function to get cached PBR values - handles both .vfMat and .vfMatInstance
         const render::mesh::ExtractedPBRValues* getCachedPBRValues(
             const std::string& materialPath,
             std::unordered_map<std::string, render::mesh::ExtractedPBRValues>& cache)
@@ -35,15 +36,10 @@ namespace controllers::offscreen
                 return &it->second;
             }
 
-            auto materialData = resource::ResourceManager::loadMaterial(materialPath);
-            if (materialData)
-            {
-                auto [inserted, success] = cache.emplace(materialPath,
-                    render::mesh::MaterialPBRExtractor::extractPBRFromMaterial(*materialData));
-                return &inserted->second;
-            }
-
-            return nullptr;
+            // Use unified extraction that handles both materials and instances
+            auto [inserted, success] = cache.emplace(materialPath,
+                render::mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath));
+            return &inserted->second;
         }
 
         // Helper function to populate SubMeshMaterialInfo
