@@ -7,6 +7,7 @@
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Texture.hpp"
+#include "print/Logger.hpp"
 
 namespace render
 {

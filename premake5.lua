@@ -131,7 +131,8 @@ project "Import"
       "dependencies/stb",               -- stb headers
       "dependencies/dr_libs",           -- dr_mp3.h, dr_wav.h, and other dr_libs headers
       "dependencies/tinyexr",           -- exr headers
-      "dependencies/assimp/include",     -- Assimp headers
+      "dependencies/assimp/include",           -- Assimp headers
+      "dependencies/assimp/build/include",     -- Assimp generated headers (config.h)
 	  "dependencies/glm",
 	  "dependencies/meshoptimizer/src"  -- meshoptimizer for LOD generation
    }
@@ -144,24 +145,24 @@ project "Import"
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
-      libdirs { "dependencies/assimp/lib/Debug" }
-      links { "assimp-vc143-mtd.lib" }  -- Assimp Debug library
+      libdirs { "dependencies/assimp/build/lib/Debug" }
+      links { "assimp-vc145-mtd.lib" }  -- Assimp Debug library
 
     -- Copy the DLL to the Editor's output directory after the build
    postbuildcommands {
-      "{COPY} ../../dependencies/assimp/bin/Debug/assimp-vc143-mtd.dll ../../bin/Editor/Debug/x64/"
+      "{COPY} ../../dependencies/assimp/build/bin/Debug/assimp-vc145-mtd.dll ../../bin/Editor/Debug/x64/"
    }
 
    -- Release configuration
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
-      libdirs { "dependencies/assimp/lib/Release" }
-      links { "assimp-vc143-mt.lib" }  -- Assimp Release library
+      libdirs { "dependencies/assimp/build/lib/Release" }
+      links { "assimp-vc145-mt.lib" }  -- Assimp Release library
 
       -- Copy the DLL to the output directory after the build
       postbuildcommands {
-         "{COPY} ../../dependencies/assimp/bin/Release/assimp-vc143-mt.dll ../../bin/Editor/Release/x64/"
+         "{COPY} ../../dependencies/assimp/build/bin/Release/assimp-vc145-mt.dll ../../bin/Editor/Release/x64/"
       }
 
 

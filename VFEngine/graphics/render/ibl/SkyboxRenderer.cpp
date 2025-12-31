@@ -18,6 +18,18 @@ namespace render::ibl
 
     void SkyboxRenderer::init(const ImageData& irradianceCube)
     {
+        // Clean up any existing resources if recreate() was called before init()
+        if (renderPass)
+        {
+            for (auto framebuffer : framebuffers)
+            {
+                device.getLogicalDevice().destroyFramebuffer(framebuffer);
+            }
+            framebuffers.clear();
+            device.getLogicalDevice().destroyRenderPass(renderPass);
+            renderPass = nullptr;
+        }
+
         // RenderPass
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
@@ -244,10 +256,18 @@ namespace render::ibl
 
             framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
         }
+
+        initialized = true;
     }
 
     void SkyboxRenderer::recreate()
     {
+        // Skip recreate if init() hasn't been called yet - resources will be created by init() later
+        if (!initialized)
+        {
+            return;
+        }
+
         // Destroy old framebuffers
         for (auto const& frame : framebuffers)
         {
@@ -358,6 +378,11 @@ namespace render::ibl
 
     void SkyboxRenderer::cleanUp()
     {
+        if (!initialized)
+        {
+            return;
+        }
+
         for (auto const& frame : framebuffers)
         {
             device.getLogicalDevice().destroyFramebuffer(frame);
@@ -374,6 +399,8 @@ namespace render::ibl
         device.getLogicalDevice().freeDescriptorSets(descriptorPool, descriptorSet);
         device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
         device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
+
+        initialized = false;
     }
 
     void SkyboxRenderer::cleanUpShader()

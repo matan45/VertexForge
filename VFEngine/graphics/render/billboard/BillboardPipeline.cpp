@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "print/Logger.hpp"
 
 namespace render::billboard
 {
@@ -78,7 +79,8 @@ namespace render::billboard
         }
         if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
 
-        if (renderPass) dev.destroyRenderPass(renderPass);
+        if (renderPass)
+            dev.destroyRenderPass(renderPass);
 
         bufferManager.cleanUp();
         atlasManager.cleanUp();

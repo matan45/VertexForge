@@ -11,7 +11,9 @@
       "mcp__mcp-atlassian__jira_get_issue",
       "WebSearch",
       "Bash(cmd /c:*)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(dir /b \"C:\\\\matan\\\\VertexForge\\\\dependencies\\\\assimp\\\\include\\\\assimp\")",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

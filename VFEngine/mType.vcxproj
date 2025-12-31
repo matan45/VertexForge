@@ -22,13 +22,13 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -41,14 +41,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\bin\mType\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\mType\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\mType\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\mType\</IntDir>
     <TargetName>mType</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\bin\mType\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\mType\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\mType\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\mType\</IntDir>
     <TargetName>mType</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>

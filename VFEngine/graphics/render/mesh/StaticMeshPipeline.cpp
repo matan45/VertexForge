@@ -570,7 +570,6 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUpForReinit()
     {
         // Clean up pipeline/descriptor resources but preserve loaded meshes and command pool
-
         for (auto& framebuffer : framebuffers)
         {
             device.getLogicalDevice().destroyFramebuffer(framebuffer);

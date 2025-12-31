@@ -7,6 +7,7 @@
 #include "../adapters/MeshPreviewAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
 #include "scene/LevelHandler.hpp"
+#include "print/Logger.hpp"
 
 namespace core
 {

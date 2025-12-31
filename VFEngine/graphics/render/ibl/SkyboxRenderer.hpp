@@ -37,6 +37,7 @@ namespace render::ibl
         glm::mat4 viewMatrix{1.0f};
         glm::mat4 projectionMatrix{1.0f};
         bool isDisplay = false;
+        bool initialized = false;
 
     public:
         explicit SkyboxRenderer(core::Device& device, core::SwapChain& swapChain,

@@ -21,13 +21,13 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -40,14 +40,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>..\bin\meshoptimizer\Debug\x64\</OutDir>
-    <IntDir>obj\x64\Debug\meshoptimizer\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\meshoptimizer\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\meshoptimizer\</IntDir>
     <TargetName>meshoptimizer</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>..\bin\meshoptimizer\Release\x64\</OutDir>
-    <IntDir>obj\x64\Release\meshoptimizer\</IntDir>
+    <OutDir>$(ProjectDir)..\bin\meshoptimizer\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\meshoptimizer\</IntDir>
     <TargetName>meshoptimizer</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
