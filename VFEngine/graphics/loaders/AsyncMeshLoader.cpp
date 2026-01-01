@@ -166,7 +166,7 @@ namespace loaders
 
         lock.lock();
 
-        // Re-find the pending load (it may have been cancelled during unlock)
+        // Re-find the pending load (it may have been cancelled/removed during unlock)
         it = pendingLoads.find(meshPath);
         if (it == pendingLoads.end())
         {
@@ -176,6 +176,16 @@ namespace loaders
         }
 
         pending = it->second.get();
+
+        // Check if cancelled during GPU upload
+        if (pending->cancelled)
+        {
+            result.errorMessage = "Load was cancelled during GPU upload";
+            pending->state = services::LoadingState::Cancelled;
+            gpuUploadReadyPath.clear();
+            loggerInfo("Mesh load cancelled during GPU upload: {}", meshPath);
+            return result;
+        }
 
         if (meshId.empty())
         {

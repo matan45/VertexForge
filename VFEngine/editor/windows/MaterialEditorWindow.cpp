@@ -276,7 +276,7 @@ namespace windows {
             if (instance) {
                 // Notify Content Browser to refresh
                 events::resource::ImportCompletedNotification notification;
-                notification.outputPath = instancePath;
+                notification.results.push_back({instancePath, true, ""});
                 events::EventDispatcher::instance().publish(notification);
             }
         }

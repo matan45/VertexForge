@@ -110,20 +110,27 @@ namespace windows
         // Check if loading is complete (non-blocking)
         if (loadFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
         {
-            AudioLoadResult result = loadFuture.get();
-
-            if (result.success)
+            try
             {
-                // Apply loaded data
-                totalDurationInSeconds = result.totalDurationInSeconds;
-                channels = result.channels;
-                sampleRate = result.sampleRate;
-                frames = result.frames;
-                dataSizeBytes = result.dataSizeBytes;
-                waveformCache = std::move(result.waveformCache);
-                audioLoaded = true;
+                AudioLoadResult result = loadFuture.get();
+
+                if (result.success)
+                {
+                    // Apply loaded data
+                    totalDurationInSeconds = result.totalDurationInSeconds;
+                    channels = result.channels;
+                    sampleRate = result.sampleRate;
+                    frames = result.frames;
+                    dataSizeBytes = result.dataSizeBytes;
+                    waveformCache = std::move(result.waveformCache);
+                    audioLoaded = true;
+                }
+                else
+                {
+                    loadFailed = true;
+                }
             }
-            else
+            catch (const std::exception&)
             {
                 loadFailed = true;
             }

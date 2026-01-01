@@ -158,13 +158,16 @@ namespace loaders
         {
             std::unique_ptr<dto::EditorTexture> texture;
 
+            // Use the pre-loaded CPU data instead of re-reading from disk
             if (pending->isHDR)
             {
-                texture = controllers::EditorTextureController::loadHdrTexture(pending->texturePath);
+                const auto& hdrData = std::get<resource::HDRData>(*pending->cpuData);
+                texture = controllers::EditorTextureController::loadHdrTextureFromData(hdrData);
             }
             else
             {
-                texture = controllers::EditorTextureController::loadTexture(pending->texturePath);
+                const auto& textureData = std::get<resource::TextureData>(*pending->cpuData);
+                texture = controllers::EditorTextureController::loadTextureFromData(textureData);
             }
 
             if (!texture)
@@ -187,7 +190,7 @@ namespace loaders
             pending->state = services::LoadingState::Complete;
             pending->statusMessage = "Complete";
             pending->progress = 1.0f;
-            pending->cpuData.reset();
+            pending->cpuData.reset();  // Release CPU data now that GPU texture is created
 
             if (gpuUploadReadyInstance == instanceId)
             {
@@ -265,7 +268,16 @@ namespace loaders
             return nullptr;
         }
 
-        return std::move(it->second->texture);
+        auto texture = std::move(it->second->texture);
+
+        // Auto-remove completed entry to prevent memory accumulation
+        if (gpuUploadReadyInstance == instanceId)
+        {
+            gpuUploadReadyInstance = nullptr;
+        }
+        pendingLoads.erase(it);
+
+        return texture;
     }
 
     uint32_t AsyncTextureLoader::getWidth(void* instanceId) const
