@@ -263,8 +263,6 @@ namespace windows
                 std::string loadPath = fileDialog.openFileDialog(fileTypes);
                 if (!loadPath.empty())
                 {
-                    // Use synchronous loading with progress notifications
-                    // Full async scene loading requires more complex state management
                     events::scene::LoadSceneCommand cmd;
                     cmd.filePath = loadPath;
                     events::EventDispatcher::instance().execute(cmd);

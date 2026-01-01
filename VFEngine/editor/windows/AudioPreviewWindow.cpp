@@ -24,8 +24,7 @@ namespace windows
         {
             loadFuture.wait();
         }
-
-        // Stop any playing audio when window closes
+        
         if (currentAudioHandle.isValid())
         {
             events::audio::StopSoundCommand stopCmd;
@@ -40,15 +39,13 @@ namespace windows
         {
             return;
         }
-
-        // Start async load on first draw
+        
         if (needsInit)
         {
             startAsyncLoad();
             needsInit = false;
         }
-
-        // Update async loading state
+        
         updateAsyncLoading();
 
         ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
@@ -57,18 +54,15 @@ namespace windows
         {
             if (isOpen)
             {
-                // Split layout: left panel for info, right for waveform
                 float panelWidth = 150.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
-
-                // Info panel on the left
+                
                 ImGui::BeginChild("InfoPanel", ImVec2(panelWidth, contentSize.y), true);
                 drawInfoPanel();
                 ImGui::EndChild();
 
                 ImGui::SameLine();
-
-                // Waveform panel on the right
+                
                 float waveformWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("WaveformPanel", ImVec2(waveformWidth, contentSize.y), true,
                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -92,7 +86,6 @@ namespace windows
     {
         loadingInProgress.store(true);
         loadingCancelled.store(false);
-        loadingProgress = 0.0f;
         loadingStatus = "Loading audio file...";
 
         loadFuture = std::async(std::launch::async, [this]() {
@@ -106,8 +99,7 @@ namespace windows
         {
             return;
         }
-
-        // Check if loading is complete (non-blocking)
+        
         if (loadFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
         {
             try
@@ -116,7 +108,6 @@ namespace windows
 
                 if (result.success)
                 {
-                    // Apply loaded data
                     totalDurationInSeconds = result.totalDurationInSeconds;
                     channels = result.channels;
                     sampleRate = result.sampleRate;
@@ -158,15 +149,13 @@ namespace windows
                 result.errorMessage = "Cancelled";
                 return result;
             }
-
-            // Store metadata
+            
             result.totalDurationInSeconds = data.totalDurationInSeconds;
             result.channels = data.channels;
             result.sampleRate = data.sampleRate;
             result.frames = data.frames;
             result.dataSizeBytes = data.data.size() * sizeof(short);
-
-            // Generate waveform cache from raw data
+            
             result.waveformCache = generateWaveformCache(data, data.channels);
 
             result.success = true;
@@ -205,7 +194,6 @@ namespace windows
             short minVal = 0, maxVal = 0;
             for (size_t j = sampleStart; j < sampleEnd; j += numChannels)
             {
-                // Check all channels to get accurate amplitude
                 for (uint32_t ch = 0; ch < numChannels && j + ch < sampleEnd; ++ch)
                 {
                     short sample = data.data[j + ch];
@@ -228,27 +216,23 @@ namespace windows
         ImVec2 availSize = ImGui::GetContentRegionAvail();
         ImVec2 windowPos = ImGui::GetCursorScreenPos();
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        // Semi-transparent dark overlay
+        
         drawList->AddRectFilled(
             windowPos,
             ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y),
             IM_COL32(30, 30, 30, 255)
         );
-
-        // Center content
+        
         float contentWidth = 200.0f;
         float contentHeight = 80.0f;
         float centerX = windowPos.x + (availSize.x - contentWidth) * 0.5f;
         float centerY = windowPos.y + (availSize.y - contentHeight) * 0.5f;
-
-        // Spinner animation
+        
         float time = static_cast<float>(ImGui::GetTime());
         float spinnerRadius = 16.0f;
         float spinnerThickness = 3.0f;
         ImVec2 spinnerCenter(centerX + contentWidth * 0.5f, centerY + 20.0f);
-
-        // Draw spinner arc
+        
         int numSegments = 24;
         float startAngle = time * 4.0f;
         float arcLength = 3.14159f * 1.3f;
@@ -259,8 +243,7 @@ namespace windows
             float t2 = static_cast<float>(i + 1) / static_cast<float>(numSegments);
             float angle1 = startAngle + t1 * arcLength;
             float angle2 = startAngle + t2 * arcLength;
-
-            // Fade alpha along the arc
+            
             int alpha = static_cast<int>(255 * (1.0f - t1 * 0.7f));
             ImU32 segColor = IM_COL32(100, 180, 255, alpha);
 
@@ -271,14 +254,12 @@ namespace windows
 
             drawList->AddLine(p1, p2, segColor, spinnerThickness);
         }
-
-        // Status message
+        
         const char* statusText = loadingStatus.c_str();
         ImVec2 textSize = ImGui::CalcTextSize(statusText);
         ImVec2 textPos(centerX + (contentWidth - textSize.x) * 0.5f, centerY + 50.0f);
         drawList->AddText(textPos, IM_COL32(200, 200, 200, 255), statusText);
-
-        // Reserve space
+        
         ImGui::Dummy(availSize);
     }
 
@@ -298,44 +279,38 @@ namespace windows
             ImGui::TextDisabled("Loading...");
             return;
         }
-
-        // Duration
+        
         uint32_t minutes = totalDurationInSeconds / 60;
         uint32_t seconds = totalDurationInSeconds % 60;
         ImGui::Text("Duration:");
         ImGui::Text("  %02u:%02u", minutes, seconds);
 
         ImGui::Spacing();
-
-        // Format info
+        
         ImGui::Text("Channels: %u", channels);
         ImGui::Text("Sample Rate:");
         ImGui::Text("  %u Hz", sampleRate);
         ImGui::Text("Frames: %u", frames);
 
         ImGui::Spacing();
-
-        // Data size
+        
         size_t dataSizeKB = dataSizeBytes / 1024;
         ImGui::Text("Data Size:");
         ImGui::Text("  %zu KB", dataSizeKB);
 
         ImGui::Separator();
         ImGui::Spacing();
-
-        // Playback controls
+        
         if (ImGui::CollapsingHeader("Playback", ImGuiTreeNodeFlags_DefaultOpen))
         {
             auto& dispatcher = events::EventDispatcher::instance();
-
-            // Update playing state from audio system
+            
             if (currentAudioHandle.isValid())
             {
                 events::audio::IsSoundPlayingQuery playingQuery;
                 playingQuery.handle = currentAudioHandle;
                 isPlaying = dispatcher.query(playingQuery);
-
-                // Get current playback position
+                
                 if (isPlaying)
                 {
                     events::audio::GetPlaybackPositionQuery posQuery;
@@ -351,29 +326,24 @@ namespace windows
             {
                 isPlaying = false;
             }
-
-            // Play/Pause button
+            
             if (ImGui::Button(isPlaying ? "Pause" : "Play", ImVec2(-1, 0)))
             {
                 if (isPlaying)
                 {
-                    // Pause
                     events::audio::PauseSoundCommand pauseCmd;
                     pauseCmd.handle = currentAudioHandle;
                     dispatcher.execute(pauseCmd);
                 }
                 else
                 {
-                    // Start or resume playback
                     if (!currentAudioHandle.isValid())
                     {
-                        // Start new streaming playback
                         events::audio::PlayStreamingSoundCommand playCmd;
                         playCmd.path = audioPath;
                         playCmd.params.volume = volume;
                         currentAudioHandle = dispatcher.execute(playCmd);
-
-                        // Get duration for the progress bar
+                        
                         if (currentAudioHandle.isValid())
                         {
                             events::audio::GetDurationQuery durQuery;
@@ -383,15 +353,13 @@ namespace windows
                     }
                     else
                     {
-                        // Resume paused playback
                         events::audio::ResumeSoundCommand resumeCmd;
                         resumeCmd.handle = currentAudioHandle;
                         dispatcher.execute(resumeCmd);
                     }
                 }
             }
-
-            // Stop button
+            
             if (ImGui::Button("Stop", ImVec2(-1, 0)))
             {
                 if (currentAudioHandle.isValid())
@@ -403,11 +371,9 @@ namespace windows
                 }
                 playbackPosition = 0.0f;
             }
-
-            // Progress slider with seek
+            
             if (ImGui::SliderFloat("##Position", &playbackPosition, 0.0f, 1.0f, ""))
             {
-                // User dragged the slider - seek to new position
                 if (currentAudioHandle.isValid() && audioDurationSeconds > 0.0f)
                 {
                     float seekSeconds = playbackPosition * audioDurationSeconds;
@@ -417,8 +383,7 @@ namespace windows
                     dispatcher.execute(seekCmd);
                 }
             }
-
-            // Show time display
+            
             if (audioDurationSeconds > 0.0f)
             {
                 float currentSeconds = playbackPosition * audioDurationSeconds;
@@ -430,14 +395,12 @@ namespace windows
             }
 
             ImGui::Spacing();
-
-            // Volume slider
+            
             ImGui::Text("Volume");
             float volumePercent = volume * 100.0f;
             if (ImGui::SliderFloat("##Volume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp))
             {
                 volume = volumePercent / 100.0f;
-                // Update volume on playing sound
                 if (currentAudioHandle.isValid())
                 {
                     events::audio::SetSoundVolumeCommand volCmd;
@@ -463,21 +426,18 @@ namespace windows
         ImVec2 availSize = ImGui::GetContentRegionAvail();
         ImVec2 canvasPos = ImGui::GetCursorScreenPos();
         ImVec2 canvasSize(availSize.x, availSize.y - 10.0f);
-
-        // Draw waveform background
+        
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(canvasPos,
             ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
             IM_COL32(30, 30, 30, 255));
-
-        // Draw center line
+        
         float centerY = canvasPos.y + canvasSize.y * 0.5f;
         drawList->AddLine(
             ImVec2(canvasPos.x, centerY),
             ImVec2(canvasPos.x + canvasSize.x, centerY),
             IM_COL32(60, 60, 60, 255));
-
-        // Draw cached waveform
+        
         ImU32 waveColor = IM_COL32(100, 180, 255, 255);
         float halfHeight = canvasSize.y * 0.45f;
         float xScale = canvasSize.x / static_cast<float>(waveformCache.size());
@@ -491,8 +451,7 @@ namespace windows
 
             drawList->AddLine(ImVec2(x, y1), ImVec2(x, y2), waveColor);
         }
-
-        // Draw playhead indicator
+        
         if (playbackPosition > 0.0f || isPlaying)
         {
             float playheadX = canvasPos.x + playbackPosition * canvasSize.x;
@@ -502,8 +461,7 @@ namespace windows
                 IM_COL32(255, 100, 100, 255),
                 2.0f);
         }
-
-        // Reserve space for the canvas
+        
         ImGui::Dummy(canvasSize);
     }
 }

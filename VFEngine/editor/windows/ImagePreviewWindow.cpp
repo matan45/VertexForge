@@ -10,7 +10,7 @@ namespace windows
 {
     ImagePreviewWindow::ImagePreviewWindow(const std::string& filePath, bool hdr)
         : imagePath(filePath)
-        , isHDR(hdr)
+          , isHDR(hdr)
     {
         std::filesystem::path path(filePath);
         windowTitle = (hdr ? "HDR Preview: " : "Image Preview: ") + path.filename().string();
@@ -20,7 +20,6 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Cancel any pending async load
         if (loadingProgress.isLoading())
         {
             events::render::CancelTextureLoadingCommand cancelCmd;
@@ -43,14 +42,12 @@ namespace windows
             return;
         }
 
-        // Load image on first draw
         if (needsInit)
         {
             loadImageAsync();
             needsInit = false;
         }
 
-        // Update async loading state
         updateAsyncLoading();
 
         ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -59,23 +56,19 @@ namespace windows
         {
             if (isOpen)
             {
-                // Split layout: left panel for info, right for image
                 float panelWidth = 150.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
-                // Info panel on the left
                 ImGui::BeginChild("InfoPanel", ImVec2(panelWidth, contentSize.y), true);
                 drawInfoPanel();
                 ImGui::EndChild();
 
                 ImGui::SameLine();
 
-                // Image viewport on the right
                 float viewportWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("ImagePanel", ImVec2(viewportWidth, contentSize.y), true,
-                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-                // Show loading indicator or image
                 if (loadingProgress.isLoading())
                 {
                     ImVec2 size = ImGui::GetContentRegionAvail();
@@ -113,12 +106,10 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Query current progress
         events::render::GetTextureLoadingProgressQuery progressQuery;
         progressQuery.instanceId = this;
         loadingProgress = dispatcher.query(progressQuery);
 
-        // If complete, get the texture handle
         if (loadingProgress.state == services::LoadingState::Complete)
         {
             events::render::GetLoadedTextureHandleQuery handleQuery;
@@ -131,14 +122,12 @@ namespace windows
     {
         ImVec2 center(width * 0.5f, height * 0.5f);
 
-        // Draw spinner
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         ImVec2 windowPos = ImGui::GetWindowPos();
         ImVec2 spinnerCenter(windowPos.x + center.x, windowPos.y + center.y - 30.0f);
 
         float radius = 20.0f;
         float thickness = 4.0f;
-        ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
 
         float time = static_cast<float>(ImGui::GetTime());
         int segments = 12;
@@ -157,7 +146,6 @@ namespace windows
             drawList->AddLine(p1, p2, IM_COL32(255, 255, 255, static_cast<int>(alpha * 255)), thickness);
         }
 
-        // Status text
         ImGui::SetCursorPos(ImVec2(0, center.y + 10.0f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 
@@ -166,13 +154,11 @@ namespace windows
         ImGui::SetCursorPosX((width - textSize.x) * 0.5f);
         ImGui::Text("%s", statusText.c_str());
 
-        // Progress bar
         ImGui::SetCursorPosX((width - 200.0f) * 0.5f);
         ImGui::ProgressBar(loadingProgress.progress, ImVec2(200.0f, 20.0f), "");
 
         ImGui::PopStyleColor();
 
-        // Error message if any
         if (loadingProgress.state == services::LoadingState::Error)
         {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
@@ -194,28 +180,24 @@ namespace windows
 
         ImVec2 availSize = ImGui::GetContentRegionAvail();
 
-        // Calculate image size maintaining aspect ratio
         float imageAspect = static_cast<float>(imageHandle.width) / static_cast<float>(imageHandle.height);
         float availAspect = availSize.x / availSize.y;
 
         ImVec2 imageSize;
         if (imageAspect > availAspect)
         {
-            // Image is wider - fit to width
             imageSize.x = availSize.x * zoom;
             imageSize.y = imageSize.x / imageAspect;
         }
         else
         {
-            // Image is taller - fit to height
             imageSize.y = availSize.y * zoom;
             imageSize.x = imageSize.y * imageAspect;
         }
-        
-        
+
+
         void* displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
         ImGui::Image(displayDescriptor, imageSize);
-        
     }
 
     void ImagePreviewWindow::drawInfoPanel()
@@ -236,13 +218,13 @@ namespace windows
 
         ImGui::Separator();
         ImGui::Spacing();
-        
+
         if (!isHDR && imageHandle.isValid() && imageHandle.mipLevels > 1)
         {
             if (ImGui::CollapsingHeader("Mip Levels", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 float itemWidth = ImGui::GetContentRegionAvail().x;
-                
+
                 std::vector<std::string> mipLabels;
                 mipLabels.reserve(imageHandle.mipLevels);
 
@@ -252,12 +234,12 @@ namespace windows
                 for (uint32_t i = 0; i < imageHandle.mipLevels; ++i)
                 {
                     mipLabels.push_back("Mip " + std::to_string(i) + " (" +
-                                       std::to_string(mipWidth) + "x" +
-                                       std::to_string(mipHeight) + ")");
+                        std::to_string(mipWidth) + "x" +
+                        std::to_string(mipHeight) + ")");
                     mipWidth = std::max(1u, mipWidth / 2);
                     mipHeight = std::max(1u, mipHeight / 2);
                 }
-                
+
                 ImGui::SetNextItemWidth(itemWidth);
                 if (ImGui::BeginCombo("##MipLevel", mipLabels[selectedMipLevel].c_str()))
                 {
@@ -276,7 +258,6 @@ namespace windows
                     ImGui::EndCombo();
                 }
 
-                // Show selected mip info
                 uint32_t selWidth = imageHandle.width >> selectedMipLevel;
                 uint32_t selHeight = imageHandle.height >> selectedMipLevel;
                 selWidth = std::max(1u, selWidth);
@@ -292,7 +273,6 @@ namespace windows
             ImGui::Spacing();
         }
 
-        // Zoom controls
         if (ImGui::CollapsingHeader("View", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
@@ -302,7 +282,6 @@ namespace windows
             ImGui::SetNextItemWidth(itemWidth);
             ImGui::SliderFloat("##Zoom", &zoom, 0.1f, 10.0f, "%.1fx");
 
-            // Zoom buttons
             if (ImGui::Button("+", ImVec2(itemWidth / 2 - 2, 0)))
             {
                 zoom = glm::clamp(zoom * 1.2f, 0.1f, 10.0f);
@@ -314,12 +293,10 @@ namespace windows
             }
 
             ImGui::Spacing();
-            
+
             if (ImGui::Button("Reset View", ImVec2(-1, 0)))
             {
                 zoom = 1.0f;
-                panX = 0.0f;
-                panY = 0.0f;
             }
         }
     }

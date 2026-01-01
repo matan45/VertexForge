@@ -3,9 +3,16 @@
 #include "../../core/controllers/EditorTextureController.hpp"
 #include "../../core/controllers/texture/EditorTexture.hpp"
 #include "print/Logger.hpp"
+#include <vector>
 
 namespace loaders
 {
+    namespace
+    {
+        constexpr float PROGRESS_LOADING_STARTED = 0.1f;
+        constexpr float PROGRESS_CPU_COMPLETE = 0.5f;
+        constexpr float PROGRESS_COMPLETE = 1.0f;
+    }
     void AsyncTextureLoader::startLoad(void* instanceId, const std::string& texturePath, bool isHDR)
     {
         std::lock_guard<std::mutex> lock(mutex);
@@ -23,7 +30,7 @@ namespace loaders
         pending->isHDR = isHDR;
         pending->state = services::LoadingState::Loading;
         pending->statusMessage = isHDR ? "Loading HDR texture..." : "Loading texture...";
-        pending->progress = 0.1f;
+        pending->progress = PROGRESS_LOADING_STARTED;
 
         // Start async file I/O
         pending->cpuDataFuture = std::async(std::launch::async, [texturePath, isHDR]() -> TextureDataVariant {
@@ -73,10 +80,20 @@ namespace loaders
 
         bool hasGPUWork = false;
 
+        // Collect cancelled entries to erase (can't erase during range-for)
+        std::vector<void*> toErase;
+
         for (auto& [id, pending] : pendingLoads)
         {
             if (pending->cancelled.load())
             {
+                // Check if future is ready so we can safely erase
+                // (erasing with running future would block in destructor)
+                if (!pending->cpuDataFuture.valid() ||
+                    pending->cpuDataFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+                {
+                    toErase.push_back(id);
+                }
                 continue;
             }
 
@@ -92,7 +109,7 @@ namespace loaders
                         pending->cpuData = std::make_shared<TextureDataVariant>(std::move(data));
                         pending->state = services::LoadingState::GPUUploadPending;
                         pending->statusMessage = "Creating GPU texture...";
-                        pending->progress = 0.5f;
+                        pending->progress = PROGRESS_CPU_COMPLETE;
 
                         if (!hasGPUWork && gpuUploadReadyInstance == nullptr)
                         {
@@ -117,6 +134,16 @@ namespace loaders
                     hasGPUWork = true;
                 }
             }
+        }
+
+        // Erase cancelled entries whose futures are complete
+        for (void* id : toErase)
+        {
+            if (gpuUploadReadyInstance == id)
+            {
+                gpuUploadReadyInstance = nullptr;
+            }
+            pendingLoads.erase(id);
         }
 
         return hasGPUWork;
@@ -151,6 +178,7 @@ namespace loaders
             {
                 gpuUploadReadyInstance = nullptr;
             }
+            pendingLoads.erase(it);
             return false;
         }
 
@@ -189,7 +217,7 @@ namespace loaders
             pending->texture = std::move(texture);
             pending->state = services::LoadingState::Complete;
             pending->statusMessage = "Complete";
-            pending->progress = 1.0f;
+            pending->progress = PROGRESS_COMPLETE;
             pending->cpuData.reset();  // Release CPU data now that GPU texture is created
 
             if (gpuUploadReadyInstance == instanceId)
@@ -310,10 +338,11 @@ namespace loaders
     {
         std::lock_guard<std::mutex> lock(mutex);
 
+        // Only clear Error and Cancelled entries.
+        // Complete entries are removed by takeTexture() when the texture is retrieved.
         for (auto it = pendingLoads.begin(); it != pendingLoads.end();)
         {
-            if (it->second->state == services::LoadingState::Complete ||
-                it->second->state == services::LoadingState::Error ||
+            if (it->second->state == services::LoadingState::Error ||
                 it->second->state == services::LoadingState::Cancelled)
             {
                 if (gpuUploadReadyInstance == it->first)

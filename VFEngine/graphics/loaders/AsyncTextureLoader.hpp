@@ -91,8 +91,10 @@ namespace loaders
         void clearCompleted();
 
     private:
+        // All member access must be protected by mutex.
+        // gpuUploadReadyInstance tracks which instance is next for GPU upload.
         mutable std::mutex mutex;
         std::unordered_map<void*, std::unique_ptr<PendingTextureLoad>> pendingLoads;
-        void* gpuUploadReadyInstance = nullptr;
+        void* gpuUploadReadyInstance = nullptr;  // Protected by mutex
     };
 }

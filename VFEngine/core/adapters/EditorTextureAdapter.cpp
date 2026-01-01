@@ -13,8 +13,9 @@ namespace core
 
     EditorTextureAdapter::~EditorTextureAdapter()
     {
-        loadedTextures.clear();
+        // Cancel pending async loads first, then clear textures
         asyncLoader.reset();
+        loadedTextures.clear();
     }
 
     services::EditorTextureData EditorTextureAdapter::loadTexture(std::string_view path)
@@ -110,9 +111,6 @@ namespace core
         // Track for cleanup
         loadedTextures[result.descriptorSet] = std::move(texture);
 
-        // Clean up from async loader
-        asyncLoader->clearCompleted();
-
         return result;
     }
 
@@ -123,13 +121,17 @@ namespace core
             return;
         }
 
-        // Check for pending CPU -> GPU transfers
-        if (asyncLoader->update())
+        // Process all pending CPU -> GPU transfers this frame
+        while (asyncLoader->update())
         {
             void* readyInstance = asyncLoader->getReadyForGPUUpload();
-            if (readyInstance)
+            if (!readyInstance)
             {
-                asyncLoader->processGPUUpload(readyInstance);
+                break;
+            }
+            if (!asyncLoader->processGPUUpload(readyInstance))
+            {
+                loggerWarning("EditorTextureAdapter: GPU upload failed for instance {:p}", readyInstance);
             }
         }
     }
