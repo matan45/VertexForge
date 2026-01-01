@@ -126,7 +126,6 @@
     <ClInclude Include="core\Utilities.hpp" />
     <ClInclude Include="core\VulkanContext.hpp" />
     <ClInclude Include="imguiPass\ImguiRender.hpp" />
-    <ClInclude Include="loaders\AsyncIBLLoader.hpp" />
     <ClInclude Include="loaders\AsyncMeshLoader.hpp" />
     <ClInclude Include="loaders\AsyncTextureLoader.hpp" />
     <ClInclude Include="render\ClearColor.hpp" />
@@ -199,7 +198,6 @@
     <ClCompile Include="core\Utilities.cpp" />
     <ClCompile Include="core\VulkanContext.cpp" />
     <ClCompile Include="imguiPass\ImguiRender.cpp" />
-    <ClCompile Include="loaders\AsyncIBLLoader.cpp" />
     <ClCompile Include="loaders\AsyncMeshLoader.cpp" />
     <ClCompile Include="loaders\AsyncTextureLoader.cpp" />
     <ClCompile Include="render\ClearColor.cpp" />

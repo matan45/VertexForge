@@ -40,7 +40,6 @@ namespace events::render {
 
     struct LoadEditorTextureCommand : ICommand<services::EditorTextureHandle> {
         std::string path;
-        bool isHDR = false;
 
         std::string_view getName() const override { return "LoadEditorTexture"; }
     };
@@ -76,21 +75,6 @@ namespace events::render {
         void* instanceId;
 
         std::string_view getName() const override { return "GetLoadedTextureHandle"; }
-    };
-
-    // Async IBL loading for scene - starts loading without blocking
-    struct SetIBLAsyncCommand : ICommand<> {
-        std::string hdrPath;
-
-        std::string_view getName() const override { return "SetIBLAsync"; }
-    };
-
-    struct CancelIBLLoadingCommand : ICommand<> {
-        std::string_view getName() const override { return "CancelIBLLoading"; }
-    };
-
-    struct GetSceneIBLLoadingProgressQuery : IQuery<services::IBLLoadingProgress> {
-        std::string_view getName() const override { return "GetSceneIBLLoadingProgress"; }
     };
 
     // ============================================

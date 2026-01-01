@@ -163,32 +163,6 @@ namespace services
         return handle;
     }
 
-    EditorTextureHandle EditorRenderServiceImpl::loadEditorHDRTexture(const std::string& path)
-    {
-        if (!textureProvider)
-        {
-            return EditorTextureHandle{};
-        }
-
-        auto textureData = textureProvider->loadHdrTexture(path);
-
-        if (!textureData.valid)
-        {
-            return EditorTextureHandle{};
-        }
-
-        EditorTextureHandle handle;
-        handle.imguiDescriptorSet = textureData.descriptorSet;
-        handle.width = static_cast<uint32_t>(textureData.width);
-        handle.height = static_cast<uint32_t>(textureData.height);
-        handle.mipLevels = static_cast<uint32_t>(textureData.mipLevels);
-        handle.mipDescriptorSets = textureData.mipDescriptorSets;
-
-        loadedTextures[handle.imguiDescriptorSet] = handle;
-
-        return handle;
-    }
-
     void EditorRenderServiceImpl::releaseEditorTexture(const EditorTextureHandle& handle)
     {
         if (textureProvider && loadedTextures.count(handle.imguiDescriptorSet))
@@ -239,10 +213,6 @@ namespace services
         dispatcher.registerCommandHandler<events::render::LoadEditorTextureCommand>(
             [this](const events::render::LoadEditorTextureCommand& cmd)
             {
-                if (cmd.isHDR)
-                {
-                    return loadEditorHDRTexture(cmd.path);
-                }
                 return loadEditorTexture(cmd.path);
             });
 

@@ -47,18 +47,10 @@ namespace services {
         [[nodiscard]] ViewportTextureHandle renderMaterialPreview(PreviewInstanceId instanceId) override;
         [[nodiscard]] std::string getMaterialShaderError(PreviewInstanceId instanceId) const override;
 
-        // Async material preview loading
-        void initMaterialPreviewAsync(PreviewInstanceId instanceId) override;
-        [[nodiscard]] IBLLoadingProgress getIBLLoadingProgress(PreviewInstanceId instanceId) const override;
-        void cancelIBLLoading(PreviewInstanceId instanceId) override;
-        void processMaterialAsyncLoading() override;
-
         // === Mesh Preview (IPreviewService) ===
         void initMeshPreview(PreviewInstanceId instanceId) override;
         void cleanUpMeshPreview(PreviewInstanceId instanceId) override;
         [[nodiscard]] bool isMeshPreviewReady(PreviewInstanceId instanceId) const override;
-        [[nodiscard]] bool loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath, math::AABB& outBounds) override;
-        void unloadPreviewMesh(PreviewInstanceId instanceId) override;
         [[nodiscard]] bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const override;
         [[nodiscard]] std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const override;
         [[nodiscard]] std::vector<LODInfo> getPreviewMeshLODInfo(PreviewInstanceId instanceId) const override;

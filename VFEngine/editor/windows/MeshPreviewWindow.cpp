@@ -38,10 +38,6 @@ namespace windows
                     events::EventDispatcher::instance().execute(cancelCmd);
                 }
 
-                services::events::preview::UnloadPreviewMeshCommand unloadCmd;
-                unloadCmd.instanceId = services::PreviewInstanceId(this);
-                events::EventDispatcher::instance().execute(unloadCmd);
-
                 services::events::preview::CleanUpMeshPreviewCommand cleanupCmd;
                 cleanupCmd.instanceId = services::PreviewInstanceId(this);
                 events::EventDispatcher::instance().execute(cleanupCmd);
@@ -107,37 +103,21 @@ namespace windows
         initCmd.instanceId = services::PreviewInstanceId(this);
         events::EventDispatcher::instance().execute(initCmd);
 
-        if (useAsyncLoading)
-        {
-            // Start async loading
-            services::events::preview::LoadPreviewMeshAsyncCommand loadCmd;
-            loadCmd.instanceId = services::PreviewInstanceId(this);
-            loadCmd.meshPath = meshPath;
-            events::EventDispatcher::instance().execute(loadCmd);
+        // Start async loading
+        services::events::preview::LoadPreviewMeshAsyncCommand loadCmd;
+        loadCmd.instanceId = services::PreviewInstanceId(this);
+        loadCmd.meshPath = meshPath;
+        events::EventDispatcher::instance().execute(loadCmd);
 
-            // Initialize loading state
-            loadingProgress.state = services::LoadingState::Pending;
-            loadingProgress.progress = 0.0f;
-            loadingProgress.statusMessage = "Starting load...";
-        }
-        else
-        {
-            // Synchronous loading (legacy)
-            services::events::preview::LoadPreviewMeshCommand loadCmd;
-            loadCmd.instanceId = services::PreviewInstanceId(this);
-            loadCmd.meshPath = meshPath;
-            auto result = events::EventDispatcher::instance().execute(loadCmd);
-
-            if (result.success)
-            {
-                onLoadingComplete();
-            }
-        }
+        // Initialize loading state
+        loadingProgress.state = services::LoadingState::Pending;
+        loadingProgress.progress = 0.0f;
+        loadingProgress.statusMessage = "Starting load...";
     }
 
     void MeshPreviewWindow::updateAsyncLoading()
     {
-        if (!useAsyncLoading || !loadingProgress.isLoading())
+        if (!loadingProgress.isLoading())
         {
             return;
         }
@@ -498,14 +478,5 @@ namespace windows
         ImVec2 progressTextSize = ImGui::CalcTextSize(progressText);
         ImVec2 progressTextPos(centerX + (contentWidth - progressTextSize.x) * 0.5f, progressBarY + 15.0f);
         drawList->AddText(progressTextPos, IM_COL32(150, 150, 150, 255), progressText);
-
-        // Cancel button (using ImGui button in the overlay area)
-        ImGui::SetCursorScreenPos(ImVec2(centerX + (contentWidth - 80.0f) * 0.5f, progressBarY + 35.0f));
-        if (ImGui::Button("Cancel", ImVec2(80.0f, 25.0f)))
-        {
-            services::events::preview::CancelMeshLoadingCommand cancelCmd;
-            cancelCmd.instanceId = services::PreviewInstanceId(this);
-            events::EventDispatcher::instance().execute(cancelCmd);
-        }
     }
 }

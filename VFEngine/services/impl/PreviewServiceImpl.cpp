@@ -59,23 +59,6 @@ namespace services {
                 return getMaterialShaderError(query.instanceId);
             });
 
-        // Async Material Preview Commands
-        dispatcher.registerCommandHandler<events::preview::InitMaterialPreviewAsyncCommand>(
-            [this](const events::preview::InitMaterialPreviewAsyncCommand& cmd) {
-                initMaterialPreviewAsync(cmd.instanceId);
-            });
-
-        dispatcher.registerCommandHandler<events::preview::CancelIBLLoadingCommand>(
-            [this](const events::preview::CancelIBLLoadingCommand& cmd) {
-                cancelIBLLoading(cmd.instanceId);
-            });
-
-        // Async Material Preview Queries
-        dispatcher.registerQueryHandler<events::preview::GetIBLLoadingProgressQuery>(
-            [this](const events::preview::GetIBLLoadingProgressQuery& query) {
-                return getIBLLoadingProgress(query.instanceId);
-            });
-
         // Mesh Preview Commands
         dispatcher.registerCommandHandler<events::preview::InitMeshPreviewCommand>(
             [this](const events::preview::InitMeshPreviewCommand& cmd) {
@@ -85,18 +68,6 @@ namespace services {
         dispatcher.registerCommandHandler<events::preview::CleanUpMeshPreviewCommand>(
             [this](const events::preview::CleanUpMeshPreviewCommand& cmd) {
                 cleanUpMeshPreview(cmd.instanceId);
-            });
-
-        dispatcher.registerCommandHandler<events::preview::LoadPreviewMeshCommand>(
-            [this](const events::preview::LoadPreviewMeshCommand& cmd) {
-                math::AABB bounds;
-                bool result = loadPreviewMesh(cmd.instanceId, cmd.meshPath, bounds);
-                return events::preview::LoadPreviewMeshResult{ result, bounds };
-            });
-
-        dispatcher.registerCommandHandler<events::preview::UnloadPreviewMeshCommand>(
-            [this](const events::preview::UnloadPreviewMeshCommand& cmd) {
-                unloadPreviewMesh(cmd.instanceId);
             });
 
         dispatcher.registerCommandHandler<events::preview::SetMeshPreviewParamsCommand>(
@@ -195,24 +166,6 @@ namespace services {
         return materialProvider->getMaterialShaderError(instanceId);
     }
 
-    // === Async Material Preview ===
-
-    void PreviewServiceImpl::initMaterialPreviewAsync(PreviewInstanceId instanceId) {
-        materialProvider->initMaterialPreviewAsync(instanceId);
-    }
-
-    IBLLoadingProgress PreviewServiceImpl::getIBLLoadingProgress(PreviewInstanceId instanceId) const {
-        return materialProvider->getIBLLoadingProgress(instanceId);
-    }
-
-    void PreviewServiceImpl::cancelIBLLoading(PreviewInstanceId instanceId) {
-        materialProvider->cancelIBLLoading(instanceId);
-    }
-
-    void PreviewServiceImpl::processMaterialAsyncLoading() {
-        materialProvider->processAsyncLoading();
-    }
-
     // === Mesh Preview ===
 
     void PreviewServiceImpl::initMeshPreview(PreviewInstanceId instanceId) {
@@ -225,14 +178,6 @@ namespace services {
 
     bool PreviewServiceImpl::isMeshPreviewReady(PreviewInstanceId instanceId) const {
         return meshProvider->isMeshPreviewInitialized(instanceId);
-    }
-
-    bool PreviewServiceImpl::loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath, math::AABB& outBounds) {
-        return meshProvider->loadPreviewMesh(instanceId, meshPath, outBounds);
-    }
-
-    void PreviewServiceImpl::unloadPreviewMesh(PreviewInstanceId instanceId) {
-        meshProvider->unloadPreviewMesh(instanceId);
     }
 
     bool PreviewServiceImpl::isPreviewMeshLoaded(PreviewInstanceId instanceId) const {

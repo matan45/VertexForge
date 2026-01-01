@@ -54,7 +54,6 @@ namespace windows
 
 		events::render::LoadEditorTextureCommand cmd;
 		cmd.path = "../../resources/editor/atlasIcons.vfImage";
-		cmd.isHDR = false;
 		iconAtlas = dispatcher.execute(cmd);
 
 		iconsLoaded = true;

@@ -32,8 +32,9 @@ namespace core
         offScreen->init();
         audioAdapter->init();
 
-        // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
-        coreInterface->setResizeCallback([this]() {
+        
+        coreInterface->setResizeCallback([this]()
+        {
             offScreen->recreate();
         });
     }
@@ -108,23 +109,24 @@ namespace core
         if (coreInterface)
         {
             // Wrap the callback to also update audio and async loading each frame
-            coreInterface->setFrameCallback([this, cb = std::move(callback)]() {
-                if (audioAdapter) {
+            coreInterface->setFrameCallback([this, cb = std::move(callback)]()
+            {
+                if (audioAdapter)
+                {
                     audioAdapter->update();
                 }
-                // Process async mesh loading for all preview instances
-                if (meshPreviewAdapter) {
+               
+                if (meshPreviewAdapter)
+                {
                     meshPreviewAdapter->processAsyncLoading();
                 }
-                // Process async material/IBL loading for all preview instances
-                if (materialPreviewAdapter) {
-                    materialPreviewAdapter->processAsyncLoading();
-                }
-                // Process async texture loading for editor textures (HDR preview, etc.)
-                if (textureAdapter) {
+                
+                if (textureAdapter)
+                {
                     textureAdapter->processAsyncLoading();
                 }
-                if (cb) {
+                if (cb)
+                {
                     cb();
                 }
             });

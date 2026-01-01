@@ -55,7 +55,6 @@ namespace core::audio
 
         config = streamConfig;
 
-        // Open file for streaming
         streamHandle = resource::AudioResource::openStream(path);
         if (!streamHandle || !streamHandle->isOpen())
         {
@@ -63,7 +62,6 @@ namespace core::audio
             return false;
         }
 
-        // Initialize OpenAL resources
         if (!initBuffers())
         {
             streamHandle.reset();
@@ -94,29 +92,23 @@ namespace core::audio
 
         const auto& header = streamHandle->getHeader();
 
-        // Calculate samples per buffer based on duration
-        // samples = sampleRate * channels * duration
         samplesPerBuffer = static_cast<size_t>(
-            header.sampleRate * header.channels * config.bufferDurationSeconds
+            static_cast<float>(header.sampleRate) * static_cast<float>(header.channels) * config.bufferDurationSeconds
         );
 
-        // Ensure even number for stereo alignment
         if (header.channels == 2 && samplesPerBuffer % 2 != 0)
         {
             samplesPerBuffer++;
         }
 
-        // Pre-allocate read buffer to avoid repeated allocations
         readBuffer.resize(samplesPerBuffer);
 
-        // Create OpenAL source
         alGenSources(1, &sourceId);
         if (AudioSystem::checkError("alGenSources"))
         {
             return false;
         }
 
-        // Create buffers
         bufferIds.resize(config.bufferCount);
         alGenBuffers(static_cast<ALsizei>(config.bufferCount), bufferIds.data());
         if (AudioSystem::checkError("alGenBuffers"))
@@ -127,12 +119,10 @@ namespace core::audio
             return false;
         }
 
-        // Fill initial buffers with audio data
         for (ALuint bufferId : bufferIds)
         {
             if (!fillBuffer(bufferId))
             {
-                // Not enough data to fill all buffers - that's OK for short files
                 break;
             }
             queueBuffer(bufferId);
@@ -145,10 +135,8 @@ namespace core::audio
     {
         if (sourceId != 0)
         {
-            // Stop the source first
             alSourceStop(sourceId);
 
-            // Unqueue all buffers
             ALint queuedCount = 0;
             alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
             if (queuedCount > 0)
@@ -157,12 +145,10 @@ namespace core::audio
                 alSourceUnqueueBuffers(sourceId, queuedCount, unqueuedBuffers.data());
             }
 
-            // Delete source
             alDeleteSources(1, &sourceId);
             sourceId = 0;
         }
 
-        // Delete buffers
         if (!bufferIds.empty())
         {
             alDeleteBuffers(static_cast<ALsizei>(bufferIds.size()), bufferIds.data());
@@ -184,12 +170,7 @@ namespace core::audio
 
     bool StreamingAudioSource::fillBuffer(ALuint bufferId)
     {
-        if (!streamHandle)
-        {
-            return false;
-        }
-
-        if (streamHandle->isEOF())
+        if (!streamHandle || streamHandle->isEOF())
         {
             return false;
         }
@@ -201,7 +182,6 @@ namespace core::audio
             return false;
         }
 
-        // Track actual samples in this buffer for accurate position reporting
         bufferSampleCounts[bufferId] = samplesRead;
 
         const auto& header = streamHandle->getHeader();
@@ -251,12 +231,10 @@ namespace core::audio
                 break;
             }
 
-            // Update samples played count using actual samples in this buffer
             auto it = bufferSampleCounts.find(bufferId);
             size_t samplesInBuffer = (it != bufferSampleCounts.end()) ? it->second : samplesPerBuffer;
             totalSamplesPlayed += samplesInBuffer;
 
-            // Try to refill the buffer
             if (!streamHandle->isEOF())
             {
                 if (fillBuffer(bufferId))
@@ -277,24 +255,20 @@ namespace core::audio
             }
         }
 
-        // Check if playback has stopped due to buffer underrun or end of stream
         ALint sourceState;
         alGetSourcei(sourceId, AL_SOURCE_STATE, &sourceState);
 
         if (sourceState == AL_STOPPED)
         {
-            // Check if there are still buffers queued
             ALint queuedCount = 0;
             alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
 
             if (queuedCount > 0)
             {
-                // Buffer underrun - restart playback
                 alSourcePlay(sourceId);
             }
             else
             {
-                // No more buffers - playback finished
                 state = StreamingState::Finished;
             }
         }
@@ -309,11 +283,9 @@ namespace core::audio
 
         if (state == StreamingState::Finished)
         {
-            // Reset for replay
             streamHandle->reset();
             totalSamplesPlayed = 0;
 
-            // Refill all buffers
             for (ALuint bufferId : bufferIds)
             {
                 if (!fillBuffer(bufferId)) break;
@@ -346,7 +318,6 @@ namespace core::audio
 
         alSourceStop(sourceId);
 
-        // Unqueue all buffers
         ALint queuedCount = 0;
         alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
         if (queuedCount > 0)
@@ -355,7 +326,6 @@ namespace core::audio
             alSourceUnqueueBuffers(sourceId, queuedCount, unqueuedBuffers.data());
         }
 
-        // Reset stream position
         if (streamHandle)
         {
             streamHandle->reset();
@@ -423,7 +393,6 @@ namespace core::audio
         const auto& header = streamHandle->getHeader();
         if (header.sampleRate == 0 || header.channels == 0) return 0.0f;
 
-        // Get OpenAL's byte offset within current buffer
         ALint byteOffset = 0;
         if (sourceId != 0)
         {
@@ -444,12 +413,10 @@ namespace core::audio
 
         bool wasPlaying = (state == StreamingState::Playing);
 
-        // Stop current playback
         if (sourceId != 0)
         {
             alSourceStop(sourceId);
 
-            // Unqueue all buffers
             ALint queuedCount = 0;
             alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
             if (queuedCount > 0)
@@ -459,25 +426,21 @@ namespace core::audio
             }
         }
 
-        // Seek in stream
         if (!streamHandle->seekToTime(seconds))
         {
             return false;
         }
 
-        // Update position tracking
         const auto& header = streamHandle->getHeader();
-        totalSamplesPlayed = static_cast<size_t>(seconds * header.sampleRate * header.channels);
+        totalSamplesPlayed = static_cast<size_t>(seconds * static_cast<float>(header.sampleRate) * static_cast<float>(header.channels));
         bufferSampleCounts.clear();
 
-        // Refill buffers
         for (ALuint bufferId : bufferIds)
         {
             if (!fillBuffer(bufferId)) break;
             queueBuffer(bufferId);
         }
 
-        // Resume playback if was playing
         if (wasPlaying)
         {
             play();

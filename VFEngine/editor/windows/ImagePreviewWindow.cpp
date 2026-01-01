@@ -46,22 +46,12 @@ namespace windows
         // Load image on first draw
         if (needsInit)
         {
-            if (useAsyncLoading)
-            {
-                loadImageAsync();
-            }
-            else
-            {
-                loadImage();
-            }
+            loadImageAsync();
             needsInit = false;
         }
 
         // Update async loading state
-        if (useAsyncLoading)
-        {
-            updateAsyncLoading();
-        }
+        updateAsyncLoading();
 
         ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
 
@@ -99,15 +89,6 @@ namespace windows
             }
         }
         ImGui::End();
-    }
-
-    void ImagePreviewWindow::loadImage()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-        events::render::LoadEditorTextureCommand loadCmd;
-        loadCmd.path = imagePath;
-        loadCmd.isHDR = isHDR;
-        imageHandle = dispatcher.execute(loadCmd);
     }
 
     void ImagePreviewWindow::loadImageAsync()

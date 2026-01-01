@@ -43,27 +43,8 @@ namespace services::events::preview {
     };
 
     // ============================================================
-    // ASYNC MATERIAL PREVIEW COMMANDS
-    // ============================================================
-
-    struct InitMaterialPreviewAsyncCommand : ::events::ICommand<void> {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "InitMaterialPreviewAsync"; }
-    };
-
-    struct CancelIBLLoadingCommand : ::events::ICommand<void> {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "CancelIBLLoading"; }
-    };
-
-    // ============================================================
     // MATERIAL PREVIEW QUERIES
     // ============================================================
-
-    struct GetIBLLoadingProgressQuery : ::events::IQuery<IBLLoadingProgress> {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "GetIBLLoadingProgress"; }
-    };
 
     struct IsMaterialPreviewReadyQuery : ::events::IQuery<bool> {
         PreviewInstanceId instanceId;
@@ -104,26 +85,6 @@ namespace services::events::preview {
         std::string_view getName() const override { return "CleanUpMeshPreview"; }
     };
 
-   
-    struct LoadPreviewMeshResult {
-        bool success = false;
-        math::AABB bounds;
-    };
-
-   
-    struct LoadPreviewMeshCommand : ::events::ICommand<LoadPreviewMeshResult> {
-        PreviewInstanceId instanceId;
-        std::string meshPath;
-        std::string_view getName() const override { return "LoadPreviewMesh"; }
-    };
-
-    
-    struct UnloadPreviewMeshCommand : ::events::ICommand<void> {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "UnloadPreviewMesh"; }
-    };
-
-   
     struct SetMeshPreviewParamsCommand : ::events::ICommand<void> {
         PreviewInstanceId instanceId;
         MeshPreviewParams params;
@@ -250,19 +211,6 @@ namespace services::events::preview {
         bool success = false;
         std::string errorMessage;
         std::string_view getName() const override { return "MeshLoadingComplete"; }
-    };
-
-    struct IBLLoadingProgressNotification : ::events::INotification {
-        PreviewInstanceId instanceId;
-        IBLLoadingProgress progress;
-        std::string_view getName() const override { return "IBLLoadingProgress"; }
-    };
-
-    struct IBLLoadingCompleteNotification : ::events::INotification {
-        PreviewInstanceId instanceId;
-        bool success = false;
-        std::string errorMessage;
-        std::string_view getName() const override { return "IBLLoadingComplete"; }
     };
 
 }

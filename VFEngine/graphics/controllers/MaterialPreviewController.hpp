@@ -3,7 +3,6 @@
 #include "math/Frustum.hpp"
 #include "material/MaterialTypes.hpp"
 #include "../core/VulkanContext.hpp"
-#include "../../services/data/AsyncLoadingTypes.hpp"
 #include <memory>
 #include <string>
 
@@ -17,11 +16,6 @@ namespace core
 namespace render
 {
     class OffScreenViewPort;
-}
-
-namespace loaders
-{
-    class AsyncIBLLoader;
 }
 
 namespace controllers
@@ -100,10 +94,6 @@ namespace controllers
         // Texture management (implementation details hidden via pImpl pattern)
         std::unique_ptr<TextureManagerImpl> textureManager;
 
-        // Async IBL loading
-        std::unique_ptr<loaders::AsyncIBLLoader> asyncIBLLoader;
-        bool useAsyncInit = true;
-
     public:
         explicit MaterialPreviewController();
         ~MaterialPreviewController();
@@ -126,12 +116,6 @@ namespace controllers
         std::string getLastShaderCompilationError() const;
 
         bool isInitialized() const { return initialized; }
-
-        // Async initialization
-        void initAsync();
-        bool updateAsyncLoading();  // Returns true if still loading
-        services::IBLLoadingProgress getIBLLoadingProgress() const;
-        void cancelIBLLoading();
 
     private:
         static std::optional<float> evaluateFloatValue(const material::ShaderGraph& graph, uint32_t nodeId, float time);

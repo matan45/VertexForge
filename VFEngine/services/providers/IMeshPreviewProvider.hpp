@@ -25,10 +25,6 @@ namespace services {
 
         virtual bool isMeshPreviewInitialized(PreviewInstanceId instanceId) const = 0;
 
-        virtual bool loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath, math::AABB& outBounds) = 0;
-
-        virtual void unloadPreviewMesh(PreviewInstanceId instanceId) = 0;
-
         virtual bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const = 0;
 
         virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const = 0;

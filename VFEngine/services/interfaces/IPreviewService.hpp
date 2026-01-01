@@ -33,23 +33,11 @@ namespace services
 
         [[nodiscard]] virtual std::string getMaterialShaderError(PreviewInstanceId instanceId) const = 0;
 
-        // Async material preview loading
-        virtual void initMaterialPreviewAsync(PreviewInstanceId instanceId) = 0;
-        [[nodiscard]] virtual IBLLoadingProgress getIBLLoadingProgress(PreviewInstanceId instanceId) const = 0;
-        virtual void cancelIBLLoading(PreviewInstanceId instanceId) = 0;
-        virtual void processMaterialAsyncLoading() = 0;
-
         virtual void initMeshPreview(PreviewInstanceId instanceId) = 0;
 
         virtual void cleanUpMeshPreview(PreviewInstanceId instanceId) = 0;
 
         [[nodiscard]] virtual bool isMeshPreviewReady(PreviewInstanceId instanceId) const = 0;
-
-        [[nodiscard]] virtual bool loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath,
-                                                   math::AABB& outBounds) = 0;
-
-        virtual void unloadPreviewMesh(PreviewInstanceId instanceId) = 0;
-
 
         [[nodiscard]] virtual bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const = 0;
 

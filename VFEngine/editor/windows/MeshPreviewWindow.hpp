@@ -40,7 +40,6 @@ namespace windows
 
         // Async loading state
         services::MeshLoadingProgress loadingProgress;
-        bool useAsyncLoading = true;  // Toggle for async vs sync loading
 
     public:
         explicit MeshPreviewWindow(const std::string& meshFilePath);

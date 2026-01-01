@@ -22,7 +22,6 @@ namespace windows
 
         // Async loading state
         services::TextureLoadingProgress loadingProgress;
-        bool useAsyncLoading = true;
 
         // Zoom/pan state
         float zoom = 1.0f;
@@ -41,7 +40,6 @@ namespace windows
         const std::string& getImagePath() const { return imagePath; }
 
     private:
-        void loadImage();
         void loadImageAsync();
         void updateAsyncLoading();
         void drawImagePanel();

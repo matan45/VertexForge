@@ -311,53 +311,12 @@ namespace windows {
     void MaterialEditorWindow::initPreview() {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        if (useAsyncLoading)
-        {
-            // Use async initialization
-            services::events::preview::InitMaterialPreviewAsyncCommand cmd;
-            cmd.instanceId = services::PreviewInstanceId(this);
-            dispatcher.execute(cmd);
-
-            // Initialize loading state
-            iblLoadingProgress.state = services::LoadingState::Pending;
-            iblLoadingProgress.progress = 0.0f;
-            iblLoadingProgress.statusMessage = "Initializing preview...";
-        }
-        else
-        {
-            // Synchronous initialization (legacy)
-            services::events::preview::InitMaterialPreviewCommand cmd;
-            cmd.instanceId = services::PreviewInstanceId(this);
-            dispatcher.execute(cmd);
-        }
+        services::events::preview::InitMaterialPreviewCommand cmd;
+        cmd.instanceId = services::PreviewInstanceId(this);
+        dispatcher.execute(cmd);
 
         previewCamera->updateMatrices();
         previewNeedsInit = false;
-    }
-
-    void MaterialEditorWindow::updateAsyncLoading() {
-        if (!useAsyncLoading || !iblLoadingProgress.isLoading())
-        {
-            return;
-        }
-
-        // Query current loading progress
-        services::events::preview::GetIBLLoadingProgressQuery progressQuery;
-        progressQuery.instanceId = services::PreviewInstanceId(this);
-        iblLoadingProgress = events::EventDispatcher::instance().query(progressQuery);
-
-        // If loading just completed, update the preview material
-        if (iblLoadingProgress.state == services::LoadingState::Complete)
-        {
-            if (materialData)
-            {
-                updatePreviewMaterial(false);
-            }
-        }
-        else if (iblLoadingProgress.state == services::LoadingState::Error)
-        {
-            vfLogError("Failed to load IBL: {}", iblLoadingProgress.errorMessage);
-        }
     }
 
     void MaterialEditorWindow::handlePreviewInput() {
@@ -595,20 +554,10 @@ namespace windows {
             initPreview();
         }
 
-        // Update async loading state
-        updateAsyncLoading();
-
         // Calculate square viewport size
         ImVec2 previewSize = ImGui::GetContentRegionAvail();
         float viewportSize = std::min(previewSize.x - 10.0f, previewSize.y - 100.0f);
         viewportSize = std::max(viewportSize, 100.0f);  // Minimum size
-
-        // Show loading indicator if IBL is still loading
-        if (iblLoadingProgress.isLoading())
-        {
-            drawLoadingIndicator(viewportSize, viewportSize);
-            return;
-        }
 
         ImGui::BeginChild("PreviewViewport", ImVec2(viewportSize, viewportSize), true,
                          ImGuiWindowFlags_NoScrollbar);
@@ -1049,91 +998,6 @@ namespace windows {
             ormPackError = result.errorMessage;
             vfLogError("Failed to pack ORM texture: {}", result.errorMessage);
         }
-    }
-
-    void MaterialEditorWindow::drawLoadingIndicator(float width, float height)
-    {
-        ImVec2 windowPos = ImGui::GetCursorScreenPos();
-        ImVec2 windowSize(width, height);
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        // Semi-transparent dark overlay
-        drawList->AddRectFilled(
-            windowPos,
-            ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y),
-            IM_COL32(30, 30, 30, 220),
-            8.0f
-        );
-
-        // Center content
-        float contentWidth = 180.0f;
-        float contentHeight = 100.0f;
-        float centerX = windowPos.x + (windowSize.x - contentWidth) * 0.5f;
-        float centerY = windowPos.y + (windowSize.y - contentHeight) * 0.5f;
-
-        // Spinner animation
-        float time = static_cast<float>(ImGui::GetTime());
-        float spinnerRadius = 16.0f;
-        float spinnerThickness = 3.0f;
-        ImVec2 spinnerCenter(centerX + contentWidth * 0.5f, centerY + 25.0f);
-
-        // Draw spinner arc
-        int numSegments = 24;
-        float startAngle = time * 3.0f;
-        float arcLength = 3.14159f * 1.2f;
-
-        for (int i = 0; i < numSegments; ++i)
-        {
-            float t1 = static_cast<float>(i) / static_cast<float>(numSegments);
-            float t2 = static_cast<float>(i + 1) / static_cast<float>(numSegments);
-            float angle1 = startAngle + t1 * arcLength;
-            float angle2 = startAngle + t2 * arcLength;
-
-            int alpha = static_cast<int>(255 * (1.0f - t1 * 0.7f));
-            ImU32 segColor = IM_COL32(100, 150, 255, alpha);
-
-            ImVec2 p1(spinnerCenter.x + cosf(angle1) * spinnerRadius,
-                      spinnerCenter.y + sinf(angle1) * spinnerRadius);
-            ImVec2 p2(spinnerCenter.x + cosf(angle2) * spinnerRadius,
-                      spinnerCenter.y + sinf(angle2) * spinnerRadius);
-
-            drawList->AddLine(p1, p2, segColor, spinnerThickness);
-        }
-
-        // Status message
-        const char* statusText = iblLoadingProgress.statusMessage.c_str();
-        ImVec2 textSize = ImGui::CalcTextSize(statusText);
-        ImVec2 textPos(centerX + (contentWidth - textSize.x) * 0.5f, centerY + 55.0f);
-        drawList->AddText(textPos, IM_COL32(200, 200, 200, 255), statusText);
-
-        // Progress bar
-        float progressBarY = centerY + 75.0f;
-        float progressBarHeight = 6.0f;
-        float progressBarWidth = contentWidth - 20.0f;
-        float progressBarX = centerX + 10.0f;
-
-        // Background
-        drawList->AddRectFilled(
-            ImVec2(progressBarX, progressBarY),
-            ImVec2(progressBarX + progressBarWidth, progressBarY + progressBarHeight),
-            IM_COL32(60, 60, 60, 255),
-            3.0f
-        );
-
-        // Progress fill
-        float fillWidth = progressBarWidth * iblLoadingProgress.progress;
-        if (fillWidth > 0)
-        {
-            drawList->AddRectFilled(
-                ImVec2(progressBarX, progressBarY),
-                ImVec2(progressBarX + fillWidth, progressBarY + progressBarHeight),
-                IM_COL32(100, 150, 255, 255),
-                3.0f
-            );
-        }
-
-        // Reserve space for the loading indicator
-        ImGui::Dummy(ImVec2(width, height));
     }
 
 }

@@ -2,15 +2,13 @@
 #include "AudioSource.hpp"
 #include "../../utilities/resource/AudioResource.hpp"
 #include <AL/al.h>
-#include <glm/glm.hpp>
 #include <vector>
 #include <memory>
 #include <string>
 #include <unordered_map>
 
 namespace core::audio {
-
-    // Configuration for streaming buffers
+    
     struct StreamingConfig {
         static constexpr size_t DEFAULT_BUFFER_COUNT = 4;
         static constexpr float DEFAULT_BUFFER_DURATION_SECONDS = 0.25f;
@@ -18,8 +16,7 @@ namespace core::audio {
         size_t bufferCount = DEFAULT_BUFFER_COUNT;
         float bufferDurationSeconds = DEFAULT_BUFFER_DURATION_SECONDS;
     };
-
-    // State of streaming playback
+    
     enum class StreamingState : uint8_t {
         Stopped,
         Playing,
@@ -35,7 +32,7 @@ namespace core::audio {
         
         ALuint sourceId = 0;
         std::vector<ALuint> bufferIds;
-        std::vector<short> readBuffer;  // Reusable buffer for reading chunks
+        std::vector<short> readBuffer;
 
         // State
         StreamingState state = StreamingState::Stopped;
