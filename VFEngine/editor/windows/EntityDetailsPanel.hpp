@@ -35,7 +35,8 @@ namespace windows
         void drawMaterialComponent(services::EntityHandle handle);
         bool drawAudioSource2DComponent(services::EntityHandle handle);
         bool drawAudioSource3DComponent(services::EntityHandle handle);
-        void drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D);
+        bool drawScriptComponent(services::EntityHandle handle);
+        void drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D, bool hasScript);
 
         // UI styling helpers
         static void pushComponentHeaderStyle();

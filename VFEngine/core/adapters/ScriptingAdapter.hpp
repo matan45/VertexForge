@@ -3,6 +3,7 @@
 #include <memory>
 #include <unordered_map>
 #include <string>
+#include <any>
 
 // Forward declare mType's ScriptInterpreter
 // Note: mType uses 'services' namespace - same name as VertexForge's but different location
@@ -19,6 +20,7 @@ namespace core {
         // Script instance tracking
         std::unordered_map<uint64_t, std::string> instanceToClassName;  // instanceId -> class name
         std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity;  // instanceId -> entity
+        std::unordered_map<uint64_t, std::any> instanceToObject;  // instanceId -> script object instance (type-erased)
         std::unordered_map<std::string, std::string> pathToClassName;  // scriptPath -> class name
 
         // Error tracking

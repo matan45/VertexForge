@@ -4,6 +4,7 @@
 #include "events/RenderEvents.hpp"
 #include "events/MaterialEvents.hpp"
 #include "events/AudioEvents.hpp"
+#include "events/ScriptingEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "print/EditorLogger.hpp"
 #include "resource/MeshResource.hpp"
@@ -81,8 +82,9 @@ namespace windows
 
         bool hasAudio2D = drawAudioSource2DComponent(handle);
         bool hasAudio3D = drawAudioSource3DComponent(handle);
+        bool hasScript = drawScriptComponent(handle);
 
-        drawAddComponentButton(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D);
+        drawAddComponentButton(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript);
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)
@@ -1054,7 +1056,141 @@ namespace windows
         return true;
     }
 
-    void EntityDetailsPanel::drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D)
+    bool EntityDetailsPanel::drawScriptComponent(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::scripting::HasScriptQuery hasScriptQuery;
+        hasScriptQuery.entity = handle;
+        bool hasScript = dispatcher.query(hasScriptQuery);
+
+        if (!hasScript)
+            return false;
+
+        events::scripting::GetScriptDataQuery scriptQuery;
+        scriptQuery.entity = handle;
+        auto scriptOpt = dispatcher.query(scriptQuery);
+
+        if (!scriptOpt.has_value())
+            return true;
+
+        ImGui::PushID("ScriptComponent");
+
+        bool removeScript = false;
+
+        pushComponentHeaderStyle();
+        bool isOpen = ImGui::CollapsingHeader("##ScriptHeader",
+                                              ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+
+        ImGui::SameLine();
+        ImGui::Text("Script");
+
+        pushRemoveButtonStyle();
+        if (ImGui::Button("x##RemoveScript", ImVec2(18, 18)))
+        {
+            removeScript = true;
+        }
+        popRemoveButtonStyle();
+        popComponentHeaderStyle();
+
+        if (isOpen)
+        {
+            ImGui::Indent(10.0f);
+
+            services::ScriptComponentData scriptData = *scriptOpt;
+
+            // Script path display and selection
+            if (!scriptData.scriptPath.empty())
+            {
+                std::string filename = scriptData.scriptPath;
+                auto lastSlash = filename.find_last_of("/\\");
+                if (lastSlash != std::string::npos)
+                {
+                    filename = filename.substr(lastSlash + 1);
+                }
+                ImGui::Text("Script: %s", filename.c_str());
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("%s", scriptData.scriptPath.c_str());
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("No script selected");
+            }
+
+            if (ImGui::Button("Select Script"))
+            {
+                nfd::FileDialog fileDialog;
+                std::string path = fileDialog.openFileDialog(
+                    {{L"mType Script Files (*.mt)", L"*.mt"}});
+                if (!path.empty())
+                {
+                    // Detach old script if any
+                    if (!scriptData.scriptPath.empty())
+                    {
+                        events::scripting::DetachScriptCommand detachCmd;
+                        detachCmd.entity = handle;
+                        dispatcher.execute(detachCmd);
+                    }
+
+                    // Attach new script
+                    events::scripting::AttachScriptCommand attachCmd;
+                    attachCmd.entity = handle;
+                    attachCmd.data.scriptPath = path;
+                    attachCmd.data.enabled = scriptData.enabled;
+                    dispatcher.execute(attachCmd);
+                }
+            }
+
+            ImGui::Spacing();
+
+            // Enabled checkbox
+            bool enabled = scriptData.enabled;
+            if (ImGui::Checkbox("Enabled##Script", &enabled))
+            {
+                events::scripting::SetScriptEnabledCommand cmd;
+                cmd.entity = handle;
+                cmd.enabled = enabled;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::Spacing();
+
+            // Status info
+            events::scripting::IsScriptEnabledQuery enabledQuery;
+            enabledQuery.entity = handle;
+            bool isEnabled = dispatcher.query(enabledQuery);
+
+            if (scriptData.scriptPath.empty())
+            {
+                ImGui::TextDisabled("Status: No script attached");
+            }
+            else if (!isEnabled)
+            {
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.2f, 1.0f), "Status: Disabled");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Status: Ready");
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+
+        ImGui::PopID();
+
+        if (removeScript)
+        {
+            events::scripting::DetachScriptCommand cmd;
+            cmd.entity = handle;
+            dispatcher.execute(cmd);
+        }
+
+        return true;
+    }
+
+    void EntityDetailsPanel::drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D, bool hasScript)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -1135,7 +1271,24 @@ namespace windows
                 }
             }
 
-            if (hasCamera && hasMesh && hasAudio2D && hasAudio3D)
+            if (!hasScript)
+            {
+                if (ImGui::Selectable("  Script"))
+                {
+                    // Add empty script component - user will select script file in the inspector
+                    events::scripting::AttachScriptCommand cmd;
+                    cmd.entity = handle;
+                    cmd.data.scriptPath = "";  // Empty path, user selects later
+                    cmd.data.enabled = true;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("mType script for custom behavior");
+                }
+            }
+
+            if (hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript)
             {
                 ImGui::TextDisabled("All components added");
             }

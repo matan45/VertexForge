@@ -49,8 +49,13 @@ namespace handlers
             }
 
             // Update scripts only in play mode
+            static bool loggedOnce = false;
             if (editorModeService && editorModeService->isPlayMode())
             {
+                if (!loggedOnce) {
+                    spdlog::info("[EditorHandler] Play mode active, scriptingService={}", scriptingService ? "valid" : "null");
+                    loggedOnce = true;
+                }
                 if (scriptingService)
                 {
                     float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());

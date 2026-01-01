@@ -1,6 +1,7 @@
 #include "ScriptingAdapter.hpp"
 #include <services/ScriptInterpreter.hpp>
 #include <value/ValueType.hpp>
+#include <runtimeTypes/klass/ObjectInstance.hpp>
 #include <spdlog/spdlog.h>
 #include <filesystem>
 #include <fstream>
@@ -9,6 +10,9 @@
 // Include event dispatcher for Entity API callbacks
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/SceneEvents.hpp"
+
+// Include editor logger for console output
+#include "print/EditorLogger.hpp"
 
 namespace core {
 
@@ -53,6 +57,7 @@ namespace core {
         // Clean up all script instances
         instanceToClassName.clear();
         instanceToEntity.clear();
+        instanceToObject.clear();
         pathToClassName.clear();
 
         interpreter.reset();
@@ -79,7 +84,12 @@ namespace core {
             std::string fullPath = scriptLibraryPath.empty() ? scriptPath :
                                    scriptLibraryPath + "/" + scriptPath;
 
+            spdlog::debug("[ScriptingAdapter] Loading script: {}", fullPath);
+            spdlog::debug("[ScriptingAdapter] Calling parseAndRegisterClasses...");
+
             interpreter->parseAndRegisterClasses(fullPath);
+
+            spdlog::debug("[ScriptingAdapter] parseAndRegisterClasses completed successfully");
 
             // Extract class name from script
             std::string className = extractClassName(fullPath);
@@ -89,8 +99,12 @@ namespace core {
                 return std::nullopt;
             }
 
+            spdlog::debug("[ScriptingAdapter] Extracted class name: {}", className);
+
             // Create script instance
+            spdlog::debug("[ScriptingAdapter] Calling createObject for class: {}", className);
             auto instance = interpreter->createObject(className);
+            spdlog::debug("[ScriptingAdapter] createObject completed successfully");
 
             // Assign instance ID
             uint64_t instanceId = nextInstanceId++;
@@ -98,11 +112,8 @@ namespace core {
             // Store mappings
             instanceToClassName[instanceId] = className;
             instanceToEntity[instanceId] = entity;
+            instanceToObject[instanceId] = std::any(instance);  // Store as type-erased any
             pathToClassName[scriptPath] = className;
-
-            // Set the entity field on the script instance
-            // (This requires the Entity native class to be registered)
-            // interpreter->setField(instance, "entity", createEntityValue(entity));
 
             // Build result
             services::ScriptInstanceInfo info;
@@ -134,6 +145,7 @@ namespace core {
             spdlog::debug("[ScriptingAdapter] Unloading script instance {}", instanceId);
             instanceToClassName.erase(it);
             instanceToEntity.erase(instanceId);
+            instanceToObject.erase(instanceId);
         }
     }
 
@@ -143,19 +155,24 @@ namespace core {
 
     void ScriptingAdapter::callOnStart(uint64_t instanceId) {
         if (!isScriptLoaded(instanceId)) {
+            spdlog::warn("[ScriptingAdapter] callOnStart: script {} not loaded", instanceId);
             return;
         }
 
         try {
-            auto it = instanceToClassName.find(instanceId);
-            if (it != instanceToClassName.end()) {
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt != instanceToObject.end()) {
                 // Set current entity for callbacks
                 currentCallbackEntity = instanceToEntity[instanceId];
 
-                // TODO: Get the actual object instance and call onStart
-                // interpreter->callMethod(instance, "onStart", {});
+                // Get the script instance and call onStart
+                spdlog::info("[ScriptingAdapter] Calling interpreter->callMethod for onStart (instance {})", instanceId);
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+                interpreter->callMethod(instance, "onStart", {});
 
-                spdlog::debug("[ScriptingAdapter] Called onStart for instance {}", instanceId);
+                spdlog::info("[ScriptingAdapter] onStart completed successfully for instance {}", instanceId);
+            } else {
+                spdlog::warn("[ScriptingAdapter] callOnStart: instance {} not found in instanceToObject", instanceId);
             }
         }
         catch (const std::exception& e) {
@@ -172,14 +189,15 @@ namespace core {
         }
 
         try {
-            auto it = instanceToClassName.find(instanceId);
-            if (it != instanceToClassName.end()) {
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt != instanceToObject.end()) {
                 // Set current context for callbacks
                 currentCallbackEntity = instanceToEntity[instanceId];
                 currentDeltaTime = deltaTime;
 
-                // TODO: Get the actual object instance and call onUpdate
-                // interpreter->callMethod(instance, "onUpdate", {value::Value(deltaTime)});
+                // Get the script instance and call onUpdate with deltaTime argument
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+                interpreter->callMethod(instance, "onUpdate", {value::Value(deltaTime)});
             }
         }
         catch (const std::exception& e) {
@@ -196,12 +214,13 @@ namespace core {
         }
 
         try {
-            auto it = instanceToClassName.find(instanceId);
-            if (it != instanceToClassName.end()) {
+            auto objIt = instanceToObject.find(instanceId);
+            if (objIt != instanceToObject.end()) {
                 currentCallbackEntity = instanceToEntity[instanceId];
 
-                // TODO: Get the actual object instance and call onDestroy
-                // interpreter->callMethod(instance, "onDestroy", {});
+                // Get the script instance and call onDestroy
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
+                interpreter->callMethod(instance, "onDestroy", {});
 
                 spdlog::debug("[ScriptingAdapter] Called onDestroy for instance {}", instanceId);
             }
@@ -296,73 +315,82 @@ namespace core {
         spdlog::debug("[ScriptingAdapter] Registered native engine APIs");
     }
 
+    // Helper function to extract string from value::Value
+    static std::string extractString(const value::Value& val) {
+        if (std::holds_alternative<std::string>(val)) {
+            return std::get<std::string>(val);
+        }
+        if (std::holds_alternative<value::InternedString>(val)) {
+            return std::get<value::InternedString>(val).getString();
+        }
+        // Check for boxed String object
+        if (std::holds_alternative<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(val)) {
+            auto obj = std::get<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(val);
+            if (obj && obj->getTypeName() == "String") {
+                auto fieldVal = obj->getFieldValue("value");
+                if (std::holds_alternative<std::string>(fieldVal)) {
+                    return std::get<std::string>(fieldVal);
+                }
+                if (std::holds_alternative<value::InternedString>(fieldVal)) {
+                    return std::get<value::InternedString>(fieldVal).getString();
+                }
+            }
+        }
+        return "";
+    }
+
     void ScriptingAdapter::registerLogClass() {
-        interpreter->registerNativeClass("Log");
-
-        // Log.info(string message)
-        interpreter->registerNativeMethod("Log", "info",
+        // Register global native functions that Log.mt will wrap
+        interpreter->registerNativeFunction("_native_log_info",
             [](const std::vector<value::Value>& args) -> value::Value {
-                if (!args.empty() && std::holds_alternative<std::string>(args[0])) {
-                    spdlog::info("[Script] {}", std::get<std::string>(args[0]));
+                if (!args.empty()) {
+                    std::string message = extractString(args[0]);
+                    if (!message.empty()) {
+                        vfLogInfo("[Script] {}", message);
+                    }
                 }
                 return value::Value(std::monostate{});
-            }, true);
+            });
 
-        // Log.warn(string message)
-        interpreter->registerNativeMethod("Log", "warn",
+        interpreter->registerNativeFunction("_native_log_warn",
             [](const std::vector<value::Value>& args) -> value::Value {
-                if (!args.empty() && std::holds_alternative<std::string>(args[0])) {
-                    spdlog::warn("[Script] {}", std::get<std::string>(args[0]));
+                if (!args.empty()) {
+                    std::string message = extractString(args[0]);
+                    if (!message.empty()) {
+                        vfLogWarning("[Script] {}", message);
+                    }
                 }
                 return value::Value(std::monostate{});
-            }, true);
+            });
 
-        // Log.error(string message)
-        interpreter->registerNativeMethod("Log", "error",
+        interpreter->registerNativeFunction("_native_log_error",
             [](const std::vector<value::Value>& args) -> value::Value {
-                if (!args.empty() && std::holds_alternative<std::string>(args[0])) {
-                    spdlog::error("[Script] {}", std::get<std::string>(args[0]));
+                if (!args.empty()) {
+                    std::string message = extractString(args[0]);
+                    if (!message.empty()) {
+                        vfLogError("[Script] {}", message);
+                    }
                 }
                 return value::Value(std::monostate{});
-            }, true);
+            });
     }
 
     void ScriptingAdapter::registerTimeClass() {
-        interpreter->registerNativeClass("Time");
-
-        // Time.getDeltaTime() : float
-        interpreter->registerNativeMethod("Time", "getDeltaTime",
+        // Register global native functions that Time.mt will wrap
+        interpreter->registerNativeFunction("_native_time_getDeltaTime",
             [](const std::vector<value::Value>& args) -> value::Value {
                 return value::Value(currentDeltaTime);
-            }, true);
+            });
 
-        // Time.getTime() : float
-        // TODO: Get actual elapsed time from engine Timer
-        interpreter->registerNativeMethod("Time", "getTime",
+        interpreter->registerNativeFunction("_native_time_getTime",
             [](const std::vector<value::Value>& args) -> value::Value {
-                return value::Value(0.0f);  // TODO: Implement
-            }, true);
+                return value::Value(0.0f);  // TODO: Implement actual elapsed time
+            });
     }
 
     void ScriptingAdapter::registerEntityClass() {
-        interpreter->registerNativeClass("Entity");
-
-        // Entity._handleId field (internal, stores the EntityHandle id)
-        interpreter->registerNativeField("Entity", "_handleId", value::Value(int64_t(0)), false);
-
-        // Entity.getName() : string
-        interpreter->registerNativeMethod("Entity", "getName",
-            [](const std::vector<value::Value>& args) -> value::Value {
-                // args[0] is 'this' - the Entity object
-                // TODO: Extract handle and query name via EventDispatcher
-                return value::Value(std::string("Entity"));
-            }, false);
-
-        // Entity.getPosition() : Vec3f
-        // TODO: Implement when Vec3f native integration is ready
-
-        // Entity.setPosition(Vec3f pos) : void
-        // TODO: Implement when Vec3f native integration is ready
+        // Entity native functions will be added later when full Entity API is needed
+        // For now, scripts use the entity ID set by the engine
     }
 
 }

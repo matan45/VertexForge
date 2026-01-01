@@ -275,15 +275,23 @@ namespace services {
         // Iterate all entities with ScriptComponent
         auto view = registry.view<components::ScriptComponent>();
 
+        static bool firstCall = true;
+        if (firstCall) {
+            spdlog::debug("[ScriptingService] updateScripts called, entities with scripts: {}", view.size());
+            firstCall = false;
+        }
+
         for (auto entity : view) {
             auto& script = view.get<components::ScriptComponent>(entity);
 
             if (!script.enabled) {
+                spdlog::debug("[ScriptingService] Script {} is disabled, skipping", script.instanceId);
                 continue;
             }
 
             // Call onStart if not started yet
             if (!script.started && script.hasOnStart) {
+                spdlog::info("[ScriptingService] Calling onStart for instance {}", script.instanceId);
                 scriptingProvider->callOnStart(script.instanceId);
                 script.started = true;
 
