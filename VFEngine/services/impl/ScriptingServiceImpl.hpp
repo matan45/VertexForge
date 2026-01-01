@@ -1,0 +1,60 @@
+#pragma once
+#include "../interfaces/IScriptingService.hpp"
+#include "../providers/IScriptingProvider.hpp"
+#include "../../utilities/scene/SceneGraphSystem.hpp"
+
+namespace services {
+
+    class ScriptingServiceImpl : public IScriptingService {
+    public:
+        explicit ScriptingServiceImpl(IScriptingProvider* scriptingProvider,
+                                       std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
+        ~ScriptingServiceImpl() override;
+
+        void registerEventHandlers();
+
+        // === Script Component ===
+        bool attachScript(EntityHandle entity, const ScriptData& data) override;
+        void detachScript(EntityHandle entity) override;
+        bool hasScript(EntityHandle entity) const override;
+        void setScriptEnabled(EntityHandle entity, bool enabled) override;
+        bool isScriptEnabled(EntityHandle entity) const override;
+
+        // === Script Properties ===
+        std::vector<ScriptPropertyInfo> getScriptProperties(EntityHandle entity) const override;
+        bool setProperty(EntityHandle entity, const std::string& propertyName,
+                         const std::any& value) override;
+        std::optional<std::any> getProperty(EntityHandle entity,
+                                             const std::string& propertyName) const override;
+
+        // === Method Calls ===
+        std::vector<ScriptMethodInfo> getScriptMethods(EntityHandle entity) const override;
+        std::optional<std::any> callMethod(EntityHandle entity,
+                                            const std::string& methodName,
+                                            const std::vector<std::any>& args = {}) override;
+
+        // === Events/Messages ===
+        void sendMessage(EntityHandle entity, const std::string& messageName,
+                         const std::any& data = {}) override;
+        void broadcastMessage(const std::string& messageName,
+                               const std::any& data = {}) override;
+
+        // === System Update ===
+        void updateScripts(float deltaTime) override;
+        void fixedUpdate(float fixedDeltaTime) override;
+        void lateUpdate(float deltaTime) override;
+
+        // === Script Lifecycle Events ===
+        void triggerStart(EntityHandle entity) override;
+        void triggerDestroy(EntityHandle entity) override;
+
+        // === Hot Reload ===
+        bool reloadScript(const std::string& scriptPath) override;
+        void reloadAllScripts() override;
+
+    private:
+        IScriptingProvider* scriptingProvider;
+        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+    };
+
+}

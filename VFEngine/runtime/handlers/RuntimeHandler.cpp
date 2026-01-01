@@ -5,9 +5,11 @@
 #include "impl/InputServiceImpl.hpp"
 #include "impl/WindowStateServiceImpl.hpp"
 #include "impl/AudioServiceImpl.hpp"
+#include "impl/ScriptingServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
+#include "time/Timer.hpp"
 
 namespace handlers {
 
@@ -28,6 +30,11 @@ namespace handlers {
             if (windowStateService) {
                 windowStateService->update();
             }
+            // Update scripts every frame in runtime
+            if (scriptingService) {
+                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+                scriptingService->updateScripts(deltaTime);
+            }
             // Update audio listener from primary camera
             if (audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
@@ -46,6 +53,7 @@ namespace handlers {
         
         audioSceneUpdater.reset();
         audioService.reset();
+        scriptingService.reset();
         renderService.reset();
         sceneService.reset();
         windowStateService.reset();
@@ -72,12 +80,18 @@ namespace handlers {
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
 
+        scriptingService = std::make_shared<services::ScriptingServiceImpl>(
+            bootstrap->getScriptingProvider(),
+            bootstrap->getSceneGraphSystem()
+        );
+
         // Register event handlers for command/query pattern
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
         windowStateService->registerEventHandlers();
         static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
+        static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
     }
 
     void RuntimeHandler::setupEventSubscriptions()

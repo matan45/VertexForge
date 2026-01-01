@@ -9,6 +9,7 @@
 #include "interfaces/IPreviewService.hpp"
 #include "interfaces/IEditorModeService.hpp"
 #include "interfaces/IAudioService.hpp"
+#include "interfaces/IScriptingService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -36,6 +37,7 @@ namespace handlers {
 		std::shared_ptr<services::IPreviewService> previewService;
 		std::shared_ptr<services::IEditorModeService> editorModeService;
 		std::shared_ptr<services::IAudioService> audioService;
+		std::shared_ptr<services::IScriptingService> scriptingService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 
 		events::SubscriptionToken resizeSubscription;

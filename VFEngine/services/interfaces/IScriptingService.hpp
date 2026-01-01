@@ -1,30 +1,13 @@
 #pragma once
 #include "../data/EntityHandle.hpp"
+#include "../data/ScriptTypes.hpp"
 #include <string>
 #include <vector>
 #include <any>
 #include <optional>
 
 namespace services {
-    
-    struct ScriptData {
-        std::string scriptPath;     // Path to the script file
-        bool enabled = true;
-        // Initial property values can be set via setProperty after attachment
-    };
-    
-    struct ScriptPropertyInfo {
-        std::string name;
-        std::string typeName;       // "float", "int", "string", "vec3", etc.
-        bool isReadOnly = false;
-    };
-    
-    struct ScriptMethodInfo {
-        std::string name;
-        std::vector<std::string> parameterTypes;
-        std::string returnType;
-    };
-    
+
     class IScriptingService {
     public:
         virtual ~IScriptingService() = default;

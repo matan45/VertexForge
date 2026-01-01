@@ -3,6 +3,7 @@
 #include "../controllers/OffScreen.hpp"
 #include "../adapters/OffScreenAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
+#include "../adapters/ScriptingAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 
 namespace core
@@ -21,9 +22,11 @@ namespace core
 
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());
         audioAdapter = std::make_unique<AudioAdapter>();
+        scriptingAdapter = std::make_unique<ScriptingAdapter>();
 
         offScreen->init();
         audioAdapter->init();
+        scriptingAdapter->init();
 
         // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
         coreInterface->setResizeCallback([this]()
@@ -49,8 +52,14 @@ namespace core
             audioAdapter->cleanUp();
         }
 
+        if (scriptingAdapter)
+        {
+            scriptingAdapter->cleanUp();
+        }
+
         offScreenAdapter.reset();
         audioAdapter.reset();
+        scriptingAdapter.reset();
 
         if (coreInterface)
         {
@@ -66,6 +75,11 @@ namespace core
     services::IAudioProvider* RuntimeBootstrap::getAudioProvider()
     {
         return audioAdapter.get();
+    }
+
+    services::IScriptingProvider* RuntimeBootstrap::getScriptingProvider()
+    {
+        return scriptingAdapter.get();
     }
 
     window::Window* RuntimeBootstrap::getWindow()

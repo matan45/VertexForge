@@ -16,10 +16,11 @@ namespace components {
 	struct BillboardComponent;
 	struct AudioSource2DComponent;
 	struct AudioSource3DComponent;
+	struct ScriptComponent;
 
 	// Type list of optional components that can be removed during cleanup
 	// Add new optional component types here when they are created
-	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent, BillboardComponent, AudioSource2DComponent, AudioSource3DComponent>;
+	using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent, BillboardComponent, AudioSource2DComponent, AudioSource3DComponent, ScriptComponent>;
 
 	struct WorldTransformComponent
 	{
@@ -277,6 +278,21 @@ namespace components {
 		// Runtime state (not serialized)
 		uint64_t activeHandle = 0;      // AudioHandle from AudioController
 		bool isPlaying = false;
+	};
+
+	// Script Component - mType scripting attachment
+	struct ScriptComponent {
+		std::string scriptPath;         // Path to .mt source file
+		bool enabled = true;            // Whether script updates are called
+
+		// Runtime state (not serialized)
+		bool started = false;           // Has onStart() been called?
+		uint64_t instanceId = 0;        // Script instance lookup ID in ScriptingAdapter
+
+		// Cached method presence flags (set when script is loaded)
+		bool hasOnStart = false;
+		bool hasOnUpdate = false;
+		bool hasOnDestroy = false;
 	};
 
 }

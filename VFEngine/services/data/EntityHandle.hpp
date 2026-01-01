@@ -44,6 +44,7 @@ namespace services {
         Billboard,
         AudioSource2D,
         AudioSource3D,
+        Script,
         // Add more as needed
     };
 

@@ -7,8 +7,10 @@
 #include "impl/PreviewServiceImpl.hpp"
 #include "impl/EditorModeServiceImpl.hpp"
 #include "impl/AudioServiceImpl.hpp"
+#include "impl/ScriptingServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
+#include "time/Timer.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/RenderEvents.hpp"
 #include "Import.hpp"
@@ -45,6 +47,21 @@ namespace handlers
             {
                 windowStateService->update();
             }
+
+            // Update scripts only in play mode
+            if (editorModeService && editorModeService->isPlayMode())
+            {
+                if (scriptingService)
+                {
+                    float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+                    scriptingService->updateScripts(deltaTime);
+                }
+                // Update audio listener from primary camera in play mode
+                if (audioSceneUpdater)
+                {
+                    audioSceneUpdater->updateListenerFromPrimaryCamera();
+                }
+            }
         });
 
         // Subscribe to window events from Services
@@ -70,6 +87,7 @@ namespace handlers
 
         audioSceneUpdater.reset();
         audioService.reset();
+        scriptingService.reset();
         editorModeService.reset();
         windowStateService.reset();
         inputService.reset();
@@ -93,6 +111,10 @@ namespace handlers
         );
         editorModeService = std::make_shared<services::EditorModeServiceImpl>();
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
+        scriptingService = std::make_shared<services::ScriptingServiceImpl>(
+            bootstrap->getScriptingProvider(),
+            bootstrap->getSceneGraphSystem()
+        );
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
 
         // Register event handlers for command/query pattern
@@ -103,6 +125,7 @@ namespace handlers
         previewService->registerEventHandlers();
         editorModeService->registerEventHandlers();
         static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
+        static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

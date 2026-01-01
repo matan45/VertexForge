@@ -6,6 +6,7 @@
 #include "interfaces/IInputService.hpp"
 #include "interfaces/IWindowStateService.hpp"
 #include "interfaces/IAudioService.hpp"
+#include "interfaces/IScriptingService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core::audio {
@@ -27,6 +28,7 @@ namespace handlers {
         std::shared_ptr<services::IInputService> inputService;
         std::shared_ptr<services::IWindowStateService> windowStateService;
         std::shared_ptr<services::IAudioService> audioService;
+        std::shared_ptr<services::IScriptingService> scriptingService;
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 
         events::SubscriptionToken resizeSubscription;
