@@ -290,15 +290,16 @@ namespace core {
         std::string content((std::istreambuf_iterator<char>(file)),
                             std::istreambuf_iterator<char>());
 
-        // Look for "class ClassName extends EngineScript" pattern
-        std::regex classPattern(R"(\bclass\s+(\w+)\s+extends\s+EngineScript\b)");
+        // Look for "@Script" annotation followed by a class definition
+        // Pattern matches: @Script followed by optional whitespace/newlines, then class ClassName
+        std::regex scriptAnnotationPattern(R"(@Script\s+(?:public\s+)?class\s+(\w+)\b)");
         std::smatch match;
 
-        if (std::regex_search(content, match, classPattern)) {
+        if (std::regex_search(content, match, scriptAnnotationPattern)) {
             return match[1].str();
         }
 
-        // Fallback: look for any class definition
+        // Fallback: look for any class definition (for backwards compatibility)
         std::regex anyClassPattern(R"(\bclass\s+(\w+)\b)");
         if (std::regex_search(content, match, anyClassPattern)) {
             return match[1].str();

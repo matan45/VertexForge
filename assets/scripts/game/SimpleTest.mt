@@ -1,8 +1,9 @@
 // SimpleTest - Minimal script to test scripting system
-// Does not extend EngineScript - just tests basic mType execution
+// Uses @Script annotation for engine integration
 
 import * from "../lib/engine/Log.mt";
 
+@Script
 public class SimpleTest {
     private int frameCount = 0;
 

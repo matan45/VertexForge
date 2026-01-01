@@ -1,34 +1,32 @@
 // PlayerController - Example game script
-// Demonstrates basic movement using EngineScript lifecycle methods
+// Uses @Script annotation for engine integration
 
-import * from "../lib/engine/EngineScript.mt";
+import * from "../lib/engine/Log.mt";
 import * from "../lib/math/Vec3f.mt";
 
-public class PlayerController extends EngineScript {
+@Script
+public class PlayerController {
     // Movement speed in units per second
     private float speed = 5.0;
 
     // Track total time for demonstration
     private float totalTime = 0.0;
 
-    public constructor() : super() {
+    public constructor() {
         // Initialize with default values
     }
 
     public function onStart(): void {
-        Log::info("PlayerController started on entity: " + getName());
-        Vec3f pos = getPosition();
-        Log::info("Initial position: " + pos.toString());
+        Log::info("PlayerController started!");
     }
 
     public function onUpdate(float deltaTime): void {
         totalTime = totalTime + deltaTime;
 
-        // Example: Move the entity upward over time
-        Vec3f currentPos = getPosition();
-        Vec3f movement = new Vec3f(0.0, speed * deltaTime, 0.0);
-        Vec3f newPos = currentPos.add(movement);
-        setPosition(newPos);
+        // Example: Log every second
+        if (parsePrimitive(totalTime) % 1.0 < deltaTime) {
+            Log::info("PlayerController running... Time: " + parsePrimitive(totalTime) + "s");
+        }
     }
 
     public function onDestroy(): void {
