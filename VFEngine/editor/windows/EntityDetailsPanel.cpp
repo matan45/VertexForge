@@ -453,7 +453,7 @@ namespace windows
             if (ImGui::Button("Browse##DefaultMat"))
             {
                 nfd::FileDialog fileDialog;
-                std::string path = fileDialog.openFileDialog({{L"VF Material (*.vfMat)", L"*.vfMat"}});
+                std::string path = fileDialog.openFileDialog({{L"VF Material (*.vfMat, *.vfMatInstance)", L"*.vfMat;*.vfMatInstance"}});
                 if (!path.empty())
                 {
                     events::material::SetDefaultMaterialCommand cmd;
@@ -533,7 +533,7 @@ namespace windows
                         if (ImGui::Button(browseId.c_str()))
                         {
                             nfd::FileDialog fileDialog;
-                            std::string path = fileDialog.openFileDialog({{L"VF Material (*.vfMat)", L"*.vfMat"}});
+                            std::string path = fileDialog.openFileDialog({{L"VF Material (*.vfMat, *.vfMatInstance)", L"*.vfMat;*.vfMatInstance"}});
                             if (!path.empty())
                             {
                                 events::material::SetSubMeshMaterialCommand cmd;

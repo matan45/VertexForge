@@ -228,9 +228,9 @@ namespace services {
         // ============================================
         // Entity Naming
         // ============================================
-        
+
         virtual std::string getEntityName(EntityHandle entity) const = 0;
-        
+
         virtual void setEntityName(EntityHandle entity, const std::string& name) = 0;
     };
 

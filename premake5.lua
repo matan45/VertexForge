@@ -4,6 +4,12 @@ workspace "VertexForge"
    location "VFEngine"  -- Specify where to place generated files
    startproject "Editor"  -- Set the default startup project
 
+   -- Target latest Windows SDK and VS2026 toolset (v145) to avoid retargeting dialog
+   filter "system:windows"
+      systemversion "latest"
+      toolset "v145"
+   filter {}
+
    -- Enable UTF-8 support for all C++ projects (required by spdlog/fmt)
    filter "language:C++"
       buildoptions { "/utf-8" }

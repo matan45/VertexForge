@@ -9,14 +9,11 @@ namespace services {
         ~IEditorRenderService() override = default;
 
         // ============================================
-        // Editor Textures (for UI icons, previews)
+        // Editor Textures (for UI icons)
         // ============================================
 
-        // Load a texture for editor UI (icons, previews)
+        // Load a texture for editor UI (icons) - sync, for small resources
         virtual EditorTextureHandle loadEditorTexture(const std::string& path) = 0;
-
-        // Load an HDR texture for editor UI (IBL preview)
-        virtual EditorTextureHandle loadEditorHDRTexture(const std::string& path) = 0;
 
         // Release an editor texture
         virtual void releaseEditorTexture(const EditorTextureHandle& handle) = 0;

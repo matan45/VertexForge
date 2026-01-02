@@ -2,6 +2,7 @@
 #include "../material/MaterialShaderCache.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "resource/ResourceManager.hpp"
+#include <material/MaterialInstanceTypes.hpp>
 
 namespace render::mesh
 {
@@ -12,10 +13,22 @@ namespace render::mesh
             return nullptr;
         }
 
+        // For material instances, we need to load the parent material
+        std::string effectivePath = materialPath;
+        if (material::isInstanceFile(materialPath))
+        {
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+            if (!instanceData || instanceData->parentMaterialPath.empty())
+            {
+                return nullptr;
+            }
+            effectivePath = instanceData->parentMaterialPath;
+        }
+
         // First check cache with shared lock
         {
             std::shared_lock lock(cacheMutex);
-            auto it = materialCache.find(materialPath);
+            auto it = materialCache.find(effectivePath);
             if (it != materialCache.end() && it->second)
             {
                 return it->second;
@@ -26,16 +39,16 @@ namespace render::mesh
         std::unique_lock lock(cacheMutex);
 
         // Double-check after acquiring exclusive lock
-        auto it = materialCache.find(materialPath);
+        auto it = materialCache.find(effectivePath);
         if (it != materialCache.end() && it->second)
         {
             return it->second;
         }
-        
-        auto matData = resource::ResourceManager::loadMaterial(materialPath);
+
+        auto matData = resource::ResourceManager::loadMaterial(effectivePath);
         if (matData)
         {
-            materialCache[materialPath] = matData;
+            materialCache[effectivePath] = matData;
         }
         return matData;
     }

@@ -2,6 +2,7 @@
 #include "EventTypes.hpp"
 #include "../providers/IPreviewProvider.hpp"
 #include "../data/DTOs.hpp"
+#include "../data/AsyncLoadingTypes.hpp"
 #include <math/Frustum.hpp>
 #include <glm/glm.hpp>
 #include <string>
@@ -45,19 +46,6 @@ namespace services::events::preview {
     // MATERIAL PREVIEW QUERIES
     // ============================================================
 
-    
-    struct IsMaterialPreviewReadyQuery : ::events::IQuery<bool> {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsMaterialPreviewReady"; }
-    };
-
-    
-    struct GetMaterialParamsQuery : ::events::IQuery<MaterialPreviewParams> {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "GetMaterialParams"; }
-    };
-
-    
     struct RenderMaterialPreviewQuery : ::events::IQuery<ViewportTextureHandle> {
         PreviewInstanceId instanceId;
         std::string_view getName() const override { return "RenderMaterialPreview"; }
@@ -85,26 +73,6 @@ namespace services::events::preview {
         std::string_view getName() const override { return "CleanUpMeshPreview"; }
     };
 
-   
-    struct LoadPreviewMeshResult {
-        bool success = false;
-        math::AABB bounds;
-    };
-
-   
-    struct LoadPreviewMeshCommand : ::events::ICommand<LoadPreviewMeshResult> {
-        PreviewInstanceId instanceId;
-        std::string meshPath;
-        std::string_view getName() const override { return "LoadPreviewMesh"; }
-    };
-
-    
-    struct UnloadPreviewMeshCommand : ::events::ICommand<void> {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "UnloadPreviewMesh"; }
-    };
-
-   
     struct SetMeshPreviewParamsCommand : ::events::ICommand<void> {
         PreviewInstanceId instanceId;
         MeshPreviewParams params;
@@ -121,21 +89,32 @@ namespace services::events::preview {
     };
 
     // ============================================================
-    // MESH PREVIEW QUERIES
+    // ASYNC MESH LOADING COMMANDS
     // ============================================================
 
-   
-    struct IsMeshPreviewReadyQuery : ::events::IQuery<bool> {
+    struct LoadPreviewMeshAsyncCommand : ::events::ICommand<void> {
         PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsMeshPreviewReady"; }
+        std::string meshPath;
+        std::string_view getName() const override { return "LoadPreviewMeshAsync"; }
     };
 
-    
-    struct IsPreviewMeshLoadedQuery : ::events::IQuery<bool> {
+    struct CancelMeshLoadingCommand : ::events::ICommand<void> {
         PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsPreviewMeshLoaded"; }
+        std::string_view getName() const override { return "CancelMeshLoading"; }
     };
 
+    // ============================================================
+    // ASYNC MESH LOADING QUERIES
+    // ============================================================
+
+    struct GetMeshLoadingProgressQuery : ::events::IQuery<MeshLoadingProgress> {
+        PreviewInstanceId instanceId;
+        std::string_view getName() const override { return "GetMeshLoadingProgress"; }
+    };
+
+    // ============================================================
+    // MESH PREVIEW QUERIES
+    // ============================================================
 
     struct GetPreviewMeshSubMeshInfoQuery : ::events::IQuery<std::vector<SubMeshInfo>> {
         PreviewInstanceId instanceId;
@@ -158,36 +137,6 @@ namespace services::events::preview {
     struct RenderMeshPreviewQuery : ::events::IQuery<ViewportTextureHandle> {
         PreviewInstanceId instanceId;
         std::string_view getName() const override { return "RenderMeshPreview"; }
-    };
-
-    // ============================================================
-    // NOTIFICATIONS
-    // ============================================================
-
-    
-    struct MaterialPreviewInitializedNotification : ::events::INotification {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "MaterialPreviewInitialized"; }
-    };
-
-    
-    struct MeshPreviewInitializedNotification : ::events::INotification {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "MeshPreviewInitialized"; }
-    };
-
-    
-    struct PreviewMeshLoadedNotification : ::events::INotification {
-        PreviewInstanceId instanceId;
-        std::string meshPath;
-        math::AABB bounds;
-        std::string_view getName() const override { return "PreviewMeshLoaded"; }
-    };
-
-    
-    struct PreviewMeshUnloadedNotification : ::events::INotification {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "PreviewMeshUnloaded"; }
     };
 
 }

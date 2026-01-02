@@ -7,6 +7,7 @@
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Texture.hpp"
+#include "resource/Types.hpp"
 #include "print/Logger.hpp"
 
 namespace render
@@ -61,7 +62,6 @@ namespace render
 
             // Disable rendering first to prevent access during cleanup
             skyboxRenderer->disable();
-            isDisplay = false;
             iblInitialized = false;
 
             hdrTexture.reset();
@@ -90,13 +90,6 @@ namespace render
     void IBL::setCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
         skyboxRenderer->setCameraMatrices(view, projection);
-        isDisplay = true;
-    }
-
-    void IBL::disableCamera()
-    {
-        skyboxRenderer->disable();
-        isDisplay = false;
     }
 
     const ibl::ImageData& IBL::getBrdfLUTImage() const

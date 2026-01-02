@@ -1,6 +1,7 @@
 #pragma once
 #include "EventTypes.hpp"
 #include "../data/DTOs.hpp"
+#include "../data/AsyncLoadingTypes.hpp"
 #include "../providers/IOffScreenProvider.hpp"
 #include <glm/glm.hpp>
 #include <optional>
@@ -22,7 +23,6 @@ namespace events::render {
         std::string_view getName() const override { return "RemoveIBL"; }
     };
 
-    // Update IBL camera matrices (called each frame from ViewPort with EditorCamera matrices)
     struct UpdateIBLCameraCommand : ICommand<> {
         glm::mat4 viewMatrix;
         glm::mat4 projectionMatrix;
@@ -30,16 +30,8 @@ namespace events::render {
         std::string_view getName() const override { return "UpdateIBLCamera"; }
     };
 
-    struct ResizeViewportCommand : ICommand<> {
-        uint32_t width;
-        uint32_t height;
-
-        std::string_view getName() const override { return "ResizeViewport"; }
-    };
-
     struct LoadEditorTextureCommand : ICommand<services::EditorTextureHandle> {
         std::string path;
-        bool isHDR = false;
 
         std::string_view getName() const override { return "LoadEditorTexture"; }
     };
@@ -50,99 +42,45 @@ namespace events::render {
         std::string_view getName() const override { return "ReleaseEditorTexture"; }
     };
 
-    // ============================================
-    // QUERIES - Read-only operations
-    // ============================================
+    struct LoadEditorTextureAsyncCommand : ICommand<> {
+        void* instanceId;
+        std::string path;
+        bool isHDR = false;
 
-    struct GetViewportTextureQuery : IQuery<services::ViewportTextureHandle> {
-        std::string_view getName() const override { return "GetViewportTexture"; }
+        std::string_view getName() const override { return "LoadEditorTextureAsync"; }
     };
 
-    struct HasIBLQuery : IQuery<bool> {
-        std::string_view getName() const override { return "HasIBL"; }
+    struct CancelTextureLoadingCommand : ICommand<> {
+        void* instanceId;
+
+        std::string_view getName() const override { return "CancelTextureLoading"; }
     };
 
-    struct GetIBLPathQuery : IQuery<std::optional<std::string>> {
-        std::string_view getName() const override { return "GetIBLPath"; }
-    };
-
-    // ============================================
-    // NOTIFICATIONS - State change broadcasts
-    // ============================================
-
-    struct ViewportResizedNotification : INotification {
-        uint32_t width;
-        uint32_t height;
-
-        std::string_view getName() const override { return "ViewportResized"; }
-    };
-
-    struct IBLChangedNotification : INotification {
-        std::optional<std::string> hdrPath;  // nullopt if IBL removed
-
-        std::string_view getName() const override { return "IBLChanged"; }
-    };
-
-    struct RenderFrameCompleteNotification : INotification {
-        uint64_t frameNumber;
-        double frameTimeMs;
-
-        std::string_view getName() const override { return "RenderFrameComplete"; }
-    };
-
-    // ============================================
-    // MESH COMMANDS - Mesh loading and rendering
-    // ============================================
-    
-    struct LoadMeshCommand : ICommand<std::string> {
-        std::string meshPath;
-
-        std::string_view getName() const override { return "LoadMesh"; }
-    };
-    
-    struct UnloadMeshCommand : ICommand<> {
-        std::string meshId;
-
-        std::string_view getName() const override { return "UnloadMesh"; }
-    };
-    
     struct UpdateMeshCameraCommand : ICommand<> {
         glm::mat4 viewMatrix;
         glm::mat4 projectionMatrix;
         glm::vec3 cameraPosition;
-        float time = 0.0f;  // Animation time in seconds
+        float time = 0.0f;
 
         std::string_view getName() const override { return "UpdateMeshCamera"; }
     };
-
-    // ============================================
-    // MESH QUERIES
-    // ============================================
-
-    struct IsMeshLoadedQuery : IQuery<bool> {
-        std::string meshPath;
-
-        std::string_view getName() const override { return "IsMeshLoaded"; }
-    };
-
-    struct GetLoadedMeshesQuery : IQuery<std::vector<std::string>> {
-        std::string_view getName() const override { return "GetLoadedMeshes"; }
-    };
-
-    struct GetMeshBoundingBoxQuery : IQuery<std::optional<services::MeshBoundingBox>> {
-        std::string meshPath;
-
-        std::string_view getName() const override { return "GetMeshBoundingBox"; }
-    };
-
-    // ============================================
-    // BILLBOARD COMMANDS - Billboard icon visibility
-    // ============================================
 
     struct SetShowBillboardIconsCommand : ICommand<> {
         bool show;
 
         std::string_view getName() const override { return "SetShowBillboardIcons"; }
+    };
+
+    struct SetShowDebugRenderingCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowDebugRendering"; }
+    };
+
+    struct SetShowGridCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowGrid"; }
     };
 
     struct LoadBillboardAtlasCommand : ICommand<bool> {
@@ -152,55 +90,45 @@ namespace events::render {
     };
 
     // ============================================
-    // BILLBOARD QUERIES
+    // QUERIES - Read-only operations
     // ============================================
+
+    struct GetTextureLoadingProgressQuery : IQuery<services::TextureLoadingProgress> {
+        void* instanceId;
+
+        std::string_view getName() const override { return "GetTextureLoadingProgress"; }
+    };
+
+    struct GetLoadedTextureHandleQuery : IQuery<services::EditorTextureHandle> {
+        void* instanceId;
+
+        std::string_view getName() const override { return "GetLoadedTextureHandle"; }
+    };
+
+    struct GetViewportTextureQuery : IQuery<services::ViewportTextureHandle> {
+        std::string_view getName() const override { return "GetViewportTexture"; }
+    };
+
+    struct GetMeshBoundingBoxQuery : IQuery<std::optional<services::MeshBoundingBox>> {
+        std::string meshPath;
+
+        std::string_view getName() const override { return "GetMeshBoundingBox"; }
+    };
 
     struct GetShowBillboardIconsQuery : IQuery<bool> {
         std::string_view getName() const override { return "GetShowBillboardIcons"; }
     };
 
-    // ============================================
-    // DEBUG RENDERING COMMANDS
-    // ============================================
-
-    struct SetShowDebugRenderingCommand : ICommand<> {
-        bool show;
-
-        std::string_view getName() const override { return "SetShowDebugRendering"; }
-    };
-
-    // ============================================
-    // DEBUG RENDERING QUERIES
-    // ============================================
-
     struct GetShowDebugRenderingQuery : IQuery<bool> {
         std::string_view getName() const override { return "GetShowDebugRendering"; }
     };
 
-    // ============================================
-    // DEBUG/STATS QUERIES
-    // ============================================
+    struct GetShowGridQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowGrid"; }
+    };
 
     struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {
         std::string_view getName() const override { return "GetCullingStats"; }
-    };
-
-    // ============================================
-    // GRID COMMANDS
-    // ============================================
-
-    struct SetShowGridCommand : ICommand<> {
-        bool show;
-
-        std::string_view getName() const override { return "SetShowGrid"; }
-    };
-
-    // ============================================
-    // GRID QUERIES
-    // ============================================
-
-    struct GetShowGridQuery : IQuery<bool> {
-        std::string_view getName() const override { return "GetShowGrid"; }
     };
 
 }

@@ -12,6 +12,7 @@ namespace fs = std::filesystem;
 
 #include "../print/EditorLogger.hpp"
 #include "../material/MaterialTypes.hpp"
+#include "../material/MaterialInstanceTypes.hpp"
 #include "Types.hpp"
 #include "ShaderResource.hpp"
 #include "MeshStreamHandle.hpp"
@@ -26,6 +27,7 @@ namespace resource {
 		inline static std::unordered_map<std::string, std::weak_ptr<MeshesData>> meshCache;
 		inline static std::unordered_map<std::string, std::weak_ptr<std::vector<ShaderModel>>> shaderCache;
 		inline static std::unordered_map<std::string, std::weak_ptr<material::MaterialData>> materialCache;
+		inline static std::unordered_map<std::string, std::weak_ptr<material::MaterialInstanceData>> materialInstanceCache;
 
 		inline static std::mutex cacheMutex;
 		inline static std::jthread cleanupThread;
@@ -39,14 +41,16 @@ namespace resource {
 		static std::future <std::shared_ptr<AudioData>> loadAudioAsync(std::string_view path);
 		static std::future <std::shared_ptr<MeshesData>> loadMeshAsync(std::string_view path);
 		static std::future <std::shared_ptr<std::vector<ShaderModel>>> loadShaderAsync(std::string_view path);
-		static std::future <std::shared_ptr<material::MaterialData>> loadMaterialAsync(std::string_view path);
 
 		static std::shared_ptr<material::MaterialData> loadMaterial(std::string_view path);
+
+		static std::shared_ptr<material::MaterialInstanceData> loadMaterialInstance(std::string_view path);
 
 		static std::unique_ptr<MeshStreamHandle> openMeshStream(std::string_view path);
 
 		// Invalidate material cache entry (for reload support)
 		static void invalidateMaterialCache(std::string_view path);
+		static void invalidateMaterialInstanceCache(std::string_view path);
 
 		static void init();
 		static void cleanUp();

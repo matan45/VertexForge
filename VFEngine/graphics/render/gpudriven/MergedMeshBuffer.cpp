@@ -8,6 +8,7 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/Logger.hpp"
+#include <material/MaterialInstanceTypes.hpp>
 #include <cstring>
 #include <cmath>
 
@@ -683,23 +684,31 @@ namespace render::gpudriven
             float iblDiffuse = 1.0f, iblSpecular = 0.5f;
             if (!materialPath.empty())
             {
-                auto matData = resource::ResourceManager::loadMaterial(materialPath);
-                if (matData)
-                {
-                    auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
-                    iblDiffuse = pbrValues.iblDiffuse;
-                    iblSpecular = pbrValues.iblSpecular;
-                }
+                // Use unified extraction that handles both .vfMat and .vfMatInstance
+                auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath);
+                iblDiffuse = pbrValues.iblDiffuse;
+                iblSpecular = pbrValues.iblSpecular;
             }
             obj.iblParams = glm::vec4(iblDiffuse, iblSpecular, 0.0f, 0.0f);
             obj.materialParams = glm::vec4(meshRender.metallic, meshRender.roughness, meshRender.ao,
                                            meshRender.emission);
         }
 
-        // Dynamic emission
+        // Dynamic emission - need parent material for shader graph
         if (!materialPath.empty() && time > 0.0f)
         {
-            auto matData = resource::ResourceManager::loadMaterial(materialPath);
+            // For instances, load the parent material to get the shader graph
+            std::string effectiveMaterialPath = materialPath;
+            if (material::isInstanceFile(materialPath))
+            {
+                auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+                if (instanceData && !instanceData->parentMaterialPath.empty())
+                {
+                    effectiveMaterialPath = instanceData->parentMaterialPath;
+                }
+            }
+
+            auto matData = resource::ResourceManager::loadMaterial(effectiveMaterialPath);
             if (matData)
             {
                 const auto* outputNode = matData->graph.findOutputNode();

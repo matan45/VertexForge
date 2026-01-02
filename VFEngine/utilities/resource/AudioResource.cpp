@@ -45,7 +45,12 @@ namespace resource
 
     size_t AudioStreamHandle::readSamples(std::vector<short>& buffer, size_t sampleCount)
     {
-        if (!file.is_open() || sampleCount == 0)
+        if (!file.is_open())
+        {
+            return 0;
+        }
+
+        if (sampleCount == 0)
         {
             return 0;
         }
@@ -91,11 +96,7 @@ namespace resource
             return false;
         }
 
-        size_t totalSamples = getTotalSamples();
-        if (sampleIndex > totalSamples)
-        {
-            sampleIndex = totalSamples;
-        }
+        sampleIndex = std::min(sampleIndex, getTotalSamples());
 
         // Calculate byte offset from data start
         std::streamoff byteOffset = static_cast<std::streamoff>(sampleIndex * sizeof(short));
@@ -209,10 +210,6 @@ namespace resource
         // Record the position where PCM data starts
         handle->header.dataStartOffset = handle->file.tellg();
         handle->currentSamplePosition = 0;
-
-        vfLogInfo("Opened audio stream: {} ({}Hz, {} channels, {} seconds)",
-                  path, handle->header.sampleRate, handle->header.channels,
-                  handle->header.totalDurationSeconds);
 
         return handle;
     }

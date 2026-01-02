@@ -2,6 +2,12 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 
+namespace resource
+{
+    struct HDRData;
+    struct TextureData;
+}
+
 namespace core {
 	class Device;
 
@@ -42,6 +48,10 @@ namespace core {
 
 		void loadTextureFromFile(std::string_view filePath, vk::Format format = vk::Format::eR8G8B8A8Srgb, bool isEditor = true);
 		void loadHDRFromFile(std::string_view filePath, bool isEditor = true);
+		
+		void loadHDRFromData(const resource::HDRData& hdrData, bool isEditor = false);
+		void loadTextureFromData(const resource::TextureData& textureData, vk::Format format = vk::Format::eR8G8B8A8Srgb, bool isEditor = true);
+		
 		const vk::DescriptorSet& getDescriptorSet() const { return descriptorSet; }
 		const vk::ImageView& getImageView() const { return imageView; }
 		const vk::Sampler& getSampler() const { return sampler; }

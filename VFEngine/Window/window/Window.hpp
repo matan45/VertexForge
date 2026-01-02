@@ -16,8 +16,8 @@ namespace window {
 		bool isFocused{ true };
 		bool minimizeStateChanged{ false };
 		bool focusStateChanged{ false };
-		int width{ 800 };
-		int height{ 600 };
+		int width{ 1024 };
+		int height{ 768 };
 
 
 		static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
