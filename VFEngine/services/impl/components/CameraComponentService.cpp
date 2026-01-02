@@ -77,16 +77,31 @@ namespace services {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::CameraComponent>();
 
-        // Find camera with isPrimary = true
+        // Find camera with isPrimary = true (skip inactive entities)
         for (auto entity : view) {
+            // Skip inactive entities
+            if (registry.all_of<components::NameComponent>(entity)) {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive) {
+                    continue;
+                }
+            }
+
             const auto& comp = view.get<components::CameraComponent>(entity);
             if (comp.isPrimary) {
                 return internal::toHandle(entity);
             }
         }
 
-        // Fallback to first camera if no primary is set
+        // Fallback to first active camera if no primary is set
         for (auto entity : view) {
+            // Skip inactive entities
+            if (registry.all_of<components::NameComponent>(entity)) {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive) {
+                    continue;
+                }
+            }
             return internal::toHandle(entity);
         }
 

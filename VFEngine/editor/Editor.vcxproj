@@ -126,7 +126,6 @@
     <ClInclude Include="windows\PrefabPreviewWindow.hpp" />
     <ClInclude Include="windows\PreviewWindowManager.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
-    <ClInclude Include="windows\SceneLoadingProgressWindow.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
     <ClInclude Include="windows\material\MaterialPreviewPanel.hpp" />
@@ -160,7 +159,6 @@
     <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
     <ClCompile Include="windows\PreviewWindowManager.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
-    <ClCompile Include="windows\SceneLoadingProgressWindow.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />
     <ClCompile Include="windows\material\MaterialPreviewPanel.cpp" />

@@ -11,6 +11,9 @@
 // Include event dispatcher for Entity API callbacks
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/SceneEvents.hpp"
+#include "../../services/events/MaterialEvents.hpp"
+#include "../../services/events/AudioEvents.hpp"
+#include "../../services/events/ScriptingEvents.hpp"
 
 // Include editor logger for console output
 #include "print/EditorLogger.hpp"
@@ -561,6 +564,45 @@ namespace core {
                 return value::Value(result.has_value());
             });
 
+        // _native_entity_isActive(id) -> bool
+        interpreter->registerNativeFunction("_native_entity_isActive",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+                if (args.empty()) {
+                    return value::Value(false);
+                }
+                int64_t id = extractInt64(args[0]);
+                if (id < 0) {
+                    return value::Value(false);
+                }
+
+                events::scene::GetEntityQuery query;
+                query.entity = intToEntity(id);
+                auto result = dispatcher.query(query);
+                if (result.has_value()) {
+                    return value::Value(result->isActive);
+                }
+                return value::Value(false);
+            });
+
+        // _native_entity_setActive(id, active) -> void
+        interpreter->registerNativeFunction("_native_entity_setActive",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+                if (args.size() < 2) {
+                    return value::Value(std::monostate{});
+                }
+                int64_t id = extractInt64(args[0]);
+                bool active = std::get<bool>(args[1]);
+                if (id < 0) {
+                    return value::Value(std::monostate{});
+                }
+
+                events::scene::SetEntityActiveCommand cmd;
+                cmd.entity = intToEntity(id);
+                cmd.isActive = active;
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
         // _native_entity_getName(id) -> string
         interpreter->registerNativeFunction("_native_entity_getName",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
@@ -822,6 +864,142 @@ namespace core {
                 return value::Value(arr);
             });
 
+        // _native_entity_addComponent(id, type) -> bool
+        interpreter->registerNativeFunction("_native_entity_addComponent",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+                if (args.size() < 2) {
+                    return value::Value(false);
+                }
+                int64_t id = extractInt64(args[0]);
+                std::string typeName = extractString(args[1]);
+                if (id < 0 || typeName.empty()) {
+                    return value::Value(false);
+                }
+
+                auto entity = intToEntity(id);
+                auto compType = stringToComponentType(typeName);
+
+                bool success = false;
+                switch (compType) {
+                    case services::ComponentTypeId::Camera: {
+                        events::scene::AddCameraComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::Mesh: {
+                        events::scene::AddMeshComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::Material: {
+                        events::material::AddMaterialComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::AudioSource2D: {
+                        events::scene::AddAudioSource2DComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::AudioSource3D: {
+                        events::scene::AddAudioSource3DComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::Script: {
+                        events::scripting::AttachScriptCommand cmd;
+                        cmd.entity = entity;
+                        cmd.data.scriptPath = "";  // Empty, user can attach script later
+                        cmd.data.enabled = true;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    default:
+                        spdlog::warn("[ScriptingAdapter] addComponent: unsupported component type '{}'", typeName);
+                        break;
+                }
+                return value::Value(success);
+            });
+
+        // _native_entity_removeComponent(id, type) -> bool
+        interpreter->registerNativeFunction("_native_entity_removeComponent",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+                if (args.size() < 2) {
+                    return value::Value(false);
+                }
+                int64_t id = extractInt64(args[0]);
+                std::string typeName = extractString(args[1]);
+                if (id < 0 || typeName.empty()) {
+                    return value::Value(false);
+                }
+
+                auto entity = intToEntity(id);
+                auto compType = stringToComponentType(typeName);
+
+                bool success = false;
+                switch (compType) {
+                    case services::ComponentTypeId::Camera: {
+                        events::scene::RemoveCameraComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::Mesh: {
+                        events::scene::RemoveMeshComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::Material: {
+                        events::material::RemoveMaterialComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::AudioSource2D: {
+                        events::scene::RemoveAudioSource2DComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    case services::ComponentTypeId::AudioSource3D: {
+                        events::scene::RemoveAudioSource3DComponentCommand cmd;
+                        cmd.entity = entity;
+                        success = dispatcher.execute(cmd);
+                        break;
+                    }
+                    default:
+                        spdlog::warn("[ScriptingAdapter] removeComponent: unsupported component type '{}'", typeName);
+                        break;
+                }
+                return value::Value(success);
+            });
+
+        // _native_entity_setParent(id, parentId) -> bool
+        // Set the parent of an entity. Use parentId = -1 to move to root
+        interpreter->registerNativeFunction("_native_entity_setParent",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+                if (args.size() < 2) {
+                    return value::Value(false);
+                }
+                int64_t id = extractInt64(args[0]);
+                int64_t parentId = extractInt64(args[1]);
+                if (id < 0) {
+                    return value::Value(false);
+                }
+
+                events::scene::ReparentEntityCommand cmd;
+                cmd.entity = intToEntity(id);
+                cmd.newParent = intToEntity(parentId);  // -1 will be invalid handle = root
+                bool success = dispatcher.execute(cmd);
+                return value::Value(success);
+            });
+
         // _native_entity_getParent(id) -> int64 (parent ID, -1 if no parent)
         interpreter->registerNativeFunction("_native_entity_getParent",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
@@ -869,7 +1047,9 @@ namespace core {
                 return value::Value(arr);
             });
 
-        // _native_entity_create(name) -> int64 (new entity ID)
+        // _native_entity_create(name, parentId?) -> int64 (new entity ID)
+        // If parentId is provided and >= 0, creates as child of that entity
+        // Otherwise creates at scene root
         interpreter->registerNativeFunction("_native_entity_create",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 std::string name = "New Entity";
@@ -882,6 +1062,15 @@ namespace core {
 
                 events::scene::CreateEntityCommand cmd;
                 cmd.name = name;
+
+                // Check for optional parent parameter
+                if (args.size() >= 2) {
+                    int64_t parentId = extractInt64(args[1]);
+                    if (parentId >= 0) {
+                        cmd.parent = intToEntity(parentId);
+                    }
+                }
+
                 auto newHandle = dispatcher.execute(cmd);
                 return value::Value(entityToInt(newHandle));
             });

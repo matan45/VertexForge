@@ -47,6 +47,13 @@ namespace events::scene {
         std::string_view getName() const override { return "SetEntityName"; }
     };
 
+    struct SetEntityActiveCommand : ICommand<> {
+        services::EntityHandle entity;
+        bool isActive;
+
+        std::string_view getName() const override { return "SetEntityActive"; }
+    };
+
     struct SelectEntityCommand : ICommand<> {
         std::optional<services::EntityHandle> entity;
 

@@ -586,6 +586,18 @@ namespace services {
         sceneEntity.setName(name);
     }
 
+    void SceneServiceImpl::setEntityActive(EntityHandle entity, bool isActive) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::NameComponent>()) {
+            sceneEntity.getComponent<components::NameComponent>().isActive = isActive;
+        }
+    }
+
     bool SceneServiceImpl::newScene() {
         if (!sceneGraph) {
             vfLogError("SceneGraph is null, cannot create new scene.");
@@ -708,6 +720,11 @@ namespace services {
         data.handle = internal::toHandle(entity);
         data.name = sceneEntity.getName();
 
+        // Active state
+        if (sceneEntity.hasComponent<components::NameComponent>()) {
+            data.isActive = sceneEntity.getComponent<components::NameComponent>().isActive;
+        }
+
         // Parent
         if (sceneEntity.hasComponent<components::ParentComponent>()) {
             data.parent = internal::toHandle(sceneEntity.getComponent<components::ParentComponent>().parent);
@@ -788,6 +805,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::scene::SetEntityNameCommand>(
             [this](const events::scene::SetEntityNameCommand& cmd) {
                 setEntityName(cmd.entity, cmd.newName);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetEntityActiveCommand>(
+            [this](const events::scene::SetEntityActiveCommand& cmd) {
+                setEntityActive(cmd.entity, cmd.isActive);
             });
 
         dispatcher.registerCommandHandler<events::scene::SelectEntityCommand>(

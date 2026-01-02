@@ -37,6 +37,7 @@ namespace components {
 
 	struct NameComponent {
 		std::string name;
+		bool isActive = true;  // If false, entity and all its components are inactive
 	};
 
 	struct UUIDComponent {

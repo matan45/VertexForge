@@ -73,6 +73,7 @@ namespace windows
             return;
 
         drawEntityName(handle, entityDataOpt->name);
+        drawEntityActiveCheckbox(handle, entityDataOpt->isActive);
         ImGui::Separator();
 
         drawTransformComponent(handle);
@@ -103,6 +104,23 @@ namespace windows
             cmd.entity = handle;
             cmd.newName = buffer;
             dispatcher.execute(cmd);
+        }
+    }
+
+    void EntityDetailsPanel::drawEntityActiveCheckbox(services::EntityHandle handle, bool isActive)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (ImGui::Checkbox("Active", &isActive))
+        {
+            events::scene::SetEntityActiveCommand cmd;
+            cmd.entity = handle;
+            cmd.isActive = isActive;
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("When disabled, the entity and all its components are inactive");
         }
     }
 
@@ -456,7 +474,9 @@ namespace windows
             if (ImGui::Button("Browse##DefaultMat"))
             {
                 nfd::FileDialog fileDialog;
-                std::string path = fileDialog.openFileDialog({{L"VF Material (*.vfMat, *.vfMatInstance)", L"*.vfMat;*.vfMatInstance"}});
+                std::string path = fileDialog.openFileDialog({
+                    {L"VF Material (*.vfMat, *.vfMatInstance)", L"*.vfMat;*.vfMatInstance"}
+                });
                 if (!path.empty())
                 {
                     events::material::SetDefaultMaterialCommand cmd;
@@ -536,7 +556,9 @@ namespace windows
                         if (ImGui::Button(browseId.c_str()))
                         {
                             nfd::FileDialog fileDialog;
-                            std::string path = fileDialog.openFileDialog({{L"VF Material (*.vfMat, *.vfMatInstance)", L"*.vfMat;*.vfMatInstance"}});
+                            std::string path = fileDialog.openFileDialog({
+                                {L"VF Material (*.vfMat, *.vfMatInstance)", L"*.vfMat;*.vfMatInstance"}
+                            });
                             if (!path.empty())
                             {
                                 events::material::SetSubMeshMaterialCommand cmd;
@@ -1079,19 +1101,20 @@ namespace windows
 
         ImGui::PushID("ScriptComponent");
 
-        bool removeScript = false;
+        bool removeAllScripts = false;
+        std::string scriptToRemove;
 
         pushComponentHeaderStyle();
         bool isOpen = ImGui::CollapsingHeader("##ScriptHeader",
                                               ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
 
         ImGui::SameLine();
-        ImGui::Text("Script");
+        ImGui::Text("Scripts (%zu)", scriptPaths.size());
 
         pushRemoveButtonStyle();
-        if (ImGui::Button("x##RemoveScript", ImVec2(18, 18)))
+        if (ImGui::Button("x##RemoveAllScripts", ImVec2(18, 18)))
         {
-            removeScript = true;
+            removeAllScripts = true;
         }
         popRemoveButtonStyle();
         popComponentHeaderStyle();
@@ -1100,45 +1123,68 @@ namespace windows
         {
             ImGui::Indent(10.0f);
 
-            services::ScriptComponentData scriptData = *scriptOpt;
-
-            // Script path display and selection
-            if (!scriptData.scriptPath.empty())
+            // Display each script
+            for (size_t i = 0; i < scriptPaths.size(); ++i)
             {
-                std::string filename = scriptData.scriptPath;
+                const auto& scriptPath = scriptPaths[i];
+                ImGui::PushID(static_cast<int>(i));
+
+                // Get script filename
+                std::string filename = scriptPath;
                 auto lastSlash = filename.find_last_of("/\\");
                 if (lastSlash != std::string::npos)
                 {
                     filename = filename.substr(lastSlash + 1);
                 }
-                ImGui::Text("Script: %s", filename.c_str());
+
+                // Script entry with enabled checkbox and remove button
+                events::scripting::IsScriptEnabledQuery enabledQuery;
+                enabledQuery.entity = handle;
+                enabledQuery.scriptPath = scriptPath;
+                bool isEnabled = dispatcher.query(enabledQuery);
+
+                if (ImGui::Checkbox("##ScriptEnabled", &isEnabled))
+                {
+                    events::scripting::SetScriptEnabledCommand cmd;
+                    cmd.entity = handle;
+                    cmd.scriptPath = scriptPath;
+                    cmd.enabled = isEnabled;
+                    dispatcher.execute(cmd);
+                }
+
+                ImGui::SameLine();
+                ImGui::Text("%s", filename.c_str());
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("%s", scriptData.scriptPath.c_str());
+                    ImGui::SetTooltip("%s", scriptPath.c_str());
                 }
-            }
-            else
-            {
-                ImGui::TextDisabled("No script selected");
+
+                ImGui::SameLine();
+                pushRemoveButtonStyle();
+                if (ImGui::Button("x##RemoveScript", ImVec2(16, 16)))
+                {
+                    scriptToRemove = scriptPath;
+                }
+                popRemoveButtonStyle();
+
+                ImGui::PopID();
             }
 
-            if (ImGui::Button("Select Script"))
+            if (scriptPaths.empty())
+            {
+                ImGui::TextDisabled("No scripts attached");
+            }
+
+            ImGui::Spacing();
+
+            // Add Script button
+            if (ImGui::Button("Add Script"))
             {
                 nfd::FileDialog fileDialog;
                 std::string path = fileDialog.openFileDialog(
                     {{L"mType Script Files (*.mt)", L"*.mt"}});
                 if (!path.empty())
                 {
-                    // Detach old script if any
-                    if (!scriptData.scriptPath.empty())
-                    {
-                        events::scripting::DetachScriptCommand detachCmd;
-                        detachCmd.entity = handle;
-                        detachCmd.scriptPath = scriptData.scriptPath;
-                        dispatcher.execute(detachCmd);
-                    }
-
-                    // Attach new script
                     events::scripting::AttachScriptCommand attachCmd;
                     attachCmd.entity = handle;
                     attachCmd.data.scriptPath = path;
@@ -1147,53 +1193,21 @@ namespace windows
                 }
             }
 
-            ImGui::Spacing();
-
-            // Enabled checkbox (only show if we have a script)
-            if (!scriptData.scriptPath.empty())
-            {
-                bool enabled = scriptData.enabled;
-                if (ImGui::Checkbox("Enabled##Script", &enabled))
-                {
-                    events::scripting::SetScriptEnabledCommand cmd;
-                    cmd.entity = handle;
-                    cmd.scriptPath = scriptData.scriptPath;
-                    cmd.enabled = enabled;
-                    dispatcher.execute(cmd);
-                }
-            }
-
-            ImGui::Spacing();
-
-            // Status info
-            bool isEnabled = false;
-            if (!scriptData.scriptPath.empty())
-            {
-                events::scripting::IsScriptEnabledQuery enabledQuery;
-                enabledQuery.entity = handle;
-                enabledQuery.scriptPath = scriptData.scriptPath;
-                isEnabled = dispatcher.query(enabledQuery);
-            }
-
-            if (scriptData.scriptPath.empty())
-            {
-                ImGui::TextDisabled("Status: No script attached");
-            }
-            else if (!isEnabled)
-            {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.2f, 1.0f), "Status: Disabled");
-            }
-            else
-            {
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Status: Ready");
-            }
-
             ImGui::Unindent(10.0f);
         }
 
         ImGui::PopID();
 
-        if (removeScript)
+        // Handle script removal (after UI rendering to avoid iterator invalidation)
+        if (!scriptToRemove.empty())
+        {
+            events::scripting::DetachScriptCommand cmd;
+            cmd.entity = handle;
+            cmd.scriptPath = scriptToRemove;
+            dispatcher.execute(cmd);
+        }
+
+        if (removeAllScripts)
         {
             // Detach all scripts from this entity
             for (const auto& scriptPath : scriptPaths)
@@ -1206,8 +1220,6 @@ namespace windows
             // If component was empty (no scripts), we need to remove it manually
             if (scriptPaths.empty())
             {
-                // Remove empty ScriptComponent by attaching and immediately detaching
-                // This is a workaround - ideally we'd have a RemoveScriptComponent command
                 auto enttEntity = services::internal::fromHandle(handle);
                 auto& registry = scene::EntityRegistry::getRegistry();
                 if (registry.all_of<components::ScriptComponent>(enttEntity))
@@ -1220,7 +1232,8 @@ namespace windows
         return true;
     }
 
-    void EntityDetailsPanel::drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D, bool hasScript)
+    void EntityDetailsPanel::drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh,
+                                                    bool hasAudio2D, bool hasAudio3D, bool hasScript)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -1301,6 +1314,7 @@ namespace windows
                 }
             }
 
+
             if (!hasScript)
             {
                 if (ImGui::Selectable("  Script"))
@@ -1308,7 +1322,7 @@ namespace windows
                     // Add empty script component - user will select script file in the inspector
                     events::scripting::AttachScriptCommand cmd;
                     cmd.entity = handle;
-                    cmd.data.scriptPath = "";  // Empty path, user selects later
+                    cmd.data.scriptPath = ""; // Empty path, user selects later
                     cmd.data.enabled = true;
                     dispatcher.execute(cmd);
                 }

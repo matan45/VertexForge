@@ -50,6 +50,18 @@ public class Entity {
         return _native_entity_isValid(entityId);
     }
 
+    // Check if an entity is active
+    // When inactive, the entity and all its components are disabled
+    public static function isActive(int entityId): bool {
+        return _native_entity_isActive(entityId);
+    }
+
+    // Set entity active state
+    // When set to false, the entity and all its components become inactive
+    public static function setActive(int entityId, bool active): void {
+        _native_entity_setActive(entityId, active);
+    }
+
     // Get entity name
     public static function getName(int entityId): string {
         return _native_entity_getName(entityId);
@@ -114,12 +126,41 @@ public class Entity {
     }
 
     // ============================================
+    // Component Operations
+    // ============================================
+
+    // Add a component to an entity
+    // Valid types: "Camera", "Mesh", "Material", "Script", "AudioSource2D", "AudioSource3D"
+    // Returns true if component was added successfully
+    public static function addComponent(int entityId, string componentType): bool {
+        return _native_entity_addComponent(entityId, componentType);
+    }
+
+    // Remove a component from an entity
+    // Valid types: "Camera", "Mesh", "Material", "AudioSource2D", "AudioSource3D"
+    // Returns true if component was removed successfully
+    public static function removeComponent(int entityId, string componentType): bool {
+        return _native_entity_removeComponent(entityId, componentType);
+    }
+
+    // ============================================
     // Hierarchy Operations
     // ============================================
 
-    // Get parent entity ID, returns -1 if no parent
+    // Get parent entity ID, returns -1 if no parent (at root)
     public static function getParent(int entityId): int {
         return _native_entity_getParent(entityId);
+    }
+
+    // Set the parent of an entity
+    // Use parentId = -1 to move entity to scene root
+    public static function setParent(int entityId, int parentId): bool {
+        return _native_entity_setParent(entityId, parentId);
+    }
+
+    // Move entity to scene root (remove from parent)
+    public static function moveToRoot(int entityId): bool {
+        return _native_entity_setParent(entityId, -1);
     }
 
     // Get child entity IDs
@@ -131,12 +172,17 @@ public class Entity {
     // Lifecycle
     // ============================================
 
-    // Create a new entity with the given name
+    // Create a new entity at the scene root
     public static function create(string name): int {
         return _native_entity_create(name);
     }
 
-    // Destroy an entity
+    // Create a new entity as a child of the specified parent
+    public static function createChild(string name, int parentId): int {
+        return _native_entity_create(name, parentId);
+    }
+
+    // Destroy an entity and all its children
     public static function destroy(int entityId): void {
         _native_entity_destroy(entityId);
     }

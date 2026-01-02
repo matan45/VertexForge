@@ -171,6 +171,16 @@ namespace controllers::offscreen
 
             for (auto entity : view)
             {
+                // Skip inactive entities
+                if (registry.all_of<components::NameComponent>(entity))
+                {
+                    const auto& nameComp = registry.get<components::NameComponent>(entity);
+                    if (!nameComp.isActive)
+                    {
+                        continue;
+                    }
+                }
+
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
                 const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
@@ -197,6 +207,16 @@ namespace controllers::offscreen
                     continue;
                 }
 
+                // Skip inactive entities
+                if (registry.all_of<components::NameComponent>(entity))
+                {
+                    const auto& nameComp = registry.get<components::NameComponent>(entity);
+                    if (!nameComp.isActive)
+                    {
+                        continue;
+                    }
+                }
+
                 const auto& meshComp = registry.get<components::MeshComponent>(entity);
                 const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
 
@@ -215,6 +235,16 @@ namespace controllers::offscreen
 
             for (auto entity : view)
             {
+                // Skip inactive entities
+                if (registry.all_of<components::NameComponent>(entity))
+                {
+                    const auto& nameComp = registry.get<components::NameComponent>(entity);
+                    if (!nameComp.isActive)
+                    {
+                        continue;
+                    }
+                }
+
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
                 const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
@@ -262,6 +292,16 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
+            // Skip inactive entities
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
             const auto& billboard = view.get<components::BillboardComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
@@ -301,6 +341,16 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
+            // Skip inactive entities
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
             const auto& cameraComp = view.get<components::CameraComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
@@ -349,6 +399,16 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
+            // Skip inactive entities
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
             const auto& audioComp = view.get<components::AudioSource3DComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 

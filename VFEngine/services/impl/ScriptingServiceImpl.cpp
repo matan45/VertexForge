@@ -410,6 +410,14 @@ namespace services {
         auto view = registry.view<components::ScriptComponent>();
 
         for (auto entity : view) {
+            // Skip inactive entities
+            if (registry.all_of<components::NameComponent>(entity)) {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive) {
+                    continue;
+                }
+            }
+
             auto& scriptComp = view.get<components::ScriptComponent>(entity);
 
             // Update each script on this entity

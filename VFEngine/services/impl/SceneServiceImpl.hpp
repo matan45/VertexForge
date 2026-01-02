@@ -124,6 +124,9 @@ namespace services {
         std::string getEntityName(EntityHandle entity) const override;
         void setEntityName(EntityHandle entity, const std::string& name) override;
 
+        // Entity Active State
+        void setEntityActive(EntityHandle entity, bool isActive);
+
         // Scene Lifecycle
         bool newScene();
         bool saveScene(const std::string& filePath);

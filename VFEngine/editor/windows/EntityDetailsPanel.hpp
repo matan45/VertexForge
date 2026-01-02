@@ -28,6 +28,7 @@ namespace windows
 
         // Component drawing helpers
         void drawEntityName(services::EntityHandle handle, const std::string& currentName);
+        void drawEntityActiveCheckbox(services::EntityHandle handle, bool isActive);
         void drawTransformComponent(services::EntityHandle handle);
         bool drawCameraComponent(services::EntityHandle handle);
         void drawIBLComponent(services::EntityHandle handle);
