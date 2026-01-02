@@ -61,6 +61,8 @@ namespace loaders
 
         services::MeshLoadingProgress getProgress(const std::string& meshPath) const;
 
-        void clearCompleted();
+        // Remove entries in terminal states (Error, Cancelled) to prevent memory leaks
+        // Note: Complete entries are auto-cleaned in processGPUUpload
+        void clearFinishedLoads();
     };
 }

@@ -194,13 +194,11 @@ namespace loaders
             result.bounds = math::AABB{glm::vec3(-1.0f), glm::vec3(1.0f)};
         }
 
-        pending->state = services::LoadingState::Complete;
-        pending->progress = 1.0f;
-        pending->statusMessage = "Complete";
-
         result.success = true;
         result.meshId = meshId;
 
+        // Auto-cleanup completed entry to prevent memory accumulation
+        pendingLoads.erase(it);
         gpuUploadReadyPath.clear();
 
         loggerInfo("Mesh GPU upload complete: {}", meshPath);
@@ -230,22 +228,13 @@ namespace loaders
         return progress;
     }
 
-    void AsyncMeshLoader::clearCompleted()
+    void AsyncMeshLoader::clearFinishedLoads()
     {
         std::lock_guard lock(mutex);
 
-        for (auto it = pendingLoads.begin(); it != pendingLoads.end();)
-        {
-            if (it->second->state == services::LoadingState::Complete ||
-                it->second->state == services::LoadingState::Error ||
-                it->second->state == services::LoadingState::Cancelled)
-            {
-                it = pendingLoads.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
+        std::erase_if(pendingLoads, [](const auto& pair) {
+            return pair.second->state == services::LoadingState::Error ||
+                   pair.second->state == services::LoadingState::Cancelled;
+        });
     }
 }

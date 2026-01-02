@@ -145,7 +145,7 @@ namespace loaders
 
     bool AsyncTextureLoader::processGPUUpload(void* instanceId)
     {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::unique_lock<std::mutex> lock(mutex);
 
         auto it = pendingLoads.find(instanceId);
         if (it == pendingLoads.end())
@@ -170,58 +170,67 @@ namespace loaders
             return false;
         }
 
+        // Extract data needed for GPU upload before releasing lock
+        std::string texturePath = pending->texturePath;
+        bool isHDR = pending->isHDR;
+        auto cpuData = pending->cpuData;
+
+        // Release lock during GPU operations to avoid blocking other async operations
+        lock.unlock();
+
+        std::unique_ptr<dto::EditorTexture> texture;
+        std::string errorMessage;
+
         try
         {
-            std::unique_ptr<dto::EditorTexture> texture;
-
-            // Use the pre-loaded CPU data instead of re-reading from disk
-            if (pending->isHDR)
+            // Perform GPU upload without holding the lock
+            if (isHDR)
             {
-                const auto& hdrData = std::get<resource::HDRData>(*pending->cpuData);
+                const auto& hdrData = std::get<resource::HDRData>(*cpuData);
                 texture = controllers::EditorTextureController::loadHdrTextureFromData(hdrData);
             }
             else
             {
-                const auto& textureData = std::get<resource::TextureData>(*pending->cpuData);
+                const auto& textureData = std::get<resource::TextureData>(*cpuData);
                 texture = controllers::EditorTextureController::loadTextureFromData(textureData);
             }
+        }
+        catch (const std::exception& e)
+        {
+            errorMessage = e.what();
+        }
 
-            if (!texture)
-            {
-                pending->state = services::LoadingState::Error;
-                pending->errorMessage = "Failed to create GPU texture";
-                pending->statusMessage = "GPU texture creation failed";
-                loggerError("AsyncTextureLoader: Failed to create GPU texture for {}", pending->texturePath);
+        // Re-acquire lock to update state
+        lock.lock();
 
-                if (gpuUploadReadyInstance == instanceId)
-                {
-                    gpuUploadReadyInstance = nullptr;
-                }
-                return false;
-            }
+        // Re-find the pending load (it may have been cancelled/removed during unlock)
+        it = pendingLoads.find(instanceId);
+        if (it == pendingLoads.end())
+        {
+            loggerWarning("AsyncTextureLoader: Load was removed during GPU upload for {}", texturePath);
+            return false;
+        }
 
-            pending->width = texture->getWidth();
-            pending->height = texture->getHeight();
-            pending->texture = std::move(texture);
-            pending->state = services::LoadingState::Complete;
-            pending->statusMessage = "Complete";
-            pending->progress = PROGRESS_COMPLETE;
-            pending->cpuData.reset();  // Release CPU data now that GPU texture is created
+        pending = it->second.get();
 
+        // Check if cancelled during GPU upload
+        if (pending->cancelled.load())
+        {
             if (gpuUploadReadyInstance == instanceId)
             {
                 gpuUploadReadyInstance = nullptr;
             }
-
-            loggerInfo("AsyncTextureLoader: GPU upload complete for {}", pending->texturePath);
-            return true;
+            pendingLoads.erase(it);
+            loggerInfo("AsyncTextureLoader: Load was cancelled during GPU upload for {}", texturePath);
+            return false;
         }
-        catch (const std::exception& e)
+
+        if (!errorMessage.empty())
         {
             pending->state = services::LoadingState::Error;
-            pending->errorMessage = e.what();
+            pending->errorMessage = errorMessage;
             pending->statusMessage = "GPU upload failed";
-            loggerError("AsyncTextureLoader: GPU upload failed for {}: {}", pending->texturePath, e.what());
+            loggerError("AsyncTextureLoader: GPU upload failed for {}: {}", texturePath, errorMessage);
 
             if (gpuUploadReadyInstance == instanceId)
             {
@@ -229,6 +238,36 @@ namespace loaders
             }
             return false;
         }
+
+        if (!texture)
+        {
+            pending->state = services::LoadingState::Error;
+            pending->errorMessage = "Failed to create GPU texture";
+            pending->statusMessage = "GPU texture creation failed";
+            loggerError("AsyncTextureLoader: Failed to create GPU texture for {}", texturePath);
+
+            if (gpuUploadReadyInstance == instanceId)
+            {
+                gpuUploadReadyInstance = nullptr;
+            }
+            return false;
+        }
+
+        pending->width = texture->getWidth();
+        pending->height = texture->getHeight();
+        pending->texture = std::move(texture);
+        pending->state = services::LoadingState::Complete;
+        pending->statusMessage = "Complete";
+        pending->progress = PROGRESS_COMPLETE;
+        pending->cpuData.reset();  // Release CPU data now that GPU texture is created
+
+        if (gpuUploadReadyInstance == instanceId)
+        {
+            gpuUploadReadyInstance = nullptr;
+        }
+
+        loggerInfo("AsyncTextureLoader: GPU upload complete for {}", texturePath);
+        return true;
     }
 
     services::TextureLoadingProgress AsyncTextureLoader::getProgress(void* instanceId) const
@@ -294,5 +333,23 @@ namespace loaders
         pendingLoads.erase(it);
 
         return texture;
+    }
+
+    void AsyncTextureLoader::clearFinishedLoads()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        std::erase_if(pendingLoads, [this](const auto& pair) {
+            const auto& pending = pair.second;
+            bool shouldRemove = pending->state == services::LoadingState::Error ||
+                                pending->state == services::LoadingState::Cancelled;
+
+            if (shouldRemove && gpuUploadReadyInstance == pair.first)
+            {
+                gpuUploadReadyInstance = nullptr;
+            }
+
+            return shouldRemove;
+        });
     }
 }

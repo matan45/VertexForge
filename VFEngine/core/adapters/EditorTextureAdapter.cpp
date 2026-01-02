@@ -121,18 +121,30 @@ namespace core
             return;
         }
 
-        // Process all pending CPU -> GPU transfers this frame
-        while (asyncLoader->update())
+        // Limit GPU uploads per frame to prevent frame spikes
+        // Multiple textures finishing simultaneously will be spread across frames
+        constexpr int MAX_UPLOADS_PER_FRAME = 3;
+        int uploadsThisFrame = 0;
+
+        // Process pending CPU -> GPU transfers this frame
+        while (asyncLoader->update() && uploadsThisFrame < MAX_UPLOADS_PER_FRAME)
         {
             void* readyInstance = asyncLoader->getReadyForGPUUpload();
             if (!readyInstance)
             {
                 break;
             }
-            if (!asyncLoader->processGPUUpload(readyInstance))
+            if (asyncLoader->processGPUUpload(readyInstance))
+            {
+                uploadsThisFrame++;
+            }
+            else
             {
                 loggerWarning("EditorTextureAdapter: GPU upload failed for instance {:p}", readyInstance);
             }
         }
+
+        // Clean up failed/cancelled loads to prevent memory leaks
+        asyncLoader->clearFinishedLoads();
     }
 }

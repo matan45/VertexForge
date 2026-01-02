@@ -75,5 +75,8 @@ namespace loaders
         bool isLoadComplete(void* instanceId) const;
 
         std::unique_ptr<dto::EditorTexture> takeTexture(void* instanceId);
+
+        // Remove entries in terminal states (Error, Cancelled) to prevent memory leaks
+        void clearFinishedLoads();
     };
 }

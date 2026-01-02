@@ -150,14 +150,14 @@ namespace controllers
             loadedMeshPath = pendingMeshPath;
             meshBounds = result.bounds;
             pendingMeshPath.clear();
-            asyncLoader->clearCompleted();
+            asyncLoader->clearFinishedLoads();
             return true;
         }
         else if (asyncLoader->getProgress(pendingMeshPath).isDone())
         {
             // Loading failed or was cancelled
             pendingMeshPath.clear();
-            asyncLoader->clearCompleted();
+            asyncLoader->clearFinishedLoads();
             return true;
         }
 
