@@ -185,20 +185,6 @@ namespace resource
         vfLogInfo("All resource caches cleared");
     }
 
-    std::future<std::shared_ptr<material::MaterialData>> ResourceManager::loadMaterialAsync(std::string_view path)
-    {
-        return loadResourceAsync<material::MaterialData>(
-            path,
-            materialCache,
-            [](std::string_view p) {
-                auto result = material::MaterialAsset::load(p);
-                if (!result) {
-                    throw std::runtime_error("Failed to load material");
-                }
-                return std::move(*result);
-            });
-    }
-
     std::shared_ptr<material::MaterialData> ResourceManager::loadMaterial(std::string_view path)
     {
         // Check cache first
@@ -233,20 +219,6 @@ namespace resource
     {
         std::scoped_lock lock(cacheMutex);
         materialCache.erase(std::string(path));
-    }
-
-    std::future<std::shared_ptr<material::MaterialInstanceData>> ResourceManager::loadMaterialInstanceAsync(std::string_view path)
-    {
-        return loadResourceAsync<material::MaterialInstanceData>(
-            path,
-            materialInstanceCache,
-            [](std::string_view p) {
-                auto result = material::MaterialInstanceAsset::load(p);
-                if (!result) {
-                    throw std::runtime_error("Failed to load material instance");
-                }
-                return std::move(*result);
-            });
     }
 
     std::shared_ptr<material::MaterialInstanceData> ResourceManager::loadMaterialInstance(std::string_view path)

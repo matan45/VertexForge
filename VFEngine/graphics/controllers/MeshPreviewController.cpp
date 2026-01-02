@@ -11,10 +11,10 @@
 namespace controllers
 {
     MeshPreviewController::MeshPreviewController()
-        : swapChain{ *core::VulkanContext::getSwapChain() }
-        , device{ *core::VulkanContext::getDevice() }
-        , offScreen{ std::make_unique<render::OffScreenViewPort>(device, swapChain) }
-        , asyncLoader{ std::make_unique<loaders::AsyncMeshLoader>() }
+        : swapChain{*core::VulkanContext::getSwapChain()}
+          , device{*core::VulkanContext::getDevice()}
+          , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
+          , asyncLoader{std::make_unique<loaders::AsyncMeshLoader>()}
     {
     }
 
@@ -34,8 +34,9 @@ namespace controllers
         offScreen->init();
 
         // Initialize mesh pipeline with default IBL textures
+        // Disable GPU-driven rendering for mesh preview to support submesh highlighting
         auto* renderHandler = offScreen->getRenderPassHandler();
-        renderHandler->initMeshPipeline();
+        renderHandler->initMeshPipeline(false);
 
         initialized = true;
     }
@@ -54,50 +55,6 @@ namespace controllers
 
         offScreen.reset();
         initialized = false;
-    }
-
-    bool MeshPreviewController::loadMesh(const std::string& meshPath, math::AABB& outBounds)
-    {
-        if (!initialized)
-        {
-            init();
-        }
-        
-        if (!loadedMeshPath.empty())
-        {
-            unloadMesh();
-        }
-
-        auto* renderHandler = offScreen->getRenderPassHandler();
-        auto* meshPipeline = renderHandler->getMeshPipeline();
-
-        if (!meshPipeline)
-        {
-            return false;
-        }
-        
-        std::string meshId = meshPipeline->loadMesh(meshPath);
-        if (meshId.empty())
-        {
-            return false;
-        }
-
-        loadedMeshPath = meshPath;
-
-        // Get bounding box for camera fitting
-        const math::AABB* bounds = meshPipeline->getMeshBoundingBox(meshPath);
-        if (bounds)
-        {
-            meshBounds = *bounds;
-            outBounds = meshBounds;
-        }
-        else
-        {
-            meshBounds = math::AABB(glm::vec3(-1.0f), glm::vec3(1.0f));
-            outBounds = meshBounds;
-        }
-
-        return true;
     }
 
     void MeshPreviewController::unloadMesh()
@@ -125,13 +82,11 @@ namespace controllers
             init();
         }
 
-        // Cancel any existing load
         if (!pendingMeshPath.empty())
         {
             asyncLoader->cancelLoad(pendingMeshPath);
         }
 
-        // Unload any existing mesh
         if (!loadedMeshPath.empty())
         {
             unloadMesh();
@@ -171,16 +126,15 @@ namespace controllers
     {
         if (pendingMeshPath.empty())
         {
-            return false;  // No async loading in progress
+            return false; // No async loading in progress
         }
 
         // Check for pending GPU work
         if (!asyncLoader->update())
         {
-            return false;  // Still loading from disk or no work ready
+            return false; // Still loading from disk or no work ready
         }
 
-        // Process GPU upload if ready
         auto* renderHandler = offScreen->getRenderPassHandler();
         auto* meshPipeline = renderHandler->getMeshPipeline();
 
@@ -197,14 +151,14 @@ namespace controllers
             meshBounds = result.bounds;
             pendingMeshPath.clear();
             asyncLoader->clearCompleted();
-            return true;  // Loading completed successfully
+            return true;
         }
         else if (asyncLoader->getProgress(pendingMeshPath).isDone())
         {
             // Loading failed or was cancelled
             pendingMeshPath.clear();
             asyncLoader->clearCompleted();
-            return true;  // Loading finished (with error)
+            return true;
         }
 
         return false;
@@ -266,7 +220,7 @@ namespace controllers
         }
 
         // Aggregate LOD info across all submeshes
-        static constexpr float lodPercents[] = { 100.0f, 50.0f, 25.0f, 12.5f };
+        static constexpr float lodPercents[] = {100.0f, 50.0f, 25.0f, 12.5f};
 
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
@@ -289,7 +243,7 @@ namespace controllers
     }
 
     void MeshPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                              const glm::vec3& cameraPos)
+                                             const glm::vec3& cameraPos)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
 
@@ -298,7 +252,6 @@ namespace controllers
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos);
         }
 
-        // Update frustum for culling
         currentFrustum.extractFromMatrix(projection * view);
     }
 
@@ -311,13 +264,12 @@ namespace controllers
 
         auto* renderHandler = offScreen->getRenderPassHandler();
 
-        // Create draw list with just the preview mesh
         std::vector<render::mesh::MeshRenderData> meshDrawList;
 
         render::mesh::MeshRenderData renderData;
         renderData.meshPath = loadedMeshPath;
         renderData.modelMatrix = modelMatrix;
-        renderData.albedo = glm::vec4(0.5294f, 0.8078f, 0.9216f, 1.0f);  // Light blue
+        renderData.albedo = glm::vec4(0.5294f, 0.8078f, 0.9216f, 1.0f); // Light blue
         renderData.metallic = 0.0f;
         renderData.roughness = 1.0f;
         renderData.ao = 1.0f;

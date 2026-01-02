@@ -6,8 +6,11 @@
 namespace editor {
 
     class OrbitCamera {
+    private:
+        glm::mat4 viewMatrix{ 1.0f };
+        glm::mat4 projectionMatrix{ 1.0f };
     public:
-        OrbitCamera();
+        explicit OrbitCamera();
         ~OrbitCamera() = default;
 
         // Orbit target (center point to orbit around)
@@ -44,10 +47,6 @@ namespace editor {
         float getMinDistance() const { return minDistance; }
         float getMaxDistance() const { return maxDistance; }
         void updateMatrices();
-
-    private:
-        glm::mat4 viewMatrix{ 1.0f };
-        glm::mat4 projectionMatrix{ 1.0f };
     };
 
 }

@@ -31,6 +31,11 @@ namespace loaders
             std::atomic<bool> cancelled{false};
         };
 
+    private:
+        mutable std::mutex mutex;
+        std::unordered_map<std::string, std::unique_ptr<PendingMeshLoad>> pendingLoads;
+        std::string gpuUploadReadyPath; // Path of mesh ready for GPU upload
+    public:
         struct LoadResult
         {
             bool success = false;
@@ -39,46 +44,23 @@ namespace loaders
             std::string errorMessage;
         };
 
-        AsyncMeshLoader() = default;
+        explicit AsyncMeshLoader() = default;
         ~AsyncMeshLoader() = default;
 
         // Non-copyable
         AsyncMeshLoader(const AsyncMeshLoader&) = delete;
         AsyncMeshLoader& operator=(const AsyncMeshLoader&) = delete;
 
-        // Start async file loading for a mesh
         void startLoad(const std::string& meshPath);
 
-        // Cancel a pending load
         void cancelLoad(const std::string& meshPath);
 
-        // Check if there's a pending load for this path
-        bool hasPendingLoad(const std::string& meshPath) const;
-
-        // Check/update loading state (call each frame)
-        // Returns true if there's GPU work ready to be done
         bool update();
 
-        // Get the path of the mesh that's ready for GPU upload
-        // Returns empty string if none ready
-        std::string getReadyForGPUUpload() const;
-
-        // Do GPU upload work (call from main thread when update() indicates ready)
-        // Returns the result of the upload operation
         LoadResult processGPUUpload(render::mesh::StaticMeshPipeline* pipeline);
 
-        // Get loading progress for a specific mesh
         services::MeshLoadingProgress getProgress(const std::string& meshPath) const;
 
-        // Check if loading is complete for a specific mesh
-        bool isLoadComplete(const std::string& meshPath) const;
-
-        // Clear completed/cancelled loads
         void clearCompleted();
-
-    private:
-        mutable std::mutex mutex;
-        std::unordered_map<std::string, std::unique_ptr<PendingMeshLoad>> pendingLoads;
-        std::string gpuUploadReadyPath;  // Path of mesh ready for GPU upload
     };
 }

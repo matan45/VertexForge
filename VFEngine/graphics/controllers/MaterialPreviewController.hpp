@@ -64,8 +64,7 @@ namespace controllers
         std::string aoTexturePath;           // Legacy individual
         std::string emissionTexturePath;
         std::string heightTexturePath;
-
-        // Material path for custom shader pipeline lookup
+        
         std::string materialPath;
 
         // Flag to enable custom shader pipeline (only after explicit compile)

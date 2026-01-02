@@ -18,12 +18,8 @@ namespace services
         virtual void initMaterialPreview(PreviewInstanceId instanceId) = 0;
 
         virtual void cleanUpMaterialPreview(PreviewInstanceId instanceId) = 0;
-        
-        [[nodiscard]] virtual bool isMaterialPreviewReady(PreviewInstanceId instanceId) const = 0;
 
         virtual void setMaterialParams(PreviewInstanceId instanceId, const MaterialPreviewParams& params) = 0;
-
-        [[nodiscard]] virtual MaterialPreviewParams getMaterialParams(PreviewInstanceId instanceId) const = 0;
 
         virtual void updateMaterialCamera(PreviewInstanceId instanceId, const glm::mat4& view,
                                           const glm::mat4& projection,
@@ -36,11 +32,6 @@ namespace services
         virtual void initMeshPreview(PreviewInstanceId instanceId) = 0;
 
         virtual void cleanUpMeshPreview(PreviewInstanceId instanceId) = 0;
-
-        [[nodiscard]] virtual bool isMeshPreviewReady(PreviewInstanceId instanceId) const = 0;
-
-        [[nodiscard]] virtual bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const = 0;
-
 
         [[nodiscard]] virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const =
         0;

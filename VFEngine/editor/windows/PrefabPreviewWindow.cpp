@@ -192,7 +192,8 @@ namespace windows
         loadingCancelled.store(false);
         loadingStatus = "Loading prefab...";
 
-        loadFuture = std::async(std::launch::async, [this]() {
+        loadFuture = std::async(std::launch::async, [this]()
+        {
             return loadPrefabBackground(prefabPath);
         });
     }
@@ -353,21 +354,21 @@ namespace windows
 
                     ImGui::Text("Position:");
                     ImGui::Text("  %.2f, %.2f, %.2f",
-                        selectedNode->position.x,
-                        selectedNode->position.y,
-                        selectedNode->position.z);
+                                selectedNode->position.x,
+                                selectedNode->position.y,
+                                selectedNode->position.z);
 
                     ImGui::Text("Rotation:");
                     ImGui::Text("  %.2f, %.2f, %.2f",
-                        selectedNode->rotation.x,
-                        selectedNode->rotation.y,
-                        selectedNode->rotation.z);
+                                selectedNode->rotation.x,
+                                selectedNode->rotation.y,
+                                selectedNode->rotation.z);
 
                     ImGui::Text("Scale:");
                     ImGui::Text("  %.2f, %.2f, %.2f",
-                        selectedNode->scale.x,
-                        selectedNode->scale.y,
-                        selectedNode->scale.z);
+                                selectedNode->scale.x,
+                                selectedNode->scale.y,
+                                selectedNode->scale.z);
 
                     if (!selectedNode->componentTypes.empty())
                     {

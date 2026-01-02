@@ -44,6 +44,8 @@ namespace controllers
         std::unique_ptr<loaders::AsyncMeshLoader> asyncLoader;
         std::string pendingMeshPath;  // Path of mesh being loaded async
 
+        void unloadMesh();
+
     public:
         explicit MeshPreviewController();
         ~MeshPreviewController();
@@ -51,17 +53,10 @@ namespace controllers
         void init();
         void cleanUp();
 
-
-        bool loadMesh(const std::string& meshPath, math::AABB& outBounds);
-        void unloadMesh();
-
         // Async loading API
         void loadMeshAsync(const std::string& meshPath);
         void cancelMeshLoading();
         services::MeshLoadingProgress getMeshLoadingProgress() const;
-
-        // Call each frame to process async loading work
-        // Returns true if loading completed this frame (check getMeshLoadingProgress for result)
         bool updateAsyncLoading();
 
         std::vector<services::SubMeshInfo> getSubMeshInfo() const;

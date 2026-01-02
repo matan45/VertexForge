@@ -180,7 +180,7 @@ namespace windows
             ImGui::BeginGroup();
             std::string folderName = asset.name;
             ImGui::ImageButton(folderName.c_str(), iconAtlas.imguiDescriptorSet,
-                ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
+                               ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
                 result.pendingNavigation = asset.path;

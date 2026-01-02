@@ -49,48 +49,6 @@ namespace render
         iblInitialized = true;
     }
 
-    void IBL::initHDRTexture(const resource::HDRData& hdrData)
-    {
-        hdrTexture = std::make_shared<core::Texture>(device);
-        hdrTexture->loadHDRFromData(hdrData, false);
-    }
-
-    void IBL::generateEnvironmentCubemap()
-    {
-        if (!hdrTexture)
-        {
-            loggerError("HDR texture not initialized");
-            return;
-        }
-        envCubemapGen->generate(*hdrTexture, device.getStagingCommandPool());
-    }
-
-    void IBL::generateIrradiance()
-    {
-        if (!hdrTexture)
-        {
-            loggerError("HDR texture not initialized");
-            return;
-        }
-        irradianceGen->generate(*hdrTexture, device.getStagingCommandPool());
-    }
-
-    void IBL::generateBRDFLUT()
-    {
-        brdfLUTGen->generate(device.getStagingCommandPool());
-    }
-
-    void IBL::generatePrefiltered()
-    {
-        prefilteredGen->generate(envCubemapGen->getImageData(), device.getStagingCommandPool());
-    }
-
-    void IBL::initSkybox()
-    {
-        skyboxRenderer->init(envCubemapGen->getImageData());
-        iblInitialized = true;
-    }
-
     void IBL::recreate()
     {
         skyboxRenderer->recreate();
@@ -104,7 +62,6 @@ namespace render
 
             // Disable rendering first to prevent access during cleanup
             skyboxRenderer->disable();
-            isDisplay = false;
             iblInitialized = false;
 
             hdrTexture.reset();
@@ -133,13 +90,6 @@ namespace render
     void IBL::setCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
         skyboxRenderer->setCameraMatrices(view, projection);
-        isDisplay = true;
-    }
-
-    void IBL::disableCamera()
-    {
-        skyboxRenderer->disable();
-        isDisplay = false;
     }
 
     const ibl::ImageData& IBL::getBrdfLUTImage() const

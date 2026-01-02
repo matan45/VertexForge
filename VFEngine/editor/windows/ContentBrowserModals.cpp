@@ -43,13 +43,13 @@ namespace windows
         {
             ImGui::OpenPopup("Rename File");
         }
-        drawRenameModal(selectedFile, currentPath);
+        drawRenameModal(selectedFile);
 
         if (showDeleteConfirmModal)
         {
             ImGui::OpenPopup("Delete File?");
         }
-        drawDeleteModal(selectedFile, currentPath);
+        drawDeleteModal(selectedFile);
     }
 
     void ContentBrowserModals::drawContextMenu(const fs::path& selectedFile)
@@ -155,14 +155,16 @@ namespace windows
                     fs::path newMaterialPath = currentPath / (newMaterialName + extension);
 
                     int counter = 1;
-                    while (fs::exists(newMaterialPath)) {
+                    while (fs::exists(newMaterialPath))
+                    {
                         newMaterialPath = currentPath / (newMaterialName + "_" + std::to_string(counter) + extension);
                         counter++;
                     }
 
                     std::string pathStr = StringUtil::wstringToUtf8(newMaterialPath.wstring());
                     auto defaultMat = material::MaterialAsset::createDefault(newMaterialName);
-                    if (material::MaterialAsset::save(pathStr, defaultMat)) {
+                    if (material::MaterialAsset::save(pathStr, defaultMat))
+                    {
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -200,7 +202,8 @@ namespace windows
                     fs::path newPrefabPath = currentPath / (newPrefabName + extension);
 
                     int counter = 1;
-                    while (fs::exists(newPrefabPath)) {
+                    while (fs::exists(newPrefabPath))
+                    {
                         newPrefabPath = currentPath / (newPrefabName + "_" + std::to_string(counter) + extension);
                         counter++;
                     }
@@ -210,7 +213,8 @@ namespace windows
                     cmd.entity = pendingSavePrefabEntity;
                     cmd.filePath = pathStr;
                     auto& dispatcher = events::EventDispatcher::instance();
-                    if (dispatcher.execute(cmd)) {
+                    if (dispatcher.execute(cmd))
+                    {
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -231,7 +235,7 @@ namespace windows
         }
     }
 
-    void ContentBrowserModals::drawRenameModal(const fs::path& selectedFile, const fs::path& currentPath)
+    void ContentBrowserModals::drawRenameModal(const fs::path& selectedFile)
     {
         if (showRenameFileModal &&
             ImGui::BeginPopupModal("Rename File", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -251,7 +255,8 @@ namespace windows
             {
                 if (!renameFileName.empty() && !selectedFile.empty())
                 {
-                    fs::path newPath = selectedFile.parent_path() / (renameFileName + selectedFile.extension().string());
+                    fs::path newPath = selectedFile.parent_path() / (renameFileName + selectedFile.extension().
+                        string());
 
                     std::error_code ec;
                     if (!fs::exists(newPath))
@@ -284,14 +289,14 @@ namespace windows
         }
     }
 
-    void ContentBrowserModals::drawDeleteModal(const fs::path& selectedFile, const fs::path& currentPath)
+    void ContentBrowserModals::drawDeleteModal(const fs::path& selectedFile)
     {
         if (showDeleteConfirmModal &&
             ImGui::BeginPopupModal("Delete File?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::Text("Are you sure you want to delete:");
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "%s",
-                StringUtil::wstringToUtf8(selectedFile.filename().wstring()).c_str());
+                               StringUtil::wstringToUtf8(selectedFile.filename().wstring()).c_str());
             ImGui::Separator();
             ImGui::Text("This action cannot be undone!");
 

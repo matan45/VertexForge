@@ -29,9 +29,8 @@ namespace windows
         int selectedSubMesh = -1; // -1 = all submeshes
         int selectedLOD = -1; // -1 = auto, 0-3 = force specific LOD
 
-        glm::vec3 meshPosition{0.0f};
-        glm::vec3 meshRotation{0.0f}; // Euler angles in degrees
-        float meshScale = 1.0f;
+        // Camera input state
+        bool isDraggingPreview = false;
 
         // Window state
         bool isOpen = true;
@@ -57,5 +56,6 @@ namespace windows
         void drawSubMeshPanel();
         void drawLoadingIndicator(float width, float height);
         void onLoadingComplete();
+        void handlePreviewInput();
     };
 }

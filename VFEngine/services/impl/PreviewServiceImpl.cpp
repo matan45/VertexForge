@@ -39,16 +39,6 @@ namespace services {
             });
 
         // Material Preview Queries
-        dispatcher.registerQueryHandler<events::preview::IsMaterialPreviewReadyQuery>(
-            [this](const events::preview::IsMaterialPreviewReadyQuery& query) {
-                return isMaterialPreviewReady(query.instanceId);
-            });
-
-        dispatcher.registerQueryHandler<events::preview::GetMaterialParamsQuery>(
-            [this](const events::preview::GetMaterialParamsQuery& query) {
-                return getMaterialParams(query.instanceId);
-            });
-
         dispatcher.registerQueryHandler<events::preview::RenderMaterialPreviewQuery>(
             [this](const events::preview::RenderMaterialPreviewQuery& query) {
                 return renderMaterialPreview(query.instanceId);
@@ -81,16 +71,6 @@ namespace services {
             });
 
         // Mesh Preview Queries
-        dispatcher.registerQueryHandler<events::preview::IsMeshPreviewReadyQuery>(
-            [this](const events::preview::IsMeshPreviewReadyQuery& query) {
-                return isMeshPreviewReady(query.instanceId);
-            });
-
-        dispatcher.registerQueryHandler<events::preview::IsPreviewMeshLoadedQuery>(
-            [this](const events::preview::IsPreviewMeshLoadedQuery& query) {
-                return isPreviewMeshLoaded(query.instanceId);
-            });
-
         dispatcher.registerQueryHandler<events::preview::GetPreviewMeshSubMeshInfoQuery>(
             [this](const events::preview::GetPreviewMeshSubMeshInfoQuery& query) {
                 return getPreviewMeshSubMeshInfo(query.instanceId);
@@ -139,16 +119,8 @@ namespace services {
         materialProvider->cleanUpMaterialPreview(instanceId);
     }
 
-    bool PreviewServiceImpl::isMaterialPreviewReady(PreviewInstanceId instanceId) const {
-        return materialProvider->isMaterialPreviewInitialized(instanceId);
-    }
-
     void PreviewServiceImpl::setMaterialParams(PreviewInstanceId instanceId, const MaterialPreviewParams& params) {
         materialProvider->setMaterialParams(instanceId, params);
-    }
-
-    MaterialPreviewParams PreviewServiceImpl::getMaterialParams(PreviewInstanceId instanceId) const {
-        return materialProvider->getMaterialParams(instanceId);
     }
 
     void PreviewServiceImpl::updateMaterialCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
@@ -174,14 +146,6 @@ namespace services {
 
     void PreviewServiceImpl::cleanUpMeshPreview(PreviewInstanceId instanceId) {
         meshProvider->cleanUpMeshPreview(instanceId);
-    }
-
-    bool PreviewServiceImpl::isMeshPreviewReady(PreviewInstanceId instanceId) const {
-        return meshProvider->isMeshPreviewInitialized(instanceId);
-    }
-
-    bool PreviewServiceImpl::isPreviewMeshLoaded(PreviewInstanceId instanceId) const {
-        return meshProvider->isPreviewMeshLoaded(instanceId);
     }
 
     std::vector<SubMeshInfo> PreviewServiceImpl::getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const {

@@ -14,7 +14,7 @@ namespace windows
 
     MaterialInstanceEditorWindow::MaterialInstanceEditorWindow(const std::string& instancePath)
         : instancePath(instancePath)
-        , previewCamera(std::make_unique<editor::OrbitCamera>())
+          , previewCamera(std::make_unique<editor::OrbitCamera>())
     {
         // Extract filename for window title
         fs::path path(instancePath);
@@ -29,11 +29,8 @@ namespace windows
         previewCamera->maxDistance = 10.0f;
     }
 
-    MaterialInstanceEditorWindow::~MaterialInstanceEditorWindow()
-    {
-        // Preview cleanup is handled in draw() when window closes
-        // to ensure cleanup happens before ImGui tries to render freed resources
-    }
+    MaterialInstanceEditorWindow::~MaterialInstanceEditorWindow() = default;
+
 
     void MaterialInstanceEditorWindow::initEditor()
     {
@@ -234,8 +231,8 @@ namespace windows
             services::events::preview::CleanUpMaterialPreviewCommand cleanupCmd;
             cleanupCmd.instanceId = services::PreviewInstanceId(this);
             events::EventDispatcher::instance().execute(cleanupCmd);
-            previewNeedsInit = true;  // Mark as cleaned up
-            return;  // Don't render anything - window is closing
+            previewNeedsInit = true; // Mark as cleaned up
+            return; // Don't render anything - window is closing
         }
 
         if (needsInit)
@@ -412,8 +409,7 @@ namespace windows
         ImGui::PushID(static_cast<int>(slot));
 
         bool hasOverride = instanceData && instanceData->isTextureOverridden(slot);
-        std::string currentPath = hasOverride ?
-            instanceData->getTextureOverride(slot) : parentTexture;
+        std::string currentPath = hasOverride ? instanceData->getTextureOverride(slot) : parentTexture;
 
         // Override checkbox
         bool overrideEnabled = hasOverride;
@@ -520,13 +516,13 @@ namespace windows
         // Calculate square viewport size
         ImVec2 previewSize = ImGui::GetContentRegionAvail();
         float viewportSize = std::min(previewSize.x - 10.0f, previewSize.y - 20.0f);
-        viewportSize = std::max(viewportSize, 100.0f);  // Minimum size
+        viewportSize = std::max(viewportSize, 100.0f); // Minimum size
 
         ImGui::BeginChild("PreviewViewport", ImVec2(viewportSize, viewportSize), true,
-                         ImGuiWindowFlags_NoScrollbar);
+                          ImGuiWindowFlags_NoScrollbar);
         {
             // Update camera aspect ratio
-            previewCamera->setAspectRatio(1.0f);  // Square
+            previewCamera->setAspectRatio(1.0f); // Square
 
             handlePreviewInput();
 
@@ -621,8 +617,10 @@ namespace windows
         params.emission = emissionOverrideEnabled ? tempEmission : 0.0f;
 
         // Helper to get texture override path
-        auto getTexture = [this](material::TextureSlot slot) -> std::string {
-            if (instanceData->isTextureOverridden(slot)) {
+        auto getTexture = [this](material::TextureSlot slot) -> std::string
+        {
+            if (instanceData->isTextureOverridden(slot))
+            {
                 std::string path = instanceData->getTextureOverride(slot);
                 if (path != " " && !path.empty()) return path;
             }

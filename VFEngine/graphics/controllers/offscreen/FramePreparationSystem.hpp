@@ -1,6 +1,6 @@
 #pragma once
 #include "../../render/material/MaterialPBRExtractor.hpp"
-#include "math/Frustum.hpp"
+#include "../../render/mesh/MeshTypes.hpp"
 #include <string>
 #include <unordered_map>
 
@@ -27,6 +27,12 @@ namespace controllers::offscreen
 
     class FramePreparationSystem
     {
+    private:
+        std::unordered_map<std::string, render::mesh::ExtractedPBRValues> pbrCache;
+
+        const render::mesh::ExtractedPBRValues* getCachedPBRValues(const std::string& materialPath);
+        void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath);
+
     public:
         FramePreparationSystem() = default;
 
@@ -37,8 +43,6 @@ namespace controllers::offscreen
         void prepareGrid(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
-
-    private:
-        std::unordered_map<std::string, render::mesh::ExtractedPBRValues> pbrCache;
+        
     };
 }

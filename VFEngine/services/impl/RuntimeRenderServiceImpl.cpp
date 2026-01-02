@@ -40,11 +40,6 @@ namespace services
 
         viewportWidth = width;
         viewportHeight = height;
-
-        events::render::ViewportResizedNotification notification;
-        notification.width = width;
-        notification.height = height;
-        events::EventDispatcher::instance().publish(notification);
     }
 
     void RuntimeRenderServiceImpl::getViewportSize(uint32_t& width, uint32_t& height) const
@@ -74,10 +69,6 @@ namespace services
         offScreenProvider->iblSet(hdrPath);
         currentIBLPath = hdrPath;
 
-        events::render::IBLChangedNotification notification;
-        notification.hdrPath = hdrPath;
-        events::EventDispatcher::instance().publish(notification);
-
         return true;
     }
 
@@ -99,10 +90,6 @@ namespace services
 
         offScreenProvider->iblRemove();
         currentIBLPath = std::nullopt;
-
-        events::render::IBLChangedNotification notification;
-        notification.hdrPath = std::nullopt;
-        events::EventDispatcher::instance().publish(notification);
     }
 
     bool RuntimeRenderServiceImpl::hasIBL() const
@@ -147,58 +134,16 @@ namespace services
                 updateIBLCamera(cmd.viewMatrix, cmd.projectionMatrix);
             });
 
-        dispatcher.registerCommandHandler<events::render::ResizeViewportCommand>(
-            [this](const events::render::ResizeViewportCommand& cmd)
-            {
-                resizeViewport(cmd.width, cmd.height);
-            });
-
         dispatcher.registerQueryHandler<events::render::GetViewportTextureQuery>(
             [this](const events::render::GetViewportTextureQuery&)
             {
                 return getViewportTexture();
             });
 
-        dispatcher.registerQueryHandler<events::render::HasIBLQuery>(
-            [this](const events::render::HasIBLQuery&)
-            {
-                return hasIBL();
-            });
-
-        dispatcher.registerQueryHandler<events::render::GetIBLPathQuery>(
-            [this](const events::render::GetIBLPathQuery&)
-            {
-                return getIBLPath();
-            });
-
-        dispatcher.registerCommandHandler<events::render::LoadMeshCommand>(
-            [this](const events::render::LoadMeshCommand& cmd)
-            {
-                return loadMesh(cmd.meshPath);
-            });
-
-        dispatcher.registerCommandHandler<events::render::UnloadMeshCommand>(
-            [this](const events::render::UnloadMeshCommand& cmd)
-            {
-                unloadMesh(cmd.meshId);
-            });
-
         dispatcher.registerCommandHandler<events::render::UpdateMeshCameraCommand>(
             [this](const events::render::UpdateMeshCameraCommand& cmd)
             {
                 updateMeshCamera(cmd.viewMatrix, cmd.projectionMatrix, cmd.cameraPosition, cmd.time);
-            });
-
-        dispatcher.registerQueryHandler<events::render::IsMeshLoadedQuery>(
-            [this](const events::render::IsMeshLoadedQuery& q)
-            {
-                return isMeshLoaded(q.meshPath);
-            });
-
-        dispatcher.registerQueryHandler<events::render::GetLoadedMeshesQuery>(
-            [this](const events::render::GetLoadedMeshesQuery&)
-            {
-                return getLoadedMeshes();
             });
 
         dispatcher.registerQueryHandler<events::render::GetMeshBoundingBoxQuery>(

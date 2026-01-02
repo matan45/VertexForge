@@ -17,7 +17,6 @@
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
-#include <cmath>
 
 namespace render::mesh
 {
@@ -673,14 +672,6 @@ namespace render::mesh
     void StaticMeshPipeline::cleanUpShader()
     {
         meshShader->cleanUp();
-    }
-
-    void StaticMeshPipeline::invalidateMaterialCache(const std::string& materialPath)
-    {
-        if (materialCacheManager)
-        {
-            materialCacheManager->invalidate(materialPath);
-        }
     }
 
     void StaticMeshPipeline::injectMaterialForPreview(const std::string& materialPath,

@@ -39,9 +39,7 @@ namespace services {
         // === Material Preview (IPreviewService) ===
         void initMaterialPreview(PreviewInstanceId instanceId) override;
         void cleanUpMaterialPreview(PreviewInstanceId instanceId) override;
-        [[nodiscard]] bool isMaterialPreviewReady(PreviewInstanceId instanceId) const override;
         void setMaterialParams(PreviewInstanceId instanceId, const MaterialPreviewParams& params) override;
-        [[nodiscard]] MaterialPreviewParams getMaterialParams(PreviewInstanceId instanceId) const override;
         void updateMaterialCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                   const glm::vec3& cameraPos, float time = 0.0f) override;
         [[nodiscard]] ViewportTextureHandle renderMaterialPreview(PreviewInstanceId instanceId) override;
@@ -50,8 +48,6 @@ namespace services {
         // === Mesh Preview (IPreviewService) ===
         void initMeshPreview(PreviewInstanceId instanceId) override;
         void cleanUpMeshPreview(PreviewInstanceId instanceId) override;
-        [[nodiscard]] bool isMeshPreviewReady(PreviewInstanceId instanceId) const override;
-        [[nodiscard]] bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const override;
         [[nodiscard]] std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const override;
         [[nodiscard]] std::vector<LODInfo> getPreviewMeshLODInfo(PreviewInstanceId instanceId) const override;
         [[nodiscard]] math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const override;

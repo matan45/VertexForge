@@ -16,10 +16,8 @@ namespace material
         std::string uuid;
         std::string name;
 
-        // Reference to parent material (.vfMat file path)
         std::string parentMaterialPath;
 
-        // Overridden textures by slot (only stores slots that differ from parent)
         std::map<TextureSlot, std::string> textureOverrides;
 
         // Overridden PBR scalar values
@@ -31,20 +29,17 @@ namespace material
         std::optional<float> iblDiffuseOverride;
         std::optional<float> iblSpecularOverride;
 
-        // Helper to check if a texture slot is overridden
         bool isTextureOverridden(TextureSlot slot) const
         {
             return textureOverrides.contains(slot);
         }
 
-        // Get texture path for a slot (empty if not overridden)
         std::string getTextureOverride(TextureSlot slot) const
         {
             auto it = textureOverrides.find(slot);
             return (it != textureOverrides.end()) ? it->second : "";
         }
 
-        // Set or clear texture override
         void setTextureOverride(TextureSlot slot, const std::string& path)
         {
             if (path.empty())
@@ -57,20 +52,18 @@ namespace material
             }
         }
 
-        // Check if any overrides are set
         bool hasOverrides() const
         {
             return !textureOverrides.empty() ||
-                   albedoOverride.has_value() ||
-                   metallicOverride.has_value() ||
-                   roughnessOverride.has_value() ||
-                   aoOverride.has_value() ||
-                   emissionOverride.has_value() ||
-                   iblDiffuseOverride.has_value() ||
-                   iblSpecularOverride.has_value();
+                albedoOverride.has_value() ||
+                metallicOverride.has_value() ||
+                roughnessOverride.has_value() ||
+                aoOverride.has_value() ||
+                emissionOverride.has_value() ||
+                iblDiffuseOverride.has_value() ||
+                iblSpecularOverride.has_value();
         }
 
-        // Clear all overrides
         void clearAllOverrides()
         {
             textureOverrides.clear();
@@ -84,19 +77,16 @@ namespace material
         }
     };
 
-    // Helper to detect material instance files by extension
     inline bool isInstanceFile(std::string_view path)
     {
         return path.ends_with(".vfMatInstance");
     }
 
-    // Helper to detect regular material files
     inline bool isMaterialFile(std::string_view path)
     {
         return path.ends_with(".vfMat");
     }
 
-    // Helper to get instance path from parent path
     inline std::string getDefaultInstancePath(const std::string& parentPath)
     {
         if (parentPath.ends_with(".vfMat"))

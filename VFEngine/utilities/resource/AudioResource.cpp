@@ -96,11 +96,7 @@ namespace resource
             return false;
         }
 
-        size_t totalSamples = getTotalSamples();
-        if (sampleIndex > totalSamples)
-        {
-            sampleIndex = totalSamples;
-        }
+        sampleIndex = std::min(sampleIndex, getTotalSamples());
 
         // Calculate byte offset from data start
         std::streamoff byteOffset = static_cast<std::streamoff>(sampleIndex * sizeof(short));

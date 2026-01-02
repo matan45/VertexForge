@@ -7,12 +7,6 @@
 
 namespace loaders
 {
-    namespace
-    {
-        constexpr float PROGRESS_LOADING_STARTED = 0.1f;
-        constexpr float PROGRESS_CPU_COMPLETE = 0.5f;
-        constexpr float PROGRESS_COMPLETE = 1.0f;
-    }
     void AsyncTextureLoader::startLoad(void* instanceId, const std::string& texturePath, bool isHDR)
     {
         std::lock_guard<std::mutex> lock(mutex);
@@ -66,12 +60,6 @@ namespace loaders
         {
             gpuUploadReadyInstance = nullptr;
         }
-    }
-
-    bool AsyncTextureLoader::hasPendingLoad(void* instanceId) const
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        return pendingLoads.find(instanceId) != pendingLoads.end();
     }
 
     bool AsyncTextureLoader::update()
@@ -306,55 +294,5 @@ namespace loaders
         pendingLoads.erase(it);
 
         return texture;
-    }
-
-    uint32_t AsyncTextureLoader::getWidth(void* instanceId) const
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-
-        auto it = pendingLoads.find(instanceId);
-        if (it == pendingLoads.end())
-        {
-            return 0;
-        }
-
-        return it->second->width;
-    }
-
-    uint32_t AsyncTextureLoader::getHeight(void* instanceId) const
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-
-        auto it = pendingLoads.find(instanceId);
-        if (it == pendingLoads.end())
-        {
-            return 0;
-        }
-
-        return it->second->height;
-    }
-
-    void AsyncTextureLoader::clearCompleted()
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-
-        // Only clear Error and Cancelled entries.
-        // Complete entries are removed by takeTexture() when the texture is retrieved.
-        for (auto it = pendingLoads.begin(); it != pendingLoads.end();)
-        {
-            if (it->second->state == services::LoadingState::Error ||
-                it->second->state == services::LoadingState::Cancelled)
-            {
-                if (gpuUploadReadyInstance == it->first)
-                {
-                    gpuUploadReadyInstance = nullptr;
-                }
-                it = pendingLoads.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
     }
 }

@@ -116,8 +116,6 @@ namespace render::gpudriven
 
         void updateStatsFromGPU();
 
-        bool isInitialized() const { return initialized; }
-
         void setMaterialTextureCache(mesh::MaterialTextureCache* cache) { materialTextureCache = cache; }
 
         uint32_t getHiZMipLevels() const { return hiZMipLevels; }

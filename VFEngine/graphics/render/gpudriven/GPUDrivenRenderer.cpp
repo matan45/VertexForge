@@ -17,6 +17,7 @@
 #undef MemoryBarrier
 #endif
 
+
 namespace render::gpudriven {
 
     GPUDrivenRenderer::GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain)
@@ -431,8 +432,7 @@ namespace render::gpudriven {
         if (!initialized || !bindlessTextures || !materialTextureCache) {
             return false;
         }
-
-        // Skip if already registered
+        
         if (registeredMaterialPaths.contains(materialPath)) {
             return true;
         }
@@ -441,7 +441,6 @@ namespace render::gpudriven {
 
         // Handle material instances
         if (material::isInstanceFile(materialPath)) {
-            // Load instance data
             auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
             if (!instanceData || instanceData->parentMaterialPath.empty()) {
                 loggerWarning("GPUDrivenRenderer: Failed to load material instance: {}", materialPath);
@@ -455,8 +454,7 @@ namespace render::gpudriven {
                 return false;
             }
             loadedMaterials[instanceData->parentMaterialPath] = parentMatData;
-
-            // Extract PBR values with instance overrides
+            
             pbrValues = mesh::MaterialPBRExtractor::extractPBRFromInstance(*instanceData, *parentMatData);
         }
         else {
@@ -468,8 +466,7 @@ namespace render::gpudriven {
             }
             // Keep material alive by storing in our cache
             loadedMaterials[materialPath] = matData;
-
-            // Extract texture paths from material
+            
             pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
         }
 
@@ -493,8 +490,7 @@ namespace render::gpudriven {
                 registered = true;
             }
         };
-
-        // Register all texture slots
+        
         tryRegister(pbrValues.albedoTexturePath);
         tryRegister(pbrValues.normalTexturePath);
         tryRegister(pbrValues.ormTexturePath);
@@ -508,7 +504,6 @@ namespace render::gpudriven {
         if (registered) {
             registeredMaterialPaths.insert(materialPath);
         }
-        // If no textures were registered, don't add to registeredMaterialPaths - allow retry on next frame
 
         return registered;
     }

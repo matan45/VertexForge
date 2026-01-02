@@ -10,8 +10,7 @@ namespace loaders
     void AsyncMeshLoader::startLoad(const std::string& meshPath)
     {
         std::lock_guard lock(mutex);
-
-        // Check if already loading
+        
         if (pendingLoads.find(meshPath) != pendingLoads.end())
         {
             loggerInfo("Mesh already being loaded: {}", meshPath);
@@ -23,8 +22,7 @@ namespace loaders
         pending->state = services::LoadingState::Loading;
         pending->progress = 0.0f;
         pending->statusMessage = "Loading mesh from disk...";
-
-        // Start async file loading using ResourceManager
+        
         pending->cpuDataFuture = resource::ResourceManager::loadMeshAsync(meshPath);
 
         pendingLoads[meshPath] = std::move(pending);
@@ -44,12 +42,6 @@ namespace loaders
             it->second->statusMessage = "Cancelled";
             loggerInfo("Cancelled mesh load: {}", meshPath);
         }
-    }
-
-    bool AsyncMeshLoader::hasPendingLoad(const std::string& meshPath) const
-    {
-        std::lock_guard lock(mutex);
-        return pendingLoads.find(meshPath) != pendingLoads.end();
     }
 
     bool AsyncMeshLoader::update()
@@ -110,12 +102,6 @@ namespace loaders
         }
 
         return !gpuUploadReadyPath.empty();
-    }
-
-    std::string AsyncMeshLoader::getReadyForGPUUpload() const
-    {
-        std::lock_guard lock(mutex);
-        return gpuUploadReadyPath;
     }
 
     AsyncMeshLoader::LoadResult AsyncMeshLoader::processGPUUpload(render::mesh::StaticMeshPipeline* pipeline)
@@ -242,19 +228,6 @@ namespace loaders
         progress.errorMessage = pending->errorMessage;
 
         return progress;
-    }
-
-    bool AsyncMeshLoader::isLoadComplete(const std::string& meshPath) const
-    {
-        std::lock_guard lock(mutex);
-
-        auto it = pendingLoads.find(meshPath);
-        if (it == pendingLoads.end())
-        {
-            return false;
-        }
-
-        return it->second->state == services::LoadingState::Complete;
     }
 
     void AsyncMeshLoader::clearCompleted()

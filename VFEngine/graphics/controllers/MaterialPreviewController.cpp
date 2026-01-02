@@ -167,7 +167,7 @@ namespace controllers
 
     MaterialPreviewController::~MaterialPreviewController()
     {
-        cleanUp();  // cleanUp() handles waitIdle() internally
+        cleanUp(); // cleanUp() handles waitIdle() internally
     }
 
     static void createDefaultTextureImpl(core::Device& device, PreviewTextureGPU& defaultTexture)
@@ -212,7 +212,8 @@ namespace controllers
 
         auto cmdA = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
         core::ImageUtilities::transitionImageLayout(cmdA.get(), defaultTexture.image, vk::ImageLayout::eUndefined,
-                                               vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor);
+                                                    vk::ImageLayout::eTransferDstOptimal,
+                                                    vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
 
         // Copy buffer to image
@@ -229,9 +230,10 @@ namespace controllers
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdCopy);
 
         auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
-        core::ImageUtilities::transitionImageLayout(cmdB.get(), defaultTexture.image, vk::ImageLayout::eTransferDstOptimal,
-                                               vk::ImageLayout::eShaderReadOnlyOptimal,
-                                               vk::ImageAspectFlagBits::eColor);
+        core::ImageUtilities::transitionImageLayout(cmdB.get(), defaultTexture.image,
+                                                    vk::ImageLayout::eTransferDstOptimal,
+                                                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                                                    vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
 
         // Cleanup staging
@@ -318,8 +320,8 @@ namespace controllers
             // Transition to transfer dst
             auto cmdA = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
             core::ImageUtilities::transitionImageLayout(cmdA.get(), tex.image, vk::ImageLayout::eUndefined,
-                                                   vk::ImageLayout::eTransferDstOptimal,
-                                                   vk::ImageAspectFlagBits::eColor);
+                                                        vk::ImageLayout::eTransferDstOptimal,
+                                                        vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
 
             // Copy buffer to image
@@ -337,8 +339,8 @@ namespace controllers
             // Transition to shader read
             auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
             core::ImageUtilities::transitionImageLayout(cmdB.get(), tex.image, vk::ImageLayout::eTransferDstOptimal,
-                                                   vk::ImageLayout::eShaderReadOnlyOptimal,
-                                                   vk::ImageAspectFlagBits::eColor);
+                                                        vk::ImageLayout::eShaderReadOnlyOptimal,
+                                                        vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
 
             // Cleanup staging
@@ -458,7 +460,8 @@ namespace controllers
     {
         materialParams = params;
 
-        if (!initialized) {
+        if (!initialized)
+        {
             return;
         }
 
@@ -474,14 +477,14 @@ namespace controllers
         }
 
         std::array<std::string, TextureManagerImpl::MAX_TEXTURES> texturePaths = {
-            params.albedoTexturePath,      // 0: Albedo
-            params.normalTexturePath,      // 1: Normal
-            params.ormTexturePath,         // 2: ORM
-            params.metallicTexturePath,    // 3: Metallic
-            params.roughnessTexturePath,   // 4: Roughness
-            params.aoTexturePath,          // 5: AO
-            params.emissionTexturePath,    // 6: Emission
-            params.heightTexturePath,      // 7: Height
+            params.albedoTexturePath, // 0: Albedo
+            params.normalTexturePath, // 1: Normal
+            params.ormTexturePath, // 2: ORM
+            params.metallicTexturePath, // 3: Metallic
+            params.roughnessTexturePath, // 4: Roughness
+            params.aoTexturePath, // 5: AO
+            params.emissionTexturePath, // 6: Emission
+            params.heightTexturePath, // 7: Height
             "", "", "", "", "", "", "", "" // 8-15: Reserved
         };
 
@@ -523,7 +526,7 @@ namespace controllers
             hasAnyTexture = !textureManager->textureSlots[i].empty();
         }
         bool shouldUpdateBindings = (params.useCustomShader || textureManager->texturesNeedUpdate || hasAnyTexture)
-                                    && textureManager->defaultTexture.valid;
+            && textureManager->defaultTexture.valid;
 
         if (shouldUpdateBindings)
         {

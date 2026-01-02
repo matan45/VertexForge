@@ -4,7 +4,6 @@
 #include "print/EditorLogger.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/PreviewEvents.hpp"
-#include <glm/gtc/matrix_transform.hpp>
 #include <filesystem>
 
 namespace windows
@@ -17,11 +16,7 @@ namespace windows
         windowTitle = "Mesh Preview: " + path.filename().string();
     }
 
-    MeshPreviewWindow::~MeshPreviewWindow()
-    {
-        // Preview cleanup is handled in draw() when window closes
-        // to ensure cleanup happens before ImGui tries to render freed resources
-    }
+    MeshPreviewWindow::~MeshPreviewWindow() = default;
 
     void MeshPreviewWindow::draw()
     {
@@ -46,8 +41,7 @@ namespace windows
             }
             return;
         }
-
-        // Initialize on first draw
+        
         if (needsInit)
         {
             initRenderer();
@@ -157,6 +151,46 @@ namespace windows
         lodLevels = events::EventDispatcher::instance().query(lodQuery);
     }
 
+    void MeshPreviewWindow::handlePreviewInput()
+    {
+        bool isHovered = ImGui::IsWindowHovered();
+
+        if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            isDraggingPreview = true;
+        }
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            isDraggingPreview = false;
+        }
+
+        if (!isHovered) return;
+
+        ImGuiIO& io = ImGui::GetIO();
+
+        // Scroll to zoom
+        if (io.MouseWheel != 0.0f)
+        {
+            float zoomFactor = 1.0f - io.MouseWheel * camera->zoomSensitivity * 0.1f;
+            camera->setDistance(camera->distance * zoomFactor);
+            camera->updateMatrices();
+        }
+
+        // Left mouse drag to orbit
+        if (isDraggingPreview && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            ImVec2 delta = io.MouseDelta;
+
+            if (delta.x != 0.0f || delta.y != 0.0f)
+            {
+                camera->yaw += delta.x * camera->orbitSensitivity;
+                camera->pitch -= delta.y * camera->orbitSensitivity;
+                camera->pitch = glm::clamp(camera->pitch, -89.0f, 89.0f);
+                camera->updateMatrices();
+            }
+        }
+    }
+
     void MeshPreviewWindow::drawViewport(float width, float height)
     {
         if (width <= 0 || height <= 0)
@@ -165,12 +199,9 @@ namespace windows
         }
         camera->setAspectRatio(width / height);
 
+        handlePreviewInput();
+
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, meshPosition);
-        model = glm::rotate(model, glm::radians(meshRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(meshRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(meshRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-        model = glm::scale(model, glm::vec3(meshScale));
 
         services::MeshPreviewParams meshParams;
         meshParams.modelMatrix = model;
@@ -299,68 +330,6 @@ namespace windows
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
-
-            ImGui::Text("Pos X");
-            ImGui::SameLine(50.0f);
-            ImGui::SetNextItemWidth(itemWidth);
-            ImGui::DragFloat("##PosX", &meshPosition.x, 0.1f, -1000.0f, 1000.0f, "%.2f");
-
-            ImGui::Text("Pos Y");
-            ImGui::SameLine(50.0f);
-            ImGui::SetNextItemWidth(itemWidth);
-            ImGui::DragFloat("##PosY", &meshPosition.y, 0.1f, -1000.0f, 1000.0f, "%.2f");
-
-            ImGui::Text("Pos Z");
-            ImGui::SameLine(50.0f);
-            ImGui::SetNextItemWidth(itemWidth);
-            ImGui::DragFloat("##PosZ", &meshPosition.z, 0.1f, -1000.0f, 1000.0f, "%.2f");
-
-            ImGui::Spacing();
-
-            ImGui::Text("Rot X");
-            ImGui::SameLine(50.0f);
-            ImGui::SetNextItemWidth(itemWidth);
-            ImGui::SliderFloat("##RotX", &meshRotation.x, -180.0f, 180.0f, "%.0f");
-
-            ImGui::Text("Rot Y");
-            ImGui::SameLine(50.0f);
-            ImGui::SetNextItemWidth(itemWidth);
-            ImGui::SliderFloat("##RotY", &meshRotation.y, -180.0f, 180.0f, "%.0f");
-
-            ImGui::Text("Rot Z");
-            ImGui::SameLine(50.0f);
-            ImGui::SetNextItemWidth(itemWidth);
-            ImGui::SliderFloat("##RotZ", &meshRotation.z, -180.0f, 180.0f, "%.0f");
-
-            ImGui::Spacing();
-
-            ImGui::Text("Scale");
-            ImGui::SameLine(50.0f);
-            ImGui::SetNextItemWidth(itemWidth);
-            if (ImGui::SliderFloat("##Scale", &meshScale, 0.01f, 10.0f, "%.2f"))
-            {
-                meshScale = glm::clamp(meshScale, 0.001f, 100.0f);
-            }
-
-            ImGui::Spacing();
-
-            if (ImGui::Button("Reset", ImVec2(-1, 0)))
-            {
-                meshPosition = glm::vec3(0.0f);
-                meshRotation = glm::vec3(0.0f);
-                meshScale = 1.0f;
-            }
-
-            if (ImGui::Button("Fit Camera", ImVec2(-1, 0)))
-            {
-                // Use cached bounds from when mesh was loaded
-                camera->fitToBounds(meshBounds);
-            }
-        }
-
         if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
@@ -386,6 +355,13 @@ namespace windows
             if (ImGui::Button("-", ImVec2(itemWidth / 2 - 2, 0)))
             {
                 camera->setDistance(dist * 1.1f);
+            }
+
+            ImGui::Spacing();
+
+            if (ImGui::Button("Fit to Mesh", ImVec2(-1, 0)))
+            {
+                camera->fitToBounds(meshBounds);
             }
         }
     }

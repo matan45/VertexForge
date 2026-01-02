@@ -25,15 +25,13 @@ namespace windows
         std::string materialPath;
         std::string audioPath;
     };
-
-    // Component count statistics
+    
     struct ComponentStats
     {
         std::map<std::string, uint32_t> counts;
         uint32_t totalEntities = 0;
     };
-
-    // Result from async loading operation
+    
     struct PrefabLoadResult
     {
         bool success = false;

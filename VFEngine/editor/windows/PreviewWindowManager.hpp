@@ -18,8 +18,15 @@ namespace windows
 
     class PreviewWindowManager
     {
+    private:
+        std::unordered_map<std::string, std::weak_ptr<MeshPreviewWindow>> openMeshPreviews;
+        std::unordered_map<std::string, std::weak_ptr<ImagePreviewWindow>> openImagePreviews;
+        std::unordered_map<std::string, std::weak_ptr<AudioPreviewWindow>> openAudioPreviews;
+        std::unordered_map<std::string, std::weak_ptr<MaterialEditorWindow>> openMaterialEditors;
+        std::unordered_map<std::string, std::weak_ptr<MaterialInstanceEditorWindow>> openInstanceEditors;
+        std::unordered_map<std::string, std::weak_ptr<PrefabPreviewWindow>> openPrefabPreviews;
     public:
-        PreviewWindowManager() = default;
+        explicit PreviewWindowManager() = default;
         ~PreviewWindowManager() = default;
 
         bool openPreview(const fs::path& filePath, AssetType type);
@@ -32,12 +39,5 @@ namespace windows
         void openMaterialEditor(const std::string& path);
         void openMaterialInstanceEditor(const std::string& path);
         void openPrefabPreview(const std::string& path);
-
-        std::unordered_map<std::string, std::weak_ptr<MeshPreviewWindow>> openMeshPreviews;
-        std::unordered_map<std::string, std::weak_ptr<ImagePreviewWindow>> openImagePreviews;
-        std::unordered_map<std::string, std::weak_ptr<AudioPreviewWindow>> openAudioPreviews;
-        std::unordered_map<std::string, std::weak_ptr<MaterialEditorWindow>> openMaterialEditors;
-        std::unordered_map<std::string, std::weak_ptr<MaterialInstanceEditorWindow>> openInstanceEditors;
-        std::unordered_map<std::string, std::weak_ptr<PrefabPreviewWindow>> openPrefabPreviews;
     };
 }

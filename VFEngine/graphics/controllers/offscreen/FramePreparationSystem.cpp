@@ -18,49 +18,43 @@
 
 namespace controllers::offscreen
 {
-    namespace
+    const render::mesh::ExtractedPBRValues* FramePreparationSystem::getCachedPBRValues(
+        const std::string& materialPath)
     {
-        // Helper function to get cached PBR values - handles both .vfMat and .vfMatInstance
-        const render::mesh::ExtractedPBRValues* getCachedPBRValues(
-            const std::string& materialPath,
-            std::unordered_map<std::string, render::mesh::ExtractedPBRValues>& cache)
+        if (materialPath.empty())
         {
-            if (materialPath.empty())
-            {
-                return nullptr;
-            }
-
-            auto it = cache.find(materialPath);
-            if (it != cache.end())
-            {
-                return &it->second;
-            }
-
-            // Use unified extraction that handles both materials and instances
-            auto [inserted, success] = cache.emplace(materialPath,
-                render::mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath));
-            return &inserted->second;
+            return nullptr;
         }
 
-        // Helper function to populate SubMeshMaterialInfo
-        void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo,
-                                 const std::string& materialPath,
-                                 std::unordered_map<std::string, render::mesh::ExtractedPBRValues>& cache)
+        auto it = pbrCache.find(materialPath);
+        if (it != pbrCache.end())
         {
-            matInfo.materialPath = materialPath;
+            return &it->second;
+        }
 
-            const auto* pbrValues = getCachedPBRValues(materialPath, cache);
-            if (pbrValues)
-            {
-                matInfo.albedo = pbrValues->albedo;
-                matInfo.metallic = pbrValues->metallic;
-                matInfo.roughness = pbrValues->roughness;
-                matInfo.ao = pbrValues->ao;
-                matInfo.emission = pbrValues->emission;
-                matInfo.blendMode = static_cast<uint8_t>(pbrValues->blendMode);
-                matInfo.iblDiffuse = pbrValues->iblDiffuse;
-                matInfo.iblSpecular = pbrValues->iblSpecular;
-            }
+        // Use unified extraction that handles both materials and instances
+        auto [inserted, success] = pbrCache.emplace(materialPath,
+                                                    render::mesh::MaterialPBRExtractor::extractPBRFromPath(
+                                                        materialPath));
+        return &inserted->second;
+    }
+
+    void FramePreparationSystem::populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo,
+                                                      const std::string& materialPath)
+    {
+        matInfo.materialPath = materialPath;
+
+        const auto* pbrValues = getCachedPBRValues(materialPath);
+        if (pbrValues)
+        {
+            matInfo.albedo = pbrValues->albedo;
+            matInfo.metallic = pbrValues->metallic;
+            matInfo.roughness = pbrValues->roughness;
+            matInfo.ao = pbrValues->ao;
+            matInfo.emission = pbrValues->emission;
+            matInfo.blendMode = static_cast<uint8_t>(pbrValues->blendMode);
+            matInfo.iblDiffuse = pbrValues->iblDiffuse;
+            matInfo.iblSpecular = pbrValues->iblSpecular;
         }
     }
 
@@ -123,12 +117,13 @@ namespace controllers::offscreen
         // Check if GPU-driven rendering is enabled
         auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
         bool useGPUDrivenCulling = renderHandler->isGPUDrivenRendererInitialized()
-                                   && gpuDrivenRenderer
-                                   && gpuDrivenRenderer->isEnabled();
+            && gpuDrivenRenderer
+            && gpuDrivenRenderer->isEnabled();
 
         // Helper lambda to build render data from entity
         auto buildRenderData = [&](entt::entity entity, const components::MeshComponent& meshComp,
-                                   const components::WorldTransformComponent& worldTransform) -> render::mesh::MeshRenderData
+                                   const components::WorldTransformComponent& worldTransform) ->
+            render::mesh::MeshRenderData
         {
             render::mesh::MeshRenderData renderData;
             renderData.meshPath = meshComp.meshPath;
@@ -139,14 +134,16 @@ namespace controllers::offscreen
             renderData.roughness = 0.5f;
             renderData.ao = 1.0f;
             renderData.emission = 0.0f;
-            renderData.showBoundingBox = (!ctx.playModeActive && ctx.showDebugRendering) ? meshComp.showBoundingBox : false;
+            renderData.showBoundingBox = (!ctx.playModeActive && ctx.showDebugRendering)
+                                             ? meshComp.showBoundingBox
+                                             : false;
 
             if (registry.all_of<components::MaterialComponent>(entity))
             {
                 const auto& materialComp = registry.get<components::MaterialComponent>(entity);
                 renderData.defaultMaterialPath = materialComp.defaultMaterial;
 
-                const auto* pbrValues = getCachedPBRValues(materialComp.defaultMaterial, pbrCache);
+                const auto* pbrValues = getCachedPBRValues(materialComp.defaultMaterial);
                 if (pbrValues)
                 {
                     renderData.albedo = pbrValues->albedo;
@@ -159,7 +156,7 @@ namespace controllers::offscreen
                 for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
                 {
                     render::mesh::SubMeshMaterialInfo matInfo;
-                    populateMaterialInfo(matInfo, materialPath, pbrCache);
+                    populateMaterialInfo(matInfo, materialPath);
                     renderData.submeshMaterials[submeshName] = matInfo;
                 }
             }

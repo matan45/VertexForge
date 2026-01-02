@@ -49,11 +49,4 @@ namespace services
         uint32_t height = 0;
         bool isHDR = false;
     };
-
-    struct SceneLoadingProgress : LoadingProgress
-    {
-        size_t entitiesLoaded = 0;
-        size_t totalEntities = 0;
-        std::string currentEntityName;
-    };
 }

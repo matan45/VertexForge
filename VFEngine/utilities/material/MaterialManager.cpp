@@ -95,8 +95,6 @@ namespace material {
         }
     }
 
-    // Instance operations
-
     std::shared_ptr<MaterialInstanceData> MaterialManager::createInstance(
         const std::string& name,
         const std::string& parentPath,

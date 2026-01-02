@@ -41,12 +41,9 @@ namespace resource {
 		static std::future <std::shared_ptr<AudioData>> loadAudioAsync(std::string_view path);
 		static std::future <std::shared_ptr<MeshesData>> loadMeshAsync(std::string_view path);
 		static std::future <std::shared_ptr<std::vector<ShaderModel>>> loadShaderAsync(std::string_view path);
-		static std::future <std::shared_ptr<material::MaterialData>> loadMaterialAsync(std::string_view path);
 
 		static std::shared_ptr<material::MaterialData> loadMaterial(std::string_view path);
 
-		// Material instance loading
-		static std::future<std::shared_ptr<material::MaterialInstanceData>> loadMaterialInstanceAsync(std::string_view path);
 		static std::shared_ptr<material::MaterialInstanceData> loadMaterialInstance(std::string_view path);
 
 		static std::unique_ptr<MeshStreamHandle> openMeshStream(std::string_view path);

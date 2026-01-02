@@ -1,6 +1,5 @@
 #pragma once
 #include "MaterialTypes.hpp"
-#include "MaterialAsset.hpp"
 #include "MaterialInstanceTypes.hpp"
 #include "MaterialInstanceAsset.hpp"
 #include <memory>
@@ -10,12 +9,13 @@
 #include <vector>
 #include <unordered_map>
 
-namespace material {
-
+namespace material
+{
     // Callback for material changes (for hot-reload support)
     using MaterialChangedCallback = std::function<void(const std::string& materialPath)>;
 
-    class MaterialManager {
+    class MaterialManager
+    {
     private:
         mutable std::mutex callbackMutex;
 
@@ -64,5 +64,4 @@ namespace material {
         void notifyMaterialChanged(const std::string& path);
         void notifyInstancesOfParentChange(const std::string& parentPath);
     };
-
 }

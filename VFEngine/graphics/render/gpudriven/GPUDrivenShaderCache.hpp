@@ -21,7 +21,6 @@ namespace material
 
 namespace render::gpudriven
 {
-    // Cached compiled shader and pipelines for a custom material in GPU-driven rendering
     struct GPUDrivenPipelineData
     {
         std::shared_ptr<core::Shader> shader;
@@ -71,13 +70,10 @@ namespace render::gpudriven
         uint32_t getOrCreateShaderGroup(const std::string& materialPath,
                                         const material::MaterialData& materialData);
 
-        // Register an instance -> parent mapping for shader sharing
         void registerInstance(const std::string& instancePath, const std::string& parentPath);
 
-        // Check if path is a registered instance and return parent path
         std::string resolveToParent(const std::string& path) const;
 
-        // Get shader group for material or instance (resolves instances to parent)
         uint32_t getShaderGroupForPath(const std::string& path) const;
 
         vk::Pipeline getPipeline(uint32_t shaderGroup, bool masked) const;
