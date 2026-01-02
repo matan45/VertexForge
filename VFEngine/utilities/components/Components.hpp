@@ -280,8 +280,8 @@ namespace components {
 		bool isPlaying = false;
 	};
 
-	// Script Component - mType scripting attachment
-	struct ScriptComponent {
+	// Script Entry - individual script attachment data
+	struct ScriptEntry {
 		std::string scriptPath;         // Path to .mt source file
 		bool enabled = true;            // Whether script updates are called
 
@@ -293,6 +293,47 @@ namespace components {
 		bool hasOnStart = false;
 		bool hasOnUpdate = false;
 		bool hasOnDestroy = false;
+	};
+
+	// Script Component - mType scripting attachment (supports multiple scripts)
+	struct ScriptComponent {
+		std::vector<ScriptEntry> scripts;
+
+		// Helper methods
+		ScriptEntry* findByPath(const std::string& path) {
+			for (auto& entry : scripts) {
+				if (entry.scriptPath == path) return &entry;
+			}
+			return nullptr;
+		}
+
+		const ScriptEntry* findByPath(const std::string& path) const {
+			for (const auto& entry : scripts) {
+				if (entry.scriptPath == path) return &entry;
+			}
+			return nullptr;
+		}
+
+		ScriptEntry* findByInstanceId(uint64_t instanceId) {
+			for (auto& entry : scripts) {
+				if (entry.instanceId == instanceId) return &entry;
+			}
+			return nullptr;
+		}
+
+		bool hasScript(const std::string& path) const {
+			return findByPath(path) != nullptr;
+		}
+
+		bool removeByPath(const std::string& path) {
+			auto it = std::remove_if(scripts.begin(), scripts.end(),
+				[&path](const ScriptEntry& e) { return e.scriptPath == path; });
+			if (it != scripts.end()) {
+				scripts.erase(it, scripts.end());
+				return true;
+			}
+			return false;
+		}
 	};
 
 }

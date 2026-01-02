@@ -33,23 +33,23 @@ namespace services {
 
         dispatcher.registerCommandHandler<events::scripting::DetachScriptCommand>(
             [this](const auto& cmd) {
-                detachScript(cmd.entity);
+                detachScript(cmd.entity, cmd.scriptPath);
                 return true;
             });
 
         dispatcher.registerCommandHandler<events::scripting::SetScriptEnabledCommand>(
             [this](const auto& cmd) {
-                setScriptEnabled(cmd.entity, cmd.enabled);
+                setScriptEnabled(cmd.entity, cmd.scriptPath, cmd.enabled);
             });
 
         dispatcher.registerCommandHandler<events::scripting::SetScriptPropertyCommand>(
             [this](const auto& cmd) {
-                return setProperty(cmd.entity, cmd.propertyName, cmd.value);
+                return setProperty(cmd.entity, cmd.scriptPath, cmd.propertyName, cmd.value);
             });
 
         dispatcher.registerCommandHandler<events::scripting::CallScriptMethodCommand>(
             [this](const auto& cmd) {
-                return callMethod(cmd.entity, cmd.methodName, cmd.args);
+                return callMethod(cmd.entity, cmd.scriptPath, cmd.methodName, cmd.args);
             });
 
         dispatcher.registerCommandHandler<events::scripting::TriggerScriptStartCommand>(
@@ -65,41 +65,49 @@ namespace services {
         // === Queries ===
         dispatcher.registerQueryHandler<events::scripting::HasScriptQuery>(
             [this](const auto& query) {
-                return hasScript(query.entity);
+                return hasScript(query.entity, query.scriptPath);
             });
 
         dispatcher.registerQueryHandler<events::scripting::IsScriptEnabledQuery>(
             [this](const auto& query) {
-                return isScriptEnabled(query.entity);
+                return isScriptEnabled(query.entity, query.scriptPath);
             });
 
-        dispatcher.registerQueryHandler<events::scripting::GetScriptDataQuery>(
-            [this](const auto& query) -> std::optional<ScriptComponentData> {
-                if (!hasScript(query.entity)) {
-                    return std::nullopt;
-                }
-                auto entity = fromHandle(query.entity);
-                auto& registry = scene::EntityRegistry::getRegistry();
-                if (registry.all_of<components::ScriptComponent>(entity)) {
-                    auto& script = registry.get<components::ScriptComponent>(entity);
-                    return ScriptComponentData{script.scriptPath, script.enabled};
-                }
-                return std::nullopt;
+        dispatcher.registerQueryHandler<events::scripting::GetScriptPathsQuery>(
+            [this](const auto& query) {
+                return getScriptPaths(query.entity);
             });
 
         dispatcher.registerQueryHandler<events::scripting::GetScriptPropertiesQuery>(
             [this](const auto& query) {
-                return getScriptProperties(query.entity);
+                return getScriptProperties(query.entity, query.scriptPath);
             });
 
         dispatcher.registerQueryHandler<events::scripting::GetScriptPropertyQuery>(
             [this](const auto& query) {
-                return getProperty(query.entity, query.propertyName);
+                return getProperty(query.entity, query.scriptPath, query.propertyName);
             });
 
         dispatcher.registerQueryHandler<events::scripting::GetScriptMethodsQuery>(
             [this](const auto& query) {
-                return getScriptMethods(query.entity);
+                return getScriptMethods(query.entity, query.scriptPath);
+            });
+
+        dispatcher.registerQueryHandler<events::scripting::GetScriptDataQuery>(
+            [this](const auto& query) -> std::optional<ScriptComponentData> {
+                auto enttEntity = internal::fromHandle(query.entity);
+                auto& registry = scene::EntityRegistry::getRegistry();
+                if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+                    return std::nullopt;
+                }
+                // Return first script's data, or empty data if no scripts
+                const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+                ScriptComponentData data;
+                if (!scriptComp.scripts.empty()) {
+                    data.scriptPath = scriptComp.scripts[0].scriptPath;
+                    data.enabled = scriptComp.scripts[0].enabled;
+                }
+                return data;
             });
     }
 
@@ -112,10 +120,19 @@ namespace services {
             registry.emplace<components::ScriptComponent>(enttEntity);
         }
 
-        auto& script = registry.get<components::ScriptComponent>(enttEntity);
-        script.scriptPath = data.scriptPath;
-        script.enabled = data.enabled;
-        script.started = false;
+        // If no script path provided, just ensure component exists (for "Add Component" UI flow)
+        if (data.scriptPath.empty()) {
+            spdlog::info("[ScriptingService] Added empty ScriptComponent to entity");
+            return true;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+
+        // Check if script already attached
+        if (scriptComp.hasScript(data.scriptPath)) {
+            spdlog::warn("[ScriptingService] Script '{}' already attached to entity", data.scriptPath);
+            return false;
+        }
 
         // Load the script via provider
         auto info = scriptingProvider->loadScript(data.scriptPath, entity);
@@ -131,11 +148,17 @@ namespace services {
             return false;
         }
 
-        // Store instance info in component
-        script.instanceId = info->instanceId;
-        script.hasOnStart = info->hasOnStart;
-        script.hasOnUpdate = info->hasOnUpdate;
-        script.hasOnDestroy = info->hasOnDestroy;
+        // Create new script entry
+        components::ScriptEntry entry;
+        entry.scriptPath = data.scriptPath;
+        entry.enabled = data.enabled;
+        entry.started = false;
+        entry.instanceId = info->instanceId;
+        entry.hasOnStart = info->hasOnStart;
+        entry.hasOnUpdate = info->hasOnUpdate;
+        entry.hasOnDestroy = info->hasOnDestroy;
+
+        scriptComp.scripts.push_back(entry);
 
         // Publish success notification
         events::scripting::ScriptAttachedNotification attachedNotification;
@@ -144,11 +167,12 @@ namespace services {
         attachedNotification.className = info->className;
         ::events::EventDispatcher::instance().publish(attachedNotification);
 
-        spdlog::info("[ScriptingService] Attached script '{}' to entity", data.scriptPath);
+        spdlog::info("[ScriptingService] Attached script '{}' to entity (total scripts: {})",
+                     data.scriptPath, scriptComp.scripts.size());
         return true;
     }
 
-    void ScriptingServiceImpl::detachScript(EntityHandle entity) {
+    void ScriptingServiceImpl::detachScript(EntityHandle entity, const std::string& scriptPath) {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
@@ -156,112 +180,222 @@ namespace services {
             return;
         }
 
-        auto& script = registry.get<components::ScriptComponent>(enttEntity);
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        auto* entry = scriptComp.findByPath(scriptPath);
+
+        if (!entry) {
+            return;
+        }
 
         // Call onDestroy if script was started
-        if (script.started && script.hasOnDestroy) {
-            scriptingProvider->callOnDestroy(script.instanceId);
+        if (entry->started && entry->hasOnDestroy) {
+            scriptingProvider->callOnDestroy(entry->instanceId);
         }
 
         // Unload from provider
-        scriptingProvider->unloadScript(script.instanceId);
+        scriptingProvider->unloadScript(entry->instanceId);
 
-        // Remove component
-        registry.remove<components::ScriptComponent>(enttEntity);
+        // Remove from component
+        scriptComp.removeByPath(scriptPath);
+
+        // Remove component entirely if no scripts left
+        if (scriptComp.scripts.empty()) {
+            registry.remove<components::ScriptComponent>(enttEntity);
+        }
 
         // Publish notification
         events::scripting::ScriptDetachedNotification detachedNotification;
         detachedNotification.entity = entity;
+        detachedNotification.scriptPath = scriptPath;
         ::events::EventDispatcher::instance().publish(detachedNotification);
+
+        spdlog::info("[ScriptingService] Detached script '{}' from entity", scriptPath);
     }
 
-    bool ScriptingServiceImpl::hasScript(EntityHandle entity) const {
-        auto enttEntity = fromHandle(entity);
-        auto& registry = scene::EntityRegistry::getRegistry();
-        return registry.all_of<components::ScriptComponent>(enttEntity);
-    }
-
-    void ScriptingServiceImpl::setScriptEnabled(EntityHandle entity, bool enabled) {
+    void ScriptingServiceImpl::detachAllScripts(EntityHandle entity) {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            registry.get<components::ScriptComponent>(enttEntity).enabled = enabled;
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+
+        // Detach each script
+        for (auto& entry : scriptComp.scripts) {
+            if (entry.started && entry.hasOnDestroy) {
+                scriptingProvider->callOnDestroy(entry.instanceId);
+            }
+            scriptingProvider->unloadScript(entry.instanceId);
+
+            events::scripting::ScriptDetachedNotification detachedNotification;
+            detachedNotification.entity = entity;
+            detachedNotification.scriptPath = entry.scriptPath;
+            ::events::EventDispatcher::instance().publish(detachedNotification);
+        }
+
+        // Remove component
+        registry.remove<components::ScriptComponent>(enttEntity);
+
+        spdlog::info("[ScriptingService] Detached all scripts from entity");
+    }
+
+    bool ScriptingServiceImpl::hasScripts(EntityHandle entity) const {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return false;
+        }
+
+        return !registry.get<components::ScriptComponent>(enttEntity).scripts.empty();
+    }
+
+    bool ScriptingServiceImpl::hasScript(EntityHandle entity, const std::string& scriptPath) const {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return false;
+        }
+
+        return registry.get<components::ScriptComponent>(enttEntity).hasScript(scriptPath);
+    }
+
+    std::vector<std::string> ScriptingServiceImpl::getScriptPaths(EntityHandle entity) const {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<std::string> paths;
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return paths;
+        }
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        for (const auto& entry : scriptComp.scripts) {
+            paths.push_back(entry.scriptPath);
+        }
+        return paths;
+    }
+
+    void ScriptingServiceImpl::setScriptEnabled(EntityHandle entity, const std::string& scriptPath, bool enabled) {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        auto* entry = scriptComp.findByPath(scriptPath);
+        if (entry) {
+            entry->enabled = enabled;
         }
     }
 
-    bool ScriptingServiceImpl::isScriptEnabled(EntityHandle entity) const {
+    bool ScriptingServiceImpl::isScriptEnabled(EntityHandle entity, const std::string& scriptPath) const {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            return registry.get<components::ScriptComponent>(enttEntity).enabled;
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return false;
         }
-        return false;
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        const auto* entry = scriptComp.findByPath(scriptPath);
+        return entry ? entry->enabled : false;
     }
 
-    std::vector<ScriptPropertyInfo> ScriptingServiceImpl::getScriptProperties(EntityHandle entity) const {
+    std::vector<ScriptPropertyInfo> ScriptingServiceImpl::getScriptProperties(EntityHandle entity,
+                                                                               const std::string& scriptPath) const {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            auto& script = registry.get<components::ScriptComponent>(enttEntity);
-            return scriptingProvider->getProperties(script.instanceId);
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return {};
+        }
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        const auto* entry = scriptComp.findByPath(scriptPath);
+        if (entry) {
+            return scriptingProvider->getProperties(entry->instanceId);
         }
         return {};
     }
 
-    bool ScriptingServiceImpl::setProperty(EntityHandle entity, const std::string& propertyName,
-                                            const std::any& value) {
+    bool ScriptingServiceImpl::setProperty(EntityHandle entity, const std::string& scriptPath,
+                                            const std::string& propertyName, const std::any& value) {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            auto& script = registry.get<components::ScriptComponent>(enttEntity);
-            return scriptingProvider->setProperty(script.instanceId, propertyName, value);
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return false;
+        }
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        const auto* entry = scriptComp.findByPath(scriptPath);
+        if (entry) {
+            return scriptingProvider->setProperty(entry->instanceId, propertyName, value);
         }
         return false;
     }
 
-    std::optional<std::any> ScriptingServiceImpl::getProperty(EntityHandle entity,
+    std::optional<std::any> ScriptingServiceImpl::getProperty(EntityHandle entity, const std::string& scriptPath,
                                                                const std::string& propertyName) const {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            auto& script = registry.get<components::ScriptComponent>(enttEntity);
-            return scriptingProvider->getProperty(script.instanceId, propertyName);
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return std::nullopt;
+        }
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        const auto* entry = scriptComp.findByPath(scriptPath);
+        if (entry) {
+            return scriptingProvider->getProperty(entry->instanceId, propertyName);
         }
         return std::nullopt;
     }
 
-    std::vector<ScriptMethodInfo> ScriptingServiceImpl::getScriptMethods(EntityHandle entity) const {
+    std::vector<ScriptMethodInfo> ScriptingServiceImpl::getScriptMethods(EntityHandle entity,
+                                                                          const std::string& scriptPath) const {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            auto& script = registry.get<components::ScriptComponent>(enttEntity);
-            return scriptingProvider->getMethods(script.instanceId);
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return {};
+        }
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        const auto* entry = scriptComp.findByPath(scriptPath);
+        if (entry) {
+            return scriptingProvider->getMethods(entry->instanceId);
         }
         return {};
     }
 
-    std::optional<std::any> ScriptingServiceImpl::callMethod(EntityHandle entity,
+    std::optional<std::any> ScriptingServiceImpl::callMethod(EntityHandle entity, const std::string& scriptPath,
                                                               const std::string& methodName,
                                                               const std::vector<std::any>& args) {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            auto& script = registry.get<components::ScriptComponent>(enttEntity);
-            return scriptingProvider->callMethod(script.instanceId, methodName, args);
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return std::nullopt;
+        }
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        const auto* entry = scriptComp.findByPath(scriptPath);
+        if (entry) {
+            return scriptingProvider->callMethod(entry->instanceId, methodName, args);
         }
         return std::nullopt;
     }
 
     void ScriptingServiceImpl::sendMessage(EntityHandle entity, const std::string& messageName,
                                             const std::any& data) {
-        // TODO: Implement message sending to script
+        // TODO: Implement message sending to all scripts on entity
     }
 
     void ScriptingServiceImpl::broadcastMessage(const std::string& messageName,
@@ -275,35 +409,33 @@ namespace services {
         // Iterate all entities with ScriptComponent
         auto view = registry.view<components::ScriptComponent>();
 
-        static bool firstCall = true;
-        if (firstCall) {
-            spdlog::debug("[ScriptingService] updateScripts called, entities with scripts: {}", view.size());
-            firstCall = false;
-        }
-
         for (auto entity : view) {
-            auto& script = view.get<components::ScriptComponent>(entity);
+            auto& scriptComp = view.get<components::ScriptComponent>(entity);
 
-            if (!script.enabled) {
-                spdlog::debug("[ScriptingService] Script {} is disabled, skipping", script.instanceId);
-                continue;
-            }
+            // Update each script on this entity
+            for (auto& entry : scriptComp.scripts) {
+                if (!entry.enabled) {
+                    continue;
+                }
 
-            // Call onStart if not started yet
-            if (!script.started && script.hasOnStart) {
-                spdlog::info("[ScriptingService] Calling onStart for instance {}", script.instanceId);
-                scriptingProvider->callOnStart(script.instanceId);
-                script.started = true;
+                // Call onStart if not started yet
+                if (!entry.started && entry.hasOnStart) {
+                    spdlog::info("[ScriptingService] Calling onStart for script '{}' (instance {})",
+                                 entry.scriptPath, entry.instanceId);
+                    scriptingProvider->callOnStart(entry.instanceId);
+                    entry.started = true;
 
-                // Publish notification
-                events::scripting::ScriptStartedNotification startedNotification;
-                startedNotification.entity = toHandle(entity);
-                ::events::EventDispatcher::instance().publish(startedNotification);
-            }
+                    // Publish notification
+                    events::scripting::ScriptStartedNotification startedNotification;
+                    startedNotification.entity = toHandle(entity);
+                    startedNotification.scriptPath = entry.scriptPath;
+                    ::events::EventDispatcher::instance().publish(startedNotification);
+                }
 
-            // Call onUpdate
-            if (script.hasOnUpdate) {
-                scriptingProvider->callOnUpdate(script.instanceId, deltaTime);
+                // Call onUpdate
+                if (entry.hasOnUpdate) {
+                    scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
+                }
             }
         }
     }
@@ -320,11 +452,15 @@ namespace services {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            auto& script = registry.get<components::ScriptComponent>(enttEntity);
-            if (!script.started && script.hasOnStart) {
-                scriptingProvider->callOnStart(script.instanceId);
-                script.started = true;
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        for (auto& entry : scriptComp.scripts) {
+            if (!entry.started && entry.hasOnStart) {
+                scriptingProvider->callOnStart(entry.instanceId);
+                entry.started = true;
             }
         }
     }
@@ -333,10 +469,14 @@ namespace services {
         auto enttEntity = fromHandle(entity);
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        if (registry.all_of<components::ScriptComponent>(enttEntity)) {
-            auto& script = registry.get<components::ScriptComponent>(enttEntity);
-            if (script.hasOnDestroy) {
-                scriptingProvider->callOnDestroy(script.instanceId);
+        if (!registry.all_of<components::ScriptComponent>(enttEntity)) {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        for (auto& entry : scriptComp.scripts) {
+            if (entry.hasOnDestroy) {
+                scriptingProvider->callOnDestroy(entry.instanceId);
             }
         }
     }

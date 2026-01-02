@@ -22,12 +22,14 @@ namespace events::scripting {
 
     struct DetachScriptCommand : ICommand<bool> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script to detach
 
         std::string_view getName() const override { return "DetachScript"; }
     };
 
     struct SetScriptEnabledCommand : ICommand<> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script to enable/disable
         bool enabled;
 
         std::string_view getName() const override { return "SetScriptEnabled"; }
@@ -35,6 +37,7 @@ namespace events::scripting {
 
     struct SetScriptPropertyCommand : ICommand<bool> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script's property to set
         std::string propertyName;
         std::any value;
 
@@ -43,6 +46,7 @@ namespace events::scripting {
 
     struct CallScriptMethodCommand : ICommand<std::optional<std::any>> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script's method to call
         std::string methodName;
         std::vector<std::any> args;
 
@@ -67,12 +71,14 @@ namespace events::scripting {
 
     struct HasScriptQuery : IQuery<bool> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script to check for
 
         std::string_view getName() const override { return "HasScript"; }
     };
 
     struct IsScriptEnabledQuery : IQuery<bool> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script to check
 
         std::string_view getName() const override { return "IsScriptEnabled"; }
     };
@@ -83,14 +89,22 @@ namespace events::scripting {
         std::string_view getName() const override { return "GetScriptData"; }
     };
 
+    struct GetScriptPathsQuery : IQuery<std::vector<std::string>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetScriptPaths"; }
+    };
+
     struct GetScriptPropertiesQuery : IQuery<std::vector<services::ScriptPropertyInfo>> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script's properties to get
 
         std::string_view getName() const override { return "GetScriptProperties"; }
     };
 
     struct GetScriptPropertyQuery : IQuery<std::optional<std::any>> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script's property to get
         std::string propertyName;
 
         std::string_view getName() const override { return "GetScriptProperty"; }
@@ -98,6 +112,7 @@ namespace events::scripting {
 
     struct GetScriptMethodsQuery : IQuery<std::vector<services::ScriptMethodInfo>> {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script's methods to get
 
         std::string_view getName() const override { return "GetScriptMethods"; }
     };
@@ -116,6 +131,7 @@ namespace events::scripting {
 
     struct ScriptDetachedNotification : INotification {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script was detached
 
         std::string_view getName() const override { return "ScriptDetached"; }
     };
@@ -129,6 +145,7 @@ namespace events::scripting {
 
     struct ScriptStartedNotification : INotification {
         services::EntityHandle entity;
+        std::string scriptPath;  // Which script started
 
         std::string_view getName() const override { return "ScriptStarted"; }
     };

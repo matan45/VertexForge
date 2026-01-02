@@ -13,23 +13,28 @@ namespace services {
 
         void registerEventHandlers();
 
-        // === Script Component ===
+        // === Script Component (Multi-Script Support) ===
         bool attachScript(EntityHandle entity, const ScriptData& data) override;
-        void detachScript(EntityHandle entity) override;
-        bool hasScript(EntityHandle entity) const override;
-        void setScriptEnabled(EntityHandle entity, bool enabled) override;
-        bool isScriptEnabled(EntityHandle entity) const override;
+        void detachScript(EntityHandle entity, const std::string& scriptPath) override;
+        void detachAllScripts(EntityHandle entity) override;
+        bool hasScripts(EntityHandle entity) const override;
+        bool hasScript(EntityHandle entity, const std::string& scriptPath) const override;
+        std::vector<std::string> getScriptPaths(EntityHandle entity) const override;
+        void setScriptEnabled(EntityHandle entity, const std::string& scriptPath, bool enabled) override;
+        bool isScriptEnabled(EntityHandle entity, const std::string& scriptPath) const override;
 
         // === Script Properties ===
-        std::vector<ScriptPropertyInfo> getScriptProperties(EntityHandle entity) const override;
-        bool setProperty(EntityHandle entity, const std::string& propertyName,
-                         const std::any& value) override;
-        std::optional<std::any> getProperty(EntityHandle entity,
+        std::vector<ScriptPropertyInfo> getScriptProperties(EntityHandle entity,
+                                                             const std::string& scriptPath) const override;
+        bool setProperty(EntityHandle entity, const std::string& scriptPath,
+                         const std::string& propertyName, const std::any& value) override;
+        std::optional<std::any> getProperty(EntityHandle entity, const std::string& scriptPath,
                                              const std::string& propertyName) const override;
 
         // === Method Calls ===
-        std::vector<ScriptMethodInfo> getScriptMethods(EntityHandle entity) const override;
-        std::optional<std::any> callMethod(EntityHandle entity,
+        std::vector<ScriptMethodInfo> getScriptMethods(EntityHandle entity,
+                                                        const std::string& scriptPath) const override;
+        std::optional<std::any> callMethod(EntityHandle entity, const std::string& scriptPath,
                                             const std::string& methodName,
                                             const std::vector<std::any>& args = {}) override;
 

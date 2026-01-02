@@ -821,6 +821,11 @@ namespace services {
                 return findEntitiesByName(query.name);
             });
 
+        dispatcher.registerQueryHandler<events::scene::GetEntitiesWithComponentQuery>(
+            [this](const events::scene::GetEntitiesWithComponentQuery& query) {
+                return getEntitiesWithComponent(query.componentType);
+            });
+
         dispatcher.registerQueryHandler<events::scene::GetRootEntityQuery>(
             [this](const events::scene::GetRootEntityQuery&) {
                 return getRoot();
