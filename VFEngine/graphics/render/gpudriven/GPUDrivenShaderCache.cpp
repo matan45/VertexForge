@@ -58,6 +58,38 @@ namespace render::gpudriven
         loggerInfo("GPUDrivenShaderCache: Initialized with shared pipeline layout");
     }
 
+    void GPUDrivenShaderCache::registerInstance(const std::string& instancePath, const std::string& parentPath)
+    {
+        if (instancePath.empty() || parentPath.empty())
+        {
+            return;
+        }
+        instanceToParent[instancePath] = parentPath;
+    }
+
+    std::string GPUDrivenShaderCache::resolveToParent(const std::string& path) const
+    {
+        auto it = instanceToParent.find(path);
+        if (it != instanceToParent.end())
+        {
+            return it->second;
+        }
+        return path; // Not an instance, return as-is
+    }
+
+    uint32_t GPUDrivenShaderCache::getShaderGroupForPath(const std::string& path) const
+    {
+        // Check if this is an instance, resolve to parent
+        std::string resolvedPath = resolveToParent(path);
+
+        auto groupIt = materialToGroup.find(resolvedPath);
+        if (groupIt != materialToGroup.end())
+        {
+            return groupIt->second;
+        }
+        return 0; // Default shader group
+    }
+
     uint32_t GPUDrivenShaderCache::getOrCreateShaderGroup(const std::string& materialPath,
                                                           const material::MaterialData& materialData)
     {
@@ -66,6 +98,8 @@ namespace render::gpudriven
             return 0;
         }
 
+        // Note: materialPath should be the parent material path, not instance path
+        // Instances should call registerInstance() and use getShaderGroupForPath()
         auto groupIt = materialToGroup.find(materialPath);
         if (groupIt != materialToGroup.end())
         {
@@ -229,6 +263,7 @@ namespace render::gpudriven
 
         cache.clear();
         materialToGroup.clear();
+        instanceToParent.clear();
         nextGroupIndex = 1; // Reset group allocation
 
         loggerInfo("GPUDrivenShaderCache: Invalidated all caches");

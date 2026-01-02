@@ -39,16 +39,6 @@ namespace services {
             });
 
         // Material Preview Queries
-        dispatcher.registerQueryHandler<events::preview::IsMaterialPreviewReadyQuery>(
-            [this](const events::preview::IsMaterialPreviewReadyQuery& query) {
-                return isMaterialPreviewReady(query.instanceId);
-            });
-
-        dispatcher.registerQueryHandler<events::preview::GetMaterialParamsQuery>(
-            [this](const events::preview::GetMaterialParamsQuery& query) {
-                return getMaterialParams(query.instanceId);
-            });
-
         dispatcher.registerQueryHandler<events::preview::RenderMaterialPreviewQuery>(
             [this](const events::preview::RenderMaterialPreviewQuery& query) {
                 return renderMaterialPreview(query.instanceId);
@@ -70,18 +60,6 @@ namespace services {
                 cleanUpMeshPreview(cmd.instanceId);
             });
 
-        dispatcher.registerCommandHandler<events::preview::LoadPreviewMeshCommand>(
-            [this](const events::preview::LoadPreviewMeshCommand& cmd) {
-                math::AABB bounds;
-                bool result = loadPreviewMesh(cmd.instanceId, cmd.meshPath, bounds);
-                return events::preview::LoadPreviewMeshResult{ result, bounds };
-            });
-
-        dispatcher.registerCommandHandler<events::preview::UnloadPreviewMeshCommand>(
-            [this](const events::preview::UnloadPreviewMeshCommand& cmd) {
-                unloadPreviewMesh(cmd.instanceId);
-            });
-
         dispatcher.registerCommandHandler<events::preview::SetMeshPreviewParamsCommand>(
             [this](const events::preview::SetMeshPreviewParamsCommand& cmd) {
                 setMeshPreviewParams(cmd.instanceId, cmd.params);
@@ -93,16 +71,6 @@ namespace services {
             });
 
         // Mesh Preview Queries
-        dispatcher.registerQueryHandler<events::preview::IsMeshPreviewReadyQuery>(
-            [this](const events::preview::IsMeshPreviewReadyQuery& query) {
-                return isMeshPreviewReady(query.instanceId);
-            });
-
-        dispatcher.registerQueryHandler<events::preview::IsPreviewMeshLoadedQuery>(
-            [this](const events::preview::IsPreviewMeshLoadedQuery& query) {
-                return isPreviewMeshLoaded(query.instanceId);
-            });
-
         dispatcher.registerQueryHandler<events::preview::GetPreviewMeshSubMeshInfoQuery>(
             [this](const events::preview::GetPreviewMeshSubMeshInfoQuery& query) {
                 return getPreviewMeshSubMeshInfo(query.instanceId);
@@ -122,6 +90,23 @@ namespace services {
             [this](const events::preview::RenderMeshPreviewQuery& query) {
                 return renderMeshPreview(query.instanceId);
             });
+
+        // Async Mesh Loading Commands
+        dispatcher.registerCommandHandler<events::preview::LoadPreviewMeshAsyncCommand>(
+            [this](const events::preview::LoadPreviewMeshAsyncCommand& cmd) {
+                loadPreviewMeshAsync(cmd.instanceId, cmd.meshPath);
+            });
+
+        dispatcher.registerCommandHandler<events::preview::CancelMeshLoadingCommand>(
+            [this](const events::preview::CancelMeshLoadingCommand& cmd) {
+                cancelMeshLoading(cmd.instanceId);
+            });
+
+        // Async Mesh Loading Queries
+        dispatcher.registerQueryHandler<events::preview::GetMeshLoadingProgressQuery>(
+            [this](const events::preview::GetMeshLoadingProgressQuery& query) {
+                return getMeshLoadingProgress(query.instanceId);
+            });
     }
 
     // === Material Preview ===
@@ -134,16 +119,8 @@ namespace services {
         materialProvider->cleanUpMaterialPreview(instanceId);
     }
 
-    bool PreviewServiceImpl::isMaterialPreviewReady(PreviewInstanceId instanceId) const {
-        return materialProvider->isMaterialPreviewInitialized(instanceId);
-    }
-
     void PreviewServiceImpl::setMaterialParams(PreviewInstanceId instanceId, const MaterialPreviewParams& params) {
         materialProvider->setMaterialParams(instanceId, params);
-    }
-
-    MaterialPreviewParams PreviewServiceImpl::getMaterialParams(PreviewInstanceId instanceId) const {
-        return materialProvider->getMaterialParams(instanceId);
     }
 
     void PreviewServiceImpl::updateMaterialCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
@@ -171,22 +148,6 @@ namespace services {
         meshProvider->cleanUpMeshPreview(instanceId);
     }
 
-    bool PreviewServiceImpl::isMeshPreviewReady(PreviewInstanceId instanceId) const {
-        return meshProvider->isMeshPreviewInitialized(instanceId);
-    }
-
-    bool PreviewServiceImpl::loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath, math::AABB& outBounds) {
-        return meshProvider->loadPreviewMesh(instanceId, meshPath, outBounds);
-    }
-
-    void PreviewServiceImpl::unloadPreviewMesh(PreviewInstanceId instanceId) {
-        meshProvider->unloadPreviewMesh(instanceId);
-    }
-
-    bool PreviewServiceImpl::isPreviewMeshLoaded(PreviewInstanceId instanceId) const {
-        return meshProvider->isPreviewMeshLoaded(instanceId);
-    }
-
     std::vector<SubMeshInfo> PreviewServiceImpl::getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const {
         return meshProvider->getPreviewMeshSubMeshInfo(instanceId);
     }
@@ -212,6 +173,24 @@ namespace services {
         ViewportTextureHandle handle;
         handle.imguiDescriptorSet = meshProvider->renderMeshPreview(instanceId);
         return handle;
+    }
+
+    // === Async Mesh Loading ===
+
+    void PreviewServiceImpl::loadPreviewMeshAsync(PreviewInstanceId instanceId, const std::string& meshPath) {
+        meshProvider->loadPreviewMeshAsync(instanceId, meshPath);
+    }
+
+    void PreviewServiceImpl::cancelMeshLoading(PreviewInstanceId instanceId) {
+        meshProvider->cancelMeshLoading(instanceId);
+    }
+
+    MeshLoadingProgress PreviewServiceImpl::getMeshLoadingProgress(PreviewInstanceId instanceId) const {
+        return meshProvider->getMeshLoadingProgress(instanceId);
+    }
+
+    void PreviewServiceImpl::processAsyncLoading() {
+        meshProvider->processAsyncLoading();
     }
 
 }

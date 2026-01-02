@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include <math/Frustum.hpp>
 #include "../data/DTOs.hpp"
+#include "../data/AsyncLoadingTypes.hpp"
 #include "PreviewInstanceId.hpp"
 #include <string>
 #include <vector>
@@ -24,10 +25,6 @@ namespace services {
 
         virtual bool isMeshPreviewInitialized(PreviewInstanceId instanceId) const = 0;
 
-        virtual bool loadPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath, math::AABB& outBounds) = 0;
-
-        virtual void unloadPreviewMesh(PreviewInstanceId instanceId) = 0;
-
         virtual bool isPreviewMeshLoaded(PreviewInstanceId instanceId) const = 0;
 
         virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const = 0;
@@ -42,6 +39,14 @@ namespace services {
                                        const glm::vec3& cameraPos) = 0;
 
         virtual void* renderMeshPreview(PreviewInstanceId instanceId) = 0;
+
+        // Async loading API
+        virtual void loadPreviewMeshAsync(PreviewInstanceId instanceId, const std::string& meshPath) = 0;
+        virtual void cancelMeshLoading(PreviewInstanceId instanceId) = 0;
+        virtual MeshLoadingProgress getMeshLoadingProgress(PreviewInstanceId instanceId) const = 0;
+
+        // Call each frame to process async loading work for all instances
+        virtual void processAsyncLoading() = 0;
     };
 
 }

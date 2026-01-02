@@ -15,6 +15,7 @@
     <IgnoreWarnCompileDuplicatedFilename>true</IgnoreWarnCompileDuplicatedFilename>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>Editor</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -109,18 +110,28 @@
     <ClInclude Include="graph\nodes\ShaderNode.hpp" />
     <ClInclude Include="handlers\EditorHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
+    <ClInclude Include="windows\AssetGridRenderer.hpp" />
     <ClInclude Include="windows\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
     <ClInclude Include="windows\ContentBrowser.hpp" />
+    <ClInclude Include="windows\ContentBrowserModals.hpp" />
+    <ClInclude Include="windows\ContentBrowserTypes.hpp" />
     <ClInclude Include="windows\EntityDetailsPanel.hpp" />
     <ClInclude Include="windows\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\ImportProgressWindow.hpp" />
     <ClInclude Include="windows\MainImguiWindow.hpp" />
     <ClInclude Include="windows\MaterialEditorWindow.hpp" />
+    <ClInclude Include="windows\MaterialInstanceEditorWindow.hpp" />
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
+    <ClInclude Include="windows\PrefabPreviewWindow.hpp" />
+    <ClInclude Include="windows\PreviewWindowManager.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
     <ClInclude Include="windows\SceneLoadingProgressWindow.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
+    <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
+    <ClInclude Include="windows\material\MaterialPreviewPanel.hpp" />
+    <ClInclude Include="windows\material\MaterialPropertyPanel.hpp" />
+    <ClInclude Include="windows\material\OrmPackingDialog.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="camera\EditorCamera.cpp" />
@@ -134,18 +145,27 @@
     <ClCompile Include="handlers\EditorHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />
+    <ClCompile Include="windows\AssetGridRenderer.cpp" />
     <ClCompile Include="windows\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\ConsoleLog.cpp" />
     <ClCompile Include="windows\ContentBrowser.cpp" />
+    <ClCompile Include="windows\ContentBrowserModals.cpp" />
     <ClCompile Include="windows\EntityDetailsPanel.cpp" />
     <ClCompile Include="windows\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\ImportProgressWindow.cpp" />
     <ClCompile Include="windows\MainImguiWindow.cpp" />
     <ClCompile Include="windows\MaterialEditorWindow.cpp" />
+    <ClCompile Include="windows\MaterialInstanceEditorWindow.cpp" />
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
+    <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
+    <ClCompile Include="windows\PreviewWindowManager.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
     <ClCompile Include="windows\SceneLoadingProgressWindow.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
+    <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />
+    <ClCompile Include="windows\material\MaterialPreviewPanel.cpp" />
+    <ClCompile Include="windows\material\MaterialPropertyPanel.cpp" />
+    <ClCompile Include="windows\material\OrmPackingDialog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\editor\VertexForge-icon.vfImage" />

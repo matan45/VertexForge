@@ -329,6 +329,128 @@ namespace render::mesh
         return pbr;
     }
 
+    ExtractedPBRValues MaterialPBRExtractor::extractPBRFromInstance(
+        const material::MaterialInstanceData& instance,
+        const material::MaterialData& parentMaterial)
+    {
+        // Start with parent's PBR values
+        ExtractedPBRValues pbr = extractPBRFromMaterial(parentMaterial);
+
+        // Apply scalar overrides
+        if (instance.albedoOverride.has_value())
+        {
+            pbr.albedo = *instance.albedoOverride;
+        }
+        if (instance.metallicOverride.has_value())
+        {
+            pbr.metallic = *instance.metallicOverride;
+        }
+        if (instance.roughnessOverride.has_value())
+        {
+            pbr.roughness = *instance.roughnessOverride;
+        }
+        if (instance.aoOverride.has_value())
+        {
+            pbr.ao = *instance.aoOverride;
+        }
+        if (instance.emissionOverride.has_value())
+        {
+            pbr.emission = *instance.emissionOverride;
+        }
+        if (instance.iblDiffuseOverride.has_value())
+        {
+            pbr.iblDiffuse = *instance.iblDiffuseOverride;
+        }
+        if (instance.iblSpecularOverride.has_value())
+        {
+            pbr.iblSpecular = *instance.iblSpecularOverride;
+        }
+
+        // Apply texture overrides
+        for (const auto& [slot, texPath] : instance.textureOverrides)
+        {
+            if (texPath.empty()) continue;
+
+            switch (slot)
+            {
+            case material::TextureSlot::Albedo:
+                pbr.albedoTexturePath = texPath;
+                break;
+            case material::TextureSlot::Normal:
+                pbr.normalTexturePath = texPath;
+                break;
+            case material::TextureSlot::ORM:
+                pbr.ormTexturePath = texPath;
+                break;
+            case material::TextureSlot::Metallic:
+                pbr.metallicTexturePath = texPath;
+                break;
+            case material::TextureSlot::Roughness:
+                pbr.roughnessTexturePath = texPath;
+                break;
+            case material::TextureSlot::AO:
+                pbr.aoTexturePath = texPath;
+                break;
+            case material::TextureSlot::Emission:
+                pbr.emissionTexturePath = texPath;
+                break;
+            case material::TextureSlot::Height:
+                pbr.heightTexturePath = texPath;
+                break;
+            default:
+                break;
+            }
+        }
+
+        return pbr;
+    }
+
+    ExtractedPBRValues MaterialPBRExtractor::extractPBRFromPath(const std::string& materialOrInstancePath)
+    {
+        ExtractedPBRValues pbr;
+
+        if (materialOrInstancePath.empty())
+        {
+            return pbr;
+        }
+
+        // Check if this is a material instance
+        if (material::isInstanceFile(materialOrInstancePath))
+        {
+            // Load instance data
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialOrInstancePath);
+            if (!instanceData || instanceData->parentMaterialPath.empty())
+            {
+                return pbr;
+            }
+
+            // Load parent material
+            auto parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            if (!parentMaterial)
+            {
+                return pbr;
+            }
+
+            // Extract with overrides
+            pbr = extractPBRFromInstance(*instanceData, *parentMaterial);
+            pbr.materialPath = materialOrInstancePath;
+        }
+        else
+        {
+            // Regular material
+            auto matData = resource::ResourceManager::loadMaterial(materialOrInstancePath);
+            if (!matData)
+            {
+                return pbr;
+            }
+
+            pbr = extractPBRFromMaterial(*matData);
+            pbr.materialPath = materialOrInstancePath;
+        }
+
+        return pbr;
+    }
+
     ExtractedPBRValues MaterialPBRExtractor::getPBRForSubmesh(
         const MeshRenderData& meshData,
         const std::string& submeshName,

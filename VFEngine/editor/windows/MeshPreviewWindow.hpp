@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/DTOs.hpp"
+#include "data/AsyncLoadingTypes.hpp"
 #include <math/Frustum.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -28,13 +29,16 @@ namespace windows
         int selectedSubMesh = -1; // -1 = all submeshes
         int selectedLOD = -1; // -1 = auto, 0-3 = force specific LOD
 
-        glm::vec3 meshPosition{0.0f};
-        glm::vec3 meshRotation{0.0f}; // Euler angles in degrees
-        float meshScale = 1.0f;
+        // Camera input state
+        bool isDraggingPreview = false;
 
         // Window state
         bool isOpen = true;
         bool needsInit = true;
+        bool previewCleanedUp = false;
+
+        // Async loading state
+        services::MeshLoadingProgress loadingProgress;
 
     public:
         explicit MeshPreviewWindow(const std::string& meshFilePath);
@@ -47,7 +51,11 @@ namespace windows
 
     private:
         void initRenderer();
+        void updateAsyncLoading();
         void drawViewport(float width, float height);
         void drawSubMeshPanel();
+        void drawLoadingIndicator(float width, float height);
+        void onLoadingComplete();
+        void handlePreviewInput();
     };
 }

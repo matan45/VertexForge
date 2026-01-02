@@ -9,6 +9,8 @@ namespace controllers::offscreen
     {
     }
 
+    IBLController::~IBLController() = default;
+
     void IBLController::set(std::string_view iblPath)
     {
         renderHandler.getIBL()->init(iblPath);

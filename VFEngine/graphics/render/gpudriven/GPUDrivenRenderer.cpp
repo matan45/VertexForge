@@ -4,6 +4,7 @@
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "resource/ResourceManager.hpp"
+#include "material/MaterialInstanceTypes.hpp"
 #include "../../core/Device.hpp"
 #include "print/Logger.hpp"
 #include <array>
@@ -15,6 +16,7 @@
 #ifdef MemoryBarrier
 #undef MemoryBarrier
 #endif
+
 
 namespace render::gpudriven {
 
@@ -165,9 +167,10 @@ namespace render::gpudriven {
 
         // Create texture resolver callback that uses BindlessTextureManager
         // Use frame-local cache to avoid re-extracting PBR values for same material multiple times
+        // Handles both materials (.vfMat) and material instances (.vfMatInstance)
         TextureIndexResolver textureResolver = nullptr;
         if (bindlessTextures) {
-            // Cache extracted PBR values per material path (avoids 8x extraction per material)
+            // Cache extracted PBR values per material/instance path (avoids 8x extraction per material)
             auto pbrCache = std::make_shared<std::unordered_map<std::string, mesh::ExtractedPBRValues>>();
 
             textureResolver = [this, pbrCache](const std::string& materialPath, TextureSlotType slot) -> uint32_t {
@@ -178,14 +181,9 @@ namespace render::gpudriven {
                 // Check cache first
                 auto it = pbrCache->find(materialPath);
                 if (it == pbrCache->end()) {
-                    // Get or load material data to find texture path
-                    auto matData = resource::ResourceManager::loadMaterial(materialPath);
-                    if (!matData) {
-                        return INVALID_TEXTURE_INDEX;
-                    }
-                    // Extract and cache PBR values (done once per material per frame)
+                    // Use unified extraction method that handles both materials and instances
                     it = pbrCache->emplace(materialPath,
-                        mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData)).first;
+                        mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
                 }
 
                 const auto& pbrValues = it->second;
@@ -215,6 +213,7 @@ namespace render::gpudriven {
 
         // Create shader group resolver for custom material shaders
         // Returns 0 for default PBR, 1+ for custom shaders
+        // Handles material instances by resolving to parent's shader group
         ShaderGroupResolver shaderGroupResolver = nullptr;
         if (customShaderCache) {
             // Clear active groups from last frame
@@ -222,18 +221,43 @@ namespace render::gpudriven {
 
             // Cache material data lookups per material path
             auto matDataCache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>>();
+            // Cache instance data lookups
+            auto instanceDataCache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<material::MaterialInstanceData>>>();
 
-            shaderGroupResolver = [this, matDataCache](const std::string& materialPath) -> uint32_t {
+            shaderGroupResolver = [this, matDataCache, instanceDataCache](const std::string& materialPath) -> uint32_t {
                 if (materialPath.empty()) {
                     return 0;  // Default shader
                 }
 
-                // Check cache first
-                auto it = matDataCache->find(materialPath);
+                std::string parentPath = materialPath;
                 std::shared_ptr<material::MaterialData> matData;
+
+                // Check if this is a material instance
+                if (material::isInstanceFile(materialPath)) {
+                    // Load instance data
+                    auto instIt = instanceDataCache->find(materialPath);
+                    std::shared_ptr<material::MaterialInstanceData> instanceData;
+                    if (instIt == instanceDataCache->end()) {
+                        instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+                        (*instanceDataCache)[materialPath] = instanceData;
+                    } else {
+                        instanceData = instIt->second;
+                    }
+
+                    if (!instanceData || instanceData->parentMaterialPath.empty()) {
+                        return 0;  // Default shader
+                    }
+
+                    // Register instance->parent mapping for shader sharing
+                    customShaderCache->registerInstance(materialPath, instanceData->parentMaterialPath);
+                    parentPath = instanceData->parentMaterialPath;
+                }
+
+                // Load parent material data
+                auto it = matDataCache->find(parentPath);
                 if (it == matDataCache->end()) {
-                    matData = resource::ResourceManager::loadMaterial(materialPath);
-                    (*matDataCache)[materialPath] = matData;
+                    matData = resource::ResourceManager::loadMaterial(parentPath);
+                    (*matDataCache)[parentPath] = matData;
                 } else {
                     matData = it->second;
                 }
@@ -247,8 +271,8 @@ namespace render::gpudriven {
                     return 0;  // Default shader
                 }
 
-                // Get or create shader group for this custom material
-                uint32_t group = customShaderCache->getOrCreateShaderGroup(materialPath, *matData);
+                // Get or create shader group for the PARENT material (instances share parent's shader)
+                uint32_t group = customShaderCache->getOrCreateShaderGroup(parentPath, *matData);
                 customShaderCache->markGroupActive(group);
                 return group;
             };
@@ -408,23 +432,43 @@ namespace render::gpudriven {
         if (!initialized || !bindlessTextures || !materialTextureCache) {
             return false;
         }
-
-        // Skip if already registered
+        
         if (registeredMaterialPaths.contains(materialPath)) {
             return true;
         }
 
-        // Load material data and cache it to prevent weak_ptr expiration
-        auto matData = resource::ResourceManager::loadMaterial(materialPath);
-        if (!matData) {
-            loggerWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);
-            return false;
-        }
-        // Keep material alive by storing in our cache
-        loadedMaterials[materialPath] = matData;
+        mesh::ExtractedPBRValues pbrValues;
 
-        // Extract texture paths from material
-        auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
+        // Handle material instances
+        if (material::isInstanceFile(materialPath)) {
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+            if (!instanceData || instanceData->parentMaterialPath.empty()) {
+                loggerWarning("GPUDrivenRenderer: Failed to load material instance: {}", materialPath);
+                return false;
+            }
+
+            // Load and cache parent material
+            auto parentMatData = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            if (!parentMatData) {
+                loggerWarning("GPUDrivenRenderer: Failed to load parent material: {}", instanceData->parentMaterialPath);
+                return false;
+            }
+            loadedMaterials[instanceData->parentMaterialPath] = parentMatData;
+            
+            pbrValues = mesh::MaterialPBRExtractor::extractPBRFromInstance(*instanceData, *parentMatData);
+        }
+        else {
+            // Regular material
+            auto matData = resource::ResourceManager::loadMaterial(materialPath);
+            if (!matData) {
+                loggerWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);
+                return false;
+            }
+            // Keep material alive by storing in our cache
+            loadedMaterials[materialPath] = matData;
+            
+            pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
+        }
 
         bool registered = false;
 
@@ -446,8 +490,7 @@ namespace render::gpudriven {
                 registered = true;
             }
         };
-
-        // Register all texture slots
+        
         tryRegister(pbrValues.albedoTexturePath);
         tryRegister(pbrValues.normalTexturePath);
         tryRegister(pbrValues.ormTexturePath);
@@ -461,7 +504,6 @@ namespace render::gpudriven {
         if (registered) {
             registeredMaterialPaths.insert(materialPath);
         }
-        // If no textures were registered, don't add to registeredMaterialPaths - allow retry on next frame
 
         return registered;
     }

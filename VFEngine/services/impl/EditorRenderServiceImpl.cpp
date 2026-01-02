@@ -62,11 +62,6 @@ namespace services
 
         viewportWidth = width;
         viewportHeight = height;
-
-        events::render::ViewportResizedNotification notification;
-        notification.width = width;
-        notification.height = height;
-        events::EventDispatcher::instance().publish(notification);
     }
 
     void EditorRenderServiceImpl::getViewportSize(uint32_t& width, uint32_t& height) const
@@ -96,10 +91,6 @@ namespace services
         offScreenProvider->iblSet(hdrPath);
         currentIBLPath = hdrPath;
 
-        events::render::IBLChangedNotification notification;
-        notification.hdrPath = hdrPath;
-        events::EventDispatcher::instance().publish(notification);
-
         return true;
     }
 
@@ -121,10 +112,6 @@ namespace services
 
         offScreenProvider->iblRemove();
         currentIBLPath = std::nullopt;
-
-        events::render::IBLChangedNotification notification;
-        notification.hdrPath = std::nullopt;
-        events::EventDispatcher::instance().publish(notification);
     }
 
     bool EditorRenderServiceImpl::hasIBL() const
@@ -145,32 +132,6 @@ namespace services
         }
 
         auto textureData = textureProvider->loadTexture(path);
-
-        if (!textureData.valid)
-        {
-            return EditorTextureHandle{};
-        }
-
-        EditorTextureHandle handle;
-        handle.imguiDescriptorSet = textureData.descriptorSet;
-        handle.width = static_cast<uint32_t>(textureData.width);
-        handle.height = static_cast<uint32_t>(textureData.height);
-        handle.mipLevels = static_cast<uint32_t>(textureData.mipLevels);
-        handle.mipDescriptorSets = textureData.mipDescriptorSets;
-
-        loadedTextures[handle.imguiDescriptorSet] = handle;
-
-        return handle;
-    }
-
-    EditorTextureHandle EditorRenderServiceImpl::loadEditorHDRTexture(const std::string& path)
-    {
-        if (!textureProvider)
-        {
-            return EditorTextureHandle{};
-        }
-
-        auto textureData = textureProvider->loadHdrTexture(path);
 
         if (!textureData.valid)
         {
@@ -230,19 +191,9 @@ namespace services
                 updateIBLCamera(cmd.viewMatrix, cmd.projectionMatrix);
             });
 
-        dispatcher.registerCommandHandler<events::render::ResizeViewportCommand>(
-            [this](const events::render::ResizeViewportCommand& cmd)
-            {
-                resizeViewport(cmd.width, cmd.height);
-            });
-
         dispatcher.registerCommandHandler<events::render::LoadEditorTextureCommand>(
             [this](const events::render::LoadEditorTextureCommand& cmd)
             {
-                if (cmd.isHDR)
-                {
-                    return loadEditorHDRTexture(cmd.path);
-                }
                 return loadEditorTexture(cmd.path);
             });
 
@@ -254,34 +205,64 @@ namespace services
                 releaseEditorTexture(handle);
             });
 
+        dispatcher.registerCommandHandler<events::render::LoadEditorTextureAsyncCommand>(
+            [this](const events::render::LoadEditorTextureAsyncCommand& cmd)
+            {
+                if (textureProvider)
+                {
+                    textureProvider->loadTextureAsync(cmd.instanceId, cmd.path, cmd.isHDR);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::CancelTextureLoadingCommand>(
+            [this](const events::render::CancelTextureLoadingCommand& cmd)
+            {
+                if (textureProvider)
+                {
+                    textureProvider->cancelTextureLoading(cmd.instanceId);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetTextureLoadingProgressQuery>(
+            [this](const events::render::GetTextureLoadingProgressQuery& query)
+            {
+                if (textureProvider)
+                {
+                    return textureProvider->getTextureLoadingProgress(query.instanceId);
+                }
+                return TextureLoadingProgress{};
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetLoadedTextureHandleQuery>(
+            [this](const events::render::GetLoadedTextureHandleQuery& query)
+            {
+                EditorTextureHandle result;
+                if (!textureProvider)
+                {
+                    return result;
+                }
+
+                auto textureData = textureProvider->getLoadedTexture(query.instanceId);
+                if (!textureData.valid)
+                {
+                    return result;
+                }
+
+                result.imguiDescriptorSet = textureData.descriptorSet;
+                result.width = static_cast<uint32_t>(textureData.width);
+                result.height = static_cast<uint32_t>(textureData.height);
+                result.mipLevels = static_cast<uint32_t>(textureData.mipLevels);
+                result.mipDescriptorSets = textureData.mipDescriptorSets;
+
+                loadedTextures[result.imguiDescriptorSet] = result;
+
+                return result;
+            });
+
         dispatcher.registerQueryHandler<events::render::GetViewportTextureQuery>(
             [this](const events::render::GetViewportTextureQuery&)
             {
                 return getViewportTexture();
-            });
-
-        dispatcher.registerQueryHandler<events::render::HasIBLQuery>(
-            [this](const events::render::HasIBLQuery&)
-            {
-                return hasIBL();
-            });
-
-        dispatcher.registerQueryHandler<events::render::GetIBLPathQuery>(
-            [this](const events::render::GetIBLPathQuery&)
-            {
-                return getIBLPath();
-            });
-
-        dispatcher.registerCommandHandler<events::render::LoadMeshCommand>(
-            [this](const events::render::LoadMeshCommand& cmd)
-            {
-                return loadMesh(cmd.meshPath);
-            });
-
-        dispatcher.registerCommandHandler<events::render::UnloadMeshCommand>(
-            [this](const events::render::UnloadMeshCommand& cmd)
-            {
-                unloadMesh(cmd.meshId);
             });
 
         dispatcher.registerCommandHandler<events::render::UpdateMeshCameraCommand>(
@@ -290,25 +271,12 @@ namespace services
                 updateMeshCamera(cmd.viewMatrix, cmd.projectionMatrix, cmd.cameraPosition, cmd.time);
             });
 
-        dispatcher.registerQueryHandler<events::render::IsMeshLoadedQuery>(
-            [this](const events::render::IsMeshLoadedQuery& q)
-            {
-                return isMeshLoaded(q.meshPath);
-            });
-
-        dispatcher.registerQueryHandler<events::render::GetLoadedMeshesQuery>(
-            [this](const events::render::GetLoadedMeshesQuery&)
-            {
-                return getLoadedMeshes();
-            });
-
         dispatcher.registerQueryHandler<events::render::GetMeshBoundingBoxQuery>(
             [this](const events::render::GetMeshBoundingBoxQuery& q)
             {
                 return getMeshBoundingBox(q.meshPath);
             });
 
-        // Billboard visibility command/query handlers
         dispatcher.registerCommandHandler<events::render::SetShowBillboardIconsCommand>(
             [this](const events::render::SetShowBillboardIconsCommand& cmd)
             {
@@ -318,24 +286,18 @@ namespace services
                 }
             });
 
-        dispatcher.registerQueryHandler<events::render::GetShowBillboardIconsQuery>(
-            [this](const events::render::GetShowBillboardIconsQuery&)
-            {
-                return offScreenProvider ? offScreenProvider->getShowBillboardIcons() : true;
-            });
-
         dispatcher.registerCommandHandler<events::render::LoadBillboardAtlasCommand>(
             [this](const events::render::LoadBillboardAtlasCommand& cmd)
             {
                 return offScreenProvider ? offScreenProvider->loadBillboardAtlas(cmd.atlasPath) : false;
             });
 
-        dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
-            [this](const events::render::GetCullingStatsQuery&)
+        dispatcher.registerQueryHandler<events::render::GetShowBillboardIconsQuery>(
+            [this](const events::render::GetShowBillboardIconsQuery&)
             {
-                return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
+                return offScreenProvider ? offScreenProvider->getShowBillboardIcons() : true;
             });
-        
+
         dispatcher.registerCommandHandler<events::render::SetShowDebugRenderingCommand>(
             [this](const events::render::SetShowDebugRenderingCommand& cmd)
             {
@@ -364,6 +326,12 @@ namespace services
             [this](const events::render::GetShowGridQuery&)
             {
                 return offScreenProvider ? offScreenProvider->getShowGrid() : true;
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
+            [this](const events::render::GetCullingStatsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
             });
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(

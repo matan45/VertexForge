@@ -1,41 +1,52 @@
 #include "MaterialPreviewAdapter.hpp"
 #include "print/Logger.hpp"
 
-namespace core {
-
-    MaterialPreviewAdapter::~MaterialPreviewAdapter() noexcept {
+namespace core
+{
+    MaterialPreviewAdapter::~MaterialPreviewAdapter() noexcept
+    {
         controllers.clear();
     }
 
-    controllers::MaterialPreviewController* MaterialPreviewAdapter::getController(services::PreviewInstanceId instanceId) const {
+    controllers::MaterialPreviewController* MaterialPreviewAdapter::getController(
+        services::PreviewInstanceId instanceId) const
+    {
         auto it = controllers.find(instanceId);
         return (it != controllers.end()) ? it->second.get() : nullptr;
     }
 
-    void MaterialPreviewAdapter::initMaterialPreview(services::PreviewInstanceId instanceId) {
+    void MaterialPreviewAdapter::initMaterialPreview(services::PreviewInstanceId instanceId)
+    {
         auto& controller = controllers[instanceId];
-        if (!controller) {
+        if (!controller)
+        {
             controller = std::make_unique<::controllers::MaterialPreviewController>();
         }
         controller->init();
     }
 
-    void MaterialPreviewAdapter::cleanUpMaterialPreview(services::PreviewInstanceId instanceId) {
+    void MaterialPreviewAdapter::cleanUpMaterialPreview(services::PreviewInstanceId instanceId)
+    {
         auto it = controllers.find(instanceId);
-        if (it != controllers.end()) {
-            if (it->second) {
+        if (it != controllers.end())
+        {
+            if (it->second)
+            {
                 it->second->cleanUp();
             }
             controllers.erase(it);
         }
     }
 
-    bool MaterialPreviewAdapter::isMaterialPreviewInitialized(services::PreviewInstanceId instanceId) const {
+    bool MaterialPreviewAdapter::isMaterialPreviewInitialized(services::PreviewInstanceId instanceId) const
+    {
         auto* controller = getController(instanceId);
         return controller && controller->isInitialized();
     }
 
-    void MaterialPreviewAdapter::setMaterialParams(services::PreviewInstanceId instanceId, const services::MaterialPreviewParams& params) {
+    void MaterialPreviewAdapter::setMaterialParams(services::PreviewInstanceId instanceId,
+                                                   const services::MaterialPreviewParams& params)
+    {
         auto* controller = getController(instanceId);
         if (!controller) return;
 
@@ -56,11 +67,15 @@ namespace core {
         controllerParams.materialPath = params.materialPath;
         controllerParams.useCustomShader = params.useCustomShader;
 
-        if (params.materialDataHandle.has_value()) {
-            try {
+        if (params.materialDataHandle.has_value())
+        {
+            try
+            {
                 controllerParams.materialData =
                     std::any_cast<std::shared_ptr<material::MaterialData>>(params.materialDataHandle);
-            } catch (const std::bad_any_cast& e) {
+            }
+            catch (const std::bad_any_cast& e)
+            {
                 loggerError("Invalid materialDataHandle type: {}", e.what());
             }
         }
@@ -68,10 +83,12 @@ namespace core {
         controller->setMaterialParams(controllerParams);
     }
 
-    services::MaterialPreviewParams MaterialPreviewAdapter::getMaterialParams(services::PreviewInstanceId instanceId) const {
+    services::MaterialPreviewParams MaterialPreviewAdapter::getMaterialParams(
+        services::PreviewInstanceId instanceId) const
+    {
         services::MaterialPreviewParams result;
         auto* controller = getController(instanceId);
-        if (!controller) return result;
+        if (!controller) return {};
 
         const auto& controllerParams = controller->getMaterialParams();
         result.albedo = controllerParams.albedo;
@@ -92,22 +109,26 @@ namespace core {
         return result;
     }
 
-    void MaterialPreviewAdapter::updateMaterialCamera(services::PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
-                                                       const glm::vec3& cameraPos, float time) {
+    void MaterialPreviewAdapter::updateMaterialCamera(services::PreviewInstanceId instanceId, const glm::mat4& view,
+                                                      const glm::mat4& projection,
+                                                      const glm::vec3& cameraPos, float time)
+    {
         auto* controller = getController(instanceId);
-        if (controller) {
+        if (controller)
+        {
             controller->updateCamera(view, projection, cameraPos, time);
         }
     }
 
-    void* MaterialPreviewAdapter::renderMaterialPreview(services::PreviewInstanceId instanceId) {
+    void* MaterialPreviewAdapter::renderMaterialPreview(services::PreviewInstanceId instanceId)
+    {
         auto* controller = getController(instanceId);
         return controller ? controller->render() : nullptr;
     }
 
-    std::string MaterialPreviewAdapter::getMaterialShaderError(services::PreviewInstanceId instanceId) const {
+    std::string MaterialPreviewAdapter::getMaterialShaderError(services::PreviewInstanceId instanceId) const
+    {
         auto* controller = getController(instanceId);
         return controller ? controller->getLastShaderCompilationError() : "";
     }
-
 }

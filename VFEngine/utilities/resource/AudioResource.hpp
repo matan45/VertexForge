@@ -52,10 +52,8 @@ namespace resource {
 		inline static const size_t chunkSize = 1024 * 1024;  // Chunk size for streaming (1MB)
 
 	public:
-		// Load entire audio file into memory (existing behavior)
 		static AudioData loadAudio(std::string_view path);
-
-		// Open audio file for streaming (reads header only, keeps file open)
+		
 		static std::unique_ptr<AudioStreamHandle> openStream(std::string_view path);
 	};
 
