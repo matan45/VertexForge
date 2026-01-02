@@ -54,7 +54,7 @@ namespace core {
         catch (const std::exception& e) {
             setError(services::ScriptError::Type::Runtime,
                      std::string("Failed to initialize scripting system: ") + e.what());
-            spdlog::error("[ScriptingAdapter] Init failed: {}", e.what());
+            vfLogError("[Script] Init failed: {}", e.what());
             return false;
         }
     }
@@ -152,7 +152,7 @@ namespace core {
         }
         catch (const std::exception& e) {
             setError(services::ScriptError::Type::Compile, e.what(), scriptPath);
-            spdlog::error("[ScriptingAdapter] Failed to load script '{}': {}", scriptPath, e.what());
+            vfLogError("[Script] Compile error in '{}': {}", scriptPath, e.what());
             return std::nullopt;
         }
     }
@@ -196,8 +196,7 @@ namespace core {
         catch (const std::exception& e) {
             setError(services::ScriptError::Type::Runtime,
                      std::string("onStart failed: ") + e.what());
-            spdlog::error("[ScriptingAdapter] onStart failed for instance {}: {}",
-                          instanceId, e.what());
+            vfLogError("[Script] onStart failed: {}", e.what());
         }
     }
 
@@ -221,8 +220,7 @@ namespace core {
         catch (const std::exception& e) {
             setError(services::ScriptError::Type::Runtime,
                      std::string("onUpdate failed: ") + e.what());
-            spdlog::error("[ScriptingAdapter] onUpdate failed for instance {}: {}",
-                          instanceId, e.what());
+            vfLogError("[Script] onUpdate failed: {}", e.what());
         }
     }
 
@@ -246,8 +244,7 @@ namespace core {
         catch (const std::exception& e) {
             setError(services::ScriptError::Type::Runtime,
                      std::string("onDestroy failed: ") + e.what());
-            spdlog::error("[ScriptingAdapter] onDestroy failed for instance {}: {}",
-                          instanceId, e.what());
+            vfLogError("[Script] onDestroy failed: {}", e.what());
         }
     }
 

@@ -18,7 +18,7 @@ namespace windows
     class ContentBrowser : public controllers::imguiHandler::ImguiWindow
     {
     public:
-        ContentBrowser();
+        explicit ContentBrowser();
         ~ContentBrowser() override;
 
         void draw() override;

@@ -1,6 +1,5 @@
 // Vec3f - 3D floating-point vector
 // Provides common 3D vector operations for graphics and math
-import * from "Vec2f.mt";
 
 public class Vec3f {
     public float x;
