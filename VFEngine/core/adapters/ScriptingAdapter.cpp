@@ -95,21 +95,29 @@ namespace core {
                                    scriptLibraryPath + "/" + scriptPath;
 
             spdlog::debug("[ScriptingAdapter] Loading script: {}", fullPath);
-            spdlog::debug("[ScriptingAdapter] Calling parseAndRegisterClasses...");
 
-            interpreter->parseAndRegisterClasses(fullPath);
+            // Check if this script class is already registered (avoid re-parsing)
+            std::string className;
+            auto pathIt = pathToClassName.find(scriptPath);
+            if (pathIt != pathToClassName.end()) {
+                // Class already registered, reuse it
+                className = pathIt->second;
+                spdlog::debug("[ScriptingAdapter] Reusing already registered class: {}", className);
+            } else {
+                // First time loading this script, parse and register
+                spdlog::debug("[ScriptingAdapter] Calling parseAndRegisterClasses...");
+                interpreter->parseAndRegisterClasses(fullPath);
+                spdlog::debug("[ScriptingAdapter] parseAndRegisterClasses completed successfully");
 
-            spdlog::debug("[ScriptingAdapter] parseAndRegisterClasses completed successfully");
-
-            // Extract class name from script
-            std::string className = extractClassName(fullPath);
-            if (className.empty()) {
-                setError(services::ScriptError::Type::Compile,
-                         "Could not find class definition in script", scriptPath);
-                return std::nullopt;
+                // Extract class name from script
+                className = extractClassName(fullPath);
+                if (className.empty()) {
+                    setError(services::ScriptError::Type::Compile,
+                             "Could not find class definition in script", scriptPath);
+                    return std::nullopt;
+                }
+                spdlog::debug("[ScriptingAdapter] Extracted class name: {}", className);
             }
-
-            spdlog::debug("[ScriptingAdapter] Extracted class name: {}", className);
 
             // Create script instance
             spdlog::debug("[ScriptingAdapter] Calling createObject for class: {}", className);

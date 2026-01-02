@@ -27,6 +27,10 @@ namespace serialization
 								  SceneLoadProgressCallback progressCallback = nullptr);
 		static bool saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename);
 
+		// In-memory snapshot methods for play mode state capture/restore
+		static json createSnapshot(scene::SceneGraphSystem& sceneGraph);
+		static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph);
+
 		// Count entities in JSON for progress tracking
 		static size_t countEntities(const json& entityJson);
 
@@ -61,6 +65,9 @@ namespace serialization
 
 		static json serializeAudioSource3D(const components::AudioSource3DComponent& audioSource);
 		static void deserializeAudioSource3D(const json& j, components::AudioSource3DComponent& audioSource);
+
+		static json serializeScript(const components::ScriptComponent& script);
+		static void deserializeScript(const json& j, components::ScriptComponent& script);
 
 	};
 }

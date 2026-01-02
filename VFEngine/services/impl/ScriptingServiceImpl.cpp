@@ -426,6 +426,19 @@ namespace services {
                     continue;
                 }
 
+                // If instanceId is 0, script needs to be loaded (e.g., after scene restore)
+                if (entry.instanceId == 0 && !entry.scriptPath.empty()) {
+                    auto info = scriptingProvider->loadScript(entry.scriptPath, toHandle(entity));
+                    if (info.has_value()) {
+                        entry.instanceId = info->instanceId;
+                        entry.hasOnStart = info->hasOnStart;
+                        entry.hasOnUpdate = info->hasOnUpdate;
+                        entry.hasOnDestroy = info->hasOnDestroy;
+                    } else {
+                        continue;
+                    }
+                }
+
                 // Call onStart if not started yet
                 if (!entry.started && entry.hasOnStart) {
                     spdlog::info("[ScriptingService] Calling onStart for script '{}' (instance {})",

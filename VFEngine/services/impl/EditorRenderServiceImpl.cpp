@@ -185,6 +185,15 @@ namespace services
                 removeIBL();
             });
 
+        dispatcher.registerCommandHandler<events::render::RemoveCameraCommand>(
+            [this](const events::render::RemoveCameraCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->removeCamera(cmd.cameraId);
+                }
+            });
+
         dispatcher.registerCommandHandler<events::render::UpdateIBLCameraCommand>(
             [this](const events::render::UpdateIBLCameraCommand& cmd)
             {

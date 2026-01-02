@@ -18,6 +18,7 @@ namespace serialization {
 	
 	json SceneSerialization::serializeCamera(const components::CameraComponent& camera) {
 		json j;
+		j["cameraId"] = camera.cameraId;
 		j["fieldOfView"] = camera.fieldOfView;
 		j["nearPlane"] = camera.nearPlane;
 		j["farPlane"] = camera.farPlane;
@@ -96,6 +97,10 @@ namespace serialization {
 			componentsJson["audioSource3D"] = serializeAudioSource3D(entity.getComponent<components::AudioSource3DComponent>());
 		}
 
+		if (entity.hasComponent<components::ScriptComponent>()) {
+			componentsJson["script"] = serializeScript(entity.getComponent<components::ScriptComponent>());
+		}
+
 		entityJson["components"] = componentsJson;
 
 		// Serialize children recursively
@@ -122,6 +127,9 @@ namespace serialization {
 	}
 	
 	void SceneSerialization::deserializeCamera(const json& j, components::CameraComponent& camera) {
+		// Restore cameraId if present (for snapshot restore)
+		if (auto it = j.find("cameraId"); it != j.end() && it->is_number_unsigned())
+			camera.cameraId = it->get<uint32_t>();
 		if (auto it = j.find("fieldOfView"); it != j.end() && it->is_number())
 			camera.fieldOfView = it->get<float>();
 		if (auto it = j.find("nearPlane"); it != j.end() && it->is_number())
@@ -350,6 +358,47 @@ namespace serialization {
 		audioSource.isPlaying = false;
 	}
 
+	json SceneSerialization::serializeScript(const components::ScriptComponent& script) {
+		json j;
+		json scriptsArray = json::array();
+		for (const auto& entry : script.scripts) {
+			json entryJson;
+			// Clean the script path
+			std::string cleanPath = entry.scriptPath;
+			if (auto pos = cleanPath.find('\0'); pos != std::string::npos) {
+				cleanPath.resize(pos);
+			}
+			entryJson["scriptPath"] = cleanPath;
+			entryJson["enabled"] = entry.enabled;
+			// Note: started, instanceId, hasOnStart, hasOnUpdate, hasOnDestroy are runtime state
+			scriptsArray.push_back(entryJson);
+		}
+		j["scripts"] = scriptsArray;
+		return j;
+	}
+
+	void SceneSerialization::deserializeScript(const json& j, components::ScriptComponent& script) {
+		script.scripts.clear();
+		if (j.contains("scripts") && j["scripts"].is_array()) {
+			for (const auto& entryJson : j["scripts"]) {
+				components::ScriptEntry entry;
+				if (entryJson.contains("scriptPath") && entryJson["scriptPath"].is_string()) {
+					entry.scriptPath = entryJson["scriptPath"].get<std::string>();
+				}
+				if (entryJson.contains("enabled") && entryJson["enabled"].is_boolean()) {
+					entry.enabled = entryJson["enabled"].get<bool>();
+				}
+				// Reset runtime state
+				entry.started = false;
+				entry.instanceId = 0;
+				entry.hasOnStart = false;
+				entry.hasOnUpdate = false;
+				entry.hasOnDestroy = false;
+				script.scripts.push_back(entry);
+			}
+		}
+	}
+
 	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
 		for (const auto& childJson : childrenJson) {
@@ -483,6 +532,11 @@ namespace serialization {
 					billboard.iconType = components::BillboardIconType::AudioSource;
 				}
 			}
+
+			if (componentsJson.contains("script")) {
+				auto& scriptComp = entity.addOrReplaceComponent<components::ScriptComponent>();
+				deserializeScript(componentsJson["script"], scriptComp);
+			}
 		}
 
 		// Deserialize children recursively
@@ -600,6 +654,57 @@ namespace serialization {
 		}
 		catch (const std::exception& e) {
 			vfLogError("Failed to save scene: {}", e.what());
+			return false;
+		}
+	}
+
+	json SceneSerialization::createSnapshot(scene::SceneGraphSystem& sceneGraph)
+	{
+		try {
+			json snapshot;
+			snapshot["version"] = "1.0";
+
+			scene::Entity& root = sceneGraph.GetRoot();
+			snapshot["root"] = serializeEntity(root);
+
+			return snapshot;
+		}
+		catch (const std::exception& e) {
+			vfLogError("Failed to create scene snapshot: {}", e.what());
+			return json();
+		}
+	}
+
+	bool SceneSerialization::restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph)
+	{
+		try {
+			// Validate snapshot structure
+			if (!snapshot.is_object()) {
+				vfLogError("Invalid snapshot: not a JSON object");
+				return false;
+			}
+
+			if (!snapshot.contains("root") || !snapshot["root"].is_object()) {
+				vfLogError("Invalid snapshot: missing or invalid 'root' object");
+				return false;
+			}
+
+			// Clear current scene and restore from snapshot
+			sceneGraph.clearScene();
+
+			// Deserialize root entity (no progress callback for snapshot restore)
+			scene::Entity& root = sceneGraph.GetRoot();
+			size_t entitiesLoaded = 0;
+			size_t totalEntities = countEntities(snapshot["root"]);
+			deserializeEntity(snapshot["root"], root, sceneGraph, true, nullptr, entitiesLoaded, totalEntities);
+
+			vfLogInfo("Scene restored from snapshot successfully");
+			return true;
+		}
+		catch (const std::exception& e) {
+			vfLogError("Failed to restore scene from snapshot: {}", e.what());
+			// Scene is in partial state - clear to avoid corruption
+			sceneGraph.clearScene();
 			return false;
 		}
 	}
