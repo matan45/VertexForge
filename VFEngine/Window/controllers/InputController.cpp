@@ -53,6 +53,11 @@ namespace window {
 		return glfwGetMouseButton(glfwWindow, button) == GLFW_RELEASE;
 	}
 
+	bool InputController::isDoubleClick(int button) const {
+		if (button < 0 || button >= 8) return false;
+		return doubleClickDetected[button];
+	}
+
 	glm::vec2 InputController::getMousePosition() const {
 		if (!glfwWindow) return glm::vec2(0.0f);
 
@@ -95,6 +100,33 @@ namespace window {
 		// Reset scroll delta after it's been consumed
 		// (scrollDelta is accumulated by callback between frames)
 		scrollDelta = glm::vec2(0.0f);
+
+		// Double-click detection
+		double currentTime = glfwGetTime();
+		for (int button = 0; button < 8; ++button) {
+			// Reset double-click flag each frame
+			doubleClickDetected[button] = false;
+
+			bool isDown = isMouseButtonDown(button);
+
+			// Detect button press (transition from up to down)
+			if (isDown && !wasButtonDown[button]) {
+				double timeSinceLastClick = currentTime - lastClickTime[button];
+				float distance = glm::length(currentPos - lastClickPos[button]);
+
+				if (timeSinceLastClick < DOUBLE_CLICK_TIME && distance < DOUBLE_CLICK_DISTANCE) {
+					doubleClickDetected[button] = true;
+					// Reset to prevent triple-click registering as another double-click
+					lastClickTime[button] = 0.0;
+				}
+				else {
+					lastClickTime[button] = currentTime;
+					lastClickPos[button] = currentPos;
+				}
+			}
+
+			wasButtonDown[button] = isDown;
+		}
 	}
 
 	void InputController::onScroll(double xoffset, double yoffset) {

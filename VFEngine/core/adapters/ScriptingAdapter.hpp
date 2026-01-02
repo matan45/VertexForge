@@ -92,6 +92,7 @@ namespace core {
         void registerLogClass();
         void registerTimeClass();
         void registerAudioClass();
+        void registerInputClass();
 
         // Helper: set error
         void setError(::services::ScriptError::Type type, const std::string& message,

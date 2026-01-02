@@ -21,6 +21,14 @@ namespace window {
 		// Scroll delta tracking (accumulated between frames)
 		glm::vec2 scrollDelta{ 0.0f };
 
+		// Double-click detection
+		static constexpr double DOUBLE_CLICK_TIME = 0.3; // seconds
+		static constexpr float DOUBLE_CLICK_DISTANCE = 5.0f; // pixels
+		double lastClickTime[8]{ 0.0 }; // per button
+		glm::vec2 lastClickPos[8]{ glm::vec2(0.0f) };
+		bool wasButtonDown[8]{ false };
+		bool doubleClickDetected[8]{ false };
+
 		// Static registry mapping GLFW windows to InputController instances.
 		// Thread Safety: Only accessed from main thread where GLFW callbacks execute.
 		// GLFW requires all window operations on the main thread, so no synchronization needed.
@@ -36,6 +44,7 @@ namespace window {
 		// Mouse State
 		bool isMouseButtonDown(int button) const;
 		bool isMouseButtonReleased(int button) const;
+		bool isDoubleClick(int button) const;
 		glm::vec2 getMousePosition() const;
 		void getCursorPos(double& xpos, double& ypos) const;
 		glm::vec2 getMouseDelta() const;

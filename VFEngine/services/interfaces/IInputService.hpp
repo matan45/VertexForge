@@ -54,6 +54,9 @@ namespace services {
         // Check if a mouse button was just released this frame
         virtual bool isMouseButtonReleased(int button) const = 0;
 
+        // Check if a mouse button was double-clicked this frame
+        virtual bool isDoubleClick(int button) const = 0;
+
         // Get current mouse position in window coordinates
         virtual glm::vec2 getMousePosition() const = 0;
 
