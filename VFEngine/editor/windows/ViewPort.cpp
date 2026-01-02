@@ -38,7 +38,10 @@ namespace windows
         {
             bool isFocused = ImGui::IsWindowFocused();
             bool isHovered = ImGui::IsWindowHovered();
-            if (isFocused && isHovered)
+            bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
+
+            // Only allow editor camera input in Edit mode
+            if (isFocused && isHovered && !isPlayMode)
             {
                 handleCameraInput();
             }
@@ -50,23 +53,93 @@ namespace windows
             {
                 editorCamera->setAspectRatio(viewportPanelSize.x / viewportPanelSize.y);
             }
-            
+
+            // Determine which camera to use: primary game camera in Play mode, editor camera otherwise
+            glm::mat4 viewMatrix;
+            glm::mat4 projectionMatrix;
+            glm::vec3 cameraPosition;
+            glm::vec3 cameraForward;
+
+            bool usingGameCamera = false;
+            if (isPlayMode)
+            {
+                // Try to find the primary game camera
+                auto primaryCameraOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+                if (primaryCameraOpt.has_value())
+                {
+                    auto primaryCamera = *primaryCameraOpt;
+
+                    // Get camera component data
+                    events::scene::GetCameraDataQuery cameraQuery;
+                    cameraQuery.entity = primaryCamera;
+                    auto cameraDataOpt = dispatcher.query(cameraQuery);
+
+                    if (cameraDataOpt.has_value())
+                    {
+                        // Get transform for camera position
+                        events::scene::GetTransformQuery transformQuery;
+                        transformQuery.entity = primaryCamera;
+                        auto transformOpt = dispatcher.query(transformQuery);
+
+                        if (transformOpt.has_value())
+                        {
+                            auto& transform = *transformOpt;
+
+                            // Update aspect ratio for game camera
+                            float aspectRatio = viewportPanelSize.x / viewportPanelSize.y;
+
+                            // Get the camera component directly to access matrices
+                            auto enttEntity = services::internal::fromHandle(primaryCamera);
+                            auto& registry = scene::EntityRegistry::getRegistry();
+                            if (registry.all_of<components::CameraComponent>(enttEntity))
+                            {
+                                auto& camComp = registry.get<components::CameraComponent>(enttEntity);
+                                camComp.aspectRatio = aspectRatio;
+                                camComp.updateProjectionMatrix();
+                                camComp.updateViewMatrix(transform.position, transform.rotation);
+
+                                viewMatrix = camComp.viewMatrix;
+                                projectionMatrix = camComp.projectionMatrix;
+                                cameraPosition = transform.position;
+
+                                // Calculate forward direction from rotation
+                                glm::mat4 rotMat = glm::mat4(1.0f);
+                                rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
+                                rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
+                                cameraForward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
+
+                                usingGameCamera = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fall back to editor camera if not in play mode or no game camera found
+            if (!usingGameCamera)
+            {
+                viewMatrix = editorCamera->getViewMatrix();
+                projectionMatrix = editorCamera->getProjectionMatrix();
+                cameraPosition = editorCamera->position;
+                cameraForward = editorCamera->getForwardDirection();
+            }
+
             events::render::UpdateIBLCameraCommand cameraCmd;
-            cameraCmd.viewMatrix = editorCamera->getViewMatrix();
-            cameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();
+            cameraCmd.viewMatrix = viewMatrix;
+            cameraCmd.projectionMatrix = projectionMatrix;
             dispatcher.execute(cameraCmd);
 
             events::render::UpdateMeshCameraCommand meshCameraCmd;
-            meshCameraCmd.viewMatrix = editorCamera->getViewMatrix();
-            meshCameraCmd.projectionMatrix = editorCamera->getProjectionMatrix();
-            meshCameraCmd.cameraPosition = editorCamera->position;
+            meshCameraCmd.viewMatrix = viewMatrix;
+            meshCameraCmd.projectionMatrix = projectionMatrix;
+            meshCameraCmd.cameraPosition = cameraPosition;
             meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
             dispatcher.execute(meshCameraCmd);
 
-            // Update audio listener position from editor camera
+            // Update audio listener position
             events::audio::SetListenerPositionCommand listenerCmd;
-            listenerCmd.position = editorCamera->position;
-            listenerCmd.forward = editorCamera->getForwardDirection();
+            listenerCmd.position = cameraPosition;
+            listenerCmd.forward = cameraForward;
             listenerCmd.up = glm::vec3(0.0f, 1.0f, 0.0f);
             dispatcher.execute(listenerCmd);
 
@@ -127,9 +200,7 @@ namespace windows
             drawViewportOverlay();
             drawGizmo();
 
-            bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
-
-            // Update picking data
+            // Update picking data (editor mode only)
             glm::vec2 vp(viewportPos.x, viewportPos.y);
             glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
             if (!isPlayMode)
