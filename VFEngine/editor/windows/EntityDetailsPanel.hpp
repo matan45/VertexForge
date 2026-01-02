@@ -2,10 +2,15 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/EntityHandle.hpp"
 #include "events/EventDispatcher.hpp"
-#include "interfaces/IAudioService.hpp"
-#include <unordered_map>
-#include <string>
-#include <vector>
+#include "details/TransformDrawer.hpp"
+#include "details/CameraDrawer.hpp"
+#include "details/IBLDrawer.hpp"
+#include "details/MeshDrawer.hpp"
+#include "details/MaterialDrawer.hpp"
+#include "details/AudioSource2DDrawer.hpp"
+#include "details/AudioSource3DDrawer.hpp"
+#include "details/ScriptDrawer.hpp"
+#include "details/AddComponentPopup.hpp"
 
 namespace windows
 {
@@ -14,8 +19,16 @@ namespace windows
     private:
         events::SubscriptionToken sceneClearedToken;
 
-        inline static std::unordered_map<std::string, std::vector<std::string>> submeshNameCache;
-        inline static std::unordered_map<uint64_t, services::AudioHandle> audioPreviewHandles;
+        // Component drawers
+        details::TransformDrawer transformDrawer;
+        details::CameraDrawer cameraDrawer;
+        details::IBLDrawer iblDrawer;
+        details::MeshDrawer meshDrawer;
+        details::MaterialDrawer materialDrawer;
+        details::AudioSource2DDrawer audio2DDrawer;
+        details::AudioSource3DDrawer audio3DDrawer;
+        details::ScriptDrawer scriptDrawer;
+        details::AddComponentPopup addComponentPopup;
 
     public:
         explicit EntityDetailsPanel();
@@ -25,27 +38,17 @@ namespace windows
 
     private:
         void drawDetails(services::EntityHandle handle);
-
-        // Component drawing helpers
         void drawEntityName(services::EntityHandle handle, const std::string& currentName);
         void drawEntityActiveCheckbox(services::EntityHandle handle, bool isActive);
-        void drawTransformComponent(services::EntityHandle handle);
-        bool drawCameraComponent(services::EntityHandle handle);
-        void drawIBLComponent(services::EntityHandle handle);
-        bool drawMeshComponent(services::EntityHandle handle);
-        void drawMaterialComponent(services::EntityHandle handle);
-        bool drawAudioSource2DComponent(services::EntityHandle handle);
-        bool drawAudioSource3DComponent(services::EntityHandle handle);
-        bool drawScriptComponent(services::EntityHandle handle);
-        void drawAddComponentButton(services::EntityHandle handle, bool hasCamera, bool hasMesh, bool hasAudio2D, bool hasAudio3D, bool hasScript);
 
-        // UI styling helpers
+        void subscribeToEvents();
+        void onSceneCleared();
+
+    public:
+        // Shared UI styling helpers (used by drawers)
         static void pushComponentHeaderStyle();
         static void popComponentHeaderStyle();
         static void pushRemoveButtonStyle();
         static void popRemoveButtonStyle();
-
-        void subscribeToEvents();
-        void onSceneCleared();
     };
 }
