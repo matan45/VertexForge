@@ -22,7 +22,6 @@ namespace resource
 
     enum class FileType : uint8_t
     {
-        SHADER,
         TEXTURE,
         MESH,
         ANIMATION,

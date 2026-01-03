@@ -215,10 +215,6 @@ namespace windows
                     {
                         asset.type = Model;
                     }
-                    else if (ext == resource::FileType::SHADER)
-                    {
-                        asset.type = Shader;
-                    }
                     else if (ext == resource::FileType::AUDIO)
                     {
                         asset.type = Audio;

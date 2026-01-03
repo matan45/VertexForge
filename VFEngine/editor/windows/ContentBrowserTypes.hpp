@@ -11,7 +11,6 @@ namespace windows
         Model,
         Audio,
         Animation,
-        Shader,
         Scene,
         Material,
         MaterialInstance,
