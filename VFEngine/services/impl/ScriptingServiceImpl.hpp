@@ -17,7 +17,6 @@ namespace services {
         ScriptBuildResult buildScripts() override;
         void cleanScripts() override;
         bool isCompiled() const override;
-        void setBuildProgressCallback(ScriptBuildProgressCallback callback) override;
 
         // === Script Component (Multi-Script Support) ===
         bool attachScript(EntityHandle entity, const ScriptData& data) override;
@@ -35,6 +34,7 @@ namespace services {
         // === Script Lifecycle Events ===
         void triggerStart(EntityHandle entity) override;
         void triggerDestroy(EntityHandle entity) override;
+        void stopAllScripts() override;
 
     private:
         IScriptingProvider* scriptingProvider;

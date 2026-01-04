@@ -4,61 +4,62 @@
 
 struct GLFWwindow;
 
-namespace window {
-	class Window;
+namespace window
+{
+    class Window;
 
-	
-	class InputController {
-	private:
-		Window* window;
-		GLFWwindow* glfwWindow;
 
-		// Mouse delta tracking
-		glm::vec2 lastMousePos{ 0.0f };
-		glm::vec2 mouseDelta{ 0.0f };
-		bool firstMouseUpdate{ true };
+    class InputController
+    {
+    private:
+        Window* window;
+        GLFWwindow* glfwWindow;
 
-		// Scroll delta tracking (accumulated between frames)
-		glm::vec2 scrollDelta{ 0.0f };
+        glm::vec2 lastMousePos{0.0f};
+        glm::vec2 mouseDelta{0.0f};
+        bool firstMouseUpdate{true};
 
-		// Double-click detection
-		static constexpr double DOUBLE_CLICK_TIME = 0.3; // seconds
-		static constexpr float DOUBLE_CLICK_DISTANCE = 5.0f; // pixels
-		double lastClickTime[8]{ 0.0 }; // per button
-		glm::vec2 lastClickPos[8]{ glm::vec2(0.0f) };
-		bool wasButtonDown[8]{ false };
-		bool doubleClickDetected[8]{ false };
+        glm::vec2 scrollDelta{0.0f};
 
-		// Static registry mapping GLFW windows to InputController instances.
-		// Thread Safety: Only accessed from main thread where GLFW callbacks execute.
-		// GLFW requires all window operations on the main thread, so no synchronization needed.
-		inline static std::unordered_map<GLFWwindow*, InputController*> controllerRegistry;
-	public:
-		explicit InputController(Window* window);
-		~InputController();
+        // Double-click detection
+        static constexpr double DOUBLE_CLICK_TIME = 0.3; // seconds
+        static constexpr float DOUBLE_CLICK_DISTANCE = 5.0f; // pixels
+        double lastClickTime[8]{0.0}; // per button
+        glm::vec2 lastClickPos[8]{glm::vec2(0.0f)};
+        bool wasButtonDown[8]{false};
+        bool doubleClickDetected[8]{false};
 
-		// Keyboard State
-		bool isKeyDown(int keyCode) const;
-		bool isKeyReleased(int keyCode) const;
+        // Static registry mapping GLFW windows to InputController instances.
+        // Thread Safety: Only accessed from main thread where GLFW callbacks execute.
+        // GLFW requires all window operations on the main thread, so no synchronization needed.
+        inline static std::unordered_map<GLFWwindow*, InputController*> controllerRegistry;
 
-		// Mouse State
-		bool isMouseButtonDown(int button) const;
-		bool isMouseButtonReleased(int button) const;
-		bool isDoubleClick(int button) const;
-		glm::vec2 getMousePosition() const;
-		void getCursorPos(double& xpos, double& ypos) const;
-		glm::vec2 getMouseDelta() const;
-		glm::vec2 getScrollDelta() const;
+    public:
+        explicit InputController(Window* window);
+        ~InputController();
 
-		// Frame update - must be called once per frame to track deltas
-		void update();
-		
-		Window* getWindow() const { return window; }
+        // Keyboard State
+        bool isKeyDown(int keyCode) const;
+        bool isKeyReleased(int keyCode) const;
 
-		// GLFW callback handler (called internally by scroll callback)
-		void onScroll(double xoffset, double yoffset);
-		
-		static InputController* getControllerForWindow(GLFWwindow* window);
-	};
+        // Mouse State
+        bool isMouseButtonDown(int button) const;
+        bool isMouseButtonReleased(int button) const;
+        bool isDoubleClick(int button) const;
+        glm::vec2 getMousePosition() const;
+        void getCursorPos(double& xpos, double& ypos) const;
+        glm::vec2 getMouseDelta() const;
+        glm::vec2 getScrollDelta() const;
 
+        void update();
+
+        Window* getWindow() const { return window; }
+
+        void onScroll(double xoffset, double yoffset);
+
+        static InputController* getControllerForWindow(GLFWwindow* window);
+        
+    private:
+        static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+    };
 }

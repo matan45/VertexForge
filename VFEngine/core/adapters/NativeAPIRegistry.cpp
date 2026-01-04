@@ -3,7 +3,7 @@
 #include <value/ValueType.hpp>
 #include <value/NativeArray.hpp>
 #include <runtimeTypes/klass/ObjectInstance.hpp>
-#include <spdlog/spdlog.h>
+#include <optional>
 
 // Include event dispatcher for Entity API callbacks
 #include "../../services/events/EventDispatcher.hpp"
@@ -18,14 +18,9 @@
 #include "../../utilities/components/Components.hpp"
 #include "../../services/data/EntityConversion.hpp"
 
-// Include editor logger for console output
 #include "print/EditorLogger.hpp"
 
 namespace core {
-
-    // Static members for callback context
-    services::EntityHandle NativeAPIRegistry::currentCallbackEntity = services::EntityHandle::invalid();
-    float NativeAPIRegistry::currentDeltaTime = 0.0f;
 
     NativeAPIRegistry::NativeAPIRegistry(::services::ScriptInterpreter* interp)
         : interpreter(interp)
@@ -36,20 +31,11 @@ namespace core {
         currentCallbackEntity = entity;
     }
 
-    void NativeAPIRegistry::setCurrentDeltaTime(float deltaTime) {
-        currentDeltaTime = deltaTime;
-    }
-
     ::services::EntityHandle NativeAPIRegistry::getCurrentEntity() {
         return currentCallbackEntity;
     }
 
-    float NativeAPIRegistry::getCurrentDeltaTime() {
-        return currentDeltaTime;
-    }
-
-    // Helper function to extract string from value::Value
-    static std::string extractString(const value::Value& val) {
+    static std::string extractString(const value::Value& val, const char* context = nullptr) {
         if (std::holds_alternative<std::string>(val)) {
             return std::get<std::string>(val);
         }
@@ -69,29 +55,35 @@ namespace core {
                 }
             }
         }
+        if (context && !std::holds_alternative<std::monostate>(val)) {
+            vfLogError("[Script] {}: expected string argument", context);
+        }
         return "";
     }
 
-    // Helper: Extract int64 from value::Value (entity ID)
-    static int64_t extractInt64(const value::Value& val) {
+    static int64_t extractInt64(const value::Value& val, const char* context = nullptr) {
         if (std::holds_alternative<int64_t>(val)) {
             return std::get<int64_t>(val);
+        }
+        if (context && !std::holds_alternative<std::monostate>(val)) {
+            vfLogError("[Script] {}: expected integer argument", context);
         }
         return -1;
     }
 
-    // Helper: Extract float from value::Value
-    static float extractFloat(const value::Value& val) {
+    static float extractFloat(const value::Value& val, const char* context = nullptr) {
         if (std::holds_alternative<float>(val)) {
             return std::get<float>(val);
         }
         if (std::holds_alternative<int64_t>(val)) {
             return static_cast<float>(std::get<int64_t>(val));
         }
+        if (context && !std::holds_alternative<std::monostate>(val)) {
+            vfLogError("[Script] {}: expected number argument", context);
+        }
         return 0.0f;
     }
 
-    // Helper: Convert EntityHandle to int64 for scripts
     static int64_t entityToInt(const services::EntityHandle& handle) {
         if (!handle.isValid()) {
             return -1;
@@ -99,7 +91,6 @@ namespace core {
         return static_cast<int64_t>(handle.id);
     }
 
-    // Helper: Convert int64 from script to EntityHandle
     static services::EntityHandle intToEntity(int64_t id) {
         if (id < 0) {
             return services::EntityHandle::invalid();
@@ -107,8 +98,7 @@ namespace core {
         return services::EntityHandle{ static_cast<uint64_t>(id) };
     }
 
-    // Helper: Map component type string to ComponentTypeId
-    static services::ComponentTypeId stringToComponentType(const std::string& type) {
+    static std::optional<services::ComponentTypeId> stringToComponentType(const std::string& type) {
         if (type == "Transform") return services::ComponentTypeId::Transform;
         if (type == "Camera") return services::ComponentTypeId::Camera;
         if (type == "Name") return services::ComponentTypeId::Name;
@@ -123,10 +113,10 @@ namespace core {
         if (type == "AudioSource2D") return services::ComponentTypeId::AudioSource2D;
         if (type == "AudioSource3D") return services::ComponentTypeId::AudioSource3D;
         if (type == "Script") return services::ComponentTypeId::Script;
-        return services::ComponentTypeId::Transform; // Default fallback
+        vfLogError("[Script] Unknown component type: '{}'", type);
+        return std::nullopt;
     }
 
-    // Helper: Map ComponentTypeId to string
     static std::string componentTypeToString(services::ComponentTypeId type) {
         switch (type) {
             case services::ComponentTypeId::Transform: return "Transform";
@@ -149,12 +139,11 @@ namespace core {
 
     void NativeAPIRegistry::registerEngineAPIs() {
         registerLogClass();
-        registerTimeClass();
         registerEntityClass();
         registerAudioClass();
         registerInputClass();
 
-        spdlog::debug("[NativeAPIRegistry] Registered native engine APIs");
+        vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }
 
     void NativeAPIRegistry::registerLogClass() {
@@ -193,19 +182,6 @@ namespace core {
             });
     }
 
-    void NativeAPIRegistry::registerTimeClass() {
-        // Register global native functions that Time.mt will wrap
-        interpreter->registerNativeFunction("_native_time_getDeltaTime",
-            [](const std::vector<value::Value>& args) -> value::Value {
-                return value::Value(currentDeltaTime);
-            });
-
-        interpreter->registerNativeFunction("_native_time_getTime",
-            [](const std::vector<value::Value>& args) -> value::Value {
-                return value::Value(0.0f);  // TODO: Implement actual elapsed time
-            });
-    }
-
     void NativeAPIRegistry::registerEntityClass() {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -219,9 +195,10 @@ namespace core {
         interpreter->registerNativeFunction("_native_entity_findByName",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 if (args.empty()) {
+                    vfLogError("[Script] Entity.findByName: missing name argument");
                     return value::Value(static_cast<int64_t>(-1));
                 }
-                std::string name = extractString(args[0]);
+                std::string name = extractString(args[0], "Entity.findByName");
                 if (name.empty()) {
                     return value::Value(static_cast<int64_t>(-1));
                 }
@@ -233,6 +210,7 @@ namespace core {
                 if (!results.empty()) {
                     return value::Value(entityToInt(results[0]));
                 }
+                // Not found is expected behavior, don't log
                 return value::Value(static_cast<int64_t>(-1));
             });
 
@@ -264,17 +242,24 @@ namespace core {
         interpreter->registerNativeFunction("_native_entity_findWithComponent",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 if (args.empty()) {
+                    vfLogError("[Script] Entity.findWithComponent: missing component type argument");
                     auto arr = std::make_shared<value::NativeArray>(0, value::ValueType::INT);
                     return value::Value(arr);
                 }
-                std::string typeName = extractString(args[0]);
+                std::string typeName = extractString(args[0], "Entity.findWithComponent");
                 if (typeName.empty()) {
                     auto arr = std::make_shared<value::NativeArray>(0, value::ValueType::INT);
                     return value::Value(arr);
                 }
 
+                auto compType = stringToComponentType(typeName);
+                if (!compType.has_value()) {
+                    auto arr = std::make_shared<value::NativeArray>(0, value::ValueType::INT);
+                    return value::Value(arr);
+                }
+
                 events::scene::GetEntitiesWithComponentQuery query;
-                query.componentType = stringToComponentType(typeName);
+                query.componentType = *compType;
                 auto results = dispatcher.query(query);
 
                 auto arr = std::make_shared<value::NativeArray>(results.size(), value::ValueType::INT);
@@ -412,9 +397,10 @@ namespace core {
         interpreter->registerNativeFunction("_native_entity_setPosition",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 4) {
+                    vfLogError("[Script] Entity.setPosition: missing arguments (expected entity id, x, y, z)");
                     return value::Value(std::monostate{});
                 }
-                int64_t id = extractInt64(args[0]);
+                int64_t id = extractInt64(args[0], "Entity.setPosition");
                 if (id < 0) {
                     return value::Value(std::monostate{});
                 }
@@ -424,14 +410,15 @@ namespace core {
                 getQuery.entity = intToEntity(id);
                 auto currentTransform = dispatcher.query(getQuery);
                 if (!currentTransform.has_value()) {
+                    vfLogError("[Script] Entity.setPosition: entity {} does not exist or has no transform", id);
                     return value::Value(std::monostate{});
                 }
 
                 // Update position
                 services::TransformData newTransform = *currentTransform;
-                newTransform.position.x = extractFloat(args[1]);
-                newTransform.position.y = extractFloat(args[2]);
-                newTransform.position.z = extractFloat(args[3]);
+                newTransform.position.x = extractFloat(args[1], "Entity.setPosition");
+                newTransform.position.y = extractFloat(args[2], "Entity.setPosition");
+                newTransform.position.z = extractFloat(args[3], "Entity.setPosition");
 
                 events::scene::SetTransformCommand cmd;
                 cmd.entity = intToEntity(id);
@@ -471,9 +458,10 @@ namespace core {
         interpreter->registerNativeFunction("_native_entity_setRotation",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 4) {
+                    vfLogError("[Script] Entity.setRotation: missing arguments (expected entity id, x, y, z)");
                     return value::Value(std::monostate{});
                 }
-                int64_t id = extractInt64(args[0]);
+                int64_t id = extractInt64(args[0], "Entity.setRotation");
                 if (id < 0) {
                     return value::Value(std::monostate{});
                 }
@@ -482,13 +470,14 @@ namespace core {
                 getQuery.entity = intToEntity(id);
                 auto currentTransform = dispatcher.query(getQuery);
                 if (!currentTransform.has_value()) {
+                    vfLogError("[Script] Entity.setRotation: entity {} does not exist or has no transform", id);
                     return value::Value(std::monostate{});
                 }
 
                 services::TransformData newTransform = *currentTransform;
-                newTransform.rotation.x = extractFloat(args[1]);
-                newTransform.rotation.y = extractFloat(args[2]);
-                newTransform.rotation.z = extractFloat(args[3]);
+                newTransform.rotation.x = extractFloat(args[1], "Entity.setRotation");
+                newTransform.rotation.y = extractFloat(args[2], "Entity.setRotation");
+                newTransform.rotation.z = extractFloat(args[3], "Entity.setRotation");
 
                 events::scene::SetTransformCommand cmd;
                 cmd.entity = intToEntity(id);
@@ -528,9 +517,10 @@ namespace core {
         interpreter->registerNativeFunction("_native_entity_setScale",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 4) {
+                    vfLogError("[Script] Entity.setScale: missing arguments (expected entity id, x, y, z)");
                     return value::Value(std::monostate{});
                 }
-                int64_t id = extractInt64(args[0]);
+                int64_t id = extractInt64(args[0], "Entity.setScale");
                 if (id < 0) {
                     return value::Value(std::monostate{});
                 }
@@ -539,13 +529,14 @@ namespace core {
                 getQuery.entity = intToEntity(id);
                 auto currentTransform = dispatcher.query(getQuery);
                 if (!currentTransform.has_value()) {
+                    vfLogError("[Script] Entity.setScale: entity {} does not exist or has no transform", id);
                     return value::Value(std::monostate{});
                 }
 
                 services::TransformData newTransform = *currentTransform;
-                newTransform.scale.x = extractFloat(args[1]);
-                newTransform.scale.y = extractFloat(args[2]);
-                newTransform.scale.z = extractFloat(args[3]);
+                newTransform.scale.x = extractFloat(args[1], "Entity.setScale");
+                newTransform.scale.y = extractFloat(args[2], "Entity.setScale");
+                newTransform.scale.z = extractFloat(args[3], "Entity.setScale");
 
                 events::scene::SetTransformCommand cmd;
                 cmd.entity = intToEntity(id);
@@ -558,11 +549,17 @@ namespace core {
         interpreter->registerNativeFunction("_native_entity_hasComponent",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 2) {
+                    vfLogError("[Script] Entity.hasComponent: missing arguments (expected entity id and component type)");
                     return value::Value(false);
                 }
-                int64_t id = extractInt64(args[0]);
-                std::string typeName = extractString(args[1]);
+                int64_t id = extractInt64(args[0], "Entity.hasComponent");
+                std::string typeName = extractString(args[1], "Entity.hasComponent");
                 if (id < 0 || typeName.empty()) {
+                    return value::Value(false);
+                }
+
+                auto compType = stringToComponentType(typeName);
+                if (!compType.has_value()) {
                     return value::Value(false);
                 }
 
@@ -570,7 +567,7 @@ namespace core {
                 query.entity = intToEntity(id);
                 auto result = dispatcher.query(query);
                 if (result.has_value()) {
-                    return value::Value(result->hasComponent(stringToComponentType(typeName)));
+                    return value::Value(result->hasComponent(*compType));
                 }
                 return value::Value(false);
             });
@@ -606,19 +603,23 @@ namespace core {
         interpreter->registerNativeFunction("_native_entity_addComponent",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 2) {
+                    vfLogError("[Script] Entity.addComponent: missing arguments (expected entity id and component type)");
                     return value::Value(false);
                 }
-                int64_t id = extractInt64(args[0]);
-                std::string typeName = extractString(args[1]);
+                int64_t id = extractInt64(args[0], "Entity.addComponent");
+                std::string typeName = extractString(args[1], "Entity.addComponent");
                 if (id < 0 || typeName.empty()) {
                     return value::Value(false);
                 }
 
                 auto entity = intToEntity(id);
                 auto compType = stringToComponentType(typeName);
+                if (!compType.has_value()) {
+                    return value::Value(false);
+                }
 
                 bool success = false;
-                switch (compType) {
+                switch (*compType) {
                     case services::ComponentTypeId::Camera: {
                         events::scene::AddCameraComponentCommand cmd;
                         cmd.entity = entity;
@@ -658,7 +659,7 @@ namespace core {
                         break;
                     }
                     default:
-                        spdlog::warn("[NativeAPIRegistry] addComponent: unsupported component type '{}'", typeName);
+                        vfLogError("[Script] Entity.addComponent: component type '{}' cannot be added via script", typeName);
                         break;
                 }
                 return value::Value(success);
@@ -668,19 +669,23 @@ namespace core {
         interpreter->registerNativeFunction("_native_entity_removeComponent",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 2) {
+                    vfLogError("[Script] Entity.removeComponent: missing arguments (expected entity id and component type)");
                     return value::Value(false);
                 }
-                int64_t id = extractInt64(args[0]);
-                std::string typeName = extractString(args[1]);
+                int64_t id = extractInt64(args[0], "Entity.removeComponent");
+                std::string typeName = extractString(args[1], "Entity.removeComponent");
                 if (id < 0 || typeName.empty()) {
                     return value::Value(false);
                 }
 
                 auto entity = intToEntity(id);
                 auto compType = stringToComponentType(typeName);
+                if (!compType.has_value()) {
+                    return value::Value(false);
+                }
 
                 bool success = false;
-                switch (compType) {
+                switch (*compType) {
                     case services::ComponentTypeId::Camera: {
                         events::scene::RemoveCameraComponentCommand cmd;
                         cmd.entity = entity;
@@ -712,7 +717,7 @@ namespace core {
                         break;
                     }
                     default:
-                        spdlog::warn("[NativeAPIRegistry] removeComponent: unsupported component type '{}'", typeName);
+                        vfLogError("[Script] Entity.removeComponent: component type '{}' cannot be removed via script", typeName);
                         break;
                 }
                 return value::Value(success);
@@ -830,7 +835,7 @@ namespace core {
                 return value::Value(std::monostate{});
             });
 
-        spdlog::debug("[NativeAPIRegistry] Registered Entity native functions");
+        vfLogInfo("[NativeAPIRegistry] Registered Entity native functions");
     }
 
     void NativeAPIRegistry::registerAudioClass() {
@@ -1313,7 +1318,7 @@ namespace core {
                 return value::Value(false);
             });
 
-        spdlog::debug("[NativeAPIRegistry] Registered Audio native functions");
+        vfLogInfo("[NativeAPIRegistry] Registered Audio native functions");
     }
 
     void NativeAPIRegistry::registerInputClass() {
@@ -1416,7 +1421,7 @@ namespace core {
                 return value::Value(dispatcher.query(query));
             });
 
-        spdlog::debug("[NativeAPIRegistry] Registered Input native functions");
+        vfLogInfo("[NativeAPIRegistry] Registered Input native functions");
     }
 
 }

@@ -2,7 +2,6 @@
 // Attach this script to an entity to test entity/component queries
 
 import * from "../lib/engine/Log.mt";
-import * from "../lib/engine/Time.mt";
 import * from "../lib/engine/Entity.mt";
 import * from "../lib/engine/ComponentType.mt";
 

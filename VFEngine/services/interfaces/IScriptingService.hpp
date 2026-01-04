@@ -21,9 +21,6 @@ namespace services {
         // Check if scripts are compiled and ready
         virtual bool isCompiled() const = 0;
 
-        // Set progress callback for build operations
-        virtual void setBuildProgressCallback(ScriptBuildProgressCallback callback) = 0;
-
         // === Script Component (Multi-Script Support) ===
         virtual bool attachScript(EntityHandle entity, const ScriptData& data) = 0;
         virtual void detachScript(EntityHandle entity, const std::string& scriptPath) = 0;
@@ -40,6 +37,9 @@ namespace services {
         // === Script Lifecycle Events ===
         virtual void triggerStart(EntityHandle entity) = 0;
         virtual void triggerDestroy(EntityHandle entity) = 0;
+
+        // Stop all scripts (called when exiting play mode)
+        virtual void stopAllScripts() = 0;
     };
 
 }

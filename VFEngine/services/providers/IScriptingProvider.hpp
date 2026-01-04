@@ -4,16 +4,8 @@
 #include <string>
 #include <optional>
 #include <vector>
-#include <functional>
 
 namespace services {
-
-    // Build progress callback
-    struct ScriptBuildProgress {
-        size_t current;
-        size_t total;
-        std::string currentFile;
-    };
 
     // Build result
     struct ScriptBuildResult {
@@ -22,8 +14,6 @@ namespace services {
         size_t filesFailed = 0;
         std::vector<std::string> errors;
     };
-
-    using ScriptBuildProgressCallback = std::function<void(const ScriptBuildProgress&)>;
 
     class IScriptingProvider {
     public:
@@ -47,14 +37,12 @@ namespace services {
         // Load compiled library (call before Play)
         virtual bool loadCompiledScripts(const std::string& manifestPath) = 0;
 
-        // Set progress callback for build operations
-        virtual void setBuildProgressCallback(ScriptBuildProgressCallback callback) = 0;
-
         // === Script Loading ===
         virtual std::optional<ScriptInstanceInfo> loadScript(
             const std::string& scriptPath,
             EntityHandle entity) = 0;
         virtual void unloadScript(uint64_t instanceId) = 0;
+        virtual void unloadAllScripts() = 0;
         virtual bool isScriptLoaded(uint64_t instanceId) const = 0;
 
         // === Lifecycle Calls ===

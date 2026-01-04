@@ -4,7 +4,6 @@
 #include <project/ProjectBuilder.hpp>
 #include <project/ProjectConfigParser.hpp>
 #include <value/ValueType.hpp>
-#include <spdlog/spdlog.h>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -31,13 +30,12 @@ namespace core
         try
         {
             interpreter = std::make_unique<::services::ScriptInterpreter>();
-
-            // Create and initialize native API registry
+            
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
             apiRegistry->registerEngineAPIs();
 
             initialized = true;
-            spdlog::info("[ScriptingAdapter] Initialized mType scripting system");
+            vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
             return true;
         }
         catch (const std::exception& e)
@@ -55,8 +53,7 @@ namespace core
         {
             return;
         }
-
-        // Clean up all script instances
+        
         instanceToClassName.clear();
         instanceToEntity.clear();
         instanceToObject.clear();
@@ -66,7 +63,7 @@ namespace core
         interpreter.reset();
         initialized = false;
 
-        spdlog::info("[ScriptingAdapter] Cleaned up scripting system");
+        vfLogInfo("[ScriptingAdapter] Cleaned up scripting system");
     }
 
     bool ScriptingAdapter::isInitialized() const
@@ -87,7 +84,7 @@ namespace core
 
         try
         {
-            spdlog::info("[ScriptingAdapter] Building scripts from manifest: {}", manifestPath);
+            vfLogInfo("[ScriptingAdapter] Building scripts from manifest: {}", manifestPath);
 
             // Clean first
             cleanScripts(manifestPath);
@@ -103,24 +100,8 @@ namespace core
                 return result;
             }
 
-            // Build as library
             project::ProjectBuilder builder;
-
-            // Set progress callback if available
-            if (buildProgressCallback)
-            {
-                builder.setProgressCallback([this](const project::BuildProgress& progress)
-                {
-                    services::ScriptBuildProgress p;
-                    p.current = progress.current;
-                    p.total = progress.total;
-                    p.currentFile = progress.currentFile;
-                    buildProgressCallback(p);
-                });
-            }
-
             std::string libraryPath = getLibraryPath(manifestPath);
-            // Pass interpreter's environment so native functions are available during compilation
             auto buildResult = builder.buildLibrary(*config, libraryPath, interpreter->getEnvironment());
 
             result.success = buildResult.success;
@@ -131,14 +112,13 @@ namespace core
             if (result.success)
             {
                 compiled = true;
-                currentManifestPath = manifestPath;
-                spdlog::info("[ScriptingAdapter] Build successful: {} files compiled", result.filesCompiled);
+                vfLogInfo("[ScriptingAdapter] Build successful: {} files compiled", result.filesCompiled);
                 vfLogInfo("[Script] Build successful: {} files compiled", result.filesCompiled);
             }
             else
             {
                 compiled = false;
-                spdlog::error("[ScriptingAdapter] Build failed with {} errors", result.errors.size());
+                vfLogError("[ScriptingAdapter] Build failed with {} errors", result.errors.size());
                 for (const auto& error : result.errors)
                 {
                     vfLogError("[Script] {}", error);
@@ -177,12 +157,12 @@ namespace core
             pathToClassName.clear();
             compiled = false;
 
-            spdlog::info("[ScriptingAdapter] Clean completed");
+            vfLogInfo("[ScriptingAdapter] Clean completed");
             vfLogInfo("[Script] Clean completed");
         }
         catch (const std::exception& e)
         {
-            spdlog::error("[ScriptingAdapter] Clean failed: {}", e.what());
+            vfLogError("[ScriptingAdapter] Clean failed: {}", e.what());
             vfLogError("[Script] Clean failed: {}", e.what());
         }
     }
@@ -196,13 +176,13 @@ namespace core
     {
         if (!initialized)
         {
-            spdlog::error("[ScriptingAdapter] Cannot load scripts: not initialized");
+            vfLogError("[ScriptingAdapter] Cannot load scripts: not initialized");
             return false;
         }
 
         if (!compiled)
         {
-            spdlog::warn("[ScriptingAdapter] Scripts not compiled. Call buildScripts first.");
+            vfLogWarning("[ScriptingAdapter] Scripts not compiled. Call buildScripts first.");
             return false;
         }
 
@@ -212,14 +192,14 @@ namespace core
 
             if (!std::filesystem::exists(libraryPath))
             {
-                spdlog::error("[ScriptingAdapter] Compiled library not found: {}", libraryPath);
+                vfLogError("[ScriptingAdapter] Compiled library not found: {}", libraryPath);
                 return false;
             }
 
-            spdlog::info("[ScriptingAdapter] Loading compiled scripts from: {}", libraryPath);
+            vfLogInfo("[ScriptingAdapter] Loading compiled scripts from: {}", libraryPath);
             interpreter->loadCompiledBytecode(libraryPath);
 
-            spdlog::info("[ScriptingAdapter] Compiled scripts loaded successfully");
+            vfLogInfo("[ScriptingAdapter] Compiled scripts loaded successfully");
             return true;
         }
         catch (const std::exception& e)
@@ -229,11 +209,6 @@ namespace core
             vfLogError("[Script] Failed to load compiled scripts: {}", e.what());
             return false;
         }
-    }
-
-    void ScriptingAdapter::setBuildProgressCallback(services::ScriptBuildProgressCallback callback)
-    {
-        buildProgressCallback = std::move(callback);
     }
 
     std::string ScriptingAdapter::getLibraryPath(const std::string& manifestPath) const
@@ -269,8 +244,6 @@ namespace core
             // Get full path for extracting class name
             std::string fullPath = scriptLibraryPath.empty() ? scriptPath : scriptLibraryPath + "/" + scriptPath;
 
-            spdlog::debug("[ScriptingAdapter] Loading script instance: {}", fullPath);
-
             // Get the class name from cache or extract from file
             std::string className;
             auto pathIt = pathToClassName.find(scriptPath);
@@ -290,8 +263,6 @@ namespace core
                 }
                 pathToClassName[scriptPath] = className;
             }
-
-            spdlog::debug("[ScriptingAdapter] Creating instance of class: {}", className);
 
             // Create script instance from pre-compiled bytecode
             auto instance = interpreter->createObject(className);
@@ -316,8 +287,8 @@ namespace core
             info.hasOnUpdate = true;
             info.hasOnDestroy = true;
 
-            spdlog::info("[ScriptingAdapter] Loaded script '{}' as class '{}' (instanceId={})",
-                         scriptPath, className, instanceId);
+            vfLogInfo("[ScriptingAdapter] Loaded script '{}' as class '{}' (instanceId={})",
+                      scriptPath, className, instanceId);
 
             return info;
         }
@@ -334,11 +305,19 @@ namespace core
         auto it = instanceToClassName.find(instanceId);
         if (it != instanceToClassName.end())
         {
-            spdlog::debug("[ScriptingAdapter] Unloading script instance {}", instanceId);
             instanceToClassName.erase(it);
             instanceToEntity.erase(instanceId);
             instanceToObject.erase(instanceId);
         }
+    }
+
+    void ScriptingAdapter::unloadAllScripts()
+    {
+        instanceToClassName.clear();
+        instanceToEntity.clear();
+        instanceToObject.clear();
+        nextInstanceId = 1;
+        vfLogInfo("[ScriptingAdapter] All scripts unloaded, instance counter reset");
     }
 
     bool ScriptingAdapter::isScriptLoaded(uint64_t instanceId) const
@@ -350,7 +329,7 @@ namespace core
     {
         if (!isScriptLoaded(instanceId))
         {
-            spdlog::warn("[ScriptingAdapter] callOnStart: script {} not loaded", instanceId);
+            vfLogWarning("[ScriptingAdapter] callOnStart: script {} not loaded", instanceId);
             return;
         }
 
@@ -363,16 +342,16 @@ namespace core
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
 
                 // Get the script instance and call onStart
-                spdlog::info("[ScriptingAdapter] Calling interpreter->callMethod for onStart (instance {})",
-                             instanceId);
+                vfLogInfo("[ScriptingAdapter] Calling interpreter->callMethod for onStart (instance {})",
+                          instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, "onStart", {});
 
-                spdlog::info("[ScriptingAdapter] onStart completed successfully for instance {}", instanceId);
+                vfLogInfo("[ScriptingAdapter] onStart completed successfully for instance {}", instanceId);
             }
             else
             {
-                spdlog::warn("[ScriptingAdapter] callOnStart: instance {} not found in instanceToObject", instanceId);
+                vfLogWarning("[ScriptingAdapter] callOnStart: instance {} not found in instanceToObject", instanceId);
             }
         }
         catch (const std::exception& e)
@@ -397,7 +376,6 @@ namespace core
             {
                 // Set current context for callbacks
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-                NativeAPIRegistry::setCurrentDeltaTime(deltaTime);
 
                 // Get the script instance and call onUpdate with deltaTime argument
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
@@ -429,8 +407,6 @@ namespace core
                 // Get the script instance and call onDestroy
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, "onDestroy", {});
-
-                spdlog::debug("[ScriptingAdapter] Called onDestroy for instance {}", instanceId);
             }
         }
         catch (const std::exception& e)
@@ -454,7 +430,7 @@ namespace core
     void ScriptingAdapter::setScriptLibraryPath(const std::string& path)
     {
         scriptLibraryPath = path;
-        spdlog::info("[ScriptingAdapter] Script library path set to: {}", path);
+        vfLogInfo("[ScriptingAdapter] Script library path set to: {}", path);
     }
 
     void ScriptingAdapter::setError(services::ScriptError::Type type, const std::string& message,

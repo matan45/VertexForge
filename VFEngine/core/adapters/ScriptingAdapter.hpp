@@ -28,19 +28,11 @@ namespace core
         // Error tracking
         mutable std::optional<::services::ScriptError> lastError;
 
-        // Instance ID generation
+       
         uint64_t nextInstanceId = 1;
-
-        // Script library path
         std::string scriptLibraryPath;
-
-        // Initialization state
         bool initialized = false;
-
-        // Build state
         bool compiled = false;
-        std::string currentManifestPath;
-        ::services::ScriptBuildProgressCallback buildProgressCallback;
 
     public:
         explicit ScriptingAdapter();
@@ -59,36 +51,31 @@ namespace core
         void cleanScripts(const std::string& manifestPath) override;
         bool isCompiled() const override;
         bool loadCompiledScripts(const std::string& manifestPath) override;
-        void setBuildProgressCallback(::services::ScriptBuildProgressCallback callback) override;
 
         // === Script Loading ===
         std::optional<::services::ScriptInstanceInfo> loadScript(
             const std::string& scriptPath,
             ::services::EntityHandle entity) override;
         void unloadScript(uint64_t instanceId) override;
+        void unloadAllScripts() override;
         bool isScriptLoaded(uint64_t instanceId) const override;
 
         // === Lifecycle Calls ===
         void callOnStart(uint64_t instanceId) override;
         void callOnUpdate(uint64_t instanceId, float deltaTime) override;
         void callOnDestroy(uint64_t instanceId) override;
-
-        // === Error Handling ===
+        
         std::optional<::services::ScriptError> getLastError() const override;
         void clearError() override;
-
-        // === Script Library Path ===
+        
         void setScriptLibraryPath(const std::string& path) override;
 
     private:
-        // Helper: set error
         void setError(::services::ScriptError::Type type, const std::string& message,
                       const std::string& file = "", int line = 0);
-
-        // Helper: extract class name from script file
+        
         std::string extractClassName(const std::string& scriptPath);
-
-        // Helper: get the library output path from manifest
+        
         std::string getLibraryPath(const std::string& manifestPath) const;
     };
 }

@@ -1,5 +1,6 @@
 #include "ScriptingServiceImpl.hpp"
 #include "../events/ScriptingEvents.hpp"
+#include "../events/EditorModeEvents.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -103,6 +104,16 @@ namespace services {
             [this](const auto& query) {
                 return isCompiled();
             });
+
+        // === Mode Change Subscription ===
+        dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
+            [this](const events::editor::EditorModeChangedNotification& notification) {
+                // Stop all scripts when exiting play mode
+                if (notification.previousMode == EditorMode::Play &&
+                    notification.currentMode == EditorMode::Edit) {
+                    stopAllScripts();
+                }
+            });
     }
 
     // === Build Methods ===
@@ -133,10 +144,6 @@ namespace services {
 
     bool ScriptingServiceImpl::isCompiled() const {
         return scriptingProvider->isCompiled();
-    }
-
-    void ScriptingServiceImpl::setBuildProgressCallback(ScriptBuildProgressCallback callback) {
-        scriptingProvider->setBuildProgressCallback(std::move(callback));
     }
 
     bool ScriptingServiceImpl::attachScript(EntityHandle entity, const ScriptData& data) {
@@ -398,6 +405,28 @@ namespace services {
                 scriptingProvider->callOnDestroy(entry.instanceId);
             }
         }
+    }
+
+    void ScriptingServiceImpl::stopAllScripts() {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ScriptComponent>();
+
+        for (auto entity : view) {
+            auto& scriptComp = view.get<components::ScriptComponent>(entity);
+            for (auto& entry : scriptComp.scripts) {
+                // Call onDestroy for started scripts
+                if (entry.started && entry.hasOnDestroy) {
+                    scriptingProvider->callOnDestroy(entry.instanceId);
+                }
+                // Reset script entry state
+                entry.instanceId = 0;
+                entry.started = false;
+            }
+        }
+
+        // Unload all scripts from provider and reset instance counter
+        scriptingProvider->unloadAllScripts();
+        vfLogInfo("[Script] All scripts stopped");
     }
 
 }
