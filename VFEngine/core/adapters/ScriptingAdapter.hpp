@@ -37,6 +37,11 @@ namespace core
         // Initialization state
         bool initialized = false;
 
+        // Build state
+        bool compiled = false;
+        std::string currentManifestPath;
+        ::services::ScriptBuildProgressCallback buildProgressCallback;
+
     public:
         explicit ScriptingAdapter();
         ~ScriptingAdapter() override;
@@ -48,6 +53,13 @@ namespace core
         bool init() override;
         void cleanUp() override;
         bool isInitialized() const override;
+
+        // === Script Building ===
+        ::services::ScriptBuildResult buildScripts(const std::string& manifestPath) override;
+        void cleanScripts(const std::string& manifestPath) override;
+        bool isCompiled() const override;
+        bool loadCompiledScripts(const std::string& manifestPath) override;
+        void setBuildProgressCallback(::services::ScriptBuildProgressCallback callback) override;
 
         // === Script Loading ===
         std::optional<::services::ScriptInstanceInfo> loadScript(
@@ -75,5 +87,8 @@ namespace core
 
         // Helper: extract class name from script file
         std::string extractClassName(const std::string& scriptPath);
+
+        // Helper: get the library output path from manifest
+        std::string getLibraryPath(const std::string& manifestPath) const;
     };
 }

@@ -3,8 +3,27 @@
 #include "../data/ScriptTypes.hpp"
 #include <string>
 #include <optional>
+#include <vector>
+#include <functional>
 
 namespace services {
+
+    // Build progress callback
+    struct ScriptBuildProgress {
+        size_t current;
+        size_t total;
+        std::string currentFile;
+    };
+
+    // Build result
+    struct ScriptBuildResult {
+        bool success = true;
+        size_t filesCompiled = 0;
+        size_t filesFailed = 0;
+        std::vector<std::string> errors;
+    };
+
+    using ScriptBuildProgressCallback = std::function<void(const ScriptBuildProgress&)>;
 
     class IScriptingProvider {
     public:
@@ -14,6 +33,22 @@ namespace services {
         virtual bool init() = 0;
         virtual void cleanUp() = 0;
         virtual bool isInitialized() const = 0;
+
+        // === Script Building ===
+        // Build all scripts from manifest (clean + compile)
+        virtual ScriptBuildResult buildScripts(const std::string& manifestPath) = 0;
+
+        // Clean compiled scripts
+        virtual void cleanScripts(const std::string& manifestPath) = 0;
+
+        // Check if scripts are compiled and ready
+        virtual bool isCompiled() const = 0;
+
+        // Load compiled library (call before Play)
+        virtual bool loadCompiledScripts(const std::string& manifestPath) = 0;
+
+        // Set progress callback for build operations
+        virtual void setBuildProgressCallback(ScriptBuildProgressCallback callback) = 0;
 
         // === Script Loading ===
         virtual std::optional<ScriptInstanceInfo> loadScript(

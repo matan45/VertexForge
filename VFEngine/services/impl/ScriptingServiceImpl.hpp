@@ -13,6 +13,12 @@ namespace services {
 
         void registerEventHandlers();
 
+        // === Script Building ===
+        ScriptBuildResult buildScripts() override;
+        void cleanScripts() override;
+        bool isCompiled() const override;
+        void setBuildProgressCallback(ScriptBuildProgressCallback callback) override;
+
         // === Script Component (Multi-Script Support) ===
         bool attachScript(EntityHandle entity, const ScriptData& data) override;
         void detachScript(EntityHandle entity, const std::string& scriptPath) override;
@@ -33,6 +39,9 @@ namespace services {
     private:
         IScriptingProvider* scriptingProvider;
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+
+        // Default manifest path (absolute path for now)
+        static constexpr const char* DEFAULT_MANIFEST_PATH = "C:/matan/VertexForge/assets/scripts/scripts.mtproj";
     };
 
 }

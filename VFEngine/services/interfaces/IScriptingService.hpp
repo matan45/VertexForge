@@ -1,6 +1,7 @@
 #pragma once
 #include "../data/EntityHandle.hpp"
 #include "../data/ScriptTypes.hpp"
+#include "../providers/IScriptingProvider.hpp"
 #include <string>
 #include <vector>
 
@@ -9,6 +10,19 @@ namespace services {
     class IScriptingService {
     public:
         virtual ~IScriptingService() = default;
+
+        // === Script Building ===
+        // Build all scripts from manifest
+        virtual ScriptBuildResult buildScripts() = 0;
+
+        // Clean compiled scripts
+        virtual void cleanScripts() = 0;
+
+        // Check if scripts are compiled and ready
+        virtual bool isCompiled() const = 0;
+
+        // Set progress callback for build operations
+        virtual void setBuildProgressCallback(ScriptBuildProgressCallback callback) = 0;
 
         // === Script Component (Multi-Script Support) ===
         virtual bool attachScript(EntityHandle entity, const ScriptData& data) = 0;

@@ -1,6 +1,8 @@
 #include "ScriptingAdapter.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <services/ScriptInterpreter.hpp>
+#include <project/ProjectBuilder.hpp>
+#include <project/ProjectConfigParser.hpp>
 #include <value/ValueType.hpp>
 #include <spdlog/spdlog.h>
 #include <filesystem>
@@ -10,20 +12,24 @@
 // Include editor logger for console output
 #include "print/EditorLogger.hpp"
 
-namespace core {
-
+namespace core
+{
     ScriptingAdapter::ScriptingAdapter() = default;
 
-    ScriptingAdapter::~ScriptingAdapter() {
+    ScriptingAdapter::~ScriptingAdapter()
+    {
         cleanUp();
     }
 
-    bool ScriptingAdapter::init() {
-        if (initialized) {
+    bool ScriptingAdapter::init()
+    {
+        if (initialized)
+        {
             return true;
         }
 
-        try {
+        try
+        {
             interpreter = std::make_unique<::services::ScriptInterpreter>();
 
             // Create and initialize native API registry
@@ -34,7 +40,8 @@ namespace core {
             spdlog::info("[ScriptingAdapter] Initialized mType scripting system");
             return true;
         }
-        catch (const std::exception& e) {
+        catch (const std::exception& e)
+        {
             setError(services::ScriptError::Type::Runtime,
                      std::string("Failed to initialize scripting system: ") + e.what());
             vfLogError("[Script] Init failed: {}", e.what());
@@ -42,8 +49,10 @@ namespace core {
         }
     }
 
-    void ScriptingAdapter::cleanUp() {
-        if (!initialized) {
+    void ScriptingAdapter::cleanUp()
+    {
+        if (!initialized)
+        {
             return;
         }
 
@@ -60,53 +69,232 @@ namespace core {
         spdlog::info("[ScriptingAdapter] Cleaned up scripting system");
     }
 
-    bool ScriptingAdapter::isInitialized() const {
+    bool ScriptingAdapter::isInitialized() const
+    {
         return initialized;
+    }
+
+    services::ScriptBuildResult ScriptingAdapter::buildScripts(const std::string& manifestPath)
+    {
+        services::ScriptBuildResult result;
+
+        if (!initialized)
+        {
+            result.success = false;
+            result.errors.push_back("Scripting system not initialized");
+            return result;
+        }
+
+        try
+        {
+            spdlog::info("[ScriptingAdapter] Building scripts from manifest: {}", manifestPath);
+
+            // Clean first
+            cleanScripts(manifestPath);
+
+            // Parse manifest
+            project::ProjectConfigParser parser;
+            auto config = parser.parse(manifestPath);
+
+            if (!config)
+            {
+                result.success = false;
+                result.errors.push_back("Failed to parse manifest: " + manifestPath);
+                return result;
+            }
+
+            // Build as library
+            project::ProjectBuilder builder;
+
+            // Set progress callback if available
+            if (buildProgressCallback)
+            {
+                builder.setProgressCallback([this](const project::BuildProgress& progress)
+                {
+                    services::ScriptBuildProgress p;
+                    p.current = progress.current;
+                    p.total = progress.total;
+                    p.currentFile = progress.currentFile;
+                    buildProgressCallback(p);
+                });
+            }
+
+            std::string libraryPath = getLibraryPath(manifestPath);
+            // Pass interpreter's environment so native functions are available during compilation
+            auto buildResult = builder.buildLibrary(*config, libraryPath, interpreter->getEnvironment());
+
+            result.success = buildResult.success;
+            result.filesCompiled = buildResult.filesCompiled;
+            result.filesFailed = buildResult.filesFailed;
+            result.errors = buildResult.errors;
+
+            if (result.success)
+            {
+                compiled = true;
+                currentManifestPath = manifestPath;
+                spdlog::info("[ScriptingAdapter] Build successful: {} files compiled", result.filesCompiled);
+                vfLogInfo("[Script] Build successful: {} files compiled", result.filesCompiled);
+            }
+            else
+            {
+                compiled = false;
+                spdlog::error("[ScriptingAdapter] Build failed with {} errors", result.errors.size());
+                for (const auto& error : result.errors)
+                {
+                    vfLogError("[Script] {}", error);
+                }
+            }
+
+            return result;
+        }
+        catch (const std::exception& e)
+        {
+            result.success = false;
+            result.errors.push_back(e.what());
+            setError(services::ScriptError::Type::Compile, e.what());
+            vfLogError("[Script] Build failed: {}", e.what());
+            return result;
+        }
+    }
+
+    void ScriptingAdapter::cleanScripts(const std::string& manifestPath)
+    {
+        try
+        {
+            vfLogInfo("[Script] Cleaning scripts...");
+
+            // Parse manifest to get output directory and clean compiled files
+            project::ProjectConfigParser parser;
+            auto config = parser.parse(manifestPath);
+
+            if (config)
+            {
+                project::ProjectBuilder builder;
+                builder.clean(*config);
+            }
+
+            // Clear cached state
+            pathToClassName.clear();
+            compiled = false;
+
+            spdlog::info("[ScriptingAdapter] Clean completed");
+            vfLogInfo("[Script] Clean completed");
+        }
+        catch (const std::exception& e)
+        {
+            spdlog::error("[ScriptingAdapter] Clean failed: {}", e.what());
+            vfLogError("[Script] Clean failed: {}", e.what());
+        }
+    }
+
+    bool ScriptingAdapter::isCompiled() const
+    {
+        return compiled;
+    }
+
+    bool ScriptingAdapter::loadCompiledScripts(const std::string& manifestPath)
+    {
+        if (!initialized)
+        {
+            spdlog::error("[ScriptingAdapter] Cannot load scripts: not initialized");
+            return false;
+        }
+
+        if (!compiled)
+        {
+            spdlog::warn("[ScriptingAdapter] Scripts not compiled. Call buildScripts first.");
+            return false;
+        }
+
+        try
+        {
+            std::string libraryPath = getLibraryPath(manifestPath);
+
+            if (!std::filesystem::exists(libraryPath))
+            {
+                spdlog::error("[ScriptingAdapter] Compiled library not found: {}", libraryPath);
+                return false;
+            }
+
+            spdlog::info("[ScriptingAdapter] Loading compiled scripts from: {}", libraryPath);
+            interpreter->loadCompiledBytecode(libraryPath);
+
+            spdlog::info("[ScriptingAdapter] Compiled scripts loaded successfully");
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            setError(services::ScriptError::Type::Runtime,
+                     std::string("Failed to load compiled scripts: ") + e.what());
+            vfLogError("[Script] Failed to load compiled scripts: {}", e.what());
+            return false;
+        }
+    }
+
+    void ScriptingAdapter::setBuildProgressCallback(services::ScriptBuildProgressCallback callback)
+    {
+        buildProgressCallback = std::move(callback);
+    }
+
+    std::string ScriptingAdapter::getLibraryPath(const std::string& manifestPath) const
+    {
+        // Get the directory containing the manifest
+        std::filesystem::path manifestDir = std::filesystem::path(manifestPath).parent_path();
+
+        // The library is output to the 'compiled' subdirectory as 'scripts.mtcLib'
+        return (manifestDir / "compiled" / "scripts.mtcLib").string();
     }
 
     std::optional<services::ScriptInstanceInfo> ScriptingAdapter::loadScript(
         const std::string& scriptPath,
         services::EntityHandle entity)
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             setError(services::ScriptError::Type::Runtime, "Scripting system not initialized");
             return std::nullopt;
         }
 
-        try {
-            // Parse and register the script class
-            std::string fullPath = scriptLibraryPath.empty() ? scriptPath :
-                                   scriptLibraryPath + "/" + scriptPath;
+        // Check if scripts are compiled
+        if (!compiled)
+        {
+            setError(services::ScriptError::Type::Runtime,
+                     "Scripts not compiled. Click 'Build Scripts' first.");
+            vfLogError("[Script] Scripts not compiled. Click 'Build Scripts' first.");
+            return std::nullopt;
+        }
 
-            spdlog::debug("[ScriptingAdapter] Loading script: {}", fullPath);
+        try
+        {
+            // Get full path for extracting class name
+            std::string fullPath = scriptLibraryPath.empty() ? scriptPath : scriptLibraryPath + "/" + scriptPath;
 
-            // Check if this script class is already registered (avoid re-parsing)
+            spdlog::debug("[ScriptingAdapter] Loading script instance: {}", fullPath);
+
+            // Get the class name from cache or extract from file
             std::string className;
             auto pathIt = pathToClassName.find(scriptPath);
-            if (pathIt != pathToClassName.end()) {
-                // Class already registered, reuse it
+            if (pathIt != pathToClassName.end())
+            {
                 className = pathIt->second;
-                spdlog::debug("[ScriptingAdapter] Reusing already registered class: {}", className);
-            } else {
-                // First time loading this script, parse and register
-                spdlog::debug("[ScriptingAdapter] Calling parseAndRegisterClasses...");
-                interpreter->parseAndRegisterClasses(fullPath);
-                spdlog::debug("[ScriptingAdapter] parseAndRegisterClasses completed successfully");
-
-                // Extract class name from script
+            }
+            else
+            {
+                // Extract class name from script file
                 className = extractClassName(fullPath);
-                if (className.empty()) {
+                if (className.empty())
+                {
                     setError(services::ScriptError::Type::Compile,
                              "Could not find class definition in script", scriptPath);
                     return std::nullopt;
                 }
-                spdlog::debug("[ScriptingAdapter] Extracted class name: {}", className);
+                pathToClassName[scriptPath] = className;
             }
 
-            // Create script instance
-            spdlog::debug("[ScriptingAdapter] Calling createObject for class: {}", className);
+            spdlog::debug("[ScriptingAdapter] Creating instance of class: {}", className);
+
+            // Create script instance from pre-compiled bytecode
             auto instance = interpreter->createObject(className);
-            spdlog::debug("[ScriptingAdapter] createObject completed successfully");
 
             // Assign instance ID
             uint64_t instanceId = nextInstanceId++;
@@ -114,8 +302,7 @@ namespace core {
             // Store mappings
             instanceToClassName[instanceId] = className;
             instanceToEntity[instanceId] = entity;
-            instanceToObject[instanceId] = std::any(instance);  // Store as type-erased any
-            pathToClassName[scriptPath] = className;
+            instanceToObject[instanceId] = std::any(instance);
 
             // Build result
             services::ScriptInstanceInfo info;
@@ -125,7 +312,7 @@ namespace core {
 
             // Check which lifecycle methods exist
             // TODO: Implement method existence check via mType API
-            info.hasOnStart = true;   // Assume present for now
+            info.hasOnStart = true;
             info.hasOnUpdate = true;
             info.hasOnDestroy = true;
 
@@ -134,16 +321,19 @@ namespace core {
 
             return info;
         }
-        catch (const std::exception& e) {
-            setError(services::ScriptError::Type::Compile, e.what(), scriptPath);
-            vfLogError("[Script] Compile error in '{}': {}", scriptPath, e.what());
+        catch (const std::exception& e)
+        {
+            setError(services::ScriptError::Type::Runtime, e.what(), scriptPath);
+            vfLogError("[Script] Failed to create script instance '{}': {}", scriptPath, e.what());
             return std::nullopt;
         }
     }
 
-    void ScriptingAdapter::unloadScript(uint64_t instanceId) {
+    void ScriptingAdapter::unloadScript(uint64_t instanceId)
+    {
         auto it = instanceToClassName.find(instanceId);
-        if (it != instanceToClassName.end()) {
+        if (it != instanceToClassName.end())
+        {
             spdlog::debug("[ScriptingAdapter] Unloading script instance {}", instanceId);
             instanceToClassName.erase(it);
             instanceToEntity.erase(instanceId);
@@ -151,47 +341,60 @@ namespace core {
         }
     }
 
-    bool ScriptingAdapter::isScriptLoaded(uint64_t instanceId) const {
+    bool ScriptingAdapter::isScriptLoaded(uint64_t instanceId) const
+    {
         return instanceToClassName.find(instanceId) != instanceToClassName.end();
     }
 
-    void ScriptingAdapter::callOnStart(uint64_t instanceId) {
-        if (!isScriptLoaded(instanceId)) {
+    void ScriptingAdapter::callOnStart(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
             spdlog::warn("[ScriptingAdapter] callOnStart: script {} not loaded", instanceId);
             return;
         }
 
-        try {
+        try
+        {
             auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end()) {
+            if (objIt != instanceToObject.end())
+            {
                 // Set current entity for callbacks
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
 
                 // Get the script instance and call onStart
-                spdlog::info("[ScriptingAdapter] Calling interpreter->callMethod for onStart (instance {})", instanceId);
+                spdlog::info("[ScriptingAdapter] Calling interpreter->callMethod for onStart (instance {})",
+                             instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, "onStart", {});
 
                 spdlog::info("[ScriptingAdapter] onStart completed successfully for instance {}", instanceId);
-            } else {
+            }
+            else
+            {
                 spdlog::warn("[ScriptingAdapter] callOnStart: instance {} not found in instanceToObject", instanceId);
             }
         }
-        catch (const std::exception& e) {
+        catch (const std::exception& e)
+        {
             setError(services::ScriptError::Type::Runtime,
                      std::string("onStart failed: ") + e.what());
             vfLogError("[Script] onStart failed: {}", e.what());
         }
     }
 
-    void ScriptingAdapter::callOnUpdate(uint64_t instanceId, float deltaTime) {
-        if (!isScriptLoaded(instanceId)) {
+    void ScriptingAdapter::callOnUpdate(uint64_t instanceId, float deltaTime)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
             return;
         }
 
-        try {
+        try
+        {
             auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end()) {
+            if (objIt != instanceToObject.end())
+            {
                 // Set current context for callbacks
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
                 NativeAPIRegistry::setCurrentDeltaTime(deltaTime);
@@ -201,21 +404,26 @@ namespace core {
                 interpreter->callMethod(instance, "onUpdate", {value::Value(deltaTime)});
             }
         }
-        catch (const std::exception& e) {
+        catch (const std::exception& e)
+        {
             setError(services::ScriptError::Type::Runtime,
                      std::string("onUpdate failed: ") + e.what());
             vfLogError("[Script] onUpdate failed: {}", e.what());
         }
     }
 
-    void ScriptingAdapter::callOnDestroy(uint64_t instanceId) {
-        if (!isScriptLoaded(instanceId)) {
+    void ScriptingAdapter::callOnDestroy(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
             return;
         }
 
-        try {
+        try
+        {
             auto objIt = instanceToObject.find(instanceId);
-            if (objIt != instanceToObject.end()) {
+            if (objIt != instanceToObject.end())
+            {
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
 
                 // Get the script instance and call onDestroy
@@ -225,35 +433,42 @@ namespace core {
                 spdlog::debug("[ScriptingAdapter] Called onDestroy for instance {}", instanceId);
             }
         }
-        catch (const std::exception& e) {
+        catch (const std::exception& e)
+        {
             setError(services::ScriptError::Type::Runtime,
                      std::string("onDestroy failed: ") + e.what());
             vfLogError("[Script] onDestroy failed: {}", e.what());
         }
     }
 
-    std::optional<services::ScriptError> ScriptingAdapter::getLastError() const {
+    std::optional<services::ScriptError> ScriptingAdapter::getLastError() const
+    {
         return lastError;
     }
 
-    void ScriptingAdapter::clearError() {
+    void ScriptingAdapter::clearError()
+    {
         lastError = std::nullopt;
     }
 
-    void ScriptingAdapter::setScriptLibraryPath(const std::string& path) {
+    void ScriptingAdapter::setScriptLibraryPath(const std::string& path)
+    {
         scriptLibraryPath = path;
         spdlog::info("[ScriptingAdapter] Script library path set to: {}", path);
     }
 
     void ScriptingAdapter::setError(services::ScriptError::Type type, const std::string& message,
-                                     const std::string& file, int line) {
+                                    const std::string& file, int line)
+    {
         lastError = services::ScriptError{type, message, file, line, 0};
     }
 
-    std::string ScriptingAdapter::extractClassName(const std::string& scriptPath) {
+    std::string ScriptingAdapter::extractClassName(const std::string& scriptPath)
+    {
         // Read the script file and extract the class name
         std::ifstream file(scriptPath);
-        if (!file.is_open()) {
+        if (!file.is_open())
+        {
             return "";
         }
 
@@ -265,17 +480,18 @@ namespace core {
         std::regex scriptAnnotationPattern(R"(@Script\s+(?:public\s+)?class\s+(\w+)\b)");
         std::smatch match;
 
-        if (std::regex_search(content, match, scriptAnnotationPattern)) {
+        if (std::regex_search(content, match, scriptAnnotationPattern))
+        {
             return match[1].str();
         }
 
         // Fallback: look for any class definition (for backwards compatibility)
         std::regex anyClassPattern(R"(\bclass\s+(\w+)\b)");
-        if (std::regex_search(content, match, anyClassPattern)) {
+        if (std::regex_search(content, match, anyClassPattern))
+        {
             return match[1].str();
         }
 
         return "";
     }
-
 }

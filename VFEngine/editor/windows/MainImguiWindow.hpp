@@ -51,6 +51,7 @@ namespace windows
 		void handleFileMenu();
 		void handleSettingsMenu();
 		void handleAddMenu();
+		void handleScriptsMenu();
 		void handleDebug();
 		void handlePlayControls();
 

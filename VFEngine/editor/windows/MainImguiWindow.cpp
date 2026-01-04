@@ -7,6 +7,7 @@
 #include "events/ResourceEvents.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/EditorModeEvents.hpp"
+#include "events/ScriptingEvents.hpp"
 #include "string/StringUtil.hpp"
 #include "Import.hpp"
 #include "config/Config.hpp"
@@ -102,9 +103,45 @@ namespace windows
             handleFileMenu();
             handleSettingsMenu();
             handleAddMenu();
+            handleScriptsMenu();
             handleDebug();
             handlePlayControls();
             ImGui::EndMainMenuBar();
+        }
+    }
+
+    void MainImguiWindow::handleScriptsMenu()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool isCompiled = dispatcher.query(events::scripting::IsScriptsCompiledQuery{});
+
+        if (ImGui::BeginMenu("Scripts"))
+        {
+            // Build Scripts button
+            if (ImGui::MenuItem("Build Scripts"))
+            {
+                dispatcher.execute(events::scripting::BuildScriptsCommand{});
+            }
+
+            // Clean Scripts button
+            if (ImGui::MenuItem("Clean Scripts"))
+            {
+                dispatcher.execute(events::scripting::CleanScriptsCommand{});
+            }
+
+            ImGui::Separator();
+
+            // Build status indicator
+            if (isCompiled)
+            {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Built");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Status: Not Built");
+            }
+
+            ImGui::EndMenu();
         }
     }
 
@@ -112,12 +149,25 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         auto currentMode = dispatcher.query(events::editor::GetEditorModeQuery{});
+        bool isScriptsCompiled = dispatcher.query(events::scripting::IsScriptsCompiledQuery{});
 
         // Calculate center position
         float menuBarWidth = ImGui::GetWindowWidth();
         float buttonWidth = 60.0f;
-        float centerX = (menuBarWidth - buttonWidth) * 0.5f;
+        float totalWidth = buttonWidth + 10.0f; // Button + spacing for indicator
+        float centerX = (menuBarWidth - totalWidth) * 0.5f;
         ImGui::SetCursorPosX(centerX);
+
+        // Show build status indicator before Play button
+        if (!isScriptsCompiled && currentMode == services::EditorMode::Edit)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "[!]");
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Scripts not built.\nGo to Scripts > Build Scripts before playing.");
+            }
+            ImGui::SameLine();
+        }
 
         if (currentMode == services::EditorMode::Edit)
         {

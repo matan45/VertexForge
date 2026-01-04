@@ -46,6 +46,15 @@ namespace events::scripting {
         std::string_view getName() const override { return "TriggerScriptDestroy"; }
     };
 
+    // === Build Commands ===
+    struct BuildScriptsCommand : ICommand<bool> {
+        std::string_view getName() const override { return "BuildScripts"; }
+    };
+
+    struct CleanScriptsCommand : ICommand<bool> {
+        std::string_view getName() const override { return "CleanScripts"; }
+    };
+
     // ============================================
     // QUERIES - Read-only script information
     // ============================================
@@ -74,6 +83,11 @@ namespace events::scripting {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetScriptPaths"; }
+    };
+
+    // === Build Queries ===
+    struct IsScriptsCompiledQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsScriptsCompiled"; }
     };
 
     // ============================================
@@ -107,6 +121,15 @@ namespace events::scripting {
         std::string scriptPath;  // Which script started
 
         std::string_view getName() const override { return "ScriptStarted"; }
+    };
+
+    // === Build Notifications ===
+    struct ScriptsBuildCompletedNotification : INotification {
+        bool success;
+        size_t filesCompiled;
+        std::vector<std::string> errors;
+
+        std::string_view getName() const override { return "ScriptsBuildCompleted"; }
     };
 
 }

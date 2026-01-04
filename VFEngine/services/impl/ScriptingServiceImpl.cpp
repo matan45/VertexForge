@@ -2,10 +2,10 @@
 #include "../events/ScriptingEvents.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../data/EntityConversion.hpp"
-#include "../../utilities/scene/EntityRegistry.hpp"
-#include "../../utilities/components/Components.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
+#include "print/EditorLogger.hpp"
 #include <cassert>
-#include <spdlog/spdlog.h>
 
 namespace services {
 
@@ -84,6 +84,59 @@ namespace services {
                 }
                 return data;
             });
+
+        // === Build Commands ===
+        dispatcher.registerCommandHandler<events::scripting::BuildScriptsCommand>(
+            [this](const auto& cmd) {
+                auto result = buildScripts();
+                return result.success;
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::CleanScriptsCommand>(
+            [this](const auto& cmd) {
+                cleanScripts();
+                return true;
+            });
+
+        // === Build Queries ===
+        dispatcher.registerQueryHandler<events::scripting::IsScriptsCompiledQuery>(
+            [this](const auto& query) {
+                return isCompiled();
+            });
+    }
+
+    // === Build Methods ===
+    ScriptBuildResult ScriptingServiceImpl::buildScripts() {
+        vfLogInfo("[Script] Building scripts...");
+
+        auto result = scriptingProvider->buildScripts(DEFAULT_MANIFEST_PATH);
+
+        // Publish notification
+        events::scripting::ScriptsBuildCompletedNotification notification;
+        notification.success = result.success;
+        notification.filesCompiled = result.filesCompiled;
+        notification.errors = result.errors;
+        ::events::EventDispatcher::instance().publish(notification);
+
+        // Load the compiled scripts if build was successful
+        if (result.success) {
+            scriptingProvider->loadCompiledScripts(DEFAULT_MANIFEST_PATH);
+        }
+
+        return result;
+    }
+
+    void ScriptingServiceImpl::cleanScripts() {
+        vfLogInfo("[Script] Cleaning scripts...");
+        scriptingProvider->cleanScripts(DEFAULT_MANIFEST_PATH);
+    }
+
+    bool ScriptingServiceImpl::isCompiled() const {
+        return scriptingProvider->isCompiled();
+    }
+
+    void ScriptingServiceImpl::setBuildProgressCallback(ScriptBuildProgressCallback callback) {
+        scriptingProvider->setBuildProgressCallback(std::move(callback));
     }
 
     bool ScriptingServiceImpl::attachScript(EntityHandle entity, const ScriptData& data) {
@@ -97,7 +150,7 @@ namespace services {
 
         // If no script path provided, just ensure component exists (for "Add Component" UI flow)
         if (data.scriptPath.empty()) {
-            spdlog::info("[ScriptingService] Added empty ScriptComponent to entity");
+            vfLogInfo("[Script] Added empty ScriptComponent to entity");
             return true;
         }
 
@@ -105,7 +158,7 @@ namespace services {
 
         // Check if script already attached
         if (scriptComp.hasScript(data.scriptPath)) {
-            spdlog::warn("[ScriptingService] Script '{}' already attached to entity", data.scriptPath);
+            vfLogWarning("[Script] Script '{}' already attached to entity", data.scriptPath);
             return false;
         }
 
@@ -142,8 +195,8 @@ namespace services {
         attachedNotification.className = info->className;
         ::events::EventDispatcher::instance().publish(attachedNotification);
 
-        spdlog::info("[ScriptingService] Attached script '{}' to entity (total scripts: {})",
-                     data.scriptPath, scriptComp.scripts.size());
+        vfLogInfo("[Script] Attached script '{}' to entity (total scripts: {})",
+                  data.scriptPath, scriptComp.scripts.size());
         return true;
     }
 
@@ -184,7 +237,7 @@ namespace services {
         detachedNotification.scriptPath = scriptPath;
         ::events::EventDispatcher::instance().publish(detachedNotification);
 
-        spdlog::info("[ScriptingService] Detached script '{}' from entity", scriptPath);
+        vfLogInfo("[Script] Detached script '{}' from entity", scriptPath);
     }
 
     void ScriptingServiceImpl::detachAllScripts(EntityHandle entity) {
@@ -213,7 +266,7 @@ namespace services {
         // Remove component
         registry.remove<components::ScriptComponent>(enttEntity);
 
-        spdlog::info("[ScriptingService] Detached all scripts from entity");
+        vfLogInfo("[Script] Detached all scripts from entity");
     }
 
     bool ScriptingServiceImpl::hasScripts(EntityHandle entity) const {
@@ -320,8 +373,8 @@ namespace services {
 
                 // Call onStart if not started yet
                 if (!entry.started && entry.hasOnStart) {
-                    spdlog::info("[ScriptingService] Calling onStart for script '{}' (instance {})",
-                                 entry.scriptPath, entry.instanceId);
+                    vfLogInfo("[Script] Calling onStart for script '{}' (instance {})",
+                              entry.scriptPath, entry.instanceId);
                     scriptingProvider->callOnStart(entry.instanceId);
                     entry.started = true;
 

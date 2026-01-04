@@ -1,0 +1,9 @@
+<Project Name="VertexForgeScripts" Version="1.0.0">
+  <Source>
+    <Include>game/**/*.mt</Include>
+  </Source>
+  <Output Directory="compiled" />
+  <Imports>
+    <SearchPath>lib/engine</SearchPath>
+  </Imports>
+</Project>
