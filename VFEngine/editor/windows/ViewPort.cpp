@@ -9,25 +9,15 @@
 #include "components/Components.hpp"
 #include "data/DTOs.hpp"
 #include "data/EntityConversion.hpp"
+#include <imgui.h>
+#include "ImGuizmo.h"
 #include <glm/gtc/type_ptr.hpp>
-#include <limits>
 
 namespace windows
 {
     ViewPort::ViewPort()
         : editorCamera(std::make_unique<editor::EditorCamera>())
     {
-    }
-
-    ViewPort::~ViewPort()
-    {
-        if (iconAtlas.isValid())
-        {
-            auto& dispatcher = events::EventDispatcher::instance();
-            events::render::ReleaseEditorTextureCommand cmd;
-            cmd.handle = iconAtlas.imguiDescriptorSet;
-            dispatcher.execute(cmd);
-        }
     }
 
     void ViewPort::draw()
@@ -40,108 +30,20 @@ namespace windows
             bool isHovered = ImGui::IsWindowHovered();
             bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
 
-            // Only allow editor camera input in Edit mode
             if (isFocused && isHovered && !isPlayMode)
             {
                 handleCameraInput();
             }
 
             ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
-
-            // Update editor camera aspect ratio based on viewport size
             if (viewportPanelSize.x > 0 && viewportPanelSize.y > 0)
             {
                 editorCamera->setAspectRatio(viewportPanelSize.x / viewportPanelSize.y);
             }
 
-            // Determine which camera to use: primary game camera in Play mode, editor camera otherwise
-            glm::mat4 viewMatrix;
-            glm::mat4 projectionMatrix;
-            glm::vec3 cameraPosition;
-            glm::vec3 cameraForward;
-
-            bool usingGameCamera = false;
-            if (isPlayMode)
-            {
-                // Try to find the primary game camera
-                auto primaryCameraOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
-                if (primaryCameraOpt.has_value())
-                {
-                    auto primaryCamera = *primaryCameraOpt;
-
-                    // Get camera component data
-                    events::scene::GetCameraDataQuery cameraQuery;
-                    cameraQuery.entity = primaryCamera;
-                    auto cameraDataOpt = dispatcher.query(cameraQuery);
-
-                    if (cameraDataOpt.has_value())
-                    {
-                        // Get transform for camera position
-                        events::scene::GetTransformQuery transformQuery;
-                        transformQuery.entity = primaryCamera;
-                        auto transformOpt = dispatcher.query(transformQuery);
-
-                        if (transformOpt.has_value())
-                        {
-                            auto& transform = *transformOpt;
-
-                            // Update aspect ratio for game camera
-                            float aspectRatio = viewportPanelSize.x / viewportPanelSize.y;
-
-                            // Get the camera component directly to access matrices
-                            auto enttEntity = services::internal::fromHandle(primaryCamera);
-                            auto& registry = scene::EntityRegistry::getRegistry();
-                            if (registry.all_of<components::CameraComponent>(enttEntity))
-                            {
-                                auto& camComp = registry.get<components::CameraComponent>(enttEntity);
-                                camComp.aspectRatio = aspectRatio;
-                                camComp.updateProjectionMatrix();
-                                camComp.updateViewMatrix(transform.position, transform.rotation);
-
-                                viewMatrix = camComp.viewMatrix;
-                                projectionMatrix = camComp.projectionMatrix;
-                                cameraPosition = transform.position;
-
-                                // Calculate forward direction from rotation
-                                glm::mat4 rotMat = glm::mat4(1.0f);
-                                rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
-                                rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
-                                cameraForward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
-
-                                usingGameCamera = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Fall back to editor camera if not in play mode or no game camera found
-            if (!usingGameCamera)
-            {
-                viewMatrix = editorCamera->getViewMatrix();
-                projectionMatrix = editorCamera->getProjectionMatrix();
-                cameraPosition = editorCamera->position;
-                cameraForward = editorCamera->getForwardDirection();
-            }
-
-            events::render::UpdateIBLCameraCommand cameraCmd;
-            cameraCmd.viewMatrix = viewMatrix;
-            cameraCmd.projectionMatrix = projectionMatrix;
-            dispatcher.execute(cameraCmd);
-
-            events::render::UpdateMeshCameraCommand meshCameraCmd;
-            meshCameraCmd.viewMatrix = viewMatrix;
-            meshCameraCmd.projectionMatrix = projectionMatrix;
-            meshCameraCmd.cameraPosition = cameraPosition;
-            meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
-            dispatcher.execute(meshCameraCmd);
-
-            // Update audio listener position
-            events::audio::SetListenerPositionCommand listenerCmd;
-            listenerCmd.position = cameraPosition;
-            listenerCmd.forward = cameraForward;
-            listenerCmd.up = glm::vec3(0.0f, 1.0f, 0.0f);
-            dispatcher.execute(listenerCmd);
+            float aspectRatio = viewportPanelSize.x / viewportPanelSize.y;
+            CameraState camera = getActiveCameraState(isPlayMode, aspectRatio);
+            updateRendererCameras(camera);
 
             ImVec2 viewportPos = ImGui::GetCursorScreenPos();
 
@@ -150,96 +52,189 @@ namespace windows
             if (texture.isValid())
             {
                 ImGui::Image(texture.imguiDescriptorSet, ImVec2{viewportPanelSize.x, viewportPanelSize.y});
-
-                // Accept prefab drops to instantiate in viewport
-                if (ImGui::BeginDragDropTarget())
-                {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PREFAB_PATH"))
-                    {
-                        std::string prefabPath(static_cast<const char*>(payload->Data));
-
-                        // Instantiate prefab at scene root
-                        events::scene::LoadPrefabCommand loadCmd;
-                        loadCmd.filePath = prefabPath;
-                        loadCmd.parent = std::nullopt;  // Add to scene root
-                        auto result = dispatcher.execute(loadCmd);
-
-                        if (result.has_value())
-                        {
-                            // Get current transform from prefab (to preserve rotation and scale)
-                            events::scene::GetTransformQuery transformQuery;
-                            transformQuery.entity = *result;
-                            auto prefabTransform = dispatcher.query(transformQuery);
-
-                            if (prefabTransform.has_value())
-                            {
-                                // Position in front of editor camera, but keep prefab's rotation and scale
-                                glm::vec3 spawnPos = editorCamera->position + editorCamera->getForwardDirection() * 5.0f;
-
-                                services::TransformData transform;
-                                transform.position = spawnPos;
-                                transform.rotation = prefabTransform->rotation;
-                                transform.scale = prefabTransform->scale;
-
-                                events::scene::SetTransformCommand transformCmd;
-                                transformCmd.entity = *result;
-                                transformCmd.transform = transform;
-                                dispatcher.execute(transformCmd);
-                            }
-
-                            // Select the newly instantiated entity
-                            events::scene::SelectEntityCommand selectCmd;
-                            selectCmd.entity = *result;
-                            dispatcher.execute(selectCmd);
-                        }
-                    }
-                    ImGui::EndDragDropTarget();
-                }
+                handlePrefabDrop();
             }
 
-            drawViewportOverlay();
-            drawGizmo();
+            overlay.draw(gizmo);
+            gizmo.draw(*editorCamera);
 
-            // Update picking data (editor mode only)
             glm::vec2 vp(viewportPos.x, viewportPos.y);
             glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
+
             if (!isPlayMode)
             {
-                updateBillboardScreenPositions(vp, vs);
-                updateMeshPickData();
+                picker.updateBillboardScreenPositions(*editorCamera, vp, vs);
+                picker.updateMeshPickData();
             }
 
-            if (!isPlayMode && ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
-                && !ImGui::IsMouseDown(ImGuiMouseButton_Right)
-                && !ImGuizmo::IsUsing() && !ImGuizmo::IsOver())
+            handleEntityPicking(isPlayMode, vp, vs);
+        }
+        ImGui::End();
+    }
+
+    CameraState ViewPort::getActiveCameraState(bool isPlayMode, float aspectRatio)
+    {
+        CameraState state;
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        bool usingGameCamera = false;
+        if (isPlayMode)
+        {
+            auto primaryCameraOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+            if (primaryCameraOpt.has_value())
             {
-                ImVec2 mousePos = ImGui::GetMousePos();
-                glm::vec2 mp(mousePos.x, mousePos.y);
+                auto primaryCamera = *primaryCameraOpt;
 
-                // Try billboard picking first
-                auto picked = pickBillboardAt(mp);
+                events::scene::GetCameraDataQuery cameraQuery;
+                cameraQuery.entity = primaryCamera;
+                auto cameraDataOpt = dispatcher.query(cameraQuery);
 
-                // If no billboard hit, try mesh picking
-                if (!picked.has_value())
+                if (cameraDataOpt.has_value())
                 {
-                    picked = pickMeshAt(mp, vp, vs);
-                }
+                    events::scene::GetTransformQuery transformQuery;
+                    transformQuery.entity = primaryCamera;
+                    auto transformOpt = dispatcher.query(transformQuery);
 
-                if (picked.has_value())
-                {
-                    events::scene::SelectEntityCommand cmd;
-                    cmd.entity = *picked;
-                    dispatcher.execute(cmd);
+                    if (transformOpt.has_value())
+                    {
+                        auto& transform = *transformOpt;
+
+                        auto enttEntity = services::internal::fromHandle(primaryCamera);
+                        auto& registry = scene::EntityRegistry::getRegistry();
+                        if (registry.all_of<components::CameraComponent>(enttEntity))
+                        {
+                            auto& camComp = registry.get<components::CameraComponent>(enttEntity);
+                            camComp.aspectRatio = aspectRatio;
+                            camComp.updateProjectionMatrix();
+                            camComp.updateViewMatrix(transform.position, transform.rotation);
+
+                            state.viewMatrix = camComp.viewMatrix;
+                            state.projectionMatrix = camComp.projectionMatrix;
+                            state.position = transform.position;
+
+                            glm::mat4 rotMat = glm::mat4(1.0f);
+                            rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
+                            rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
+                            state.forward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
+
+                            usingGameCamera = true;
+                        }
+                    }
                 }
             }
         }
-        ImGui::End();
+
+        if (!usingGameCamera)
+        {
+            state.viewMatrix = editorCamera->getViewMatrix();
+            state.projectionMatrix = editorCamera->getProjectionMatrix();
+            state.position = editorCamera->position;
+            state.forward = editorCamera->getForwardDirection();
+        }
+
+        return state;
+    }
+
+    void ViewPort::updateRendererCameras(const CameraState& camera)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::render::UpdateIBLCameraCommand cameraCmd;
+        cameraCmd.viewMatrix = camera.viewMatrix;
+        cameraCmd.projectionMatrix = camera.projectionMatrix;
+        dispatcher.execute(cameraCmd);
+
+        events::render::UpdateMeshCameraCommand meshCameraCmd;
+        meshCameraCmd.viewMatrix = camera.viewMatrix;
+        meshCameraCmd.projectionMatrix = camera.projectionMatrix;
+        meshCameraCmd.cameraPosition = camera.position;
+        meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
+        dispatcher.execute(meshCameraCmd);
+
+        events::audio::SetListenerPositionCommand listenerCmd;
+        listenerCmd.position = camera.position;
+        listenerCmd.forward = camera.forward;
+        listenerCmd.up = glm::vec3(0.0f, 1.0f, 0.0f);
+        dispatcher.execute(listenerCmd);
+    }
+
+    void ViewPort::handlePrefabDrop()
+    {
+        if (!ImGui::BeginDragDropTarget())
+        {
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PREFAB_PATH"))
+        {
+            std::string prefabPath(static_cast<const char*>(payload->Data));
+
+            events::scene::LoadPrefabCommand loadCmd;
+            loadCmd.filePath = prefabPath;
+            loadCmd.parent = std::nullopt;
+            auto result = dispatcher.execute(loadCmd);
+
+            if (result.has_value())
+            {
+                events::scene::GetTransformQuery transformQuery;
+                transformQuery.entity = *result;
+                auto prefabTransform = dispatcher.query(transformQuery);
+
+                if (prefabTransform.has_value())
+                {
+                    glm::vec3 spawnPos = editorCamera->position + editorCamera->getForwardDirection() * 5.0f;
+
+                    services::TransformData transform;
+                    transform.position = spawnPos;
+                    transform.rotation = prefabTransform->rotation;
+                    transform.scale = prefabTransform->scale;
+
+                    events::scene::SetTransformCommand transformCmd;
+                    transformCmd.entity = *result;
+                    transformCmd.transform = transform;
+                    dispatcher.execute(transformCmd);
+                }
+
+                events::scene::SelectEntityCommand selectCmd;
+                selectCmd.entity = *result;
+                dispatcher.execute(selectCmd);
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    void ViewPort::handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        if (isPlayMode) return;
+        if (!ImGui::IsWindowHovered()) return;
+        if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) return;
+        if (ImGuizmo::IsUsing() || ImGuizmo::IsOver()) return;
+
+        ImVec2 mousePos = ImGui::GetMousePos();
+        glm::vec2 mp(mousePos.x, mousePos.y);
+
+        auto picked = picker.pickBillboardAt(mp);
+        if (!picked.has_value())
+        {
+            picked = picker.pickMeshAt(*editorCamera, mp, viewportPos, viewportSize);
+        }
+
+        if (picked.has_value())
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::SelectEntityCommand cmd;
+            cmd.entity = *picked;
+            dispatcher.execute(cmd);
+        }
     }
 
     void ViewPort::handleCameraInput()
     {
         float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-        
+
         bool forward = ImGui::IsKeyDown(ImGuiKey_W);
         bool backward = ImGui::IsKeyDown(ImGuiKey_S);
         bool left = ImGui::IsKeyDown(ImGuiKey_A);
@@ -252,7 +247,7 @@ namespace windows
         {
             editorCamera->processKeyboardInput(dt, forward, backward, left, right, up, down, sprint);
         }
-        
+
         if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
         {
             ImGui::SetMouseCursor(ImGuiMouseCursor_None);
@@ -279,451 +274,5 @@ namespace windows
         {
             isFirstMouseInput = true;
         }
-    }
-
-    void ViewPort::updateBillboardScreenPositions(glm::vec2 viewportPos, glm::vec2 viewportSize)
-    {
-        cachedBillboardHits.clear();
-
-        if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
-        {
-            return;
-        }
-
-        glm::mat4 viewMatrix = editorCamera->getViewMatrix();
-        glm::mat4 projMatrix = editorCamera->getProjectionMatrix();
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::BillboardComponent, components::WorldTransformComponent>();
-
-        for (auto entity : view)
-        {
-            const auto& billboard = view.get<components::BillboardComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            // Skip non-selectable or non-editor billboards
-            if (!billboard.selectable || !billboard.editorOnly)
-            {
-                continue;
-            }
-
-            glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
-
-            glm::vec4 clipPos = projMatrix * viewMatrix * glm::vec4(worldPos, 1.0f);
-
-            // Behind camera check
-            if (clipPos.w <= 0.0f)
-            {
-                continue;
-            }
-
-            // Convert to NDC
-            glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
-
-            if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f)
-            {
-                continue;
-            }
-
-            // Convert to screen space
-            // Note: No Y flip needed because EditorCamera's projection matrix already
-            // flips Y for Vulkan (projectionMatrix[1][1] *= -1), so ndc.y = -1 is top, +1 is bottom
-            glm::vec2 screenPos;
-            screenPos.x = (ndc.x * 0.5f + 0.5f) * viewportSize.x + viewportPos.x;
-            screenPos.y = (ndc.y * 0.5f + 0.5f) * viewportSize.y + viewportPos.y;
-
-            BillboardScreenHit hit;
-            hit.entity = services::internal::toHandle(entity);
-            hit.screenCenter = screenPos;
-            hit.screenSize = billboard.size; // Size is in screen pixels for ScreenSpace mode
-
-            cachedBillboardHits.push_back(hit);
-        }
-    }
-
-    std::optional<services::EntityHandle> ViewPort::pickBillboardAt(glm::vec2 screenPos)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        // Iterate in reverse order (last rendered = closest to camera for screen-space billboards)
-        for (auto it = cachedBillboardHits.rbegin(); it != cachedBillboardHits.rend(); ++it)
-        {
-            const auto& hit = *it;
-
-            glm::vec2 halfSize = hit.screenSize * 0.5f;
-            glm::vec2 minBounds = hit.screenCenter - halfSize;
-            glm::vec2 maxBounds = hit.screenCenter + halfSize;
-
-            if (screenPos.x >= minBounds.x && screenPos.x <= maxBounds.x &&
-                screenPos.y >= minBounds.y && screenPos.y <= maxBounds.y)
-            {
-                // Validate entity still exists and has BillboardComponent (prevents race condition
-                // if entity was deleted or component removed between cache update and pick)
-                auto enttEntity = services::internal::fromHandle(hit.entity);
-                if (registry.valid(enttEntity) &&
-                    registry.all_of<components::BillboardComponent>(enttEntity))
-                {
-                    return hit.entity;
-                }
-                // Entity was deleted or no longer has billboard, skip and continue searching
-            }
-        }
-        return std::nullopt;
-    }
-
-    void ViewPort::updateMeshPickData()
-    {
-        cachedMeshHits.clear();
-
-        auto& dispatcher = events::EventDispatcher::instance();
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
-
-        for (auto entity : view)
-        {
-            const auto& meshComp = view.get<components::MeshComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            if (meshComp.meshPath.empty())
-            {
-                continue;
-            }
-
-            // Get mesh bounding box from renderer
-            events::render::GetMeshBoundingBoxQuery query;
-            query.meshPath = meshComp.meshPath;
-            auto bounds = dispatcher.query(query);
-
-            if (!bounds.has_value())
-            {
-                continue;
-            }
-
-            // Transform local AABB to world space
-            math::AABB localAABB(bounds->min, bounds->max);
-            math::AABB worldAABB = localAABB.getTransformed(worldTransform.worldMatrix);
-
-            MeshPickData pickData;
-            pickData.entity = services::internal::toHandle(entity);
-            pickData.worldAABB = worldAABB;
-            pickData.meshPath = meshComp.meshPath;
-
-            cachedMeshHits.push_back(pickData);
-        }
-    }
-
-    math::Ray ViewPort::screenToWorldRay(glm::vec2 screenPos, glm::vec2 viewportPos, glm::vec2 viewportSize)
-    {
-        screenPos.x = glm::clamp(screenPos.x, viewportPos.x, viewportPos.x + viewportSize.x);
-        screenPos.y = glm::clamp(screenPos.y, viewportPos.y, viewportPos.y + viewportSize.y);
-
-        // Convert screen position to normalized viewport coordinates [0, 1]
-        float normalizedX = (screenPos.x - viewportPos.x) / viewportSize.x;
-        float normalizedY = (screenPos.y - viewportPos.y) / viewportSize.y;
-
-        // Convert to NDC [-1, 1]
-        // Note: Y is already in correct orientation due to Vulkan's flipped projection
-        float ndcX = normalizedX * 2.0f - 1.0f;
-        float ndcY = normalizedY * 2.0f - 1.0f;
-
-        // Get inverse matrices
-        glm::mat4 invProj = glm::inverse(editorCamera->getProjectionMatrix());
-        glm::mat4 invView = glm::inverse(editorCamera->getViewMatrix());
-
-        // Unproject near and far points
-        glm::vec4 nearPoint = invProj * glm::vec4(ndcX, ndcY, 0.0f, 1.0f);
-        glm::vec4 farPoint = invProj * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
-
-        // Perspective divide
-        nearPoint /= nearPoint.w;
-        farPoint /= farPoint.w;
-
-        // Transform to world space
-        glm::vec3 worldNear = glm::vec3(invView * nearPoint);
-        glm::vec3 worldFar = glm::vec3(invView * farPoint);
-
-        glm::vec3 direction = glm::normalize(worldFar - worldNear);
-        return math::Ray(worldNear, direction);
-    }
-
-    std::optional<services::EntityHandle> ViewPort::pickMeshAt(glm::vec2 screenPos, glm::vec2 viewportPos,
-                                                               glm::vec2 viewportSize)
-    {
-        if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
-        {
-            return std::nullopt;
-        }
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        math::Ray ray = screenToWorldRay(screenPos, viewportPos, viewportSize);
-
-        // Collect all hits, then prefer smaller bounding boxes
-        // This allows selecting inner objects within larger parent bounds
-        float smallestVolume = std::numeric_limits<float>::max();
-        std::optional<services::EntityHandle> bestEntity;
-
-        for (const auto& meshData : cachedMeshHits)
-        {
-            auto hitDistance = meshData.worldAABB.intersectRay(ray);
-            if (hitDistance.has_value())
-            {
-                // Validate entity still exists
-                auto enttEntity = services::internal::fromHandle(meshData.entity);
-                if (registry.valid(enttEntity) &&
-                    registry.all_of<components::MeshComponent>(enttEntity))
-                {
-                    // Prefer smaller bounding boxes - allows picking nested objects
-                    float volume = meshData.worldAABB.getVolume();
-                    if (volume < smallestVolume)
-                    {
-                        smallestVolume = volume;
-                        bestEntity = meshData.entity;
-                    }
-                }
-            }
-        }
-
-        return bestEntity;
-    }
-
-    void ViewPort::drawViewportOverlay()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-        bool isPlayMode = dispatcher.query(events::editor::IsPlayModeQuery{});
-
-        if (isPlayMode)
-        {
-            return;
-        }
-
-        if (!iconsLoaded)
-        {
-            loadIconAtlas();
-        }
-
-        // Position overlay in top-left of viewport content area
-        ImVec2 windowPos = ImGui::GetWindowPos();
-        ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
-        ImVec2 overlayPos = ImVec2(windowPos.x + contentMin.x + 8.0f,
-                                   windowPos.y + contentMin.y + 8.0f);
-
-        ImGui::SetNextWindowPos(overlayPos);
-        ImGui::SetNextWindowBgAlpha(0.0f);
-
-        ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration
-            | ImGuiWindowFlags_AlwaysAutoResize
-            | ImGuiWindowFlags_NoSavedSettings
-            | ImGuiWindowFlags_NoFocusOnAppearing
-            | ImGuiWindowFlags_NoNav
-            | ImGuiWindowFlags_NoMove;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-        if (ImGui::Begin("##ViewportOverlay", nullptr, overlayFlags))
-        {
-            bool currentGridState = dispatcher.query(events::render::GetShowGridQuery{});
-
-            if (iconAtlas.isValid())
-            {
-                if (iconButton(ViewportIcon::Grid, currentGridState, "Toggle 3D grid overlay"))
-                {
-                    events::render::SetShowGridCommand cmd;
-                    cmd.show = !currentGridState;
-                    dispatcher.execute(cmd);
-                }
-
-                ImGui::SameLine();
-                bool isWorldMode = (currentGizmoMode == ImGuizmo::WORLD);
-                if (iconButton(ViewportIcon::World, isWorldMode, isWorldMode ? "World space" : "Local space"))
-                {
-                    currentGizmoMode = isWorldMode ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
-                }
-
-                ImGui::SameLine();
-
-                if (iconButton(ViewportIcon::Rotate, currentGizmoOp == GizmoOperation::Rotate, "Rotate tool"))
-                {
-                    currentGizmoOp = (currentGizmoOp == GizmoOperation::Rotate)
-                                         ? GizmoOperation::None
-                                         : GizmoOperation::Rotate;
-                }
-
-                ImGui::SameLine();
-
-                if (iconButton(ViewportIcon::Scale, currentGizmoOp == GizmoOperation::Scale, "Scale tool"))
-                {
-                    currentGizmoOp = (currentGizmoOp == GizmoOperation::Scale)
-                                         ? GizmoOperation::None
-                                         : GizmoOperation::Scale;
-                }
-
-                ImGui::SameLine();
-
-                if (iconButton(ViewportIcon::Translate, currentGizmoOp == GizmoOperation::Translate, "Move tool"))
-                {
-                    currentGizmoOp = (currentGizmoOp == GizmoOperation::Translate)
-                                         ? GizmoOperation::None
-                                         : GizmoOperation::Translate;
-                }
-            }
-        }
-        ImGui::End();
-        ImGui::PopStyleVar(2);
-    }
-
-    void ViewPort::loadIconAtlas()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        events::render::LoadEditorTextureCommand cmd;
-        cmd.path = "../../resources/editor/viewPortAtlasIcons.vfImage";
-        iconAtlas = dispatcher.execute(cmd);
-
-        iconsLoaded = true;
-    }
-
-    std::pair<glm::vec2, glm::vec2> ViewPort::getIconUV(ViewportIcon icon) const
-    {
-        uint32_t index = static_cast<uint32_t>(icon);
-        uint32_t maxIndex = ATLAS_COLUMNS * ATLAS_ROWS;
-
-        // Bounds check - fallback to first icon if out of range
-        if (index >= maxIndex)
-        {
-            index = 0;
-        }
-
-        float colSize = 1.0f / static_cast<float>(ATLAS_COLUMNS);
-        float rowSize = 1.0f / static_cast<float>(ATLAS_ROWS);
-
-        float col = static_cast<float>(index % ATLAS_COLUMNS);
-        float row = static_cast<float>(index / ATLAS_COLUMNS);
-
-        glm::vec2 uv0(col * colSize, row * rowSize);
-        glm::vec2 uv1((col + 1.0f) * colSize, (row + 1.0f) * rowSize);
-
-        return {uv0, uv1};
-    }
-
-    bool ViewPort::iconButton(ViewportIcon icon, bool isActive, const char* tooltip)
-    {
-        auto [uv0, uv1] = getIconUV(icon);
-
-        ImGui::PushID(static_cast<int>(icon));
-
-        ImVec4 bgColor = isActive ? ImVec4(0.3f, 0.5f, 0.8f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f);
-        ImVec4 tintColor = isActive ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
-
-        ImGui::PushStyleColor(ImGuiCol_Button, bgColor);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                              ImVec4(bgColor.x + 0.1f, bgColor.y + 0.1f, bgColor.z + 0.1f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                              ImVec4(bgColor.x + 0.2f, bgColor.y + 0.2f, bgColor.z + 0.2f, 1.0f));
-
-        bool clicked = ImGui::ImageButton(
-            "##iconBtn",
-            iconAtlas.imguiDescriptorSet,
-            ImVec2(ICON_SIZE, ICON_SIZE),
-            ImVec2(uv0.x, uv0.y),
-            ImVec2(uv1.x, uv1.y),
-            ImVec4(0.0f, 0.0f, 0.0f, 0.0f), // bg_col (transparent)
-            tintColor
-        );
-
-        ImGui::PopStyleColor(3);
-
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("%s", tooltip);
-        }
-
-        ImGui::PopID();
-
-        return clicked;
-    }
-
-    void ViewPort::drawGizmo()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        // Skip in play mode or if no operation selected
-        if (dispatcher.query(events::editor::IsPlayModeQuery{})) return;
-        if (currentGizmoOp == GizmoOperation::None) return;
-        
-        auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
-        if (!selectedEntity.has_value()) return;
-        
-        events::scene::GetTransformQuery transformQuery;
-        transformQuery.entity = *selectedEntity;
-        auto transformOpt = dispatcher.query(transformQuery);
-        if (!transformOpt.has_value()) return;
-
-        // Setup viewport rect
-        ImVec2 windowPos = ImGui::GetWindowPos();
-        ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
-        ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
-        float vpX = windowPos.x + contentMin.x;
-        float vpY = windowPos.y + contentMin.y;
-        float vpW = contentMax.x - contentMin.x;
-        float vpH = contentMax.y - contentMin.y;
-
-        ImGuizmo::SetOrthographic(false);
-        ImGuizmo::SetDrawlist();
-        ImGuizmo::SetRect(vpX, vpY, vpW, vpH);
-
-        // Get matrices - undo Vulkan Y-flip for ImGuizmo (it expects OpenGL-style projection)
-        glm::mat4 view = editorCamera->getViewMatrix();
-        glm::mat4 proj = editorCamera->getProjectionMatrix();
-        proj[1][1] *= -1.0f;  // Undo Vulkan Y-flip for ImGuizmo
-        glm::mat4 objectMatrix = buildTransformMatrix(*transformOpt);
-
-        // Map operation
-        ImGuizmo::OPERATION op;
-        switch (currentGizmoOp)
-        {
-        case GizmoOperation::Translate: op = ImGuizmo::TRANSLATE;
-            break;
-        case GizmoOperation::Rotate: op = ImGuizmo::ROTATE;
-            break;
-        case GizmoOperation::Scale: op = ImGuizmo::SCALE;
-            break;
-        default: return;
-        }
-
-        // Manipulate and update if changed
-        if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
-                                 op, currentGizmoMode, glm::value_ptr(objectMatrix)))
-        {
-            events::scene::SetTransformCommand cmd;
-            cmd.entity = *selectedEntity;
-            cmd.transform = decomposeTransformMatrix(objectMatrix);
-            dispatcher.execute(cmd);
-        }
-    }
-
-    glm::mat4 ViewPort::buildTransformMatrix(const services::TransformData& transform) const
-    {
-        float translation[3] = {transform.position.x, transform.position.y, transform.position.z};
-        float rotation[3] = {transform.rotation.x, transform.rotation.y, transform.rotation.z};
-        float scale[3] = {transform.scale.x, transform.scale.y, transform.scale.z};
-
-        glm::mat4 mat(1.0f);
-        ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, glm::value_ptr(mat));
-        return mat;
-    }
-
-    services::TransformData ViewPort::decomposeTransformMatrix(const glm::mat4& matrix) const
-    {
-        float translation[3], rotation[3], scale[3];
-        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(matrix), translation, rotation, scale);
-
-        services::TransformData result;
-        result.position = glm::vec3(translation[0], translation[1], translation[2]);
-        result.rotation = glm::vec3(rotation[0], rotation[1], rotation[2]);
-        result.scale = glm::vec3(scale[0], scale[1], scale[2]);
-
-        return result;
     }
 }

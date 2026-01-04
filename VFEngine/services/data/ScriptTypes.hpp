@@ -1,7 +1,6 @@
 #pragma once
 #include "EntityHandle.hpp"
 #include <string>
-#include <optional>
 
 namespace services {
 
@@ -16,12 +15,8 @@ namespace services {
         uint64_t instanceId = 0;
         std::string className;
         std::string scriptPath;
-        bool hasOnStart = false;
-        bool hasOnUpdate = false;
-        bool hasOnDestroy = false;
     };
-
-    // Error information from script compilation or execution
+    
     struct ScriptError {
         enum class Type {
             Compile,    // Syntax or type error during compilation
@@ -33,12 +28,6 @@ namespace services {
         std::string file;
         int line = 0;
         int column = 0;
-    };
-
-    // Component data for serialization
-    struct ScriptComponentData {
-        std::string scriptPath;
-        bool enabled = true;
     };
 
 }

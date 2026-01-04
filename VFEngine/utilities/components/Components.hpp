@@ -336,11 +336,6 @@ namespace components
         // Runtime state (not serialized)
         bool started = false; // Has onStart() been called?
         uint64_t instanceId = 0; // Script instance lookup ID in ScriptingAdapter
-
-        // Cached method presence flags (set when script is loaded)
-        bool hasOnStart = false;
-        bool hasOnUpdate = false;
-        bool hasOnDestroy = false;
     };
 
     // Script Component - mType scripting attachment (supports multiple scripts)

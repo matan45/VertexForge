@@ -9,7 +9,7 @@ namespace services {
         explicit AudioServiceImpl(IAudioProvider* audioProvider);
         ~AudioServiceImpl() override;
 
-        void registerEventHandlers();
+        void registerEventHandlers() override;
 
         // === Listener (Camera/Player) ===
         void setListenerPosition(const glm::vec3& position,

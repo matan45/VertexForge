@@ -391,9 +391,6 @@ namespace serialization {
 				// Reset runtime state
 				entry.started = false;
 				entry.instanceId = 0;
-				entry.hasOnStart = false;
-				entry.hasOnUpdate = false;
-				entry.hasOnDestroy = false;
 				script.scripts.push_back(entry);
 			}
 		}

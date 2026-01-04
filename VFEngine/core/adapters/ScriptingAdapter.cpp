@@ -281,12 +281,6 @@ namespace core
             info.className = className;
             info.scriptPath = scriptPath;
 
-            // Check which lifecycle methods exist
-            // TODO: Implement method existence check via mType API
-            info.hasOnStart = true;
-            info.hasOnUpdate = true;
-            info.hasOnDestroy = true;
-
             vfLogInfo("[ScriptingAdapter] Loaded script '{}' as class '{}' (instanceId={})",
                       scriptPath, className, instanceId);
 

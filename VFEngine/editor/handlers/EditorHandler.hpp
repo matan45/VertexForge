@@ -41,9 +41,6 @@ namespace handlers {
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 
 		events::SubscriptionToken resizeSubscription;
-		events::SubscriptionToken minimizeSubscription;
-		events::SubscriptionToken restoreSubscription;
-		events::SubscriptionToken focusSubscription;
 
 	public:
 		explicit EditorHandler();

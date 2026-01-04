@@ -6,12 +6,19 @@
 namespace services {
 
     class ScriptingServiceImpl : public IScriptingService {
+   
+    private:
+        IScriptingProvider* scriptingProvider;
+        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+
+        //TODO when we have the project file ge the path from there
+        static constexpr const char* DEFAULT_MANIFEST_PATH = "C:/matan/VertexForge/assets/scripts/scripts.mtproj";
     public:
         explicit ScriptingServiceImpl(IScriptingProvider* scriptingProvider,
                                        std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~ScriptingServiceImpl() override;
 
-        void registerEventHandlers();
+        void registerEventHandlers() override;
 
         // === Script Building ===
         ScriptBuildResult buildScripts() override;
@@ -30,18 +37,9 @@ namespace services {
 
         // === System Update ===
         void updateScripts(float deltaTime) override;
-
-        // === Script Lifecycle Events ===
-        void triggerStart(EntityHandle entity) override;
-        void triggerDestroy(EntityHandle entity) override;
         void stopAllScripts() override;
 
-    private:
-        IScriptingProvider* scriptingProvider;
-        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
-
-        // Default manifest path (absolute path for now)
-        static constexpr const char* DEFAULT_MANIFEST_PATH = "C:/matan/VertexForge/assets/scripts/scripts.mtproj";
+    
     };
 
 }

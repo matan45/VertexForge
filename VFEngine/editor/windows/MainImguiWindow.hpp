@@ -1,65 +1,47 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
-#include "nfd/FileDialog.hpp"
-#include "data/DTOs.hpp"
+#include "CullingStatsWindow.hpp"
+#include "EditorCameraWindow.hpp"
+#include "IBLWindow.hpp"
+#include "ImportModalDialog.hpp"
+#include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 
-#include <filesystem>
-
-namespace fs = std::filesystem;
-
-namespace editor {
-	class EditorCamera;
+namespace editor
+{
+    class EditorCamera;
 }
 
 namespace windows
 {
-	class MainImguiWindow : public controllers::imguiHandler::ImguiWindow
-	{
-	private:
-		int windowFlags;
-		
-		nfd::FileDialog fileDialog;
-		std::vector<std::string> files;
-		std::vector<bool> isFlip;
-		bool openModal = false;
-		
-		bool showIBLWindow = false;
-		fs::path selectedIBLFile;
-		services::EditorTextureHandle iblPreviewHandle;
-		
-		bool showEditorCameraWindow = false;
-		editor::EditorCamera* editorCameraRef = nullptr;  // Set by ViewPort
-		
-		bool showCullingStatsWindow = false;
+    class MainImguiWindow : public controllers::imguiHandler::ImguiWindow
+    {
+    private:
+        int windowFlags;
 
-		// Event subscription
-		events::SubscriptionToken sceneClearedToken;
+        // Sub-windows
+        CullingStatsWindow cullingStatsWindow;
+        EditorCameraWindow editorCameraWindow;
+        IBLWindow iblWindow;
+        ImportModalDialog importDialog;
+        MainMenuBar menuBar;
 
-	public:
-		explicit MainImguiWindow();
-		~MainImguiWindow() override;
+        // Event subscription
+        events::SubscriptionToken sceneClearedToken;
 
-		void draw() override;
-		
-		void setEditorCamera(editor::EditorCamera* camera) { editorCameraRef = camera; }
+    public:
+        explicit MainImguiWindow();
+        ~MainImguiWindow() override;
 
-	private:
-		void menuBar();
-		void importModel();
+        void draw() override;
 
-		void handleFileMenu();
-		void handleSettingsMenu();
-		void handleAddMenu();
-		void handleScriptsMenu();
-		void handleDebug();
-		void handlePlayControls();
+        void setEditorCamera(editor::EditorCamera* camera)
+        {
+            editorCameraWindow.setEditorCamera(camera);
+        }
 
-		void iblWindow();
-		void editorCameraWindow();
-		void cullingStatsWindow();
-
-		void subscribeToEvents();
-		void onSceneCleared();
-	};
+    private:
+        void subscribeToEvents();
+        void onSceneCleared();
+    };
 }

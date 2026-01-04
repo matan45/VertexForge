@@ -79,7 +79,6 @@ namespace services {
 
         // Find camera with isPrimary = true (skip inactive entities)
         for (auto entity : view) {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity)) {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
                 if (!nameComp.isActive) {
@@ -95,7 +94,6 @@ namespace services {
 
         // Fallback to first active camera if no primary is set
         for (auto entity : view) {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity)) {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
                 if (!nameComp.isActive) {

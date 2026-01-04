@@ -4,10 +4,10 @@
 #include "events/ScriptingEvents.hpp"
 #include <imgui.h>
 
-namespace windows::details {
-
+namespace windows::details
+{
     void AddComponentPopup::draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
-                                  bool hasAudio2D, bool hasAudio3D, bool hasScript)
+                                 bool hasAudio2D, bool hasAudio3D, bool hasScript)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -93,10 +93,9 @@ namespace windows::details {
             {
                 if (ImGui::Selectable("  Script"))
                 {
-                    // Add empty script component - user will select script file in the inspector
                     events::scripting::AttachScriptCommand cmd;
                     cmd.entity = handle;
-                    cmd.data.scriptPath = ""; // Empty path, user selects later
+                    cmd.data.scriptPath = "";
                     cmd.data.enabled = true;
                     dispatcher.execute(cmd);
                 }
@@ -116,5 +115,4 @@ namespace windows::details {
 
         ImGui::PopStyleVar(2);
     }
-
 }

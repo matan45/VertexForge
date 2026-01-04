@@ -14,7 +14,6 @@
 #include "events/ApplicationEvents.hpp"
 #include "events/RenderEvents.hpp"
 #include "Import.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace handlers
 {
@@ -33,10 +32,8 @@ namespace handlers
 
         controllers::Import::initialize();
 
-        // Initialize services with providers from bootstrap
         initializeServices();
 
-        // Set up frame callback to update services each frame
         bootstrap->setFrameCallback([this]()
         {
             if (inputService)
@@ -48,28 +45,21 @@ namespace handlers
                 windowStateService->update();
             }
 
-            // Update scripts only in play mode
-            static bool loggedOnce = false;
             if (editorModeService && editorModeService->isPlayMode())
             {
-                if (!loggedOnce) {
-                    spdlog::info("[EditorHandler] Play mode active, scriptingService={}", scriptingService ? "valid" : "null");
-                    loggedOnce = true;
-                }
                 if (scriptingService)
                 {
                     float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
                     scriptingService->updateScripts(deltaTime);
                 }
-                // Update audio listener from primary camera in play mode
+
                 if (audioSceneUpdater)
                 {
                     audioSceneUpdater->updateListenerFromPrimaryCamera();
                 }
             }
         });
-
-        // Subscribe to window events from Services
+        
         setupEventSubscriptions();
 
         windowImguiHandler->init();
@@ -129,8 +119,8 @@ namespace handlers
         windowStateService->registerEventHandlers();
         previewService->registerEventHandlers();
         editorModeService->registerEventHandlers();
-        static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
-        static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
+        audioService->registerEventHandlers();
+        scriptingService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
@@ -146,24 +136,6 @@ namespace handlers
             {
                 bootstrap->triggerResize();
             });
-
-        minimizeSubscription = dispatcher.subscribe<events::application::WindowMinimizedNotification>(
-            [](const events::application::WindowMinimizedNotification&)
-            {
-                // Could pause rendering or other expensive operations here
-            });
-
-        restoreSubscription = dispatcher.subscribe<events::application::WindowRestoredNotification>(
-            [](const events::application::WindowRestoredNotification&)
-            {
-                // Could resume rendering or other operations here
-            });
-
-        focusSubscription = dispatcher.subscribe<events::application::WindowFocusedNotification>(
-            [](const events::application::WindowFocusedNotification&)
-            {
-                // Could handle focus changes (e.g., pause input when unfocused)
-            });
     }
 
     void EditorHandler::cleanupEventSubscriptions()
@@ -174,21 +146,6 @@ namespace handlers
         {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
-        }
-        if (minimizeSubscription.isValid())
-        {
-            dispatcher.unsubscribe(minimizeSubscription);
-            minimizeSubscription = {};
-        }
-        if (restoreSubscription.isValid())
-        {
-            dispatcher.unsubscribe(restoreSubscription);
-            restoreSubscription = {};
-        }
-        if (focusSubscription.isValid())
-        {
-            dispatcher.unsubscribe(focusSubscription);
-            focusSubscription = {};
         }
     }
 }

@@ -11,6 +11,8 @@ namespace services {
     public:
         virtual ~IScriptingService() = default;
 
+        virtual void registerEventHandlers() = 0;
+
         // === Script Building ===
         // Build all scripts from manifest
         virtual ScriptBuildResult buildScripts() = 0;
@@ -33,10 +35,6 @@ namespace services {
 
         // === System Update ===
         virtual void updateScripts(float deltaTime) = 0;
-
-        // === Script Lifecycle Events ===
-        virtual void triggerStart(EntityHandle entity) = 0;
-        virtual void triggerDestroy(EntityHandle entity) = 0;
 
         // Stop all scripts (called when exiting play mode)
         virtual void stopAllScripts() = 0;
