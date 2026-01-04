@@ -162,38 +162,12 @@ namespace services {
             return false;
         }
 
-        // Load the script via provider
-        auto info = scriptingProvider->loadScript(data.scriptPath, entity);
-        if (!info.has_value()) {
-            // Script failed to load - publish error notification
-            auto error = scriptingProvider->getLastError();
-            if (error.has_value()) {
-                events::scripting::ScriptErrorNotification errorNotification;
-                errorNotification.entity = entity;
-                errorNotification.error = error.value();
-                ::events::EventDispatcher::instance().publish(errorNotification);
-            }
-            return false;
-        }
-
-        // Create new script entry
+        // Just store the script path - actual loading happens when Play is pressed
         components::ScriptEntry entry;
         entry.scriptPath = data.scriptPath;
         entry.enabled = data.enabled;
-        entry.started = false;
-        entry.instanceId = info->instanceId;
-        entry.hasOnStart = info->hasOnStart;
-        entry.hasOnUpdate = info->hasOnUpdate;
-        entry.hasOnDestroy = info->hasOnDestroy;
 
         scriptComp.scripts.push_back(entry);
-
-        // Publish success notification
-        events::scripting::ScriptAttachedNotification attachedNotification;
-        attachedNotification.entity = entity;
-        attachedNotification.scriptPath = data.scriptPath;
-        attachedNotification.className = info->className;
-        ::events::EventDispatcher::instance().publish(attachedNotification);
 
         vfLogInfo("[Script] Attached script '{}' to entity (total scripts: {})",
                   data.scriptPath, scriptComp.scripts.size());
