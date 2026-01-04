@@ -1,7 +1,6 @@
 #pragma once
 #include "EntityHandle.hpp"
 #include <string>
-#include <vector>
 #include <optional>
 
 namespace services {
@@ -10,20 +9,6 @@ namespace services {
     struct ScriptData {
         std::string scriptPath;     // Path to .mt source file
         bool enabled = true;
-    };
-
-    // Information about a script's public properties
-    struct ScriptPropertyInfo {
-        std::string name;
-        std::string typeName;       // "float", "int", "string", "Vec3f", etc.
-        bool isReadOnly = false;
-    };
-
-    // Information about a script's callable methods
-    struct ScriptMethodInfo {
-        std::string name;
-        std::vector<std::string> parameterTypes;
-        std::string returnType;
     };
 
     // Information about a loaded script instance
