@@ -38,6 +38,7 @@ namespace core {
 		createDebugMessenger();
 		pickPhysicalDevice();
 		createLogicalDevice();
+		queryMeshShaderCapabilities();
 		createStagingCommandPool();
 	}
 
@@ -243,8 +244,14 @@ namespace core {
 		vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
 		vulkan13Features.pNext = &vulkan12Features;  // Chain Vulkan 1.2 features
 
+		// Mesh shader features (VK_EXT_mesh_shader)
+		vk::PhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
+		meshShaderFeatures.taskShader = VK_TRUE;
+		meshShaderFeatures.meshShader = VK_TRUE;
+		meshShaderFeatures.pNext = &vulkan13Features;  // Chain Vulkan 1.3 features
+
 		vk::DeviceCreateInfo createInfo{};
-		createInfo.pNext = &vulkan13Features;
+		createInfo.pNext = &meshShaderFeatures;
 		createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		createInfo.pQueueCreateInfos = queueCreateInfos.data();
 		createInfo.pEnabledFeatures = &deviceFeatures;
@@ -320,10 +327,27 @@ namespace core {
 	bool Device::isDeviceSuitable(const vk::PhysicalDevice& device) const
 	{
 		const QueueFamilyIndices indices = Utilities::findQueueFamiliesFromDevice(device, surface);
-
 		const bool extensionsSupported = checkDeviceExtensionSupport(device);
 		const vk::PhysicalDeviceFeatures supportedFeatures = device.getFeatures();
 		const vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
+
+		// Log rejection reasons in debug mode
+		if (debug) {
+			const std::string deviceName = deviceProperties.deviceName;
+			if (!indices.isComplete()) {
+				loggerInfo("Device '{}' rejected: incomplete queue families", deviceName);
+			}
+			if (!extensionsSupported) {
+				loggerInfo("Device '{}' rejected: missing required extensions (including VK_EXT_mesh_shader)", deviceName);
+			}
+			if (!supportedFeatures.samplerAnisotropy) {
+				loggerInfo("Device '{}' rejected: no sampler anisotropy support", deviceName);
+			}
+			if (deviceProperties.deviceType != vk::PhysicalDeviceType::eDiscreteGpu) {
+				loggerInfo("Device '{}' rejected: not a discrete GPU (type: {})",
+				           deviceName, vk::to_string(deviceProperties.deviceType));
+			}
+		}
 
 		return indices.isComplete() &&
 			extensionsSupported &&
@@ -369,6 +393,82 @@ namespace core {
 		}
 
 		return true;
+	}
+
+	void Device::queryMeshShaderCapabilities()
+	{
+		// Verify mesh shader extension is available before querying
+		// (Should always be true since VK_EXT_mesh_shader is a required extension,
+		// but defensive check in case requirements change)
+		bool meshShaderExtensionFound = false;
+		for (const auto& ext : physicalDevice.enumerateDeviceExtensionProperties()) {
+			if (strcmp(ext.extensionName.data(), VK_EXT_MESH_SHADER_EXTENSION_NAME) == 0) {
+				meshShaderExtensionFound = true;
+				break;
+			}
+		}
+
+		if (!meshShaderExtensionFound) {
+			loggerWarning("VK_EXT_mesh_shader not available - mesh shader capabilities will be zero");
+			return;
+		}
+
+		// Query mesh shader properties
+		vk::PhysicalDeviceMeshShaderPropertiesEXT meshProps{};
+		vk::PhysicalDeviceProperties2 props2{};
+		props2.pNext = &meshProps;
+		physicalDevice.getProperties2(&props2);
+
+		// Query mesh shader features to confirm what's actually supported
+		vk::PhysicalDeviceMeshShaderFeaturesEXT meshFeatures{};
+		vk::PhysicalDeviceFeatures2 features2{};
+		features2.pNext = &meshFeatures;
+		physicalDevice.getFeatures2(&features2);
+
+		// Populate capabilities struct
+		meshShaderCapabilities.meshShaderSupported = meshFeatures.meshShader;
+		meshShaderCapabilities.taskShaderSupported = meshFeatures.taskShader;
+		meshShaderCapabilities.meshShaderQueriesSupported = meshFeatures.meshShaderQueries;
+
+		// Mesh shader limits
+		meshShaderCapabilities.maxMeshOutputVertices = meshProps.maxMeshOutputVertices;
+		meshShaderCapabilities.maxMeshOutputPrimitives = meshProps.maxMeshOutputPrimitives;
+		meshShaderCapabilities.maxMeshWorkGroupInvocations = meshProps.maxMeshWorkGroupInvocations;
+		meshShaderCapabilities.maxMeshWorkGroupSize = {
+			meshProps.maxMeshWorkGroupSize[0],
+			meshProps.maxMeshWorkGroupSize[1],
+			meshProps.maxMeshWorkGroupSize[2]
+		};
+		meshShaderCapabilities.maxMeshOutputMemorySize = meshProps.maxMeshOutputMemorySize;
+		meshShaderCapabilities.maxMeshPayloadAndOutputMemorySize = meshProps.maxMeshPayloadAndOutputMemorySize;
+
+		// Task shader limits
+		meshShaderCapabilities.maxTaskWorkGroupInvocations = meshProps.maxTaskWorkGroupInvocations;
+		meshShaderCapabilities.maxTaskWorkGroupSize = {
+			meshProps.maxTaskWorkGroupSize[0],
+			meshProps.maxTaskWorkGroupSize[1],
+			meshProps.maxTaskWorkGroupSize[2]
+		};
+		meshShaderCapabilities.maxTaskPayloadSize = meshProps.maxTaskPayloadSize;
+
+		// Preferred sizes
+		meshShaderCapabilities.maxPreferredMeshWorkGroupInvocations = meshProps.maxPreferredMeshWorkGroupInvocations;
+		meshShaderCapabilities.maxPreferredTaskWorkGroupInvocations = meshProps.maxPreferredTaskWorkGroupInvocations;
+
+		if (debug) {
+			loggerInfo("Mesh Shader Capabilities:");
+			loggerInfo("  Mesh shader supported: {}", meshShaderCapabilities.meshShaderSupported);
+			loggerInfo("  Task shader supported: {}", meshShaderCapabilities.taskShaderSupported);
+			loggerInfo("  Max mesh output vertices: {}", meshShaderCapabilities.maxMeshOutputVertices);
+			loggerInfo("  Max mesh output primitives: {}", meshShaderCapabilities.maxMeshOutputPrimitives);
+			loggerInfo("  Max mesh workgroup invocations: {}", meshShaderCapabilities.maxMeshWorkGroupInvocations);
+			loggerInfo("  Max mesh workgroup size: [{}, {}, {}]",
+				meshShaderCapabilities.maxMeshWorkGroupSize[0],
+				meshShaderCapabilities.maxMeshWorkGroupSize[1],
+				meshShaderCapabilities.maxMeshWorkGroupSize[2]);
+			loggerInfo("  Max task workgroup invocations: {}", meshShaderCapabilities.maxTaskWorkGroupInvocations);
+			loggerInfo("  Preferred mesh workgroup invocations: {}", meshShaderCapabilities.maxPreferredMeshWorkGroupInvocations);
+		}
 	}
 
 	DeviceMemoryInfo Device::getDeviceMemoryInfo() const

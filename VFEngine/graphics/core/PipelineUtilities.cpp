@@ -20,7 +20,8 @@ namespace core
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
-		result.pipelineLayout = config.device.createPipelineLayout(pipelineLayoutInfo);
+		// RAII: Use unique handle for automatic cleanup on failure
+		vk::UniquePipelineLayout uniqueLayout = config.device.createPipelineLayoutUnique(pipelineLayoutInfo);
 
 		// Vertex input - simple vec3 positions
 		vk::VertexInputBindingDescription bindingDescription{};
@@ -118,17 +119,16 @@ namespace core
 		pipelineInfo.pMultisampleState = &multisampling;
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
-		pipelineInfo.layout = result.pipelineLayout;
+		pipelineInfo.layout = uniqueLayout.get();
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
 
-		auto createResult = config.device.createGraphicsPipeline(nullptr, pipelineInfo);
-		if (createResult.result != vk::Result::eSuccess)
-		{
-			config.device.destroyPipelineLayout(result.pipelineLayout);
-			throw std::runtime_error("Failed to create wireframe graphics pipeline");
-		}
-		result.pipeline = createResult.value;
+		// RAII: Use unique handle for automatic cleanup on failure
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+
+		// Success: release ownership to result (caller manages lifetime)
+		result.pipelineLayout = uniqueLayout.release();
+		result.pipeline = uniquePipeline.release();
 
 		return result;
 	}
@@ -137,8 +137,9 @@ namespace core
 	{
 		GraphicsPipelineResult result{};
 
-		// Use existing pipeline layout or create a new one
-		bool createdLayout = false;
+		// RAII: Use unique handle for layout if we create it (nullptr if using existing)
+		vk::UniquePipelineLayout uniqueLayout;
+
 		if (config.existingPipelineLayout)
 		{
 			result.pipelineLayout = config.existingPipelineLayout;
@@ -159,8 +160,8 @@ namespace core
 				pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 			}
 
-			result.pipelineLayout = config.device.createPipelineLayout(pipelineLayoutInfo);
-			createdLayout = true;
+			uniqueLayout = config.device.createPipelineLayoutUnique(pipelineLayoutInfo);
+			result.pipelineLayout = uniqueLayout.get();
 		}
 
 		// Vertex input
@@ -259,16 +260,192 @@ namespace core
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
 
-		auto createResult = config.device.createGraphicsPipeline(nullptr, pipelineInfo);
-		if (createResult.result != vk::Result::eSuccess)
+		// RAII: Use unique handle for automatic cleanup on failure
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+
+		// Success: release ownership to result (caller manages lifetime)
+		if (uniqueLayout)
 		{
-			if (createdLayout)
-			{
-				config.device.destroyPipelineLayout(result.pipelineLayout);
-			}
-			throw std::runtime_error("Failed to create graphics pipeline");
+			uniqueLayout.release();  // We already set result.pipelineLayout above
 		}
-		result.pipeline = createResult.value;
+		result.pipeline = uniquePipeline.release();
+
+		return result;
+	}
+
+	MeshShaderPipelineResult PipelineUtilities::createMeshShaderPipeline(const MeshShaderPipelineConfig& config)
+	{
+		// Validate shader stages for mesh shader pipeline
+		bool hasMeshShader = false;
+		bool hasTaskShader = false;
+		bool hasFragmentShader = false;
+		bool hasInvalidStage = false;
+		std::string invalidStageName;
+
+		for (const auto& stage : config.shaderStages)
+		{
+			switch (stage.stage)
+			{
+			case vk::ShaderStageFlagBits::eMeshEXT:
+				hasMeshShader = true;
+				break;
+			case vk::ShaderStageFlagBits::eTaskEXT:
+				hasTaskShader = true;
+				break;
+			case vk::ShaderStageFlagBits::eFragment:
+				hasFragmentShader = true;
+				break;
+			case vk::ShaderStageFlagBits::eVertex:
+			case vk::ShaderStageFlagBits::eGeometry:
+			case vk::ShaderStageFlagBits::eTessellationControl:
+			case vk::ShaderStageFlagBits::eTessellationEvaluation:
+				hasInvalidStage = true;
+				invalidStageName = vk::to_string(stage.stage);
+				break;
+			default:
+				break;
+			}
+		}
+
+		if (!hasMeshShader)
+		{
+			throw std::runtime_error("Mesh shader pipeline requires a mesh shader stage (eMeshEXT)");
+		}
+
+		if (hasInvalidStage)
+		{
+			throw std::runtime_error("Mesh shader pipeline cannot contain " + invalidStageName +
+			                         " - only Task, Mesh, and Fragment shaders are allowed");
+		}
+
+		// Note: Task shader is optional, Fragment shader is usually present but not strictly required
+		// (e.g., depth-only passes might skip fragment shader)
+
+		MeshShaderPipelineResult result{};
+
+		// RAII: Use unique handle for layout if we create it (nullptr if using existing)
+		vk::UniquePipelineLayout uniqueLayout;
+
+		if (config.existingPipelineLayout)
+		{
+			result.pipelineLayout = config.existingPipelineLayout;
+		}
+		else
+		{
+			vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+			pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(config.descriptorSetLayouts.size());
+			pipelineLayoutInfo.pSetLayouts = config.descriptorSetLayouts.empty() ? nullptr : config.descriptorSetLayouts.data();
+
+			vk::PushConstantRange pushConstantRange{};
+			if (config.pushConstantSize > 0)
+			{
+				pushConstantRange.stageFlags = config.pushConstantStages;
+				pushConstantRange.offset = 0;
+				pushConstantRange.size = config.pushConstantSize;
+				pipelineLayoutInfo.pushConstantRangeCount = 1;
+				pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+			}
+
+			uniqueLayout = config.device.createPipelineLayoutUnique(pipelineLayoutInfo);
+			result.pipelineLayout = uniqueLayout.get();
+		}
+
+		// NOTE: Mesh shader pipelines do NOT use vertex input or input assembly states
+
+		// Viewport and scissor
+		vk::Viewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = static_cast<float>(config.extent.width);
+		viewport.height = static_cast<float>(config.extent.height);
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		vk::Rect2D scissor{};
+		scissor.offset = vk::Offset2D{0, 0};
+		scissor.extent = config.extent;
+
+		vk::PipelineViewportStateCreateInfo viewportState{};
+		viewportState.viewportCount = 1;
+		viewportState.pViewports = &viewport;
+		viewportState.scissorCount = 1;
+		viewportState.pScissors = &scissor;
+
+		// Rasterization
+		vk::PipelineRasterizationStateCreateInfo rasterizer{};
+		rasterizer.depthClampEnable = VK_FALSE;
+		rasterizer.rasterizerDiscardEnable = VK_FALSE;
+		rasterizer.polygonMode = config.polygonMode;
+		rasterizer.lineWidth = 1.0f;
+		rasterizer.cullMode = config.cullMode;
+		rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
+		rasterizer.depthBiasEnable = VK_FALSE;
+
+		// Multisampling
+		vk::PipelineMultisampleStateCreateInfo multisampling{};
+		multisampling.sampleShadingEnable = VK_FALSE;
+		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+		// Depth stencil
+		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+		depthStencil.depthTestEnable = config.depthTestEnable ? VK_TRUE : VK_FALSE;
+		depthStencil.depthWriteEnable = config.depthWriteEnable ? VK_TRUE : VK_FALSE;
+		depthStencil.depthCompareOp = config.depthCompareOp;
+		depthStencil.depthBoundsTestEnable = VK_FALSE;
+		depthStencil.stencilTestEnable = VK_FALSE;
+
+		// Color blending
+		vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
+		colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
+		                                      vk::ColorComponentFlagBits::eG |
+		                                      vk::ColorComponentFlagBits::eB |
+		                                      vk::ColorComponentFlagBits::eA;
+
+		if (config.blendEnable)
+		{
+			colorBlendAttachment.blendEnable = VK_TRUE;
+			colorBlendAttachment.srcColorBlendFactor = config.srcColorBlendFactor;
+			colorBlendAttachment.dstColorBlendFactor = config.dstColorBlendFactor;
+			colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
+			colorBlendAttachment.srcAlphaBlendFactor = config.srcAlphaBlendFactor;
+			colorBlendAttachment.dstAlphaBlendFactor = config.dstAlphaBlendFactor;
+			colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+		}
+		else
+		{
+			colorBlendAttachment.blendEnable = VK_FALSE;
+		}
+
+		vk::PipelineColorBlendStateCreateInfo colorBlending{};
+		colorBlending.logicOpEnable = VK_FALSE;
+		colorBlending.attachmentCount = 1;
+		colorBlending.pAttachments = &colorBlendAttachment;
+
+		// Create mesh shader pipeline
+		// Key difference: pVertexInputState and pInputAssemblyState are nullptr
+		vk::GraphicsPipelineCreateInfo pipelineInfo{};
+		pipelineInfo.stageCount = static_cast<uint32_t>(config.shaderStages.size());
+		pipelineInfo.pStages = config.shaderStages.data();
+		pipelineInfo.pVertexInputState = nullptr;    // Not used for mesh shaders
+		pipelineInfo.pInputAssemblyState = nullptr;  // Not used for mesh shaders
+		pipelineInfo.pViewportState = &viewportState;
+		pipelineInfo.pRasterizationState = &rasterizer;
+		pipelineInfo.pMultisampleState = &multisampling;
+		pipelineInfo.pDepthStencilState = &depthStencil;
+		pipelineInfo.pColorBlendState = &colorBlending;
+		pipelineInfo.layout = result.pipelineLayout;
+		pipelineInfo.renderPass = config.renderPass;
+		pipelineInfo.subpass = 0;
+
+		// RAII: Use unique handle for automatic cleanup on failure
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+
+		// Success: release ownership to result (caller manages lifetime)
+		if (uniqueLayout)
+		{
+			uniqueLayout.release();  // We already set result.pipelineLayout above
+		}
+		result.pipeline = uniquePipeline.release();
 
 		return result;
 	}
