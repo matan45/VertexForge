@@ -56,6 +56,7 @@ namespace render::gpudriven
         bool lodSelectionEnabled = true;
         bool occlusionCullingEnabled = true;
         bool meshShaderSupported = false;
+        uint32_t currentViewMode = 0;  // 0=Color, 1=Meshlet, 2=LOD
 
         vk::ImageView cachedHiZView;
         vk::Sampler cachedHiZSampler;
@@ -114,6 +115,9 @@ namespace render::gpudriven
         bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
 
         bool isMeshShaderSupported() const { return meshShaderSupported; }
+
+        void setViewMode(uint32_t mode) { currentViewMode = mode; }
+        uint32_t getViewMode() const { return currentViewMode; }
 
         void updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels);
 

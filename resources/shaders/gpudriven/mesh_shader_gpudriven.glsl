@@ -449,7 +449,7 @@ layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 // Push constants (shared with task/mesh shaders)
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;    // Used by task shader
-    uint padding;
+    uint viewMode;         // 0=Color, 1=Meshlet, 2=LOD visualization mode
     float screenWidth;     // Screen width in pixels
     float screenHeight;    // Screen height in pixels
 } pc;
@@ -463,14 +463,10 @@ const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 // Object flags (must match ObjectFlags namespace in GPUDrivenTypes.hpp)
 const uint FLAG_ALPHA_MASK = 1u << 4;
 
-// Debug mode: set to 1 to visualize LOD levels with colors
-const int DEBUG_VISUALIZE_LOD = 1;
-
-// Debug mode: set to 1 to visualize vertex positions/normals
-const int DEBUG_VISUALIZE_POSITIONS = 0;
-
-// Debug mode: set to 1 to visualize each meshlet with a unique color
-const int DEBUG_VISUALIZE_MESHLETS = 0;
+// View modes (controlled via push constant pc.viewMode):
+// 0 = Color (normal PBR rendering)
+// 1 = Meshlet (visualize each meshlet with unique color)
+// 2 = LOD (color-coded by LOD level)
 
 // Helper: Check if texture index is valid
 bool isValidTexture(uint index) {
@@ -650,20 +646,8 @@ void main() {
     // Gamma correction
     color = pow(color, vec3(1.0/2.2));
 
-    // Debug: visualize LOD levels with colors
-    if (DEBUG_VISUALIZE_LOD != 0) {
-        vec3 lodColors[4] = vec3[4](
-            vec3(0.0, 1.0, 0.0),   // LOD0: Green
-            vec3(1.0, 1.0, 0.0),   // LOD1: Yellow
-            vec3(1.0, 0.5, 0.0),   // LOD2: Orange
-            vec3(1.0, 0.0, 0.0)    // LOD3: Red
-        );
-        uint lod = min(drawData.lodLevel, 3u);
-        color = mix(color, lodColors[lod], 0.5);
-    }
-
-    // Debug: visualize each meshlet with a unique color
-    if (DEBUG_VISUALIZE_MESHLETS != 0) {
+    // Meshlet view mode (pc.viewMode == 1): visualize each meshlet with a unique color
+    if (pc.viewMode == 1u) {
         // Generate a unique color per meshlet using hash-based approach
         uint h = fragMeshletIndex;
         h = ((h >> 16) ^ h) * 0x45d9f3b;
@@ -680,36 +664,16 @@ void main() {
         color = meshletColor;
     }
 
-    // Debug: visualize world positions as colors (helps debug vertex loading)
-    if (DEBUG_VISUALIZE_POSITIONS != 0) {
-        // Map world position to colors (assuming positions in -10 to 10 range)
-        vec3 posColor = (fragWorldPos + 10.0) / 20.0;
-        posColor = clamp(posColor, 0.0, 1.0);
-
-        // Normal visualization: map from [-1,1] to [0,1]
-        vec3 normalColor = fragNormal * 0.5 + 0.5;
-
-        // Vertex index visualization: use modulo to create color bands
-        // This helps identify if all vertices have the same index (would be single color)
-        float indexVal = float(fragDebugVertexIndex);
-        vec3 indexColor = vec3(
-            fract(indexVal * 0.0001),           // R: slow variation
-            fract(indexVal * 0.001),            // G: medium variation
-            fract(indexVal * 0.01)              // B: fast variation
+    // LOD view mode (pc.viewMode == 2): visualize LOD levels with colors
+    if (pc.viewMode == 2u) {
+        vec3 lodColors[4] = vec3[4](
+            vec3(0.0, 1.0, 0.0),   // LOD0: Green
+            vec3(1.0, 1.0, 0.0),   // LOD1: Yellow
+            vec3(1.0, 0.5, 0.0),   // LOD2: Orange
+            vec3(1.0, 0.0, 0.0)    // LOD3: Red
         );
-
-        // Split screen into 3 sections for comparison
-        float screenX = gl_FragCoord.x / pc.screenWidth;
-        if (screenX < 0.33) {
-            // Left: show world position as color
-            color = posColor;
-        } else if (screenX < 0.66) {
-            // Middle: show normals as color
-            color = normalColor;
-        } else {
-            // Right: show vertex index as color (should vary if vertices are different)
-            color = indexColor;
-        }
+        uint lod = min(drawData.lodLevel, 3u);
+        color = mix(color, lodColors[lod], 0.5);
     }
 
     outColor = vec4(color, alpha);

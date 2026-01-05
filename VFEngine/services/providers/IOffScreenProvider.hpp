@@ -141,6 +141,10 @@ namespace services {
         virtual void setShowGrid(bool show) = 0;
         virtual bool getShowGrid() const = 0;
         virtual void prepareGrid() = 0;
+
+        // View Mode API
+        virtual void setViewMode(uint32_t mode) = 0;
+        virtual uint32_t getViewMode() const = 0;
     };
 
 }

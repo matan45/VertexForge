@@ -6,6 +6,7 @@
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/SwapChain.hpp"
 #include "print/Logger.hpp"
 #include <array>
 #include <unordered_map>
@@ -469,6 +470,7 @@ namespace render::gpudriven {
             {
                 MeshShaderPushConstants pushConstants{};
                 pushConstants.baseDrawIndex = 0;
+                pushConstants.viewMode = currentViewMode;
                 pushConstants.screenWidth = static_cast<float>(extent.width);
                 pushConstants.screenHeight = static_cast<float>(extent.height);
                 cmd.pushConstants(
@@ -490,6 +492,7 @@ namespace render::gpudriven {
                 // The task shader uses: drawIndex = pc.baseDrawIndex + gl_DrawID
                 MeshShaderPushConstants pushConstants{};
                 pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, shaderGroup) * commandsPerSection;
+                pushConstants.viewMode = currentViewMode;
                 pushConstants.screenWidth = static_cast<float>(extent.width);
                 pushConstants.screenHeight = static_cast<float>(extent.height);
 

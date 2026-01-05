@@ -184,4 +184,14 @@ namespace controllers {
 	{
 		offScreenController->prepareGrid();
 	}
+
+	void OffScreen::setViewMode(uint32_t mode)
+	{
+		offScreenController->setViewMode(mode);
+	}
+
+	uint32_t OffScreen::getViewMode() const
+	{
+		return offScreenController->getViewMode();
+	}
 }
