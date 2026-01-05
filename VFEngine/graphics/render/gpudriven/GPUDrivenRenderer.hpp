@@ -7,7 +7,8 @@
 #include "GPUCullLODPipeline.hpp"
 #include "GPUDrivenShaderCache.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
-#include "GPUDrivenPipeline.hpp"
+#include "MeshShaderPipeline.hpp"
+#include "MeshletBuffer.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -46,13 +47,15 @@ namespace render::gpudriven
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
         std::unique_ptr<GPUDrivenShaderCache> customShaderCache;
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
-        std::unique_ptr<GPUDrivenPipeline> pipeline;
+        std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
+        std::unique_ptr<MeshletBuffer> meshletBuffer;
 
         bool initialized = false;
         bool enabled = false;
         bool frustumCullingEnabled = true;
         bool lodSelectionEnabled = true;
         bool occlusionCullingEnabled = false; // Disabled by default until Hi-Z is set
+        bool meshShaderSupported = false;
 
         vk::ImageView cachedHiZView;
         vk::Sampler cachedHiZSampler;
@@ -109,6 +112,8 @@ namespace render::gpudriven
 
         void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
         bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
+
+        bool isMeshShaderSupported() const { return meshShaderSupported; }
 
         void updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels);
 

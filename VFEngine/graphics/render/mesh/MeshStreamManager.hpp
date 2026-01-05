@@ -25,6 +25,7 @@ namespace resource
 namespace render::gpudriven
 {
     class MergedMeshBuffer;
+    class MeshletBuffer;
 }
 
 namespace render::mesh
@@ -82,6 +83,7 @@ namespace render::mesh
     private:
         core::Device& device;
         gpudriven::MergedMeshBuffer& mergedBuffer;
+        gpudriven::MeshletBuffer* meshletBuffer = nullptr;  // Optional, for mesh shader rendering
         
         std::unordered_map<std::string, MeshStreamingState> meshStates;
         mutable std::mutex meshStatesMutex;
@@ -135,6 +137,9 @@ namespace render::mesh
         void setMaxBytesPerFrame(size_t bytes) { maxBytesPerFrame = bytes; }
         void setMaxPendingReads(uint32_t count) { maxPendingReads = count; }
         void setMaxPendingUploads(uint32_t count) { maxPendingUploads = count; }
+
+        // Set meshlet buffer for mesh shader rendering (optional)
+        void setMeshletBuffer(gpudriven::MeshletBuffer* buffer) { meshletBuffer = buffer; }
 
         const Stats& getStats() const { return stats; }
 

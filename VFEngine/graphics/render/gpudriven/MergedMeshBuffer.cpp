@@ -639,7 +639,7 @@ namespace render::gpudriven
         obj.modelMatrix = meshRender.modelMatrix;
         obj.boundingSphere = submeshLoc.boundingSphere;
 
-        // LOD data
+        // LOD data (vertex/index based)
         for (uint32_t i = 0; i < LOD_LEVEL_COUNT; ++i)
         {
             glm::uvec4& lodData = (i == 0)
@@ -656,6 +656,33 @@ namespace render::gpudriven
                 submeshLoc.lods[i].vertexCount
             );
         }
+
+        // Meshlet LOD data (for mesh shader path)
+        // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
+        obj.meshletLod0 = glm::uvec4(
+            submeshLoc.meshletLods[0].meshletOffset,
+            submeshLoc.meshletLods[0].meshletCount,
+            submeshLoc.meshletLods[0].baseVertexOffset,
+            0
+        );
+        obj.meshletLod1 = glm::uvec4(
+            submeshLoc.meshletLods[1].meshletOffset,
+            submeshLoc.meshletLods[1].meshletCount,
+            submeshLoc.meshletLods[1].baseVertexOffset,
+            0
+        );
+        obj.meshletLod2 = glm::uvec4(
+            submeshLoc.meshletLods[2].meshletOffset,
+            submeshLoc.meshletLods[2].meshletCount,
+            submeshLoc.meshletLods[2].baseVertexOffset,
+            0
+        );
+        obj.meshletLod3 = glm::uvec4(
+            submeshLoc.meshletLods[3].meshletOffset,
+            submeshLoc.meshletLods[3].meshletCount,
+            submeshLoc.meshletLods[3].baseVertexOffset,
+            0
+        );
 
         float bias = meshRender.lodBias;
         obj.lodThresholds = glm::vec4(

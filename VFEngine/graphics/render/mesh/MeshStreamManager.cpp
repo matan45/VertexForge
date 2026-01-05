@@ -1,7 +1,9 @@
 #include "MeshStreamManager.hpp"
 #include "../gpudriven/MergedMeshBuffer.hpp"
+#include "../gpudriven/MeshletBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "resource/MeshletTypes.hpp"
 #include "resource/Types.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
@@ -69,7 +71,7 @@ namespace render::mesh
         }
 
         auto& state = it->second;
-        
+
         state.handle = resource::MeshStreamResource::openStream(meshPath);
         if (!state.handle)
         {
@@ -78,7 +80,7 @@ namespace render::mesh
         }
 
         state.headerParsed = true;
-        
+
         const auto& header = state.handle->getHeader();
         auto* meshInfo = mergedBuffer.reserveMesh(meshPath, header);
         if (!meshInfo)
@@ -88,7 +90,39 @@ namespace render::mesh
             state.headerParsed = false;
             return;
         }
-        
+
+        // Reserve meshlet buffer space if mesh shader rendering is enabled
+        if (meshletBuffer && state.handle->hasMeshletData())
+        {
+            auto* meshletAlloc = meshletBuffer->reserveMeshlets(meshPath, header);
+            if (meshletAlloc)
+            {
+                loggerInfo("MeshStreamManager: Reserved meshlet space for {}", meshPath);
+
+                // Populate meshlet LOD info in SubmeshLocation
+                for (uint32_t subIdx = 0; subIdx < header.numSubmeshes; ++subIdx)
+                {
+                    const auto& submeshInfo = header.submeshes[subIdx];
+                    auto* loc = mergedBuffer.getSubmeshLocationMutable(meshPath, submeshInfo.name, subIdx);
+                    if (loc)
+                    {
+                        const auto* alloc = meshletBuffer->getAllocation(meshPath, submeshInfo.name, subIdx);
+                        if (alloc)
+                        {
+                            for (uint32_t lod = 0; lod < gpudriven::LOD_LEVEL_COUNT; ++lod)
+                            {
+                                loc->meshletLods[lod] = meshletBuffer->getMeshletLODInfo(*alloc, lod);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                loggerWarning("MeshStreamManager: Failed to reserve meshlet space for {}, mesh shader rendering will use fallback", meshPath);
+            }
+        }
+
         scheduleInitialLODs(meshPath);
     }
 
@@ -220,6 +254,52 @@ namespace render::mesh
         );
 
         if (!uploaded) return;
+
+        // Upload meshlet data when first LOD (LOD3) is loaded
+        // This uploads meshlet data for ALL LODs at once
+        if (result.lodLevel == 3 && meshletBuffer)
+        {
+            std::lock_guard<std::mutex> lock(meshStatesMutex);
+            auto it = meshStates.find(result.meshPath);
+            if (it != meshStates.end() && it->second.handle && it->second.handle->hasMeshletData())
+            {
+                resource::SubmeshMeshletData meshletData;
+                if (it->second.handle->readMeshletData(result.submeshIndex, meshletData))
+                {
+                    // Get base vertex offset from the submesh location
+                    const auto* loc = mergedBuffer.getSubmeshLocation(
+                        result.meshPath, result.submeshName, result.submeshIndex);
+
+                    if (loc && meshletData.hasMeshletData())
+                    {
+                        // Upload meshlet data for all LODs that have both vertex data AND meshlet allocations
+                        for (uint32_t lod = 0; lod < gpudriven::LOD_LEVEL_COUNT; ++lod)
+                        {
+                            const auto& lodInfo = loc->lods[lod];
+                            // Check if this LOD has both vertex data and meshlet allocation
+                            if (lodInfo.vertexCount > 0 && loc->meshletLods[lod].meshletCount > 0)
+                            {
+                                meshletBuffer->uploadMeshletData(
+                                    result.meshPath,
+                                    result.submeshName,
+                                    result.submeshIndex,
+                                    lod,
+                                    meshletData,
+                                    lodInfo.vertexOffset  // Base vertex offset in merged buffer
+                                );
+                            }
+                        }
+                        loggerInfo("MeshStreamManager: Uploaded meshlet data for {}:{}",
+                                    result.meshPath, result.submeshName);
+                    }
+                }
+                else
+                {
+                    loggerWarning("MeshStreamManager: Failed to read meshlet data for {}:{}",
+                                   result.meshPath, result.submeshName);
+                }
+            }
+        }
 
         PendingUpload pending;
         pending.meshPath = result.meshPath;

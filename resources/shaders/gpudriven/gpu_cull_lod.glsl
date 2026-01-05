@@ -4,10 +4,13 @@
 // GPU-Driven Culling + LOD Selection Compute Shader
 //
 // This shader performs frustum culling and LOD selection on the GPU,
-// outputting VkDrawIndexedIndirectCommand and PerDrawData for each visible object.
-// The result is a compacted list of draw commands for indirect rendering.
+// outputting VkDrawMeshTasksIndirectCommandEXT and PerDrawData for each visible object.
+// The result is a compacted list of mesh shader dispatch commands for indirect rendering.
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Task shader workgroup size (must match task_gpudriven.glsl)
+const uint TASK_WORKGROUP_SIZE = 32;
 
 // Constants (must match GPUDrivenTypes.hpp)
 const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
@@ -22,7 +25,7 @@ const uint FLAG_NO_OCCLUDE    = 1u << 7;
 const uint FLAG_UNIFORM_SCALE = 1u << 9;
 
 // ============================================================================
-// GPU Object Data (256 bytes, must match GPUObjectData in GPUDrivenTypes.hpp)
+// GPU Object Data (320 bytes, must match GPUObjectData in GPUDrivenTypes.hpp)
 // ============================================================================
 struct GPUObjectData {
     mat4 modelMatrix;           // 64 bytes
@@ -47,10 +50,19 @@ struct GPUObjectData {
     uint entityId;              // 4 bytes
     uint availableLODMask;      // 4 bytes - bits 0-3: which LODs are ready for streaming
     uint shaderGroupIndex;      // 4 bytes - 0 = default PBR, 1+ = custom shaders
+    // 256 bytes up to here
+
+    // Meshlet LOD data - meshlet locations in meshlet buffer
+    // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
+    uvec4 meshletLod0;          // 16 bytes
+    uvec4 meshletLod1;          // 16 bytes
+    uvec4 meshletLod2;          // 16 bytes
+    uvec4 meshletLod3;          // 16 bytes
+    // Total: 320 bytes
 };
 
 // ============================================================================
-// Per-Draw Data (224 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
+// Per-Draw Data (240 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
 // ============================================================================
 struct PerDrawData {
     mat4 modelMatrix;           // 64 bytes
@@ -69,19 +81,24 @@ struct PerDrawData {
 
     uint lodLevel;              // 4 bytes - selected LOD (for debug)
     uint shaderGroupIndex;      // 4 bytes - 0 = default PBR, 1+ = custom shaders
+    // Meshlet dispatch info (for mesh shader path)
+    uint meshletOffset;         // 4 bytes - first meshlet index in meshlet buffer
+    uint meshletCount;          // 4 bytes - number of meshlets for selected LOD
+
+    uint baseVertexOffset;      // 4 bytes - base vertex offset in merged vertex buffer
     uint padding1;              // 4 bytes
     uint padding2;              // 4 bytes
+    uint padding3;              // 4 bytes
+    // Total: 240 bytes
 };
 
 // ============================================================================
-// VkDrawIndexedIndirectCommand (20 bytes)
+// VkDrawMeshTasksIndirectCommandEXT (12 bytes)
 // ============================================================================
-struct DrawCommand {
-    uint indexCount;
-    uint instanceCount;
-    uint firstIndex;
-    int  vertexOffset;
-    uint firstInstance;
+struct MeshTasksCommand {
+    uint groupCountX;   // Number of task shader workgroups in X (ceil(meshletCount / TASK_WORKGROUP_SIZE))
+    uint groupCountY;   // Always 1
+    uint groupCountZ;   // Always 1
 };
 
 // ============================================================================
@@ -138,12 +155,12 @@ uint getSectionIndex(uint batch, uint shaderGroup) {
     return batch * camera.shaderGroupCount + shaderGroup;
 }
 
-// Output: Draw commands
+// Output: Mesh shader dispatch commands
 layout(std430, set = 0, binding = 2) writeonly buffer DrawCommandBuffer {
-    DrawCommand drawCommands[];
+    MeshTasksCommand drawCommands[];
 };
 
-// Output: Per-draw data (for vertex/fragment shaders)
+// Output: Per-draw data (for task/mesh shaders)
 layout(std430, set = 0, binding = 3) writeonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
@@ -175,13 +192,24 @@ layout(set = 0, binding = 5) uniform sampler2D hiZTexture;
 // Helper Functions
 // ============================================================================
 
-// Get LOD data for a given level
+// Get LOD data for a given level (vertex/index based)
 uvec4 getLODData(GPUObjectData obj, uint level) {
     switch (level) {
         case 0: return obj.lod0Data;
         case 1: return obj.lod1Data;
         case 2: return obj.lod2Data;
         default: return obj.lod3Data;
+    }
+}
+
+// Get meshlet LOD data for a given level
+// Returns uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
+uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
+    switch (level) {
+        case 0: return obj.meshletLod0;
+        case 1: return obj.meshletLod1;
+        case 2: return obj.meshletLod2;
+        default: return obj.meshletLod3;
     }
 }
 
@@ -427,31 +455,32 @@ void main() {
         return;
     }
 
-    // Get LOD geometry data
-    uvec4 lodData = getLODData(obj, lodLevel);
-    uint indexCount = lodData.z;
-    uint vertexCount = lodData.w;
+    // Get meshlet LOD data: (meshletOffset, meshletCount, baseVertexOffset, padding)
+    uvec4 meshletLodData = getMeshletLODData(obj, lodLevel);
+    uint meshletOffset = meshletLodData.x;
+    uint meshletCount = meshletLodData.y;
+    uint baseVertexOffset = meshletLodData.z;
 
-    // Additional validation: fallback to lower LODs if geometry data is invalid
-    // (This handles edge cases where LOD is marked ready but has no geometry)
-    while (lodLevel > 0u && (indexCount == 0u || vertexCount == 0u)) {
+    // Additional validation: fallback to lower LODs if meshlet data is invalid
+    while (lodLevel > 0u && meshletCount == 0u) {
         lodLevel--;
         // Check if this lower LOD is available
         if ((obj.availableLODMask & (1u << lodLevel)) == 0u) {
             continue;  // This LOD not available, try next
         }
-        lodData = getLODData(obj, lodLevel);
-        indexCount = lodData.z;
-        vertexCount = lodData.w;
+        meshletLodData = getMeshletLODData(obj, lodLevel);
+        meshletOffset = meshletLodData.x;
+        meshletCount = meshletLodData.y;
+        baseVertexOffset = meshletLodData.z;
     }
 
-    // Skip if no valid LOD has geometry
-    if (indexCount == 0u) {
+    // Skip if no valid LOD has meshlet data
+    if (meshletCount == 0u) {
         return;
     }
 
     // ========================================
-    // Emit Draw Command (Section-Aware: batch x shaderGroup)
+    // Emit Mesh Shader Dispatch Command (Section-Aware: batch x shaderGroup)
     // ========================================
 
     // Atomically allocate a draw slot within this section
@@ -475,18 +504,20 @@ void main() {
     // Layout: [Batch0_Group0][Batch0_Group1]...[BatchN_GroupM]
     uint globalDrawIndex = sectionIndex * commandsPerSection + localDrawIndex;
 
-    // Write draw command at global index
-    drawCommands[globalDrawIndex].indexCount = indexCount;
-    drawCommands[globalDrawIndex].instanceCount = 1;
-    drawCommands[globalDrawIndex].firstIndex = lodData.y;   // indexOffset
-    drawCommands[globalDrawIndex].vertexOffset = int(lodData.x);  // vertexOffset
-    drawCommands[globalDrawIndex].firstInstance = globalDrawIndex; // For fetching per-draw data
+    // Calculate task shader workgroup count
+    // Each task workgroup processes TASK_WORKGROUP_SIZE meshlets
+    uint taskGroupCount = (meshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
 
-    // Write per-draw data at global index (for vertex/fragment shaders)
+    // Write mesh tasks dispatch command at global index
+    drawCommands[globalDrawIndex].groupCountX = taskGroupCount;
+    drawCommands[globalDrawIndex].groupCountY = 1u;
+    drawCommands[globalDrawIndex].groupCountZ = 1u;
+
+    // Write per-draw data at global index (for task/mesh shaders)
     perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
 
     // Pre-compute normal matrix (transpose of inverse of upper-left 3x3)
-    // Done once per object here instead of per-vertex in the vertex shader
+    // Done once per object here instead of per-vertex in the mesh shader
     mat3 modelMat3 = mat3(obj.modelMatrix);
     mat3 normalMat3;
 
@@ -512,6 +543,11 @@ void main() {
     perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
     perDrawData[globalDrawIndex].lodLevel = lodLevel;
     perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
+    // Meshlet dispatch info for task shader
+    perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
+    perDrawData[globalDrawIndex].meshletCount = meshletCount;
+    perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
     perDrawData[globalDrawIndex].padding1 = 0u;
     perDrawData[globalDrawIndex].padding2 = 0u;
+    perDrawData[globalDrawIndex].padding3 = 0u;
 }

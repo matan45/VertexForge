@@ -242,6 +242,7 @@ namespace core {
 
 		vk::PhysicalDeviceVulkan13Features vulkan13Features{};
 		vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
+		vulkan13Features.maintenance4 = VK_TRUE;  // Required for mesh shader LocalSizeId
 		vulkan13Features.pNext = &vulkan12Features;  // Chain Vulkan 1.2 features
 
 		// Mesh shader features (VK_EXT_mesh_shader)

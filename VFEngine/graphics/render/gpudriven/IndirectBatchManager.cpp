@@ -26,7 +26,7 @@ namespace render::gpudriven {
 
         // Use 64-bit arithmetic to prevent overflow in size calculations
         vk::DeviceSize totalCommands = static_cast<vk::DeviceSize>(totalSections) * commandsPerSection;
-        vk::DeviceSize drawCommandSize = totalCommands * sizeof(DrawIndexedIndirectCommand);
+        vk::DeviceSize drawCommandSize = totalCommands * sizeof(MeshTasksIndirectCommand);
         vk::DeviceSize drawCountSize = static_cast<vk::DeviceSize>(totalSections) * sizeof(BatchDrawStats);
         vk::DeviceSize perDrawDataSize = totalCommands * sizeof(PerDrawData);
         vk::DeviceSize stagingSize = drawCountSize;
@@ -276,9 +276,9 @@ namespace render::gpudriven {
 
     void IndirectBatchManager::insertBarriersAfterCompute(vk::CommandBuffer cmd)
     {
-        
         std::array<vk::BufferMemoryBarrier, 3> barriers;
-        
+
+        // Draw command buffer: Compute shader write → Indirect command read
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -286,7 +286,8 @@ namespace render::gpudriven {
         barriers[0].buffer = combinedDrawCommandBuffer;
         barriers[0].offset = 0;
         barriers[0].size = VK_WHOLE_SIZE;
-        
+
+        // Draw count buffer: Compute shader write → Indirect command read
         barriers[1].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[1].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -294,7 +295,8 @@ namespace render::gpudriven {
         barriers[1].buffer = combinedDrawCountBuffer;
         barriers[1].offset = 0;
         barriers[1].size = VK_WHOLE_SIZE;
-        
+
+        // Per-draw data buffer: Compute shader write → Task/Mesh shader read
         barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderRead;
         barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -303,9 +305,10 @@ namespace render::gpudriven {
         barriers[2].offset = 0;
         barriers[2].size = VK_WHOLE_SIZE;
 
+        // Mesh shader path: ComputeShader → DrawIndirect + TaskShader
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,
-            vk::PipelineStageFlagBits::eDrawIndirect | vk::PipelineStageFlagBits::eVertexShader,
+            vk::PipelineStageFlagBits::eDrawIndirect | vk::PipelineStageFlagBits::eTaskShaderEXT,
             {},
             {},
             barriers,

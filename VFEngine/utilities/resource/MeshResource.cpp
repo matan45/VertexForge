@@ -88,6 +88,7 @@ namespace resource
 
         // Determine format version
         bool isLODFormat = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 3);
+        bool hasMeshlets = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 4);
 
         if (!isLODFormat)
         {
@@ -139,8 +140,39 @@ namespace resource
                     return result;
                 }
             }
+
+            // Skip meshlet data if present (v0.0.4+)
+            if (hasMeshlets)
+            {
+                // Read per-LOD meshlet headers to calculate skip size
+                uint32_t totalMeshlets = 0;
+                uint32_t totalVertexIndices = 0;
+                uint32_t totalPrimitives = 0;
+
+                for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+                {
+                    uint32_t meshletCount = endian::readLE<uint32_t>(inFile);
+                    uint32_t vertexCount = endian::readLE<uint32_t>(inFile);
+                    uint32_t primitiveCount = endian::readLE<uint32_t>(inFile);
+                    totalMeshlets += meshletCount;
+                    totalVertexIndices += vertexCount;
+                    totalPrimitives += primitiveCount;
+                }
+
+                // Skip meshlet descriptors + bounds (44 bytes each)
+                // Skip vertex indices (4 bytes each)
+                // Skip primitive data (4 bytes each)
+                size_t skipBytes = totalMeshlets * 44 + totalVertexIndices * 4 + totalPrimitives * 4;
+                inFile.seekg(skipBytes, std::ios::cur);
+
+                if (inFile.fail())
+                {
+                    vfLogError("Failed to skip meshlet data for mesh {}", meshIdx);
+                    return result;
+                }
+            }
         }
-        
+
         vfLogInfo("Loaded mesh file with {} meshes (LOD format v{}.{}.{}): {}",
                   result.numberOfMeshes, majorVersion, minorVersion, patchVersion, path);
 

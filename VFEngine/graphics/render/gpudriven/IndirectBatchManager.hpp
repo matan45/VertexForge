@@ -67,7 +67,7 @@ namespace render::gpudriven {
         vk::Buffer getCombinedPerDrawDataBuffer() const { return combinedPerDrawDataBuffer; }
 
         vk::DeviceSize getCombinedDrawCommandBufferSize() const {
-            return batchCount * shaderGroupCount * commandsPerSection * sizeof(DrawIndexedIndirectCommand);
+            return batchCount * shaderGroupCount * commandsPerSection * sizeof(MeshTasksIndirectCommand);
         }
         vk::DeviceSize getCombinedDrawCountBufferSize() const {
             return batchCount * shaderGroupCount * sizeof(BatchDrawStats);
@@ -80,7 +80,7 @@ namespace render::gpudriven {
             return batch * shaderGroupCount + shaderGroup;
         }
         vk::DeviceSize getDrawCommandOffset(uint32_t batch, uint32_t shaderGroup) const {
-            return getSectionIndex(batch, shaderGroup) * commandsPerSection * sizeof(DrawIndexedIndirectCommand);
+            return getSectionIndex(batch, shaderGroup) * commandsPerSection * sizeof(MeshTasksIndirectCommand);
         }
         vk::DeviceSize getDrawCountOffset(uint32_t batch, uint32_t shaderGroup) const {
             return getSectionIndex(batch, shaderGroup) * sizeof(BatchDrawStats);

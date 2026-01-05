@@ -71,18 +71,46 @@ namespace render::gpudriven {
         cameraBuffer = std::make_unique<GPUDrivenCameraBuffer>(device, swapChain);
         cameraBuffer->init();
 
-        // Create graphics pipeline for GPU-driven rendering
-        pipeline = std::make_unique<GPUDrivenPipeline>(device, swapChain);
-        pipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(), renderPass);
+        // Check mesh shader support
+        const auto& meshCaps = device.getMeshShaderCapabilities();
+        meshShaderSupported = meshCaps.meshShaderSupported && meshCaps.taskShaderSupported;
 
-        // Initialize custom shader cache for GPU-driven compatible material shaders
-        customShaderCache = std::make_unique<GPUDrivenShaderCache>(device, swapChain);
-        customShaderCache->init(
-            iblDescriptorSetLayout,
-            pipeline->getPerDrawDataLayout(),
-            bindlessTextures->getDescriptorSetLayout(),
-            renderPass
-        );
+        if (meshShaderSupported)
+        {
+            loggerInfo("GPUDrivenRenderer: Mesh shader supported - using Task+Mesh shader pipeline");
+
+            // Initialize meshlet buffer
+            meshletBuffer = std::make_unique<MeshletBuffer>(device);
+            meshletBuffer->init();
+
+            // Create mesh shader pipeline for GPU-driven rendering
+            meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+            meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(), renderPass);
+
+            // Initialize custom shader cache for GPU-driven compatible material shaders
+            customShaderCache = std::make_unique<GPUDrivenShaderCache>(device, swapChain);
+            customShaderCache->init(
+                iblDescriptorSetLayout,
+                meshShaderPipeline->getPerDrawDataLayout(),
+                bindlessTextures->getDescriptorSetLayout(),
+                renderPass
+            );
+
+            // Connect meshlet buffer to stream manager for mesh shader data streaming
+            if (meshStreamManager)
+            {
+                meshStreamManager->setMeshletBuffer(meshletBuffer.get());
+                loggerInfo("GPUDrivenRenderer: Meshlet streaming enabled");
+            }
+        }
+        else
+        {
+            loggerError("GPUDrivenRenderer: Mesh shaders not supported - GPU-driven rendering requires mesh shader support");
+            loggerError("GPUDrivenRenderer: The VK_EXT_mesh_shader extension with task shader support is required");
+            // GPU-driven rendering will be unavailable
+            // The renderer will remain initialized but disabled
+            return;
+        }
 
         initialized = true;
         loggerInfo("GPUDrivenRenderer: Initialized successfully");
@@ -99,7 +127,8 @@ namespace render::gpudriven {
 
         // Cleanup sub-components
         if (customShaderCache) customShaderCache->cleanup();
-        if (pipeline) pipeline->cleanup();
+        if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (meshletBuffer) meshletBuffer->cleanup();
         if (cameraBuffer) cameraBuffer->cleanup();
         if (cullPipeline) cullPipeline->cleanup();
         if (bindlessTextures) bindlessTextures->cleanup();
@@ -107,7 +136,8 @@ namespace render::gpudriven {
         if (mergedBuffer) mergedBuffer->cleanup();
 
         meshStreamManager.reset();
-        pipeline.reset();
+        meshShaderPipeline.reset();
+        meshletBuffer.reset();
         cameraBuffer.reset();
         cullPipeline.reset();
         bindlessTextures.reset();
@@ -307,8 +337,14 @@ namespace render::gpudriven {
             batchManager->getCombinedDrawCountBuffer()
         );
 
-        // Update per-draw data descriptor for graphics pipeline (uses combined buffer)
-        pipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
+        // Update per-draw data descriptor for mesh shader pipeline (uses combined buffer)
+        // Only update when there's actual data to render
+        if (meshShaderPipeline && mergedBuffer->getObjectCount() > 0)
+        {
+            meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
+            meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
+            meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+        }
 
         // Update stats
         stats.totalObjects = mergedBuffer->getObjectCount();
@@ -349,16 +385,10 @@ namespace render::gpudriven {
 
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
     {
-        if (!initialized || !enabled || stats.totalObjects == 0)
+        if (!initialized || !enabled || stats.totalObjects == 0 || !meshShaderPipeline)
         {
             return;
         }
-
-        // Bind merged vertex/index buffers once (shared across all pipelines and batches)
-        vk::Buffer vertBufs[] = { mergedBuffer->getVertexBuffer() };
-        vk::DeviceSize vertOffsets[] = { 0 };
-        cmd.bindVertexBuffers(0, 1, vertBufs, vertOffsets);
-        cmd.bindIndexBuffer(mergedBuffer->getIndexBuffer(), 0, vk::IndexType::eUint32);
 
         uint32_t batchCount = batchManager->getBatchCount();
         uint32_t commandsPerSection = batchManager->getCommandsPerSection();
@@ -368,36 +398,49 @@ namespace render::gpudriven {
             customShaderCache->getActiveGroups() :
             std::set<uint32_t>{0};
 
-        // Multi-pipeline rendering: each shader group has its own buffer sections
-        // No fragment discard needed - compute shader outputs to group-specific sections
+        // Use Task+Mesh shader pipeline with indirect count dispatch
+        // No vertex/index buffer binding needed - mesh shader fetches from SSBOs
+
         for (uint32_t shaderGroup : activeGroups)
         {
             vk::Pipeline activePipeline;
             vk::PipelineLayout layout;
 
-            if (shaderGroup == 0) {
-                // Default PBR pipeline
-                activePipeline = pipeline->getPipeline();
-                layout = pipeline->getPipelineLayout();
-            } else {
-                // Custom shader pipeline
-                if (customShaderCache) {
+            if (shaderGroup == 0)
+            {
+                // Default PBR mesh shader pipeline
+                activePipeline = meshShaderPipeline->getPipeline();
+                layout = meshShaderPipeline->getPipelineLayout();
+            }
+            else
+            {
+                // Custom shader pipeline (TODO: implement mesh shader variants)
+                if (customShaderCache)
+                {
                     activePipeline = customShaderCache->getPipeline(shaderGroup, false);
                 }
-                if (!activePipeline) {
-                    loggerWarning("GPUDrivenRenderer: No pipeline for shader group {}, skipping", shaderGroup);
+                if (!activePipeline)
+                {
+                    loggerWarning("GPUDrivenRenderer: No mesh shader pipeline for shader group {}, skipping", shaderGroup);
                     continue;
                 }
-                // Custom pipelines use the same layout (shared in shader cache)
-                layout = pipeline->getPipelineLayout();
+                layout = meshShaderPipeline->getPipelineLayout();
             }
 
             cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-            std::array<vk::DescriptorSet, 3> descriptorSets = {
+            // Bind all 5 descriptor sets:
+            // Set 0: IBL (camera UBO + IBL textures)
+            // Set 1: Per-draw data
+            // Set 2: Bindless textures
+            // Set 3: Meshlet data (meshlet buffer, vertex indices, primitive indices)
+            // Set 4: Vertex data (merged vertex buffer)
+            std::array<vk::DescriptorSet, 5> descriptorSets = {
                 iblDescriptorSet,
-                pipeline->getPerDrawDataDescriptorSet(),
-                bindlessTextures->getDescriptorSet()
+                meshShaderPipeline->getPerDrawDataDescriptorSet(),
+                bindlessTextures->getDescriptorSet(),
+                meshShaderPipeline->getMeshletDataDescriptorSet(),
+                meshShaderPipeline->getVertexDataDescriptorSet()
             };
 
             cmd.bindDescriptorSets(
@@ -408,21 +451,19 @@ namespace render::gpudriven {
                 descriptorSets.data(),
                 0, nullptr);
 
-            // Draw all batches for this shader group
-            // Each (batch, shaderGroup) pair has its own section in the buffers
+            // Draw all batches for this shader group using mesh shader dispatch
             for (uint32_t batch = 0; batch < batchCount; ++batch)
             {
-                // Get offsets for this (batch, shaderGroup) section
                 vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, shaderGroup);
                 vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, shaderGroup);
 
-                cmd.drawIndexedIndirectCount(
+                cmd.drawMeshTasksIndirectCountEXT(
                     batchManager->getCombinedDrawCommandBuffer(),
                     cmdOffset,
                     batchManager->getCombinedDrawCountBuffer(),
                     countOffset,
                     commandsPerSection,
-                    sizeof(DrawIndexedIndirectCommand));
+                    sizeof(MeshTasksIndirectCommand));
             }
         }
     }
@@ -631,9 +672,10 @@ namespace render::gpudriven {
             cachedIBLLayout = newIBLLayout;
         }
 
-        // Recreate main graphics pipeline with new render pass and IBL layout
-        if (pipeline) {
-            pipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(), cachedRenderPass);
+        // Recreate mesh shader pipeline with new render pass and IBL layout
+        if (meshShaderPipeline)
+        {
+            meshShaderPipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(), cachedRenderPass);
         }
 
         // Update custom shader cache with new render pass and IBL layout

@@ -168,11 +168,12 @@ namespace render::mesh
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings(4);
 
-        // Binding 0: Camera UBO (vertex + fragment)
+        // Binding 0: Camera UBO (vertex + fragment + task + mesh for mesh shader pipeline)
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment |
+                                 vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
         bindings[0].pImmutableSamplers = nullptr;
 
         // Binding 1: Irradiance cubemap (fragment only)

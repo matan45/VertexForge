@@ -49,35 +49,43 @@ namespace render::gpudriven {
     };
     
     struct alignas(16) GPUObjectData {
-        glm::mat4 modelMatrix;           
+        glm::mat4 modelMatrix;
 
-        glm::vec4 boundingSphere;       
+        glm::vec4 boundingSphere;
 
-        // LOD data - geometry locations in merged buffer
-        glm::uvec4 lod0Data;             
-        glm::uvec4 lod1Data;             
-        glm::uvec4 lod2Data;             
-        glm::uvec4 lod3Data;             
-        
-        glm::vec4 lodThresholds;         
+        // LOD data - geometry locations in merged buffer (vertex/index based)
+        glm::uvec4 lod0Data;
+        glm::uvec4 lod1Data;
+        glm::uvec4 lod2Data;
+        glm::uvec4 lod3Data;
+
+        glm::vec4 lodThresholds;
 
         // Material data
-        glm::vec4 albedo;                
-        glm::vec4 materialParams;        
-        glm::vec4 iblParams;             
+        glm::vec4 albedo;
+        glm::vec4 materialParams;
+        glm::vec4 iblParams;
 
         // Bindless texture indices
-        glm::uvec4 textureIndices0;      
-        glm::uvec4 textureIndices1;      
+        glm::uvec4 textureIndices0;
+        glm::uvec4 textureIndices1;
 
         // Object flags and indices
-        uint32_t flags;                 
-        uint32_t entityId;              
-        uint32_t availableLODMask;       
+        uint32_t flags;
+        uint32_t entityId;
+        uint32_t availableLODMask;
         uint32_t shaderGroupIndex;
-        // Total: 256 bytes
+        // 256 bytes up to here
+
+        // Meshlet LOD data - meshlet locations in meshlet buffer
+        // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
+        glm::uvec4 meshletLod0;
+        glm::uvec4 meshletLod1;
+        glm::uvec4 meshletLod2;
+        glm::uvec4 meshletLod3;
+        // Total: 320 bytes
     };
-    static_assert(sizeof(GPUObjectData) == 256, "GPUObjectData must be 256 bytes");
+    static_assert(sizeof(GPUObjectData) == 320, "GPUObjectData must be 320 bytes");
 
     // Object flags (must match gpu_cull_lod.glsl)
     namespace ObjectFlags {
@@ -89,27 +97,33 @@ namespace render::gpudriven {
 
   
     struct alignas(16) PerDrawData {
-        glm::mat4 modelMatrix;           
-        glm::mat4 normalMatrix;          
+        glm::mat4 modelMatrix;
+        glm::mat4 normalMatrix;
 
-        glm::vec4 albedo;               
-        glm::vec4 materialParams;        
+        glm::vec4 albedo;
+        glm::vec4 materialParams;
 
-        glm::uvec4 textureIndices0;     
-        glm::uvec4 textureIndices1;      
+        glm::uvec4 textureIndices0;
+        glm::uvec4 textureIndices1;
 
-        uint32_t objectIndex;            
-        uint32_t flags;                
-        float iblDiffuse;                
-        float iblSpecular;             
+        uint32_t objectIndex;
+        uint32_t flags;
+        float iblDiffuse;
+        float iblSpecular;
 
-        uint32_t lodLevel;               
-        uint32_t shaderGroupIndex;       
-        uint32_t padding1;               
-        uint32_t padding2;              
-        // Total: 224 bytes
+        uint32_t lodLevel;
+        uint32_t shaderGroupIndex;
+        // Meshlet dispatch info (filled by compute shader for mesh shader path)
+        uint32_t meshletOffset;      // First meshlet index in meshlet buffer
+        uint32_t meshletCount;       // Number of meshlets for selected LOD
+
+        uint32_t baseVertexOffset;   // Base vertex offset in merged vertex buffer
+        uint32_t padding1;
+        uint32_t padding2;
+        uint32_t padding3;
+        // Total: 240 bytes
     };
-    static_assert(sizeof(PerDrawData) == 224, "PerDrawData must be 224 bytes to match GLSL");
+    static_assert(sizeof(PerDrawData) == 240, "PerDrawData must be 240 bytes to match GLSL");
 
     // Camera/view data for culling and rendering
     struct alignas(16) GPUCameraData {
@@ -257,7 +271,7 @@ namespace render::gpudriven {
         uint32_t culledByOcclusion;
     };
 
-    // VkDrawIndexedIndirectCommand structure (matches Vulkan spec)
+    // VkDrawIndexedIndirectCommand structure (matches Vulkan spec) - LEGACY for fallback
     struct DrawIndexedIndirectCommand {
         uint32_t indexCount;
         uint32_t instanceCount;
@@ -266,6 +280,15 @@ namespace render::gpudriven {
         uint32_t firstInstance;
     };
     static_assert(sizeof(DrawIndexedIndirectCommand) == 20, "DrawIndexedIndirectCommand must match VkDrawIndexedIndirectCommand");
+
+    // VkDrawMeshTasksIndirectCommandEXT structure (matches Vulkan spec)
+    // Used for mesh shader dispatch instead of indirect draws
+    struct MeshTasksIndirectCommand {
+        uint32_t groupCountX;  // Number of task shader workgroups in X dimension
+        uint32_t groupCountY;  // Number of task shader workgroups in Y dimension (typically 1)
+        uint32_t groupCountZ;  // Number of task shader workgroups in Z dimension (typically 1)
+    };
+    static_assert(sizeof(MeshTasksIndirectCommand) == 12, "MeshTasksIndirectCommand must match VkDrawMeshTasksIndirectCommandEXT");
 
     // Per-batch statistics for multi-batch indirect rendering
     // Must match BatchDrawStats in gpu_cull_lod.glsl
