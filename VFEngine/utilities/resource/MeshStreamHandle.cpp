@@ -76,6 +76,9 @@ namespace resource {
             return false;
         }
 
+        // Check for meshlet support (v0.0.4+)
+        hasMeshlets = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 4);
+
         header.numSubmeshes = endian::readLE<uint32_t>(file);
 
         if (file.fail()) {
@@ -162,6 +165,63 @@ namespace resource {
                     return false;
                 }
             }
+
+            // Parse meshlet headers if available (v0.0.4+)
+            if (hasMeshlets) {
+                if (!parseMeshletHeaders(meshIdx)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    bool MeshStreamHandle::parseMeshletHeaders(uint32_t meshIdx) {
+        auto& submeshInfo = header.submeshes[meshIdx];
+
+        // Record where meshlet data starts for this submesh
+        submeshInfo.meshletDataOffset = file.tellg();
+        submeshInfo.hasMeshletData = true;
+
+        // Read per-LOD meshlet counts
+        uint32_t totalMeshlets = 0;
+        uint32_t totalVertexIndices = 0;
+        uint32_t totalPrimitives = 0;
+
+        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
+            auto& meshletInfo = submeshInfo.meshletLods[lod];
+            meshletInfo.meshletCount = endian::readLE<uint32_t>(file);
+            meshletInfo.vertexIndexCount = endian::readLE<uint32_t>(file);
+            meshletInfo.primitiveCount = endian::readLE<uint32_t>(file);
+
+            if (meshletInfo.meshletCount > maxMeshletCount) {
+                vfLogError("MeshStreamHandle: Meshlet count {} exceeds limit {} in submesh {} LOD {}",
+                           meshletInfo.meshletCount, maxMeshletCount, meshIdx, lod);
+                return false;
+            }
+
+            totalMeshlets += meshletInfo.meshletCount;
+            totalVertexIndices += meshletInfo.vertexIndexCount;
+            totalPrimitives += meshletInfo.primitiveCount;
+        }
+
+        if (file.fail()) {
+            vfLogError("MeshStreamHandle: Failed to read meshlet headers for submesh {}", meshIdx);
+            return false;
+        }
+
+        // Skip meshlet data (we only parse headers for streaming)
+        // Meshlet descriptors + bounds: 44 bytes each
+        file.seekg(totalMeshlets * sizeof(Meshlet), std::ios::cur);
+        // Meshlet vertex indices: 4 bytes each
+        file.seekg(totalVertexIndices * sizeof(uint32_t), std::ios::cur);
+        // Meshlet primitive data: 4 bytes each
+        file.seekg(totalPrimitives * sizeof(uint32_t), std::ios::cur);
+
+        if (file.fail()) {
+            vfLogError("MeshStreamHandle: Failed to skip meshlet data for submesh {}", meshIdx);
+            return false;
         }
 
         return true;
@@ -246,11 +306,130 @@ namespace resource {
         return true;
     }
 
+    bool MeshStreamHandle::readMeshletData(uint32_t submeshIdx, SubmeshMeshletData& outMeshletData) {
+        std::lock_guard<std::mutex> lock(fileMutex);
+
+        if (!file.is_open()) {
+            vfLogError("MeshStreamHandle: File not open");
+            return false;
+        }
+
+        if (!hasMeshlets) {
+            vfLogError("MeshStreamHandle: File does not contain meshlet data");
+            return false;
+        }
+
+        if (submeshIdx >= header.numSubmeshes) {
+            vfLogError("MeshStreamHandle: Invalid submesh index {} (max {})",
+                       submeshIdx, header.numSubmeshes);
+            return false;
+        }
+
+        const auto& submeshInfo = header.submeshes[submeshIdx];
+        if (!submeshInfo.hasMeshletData) {
+            vfLogError("MeshStreamHandle: Submesh {} does not have meshlet data", submeshIdx);
+            return false;
+        }
+
+        // Seek to meshlet data position
+        file.seekg(submeshInfo.meshletDataOffset);
+        if (file.fail()) {
+            vfLogError("MeshStreamHandle: Failed to seek to meshlet data for submesh {}", submeshIdx);
+            return false;
+        }
+
+        outMeshletData.name = submeshInfo.name;
+
+        // Read per-LOD headers (already parsed, but need to read them again to get to actual data)
+        uint32_t totalMeshlets = 0;
+        uint32_t totalVertexIndices = 0;
+        uint32_t totalPrimitives = 0;
+
+        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
+            uint32_t meshletCount = endian::readLE<uint32_t>(file);
+            uint32_t vertexCount = endian::readLE<uint32_t>(file);
+            uint32_t primitiveCount = endian::readLE<uint32_t>(file);
+
+            outMeshletData.lodLevels[lod].meshletOffset = totalMeshlets;
+            outMeshletData.lodLevels[lod].meshletCount = meshletCount;
+            outMeshletData.lodLevels[lod].vertexDataOffset = totalVertexIndices;
+            outMeshletData.lodLevels[lod].vertexDataCount = vertexCount;
+            outMeshletData.lodLevels[lod].primitiveDataOffset = totalPrimitives;
+            outMeshletData.lodLevels[lod].primitiveDataCount = primitiveCount;
+
+            totalMeshlets += meshletCount;
+            totalVertexIndices += vertexCount;
+            totalPrimitives += primitiveCount;
+        }
+
+        // Read all meshlet descriptors and bounds
+        outMeshletData.meshlets.resize(totalMeshlets);
+        for (uint32_t i = 0; i < totalMeshlets; ++i) {
+            auto& meshlet = outMeshletData.meshlets[i];
+
+            // Read descriptor
+            meshlet.descriptor.vertexOffset = endian::readLE<uint32_t>(file);
+            meshlet.descriptor.primitiveOffset = endian::readLE<uint32_t>(file);
+            meshlet.descriptor.vertexCount = endian::readLE<uint8_t>(file);
+            meshlet.descriptor.primitiveCount = endian::readLE<uint8_t>(file);
+            meshlet.descriptor.padding = endian::readLE<uint16_t>(file);
+
+            // Read bounds
+            meshlet.bounds.boundingSphere.x = endian::readLE<float>(file);
+            meshlet.bounds.boundingSphere.y = endian::readLE<float>(file);
+            meshlet.bounds.boundingSphere.z = endian::readLE<float>(file);
+            meshlet.bounds.boundingSphere.w = endian::readLE<float>(file);
+            meshlet.bounds.cone.x = endian::readLE<float>(file);
+            meshlet.bounds.cone.y = endian::readLE<float>(file);
+            meshlet.bounds.cone.z = endian::readLE<float>(file);
+            meshlet.bounds.cone.w = endian::readLE<float>(file);
+        }
+
+        if (file.fail()) {
+            vfLogError("MeshStreamHandle: Failed to read meshlet descriptors for submesh {}", submeshIdx);
+            return false;
+        }
+
+        // Read all meshlet vertex indices
+        outMeshletData.meshletVertices.resize(totalVertexIndices);
+        for (uint32_t i = 0; i < totalVertexIndices; ++i) {
+            outMeshletData.meshletVertices[i] = endian::readLE<uint32_t>(file);
+        }
+
+        if (file.fail()) {
+            vfLogError("MeshStreamHandle: Failed to read meshlet vertices for submesh {}", submeshIdx);
+            return false;
+        }
+
+        // Read all meshlet primitive data
+        outMeshletData.meshletPrimitives.resize(totalPrimitives);
+        for (uint32_t i = 0; i < totalPrimitives; ++i) {
+            outMeshletData.meshletPrimitives[i] = endian::readLE<uint32_t>(file);
+        }
+
+        if (file.fail()) {
+            vfLogError("MeshStreamHandle: Failed to read meshlet primitives for submesh {}", submeshIdx);
+            return false;
+        }
+
+        return true;
+    }
+
     size_t MeshStreamHandle::getLODMemorySize(uint32_t submeshIdx, uint32_t lodLevel) const {
         if (submeshIdx >= header.numSubmeshes || lodLevel >= LOD_LEVEL_COUNT) {
             return 0;
         }
         return header.submeshes[submeshIdx].lods[lodLevel].getMemorySize();
+    }
+
+    size_t MeshStreamHandle::getMeshletMemorySize(uint32_t submeshIdx, uint32_t lodLevel) const {
+        if (submeshIdx >= header.numSubmeshes || lodLevel >= LOD_LEVEL_COUNT) {
+            return 0;
+        }
+        if (!hasMeshlets || !header.submeshes[submeshIdx].hasMeshletData) {
+            return 0;
+        }
+        return header.submeshes[submeshIdx].meshletLods[lodLevel].getMeshletMemorySize();
     }
 
     uint32_t MeshStreamHandle::getTotalVertexCount(uint32_t lodLevel) const {
