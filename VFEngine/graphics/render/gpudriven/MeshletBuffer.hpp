@@ -91,6 +91,7 @@ namespace render::gpudriven {
         // Registered meshlet allocations
         std::vector<MeshletAllocation> allocations;
         std::unordered_map<std::string, size_t> allocationKeyToIndex;
+        std::vector<size_t> freeAllocationSlots;  // Reusable slots in allocations vector
 
         bool initialized = false;
 

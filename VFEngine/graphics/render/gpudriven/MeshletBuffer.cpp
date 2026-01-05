@@ -57,6 +57,7 @@ namespace render::gpudriven {
 
         allocations.clear();
         allocationKeyToIndex.clear();
+        freeAllocationSlots.clear();
 
         destroyBuffers();
 
@@ -148,6 +149,9 @@ namespace render::gpudriven {
             return nullptr;
         }
 
+        // Track all allocations made during this call for cleanup on failure
+        std::vector<std::string> allocatedKeys;
+
         // Create allocations for each submesh
         for (uint32_t submeshIdx = 0; submeshIdx < header.numSubmeshes; ++submeshIdx) {
             const auto& submeshInfo = header.submeshes[submeshIdx];
@@ -169,6 +173,7 @@ namespace render::gpudriven {
             alloc.submeshIndex = submeshIdx;
 
             // Reserve space for each LOD
+            bool allocationFailed = false;
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod) {
                 const auto& meshletInfo = submeshInfo.meshletLods[lod];
 
@@ -178,20 +183,45 @@ namespace render::gpudriven {
                                                   meshletInfo.vertexIndexCount,
                                                   meshletInfo.primitiveCount,
                                                   key + " LOD" + std::to_string(lod))) {
-                        // Failed to allocate - clean up what we allocated so far
+                        // Failed to allocate - clean up current submesh's LODs
                         for (uint32_t prevLod = 0; prevLod < lod; ++prevLod) {
                             freeLODMeshletSpace(alloc.lods[prevLod]);
                         }
                         vfLogError("MeshletBuffer: Failed to reserve space for {} LOD{}",
                                     key, lod);
-                        return nullptr;
+                        allocationFailed = true;
+                        break;
                     }
                 }
             }
 
-            size_t allocIndex = allocations.size();
-            allocations.push_back(std::move(alloc));
+            if (allocationFailed) {
+                // Clean up all previously allocated submeshes from this call
+                for (const auto& prevKey : allocatedKeys) {
+                    auto it = allocationKeyToIndex.find(prevKey);
+                    if (it != allocationKeyToIndex.end()) {
+                        auto& prevAlloc = allocations[it->second];
+                        for (auto& lodAlloc : prevAlloc.lods) {
+                            freeLODMeshletSpace(lodAlloc);
+                        }
+                        allocationKeyToIndex.erase(it);
+                    }
+                }
+                return nullptr;
+            }
+
+            // Reuse a free slot if available, otherwise append
+            size_t allocIndex;
+            if (!freeAllocationSlots.empty()) {
+                allocIndex = freeAllocationSlots.back();
+                freeAllocationSlots.pop_back();
+                allocations[allocIndex] = std::move(alloc);
+            } else {
+                allocIndex = allocations.size();
+                allocations.push_back(std::move(alloc));
+            }
             allocationKeyToIndex[key] = allocIndex;
+            allocatedKeys.push_back(key);
         }
 
         // Return the first allocation for this mesh (or nullptr if none)
@@ -395,10 +425,14 @@ namespace render::gpudriven {
         for (const auto& key : keysToRemove) {
             auto it = allocationKeyToIndex.find(key);
             if (it != allocationKeyToIndex.end()) {
-                auto& alloc = allocations[it->second];
+                size_t allocIndex = it->second;
+                auto& alloc = allocations[allocIndex];
                 for (auto& lodAlloc : alloc.lods) {
                     freeLODMeshletSpace(lodAlloc);
                 }
+                // Clear the allocation and add slot to free list for reuse
+                alloc = MeshletAllocation{};
+                freeAllocationSlots.push_back(allocIndex);
                 allocationKeyToIndex.erase(it);
             }
         }
