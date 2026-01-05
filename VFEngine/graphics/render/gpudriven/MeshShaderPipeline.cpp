@@ -410,6 +410,7 @@ namespace render::gpudriven
             .shaderStages = stages,
             .existingPipelineLayout = pipelineLayout,
             .cullMode = vk::CullModeFlagBits::eBack,
+            .depthTestEnable = true,
             .depthWriteEnable = true
         };
 

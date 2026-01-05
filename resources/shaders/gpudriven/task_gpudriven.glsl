@@ -52,32 +52,15 @@ struct GPUMeshlet {
     vec4 cone;               // xyz = cone axis, w = cos(half-angle), >= 1.0 means no backface culling
 };
 
-// Camera/Frustum data
+// Camera data - MUST match C++ CameraUBO struct in MeshTypes.hpp
+// NOTE: The IBL descriptor set uses this smaller struct. For culling,
+// we would need a separate GPUCameraData buffer with frustum planes.
 struct CameraData {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProjection;
-    mat4 invViewProjection;
-
-    vec4 cameraPosition;     // xyz = position, w = nearPlane
-    vec4 screenParams;       // xy = resolution, zw = 1/resolution
-
-    vec4 frustumPlanes[6];   // Frustum planes for culling
-
-    float farPlane;
-    uint objectCount;
-    uint hiZMipLevels;
-    uint frameIndex;
-
-    uint enableFrustumCulling;
-    uint enableOcclusionCulling;
-    uint enableLODSelection;
-    uint batchCount;
-
-    uint commandsPerBatch;
-    uint shaderGroupCount;
-    uint padding1;
-    uint padding2;
+    mat4 view;           // 64 bytes
+    mat4 projection;     // 64 bytes
+    vec3 cameraPos;      // 12 bytes (aligned to 16)
+    float time;          // 4 bytes
+    // Total: 144 bytes
 };
 
 // ============================================================================
@@ -215,19 +198,16 @@ void main() {
         // Transform meshlet bounding sphere to world space
         vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
 
-        // DISABLED: Per-meshlet frustum culling
-        // if (camera.enableFrustumCulling != 0u) {
-        //     isVisible = sphereInFrustum(worldSphere, camera.frustumPlanes);
-        // } else {
-        //     isVisible = true;
-        // }
-        isVisible = true;  // Always visible for debugging
+        // Per-meshlet frustum culling
+        // NOTE: Disabled - requires GPUCameraData buffer with frustumPlanes (IBL CameraUBO doesn't have them)
+        // Object-level frustum culling in compute shader handles this instead
+        isVisible = true;
 
-        // DISABLED: Backface cone culling
-        // if (isVisible) {
-        //     isVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
-        //                              camera.cameraPosition.xyz, worldSphere.xyz);
-        // }
+        // Backface cone culling - cull meshlets facing away from camera
+        if (isVisible) {
+            isVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
+                                     camera.cameraPos, worldSphere.xyz);
+        }
 
         // If visible, add to shared memory for compaction
         if (isVisible) {
@@ -252,7 +232,7 @@ void main() {
             payload.meshletIndices[i] = sharedMeshletIndices[i];
         }
 
-        // Emit mesh shader workgroups (one per visible meshlet)
+        // Emit mesh shader workgroups for visible meshlets
         EmitMeshTasksEXT(visibleCount, 1, 1);
     }
 }

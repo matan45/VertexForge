@@ -52,9 +52,9 @@ namespace render::gpudriven
 
         bool initialized = false;
         bool enabled = false;
-        bool frustumCullingEnabled = false;  // DISABLED for debugging
-        bool lodSelectionEnabled = false;    // DISABLED for debugging - forces LOD3
-        bool occlusionCullingEnabled = false; // DISABLED for debugging
+        bool frustumCullingEnabled = true;
+        bool lodSelectionEnabled = true;
+        bool occlusionCullingEnabled = true;
         bool meshShaderSupported = false;
 
         vk::ImageView cachedHiZView;

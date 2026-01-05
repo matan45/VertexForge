@@ -462,6 +462,19 @@ namespace render::gpudriven {
                 descriptorSets.data(),
                 0, nullptr);
 
+            // DEBUG: Direct draw call - bypasses indirect buffer entirely
+            {
+                MeshShaderPushConstants pushConstants{};
+                pushConstants.baseDrawIndex = 0;
+                cmd.pushConstants(
+                    layout,
+                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                    0,
+                    sizeof(MeshShaderPushConstants),
+                    &pushConstants);
+                cmd.drawMeshTasksEXT(1, 1, 1);  // Direct call: 1 task workgroup
+            }
+
             // Draw all batches for this shader group using mesh shader dispatch
             for (uint32_t batch = 0; batch < batchCount; ++batch)
             {
