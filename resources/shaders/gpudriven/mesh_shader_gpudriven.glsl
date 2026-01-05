@@ -20,6 +20,7 @@ layout(location = 0) out vec3 fragWorldPos[];
 layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragDrawIndex[];
+layout(location = 4) flat out uint fragDebugVertexIndex[];  // Debug: global vertex index
 
 // ============================================================================
 // Per-Draw Data (240 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
@@ -62,12 +63,9 @@ struct GPUMeshlet {
     vec4 cone;
 };
 
-// Vertex structure in merged buffer
-struct Vertex {
-    vec3 position;
-    vec3 normal;
-    vec2 texCoord;
-};
+// Vertex data is read as raw floats to avoid std430 vec3 padding issues
+// C++ Vertex struct is 32 bytes: position(12) + normal(12) + texCoord(8)
+// std430 would pad vec3 to 16 bytes, breaking alignment
 
 // Camera data
 struct CameraData {
@@ -124,9 +122,10 @@ layout(std430, set = 3, binding = 2) readonly buffer MeshletPrimitiveBuffer {
     uint meshletPrimitives[];  // Packed triangle indices (3 uint8 per triangle)
 };
 
-// Set 4: Merged vertex data (interleaved, uses Vertex struct defined above)
+// Set 4: Merged vertex data as raw floats (32 bytes per vertex)
+// Layout per vertex: position.xyz (12), normal.xyz (12), texCoord.xy (8) = 32 bytes = 8 floats
 layout(std430, set = 4, binding = 0) readonly buffer VertexBuffer {
-    Vertex vertices[];
+    float vertexData[];  // Raw float array to avoid std430 vec3 padding
 };
 
 // ============================================================================
@@ -217,11 +216,23 @@ void main() {
             // Calculate global vertex index in merged buffer
             uint globalVertexIndex = meshlet.globalVertexOffset + meshletLocalVertexIdx;
 
-            // Load vertex data into shared memory (from interleaved buffer)
-            Vertex v = vertices[globalVertexIndex];
-            sharedPositions[localVertexIndex] = v.position;
-            sharedNormals[localVertexIndex] = v.normal;
-            sharedTexCoords[localVertexIndex] = v.texCoord;
+            // Load vertex data from raw float array (8 floats per vertex = 32 bytes)
+            // Layout: position.xyz (0-2), normal.xyz (3-5), texCoord.xy (6-7)
+            uint baseIdx = globalVertexIndex * 8;
+            sharedPositions[localVertexIndex] = vec3(
+                vertexData[baseIdx + 0],
+                vertexData[baseIdx + 1],
+                vertexData[baseIdx + 2]
+            );
+            sharedNormals[localVertexIndex] = vec3(
+                vertexData[baseIdx + 3],
+                vertexData[baseIdx + 4],
+                vertexData[baseIdx + 5]
+            );
+            sharedTexCoords[localVertexIndex] = vec2(
+                vertexData[baseIdx + 6],
+                vertexData[baseIdx + 7]
+            );
         }
     }
 
@@ -244,6 +255,10 @@ void main() {
 
             // Pass draw index for fragment shader
             fragDrawIndex[localVertexIndex] = drawIndex;
+
+            // Debug: pass the global vertex index
+            uint meshletLocalVertexIdx = meshletVertices[meshlet.vertexOffset + localVertexIndex];
+            fragDebugVertexIndex[localVertexIndex] = meshlet.globalVertexOffset + meshletLocalVertexIdx;
 
             // Output clip-space position
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * worldPos;
@@ -282,6 +297,7 @@ layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) in flat uint fragDrawIndex;
+layout(location = 4) in flat uint fragDebugVertexIndex;
 
 layout(location = 0) out vec4 outColor;
 
@@ -368,6 +384,9 @@ const uint FLAG_ALPHA_MASK = 1u << 4;
 
 // Debug mode: set to 1 to visualize LOD levels with colors
 const int DEBUG_VISUALIZE_LOD = 0;
+
+// Debug mode: set to 1 to visualize vertex positions/normals
+const int DEBUG_VISUALIZE_POSITIONS = 0;
 
 // Helper: Check if texture index is valid
 bool isValidTexture(uint index) {
@@ -550,6 +569,38 @@ void main() {
         );
         uint lod = min(drawData.lodLevel, 3u);
         color = mix(color, lodColors[lod], 0.5);
+    }
+
+    // Debug: visualize world positions as colors (helps debug vertex loading)
+    if (DEBUG_VISUALIZE_POSITIONS != 0) {
+        // Map world position to colors (assuming positions in -10 to 10 range)
+        vec3 posColor = (fragWorldPos + 10.0) / 20.0;
+        posColor = clamp(posColor, 0.0, 1.0);
+
+        // Normal visualization: map from [-1,1] to [0,1]
+        vec3 normalColor = fragNormal * 0.5 + 0.5;
+
+        // Vertex index visualization: use modulo to create color bands
+        // This helps identify if all vertices have the same index (would be single color)
+        float indexVal = float(fragDebugVertexIndex);
+        vec3 indexColor = vec3(
+            fract(indexVal * 0.0001),           // R: slow variation
+            fract(indexVal * 0.001),            // G: medium variation
+            fract(indexVal * 0.01)              // B: fast variation
+        );
+
+        // Split screen into 3 sections for comparison
+        float screenX = gl_FragCoord.x / camera.screenParams.x;
+        if (screenX < 0.33) {
+            // Left: show world position as color
+            color = posColor;
+        } else if (screenX < 0.66) {
+            // Middle: show normals as color
+            color = normalColor;
+        } else {
+            // Right: show vertex index as color (should vary if vertices are different)
+            color = indexColor;
+        }
     }
 
     outColor = vec4(color, alpha);

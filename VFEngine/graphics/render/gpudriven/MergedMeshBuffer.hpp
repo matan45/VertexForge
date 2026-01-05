@@ -171,6 +171,9 @@ namespace render::gpudriven {
         
         StreamingStats getStreamingStats() const;
 
+        // Ensure all pending async transfers are complete before rendering
+        void flushPendingTransfers();
+
     private:
         void createBuffers();
         void destroyBuffers();

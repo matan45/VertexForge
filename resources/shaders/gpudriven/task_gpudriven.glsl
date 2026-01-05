@@ -99,6 +99,11 @@ layout(std430, set = 3, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
 
+// Push constants for base draw index
+layout(push_constant) uniform PushConstants {
+    uint baseDrawIndex;  // Base index into perDrawData buffer for this section
+} pc;
+
 // ============================================================================
 // Task Payload (shared data passed to mesh shader)
 // ============================================================================
@@ -178,10 +183,12 @@ void main() {
     // This is computed by the mesh shader pipeline based on the indirect dispatch
     // For now, we use a push constant or compute the draw index from the batch structure
 
-    // Get draw index - stored in gl_WorkGroupID based on dispatch structure
-    // Each dispatch command corresponds to one visible object
-    // The compute shader outputs one dispatch per object
-    uint drawIndex = gl_DrawID; // Use gl_DrawID for indirect count dispatch
+    // Get draw index - combine base index from push constant with gl_DrawID
+    // The compute shader writes to perDrawData[globalDrawIndex] where:
+    //   globalDrawIndex = sectionIndex * commandsPerSection + localDrawIndex
+    // gl_DrawID is the local draw index within this section (0, 1, 2, ...)
+    // pc.baseDrawIndex is the base offset for this section
+    uint drawIndex = pc.baseDrawIndex + gl_DrawID;
 
     PerDrawData drawData = perDrawData[drawIndex];
 
@@ -208,18 +215,19 @@ void main() {
         // Transform meshlet bounding sphere to world space
         vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
 
-        // Frustum culling
-        if (camera.enableFrustumCulling != 0u) {
-            isVisible = sphereInFrustum(worldSphere, camera.frustumPlanes);
-        } else {
-            isVisible = true;
-        }
+        // DISABLED: Per-meshlet frustum culling
+        // if (camera.enableFrustumCulling != 0u) {
+        //     isVisible = sphereInFrustum(worldSphere, camera.frustumPlanes);
+        // } else {
+        //     isVisible = true;
+        // }
+        isVisible = true;  // Always visible for debugging
 
-        // Backface cone culling (only if passed frustum)
-        if (isVisible) {
-            isVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
-                                     camera.cameraPosition.xyz, worldSphere.xyz);
-        }
+        // DISABLED: Backface cone culling
+        // if (isVisible) {
+        //     isVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
+        //                              camera.cameraPosition.xyz, worldSphere.xyz);
+        // }
 
         // If visible, add to shared memory for compaction
         if (isVisible) {

@@ -357,6 +357,17 @@ namespace render::gpudriven {
             return;
         }
 
+        // Ensure all async buffer transfers are complete before rendering
+        // This prevents flickering from incomplete mesh/meshlet data
+        if (mergedBuffer)
+        {
+            mergedBuffer->flushPendingTransfers();
+        }
+        if (meshletBuffer)
+        {
+            meshletBuffer->flushPendingTransfers();
+        }
+
         // Always reset all batch draw counts (clears stale data when no objects)
         batchManager->resetAllBatches(cmd);
 
@@ -456,6 +467,18 @@ namespace render::gpudriven {
             {
                 vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, shaderGroup);
                 vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, shaderGroup);
+
+                // Set push constant with base draw index for this section
+                // The task shader uses: drawIndex = pc.baseDrawIndex + gl_DrawID
+                MeshShaderPushConstants pushConstants{};
+                pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, shaderGroup) * commandsPerSection;
+
+                cmd.pushConstants(
+                    layout,
+                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                    0,
+                    sizeof(MeshShaderPushConstants),
+                    &pushConstants);
 
                 cmd.drawMeshTasksIndirectCountEXT(
                     batchManager->getCombinedDrawCommandBuffer(),
@@ -566,10 +589,11 @@ namespace render::gpudriven {
             cullPipeline->updateHiZDescriptor(hiZView, hiZSampler);
 
             // Auto-enable occlusion culling when Hi-Z first becomes available
-            if (!wasAvailable && mipLevels > 0 && !occlusionCullingEnabled) {
-                occlusionCullingEnabled = true;
-                loggerInfo("GPUDrivenRenderer: Hi-Z occlusion culling enabled ({} mip levels)", mipLevels);
-            }
+            // DISABLED for debugging - uncomment to re-enable
+            // if (!wasAvailable && mipLevels > 0 && !occlusionCullingEnabled) {
+            //     occlusionCullingEnabled = true;
+            //     loggerInfo("GPUDrivenRenderer: Hi-Z occlusion culling enabled ({} mip levels)", mipLevels);
+            // }
         }
     }
 

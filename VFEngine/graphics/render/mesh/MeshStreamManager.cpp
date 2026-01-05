@@ -255,9 +255,9 @@ namespace render::mesh
 
         if (!uploaded) return;
 
-        // Upload meshlet data when first LOD (LOD3) is loaded
-        // This uploads meshlet data for ALL LODs at once
-        if (result.lodLevel == 3 && meshletBuffer)
+        // Upload meshlet data for THIS LOD when its vertex data is uploaded
+        // Each LOD's meshlet data needs to be uploaded with its own baseVertexOffset
+        if (meshletBuffer)
         {
             std::lock_guard<std::mutex> lock(meshStatesMutex);
             auto it = meshStates.find(result.meshPath);
@@ -266,31 +266,27 @@ namespace render::mesh
                 resource::SubmeshMeshletData meshletData;
                 if (it->second.handle->readMeshletData(result.submeshIndex, meshletData))
                 {
-                    // Get base vertex offset from the submesh location
+                    // Get base vertex offset for THIS LOD from the submesh location
                     const auto* loc = mergedBuffer.getSubmeshLocation(
                         result.meshPath, result.submeshName, result.submeshIndex);
 
                     if (loc && meshletData.hasMeshletData())
                     {
-                        // Upload meshlet data for all LODs that have both vertex data AND meshlet allocations
-                        for (uint32_t lod = 0; lod < gpudriven::LOD_LEVEL_COUNT; ++lod)
+                        const auto& lodInfo = loc->lods[result.lodLevel];
+                        // Upload meshlet data for THIS LOD only (now that its vertex data is ready)
+                        if (lodInfo.vertexCount > 0 && loc->meshletLods[result.lodLevel].meshletCount > 0)
                         {
-                            const auto& lodInfo = loc->lods[lod];
-                            // Check if this LOD has both vertex data and meshlet allocation
-                            if (lodInfo.vertexCount > 0 && loc->meshletLods[lod].meshletCount > 0)
-                            {
-                                meshletBuffer->uploadMeshletData(
-                                    result.meshPath,
-                                    result.submeshName,
-                                    result.submeshIndex,
-                                    lod,
-                                    meshletData,
-                                    lodInfo.vertexOffset  // Base vertex offset in merged buffer
-                                );
-                            }
+                            meshletBuffer->uploadMeshletData(
+                                result.meshPath,
+                                result.submeshName,
+                                result.submeshIndex,
+                                result.lodLevel,
+                                meshletData,
+                                lodInfo.vertexOffset  // Base vertex offset for THIS LOD
+                            );
+                            loggerInfo("MeshStreamManager: Uploaded meshlet data for {}:{} LOD{}",
+                                        result.meshPath, result.submeshName, result.lodLevel);
                         }
-                        loggerInfo("MeshStreamManager: Uploaded meshlet data for {}:{}",
-                                    result.meshPath, result.submeshName);
                     }
                 }
                 else

@@ -158,6 +158,9 @@ namespace render::gpudriven {
             return getMeshletBufferSize() + getMeshletVertexBufferSize() + getMeshletPrimitiveBufferSize();
         }
 
+        // Ensure all pending async transfers are complete before rendering
+        void flushPendingTransfers();
+
     private:
         void createBuffers();
         void destroyBuffers();

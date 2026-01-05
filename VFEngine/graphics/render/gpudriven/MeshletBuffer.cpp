@@ -483,6 +483,14 @@ namespace render::gpudriven {
         return info;
     }
 
+    void MeshletBuffer::flushPendingTransfers()
+    {
+        if (transferManager && transferManager->hasPendingTransfers())
+        {
+            transferManager->waitAll();
+        }
+    }
+
     MeshletBufferStats MeshletBuffer::getStats() const
     {
         MeshletBufferStats stats;

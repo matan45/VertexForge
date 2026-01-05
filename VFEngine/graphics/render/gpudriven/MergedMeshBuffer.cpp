@@ -554,6 +554,14 @@ namespace render::gpudriven
         return stats;
     }
 
+    void MergedMeshBuffer::flushPendingTransfers()
+    {
+        if (transferManager && transferManager->hasPendingTransfers())
+        {
+            transferManager->waitAll();
+        }
+    }
+
     // ===== METADATA-BASED REGISTRATION (for streaming path) =====
 
     MergedMeshInfo* MergedMeshBuffer::registerMeshFromMetadata(const std::string& meshPath,

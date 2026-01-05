@@ -15,6 +15,12 @@ namespace render::gpudriven
     class MeshletBuffer;
     class MergedMeshBuffer;
 
+    // Push constant for mesh shader pipeline
+    struct MeshShaderPushConstants {
+        uint32_t baseDrawIndex;  // Base index into perDrawData buffer for this dispatch
+        uint32_t padding[3];     // Pad to 16 bytes for alignment
+    };
+
     // Pipeline for GPU-driven mesh shader rendering
     // Uses Task + Mesh + Fragment shader pipeline instead of traditional vertex/fragment
     class MeshShaderPipeline

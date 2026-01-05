@@ -388,11 +388,17 @@ namespace render::gpudriven
             vertexDataLayout       // Set 4
         };
 
+        // Push constant for base draw index (used by task shader to index perDrawData correctly)
+        vk::PushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(MeshShaderPushConstants);
+
         vk::PipelineLayoutCreateInfo layoutCreateInfo{};
         layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
         layoutCreateInfo.pSetLayouts = setLayouts.data();
-        layoutCreateInfo.pushConstantRangeCount = 0;
-        layoutCreateInfo.pPushConstantRanges = nullptr;
+        layoutCreateInfo.pushConstantRangeCount = 1;
+        layoutCreateInfo.pPushConstantRanges = &pushConstantRange;
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
 
