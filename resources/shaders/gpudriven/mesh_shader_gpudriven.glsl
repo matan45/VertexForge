@@ -543,6 +543,11 @@ void main() {
 
     vec2 texCoords = fragTexCoord;
 
+    // Apply time-based UV animation for materials with Time node (shaderGroupIndex > 0)
+    if (drawData.shaderGroupIndex > 0u) {
+        texCoords += vec2(camera.time * 0.1, 0.0);
+    }
+
     // Calculate texture coordinate derivatives for proper mipmap selection
     vec2 texDx = dFdx(fragTexCoord);
     vec2 texDy = dFdy(fragTexCoord);

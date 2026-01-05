@@ -4,6 +4,7 @@
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
 #include "events/PreviewEvents.hpp"
+#include "time/Timer.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <filesystem>
@@ -534,7 +535,7 @@ namespace windows
             cameraCmd.view = previewCamera->getViewMatrix();
             cameraCmd.projection = previewCamera->getProjectionMatrix();
             cameraCmd.cameraPos = previewCamera->getPosition();
-            cameraCmd.time = 0.0f;
+            cameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
             dispatcher.execute(cameraCmd);
 
             // Render and get texture handle
