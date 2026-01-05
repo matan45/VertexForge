@@ -14,6 +14,12 @@ namespace serialization
 
         entityJson["name"] = entity.getName();
 
+        // Active state
+        if (entity.hasComponent<components::NameComponent>())
+        {
+            entityJson["isActive"] = entity.getComponent<components::NameComponent>().isActive;
+        }
+
         if (entity.hasComponent<components::TransformComponent>())
         {
             entityJson["transform"] = SceneSerialization::serializeTransform(
@@ -154,6 +160,15 @@ namespace serialization
         }
 
         sceneGraph.addChild(parent, entity);
+
+        // Restore active state
+        if (entityJson.contains("isActive") && entityJson["isActive"].is_boolean())
+        {
+            if (entity.hasComponent<components::NameComponent>())
+            {
+                entity.getComponent<components::NameComponent>().isActive = entityJson["isActive"].get<bool>();
+            }
+        }
 
         if (entityJson.contains("transform"))
         {

@@ -61,6 +61,11 @@ namespace serialization {
 		entityJson["uuid"] = entity.getUUID().getValue();
 		entityJson["name"] = entity.getName();
 
+		// Active state
+		if (entity.hasComponent<components::NameComponent>()) {
+			entityJson["isActive"] = entity.getComponent<components::NameComponent>().isActive;
+		}
+
 		// Transform (always present per Entity constructor)
 		if (entity.hasComponent<components::TransformComponent>()) {
 			entityJson["transform"] = serializeTransform(entity.getComponent<components::TransformComponent>());
@@ -427,13 +432,20 @@ namespace serialization {
 	
 	void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
-		
+
 		std::string entityName = "Unnamed";
 		if (entityJson.contains("name")) {
 			entityName = entityJson["name"].get<std::string>();
 			entity.setName(entityName);
 		}
-		
+
+		// Restore active state
+		if (entityJson.contains("isActive") && entityJson["isActive"].is_boolean()) {
+			if (entity.hasComponent<components::NameComponent>()) {
+				entity.getComponent<components::NameComponent>().isActive = entityJson["isActive"].get<bool>();
+			}
+		}
+
 		if (progressCallback) {
 			progressCallback(entityName, entitiesLoaded, totalEntities);
 		}
