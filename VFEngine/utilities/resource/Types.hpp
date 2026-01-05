@@ -17,6 +17,8 @@ namespace resource
         GEOMETRY,
         TESS_CONTROL,
         TESS_EVALUATION,
+        MESH,
+        TASK,
         UNKNOWN
     };
 
