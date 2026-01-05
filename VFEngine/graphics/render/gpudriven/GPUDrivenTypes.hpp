@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <array>
 #include <string>
+#include "MeshletBufferTypes.hpp"
 
 namespace render::gpudriven {
 
@@ -148,6 +149,9 @@ namespace render::gpudriven {
 
         std::array<LODDrawInfo, LOD_LEVEL_COUNT> lods;
 
+        // Meshlet data per LOD level
+        std::array<MeshletLODInfo, LOD_LEVEL_COUNT> meshletLods{};
+
         glm::vec3 aabbMin;
         glm::vec3 aabbMax;
         glm::vec4 boundingSphere;        // xyz = center, w = radius
@@ -193,6 +197,33 @@ namespace render::gpudriven {
                 }
             }
             return mask;
+        }
+
+        // Check if meshlet data is available for this submesh
+        bool hasMeshletData() const {
+            for (const auto& mlod : meshletLods) {
+                if (mlod.meshletCount > 0) return true;
+            }
+            return false;
+        }
+
+        // Get best available LOD with meshlet data
+        uint32_t getBestAvailableMeshletLOD(uint32_t requestedLOD) const {
+            // First try requested or lower detail
+            for (uint32_t lod = requestedLOD; lod < LOD_LEVEL_COUNT; ++lod) {
+                if (meshletLods[lod].meshletCount > 0 &&
+                    lodStates[lod] == LODStreamState::Ready) {
+                    return lod;
+                }
+            }
+            // Fallback to any available meshlet LOD
+            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod) {
+                if (meshletLods[lod].meshletCount > 0 &&
+                    lodStates[lod] == LODStreamState::Ready) {
+                    return lod;
+                }
+            }
+            return LOD_LEVEL_COUNT; // None ready
         }
     };
 

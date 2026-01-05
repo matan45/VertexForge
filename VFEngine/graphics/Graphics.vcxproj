@@ -148,6 +148,8 @@
     <ClInclude Include="render\gpudriven\IndirectBatchManager.hpp" />
     <ClInclude Include="render\gpudriven\IndirectDrawBuffer.hpp" />
     <ClInclude Include="render\gpudriven\MergedMeshBuffer.hpp" />
+    <ClInclude Include="render\gpudriven\MeshletBuffer.hpp" />
+    <ClInclude Include="render\gpudriven\MeshletBufferTypes.hpp" />
     <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
     <ClInclude Include="render\ibl\DefaultIBLTextureFactory.hpp" />
     <ClInclude Include="render\ibl\EnvironmentCubemapGenerator.hpp" />
@@ -217,6 +219,7 @@
     <ClCompile Include="render\gpudriven\IndirectBatchManager.cpp" />
     <ClCompile Include="render\gpudriven\IndirectDrawBuffer.cpp" />
     <ClCompile Include="render\gpudriven\MergedMeshBuffer.cpp" />
+    <ClCompile Include="render\gpudriven\MeshletBuffer.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
     <ClCompile Include="render\ibl\DefaultIBLTextureFactory.cpp" />
     <ClCompile Include="render\ibl\EnvironmentCubemapGenerator.cpp" />

@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include "Types.hpp"
+#include "MeshletTypes.hpp"
 
 namespace resource {
 
@@ -22,10 +23,29 @@ namespace resource {
         }
     };
 
+    // Information about meshlet data for a single LOD level
+    struct LODMeshletFileInfo {
+        uint32_t meshletCount = 0;
+        uint32_t vertexIndexCount = 0;
+        uint32_t primitiveCount = 0;
+
+        // Calculate memory size for meshlet data of this LOD
+        size_t getMeshletMemorySize() const {
+            return (meshletCount * sizeof(Meshlet)) +
+                   (vertexIndexCount * sizeof(uint32_t)) +
+                   (primitiveCount * sizeof(uint32_t));
+        }
+    };
+
     // Information about a submesh for streaming
     struct SubmeshStreamInfo {
         std::string name;
         std::array<LODFileInfo, LOD_LEVEL_COUNT> lods;
+
+        // Meshlet info per LOD (v0.0.4+)
+        std::array<LODMeshletFileInfo, LOD_LEVEL_COUNT> meshletLods{};
+        std::streampos meshletDataOffset = 0;  // File position where meshlet data starts
+        bool hasMeshletData = false;
     };
 
     // Header information parsed from mesh file (without loading geometry)
@@ -93,8 +113,18 @@ namespace resource {
                           std::vector<Vertex>& outVertices,
                           std::vector<uint32_t>& outIndices);
 
+        // Read meshlet data for a submesh (v0.0.4+)
+        // Returns true on success, meshlet data filled
+        bool readMeshletData(uint32_t submeshIdx, SubmeshMeshletData& outMeshletData);
+
+        // Check if file has meshlet data
+        bool hasMeshletData() const { return hasMeshlets; }
+
         // Get memory size estimate for a specific LOD
         size_t getLODMemorySize(uint32_t submeshIdx, uint32_t lodLevel) const;
+
+        // Get meshlet memory size estimate for a specific LOD
+        size_t getMeshletMemorySize(uint32_t submeshIdx, uint32_t lodLevel) const;
 
         // Get total vertex count for a specific LOD across all submeshes
         uint32_t getTotalVertexCount(uint32_t lodLevel) const;
@@ -106,15 +136,20 @@ namespace resource {
         std::ifstream file;
         MeshStreamHeader header;
         std::string filePath;
+        bool hasMeshlets = false;  // True if file has meshlet data (v0.0.4+)
         mutable std::mutex fileMutex;  // Protects file reads from concurrent access
 
         // Parse header and compute file offsets for each LOD
         bool parseHeader();
 
+        // Parse meshlet headers after LOD data (v0.0.4+)
+        bool parseMeshletHeaders(uint32_t meshIdx);
+
         // Safety limits (same as MeshResource)
         static constexpr uint32_t maxVertexCount = 10'000'000;
         static constexpr uint32_t maxIndexCount = 30'000'000;
         static constexpr uint32_t maxSubmeshCount = 10'000;
+        static constexpr uint32_t maxMeshletCount = 1'000'000;
     };
 
     // Static factory for creating stream handles
