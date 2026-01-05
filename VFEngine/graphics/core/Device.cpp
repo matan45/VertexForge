@@ -327,10 +327,27 @@ namespace core {
 	bool Device::isDeviceSuitable(const vk::PhysicalDevice& device) const
 	{
 		const QueueFamilyIndices indices = Utilities::findQueueFamiliesFromDevice(device, surface);
-
 		const bool extensionsSupported = checkDeviceExtensionSupport(device);
 		const vk::PhysicalDeviceFeatures supportedFeatures = device.getFeatures();
 		const vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
+
+		// Log rejection reasons in debug mode
+		if (debug) {
+			const std::string deviceName = deviceProperties.deviceName;
+			if (!indices.isComplete()) {
+				loggerInfo("Device '{}' rejected: incomplete queue families", deviceName);
+			}
+			if (!extensionsSupported) {
+				loggerInfo("Device '{}' rejected: missing required extensions (including VK_EXT_mesh_shader)", deviceName);
+			}
+			if (!supportedFeatures.samplerAnisotropy) {
+				loggerInfo("Device '{}' rejected: no sampler anisotropy support", deviceName);
+			}
+			if (deviceProperties.deviceType != vk::PhysicalDeviceType::eDiscreteGpu) {
+				loggerInfo("Device '{}' rejected: not a discrete GPU (type: {})",
+				           deviceName, vk::to_string(deviceProperties.deviceType));
+			}
+		}
 
 		return indices.isComplete() &&
 			extensionsSupported &&
@@ -380,6 +397,22 @@ namespace core {
 
 	void Device::queryMeshShaderCapabilities()
 	{
+		// Verify mesh shader extension is available before querying
+		// (Should always be true since VK_EXT_mesh_shader is a required extension,
+		// but defensive check in case requirements change)
+		bool meshShaderExtensionFound = false;
+		for (const auto& ext : physicalDevice.enumerateDeviceExtensionProperties()) {
+			if (strcmp(ext.extensionName.data(), VK_EXT_MESH_SHADER_EXTENSION_NAME) == 0) {
+				meshShaderExtensionFound = true;
+				break;
+			}
+		}
+
+		if (!meshShaderExtensionFound) {
+			loggerWarning("VK_EXT_mesh_shader not available - mesh shader capabilities will be zero");
+			return;
+		}
+
 		// Query mesh shader properties
 		vk::PhysicalDeviceMeshShaderPropertiesEXT meshProps{};
 		vk::PhysicalDeviceProperties2 props2{};

@@ -20,7 +20,8 @@ namespace core
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
-		result.pipelineLayout = config.device.createPipelineLayout(pipelineLayoutInfo);
+		// RAII: Use unique handle for automatic cleanup on failure
+		vk::UniquePipelineLayout uniqueLayout = config.device.createPipelineLayoutUnique(pipelineLayoutInfo);
 
 		// Vertex input - simple vec3 positions
 		vk::VertexInputBindingDescription bindingDescription{};
@@ -118,17 +119,16 @@ namespace core
 		pipelineInfo.pMultisampleState = &multisampling;
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
-		pipelineInfo.layout = result.pipelineLayout;
+		pipelineInfo.layout = uniqueLayout.get();
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
 
-		auto createResult = config.device.createGraphicsPipeline(nullptr, pipelineInfo);
-		if (createResult.result != vk::Result::eSuccess)
-		{
-			config.device.destroyPipelineLayout(result.pipelineLayout);
-			throw std::runtime_error("Failed to create wireframe graphics pipeline");
-		}
-		result.pipeline = createResult.value;
+		// RAII: Use unique handle for automatic cleanup on failure
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+
+		// Success: release ownership to result (caller manages lifetime)
+		result.pipelineLayout = uniqueLayout.release();
+		result.pipeline = uniquePipeline.release();
 
 		return result;
 	}
@@ -137,8 +137,9 @@ namespace core
 	{
 		GraphicsPipelineResult result{};
 
-		// Use existing pipeline layout or create a new one
-		bool createdLayout = false;
+		// RAII: Use unique handle for layout if we create it (nullptr if using existing)
+		vk::UniquePipelineLayout uniqueLayout;
+
 		if (config.existingPipelineLayout)
 		{
 			result.pipelineLayout = config.existingPipelineLayout;
@@ -159,8 +160,8 @@ namespace core
 				pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 			}
 
-			result.pipelineLayout = config.device.createPipelineLayout(pipelineLayoutInfo);
-			createdLayout = true;
+			uniqueLayout = config.device.createPipelineLayoutUnique(pipelineLayoutInfo);
+			result.pipelineLayout = uniqueLayout.get();
 		}
 
 		// Vertex input
@@ -259,26 +260,72 @@ namespace core
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
 
-		auto createResult = config.device.createGraphicsPipeline(nullptr, pipelineInfo);
-		if (createResult.result != vk::Result::eSuccess)
+		// RAII: Use unique handle for automatic cleanup on failure
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+
+		// Success: release ownership to result (caller manages lifetime)
+		if (uniqueLayout)
 		{
-			if (createdLayout)
-			{
-				config.device.destroyPipelineLayout(result.pipelineLayout);
-			}
-			throw std::runtime_error("Failed to create graphics pipeline");
+			uniqueLayout.release();  // We already set result.pipelineLayout above
 		}
-		result.pipeline = createResult.value;
+		result.pipeline = uniquePipeline.release();
 
 		return result;
 	}
 
 	MeshShaderPipelineResult PipelineUtilities::createMeshShaderPipeline(const MeshShaderPipelineConfig& config)
 	{
+		// Validate shader stages for mesh shader pipeline
+		bool hasMeshShader = false;
+		bool hasTaskShader = false;
+		bool hasFragmentShader = false;
+		bool hasInvalidStage = false;
+		std::string invalidStageName;
+
+		for (const auto& stage : config.shaderStages)
+		{
+			switch (stage.stage)
+			{
+			case vk::ShaderStageFlagBits::eMeshEXT:
+				hasMeshShader = true;
+				break;
+			case vk::ShaderStageFlagBits::eTaskEXT:
+				hasTaskShader = true;
+				break;
+			case vk::ShaderStageFlagBits::eFragment:
+				hasFragmentShader = true;
+				break;
+			case vk::ShaderStageFlagBits::eVertex:
+			case vk::ShaderStageFlagBits::eGeometry:
+			case vk::ShaderStageFlagBits::eTessellationControl:
+			case vk::ShaderStageFlagBits::eTessellationEvaluation:
+				hasInvalidStage = true;
+				invalidStageName = vk::to_string(stage.stage);
+				break;
+			default:
+				break;
+			}
+		}
+
+		if (!hasMeshShader)
+		{
+			throw std::runtime_error("Mesh shader pipeline requires a mesh shader stage (eMeshEXT)");
+		}
+
+		if (hasInvalidStage)
+		{
+			throw std::runtime_error("Mesh shader pipeline cannot contain " + invalidStageName +
+			                         " - only Task, Mesh, and Fragment shaders are allowed");
+		}
+
+		// Note: Task shader is optional, Fragment shader is usually present but not strictly required
+		// (e.g., depth-only passes might skip fragment shader)
+
 		MeshShaderPipelineResult result{};
 
-		// Use existing pipeline layout or create a new one
-		bool createdLayout = false;
+		// RAII: Use unique handle for layout if we create it (nullptr if using existing)
+		vk::UniquePipelineLayout uniqueLayout;
+
 		if (config.existingPipelineLayout)
 		{
 			result.pipelineLayout = config.existingPipelineLayout;
@@ -299,8 +346,8 @@ namespace core
 				pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 			}
 
-			result.pipelineLayout = config.device.createPipelineLayout(pipelineLayoutInfo);
-			createdLayout = true;
+			uniqueLayout = config.device.createPipelineLayoutUnique(pipelineLayoutInfo);
+			result.pipelineLayout = uniqueLayout.get();
 		}
 
 		// NOTE: Mesh shader pipelines do NOT use vertex input or input assembly states
@@ -390,16 +437,15 @@ namespace core
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
 
-		auto createResult = config.device.createGraphicsPipeline(nullptr, pipelineInfo);
-		if (createResult.result != vk::Result::eSuccess)
+		// RAII: Use unique handle for automatic cleanup on failure
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+
+		// Success: release ownership to result (caller manages lifetime)
+		if (uniqueLayout)
 		{
-			if (createdLayout)
-			{
-				config.device.destroyPipelineLayout(result.pipelineLayout);
-			}
-			throw std::runtime_error("Failed to create mesh shader pipeline");
+			uniqueLayout.release();  // We already set result.pipelineLayout above
 		}
-		result.pipeline = createResult.value;
+		result.pipeline = uniquePipeline.release();
 
 		return result;
 	}

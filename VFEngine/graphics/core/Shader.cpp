@@ -227,6 +227,10 @@ namespace core {
 				shaderType = resource::ShaderType::COMPUTE;
 			} else if (typeLine == "GEOMETRY" || typeLine == "geometry") {
 				shaderType = resource::ShaderType::GEOMETRY;
+			} else if (typeLine == "TESS_CONTROL" || typeLine == "tess_control") {
+				shaderType = resource::ShaderType::TESS_CONTROL;
+			} else if (typeLine == "TESS_EVALUATION" || typeLine == "tess_evaluation") {
+				shaderType = resource::ShaderType::TESS_EVALUATION;
 			} else if (typeLine == "MESH" || typeLine == "mesh") {
 				shaderType = resource::ShaderType::MESH;
 			} else if (typeLine == "TASK" || typeLine == "task") {
