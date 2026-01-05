@@ -5,8 +5,10 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
 #include <array>
+#include <cstring>
 
 namespace render::gpudriven
 {
@@ -25,10 +27,30 @@ namespace render::gpudriven
                                    vk::DescriptorSetLayout bindlessTextureLayout,
                                    vk::RenderPass renderPass)
     {
+        createStatsBuffer();
         createPerDrawDataDescriptor();
         createMeshletDataDescriptor();
         createVertexDataDescriptor();
         createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, renderPass);
+    }
+
+    void MeshShaderPipeline::createStatsBuffer()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+        request.size = sizeof(MeshletCullingStats);
+        request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+
+        core::BufferUtilities::createBuffer(request, statsBuffer, statsBufferMemory);
+
+        // Initialize to zero
+        void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(MeshletCullingStats));
+        std::memset(data, 0, sizeof(MeshletCullingStats));
+        vkDevice.unmapMemory(statsBufferMemory);
+
+        loggerInfo("MeshShaderPipeline: Created culling stats buffer");
     }
 
     void MeshShaderPipeline::cleanup()
@@ -52,6 +74,9 @@ namespace render::gpudriven
             vkDevice.destroyPipelineLayout(pipelineLayout);
             pipelineLayout = nullptr;
         }
+
+        // Stats buffer
+        core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
 
         // Per-draw data
         if (perDrawDataPool)
@@ -239,8 +264,8 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
 
         // Create descriptor set layout for meshlet data (Set 3)
-        // 3 bindings: meshlet buffer, vertex indices, primitive indices
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+        // 4 bindings: meshlet buffer, vertex indices, primitive indices, stats
+        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
 
         // Binding 0: GPUMeshlet[] buffer
         bindings[0].binding = 0;
@@ -260,6 +285,12 @@ namespace render::gpudriven
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
 
+        // Binding 3: Culling stats buffer (read/write by task shader)
+        bindings[3].binding = 3;
+        bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -269,7 +300,7 @@ namespace render::gpudriven
         // Create descriptor pool
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 3;
+        poolSize.descriptorCount = 4;  // 4 storage buffers now
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -287,7 +318,23 @@ namespace render::gpudriven
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         meshletDataDescriptorSet = sets[0];
 
-        loggerInfo("MeshShaderPipeline: Created meshlet data descriptor");
+        // Immediately bind the stats buffer (binding 3)
+        vk::DescriptorBufferInfo statsInfo{};
+        statsInfo.buffer = statsBuffer;
+        statsInfo.offset = 0;
+        statsInfo.range = sizeof(MeshletCullingStats);
+
+        vk::WriteDescriptorSet statsWrite{};
+        statsWrite.dstSet = meshletDataDescriptorSet;
+        statsWrite.dstBinding = 3;
+        statsWrite.dstArrayElement = 0;
+        statsWrite.descriptorCount = 1;
+        statsWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        statsWrite.pBufferInfo = &statsInfo;
+
+        vkDevice.updateDescriptorSets(statsWrite, {});
+
+        loggerInfo("MeshShaderPipeline: Created meshlet data descriptor with stats buffer");
     }
 
     void MeshShaderPipeline::createVertexDataDescriptor()
@@ -428,5 +475,46 @@ namespace render::gpudriven
         {
             loggerError("MeshShaderPipeline: Failed to create pipeline - {}", e.what());
         }
+    }
+
+    void MeshShaderPipeline::resetStats(vk::CommandBuffer cmd)
+    {
+        // Reset stats buffer to zero at the start of each frame
+        cmd.fillBuffer(statsBuffer, 0, sizeof(MeshletCullingStats), 0);
+
+        // Add barrier to ensure the fill completes before shaders access it
+        vk::BufferMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = statsBuffer;
+        barrier.offset = 0;
+        barrier.size = sizeof(MeshletCullingStats);
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eTaskShaderEXT,
+            {},
+            {},
+            barrier,
+            {});
+    }
+
+    MeshletCullingStats MeshShaderPipeline::readStats()
+    {
+        if (!statsBuffer)
+        {
+            return cachedStats;
+        }
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Map and read the stats buffer (host-visible)
+        void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(MeshletCullingStats));
+        std::memcpy(&cachedStats, data, sizeof(MeshletCullingStats));
+        vkDevice.unmapMemory(statsBufferMemory);
+
+        return cachedStats;
     }
 }

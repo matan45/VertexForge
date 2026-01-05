@@ -35,7 +35,7 @@ namespace windows
 
                 if (gpu.enabled)
                 {
-                    ImGui::Text("Features:");
+                    ImGui::Text("Object-Level Features:");
                     ImGui::SameLine();
                     ImGui::TextColored(gpu.frustumCullingEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1),
                                        "Frustum");
@@ -45,6 +45,14 @@ namespace windows
                     ImGui::SameLine();
                     ImGui::TextColored(gpu.lodSelectionEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1),
                                        "| LOD");
+
+                    ImGui::Text("Meshlet-Level Features:");
+                    ImGui::SameLine();
+                    ImGui::TextColored(gpu.meshletFrustumCullingEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1),
+                                       "Frustum");
+                    ImGui::SameLine();
+                    ImGui::TextColored(gpu.meshletBackfaceCullingEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1),
+                                       "| Backface");
 
                     ImGui::Separator();
 
@@ -80,6 +88,29 @@ namespace windows
                     else
                     {
                         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "  No LOD data available");
+                    }
+
+                    ImGui::Separator();
+
+                    // Meshlet culling stats (task shader level)
+                    ImGui::Text("Meshlet Culling (Task Shader):");
+                    if (gpu.totalMeshlets > 0)
+                    {
+                        ImGui::Text("  Total Meshlets:      %u", gpu.totalMeshlets);
+                        ImGui::Text("  Culled by Frustum:   %u", gpu.meshletsCulledByFrustum);
+                        ImGui::Text("  Culled by Backface:  %u", gpu.meshletsCulledByBackface);
+                        ImGui::Text("  Visible:             %u", gpu.visibleMeshlets);
+
+                        uint32_t totalCulled = gpu.meshletsCulledByFrustum + gpu.meshletsCulledByBackface;
+                        float meshletCullRate = static_cast<float>(totalCulled) / static_cast<float>(gpu.totalMeshlets);
+                        ImGui::Text("Meshlet Cull Rate:");
+                        ImGui::SameLine();
+                        ImGui::ProgressBar(meshletCullRate, ImVec2(150, 0),
+                                           (std::to_string(static_cast<int>(meshletCullRate * 100)) + "%").c_str());
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "  No meshlet data available");
                     }
 
                     ImGui::Separator();

@@ -402,6 +402,9 @@ namespace render::gpudriven {
             return;
         }
 
+        // Reset meshlet culling stats at the start of each frame
+        meshShaderPipeline->resetStats(cmd);
+
         uint32_t batchCount = batchManager->getBatchCount();
         uint32_t commandsPerSection = batchManager->getCommandsPerSection();
 
@@ -461,7 +464,10 @@ namespace render::gpudriven {
                 // The task shader uses: drawIndex = pc.baseDrawIndex + gl_DrawID
                 MeshShaderPushConstants pushConstants{};
                 pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, shaderGroup) * commandsPerSection;
+                // Pack viewMode and culling flags: bits 0-7 = viewMode, bit 8 = frustum, bit 9 = backface
                 pushConstants.viewMode = currentViewMode;
+                if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+                if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
                 pushConstants.screenWidth = static_cast<float>(extent.width);
                 pushConstants.screenHeight = static_cast<float>(extent.height);
 
@@ -668,6 +674,14 @@ namespace render::gpudriven {
         // Culling stats directly from GPU counters (aggregated)
         stats.culledByFrustum = aggregated.culledByFrustum;
         stats.culledByOcclusion = aggregated.culledByOcclusion;
+    }
+
+    MeshletCullingStats GPUDrivenRenderer::getMeshletCullingStats()
+    {
+        if (!meshShaderPipeline) {
+            return MeshletCullingStats{};
+        }
+        return meshShaderPipeline->readStats();
     }
 
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)

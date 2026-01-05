@@ -55,6 +55,10 @@ namespace render::gpudriven
         bool frustumCullingEnabled = true;
         bool lodSelectionEnabled = true;
         bool occlusionCullingEnabled = true;
+
+        // Per-meshlet culling (task shader level)
+        bool meshletFrustumCullingEnabled = true;
+        bool meshletBackfaceCullingEnabled = true;
         bool meshShaderSupported = false;
         uint32_t currentViewMode = 0;  // 0=Color, 1=Meshlet, 2=LOD
 
@@ -114,6 +118,12 @@ namespace render::gpudriven
         void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
         bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
 
+        // Per-meshlet culling (task shader)
+        void setMeshletFrustumCullingEnabled(bool enabled) { meshletFrustumCullingEnabled = enabled; }
+        bool isMeshletFrustumCullingEnabled() const { return meshletFrustumCullingEnabled; }
+        void setMeshletBackfaceCullingEnabled(bool enabled) { meshletBackfaceCullingEnabled = enabled; }
+        bool isMeshletBackfaceCullingEnabled() const { return meshletBackfaceCullingEnabled; }
+
         bool isMeshShaderSupported() const { return meshShaderSupported; }
 
         void setViewMode(uint32_t mode) { currentViewMode = mode; }
@@ -124,6 +134,9 @@ namespace render::gpudriven
         const GPUDrivenStats& getStats() const { return stats; }
 
         void updateStatsFromGPU();
+
+        // Meshlet culling stats (from task shader)
+        MeshletCullingStats getMeshletCullingStats();
 
         void setMaterialTextureCache(mesh::MaterialTextureCache* cache) { materialTextureCache = cache; }
 

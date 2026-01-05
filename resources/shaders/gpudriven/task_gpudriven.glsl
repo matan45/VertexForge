@@ -53,14 +53,13 @@ struct GPUMeshlet {
 };
 
 // Camera data - MUST match C++ CameraUBO struct in MeshTypes.hpp
-// NOTE: The IBL descriptor set uses this smaller struct. For culling,
-// we would need a separate GPUCameraData buffer with frustum planes.
 struct CameraData {
     mat4 view;           // 64 bytes
     mat4 projection;     // 64 bytes
     vec3 cameraPos;      // 12 bytes (aligned to 16)
     float time;          // 4 bytes
-    // Total: 144 bytes
+    vec4 frustumPlanes[6]; // 96 bytes - frustum planes for per-meshlet culling
+    // Total: 240 bytes
 };
 
 // ============================================================================
@@ -82,13 +81,26 @@ layout(std430, set = 3, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
 
+// Set 3: Debug stats buffer for culling statistics
+// Must match MeshletCullingStats in MeshShaderPipeline.hpp
+layout(std430, set = 3, binding = 3) buffer CullingStatsBuffer {
+    uint totalMeshlets;
+    uint culledByFrustum;
+    uint culledByBackface;
+    uint visibleMeshlets;
+} stats;
+
 // Push constants (shared with mesh/fragment shaders)
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;  // Base index into perDrawData buffer for this section
-    uint padding;
+    uint viewMode;       // Bits 0-7: viewMode, Bit 8: frustum cull, Bit 9: backface cull
     float screenWidth;   // Used by fragment shader
     float screenHeight;  // Used by fragment shader
 } pc;
+
+// Culling control flags (must match MeshShaderPipeline.hpp)
+const uint MESHLET_CULL_FRUSTUM_BIT = 0x100u;
+const uint MESHLET_CULL_BACKFACE_BIT = 0x200u;
 
 // ============================================================================
 // Task Payload (shared data passed to mesh shader)
@@ -201,19 +213,34 @@ void main() {
         // Transform meshlet bounding sphere to world space
         vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
 
-        // Per-meshlet frustum culling
-        // NOTE: Disabled - requires GPUCameraData buffer with frustumPlanes (IBL CameraUBO doesn't have them)
-        // Object-level frustum culling in compute shader handles this instead
+        // Count total meshlets processed
+        atomicAdd(stats.totalMeshlets, 1);
+
+        // Start as visible
         isVisible = true;
 
-        // Backface cone culling - DISABLED for debugging LOD issues
-        // if (isVisible) {
-        //     isVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
-        //                              camera.cameraPos, worldSphere.xyz);
-        // }
+        // Per-meshlet frustum culling (if enabled)
+        if ((pc.viewMode & MESHLET_CULL_FRUSTUM_BIT) != 0u) {
+            bool frustumVisible = sphereInFrustum(worldSphere, camera.frustumPlanes);
+            if (!frustumVisible) {
+                atomicAdd(stats.culledByFrustum, 1);
+                isVisible = false;
+            }
+        }
+
+        // Backface cone culling (if enabled)
+        if (isVisible && (pc.viewMode & MESHLET_CULL_BACKFACE_BIT) != 0u) {
+            bool backfaceVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
+                                                camera.cameraPos, worldSphere.xyz);
+            if (!backfaceVisible) {
+                atomicAdd(stats.culledByBackface, 1);
+                isVisible = false;
+            }
+        }
 
         // If visible, add to shared memory for compaction
         if (isVisible) {
+            atomicAdd(stats.visibleMeshlets, 1);
             uint slot = atomicAdd(sharedVisibleCount, 1);
             if (slot < TASK_WORKGROUP_SIZE) {
                 sharedMeshletIndices[slot] = globalMeshletIndex;

@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include <memory>
+#include <cstdint>
 
 namespace core
 {
@@ -18,9 +19,25 @@ namespace render::gpudriven
     // Push constant for mesh shader pipeline
     struct MeshShaderPushConstants {
         uint32_t baseDrawIndex;  // Base index into perDrawData buffer for this dispatch
-        uint32_t viewMode;       // 0=Color, 1=Meshlet, 2=LOD visualization mode
+        uint32_t viewMode;       // 0=Color, 1=Meshlet, 2=LOD
         float screenWidth;       // Screen width in pixels (for debug visualization)
         float screenHeight;      // Screen height in pixels (for debug visualization)
+    };
+
+    // Separate push constants for task shader culling control
+    // Note: Push constants are shared, so these flags are packed into viewMode bits
+    // Bit 0-7: viewMode (0=Color, 1=Meshlet, 2=LOD)
+    // Bit 8: enableFrustumCulling
+    // Bit 9: enableBackfaceCulling
+    constexpr uint32_t MESHLET_CULL_FRUSTUM_BIT = 0x100;
+    constexpr uint32_t MESHLET_CULL_BACKFACE_BIT = 0x200;
+
+    // Debug statistics for meshlet culling (must match shader struct)
+    struct MeshletCullingStats {
+        uint32_t totalMeshlets;       // Total meshlets processed
+        uint32_t culledByFrustum;     // Meshlets culled by frustum test
+        uint32_t culledByBackface;    // Meshlets culled by backface cone test
+        uint32_t visibleMeshlets;     // Meshlets that passed all tests
     };
 
     // Pipeline for GPU-driven mesh shader rendering
@@ -49,6 +66,11 @@ namespace render::gpudriven
         vk::DescriptorSetLayout vertexDataLayout;
         vk::DescriptorPool vertexDataPool;
         vk::DescriptorSet vertexDataDescriptorSet;
+
+        // Debug stats buffer (binding 3 in set 3)
+        vk::Buffer statsBuffer;
+        vk::DeviceMemory statsBufferMemory;
+        MeshletCullingStats cachedStats{};
 
     public:
         explicit MeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -85,7 +107,13 @@ namespace render::gpudriven
         vk::DescriptorSetLayout getVertexDataLayout() const { return vertexDataLayout; }
         vk::DescriptorSet getVertexDataDescriptorSet() const { return vertexDataDescriptorSet; }
 
+        // Debug stats
+        void resetStats(vk::CommandBuffer cmd);
+        MeshletCullingStats readStats();
+        const MeshletCullingStats& getCachedStats() const { return cachedStats; }
+
     private:
+        void createStatsBuffer();
         void createPerDrawDataDescriptor();
         void createMeshletDataDescriptor();
         void createVertexDataDescriptor();

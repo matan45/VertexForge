@@ -67,6 +67,14 @@ namespace services {
         uint64_t drawCountBufferSize = 0;
         uint64_t perDrawDataBufferSize = 0;
         uint64_t totalMemoryUsage = 0;
+
+        // Meshlet culling stats (from task shader)
+        bool meshletFrustumCullingEnabled = false;
+        bool meshletBackfaceCullingEnabled = false;
+        uint32_t totalMeshlets = 0;
+        uint32_t meshletsCulledByFrustum = 0;
+        uint32_t meshletsCulledByBackface = 0;
+        uint32_t visibleMeshlets = 0;
     };
 
     struct CullingDebugStats {

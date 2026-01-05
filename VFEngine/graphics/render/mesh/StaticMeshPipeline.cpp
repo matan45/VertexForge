@@ -558,6 +558,62 @@ namespace render::mesh
         ubo.cameraPos = cameraPos;
         ubo.time = time;
 
+        // Extract frustum planes from view-projection matrix
+        // Planes are in world space, normalized (ax + by + cz + d = 0)
+        glm::mat4 vp = projection * view;
+
+        // Left plane
+        ubo.frustumPlanes[0] = glm::vec4(
+            vp[0][3] + vp[0][0],
+            vp[1][3] + vp[1][0],
+            vp[2][3] + vp[2][0],
+            vp[3][3] + vp[3][0]);
+
+        // Right plane
+        ubo.frustumPlanes[1] = glm::vec4(
+            vp[0][3] - vp[0][0],
+            vp[1][3] - vp[1][0],
+            vp[2][3] - vp[2][0],
+            vp[3][3] - vp[3][0]);
+
+        // Bottom plane
+        ubo.frustumPlanes[2] = glm::vec4(
+            vp[0][3] + vp[0][1],
+            vp[1][3] + vp[1][1],
+            vp[2][3] + vp[2][1],
+            vp[3][3] + vp[3][1]);
+
+        // Top plane
+        ubo.frustumPlanes[3] = glm::vec4(
+            vp[0][3] - vp[0][1],
+            vp[1][3] - vp[1][1],
+            vp[2][3] - vp[2][1],
+            vp[3][3] - vp[3][1]);
+
+        // Near plane
+        ubo.frustumPlanes[4] = glm::vec4(
+            vp[0][3] + vp[0][2],
+            vp[1][3] + vp[1][2],
+            vp[2][3] + vp[2][2],
+            vp[3][3] + vp[3][2]);
+
+        // Far plane
+        ubo.frustumPlanes[5] = glm::vec4(
+            vp[0][3] - vp[0][2],
+            vp[1][3] - vp[1][2],
+            vp[2][3] - vp[2][2],
+            vp[3][3] - vp[3][2]);
+
+        // Normalize all planes
+        for (int i = 0; i < 6; ++i)
+        {
+            float length = glm::length(glm::vec3(ubo.frustumPlanes[i]));
+            if (length > 0.0001f)
+            {
+                ubo.frustumPlanes[i] /= length;
+            }
+        }
+
         void* data;
         vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
         if (result == vk::Result::eSuccess)

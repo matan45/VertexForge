@@ -69,13 +69,13 @@ struct GPUMeshlet {
 // std430 would pad vec3 to 16 bytes, breaking alignment
 
 // Camera data - MUST match C++ CameraUBO struct in MeshTypes.hpp
-// The IBL descriptor set uses this smaller struct, not GPUCameraData
 struct CameraData {
     mat4 view;           // 64 bytes
     mat4 projection;     // 64 bytes
     vec3 cameraPos;      // 12 bytes (aligned to 16)
     float time;          // 4 bytes
-    // Total: 144 bytes
+    vec4 frustumPlanes[6]; // 96 bytes - frustum planes (used by task shader)
+    // Total: 240 bytes
 };
 
 // ============================================================================
@@ -127,7 +127,7 @@ taskPayloadSharedEXT MeshletPayload payload;
 // Push constants (shared with task/fragment shaders)
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;  // Used by task shader
-    uint padding;
+    uint viewMode;       // Bits 0-7: viewMode, Bit 8: frustum cull, Bit 9: backface cull
     float screenWidth;   // Used by fragment shader
     float screenHeight;  // Used by fragment shader
 } pc;
@@ -393,13 +393,13 @@ layout(location = 5) in flat uint fragMeshletIndex;
 layout(location = 0) out vec4 outColor;
 
 // Camera data - MUST match C++ CameraUBO struct in MeshTypes.hpp
-// The IBL descriptor set uses this smaller struct, not GPUCameraData
 struct CameraData {
     mat4 view;           // 64 bytes
     mat4 projection;     // 64 bytes
     vec3 cameraPos;      // 12 bytes (aligned to 16)
     float time;          // 4 bytes
-    // Total: 144 bytes
+    vec4 frustumPlanes[6]; // 96 bytes - frustum planes (used by task shader)
+    // Total: 240 bytes
 };
 
 // Set 0: Camera and IBL resources
@@ -449,7 +449,7 @@ layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 // Push constants (shared with task/mesh shaders)
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;    // Used by task shader
-    uint viewMode;         // 0=Color, 1=Meshlet, 2=LOD visualization mode
+    uint viewMode;         // Bits 0-7: viewMode (0=Color, 1=Meshlet, 2=LOD), Bits 8-9: culling flags
     float screenWidth;     // Screen width in pixels
     float screenHeight;    // Screen height in pixels
 } pc;
@@ -651,8 +651,11 @@ void main() {
     // Gamma correction
     color = pow(color, vec3(1.0/2.2));
 
-    // Meshlet view mode (pc.viewMode == 1): visualize each meshlet with a unique color
-    if (pc.viewMode == 1u) {
+    // Extract view mode from lower 8 bits (upper bits contain culling flags)
+    uint viewModeValue = pc.viewMode & 0xFFu;
+
+    // Meshlet view mode (viewMode == 1): visualize each meshlet with a unique color
+    if (viewModeValue == 1u) {
         // Generate a unique color per meshlet using hash-based approach
         uint h = fragMeshletIndex;
         h = ((h >> 16) ^ h) * 0x45d9f3b;
@@ -669,8 +672,8 @@ void main() {
         color = meshletColor;
     }
 
-    // LOD view mode (pc.viewMode == 2): visualize LOD levels with colors
-    if (pc.viewMode == 2u) {
+    // LOD view mode (viewMode == 2): visualize LOD levels with colors
+    if (viewModeValue == 2u) {
         vec3 lodColors[4] = vec3[4](
             vec3(0.0, 1.0, 0.0),   // LOD0: Green
             vec3(1.0, 1.0, 0.0),   // LOD1: Yellow

@@ -101,6 +101,15 @@ namespace controllers::offscreen
             stats.gpuDriven.drawCountBufferSize = gpuDrivenRenderer->getDrawCountBufferSize();
             stats.gpuDriven.perDrawDataBufferSize = gpuDrivenRenderer->getPerDrawDataBufferSize();
             stats.gpuDriven.totalMemoryUsage = gpuDrivenRenderer->getTotalMemoryUsage();
+
+            // Meshlet culling stats (from task shader)
+            stats.gpuDriven.meshletFrustumCullingEnabled = gpuDrivenRenderer->isMeshletFrustumCullingEnabled();
+            stats.gpuDriven.meshletBackfaceCullingEnabled = gpuDrivenRenderer->isMeshletBackfaceCullingEnabled();
+            auto meshletStats = gpuDrivenRenderer->getMeshletCullingStats();
+            stats.gpuDriven.totalMeshlets = meshletStats.totalMeshlets;
+            stats.gpuDriven.meshletsCulledByFrustum = meshletStats.culledByFrustum;
+            stats.gpuDriven.meshletsCulledByBackface = meshletStats.culledByBackface;
+            stats.gpuDriven.visibleMeshlets = meshletStats.visibleMeshlets;
         }
 
         return stats;
