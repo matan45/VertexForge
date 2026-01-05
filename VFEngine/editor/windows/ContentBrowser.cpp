@@ -6,6 +6,8 @@
 #include "Import.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>
+#include <windows.h>
+#include <shellapi.h>
 
 namespace windows
 {
@@ -100,7 +102,17 @@ namespace windows
 
                 if (clickResult.wasDoubleClicked)
                 {
-                    showFileWindow = true;
+                    if (selectedType == AssetType::Script)
+                    {
+                        // Open .mt files with VS Code
+                        std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+                        std::string args = "\"" + filePath + "\"";
+                        ShellExecuteA(nullptr, "open", "code", args.c_str(), nullptr, SW_SHOWNORMAL);
+                    }
+                    else
+                    {
+                        showFileWindow = true;
+                    }
                 }
             }
 
@@ -179,6 +191,10 @@ namespace windows
                 {
                     asset.type = Prefab;
                 }
+                else if (extension == ".mt")
+                {
+                    asset.type = Script;
+                }
                 else
                 {
                     resource::FileType ext = resource::ResourceManager::readHeaderFile(entry);
@@ -198,10 +214,6 @@ namespace windows
                     else if (ext == resource::FileType::MESH)
                     {
                         asset.type = Model;
-                    }
-                    else if (ext == resource::FileType::SHADER)
-                    {
-                        asset.type = Shader;
                     }
                     else if (ext == resource::FileType::AUDIO)
                     {

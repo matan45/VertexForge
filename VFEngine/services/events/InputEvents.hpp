@@ -29,6 +29,24 @@ namespace events::input {
         std::string_view getName() const override { return "GetMouseDelta"; }
     };
 
+    struct IsKeyReleasedQuery : IQuery<bool> {
+        int keyCode;
+
+        std::string_view getName() const override { return "IsKeyReleased"; }
+    };
+
+    struct IsMouseButtonReleasedQuery : IQuery<bool> {
+        int button;
+
+        std::string_view getName() const override { return "IsMouseButtonReleased"; }
+    };
+
+    struct IsDoubleClickQuery : IQuery<bool> {
+        int button;
+
+        std::string_view getName() const override { return "IsDoubleClick"; }
+    };
+
     // ============================================
     // NOTIFICATIONS - State change broadcasts
     // ============================================

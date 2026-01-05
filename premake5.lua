@@ -103,10 +103,11 @@ project "Core"
 	  "dependencies/glfw/include",
 	  "dependencies/imgui/backends",
 	  "dependencies/openal-soft/include", -- OpenAL headers
+	  "dependencies/mtype/mType",         -- mType scripting language
 	  vulkanLibPath.."/Include"
    }
 
-   links { "Graphics" }  -- Link against Graphics (Services is a higher layer, no link needed)
+   links { "Graphics", "mType" }  -- Link against Graphics, mType (Services is a higher layer, no link needed)
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
    filter "configurations:Debug"

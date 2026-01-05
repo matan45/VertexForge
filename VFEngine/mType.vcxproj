@@ -295,6 +295,10 @@
     <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\QualifiedNameParser.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\StatementTypeDetector.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\parser\utilities\VisibilityParser.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\project\GlobMatcher.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\project\ProjectBuilder.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\project\ProjectConfig.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\project\ProjectConfigParser.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\reflection\ReflectionHandle.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\reflection\ReflectionNatives.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\runtime\EventLoop.hpp" />
@@ -599,6 +603,9 @@
     <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\QualifiedNameParser.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\StatementTypeDetector.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\parser\utilities\VisibilityParser.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\project\GlobMatcher.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\project\ProjectBuilder.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\project\ProjectConfigParser.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionHandle.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionNatives.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\runtime\EventLoop.cpp" />

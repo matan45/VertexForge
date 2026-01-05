@@ -6,6 +6,7 @@
 #include "../adapters/MaterialPreviewAdapter.hpp"
 #include "../adapters/MeshPreviewAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
+#include "../adapters/ScriptingAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 #include "print/Logger.hpp"
 
@@ -28,9 +29,11 @@ namespace core
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         audioAdapter = std::make_unique<AudioAdapter>();
+        scriptingAdapter = std::make_unique<ScriptingAdapter>();
 
         offScreen->init();
         audioAdapter->init();
+        scriptingAdapter->init();
 
         
         coreInterface->setResizeCallback([this]()
@@ -56,11 +59,17 @@ namespace core
             audioAdapter->cleanUp();
         }
 
+        if (scriptingAdapter)
+        {
+            scriptingAdapter->cleanUp();
+        }
+
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
         textureAdapter.reset();
         offScreenAdapter.reset();
         audioAdapter.reset();
+        scriptingAdapter.reset();
 
         if (coreInterface)
         {
@@ -91,6 +100,11 @@ namespace core
     services::IAudioProvider* EditorBootstrap::getAudioProvider()
     {
         return audioAdapter.get();
+    }
+
+    services::IScriptingProvider* EditorBootstrap::getScriptingProvider()
+    {
+        return scriptingAdapter.get();
     }
 
     window::Window* EditorBootstrap::getWindow()

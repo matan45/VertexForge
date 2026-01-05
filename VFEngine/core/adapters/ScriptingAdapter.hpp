@@ -1,0 +1,81 @@
+#pragma once
+#include "../../services/providers/IScriptingProvider.hpp"
+#include "NativeAPIRegistry.hpp"
+#include <memory>
+#include <unordered_map>
+#include <string>
+#include <any>
+
+namespace services
+{
+    class ScriptInterpreter;
+}
+
+namespace core
+{
+    class ScriptingAdapter : public ::services::IScriptingProvider
+    {
+    private:
+        std::unique_ptr<::services::ScriptInterpreter> interpreter;
+        std::unique_ptr<NativeAPIRegistry> apiRegistry;
+
+        // Script instance tracking
+        std::unordered_map<uint64_t, std::string> instanceToClassName; // instanceId -> class name
+        std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity; // instanceId -> entity
+        std::unordered_map<uint64_t, std::any> instanceToObject; // instanceId -> script object instance (type-erased)
+        std::unordered_map<std::string, std::string> pathToClassName; // scriptPath -> class name
+
+        // Error tracking
+        mutable std::optional<::services::ScriptError> lastError;
+
+       
+        uint64_t nextInstanceId = 1;
+        std::string scriptLibraryPath;
+        bool initialized = false;
+        bool compiled = false;
+
+    public:
+        explicit ScriptingAdapter();
+        ~ScriptingAdapter() override;
+
+        ScriptingAdapter(const ScriptingAdapter&) = delete;
+        ScriptingAdapter& operator=(const ScriptingAdapter&) = delete;
+
+        // === VM Lifecycle ===
+        bool init() override;
+        void cleanUp() override;
+        bool isInitialized() const override;
+
+        // === Script Building ===
+        ::services::ScriptBuildResult buildScripts(const std::string& manifestPath) override;
+        void cleanScripts(const std::string& manifestPath) override;
+        bool isCompiled() const override;
+        bool loadCompiledScripts(const std::string& manifestPath) override;
+
+        // === Script Loading ===
+        std::optional<::services::ScriptInstanceInfo> loadScript(
+            const std::string& scriptPath,
+            ::services::EntityHandle entity) override;
+        void unloadScript(uint64_t instanceId) override;
+        void unloadAllScripts() override;
+        bool isScriptLoaded(uint64_t instanceId) const override;
+
+        // === Lifecycle Calls ===
+        void callOnStart(uint64_t instanceId) override;
+        void callOnUpdate(uint64_t instanceId, float deltaTime) override;
+        void callOnDestroy(uint64_t instanceId) override;
+        
+        std::optional<::services::ScriptError> getLastError() const override;
+        void clearError() override;
+        
+        void setScriptLibraryPath(const std::string& path) override;
+
+    private:
+        void setError(::services::ScriptError::Type type, const std::string& message,
+                      const std::string& file = "", int line = 0);
+        
+        std::string extractClassName(const std::string& scriptPath);
+        
+        std::string getLibraryPath(const std::string& manifestPath) const;
+    };
+}

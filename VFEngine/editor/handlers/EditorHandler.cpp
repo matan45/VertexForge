@@ -7,12 +7,13 @@
 #include "impl/PreviewServiceImpl.hpp"
 #include "impl/EditorModeServiceImpl.hpp"
 #include "impl/AudioServiceImpl.hpp"
+#include "impl/ScriptingServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
+#include "time/Timer.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/RenderEvents.hpp"
 #include "Import.hpp"
-#include "print/EditorLogger.hpp"
 
 namespace handlers
 {
@@ -31,10 +32,8 @@ namespace handlers
 
         controllers::Import::initialize();
 
-        // Initialize services with providers from bootstrap
         initializeServices();
 
-        // Set up frame callback to update services each frame
         bootstrap->setFrameCallback([this]()
         {
             if (inputService)
@@ -45,9 +44,22 @@ namespace handlers
             {
                 windowStateService->update();
             }
-        });
 
-        // Subscribe to window events from Services
+            if (editorModeService && editorModeService->isPlayMode())
+            {
+                if (scriptingService)
+                {
+                    float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+                    scriptingService->updateScripts(deltaTime);
+                }
+
+                if (audioSceneUpdater)
+                {
+                    audioSceneUpdater->updateListenerFromPrimaryCamera();
+                }
+            }
+        });
+        
         setupEventSubscriptions();
 
         windowImguiHandler->init();
@@ -70,6 +82,7 @@ namespace handlers
 
         audioSceneUpdater.reset();
         audioService.reset();
+        scriptingService.reset();
         editorModeService.reset();
         windowStateService.reset();
         inputService.reset();
@@ -91,8 +104,12 @@ namespace handlers
             bootstrap->getMaterialPreviewProvider(),
             bootstrap->getMeshPreviewProvider()
         );
-        editorModeService = std::make_shared<services::EditorModeServiceImpl>();
+        editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
+        scriptingService = std::make_shared<services::ScriptingServiceImpl>(
+            bootstrap->getScriptingProvider(),
+            bootstrap->getSceneGraphSystem()
+        );
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
 
         // Register event handlers for command/query pattern
@@ -102,7 +119,8 @@ namespace handlers
         windowStateService->registerEventHandlers();
         previewService->registerEventHandlers();
         editorModeService->registerEventHandlers();
-        static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
+        audioService->registerEventHandlers();
+        scriptingService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
@@ -118,24 +136,6 @@ namespace handlers
             {
                 bootstrap->triggerResize();
             });
-
-        minimizeSubscription = dispatcher.subscribe<events::application::WindowMinimizedNotification>(
-            [](const events::application::WindowMinimizedNotification&)
-            {
-                // Could pause rendering or other expensive operations here
-            });
-
-        restoreSubscription = dispatcher.subscribe<events::application::WindowRestoredNotification>(
-            [](const events::application::WindowRestoredNotification&)
-            {
-                // Could resume rendering or other operations here
-            });
-
-        focusSubscription = dispatcher.subscribe<events::application::WindowFocusedNotification>(
-            [](const events::application::WindowFocusedNotification&)
-            {
-                // Could handle focus changes (e.g., pause input when unfocused)
-            });
     }
 
     void EditorHandler::cleanupEventSubscriptions()
@@ -146,21 +146,6 @@ namespace handlers
         {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
-        }
-        if (minimizeSubscription.isValid())
-        {
-            dispatcher.unsubscribe(minimizeSubscription);
-            minimizeSubscription = {};
-        }
-        if (restoreSubscription.isValid())
-        {
-            dispatcher.unsubscribe(restoreSubscription);
-            restoreSubscription = {};
-        }
-        if (focusSubscription.isValid())
-        {
-            dispatcher.unsubscribe(focusSubscription);
-            focusSubscription = {};
         }
     }
 }

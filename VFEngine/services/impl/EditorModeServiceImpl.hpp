@@ -1,11 +1,25 @@
 #pragma once
 #include "../interfaces/IEditorModeService.hpp"
+#include <nlohmann/json.hpp>
+#include <optional>
+#include <memory>
 
-namespace services {
+namespace scene
+{
+    class SceneGraphSystem;
+}
 
-    class EditorModeServiceImpl : public IEditorModeService {
+namespace services
+{
+    class EditorModeServiceImpl : public IEditorModeService
+    {
+    private:
+        EditorMode currentMode = EditorMode::Edit;
+        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+        std::optional<nlohmann::json> playModeSnapshot;
+
     public:
-        EditorModeServiceImpl() = default;
+        explicit EditorModeServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~EditorModeServiceImpl() override = default;
 
         void registerEventHandlers() override;
@@ -19,7 +33,7 @@ namespace services {
         bool isEditMode() const override;
 
     private:
-        EditorMode currentMode = EditorMode::Edit;
+        void captureSnapshot();
+        void restoreSnapshot();
     };
-
 }

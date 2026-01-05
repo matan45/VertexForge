@@ -11,11 +11,11 @@ namespace windows
         Model,
         Audio,
         Animation,
-        Shader,
         Scene,
         Material,
         MaterialInstance,
         Prefab,
+        Script,
         Other
     };
 
@@ -23,7 +23,7 @@ namespace windows
     {
         Animation = 0,
         Texture = 1,
-        Glsl = 2,
+        Mtype = 2,
         Mesh = 3,
         Material = 4,
         Folder = 5,

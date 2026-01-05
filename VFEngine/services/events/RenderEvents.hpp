@@ -23,6 +23,12 @@ namespace events::render {
         std::string_view getName() const override { return "RemoveIBL"; }
     };
 
+    struct RemoveCameraCommand : ICommand<> {
+        services::CameraId cameraId;
+
+        std::string_view getName() const override { return "RemoveCamera"; }
+    };
+
     struct UpdateIBLCameraCommand : ICommand<> {
         glm::mat4 viewMatrix;
         glm::mat4 projectionMatrix;

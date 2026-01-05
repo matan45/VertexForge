@@ -66,10 +66,6 @@ namespace resource
         auto extension = filePath.extension().string();
         std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
         
-        if (extension == ".glsl")
-        {
-            return FileType::SHADER;
-        }
         if (extension == ".vfscene")
         {
             return FileType::SCENE;

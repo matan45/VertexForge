@@ -78,6 +78,7 @@ namespace services
     {
         EntityHandle handle;
         std::string name;
+        bool isActive = true;
         std::optional<EntityHandle> parent;
         std::vector<EntityHandle> children;
         TransformData localTransform;

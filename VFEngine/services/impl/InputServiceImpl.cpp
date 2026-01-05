@@ -34,6 +34,11 @@ namespace services {
         return inputController->isMouseButtonReleased(button);
     }
 
+    bool InputServiceImpl::isDoubleClick(int button) const {
+        if (!inputController) return false;
+        return inputController->isDoubleClick(button);
+    }
+
     glm::vec2 InputServiceImpl::getMousePosition() const {
         if (!inputController) return glm::vec2(0.0f);
         double xpos, ypos;
@@ -145,6 +150,21 @@ namespace services {
         dispatcher.registerQueryHandler<events::input::GetMouseDeltaQuery>(
             [this](const events::input::GetMouseDeltaQuery&) {
                 return getMouseDelta();
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsKeyReleasedQuery>(
+            [this](const events::input::IsKeyReleasedQuery& query) {
+                return isKeyReleased(query.keyCode);
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsMouseButtonReleasedQuery>(
+            [this](const events::input::IsMouseButtonReleasedQuery& query) {
+                return isMouseButtonReleased(query.button);
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsDoubleClickQuery>(
+            [this](const events::input::IsDoubleClickQuery& query) {
+                return isDoubleClick(query.button);
             });
     }
 

@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;..\..\dependencies\mtype\mType;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
@@ -78,7 +78,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;..\..\dependencies\mtype\mType;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -103,7 +103,9 @@
     <ClInclude Include="adapters\EditorTextureAdapter.hpp" />
     <ClInclude Include="adapters\MaterialPreviewAdapter.hpp" />
     <ClInclude Include="adapters\MeshPreviewAdapter.hpp" />
+    <ClInclude Include="adapters\NativeAPIRegistry.hpp" />
     <ClInclude Include="adapters\OffScreenAdapter.hpp" />
+    <ClInclude Include="adapters\ScriptingAdapter.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
     <ClInclude Include="audio\AudioListener.hpp" />
@@ -130,7 +132,9 @@
     <ClCompile Include="adapters\EditorTextureAdapter.cpp" />
     <ClCompile Include="adapters\MaterialPreviewAdapter.cpp" />
     <ClCompile Include="adapters\MeshPreviewAdapter.cpp" />
+    <ClCompile Include="adapters\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
+    <ClCompile Include="adapters\ScriptingAdapter.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
     <ClCompile Include="audio\AudioListener.cpp" />
@@ -154,6 +158,9 @@
   <ItemGroup>
     <ProjectReference Include="..\graphics\Graphics.vcxproj">
       <Project>{1653CE33-0220-293F-2B39-17E717655ECD}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\mType.vcxproj">
+      <Project>{7490E30F-E0A4-0BC1-A926-AF2015FA07F2}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

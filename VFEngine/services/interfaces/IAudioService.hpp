@@ -26,6 +26,8 @@ namespace services {
     public:
         virtual ~IAudioService() = default;
 
+        virtual void registerEventHandlers() = 0;
+
         // === Listener (Camera/Player) ===
 
         virtual void setListenerPosition(const glm::vec3& position,

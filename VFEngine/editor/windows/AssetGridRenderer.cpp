@@ -150,8 +150,8 @@ namespace windows
         case Animation:
             icon = AtlasIcon::Animation;
             break;
-        case Shader:
-            icon = AtlasIcon::Glsl;
+        case Script:
+            icon = AtlasIcon::Mtype;
             break;
         case Material:
         case MaterialInstance:

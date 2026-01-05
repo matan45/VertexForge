@@ -27,6 +27,16 @@ namespace core::audio {
 
         for (auto entityHandle : view)
         {
+            // Skip inactive entities
+            if (registry.all_of<components::NameComponent>(entityHandle))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entityHandle);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
             const auto& camera = view.get<components::CameraComponent>(entityHandle);
 
             // Only use the primary camera for listener position

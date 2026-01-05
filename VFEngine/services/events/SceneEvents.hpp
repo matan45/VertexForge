@@ -47,6 +47,13 @@ namespace events::scene {
         std::string_view getName() const override { return "SetEntityName"; }
     };
 
+    struct SetEntityActiveCommand : ICommand<> {
+        services::EntityHandle entity;
+        bool isActive;
+
+        std::string_view getName() const override { return "SetEntityActive"; }
+    };
+
     struct SelectEntityCommand : ICommand<> {
         std::optional<services::EntityHandle> entity;
 
@@ -180,6 +187,12 @@ namespace events::scene {
         std::optional<services::EntityHandle> parent;  // nullopt = add to scene root
 
         std::string_view getName() const override { return "LoadPrefab"; }
+    };
+
+    struct DuplicateEntityCommand : ICommand<services::EntityHandle> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "DuplicateEntity"; }
     };
 
     // ============================================
@@ -390,6 +403,13 @@ namespace events::scene {
         services::EntityHandle rootEntity;
 
         std::string_view getName() const override { return "PrefabInstantiated"; }
+    };
+
+    struct EntityDuplicatedNotification : INotification {
+        services::EntityHandle originalEntity;
+        services::EntityHandle duplicatedEntity;
+
+        std::string_view getName() const override { return "EntityDuplicated"; }
     };
 
 }

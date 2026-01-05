@@ -2,45 +2,59 @@
 #include "../interfaces/ISceneService.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../data/EntityConversion.hpp"
-#include <entt/entt.hpp>
 #include <memory>
 #include <optional>
 #include <cstdint>
 
-namespace scene {
+namespace scene
+{
     class SceneGraphSystem;
 }
 
-namespace services {
-
-    // Forward declarations for component services
+namespace services
+{
+    // Existing component services
     class CameraComponentService;
     class MeshComponentService;
     class MaterialComponentService;
     class AudioComponentService;
     class IBLComponentService;
 
-    class SceneServiceImpl : public ISceneService {
+    // New extracted services
+    class HierarchyService;
+    class EntityQueryService;
+    class TransformComponentService;
+    class EntityStateService;
+    class ScenePersistenceService;
+
+    class SceneServiceImpl : public ISceneService
+    {
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
-        std::optional<EntityHandle> selectedEntity;
 
-        // Component services
+        // Existing component services
         std::unique_ptr<CameraComponentService> cameraService;
         std::unique_ptr<MeshComponentService> meshService;
         std::unique_ptr<MaterialComponentService> materialService;
         std::unique_ptr<AudioComponentService> audioService;
         std::unique_ptr<IBLComponentService> iblService;
 
+        // New extracted services
+        std::unique_ptr<HierarchyService> hierarchyService;
+        std::unique_ptr<EntityQueryService> entityQueryService;
+        std::unique_ptr<TransformComponentService> transformService;
+        std::unique_ptr<EntityStateService> entityStateService;
+        std::unique_ptr<ScenePersistenceService> persistenceService;
+
     public:
         explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~SceneServiceImpl() override;
-        
+
         void registerEventHandlers() override;
 
         // Entity Lifecycle
         EntityHandle createEntity(const std::string& name,
-            std::optional<EntityHandle> parent = std::nullopt) override;
+                                  std::optional<EntityHandle> parent = std::nullopt) override;
         bool deleteEntity(EntityHandle entity, bool deleteChildren = true) override;
         EntityHandle duplicateEntity(EntityHandle entity) override;
 
@@ -91,7 +105,8 @@ namespace services {
         std::optional<MaterialData> getMaterialData(EntityHandle entity) const override;
         bool setMaterialData(EntityHandle entity, const MaterialData& material) override;
         bool setDefaultMaterial(EntityHandle entity, const std::string& materialPath) override;
-        bool setSubMeshMaterial(EntityHandle entity, const std::string& submeshName, const std::string& materialPath) override;
+        bool setSubMeshMaterial(EntityHandle entity, const std::string& submeshName,
+                                const std::string& materialPath) override;
         std::string getSubMeshMaterial(EntityHandle entity, const std::string& submeshName) const override;
         std::map<std::string, std::string> getAllSubMeshMaterials(EntityHandle entity) const override;
 
@@ -124,6 +139,9 @@ namespace services {
         std::string getEntityName(EntityHandle entity) const override;
         void setEntityName(EntityHandle entity, const std::string& name) override;
 
+        // Entity Active State
+        void setEntityActive(EntityHandle entity, bool isActive);
+
         // Scene Lifecycle
         bool newScene();
         bool saveScene(const std::string& filePath);
@@ -133,16 +151,5 @@ namespace services {
         bool savePrefab(EntityHandle entity, const std::string& filePath);
         std::optional<EntityHandle> loadPrefab(const std::string& filePath,
                                                std::optional<EntityHandle> parent = std::nullopt);
-
-    private:
-        
-        EntityData buildEntityData(entt::entity entity) const;
-
-        // Recursive helper for scene hierarchy
-        void collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const;
-        
-        void autoAttachBillboard(EntityHandle entity, uint32_t iconType);
-        void autoDetachBillboard(EntityHandle entity, uint32_t iconType);
     };
-
 }

@@ -96,6 +96,7 @@
     <ClInclude Include="data\EditorMode.hpp" />
     <ClInclude Include="data\EntityConversion.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />
+    <ClInclude Include="data\ScriptTypes.hpp" />
     <ClInclude Include="events\ApplicationEvents.hpp" />
     <ClInclude Include="events\AudioEvents.hpp" />
     <ClInclude Include="events\EditorModeEvents.hpp" />
@@ -107,6 +108,7 @@
     <ClInclude Include="events\RenderEvents.hpp" />
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
+    <ClInclude Include="events\ScriptingEvents.hpp" />
     <ClInclude Include="impl\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\EditorModeServiceImpl.hpp" />
     <ClInclude Include="impl\EditorRenderServiceImpl.hpp" />
@@ -114,12 +116,18 @@
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
     <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
+    <ClInclude Include="impl\ScriptingServiceImpl.hpp" />
     <ClInclude Include="impl\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
     <ClInclude Include="impl\components\CameraComponentService.hpp" />
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
     <ClInclude Include="impl\components\MaterialComponentService.hpp" />
     <ClInclude Include="impl\components\MeshComponentService.hpp" />
+    <ClInclude Include="impl\scene\EntityQueryService.hpp" />
+    <ClInclude Include="impl\scene\EntityStateService.hpp" />
+    <ClInclude Include="impl\scene\HierarchyService.hpp" />
+    <ClInclude Include="impl\scene\ScenePersistenceService.hpp" />
+    <ClInclude Include="impl\scene\TransformComponentService.hpp" />
     <ClInclude Include="interfaces\IAnimationService.hpp" />
     <ClInclude Include="interfaces\IAudioService.hpp" />
     <ClInclude Include="interfaces\IEditorModeService.hpp" />
@@ -137,6 +145,7 @@
     <ClInclude Include="providers\IMeshPreviewProvider.hpp" />
     <ClInclude Include="providers\IOffScreenProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
+    <ClInclude Include="providers\IScriptingProvider.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -148,12 +157,18 @@
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />
     <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
+    <ClCompile Include="impl\ScriptingServiceImpl.cpp" />
     <ClCompile Include="impl\WindowStateServiceImpl.cpp" />
     <ClCompile Include="impl\components\AudioComponentService.cpp" />
     <ClCompile Include="impl\components\CameraComponentService.cpp" />
     <ClCompile Include="impl\components\IBLComponentService.cpp" />
     <ClCompile Include="impl\components\MaterialComponentService.cpp" />
     <ClCompile Include="impl\components\MeshComponentService.cpp" />
+    <ClCompile Include="impl\scene\EntityQueryService.cpp" />
+    <ClCompile Include="impl\scene\EntityStateService.cpp" />
+    <ClCompile Include="impl\scene\HierarchyService.cpp" />
+    <ClCompile Include="impl\scene\ScenePersistenceService.cpp" />
+    <ClCompile Include="impl\scene\TransformComponentService.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

@@ -18,6 +18,7 @@ namespace serialization {
 	
 	json SceneSerialization::serializeCamera(const components::CameraComponent& camera) {
 		json j;
+		j["cameraId"] = camera.cameraId;
 		j["fieldOfView"] = camera.fieldOfView;
 		j["nearPlane"] = camera.nearPlane;
 		j["farPlane"] = camera.farPlane;
@@ -60,6 +61,11 @@ namespace serialization {
 		entityJson["uuid"] = entity.getUUID().getValue();
 		entityJson["name"] = entity.getName();
 
+		// Active state
+		if (entity.hasComponent<components::NameComponent>()) {
+			entityJson["isActive"] = entity.getComponent<components::NameComponent>().isActive;
+		}
+
 		// Transform (always present per Entity constructor)
 		if (entity.hasComponent<components::TransformComponent>()) {
 			entityJson["transform"] = serializeTransform(entity.getComponent<components::TransformComponent>());
@@ -96,6 +102,10 @@ namespace serialization {
 			componentsJson["audioSource3D"] = serializeAudioSource3D(entity.getComponent<components::AudioSource3DComponent>());
 		}
 
+		if (entity.hasComponent<components::ScriptComponent>()) {
+			componentsJson["script"] = serializeScript(entity.getComponent<components::ScriptComponent>());
+		}
+
 		entityJson["components"] = componentsJson;
 
 		// Serialize children recursively
@@ -122,6 +132,9 @@ namespace serialization {
 	}
 	
 	void SceneSerialization::deserializeCamera(const json& j, components::CameraComponent& camera) {
+		// Restore cameraId if present (for snapshot restore)
+		if (auto it = j.find("cameraId"); it != j.end() && it->is_number_unsigned())
+			camera.cameraId = it->get<uint32_t>();
 		if (auto it = j.find("fieldOfView"); it != j.end() && it->is_number())
 			camera.fieldOfView = it->get<float>();
 		if (auto it = j.find("nearPlane"); it != j.end() && it->is_number())
@@ -350,6 +363,44 @@ namespace serialization {
 		audioSource.isPlaying = false;
 	}
 
+	json SceneSerialization::serializeScript(const components::ScriptComponent& script) {
+		json j;
+		json scriptsArray = json::array();
+		for (const auto& entry : script.scripts) {
+			json entryJson;
+			// Clean the script path
+			std::string cleanPath = entry.scriptPath;
+			if (auto pos = cleanPath.find('\0'); pos != std::string::npos) {
+				cleanPath.resize(pos);
+			}
+			entryJson["scriptPath"] = cleanPath;
+			entryJson["enabled"] = entry.enabled;
+			// Note: started, instanceId, hasOnStart, hasOnUpdate, hasOnDestroy are runtime state
+			scriptsArray.push_back(entryJson);
+		}
+		j["scripts"] = scriptsArray;
+		return j;
+	}
+
+	void SceneSerialization::deserializeScript(const json& j, components::ScriptComponent& script) {
+		script.scripts.clear();
+		if (j.contains("scripts") && j["scripts"].is_array()) {
+			for (const auto& entryJson : j["scripts"]) {
+				components::ScriptEntry entry;
+				if (entryJson.contains("scriptPath") && entryJson["scriptPath"].is_string()) {
+					entry.scriptPath = entryJson["scriptPath"].get<std::string>();
+				}
+				if (entryJson.contains("enabled") && entryJson["enabled"].is_boolean()) {
+					entry.enabled = entryJson["enabled"].get<bool>();
+				}
+				// Reset runtime state
+				entry.started = false;
+				entry.instanceId = 0;
+				script.scripts.push_back(entry);
+			}
+		}
+	}
+
 	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
 		for (const auto& childJson : childrenJson) {
@@ -374,56 +425,55 @@ namespace serialization {
 
 			// Add to parent
 			sceneGraph.addChild(parent, child);
-
-			// Deserialize the child's data (transform, components, children)
+			
 			deserializeEntity(childJson, child, sceneGraph, false, progressCallback, entitiesLoaded, totalEntities);
 		}
 	}
-
-	// Main entity deserialization (handles both root and children)
+	
 	void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
-		// Set name
+
 		std::string entityName = "Unnamed";
 		if (entityJson.contains("name")) {
 			entityName = entityJson["name"].get<std::string>();
 			entity.setName(entityName);
 		}
 
-		// Report progress
+		// Restore active state
+		if (entityJson.contains("isActive") && entityJson["isActive"].is_boolean()) {
+			if (entity.hasComponent<components::NameComponent>()) {
+				entity.getComponent<components::NameComponent>().isActive = entityJson["isActive"].get<bool>();
+			}
+		}
+
 		if (progressCallback) {
 			progressCallback(entityName, entitiesLoaded, totalEntities);
 		}
 		++entitiesLoaded;
-
-		// Restore UUID for root
+		
 		if (isRoot && entityJson.contains("uuid")) {
 			uint64_t uuidValue = entityJson["uuid"].get<uint64_t>();
 			entity.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
 		}
 
-		// Deserialize transform
+		
 		if (entityJson.contains("transform")) {
 			auto& transform = entity.getComponent<components::TransformComponent>();
 			deserializeTransform(entityJson["transform"], transform);
 		}
-
-		// Deserialize optional components
+		
 		if (entityJson.contains("components")) {
 			const auto& componentsJson = entityJson["components"];
-
-			// Camera component (auto-adds billboard if not explicitly defined)
+			
 			if (componentsJson.contains("camera")) {
 				auto& camera = entity.addOrReplaceComponent<components::CameraComponent>();
 				deserializeCamera(componentsJson["camera"], camera);
-				// Auto-add camera billboard if no billboard component is defined
 				if (!componentsJson.contains("billboard")) {
 					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
 					billboard.iconType = components::BillboardIconType::Camera;
 				}
 			}
-
-			// IBL component
+			
 			if (componentsJson.contains("ibl")) {
 				std::string iblFileName = deserializeIBL(componentsJson["ibl"]);
 				if (!iblFileName.empty()) {
@@ -446,28 +496,9 @@ namespace serialization {
 				deserializeBillboard(componentsJson["billboard"], billboardComp);
 			}
 
-			// Handle legacy "audioSource" key - convert to either 2D or 3D based on is3D flag
-			if (componentsJson.contains("audioSource")) {
-				const auto& audioJson = componentsJson["audioSource"];
-				bool is3D = audioJson.value("is3D", false);
-				if (is3D) {
-					auto& audioComp = entity.addOrReplaceComponent<components::AudioSource3DComponent>();
-					deserializeAudioSource3D(audioJson, audioComp);
-				} else {
-					auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
-					deserializeAudioSource2D(audioJson, audioComp);
-				}
-				// Auto-add audio source billboard if no billboard component is defined
-				if (!componentsJson.contains("billboard")) {
-					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-					billboard.iconType = components::BillboardIconType::AudioSource;
-				}
-			}
-
 			if (componentsJson.contains("audioSource2D")) {
 				auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
 				deserializeAudioSource2D(componentsJson["audioSource2D"], audioComp);
-				// Auto-add audio source billboard if no billboard component is defined
 				if (!componentsJson.contains("billboard")) {
 					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
 					billboard.iconType = components::BillboardIconType::AudioSource;
@@ -477,15 +508,18 @@ namespace serialization {
 			if (componentsJson.contains("audioSource3D")) {
 				auto& audioComp = entity.addOrReplaceComponent<components::AudioSource3DComponent>();
 				deserializeAudioSource3D(componentsJson["audioSource3D"], audioComp);
-				// Auto-add audio source billboard if no billboard component is defined
 				if (!componentsJson.contains("billboard")) {
 					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
 					billboard.iconType = components::BillboardIconType::AudioSource;
 				}
 			}
-		}
 
-		// Deserialize children recursively
+			if (componentsJson.contains("script")) {
+				auto& scriptComp = entity.addOrReplaceComponent<components::ScriptComponent>();
+				deserializeScript(componentsJson["script"], scriptComp);
+			}
+		}
+		
 		if (entityJson.contains("children") && entityJson["children"].is_array()) {
 			deserializeChildren(entityJson["children"], entity, sceneGraph, progressCallback, entitiesLoaded, totalEntities);
 		}
@@ -600,6 +634,57 @@ namespace serialization {
 		}
 		catch (const std::exception& e) {
 			vfLogError("Failed to save scene: {}", e.what());
+			return false;
+		}
+	}
+
+	json SceneSerialization::createSnapshot(scene::SceneGraphSystem& sceneGraph)
+	{
+		try {
+			json snapshot;
+			snapshot["version"] = "1.0";
+
+			scene::Entity& root = sceneGraph.GetRoot();
+			snapshot["root"] = serializeEntity(root);
+
+			return snapshot;
+		}
+		catch (const std::exception& e) {
+			vfLogError("Failed to create scene snapshot: {}", e.what());
+			return json();
+		}
+	}
+
+	bool SceneSerialization::restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph)
+	{
+		try {
+			// Validate snapshot structure
+			if (!snapshot.is_object()) {
+				vfLogError("Invalid snapshot: not a JSON object");
+				return false;
+			}
+
+			if (!snapshot.contains("root") || !snapshot["root"].is_object()) {
+				vfLogError("Invalid snapshot: missing or invalid 'root' object");
+				return false;
+			}
+
+			// Clear current scene and restore from snapshot
+			sceneGraph.clearScene();
+
+			// Deserialize root entity (no progress callback for snapshot restore)
+			scene::Entity& root = sceneGraph.GetRoot();
+			size_t entitiesLoaded = 0;
+			size_t totalEntities = countEntities(snapshot["root"]);
+			deserializeEntity(snapshot["root"], root, sceneGraph, true, nullptr, entitiesLoaded, totalEntities);
+
+			vfLogInfo("Scene restored from snapshot successfully");
+			return true;
+		}
+		catch (const std::exception& e) {
+			vfLogError("Failed to restore scene from snapshot: {}", e.what());
+			// Scene is in partial state - clear to avoid corruption
+			sceneGraph.clearScene();
 			return false;
 		}
 	}

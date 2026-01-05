@@ -19,10 +19,8 @@ namespace windows {
 			ImGui::Text("Delta Time: %.4f", engineTime::Timer::getDeltaTime());
 
 			ImGui::Separator();
-			ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0, 0, 0 ,255 });
+			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.05f, 0.15f, 1.0f));  // Dark blue background
 			ImGui::BeginChild("ScrollingRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), false, ImGuiWindowFlags_HorizontalScrollbar);
-
-			ImGui::PushStyleColor(ImGuiCol_Text, { 0, 255, 0 ,255 });
 
 			// Display all messages from the buffer (thread-safe copy)
 			std::vector<std::string> bufferCopy;
@@ -31,10 +29,18 @@ namespace windows {
 				bufferCopy = util::imguiConsoleBuffer;
 			}
 			for (const auto& logEntry : bufferCopy) {
+				ImVec4 textColor;
+				if (logEntry.find("ERROR:") != std::string::npos) {
+					textColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);  // Red for errors
+				} else if (logEntry.find("WARNING:") != std::string::npos) {
+					textColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow for warnings
+				} else {
+					textColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White for info
+				}
+				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 				ImGui::TextUnformatted(logEntry.c_str());
+				ImGui::PopStyleColor();
 			}
-
-			ImGui::PopStyleColor();
 
 
 			// Scroll to the bottom to show the latest log entry
