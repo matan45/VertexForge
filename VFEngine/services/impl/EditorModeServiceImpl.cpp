@@ -24,7 +24,7 @@ namespace services
         }
 
         EditorMode previousMode = currentMode;
-        
+
         if (mode == EditorMode::Play && previousMode == EditorMode::Edit)
         {
             captureSnapshot();
@@ -40,7 +40,7 @@ namespace services
 
             restoreSnapshot();
             currentMode = mode;
-            return; 
+            return;
         }
 
         currentMode = mode;
