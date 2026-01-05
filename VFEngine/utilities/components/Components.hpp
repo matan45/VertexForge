@@ -18,8 +18,6 @@ namespace components
     struct AudioSource3DComponent;
     struct ScriptComponent;
 
-    // Type list of optional components that can be removed during cleanup
-    // Add new optional component types here when they are created
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent>;
@@ -31,18 +29,18 @@ namespace components
 
     struct ParentComponent
     {
-        entt::entity parent = entt::null; // Parent entity handle
+        entt::entity parent = entt::null;
     };
 
     struct ChildrenComponent
     {
-        std::vector<entt::entity> children; // List of child entity handles
+        std::vector<entt::entity> children;
     };
 
     struct NameComponent
     {
         std::string name;
-        bool isActive = true; // If false, entity and all its components are inactive
+        bool isActive = true;
     };
 
     struct UUIDComponent
@@ -51,7 +49,8 @@ namespace components
 
         UUIDComponent() : id()
         {
-        } // Generates new UUID
+        }
+
         explicit UUIDComponent(uuid::UUID existingId) : id(existingId)
         {
         }
@@ -72,9 +71,9 @@ namespace components
         glm::vec3 rotation{0.0f};
         glm::vec3 scale{1.0f};
         bool isDirty = true;
-        bool isStatic = true; // Static entities are in a BVH that rebuilds infrequently
+        bool isStatic = true;
 
-        // Mark as dirty when transform changes
+
         void setPosition(const glm::vec3& newPos)
         {
             position = newPos;
@@ -126,7 +125,6 @@ namespace components
         // Static counter for generating unique camera IDs
         static inline uint32_t nextCameraId = 0;
 
-        // Generate a new unique camera ID
         static uint32_t generateCameraId()
         {
             return nextCameraId++;
@@ -136,7 +134,6 @@ namespace components
         {
             cameraId = generateCameraId();
             updateProjectionMatrix();
-            // Initialize view matrix looking down -Z axis
             viewMatrix = glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f),
                                      glm::vec3(0.0f, 1.0f, 0.0f));
         }
@@ -164,51 +161,45 @@ namespace components
                     farPlane
                 );
             }
-            // Flip Y for Vulkan coordinate system (GLM is designed for OpenGL)
+
             projectionMatrix[1][1] *= -1;
         }
 
-        // Update the view matrix based on the camera's position, rotation, and direction
+
         void updateViewMatrix(const glm::vec3& position, const glm::vec3& rotation)
         {
-            // Build camera model matrix: first translate to position, then rotate
-            // Model = T(pos) * Ry * Rx * Rz
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, position);
             model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0, 1, 0)); // Yaw
             model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1, 0, 0)); // Pitch
             model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0, 0, 1)); // Roll
 
-            // View matrix is the inverse of the camera's model matrix
             viewMatrix = glm::inverse(model);
         }
     };
 
     struct MeshComponent
     {
-        std::string meshPath; // Path to .vfmesh file
-        bool showBoundingBox = false; // Debug: render AABB wireframe
+        std::string meshPath;
+        bool showBoundingBox = false;
     };
 
     struct MaterialComponent
     {
-        std::string defaultMaterial; // .vfMat path for unmapped submeshes
-        std::map<std::string, std::string> subMeshMaterials; // submesh NAME -> .vfMat path
-        std::map<std::string, float> parameterOverrides; // Runtime parameter tweaks
+        std::string defaultMaterial;
+        std::map<std::string, std::string> subMeshMaterials;
+        std::map<std::string, float> parameterOverrides;
 
-        // Set material for a specific submesh by name
         void setSubMeshMaterial(const std::string& submeshName, const std::string& matPath)
         {
             subMeshMaterials[submeshName] = matPath;
         }
 
-        // Set the default material for all unmapped submeshes
         void setDefaultMaterial(const std::string& matPath)
         {
             defaultMaterial = matPath;
         }
 
-        // Get material path for a submesh, falling back to default if not mapped
         std::string getMaterialForSubmesh(const std::string& submeshName) const
         {
             auto it = subMeshMaterials.find(submeshName);
@@ -219,25 +210,21 @@ namespace components
             return defaultMaterial;
         }
 
-        // Check if a submesh has a specific material assigned
         bool hasSubmeshMaterial(const std::string& submeshName) const
         {
             return subMeshMaterials.find(submeshName) != subMeshMaterials.end();
         }
 
-        // Clear all submesh material assignments
         void clearSubMeshMaterials()
         {
             subMeshMaterials.clear();
         }
 
-        // Set a runtime parameter override
         void setParameterOverride(const std::string& paramName, float value)
         {
             parameterOverrides[paramName] = value;
         }
 
-        // Get a parameter override value, returns nullopt if not set
         std::optional<float> getParameterOverride(const std::string& paramName) const
         {
             auto it = parameterOverrides.find(paramName);
@@ -252,8 +239,8 @@ namespace components
 
     enum class BillboardSizeMode : uint8_t
     {
-        ScreenSpace, // Constant on-screen size regardless of distance
-        WorldSpace // Size scales with distance
+        ScreenSpace,
+        WorldSpace
     };
 
 
@@ -277,8 +264,8 @@ namespace components
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f}; // RGBA
 
 
-        bool editorOnly = true; // Only render in editor
-        bool selectable = true; // Allow entity selection via click
+        bool editorOnly = true;
+        bool selectable = true;
 
         uint32_t getEffectiveAtlasIndex() const
         {
@@ -298,52 +285,47 @@ namespace components
         }
     };
 
-    // 2D Audio Source - uses streaming, good for background music/ambient
+
     struct AudioSource2DComponent
     {
-        std::string audioFilePath; // Path to .vfAudio file
+        std::string audioFilePath;
         float volume = 1.0f; // 0.0 to 1.0
         float pitch = 1.0f; // 0.5 to 2.0
         bool loop = false;
 
-        // Runtime state (not serialized)
-        uint64_t activeHandle = 0; // AudioHandle from AudioController
+        uint64_t activeHandle = 0;
         bool isPlaying = false;
     };
 
-    // 3D Audio Source - uses cached audio, good for spatial sound effects
+
     struct AudioSource3DComponent
     {
-        std::string audioFilePath; // Path to .vfAudio file
+        std::string audioFilePath;
         float volume = 1.0f; // 0.0 to 1.0
         float pitch = 1.0f; // 0.5 to 2.0
         bool loop = false;
         float minDistance = 1.0f; // Distance where volume starts to attenuate
         float maxDistance = 100.0f; // Distance where volume reaches minimum
-        bool showDebugSpheres = false; // Show min/max distance wireframe spheres
+        bool showDebugSpheres = false;
 
-        // Runtime state (not serialized)
-        uint64_t activeHandle = 0; // AudioHandle from AudioController
+        uint64_t activeHandle = 0;
         bool isPlaying = false;
     };
 
-    // Script Entry - individual script attachment data
+
     struct ScriptEntry
     {
-        std::string scriptPath; // Path to .mt source file
-        bool enabled = true; // Whether script updates are called
+        std::string scriptPath;
+        bool enabled = true;
 
-        // Runtime state (not serialized)
-        bool started = false; // Has onStart() been called?
-        uint64_t instanceId = 0; // Script instance lookup ID in ScriptingAdapter
+        bool started = false;
+        uint64_t instanceId = 0;
     };
 
-    // Script Component - mType scripting attachment (supports multiple scripts)
     struct ScriptComponent
     {
         std::vector<ScriptEntry> scripts;
 
-        // Helper methods
         ScriptEntry* findByPath(const std::string& path)
         {
             for (auto& entry : scripts)

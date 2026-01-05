@@ -1,0 +1,298 @@
+#include "EntityQueryService.hpp"
+#include "scene/SceneGraphSystem.hpp"
+#include "scene/Entity.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
+#include "../../data/EntityConversion.hpp"
+#include "../../events/EventDispatcher.hpp"
+#include "../../events/SceneEvents.hpp"
+
+namespace services
+{
+    EntityQueryService::EntityQueryService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
+        : sceneGraph(sceneGraph)
+    {
+    }
+
+    void EntityQueryService::registerEventHandlers(events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerQueryHandler<events::scene::GetEntityQuery>(
+            [this](const events::scene::GetEntityQuery& query)
+            {
+                return getEntity(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetSceneHierarchyQuery>(
+            [this](const events::scene::GetSceneHierarchyQuery&)
+            {
+                return getSceneHierarchy();
+            });
+
+        dispatcher.registerQueryHandler<events::scene::FindEntitiesByNameQuery>(
+            [this](const events::scene::FindEntitiesByNameQuery& query)
+            {
+                return findEntitiesByName(query.name);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetEntitiesWithComponentQuery>(
+            [this](const events::scene::GetEntitiesWithComponentQuery& query)
+            {
+                return getEntitiesWithComponent(query.componentType);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetRootEntityQuery>(
+            [this](const events::scene::GetRootEntityQuery&)
+            {
+                return getRoot();
+            });
+    }
+
+    EntityHandle EntityQueryService::getRoot() const
+    {
+        return internal::toHandle(sceneGraph->GetRoot().getHandle());
+    }
+
+    std::optional<EntityData> EntityQueryService::getEntity(EntityHandle handle) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(handle, registry))
+        {
+            return std::nullopt;
+        }
+
+        return buildEntityData(internal::fromHandle(handle));
+    }
+
+    std::optional<EntityHandle> EntityQueryService::findEntityByName(const std::string& name) const
+    {
+        auto entities = sceneGraph->findAllEntitiesByName(name);
+        if (entities.empty())
+        {
+            return std::nullopt;
+        }
+        return internal::toHandle(entities[0].getHandle());
+    }
+
+    std::vector<EntityHandle> EntityQueryService::findEntitiesByName(const std::string& name) const
+    {
+        auto entities = sceneGraph->findAllEntitiesByName(name);
+        std::vector<EntityHandle> handles;
+        handles.reserve(entities.size());
+        for (auto& entity : entities)
+        {
+            handles.push_back(internal::toHandle(entity.getHandle()));
+        }
+        return handles;
+    }
+
+    std::vector<EntityHandle> EntityQueryService::getEntitiesWithComponent(ComponentTypeId type) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<EntityHandle> handles;
+
+        switch (type)
+        {
+        case ComponentTypeId::Camera:
+            {
+                auto view = registry.view<components::CameraComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::Transform:
+            {
+                auto view = registry.view<components::TransformComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::IBL:
+            {
+                auto view = registry.view<components::IBLComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::Mesh:
+            {
+                auto view = registry.view<components::MeshComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::AudioSource2D:
+            {
+                auto view = registry.view<components::AudioSource2DComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::AudioSource3D:
+            {
+                auto view = registry.view<components::AudioSource3DComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        default:
+            break;
+        }
+
+        return handles;
+    }
+
+    SceneHierarchyData EntityQueryService::getSceneHierarchy() const
+    {
+        SceneHierarchyData data;
+        data.root = getRoot();
+
+        collectHierarchy(internal::fromHandle(data.root), data.entities);
+
+        return data;
+    }
+
+    bool EntityQueryService::hasComponent(EntityHandle entity, ComponentTypeId type) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+
+        switch (type)
+        {
+        case ComponentTypeId::Transform:
+            return registry.all_of<components::TransformComponent>(enttEntity);
+        case ComponentTypeId::Camera:
+            return registry.all_of<components::CameraComponent>(enttEntity);
+        case ComponentTypeId::Name:
+            return registry.all_of<components::NameComponent>(enttEntity);
+        case ComponentTypeId::Parent:
+            return registry.all_of<components::ParentComponent>(enttEntity);
+        case ComponentTypeId::Children:
+            return registry.all_of<components::ChildrenComponent>(enttEntity);
+        case ComponentTypeId::WorldTransform:
+            return registry.all_of<components::WorldTransformComponent>(enttEntity);
+        case ComponentTypeId::IBL:
+            return registry.all_of<components::IBLComponent>(enttEntity);
+        case ComponentTypeId::Mesh:
+            return registry.all_of<components::MeshComponent>(enttEntity);
+        case ComponentTypeId::AudioSource2D:
+            return registry.all_of<components::AudioSource2DComponent>(enttEntity);
+        case ComponentTypeId::AudioSource3D:
+            return registry.all_of<components::AudioSource3DComponent>(enttEntity);
+        default:
+            return false;
+        }
+    }
+
+    std::vector<ComponentTypeId> EntityQueryService::getComponentTypes(EntityHandle entity) const
+    {
+        std::vector<ComponentTypeId> types;
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return types;
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+
+        if (registry.all_of<components::TransformComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Transform);
+        if (registry.all_of<components::CameraComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Camera);
+        if (registry.all_of<components::NameComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Name);
+        if (registry.all_of<components::ParentComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Parent);
+        if (registry.all_of<components::ChildrenComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Children);
+        if (registry.all_of<components::WorldTransformComponent>(enttEntity))
+            types.push_back(ComponentTypeId::WorldTransform);
+        if (registry.all_of<components::IBLComponent>(enttEntity))
+            types.push_back(ComponentTypeId::IBL);
+        if (registry.all_of<components::MeshComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Mesh);
+        if (registry.all_of<components::AudioSource2DComponent>(enttEntity))
+            types.push_back(ComponentTypeId::AudioSource2D);
+        if (registry.all_of<components::AudioSource3DComponent>(enttEntity))
+            types.push_back(ComponentTypeId::AudioSource3D);
+
+        return types;
+    }
+
+    EntityData EntityQueryService::buildEntityData(entt::entity entity) const
+    {
+        scene::Entity sceneEntity(entity);
+
+        EntityData data;
+        data.handle = internal::toHandle(entity);
+        data.name = sceneEntity.getName();
+
+        if (sceneEntity.hasComponent<components::NameComponent>())
+        {
+            data.isActive = sceneEntity.getComponent<components::NameComponent>().isActive;
+        }
+
+        if (sceneEntity.hasComponent<components::ParentComponent>())
+        {
+            data.parent = internal::toHandle(sceneEntity.getComponent<components::ParentComponent>().parent);
+        }
+
+        if (sceneEntity.hasComponent<components::ChildrenComponent>())
+        {
+            auto& children = sceneEntity.getComponent<components::ChildrenComponent>().children;
+            for (auto child : children)
+            {
+                data.children.push_back(internal::toHandle(child));
+            }
+        }
+
+        if (sceneEntity.hasComponent<components::TransformComponent>())
+        {
+            auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+            data.localTransform = TransformData{transform.position, transform.rotation, transform.scale};
+        }
+
+        if (sceneEntity.hasComponent<components::WorldTransformComponent>())
+        {
+            data.worldTransform = data.localTransform;
+        }
+
+        data.components = getComponentTypes(data.handle);
+
+        return data;
+    }
+
+    void EntityQueryService::collectHierarchy(entt::entity entity, std::vector<EntityData>& entities) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.valid(entity)) return;
+
+        entities.push_back(buildEntityData(entity));
+
+        scene::Entity sceneEntity(entity);
+        if (sceneEntity.hasComponent<components::ChildrenComponent>())
+        {
+            auto& children = sceneEntity.getComponent<components::ChildrenComponent>().children;
+            for (auto child : children)
+            {
+                collectHierarchy(child, entities);
+            }
+        }
+    }
+}

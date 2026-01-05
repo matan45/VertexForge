@@ -45,18 +45,28 @@ namespace core {
         // Check for boxed String object
         if (std::holds_alternative<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(val)) {
             auto obj = std::get<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(val);
-            if (obj && obj->getTypeName() == "String") {
-                auto fieldVal = obj->getFieldValue("value");
-                if (std::holds_alternative<std::string>(fieldVal)) {
-                    return std::get<std::string>(fieldVal);
+            if (obj) {
+                if (obj->getTypeName() == "String") {
+                    auto fieldVal = obj->getFieldValue("value");
+                    if (std::holds_alternative<std::string>(fieldVal)) {
+                        return std::get<std::string>(fieldVal);
+                    }
+                    if (std::holds_alternative<value::InternedString>(fieldVal)) {
+                        return std::get<value::InternedString>(fieldVal).getString();
+                    }
                 }
-                if (std::holds_alternative<value::InternedString>(fieldVal)) {
-                    return std::get<value::InternedString>(fieldVal).getString();
+                // Try to get _value field for other wrapper types
+                auto valueField = obj->getFieldValue("_value");
+                if (std::holds_alternative<std::string>(valueField)) {
+                    return std::get<std::string>(valueField);
+                }
+                if (std::holds_alternative<value::InternedString>(valueField)) {
+                    return std::get<value::InternedString>(valueField).getString();
                 }
             }
         }
         if (context && !std::holds_alternative<std::monostate>(val)) {
-            vfLogError("[Script] {}: expected string argument", context);
+            vfLogError("[Script] {}: expected string argument, got variant index {}", context, val.index());
         }
         return "";
     }

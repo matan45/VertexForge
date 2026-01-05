@@ -4,10 +4,10 @@
 #include "../events/SceneEvents.hpp"
 #include "../events/RenderEvents.hpp"
 #include "../data/EntityConversion.hpp"
-#include "../../utilities/serialization/SceneSerialization.hpp"
-#include "../../utilities/scene/SceneGraphSystem.hpp"
-#include "../../utilities/scene/EntityRegistry.hpp"
-#include "../../utilities/components/Components.hpp"
+#include "serialization/SceneSerialization.hpp"
+#include "scene/SceneGraphSystem.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 
 namespace services
 {
@@ -24,17 +24,23 @@ namespace services
         }
 
         EditorMode previousMode = currentMode;
-
-        // Capture snapshot when entering play mode
+        
         if (mode == EditorMode::Play && previousMode == EditorMode::Edit)
         {
             captureSnapshot();
         }
 
-        // Restore snapshot when exiting play mode
+        // Publish notification BEFORE restoring snapshot so scripts can call onDestroy
         if (mode == EditorMode::Edit && previousMode == EditorMode::Play)
         {
+            events::editor::EditorModeChangedNotification notification;
+            notification.previousMode = previousMode;
+            notification.currentMode = mode;
+            events::EventDispatcher::instance().publish(notification);
+
             restoreSnapshot();
+            currentMode = mode;
+            return; 
         }
 
         currentMode = mode;

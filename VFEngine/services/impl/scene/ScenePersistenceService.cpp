@@ -1,0 +1,265 @@
+#include "ScenePersistenceService.hpp"
+#include "EntityStateService.hpp"
+#include "scene/SceneGraphSystem.hpp"
+#include "scene/Entity.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
+#include "serialization/SceneSerialization.hpp"
+#include "serialization/PrefabSerialization.hpp"
+#include "../../data/EntityConversion.hpp"
+#include "../../events/EventDispatcher.hpp"
+#include "../../events/SceneEvents.hpp"
+#include "../../events/RenderEvents.hpp"
+#include "print/EditorLogger.hpp"
+#include <functional>
+
+namespace services
+{
+    ScenePersistenceService::ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
+                                                     EntityStateService* entityStateService)
+        : sceneGraph(sceneGraph)
+        , entityStateService(entityStateService)
+    {
+    }
+
+    void ScenePersistenceService::registerEventHandlers(events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::scene::NewSceneCommand>(
+            [this](const events::scene::NewSceneCommand&)
+            {
+                return newScene();
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SaveSceneCommand>(
+            [this](const events::scene::SaveSceneCommand& cmd)
+            {
+                return saveScene(cmd.filePath);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::LoadSceneCommand>(
+            [this](const events::scene::LoadSceneCommand& cmd)
+            {
+                return loadScene(cmd.filePath);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SavePrefabCommand>(
+            [this](const events::scene::SavePrefabCommand& cmd)
+            {
+                return savePrefab(cmd.entity, cmd.filePath);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::LoadPrefabCommand>(
+            [this](const events::scene::LoadPrefabCommand& cmd)
+            {
+                return loadPrefab(cmd.filePath, cmd.parent);
+            });
+    }
+
+    bool ScenePersistenceService::newScene()
+    {
+        if (!sceneGraph)
+        {
+            vfLogError("SceneGraph is null, cannot create new scene.");
+            return false;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::render::RemoveIBLCommand removeIblCmd;
+        dispatcher.execute(removeIblCmd);
+
+        sceneGraph->clearScene();
+
+        if (entityStateService)
+        {
+            entityStateService->clearSelection();
+        }
+
+        events::scene::SceneClearedNotification notification;
+        dispatcher.publish(notification);
+
+        vfLogInfo("New scene created.");
+        return true;
+    }
+
+    bool ScenePersistenceService::saveScene(const std::string& filePath)
+    {
+        if (!sceneGraph)
+        {
+            vfLogError("SceneGraph is null, cannot save scene.");
+            return false;
+        }
+
+        if (filePath.empty())
+        {
+            vfLogError("File path is empty, cannot save scene.");
+            return false;
+        }
+
+        return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);
+    }
+
+    bool ScenePersistenceService::loadScene(const std::string& filePath)
+    {
+        if (!sceneGraph)
+        {
+            vfLogError("SceneGraph is null, cannot load scene.");
+            return false;
+        }
+
+        if (filePath.empty())
+        {
+            vfLogError("File path is empty, cannot load scene.");
+            return false;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::render::RemoveIBLCommand removeIblCmd;
+        dispatcher.execute(removeIblCmd);
+
+        if (entityStateService)
+        {
+            entityStateService->clearSelection();
+        }
+
+        events::scene::SceneLoadingStartedNotification startNotif;
+        startNotif.scenePath = filePath;
+        dispatcher.publish(startNotif);
+
+        auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total)
+        {
+            events::scene::SceneLoadingProgressUpdatedNotification progressNotif;
+            progressNotif.currentEntityName = entityName;
+            progressNotif.progress = (total > 0) ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
+            dispatcher.publish(progressNotif);
+        };
+
+        bool success = serialization::SceneSerialization::loadSceneInto(filePath, *sceneGraph, progressCallback);
+
+        events::scene::SceneLoadingCompletedNotification completeNotif;
+        completeNotif.scenePath = filePath;
+        completeNotif.success = success;
+        if (!success)
+        {
+            completeNotif.errorMessage = "Failed to load scene file";
+        }
+        dispatcher.publish(completeNotif);
+
+        if (success)
+        {
+            scene::Entity& root = sceneGraph->GetRoot();
+            if (root.hasComponent<components::IBLComponent>())
+            {
+                const auto& ibl = root.getComponent<components::IBLComponent>();
+                if (!ibl.fileName.empty())
+                {
+                    events::render::SetIBLCommand setIblCmd;
+                    setIblCmd.hdrPath = ibl.fileName;
+                    dispatcher.execute(setIblCmd);
+                }
+            }
+
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto meshView = registry.view<components::MeshComponent>();
+            for (auto entity : meshView)
+            {
+                const auto& meshComp = meshView.get<components::MeshComponent>(entity);
+                if (!meshComp.meshPath.empty())
+                {
+                    events::scene::MeshDataChangedNotification meshNotif;
+                    meshNotif.entity = internal::toHandle(entity);
+                    meshNotif.meshPath = meshComp.meshPath;
+                    dispatcher.publish(meshNotif);
+                }
+            }
+
+            events::scene::SceneLoadedNotification notification;
+            notification.scenePath = filePath;
+            dispatcher.publish(notification);
+        }
+
+        return success;
+    }
+
+    bool ScenePersistenceService::savePrefab(EntityHandle entity, const std::string& filePath)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity& root = sceneGraph->GetRoot();
+        if (internal::fromHandle(entity) == root.getHandle())
+        {
+            vfLogWarning("Cannot save root entity as prefab");
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        bool success = serialization::PrefabSerialization::savePrefab(sceneEntity, filePath);
+
+        if (success)
+        {
+            events::scene::PrefabCreatedNotification notification;
+            notification.filePath = filePath;
+            notification.sourceEntity = entity;
+            events::EventDispatcher::instance().publish(notification);
+        }
+
+        return success;
+    }
+
+    std::optional<EntityHandle> ScenePersistenceService::loadPrefab(const std::string& filePath,
+                                                                     std::optional<EntityHandle> parent)
+    {
+        scene::Entity parentEntity = sceneGraph->GetRoot();
+        if (parent.has_value() && parent->isValid())
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (internal::isValidHandle(*parent, registry))
+            {
+                parentEntity = scene::Entity(internal::fromHandle(*parent));
+            }
+        }
+
+        auto result = serialization::PrefabSerialization::loadPrefab(filePath, parentEntity, *sceneGraph);
+
+        if (result.has_value())
+        {
+            auto handle = internal::toHandle(result->getHandle());
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            std::function<void(scene::Entity&)> triggerResourceLoading = [&](scene::Entity& entity)
+            {
+                if (entity.hasComponent<components::MeshComponent>())
+                {
+                    const auto& meshComp = entity.getComponent<components::MeshComponent>();
+                    if (!meshComp.meshPath.empty())
+                    {
+                        events::scene::MeshDataChangedNotification meshNotif;
+                        meshNotif.entity = internal::toHandle(entity.getHandle());
+                        meshNotif.meshPath = meshComp.meshPath;
+                        dispatcher.publish(meshNotif);
+                    }
+                }
+
+                for (auto& child : entity.getChildren())
+                {
+                    triggerResourceLoading(child);
+                }
+            };
+            triggerResourceLoading(*result);
+
+            events::scene::PrefabInstantiatedNotification notification;
+            notification.filePath = filePath;
+            notification.rootEntity = handle;
+            dispatcher.publish(notification);
+
+            return handle;
+        }
+
+        return std::nullopt;
+    }
+}

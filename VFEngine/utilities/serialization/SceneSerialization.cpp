@@ -420,56 +420,48 @@ namespace serialization {
 
 			// Add to parent
 			sceneGraph.addChild(parent, child);
-
-			// Deserialize the child's data (transform, components, children)
+			
 			deserializeEntity(childJson, child, sceneGraph, false, progressCallback, entitiesLoaded, totalEntities);
 		}
 	}
-
-	// Main entity deserialization (handles both root and children)
+	
 	void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity, scene::SceneGraphSystem& sceneGraph, bool isRoot,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
-		// Set name
+		
 		std::string entityName = "Unnamed";
 		if (entityJson.contains("name")) {
 			entityName = entityJson["name"].get<std::string>();
 			entity.setName(entityName);
 		}
-
-		// Report progress
+		
 		if (progressCallback) {
 			progressCallback(entityName, entitiesLoaded, totalEntities);
 		}
 		++entitiesLoaded;
-
-		// Restore UUID for root
+		
 		if (isRoot && entityJson.contains("uuid")) {
 			uint64_t uuidValue = entityJson["uuid"].get<uint64_t>();
 			entity.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
 		}
 
-		// Deserialize transform
+		
 		if (entityJson.contains("transform")) {
 			auto& transform = entity.getComponent<components::TransformComponent>();
 			deserializeTransform(entityJson["transform"], transform);
 		}
-
-		// Deserialize optional components
+		
 		if (entityJson.contains("components")) {
 			const auto& componentsJson = entityJson["components"];
-
-			// Camera component (auto-adds billboard if not explicitly defined)
+			
 			if (componentsJson.contains("camera")) {
 				auto& camera = entity.addOrReplaceComponent<components::CameraComponent>();
 				deserializeCamera(componentsJson["camera"], camera);
-				// Auto-add camera billboard if no billboard component is defined
 				if (!componentsJson.contains("billboard")) {
 					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
 					billboard.iconType = components::BillboardIconType::Camera;
 				}
 			}
-
-			// IBL component
+			
 			if (componentsJson.contains("ibl")) {
 				std::string iblFileName = deserializeIBL(componentsJson["ibl"]);
 				if (!iblFileName.empty()) {
@@ -492,28 +484,9 @@ namespace serialization {
 				deserializeBillboard(componentsJson["billboard"], billboardComp);
 			}
 
-			// Handle legacy "audioSource" key - convert to either 2D or 3D based on is3D flag
-			if (componentsJson.contains("audioSource")) {
-				const auto& audioJson = componentsJson["audioSource"];
-				bool is3D = audioJson.value("is3D", false);
-				if (is3D) {
-					auto& audioComp = entity.addOrReplaceComponent<components::AudioSource3DComponent>();
-					deserializeAudioSource3D(audioJson, audioComp);
-				} else {
-					auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
-					deserializeAudioSource2D(audioJson, audioComp);
-				}
-				// Auto-add audio source billboard if no billboard component is defined
-				if (!componentsJson.contains("billboard")) {
-					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-					billboard.iconType = components::BillboardIconType::AudioSource;
-				}
-			}
-
 			if (componentsJson.contains("audioSource2D")) {
 				auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
 				deserializeAudioSource2D(componentsJson["audioSource2D"], audioComp);
-				// Auto-add audio source billboard if no billboard component is defined
 				if (!componentsJson.contains("billboard")) {
 					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
 					billboard.iconType = components::BillboardIconType::AudioSource;
@@ -523,7 +496,6 @@ namespace serialization {
 			if (componentsJson.contains("audioSource3D")) {
 				auto& audioComp = entity.addOrReplaceComponent<components::AudioSource3DComponent>();
 				deserializeAudioSource3D(componentsJson["audioSource3D"], audioComp);
-				// Auto-add audio source billboard if no billboard component is defined
 				if (!componentsJson.contains("billboard")) {
 					auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
 					billboard.iconType = components::BillboardIconType::AudioSource;
@@ -535,8 +507,7 @@ namespace serialization {
 				deserializeScript(componentsJson["script"], scriptComp);
 			}
 		}
-
-		// Deserialize children recursively
+		
 		if (entityJson.contains("children") && entityJson["children"].is_array()) {
 			deserializeChildren(entityJson["children"], entity, sceneGraph, progressCallback, entitiesLoaded, totalEntities);
 		}

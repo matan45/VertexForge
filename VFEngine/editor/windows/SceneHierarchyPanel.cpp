@@ -81,7 +81,7 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
 
-                // Prevent deleting the root entity
+                // Prevent deleting/duplicating the root entity
                 if (selectedHandle.isValid())
                 {
                     events::scene::GetSceneHierarchyQuery rootCheckQuery;
@@ -89,12 +89,30 @@ namespace windows
                     bool isRoot = !rootCheckHierarchy.entities.empty() &&
                         rootCheckHierarchy.entities[0].handle.id == selectedHandle.id;
 
-                    if (!isRoot && ImGui::MenuItem("Remove Selected Entity"))
+                    if (!isRoot)
                     {
-                        events::scene::DeleteEntityCommand cmd;
-                        cmd.entity = selectedHandle;
-                        dispatcher.execute(cmd);
-                        selectedHandle = services::EntityHandle::invalid();
+                        if (ImGui::MenuItem("Duplicate"))
+                        {
+                            events::scene::DuplicateEntityCommand cmd;
+                            cmd.entity = selectedHandle;
+                            auto duplicated = dispatcher.execute(cmd);
+                            if (duplicated.isValid())
+                            {
+                                // Select the duplicated entity
+                                selectedHandle = duplicated;
+                                events::scene::SelectEntityCommand selectCmd;
+                                selectCmd.entity = duplicated;
+                                dispatcher.execute(selectCmd);
+                            }
+                        }
+
+                        if (ImGui::MenuItem("Remove Selected Entity"))
+                        {
+                            events::scene::DeleteEntityCommand cmd;
+                            cmd.entity = selectedHandle;
+                            dispatcher.execute(cmd);
+                            selectedHandle = services::EntityHandle::invalid();
+                        }
                     }
                 }
 

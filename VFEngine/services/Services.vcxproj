@@ -123,6 +123,11 @@
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
     <ClInclude Include="impl\components\MaterialComponentService.hpp" />
     <ClInclude Include="impl\components\MeshComponentService.hpp" />
+    <ClInclude Include="impl\scene\EntityQueryService.hpp" />
+    <ClInclude Include="impl\scene\EntityStateService.hpp" />
+    <ClInclude Include="impl\scene\HierarchyService.hpp" />
+    <ClInclude Include="impl\scene\ScenePersistenceService.hpp" />
+    <ClInclude Include="impl\scene\TransformComponentService.hpp" />
     <ClInclude Include="interfaces\IAnimationService.hpp" />
     <ClInclude Include="interfaces\IAudioService.hpp" />
     <ClInclude Include="interfaces\IEditorModeService.hpp" />
@@ -159,6 +164,11 @@
     <ClCompile Include="impl\components\IBLComponentService.cpp" />
     <ClCompile Include="impl\components\MaterialComponentService.cpp" />
     <ClCompile Include="impl\components\MeshComponentService.cpp" />
+    <ClCompile Include="impl\scene\EntityQueryService.cpp" />
+    <ClCompile Include="impl\scene\EntityStateService.cpp" />
+    <ClCompile Include="impl\scene\HierarchyService.cpp" />
+    <ClCompile Include="impl\scene\ScenePersistenceService.cpp" />
+    <ClCompile Include="impl\scene\TransformComponentService.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

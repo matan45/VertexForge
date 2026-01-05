@@ -6,8 +6,7 @@
 #include <vector>
 
 namespace services {
-
-    // Build result
+    
     struct ScriptBuildResult {
         bool success = true;
         size_t filesCompiled = 0;
@@ -25,16 +24,12 @@ namespace services {
         virtual bool isInitialized() const = 0;
 
         // === Script Building ===
-        // Build all scripts from manifest (clean + compile)
         virtual ScriptBuildResult buildScripts(const std::string& manifestPath) = 0;
-
-        // Clean compiled scripts
+        
         virtual void cleanScripts(const std::string& manifestPath) = 0;
-
-        // Check if scripts are compiled and ready
+        
         virtual bool isCompiled() const = 0;
-
-        // Load compiled library (call before Play)
+        
         virtual bool loadCompiledScripts(const std::string& manifestPath) = 0;
 
         // === Script Loading ===

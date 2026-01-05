@@ -189,6 +189,12 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadPrefab"; }
     };
 
+    struct DuplicateEntityCommand : ICommand<services::EntityHandle> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "DuplicateEntity"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================
@@ -397,6 +403,13 @@ namespace events::scene {
         services::EntityHandle rootEntity;
 
         std::string_view getName() const override { return "PrefabInstantiated"; }
+    };
+
+    struct EntityDuplicatedNotification : INotification {
+        services::EntityHandle originalEntity;
+        services::EntityHandle duplicatedEntity;
+
+        std::string_view getName() const override { return "EntityDuplicated"; }
     };
 
 }

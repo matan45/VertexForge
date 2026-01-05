@@ -5,22 +5,20 @@
 #include <string>
 #include <vector>
 
-namespace services {
-
-    class IScriptingService {
+namespace services
+{
+    class IScriptingService
+    {
     public:
         virtual ~IScriptingService() = default;
 
         virtual void registerEventHandlers() = 0;
 
         // === Script Building ===
-        // Build all scripts from manifest
         virtual ScriptBuildResult buildScripts() = 0;
 
-        // Clean compiled scripts
         virtual void cleanScripts() = 0;
 
-        // Check if scripts are compiled and ready
         virtual bool isCompiled() const = 0;
 
         // === Script Component (Multi-Script Support) ===
@@ -39,5 +37,4 @@ namespace services {
         // Stop all scripts (called when exiting play mode)
         virtual void stopAllScripts() = 0;
     };
-
 }

@@ -4,13 +4,20 @@
 #include <optional>
 #include <memory>
 
-namespace scene {
+namespace scene
+{
     class SceneGraphSystem;
 }
 
-namespace services {
+namespace services
+{
+    class EditorModeServiceImpl : public IEditorModeService
+    {
+    private:
+        EditorMode currentMode = EditorMode::Edit;
+        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+        std::optional<nlohmann::json> playModeSnapshot;
 
-    class EditorModeServiceImpl : public IEditorModeService {
     public:
         explicit EditorModeServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~EditorModeServiceImpl() override = default;
@@ -26,12 +33,7 @@ namespace services {
         bool isEditMode() const override;
 
     private:
-        EditorMode currentMode = EditorMode::Edit;
-        std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
-        std::optional<nlohmann::json> playModeSnapshot;
-
         void captureSnapshot();
         void restoreSnapshot();
     };
-
 }
