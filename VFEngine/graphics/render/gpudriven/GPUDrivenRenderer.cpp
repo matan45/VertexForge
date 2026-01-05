@@ -418,26 +418,11 @@ namespace render::gpudriven {
             vk::Pipeline activePipeline;
             vk::PipelineLayout layout;
 
-            if (shaderGroup == 0)
-            {
-                // Default PBR mesh shader pipeline
-                activePipeline = meshShaderPipeline->getPipeline();
-                layout = meshShaderPipeline->getPipelineLayout();
-            }
-            else
-            {
-                // Custom shader pipeline (TODO: implement mesh shader variants)
-                if (customShaderCache)
-                {
-                    activePipeline = customShaderCache->getPipeline(shaderGroup, false);
-                }
-                if (!activePipeline)
-                {
-                    loggerWarning("GPUDrivenRenderer: No mesh shader pipeline for shader group {}, skipping", shaderGroup);
-                    continue;
-                }
-                layout = meshShaderPipeline->getPipelineLayout();
-            }
+            // Use default mesh shader pipeline for all shader groups
+            // Custom mesh shader variants are not yet implemented, so all objects
+            // use the same pipeline regardless of their material's shader group
+            activePipeline = meshShaderPipeline->getPipeline();
+            layout = meshShaderPipeline->getPipelineLayout();
 
             cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
@@ -465,22 +450,6 @@ namespace render::gpudriven {
 
             // Get screen dimensions for push constants
             auto extent = swapChain.getSwapchainExtent();
-
-            // DEBUG: Direct draw call - bypasses indirect buffer entirely
-            {
-                MeshShaderPushConstants pushConstants{};
-                pushConstants.baseDrawIndex = 0;
-                pushConstants.viewMode = currentViewMode;
-                pushConstants.screenWidth = static_cast<float>(extent.width);
-                pushConstants.screenHeight = static_cast<float>(extent.height);
-                cmd.pushConstants(
-                    layout,
-                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment,
-                    0,
-                    sizeof(MeshShaderPushConstants),
-                    &pushConstants);
-                cmd.drawMeshTasksEXT(1, 1, 1);  // Direct call: 1 task workgroup
-            }
 
             // Draw all batches for this shader group using mesh shader dispatch
             for (uint32_t batch = 0; batch < batchCount; ++batch)

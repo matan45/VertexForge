@@ -194,12 +194,13 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
 
         // Create descriptor set layout for per-draw data (Set 1)
-        // Accessed by Task, Mesh, and Fragment shaders
+        // Accessed by Task, Mesh, Fragment, and Vertex shaders (Vertex for custom material pipelines)
         vk::DescriptorSetLayoutBinding perDrawBinding{};
         perDrawBinding.binding = 0;
         perDrawBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
         perDrawBinding.descriptorCount = 1;
-        perDrawBinding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |
+        perDrawBinding.stageFlags = vk::ShaderStageFlagBits::eVertex |
+                                    vk::ShaderStageFlagBits::eTaskEXT |
                                     vk::ShaderStageFlagBits::eMeshEXT |
                                     vk::ShaderStageFlagBits::eFragment;
 
