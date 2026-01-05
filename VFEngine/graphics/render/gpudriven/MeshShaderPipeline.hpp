@@ -18,7 +18,9 @@ namespace render::gpudriven
     // Push constant for mesh shader pipeline
     struct MeshShaderPushConstants {
         uint32_t baseDrawIndex;  // Base index into perDrawData buffer for this dispatch
-        uint32_t padding[3];     // Pad to 16 bytes for alignment
+        uint32_t padding;        // Alignment padding
+        float screenWidth;       // Screen width in pixels (for debug visualization)
+        float screenHeight;      // Screen height in pixels (for debug visualization)
     };
 
     // Pipeline for GPU-driven mesh shader rendering

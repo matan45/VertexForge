@@ -388,9 +388,12 @@ namespace render::gpudriven
             vertexDataLayout       // Set 4
         };
 
-        // Push constant for base draw index (used by task shader to index perDrawData correctly)
+        // Push constant for base draw index and screen params
+        // Task/Mesh use baseDrawIndex, Fragment uses screenWidth/screenHeight for debug visualization
         vk::PushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
+        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |
+                                       vk::ShaderStageFlagBits::eMeshEXT |
+                                       vk::ShaderStageFlagBits::eFragment;
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(MeshShaderPushConstants);
 

@@ -124,6 +124,14 @@ struct MeshletPayload {
 
 taskPayloadSharedEXT MeshletPayload payload;
 
+// Push constants (shared with task/fragment shaders)
+layout(push_constant) uniform PushConstants {
+    uint baseDrawIndex;  // Used by task shader
+    uint padding;
+    float screenWidth;   // Used by fragment shader
+    float screenHeight;  // Used by fragment shader
+} pc;
+
 // Shared memory for vertex/primitive data
 shared vec3 sharedPositions[MESHLET_MAX_VERTICES];
 shared vec3 sharedNormals[MESHLET_MAX_VERTICES];
@@ -438,6 +446,14 @@ layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
 // Set 2: Bindless texture array
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
+// Push constants (shared with task/mesh shaders)
+layout(push_constant) uniform PushConstants {
+    uint baseDrawIndex;    // Used by task shader
+    uint padding;
+    float screenWidth;     // Screen width in pixels
+    float screenHeight;    // Screen height in pixels
+} pc;
+
 // Constants
 const float PI = 3.14159265359;
 const float ALPHA_CUTOFF = 0.5;
@@ -682,8 +698,8 @@ void main() {
             fract(indexVal * 0.01)              // B: fast variation
         );
 
-        // Split screen into 3 sections for comparison (use fixed value since we don't have screenParams)
-        float screenX = gl_FragCoord.x / 1920.0;  // Approximate, debug only
+        // Split screen into 3 sections for comparison
+        float screenX = gl_FragCoord.x / pc.screenWidth;
         if (screenX < 0.33) {
             // Left: show world position as color
             color = posColor;

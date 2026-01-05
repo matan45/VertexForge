@@ -438,12 +438,25 @@ void main() {
     uint targetLOD = 0;
 
     if (camera.enableLODSelection != 0u) {
-        // Transform sphere to view space for accurate projection
-        vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
-        viewSphere.w = worldSphere.w; // Keep radius
+        // DEBUG: Simple distance-based LOD for testing
+        float distance = length(worldSphere.xyz - camera.cameraPosition.xyz);
 
-        float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-        targetLOD = selectLOD(screenPixels, obj.lodThresholds);
+        // Distance thresholds (close ranges for easy testing)
+        if (distance < 3.0) {
+            targetLOD = 0;  // Very close - LOD0 (green)
+        } else if (distance < 6.0) {
+            targetLOD = 1;  // Medium close - LOD1 (yellow)
+        } else if (distance < 10.0) {
+            targetLOD = 2;  // Medium far - LOD2 (orange)
+        } else {
+            targetLOD = 3;  // Far - LOD3 (red)
+        }
+
+        // Original screen-space based selection (disabled for debugging):
+        // vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
+        // viewSphere.w = worldSphere.w;
+        // float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
+        // targetLOD = selectLOD(screenPixels, obj.lodThresholds);
     }
 
     // Find best available LOD considering streaming state

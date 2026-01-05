@@ -342,8 +342,11 @@ namespace render::gpudriven {
             const auto& srcMeshlet = meshletData.meshlets[localMeshletStart + i];
             auto& dstMeshlet = gpuMeshlets[i];
 
-            dstMeshlet.vertexOffset = lodAlloc.vertexOffset + srcMeshlet.descriptor.vertexOffset - lodInfo.vertexDataOffset;
-            dstMeshlet.primitiveOffset = lodAlloc.primitiveOffset + srcMeshlet.descriptor.primitiveOffset - lodInfo.primitiveDataOffset;
+            // srcMeshlet.descriptor.vertexOffset is already 0-based for each LOD (from meshopt_buildMeshlets)
+            // lodAlloc.vertexOffset is where this LOD's vertex indices are uploaded in the GPU buffer
+            // No need to subtract lodInfo.vertexDataOffset (that's for CPU-side combined array access)
+            dstMeshlet.vertexOffset = lodAlloc.vertexOffset + srcMeshlet.descriptor.vertexOffset;
+            dstMeshlet.primitiveOffset = lodAlloc.primitiveOffset + srcMeshlet.descriptor.primitiveOffset;
             dstMeshlet.vertexCount = srcMeshlet.descriptor.vertexCount;
             dstMeshlet.primitiveCount = srcMeshlet.descriptor.primitiveCount;
             dstMeshlet.padding0 = 0;

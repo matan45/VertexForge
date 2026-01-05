@@ -462,13 +462,18 @@ namespace render::gpudriven {
                 descriptorSets.data(),
                 0, nullptr);
 
+            // Get screen dimensions for push constants
+            auto extent = swapChain.getSwapchainExtent();
+
             // DEBUG: Direct draw call - bypasses indirect buffer entirely
             {
                 MeshShaderPushConstants pushConstants{};
                 pushConstants.baseDrawIndex = 0;
+                pushConstants.screenWidth = static_cast<float>(extent.width);
+                pushConstants.screenHeight = static_cast<float>(extent.height);
                 cmd.pushConstants(
                     layout,
-                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment,
                     0,
                     sizeof(MeshShaderPushConstants),
                     &pushConstants);
@@ -485,10 +490,12 @@ namespace render::gpudriven {
                 // The task shader uses: drawIndex = pc.baseDrawIndex + gl_DrawID
                 MeshShaderPushConstants pushConstants{};
                 pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, shaderGroup) * commandsPerSection;
+                pushConstants.screenWidth = static_cast<float>(extent.width);
+                pushConstants.screenHeight = static_cast<float>(extent.height);
 
                 cmd.pushConstants(
                     layout,
-                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment,
                     0,
                     sizeof(MeshShaderPushConstants),
                     &pushConstants);

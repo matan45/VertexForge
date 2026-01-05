@@ -82,9 +82,12 @@ layout(std430, set = 3, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
 
-// Push constants for base draw index
+// Push constants (shared with mesh/fragment shaders)
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;  // Base index into perDrawData buffer for this section
+    uint padding;
+    float screenWidth;   // Used by fragment shader
+    float screenHeight;  // Used by fragment shader
 } pc;
 
 // ============================================================================
@@ -203,11 +206,11 @@ void main() {
         // Object-level frustum culling in compute shader handles this instead
         isVisible = true;
 
-        // Backface cone culling - cull meshlets facing away from camera
-        if (isVisible) {
-            isVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
-                                     camera.cameraPos, worldSphere.xyz);
-        }
+        // Backface cone culling - DISABLED for debugging LOD issues
+        // if (isVisible) {
+        //     isVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
+        //                              camera.cameraPos, worldSphere.xyz);
+        // }
 
         // If visible, add to shared memory for compaction
         if (isVisible) {
