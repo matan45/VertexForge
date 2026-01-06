@@ -1,22 +1,10 @@
 #type COMPUTE
 #version 450
 
-// GPU-Driven Culling + LOD Selection Compute Shader
-//
-// This shader performs frustum culling and LOD selection on the GPU,
-// outputting VkDrawMeshTasksIndirectCommandEXT and PerDrawData for each visible object.
-// The result is a compacted list of mesh shader dispatch commands for indirect rendering.
-
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 // Task shader workgroup size (must match task_gpudriven.glsl)
 const uint TASK_WORKGROUP_SIZE = 32;
-
-// Constants (must match GPUDrivenTypes.hpp)
-const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
-const float LOD_THRESHOLD_0 = 400.0;
-const float LOD_THRESHOLD_1 = 200.0;
-const float LOD_THRESHOLD_2 = 100.0;
 
 // Object flags (must match ObjectFlags namespace in GPUDrivenTypes.hpp)
 const uint FLAG_ALPHA_MASK    = 1u << 4;

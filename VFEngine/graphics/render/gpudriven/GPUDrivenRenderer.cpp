@@ -372,6 +372,12 @@ namespace render::gpudriven {
         // Always reset all batch draw counts (clears stale data when no objects)
         batchManager->resetAllBatches(cmd);
 
+        // Reset meshlet culling stats (must be outside render pass)
+        if (meshShaderPipeline)
+        {
+            meshShaderPipeline->resetStats(cmd);
+        }
+
         if (stats.totalObjects == 0)
         {
             return;
@@ -401,9 +407,6 @@ namespace render::gpudriven {
         {
             return;
         }
-
-        // Reset meshlet culling stats at the start of each frame
-        meshShaderPipeline->resetStats(cmd);
 
         uint32_t batchCount = batchManager->getBatchCount();
         uint32_t commandsPerSection = batchManager->getCommandsPerSection();

@@ -158,109 +158,16 @@ void unpackMeshletCounts(uint packed, out uint vertexCount, out uint primitiveCo
     primitiveCount = (packed >> 8) & 0xFFu;
 }
 
-// Debug mode: set to 1 to output a hardcoded triangle (bypasses all data loading)
-const int DEBUG_HARDCODED_TRIANGLE = 0;
 
-// Debug mode: set to 1 to output simple triangles at meshlet bounding sphere centers
-const int DEBUG_MESHLET_BOUNDS = 0;
 
 // ============================================================================
 // Main
 // ============================================================================
 void main() {
-    // DEBUG: Output a hardcoded triangle to verify the shader pipeline works
-    if (DEBUG_HARDCODED_TRIANGLE != 0) {
-        // ALL workgroups output the test triangle (not just first one)
-        SetMeshOutputsEXT(3, 1);
-
-        if (gl_LocalInvocationID.x == 0) {
-            // Offset based on workgroup ID so triangles don't overlap
-            float offsetX = float(gl_WorkGroupID.x) * 0.1;
-
-            // Hardcoded triangle in clip space - try both winding orders
-            // Vulkan NDC: Y points down, so flip Y for correct orientation
-            gl_MeshVerticesEXT[0].gl_Position = vec4(-0.5 + offsetX,  0.5, 0.5, 1.0);  // top-left
-            gl_MeshVerticesEXT[1].gl_Position = vec4( 0.5 + offsetX,  0.5, 0.5, 1.0);  // top-right
-            gl_MeshVerticesEXT[2].gl_Position = vec4( 0.0 + offsetX, -0.5, 0.5, 1.0);  // bottom-center
-
-            fragWorldPos[0] = vec3(0.0);
-            fragWorldPos[1] = vec3(1.0, 0.0, 0.0);
-            fragWorldPos[2] = vec3(0.0, 1.0, 0.0);
-
-            fragNormal[0] = vec3(0.0, 0.0, 1.0);
-            fragNormal[1] = vec3(0.0, 0.0, 1.0);
-            fragNormal[2] = vec3(0.0, 0.0, 1.0);
-
-            fragTexCoord[0] = vec2(0.0, 0.0);
-            fragTexCoord[1] = vec2(1.0, 0.0);
-            fragTexCoord[2] = vec2(0.5, 1.0);
-
-            // Use index 0 - this should have valid perDrawData
-            // Or use a special marker (0xFFFFFFFF) that fragment shader can detect
-            fragDrawIndex[0] = 0xFFFFFFFEu;  // Special marker for debug mode
-            fragDrawIndex[1] = 0xFFFFFFFEu;
-            fragDrawIndex[2] = 0xFFFFFFFEu;
-
-            fragDebugVertexIndex[0] = 0;
-            fragDebugVertexIndex[1] = 1;
-            fragDebugVertexIndex[2] = 2;
-
-            gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
-        }
-        return;
-    }
 
     // Each mesh shader workgroup processes one meshlet
     // gl_WorkGroupID.x indexes into the visible meshlet list in payload
     uint payloadMeshletIndex = gl_WorkGroupID.x;
-
-    // DEBUG: Output simple triangles - NO buffer reads except camera
-    // This must be BEFORE the payload.meshletCount check!
-    if (DEBUG_MESHLET_BOUNDS != 0) {
-        // Output a small triangle at world origin using only camera matrix
-        SetMeshOutputsEXT(3, 1);
-
-        if (gl_LocalInvocationID.x == 0) {
-            // Compute viewProjection manually since IBL CameraUBO doesn't have it precomputed
-            mat4 viewProj = camera.projection * camera.view;
-
-            // Hardcoded world position - triangle at origin
-            float size = 0.5;
-            float offset = float(gl_WorkGroupID.x) * 0.2;  // Offset per workgroup
-            vec3 worldPos = vec3(offset, 0.0, 0.0);
-
-            vec4 p0 = viewProj * vec4(worldPos + vec3(-size, -size, 0.0), 1.0);
-            vec4 p1 = viewProj * vec4(worldPos + vec3( size, -size, 0.0), 1.0);
-            vec4 p2 = viewProj * vec4(worldPos + vec3( 0.0,  size, 0.0), 1.0);
-
-            gl_MeshVerticesEXT[0].gl_Position = p0;
-            gl_MeshVerticesEXT[1].gl_Position = p1;
-            gl_MeshVerticesEXT[2].gl_Position = p2;
-
-            fragWorldPos[0] = worldPos;
-            fragWorldPos[1] = worldPos;
-            fragWorldPos[2] = worldPos;
-
-            fragNormal[0] = vec3(0.0, 0.0, 1.0);
-            fragNormal[1] = vec3(0.0, 0.0, 1.0);
-            fragNormal[2] = vec3(0.0, 0.0, 1.0);
-
-            fragTexCoord[0] = vec2(0.0, 0.0);
-            fragTexCoord[1] = vec2(1.0, 0.0);
-            fragTexCoord[2] = vec2(0.5, 1.0);
-
-            fragDrawIndex[0] = 0xFFFFFFFEu;  // Debug marker
-            fragDrawIndex[1] = 0xFFFFFFFEu;
-            fragDrawIndex[2] = 0xFFFFFFFEu;
-
-            fragDebugVertexIndex[0] = gl_WorkGroupID.x;
-            fragDebugVertexIndex[1] = gl_WorkGroupID.x;
-            fragDebugVertexIndex[2] = gl_WorkGroupID.x;
-
-            gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
-        }
-        return;
-    }
 
     // Bounds check - should not happen if task shader is correct
     if (payloadMeshletIndex >= payload.meshletCount) {
