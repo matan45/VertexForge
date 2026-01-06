@@ -7,9 +7,10 @@
 namespace render::gpudriven {
 
     // Maximum buffer capacities for meshlet rendering
-    constexpr uint32_t MAX_MESHLET_COUNT = 4 * 1024 * 1024;          // 4M meshlets
-    constexpr uint32_t MAX_MESHLET_VERTEX_INDICES = 16 * 1024 * 1024; // 16M vertex indices
-    constexpr uint32_t MAX_MESHLET_PRIMITIVES = 16 * 1024 * 1024;     // 16M primitive entries
+    // Default sizes support ~1M meshlets (~80MB total). For larger scenes, pass custom values to init().
+    constexpr uint32_t MAX_MESHLET_COUNT = 1 * 1024 * 1024;          // 1M meshlets (48 MB)
+    constexpr uint32_t MAX_MESHLET_VERTEX_INDICES = 4 * 1024 * 1024;  // 4M vertex indices (16 MB)
+    constexpr uint32_t MAX_MESHLET_PRIMITIVES = 4 * 1024 * 1024;      // 4M primitive entries (16 MB)
 
     // Meshlet sizes (must match resource::MAX_MESHLET_VERTICES/PRIMITIVES)
     constexpr uint32_t MESHLET_MAX_VERTICES = 64;

@@ -77,6 +77,17 @@ namespace render::gpudriven {
         const auto& meshCaps = device.getMeshShaderCapabilities();
         meshShaderSupported = meshCaps.meshShaderSupported && meshCaps.taskShaderSupported;
 
+        // Validate meshlet size constants against device limits
+        if (meshShaderSupported &&
+            (MESHLET_MAX_VERTICES > meshCaps.maxMeshOutputVertices ||
+             MESHLET_MAX_PRIMITIVES > meshCaps.maxMeshOutputPrimitives))
+        {
+            loggerError("GPUDrivenRenderer: Meshlet constants ({} vertices, {} primitives) exceed device limits ({}, {})",
+                        MESHLET_MAX_VERTICES, MESHLET_MAX_PRIMITIVES,
+                        meshCaps.maxMeshOutputVertices, meshCaps.maxMeshOutputPrimitives);
+            meshShaderSupported = false;
+        }
+
         if (meshShaderSupported)
         {
             loggerInfo("GPUDrivenRenderer: Mesh shader supported - using Task+Mesh shader pipeline");

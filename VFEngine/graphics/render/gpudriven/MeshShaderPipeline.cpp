@@ -508,9 +508,13 @@ namespace render::gpudriven
             return cachedStats;
         }
 
+        // Ensure all GPU writes to stats buffer are complete before host read.
+        // Task shader writes to this buffer; wait for graphics queue to finish.
+        device.getGraphicsQueue().waitIdle();
+
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Map and read the stats buffer (host-visible)
+        // Map and read the stats buffer (host-visible, host-coherent)
         void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(MeshletCullingStats));
         std::memcpy(&cachedStats, data, sizeof(MeshletCullingStats));
         vkDevice.unmapMemory(statsBufferMemory);

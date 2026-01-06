@@ -5,6 +5,7 @@
 #include "resource/MeshletTypes.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
+#include <cassert>
 
 namespace render::gpudriven {
 
@@ -54,6 +55,8 @@ namespace render::gpudriven {
     void MeshletBuffer::cleanup()
     {
         if (!initialized) return;
+
+        flushPendingTransfers();  // Wait for all async transfers before destroying buffers
 
         allocations.clear();
         allocationKeyToIndex.clear();
@@ -388,6 +391,8 @@ namespace render::gpudriven {
     {
         if (!data || count == 0) return;
 
+        assert(offset + count <= maxMeshletCount && "Meshlet upload exceeds buffer bounds");
+
         size_t dataSize = count * sizeof(GPUMeshlet);
         size_t dstOffset = offset * sizeof(GPUMeshlet);
 
@@ -397,6 +402,8 @@ namespace render::gpudriven {
     void MeshletBuffer::uploadVertexIndicesAt(uint32_t offset, const uint32_t* data, uint32_t count)
     {
         if (!data || count == 0) return;
+
+        assert(offset + count <= maxVertexIndexCount && "Vertex index upload exceeds buffer bounds");
 
         size_t dataSize = count * sizeof(uint32_t);
         size_t dstOffset = offset * sizeof(uint32_t);
@@ -408,6 +415,8 @@ namespace render::gpudriven {
     {
         if (!data || count == 0) return;
 
+        assert(offset + count <= maxPrimitiveCount && "Primitive upload exceeds buffer bounds");
+
         size_t dataSize = count * sizeof(uint32_t);
         size_t dstOffset = offset * sizeof(uint32_t);
 
@@ -416,6 +425,8 @@ namespace render::gpudriven {
 
     void MeshletBuffer::unregisterMesh(const std::string& meshPath)
     {
+        flushPendingTransfers();  // Ensure no pending transfers to regions being freed
+
         // Find and remove all allocations for this mesh
         std::vector<std::string> keysToRemove;
 

@@ -45,7 +45,7 @@ struct PerDrawData {
 struct GPUMeshlet {
     uint vertexOffset;       // Offset into meshlet vertex index buffer
     uint primitiveOffset;    // Offset into meshlet primitive buffer
-    uint vertexCount;        // Packed: (vertexCount | primitiveCount << 8)
+    uint vertexPrimCount;    // Packed: (vertexCount | primitiveCount << 8 | padding << 16)
     uint globalVertexOffset; // Base vertex offset in merged vertex buffer
 
     vec4 boundingSphere;     // xyz = center (local space), w = radius
