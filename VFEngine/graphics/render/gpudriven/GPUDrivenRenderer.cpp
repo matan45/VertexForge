@@ -11,6 +11,7 @@
 #include <array>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 #include <memory>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
@@ -88,15 +89,6 @@ namespace render::gpudriven {
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(), renderPass);
 
-            // Initialize custom shader cache for GPU-driven compatible material shaders
-            customShaderCache = std::make_unique<GPUDrivenShaderCache>(device, swapChain);
-            customShaderCache->init(
-                iblDescriptorSetLayout,
-                meshShaderPipeline->getPerDrawDataLayout(),
-                bindlessTextures->getDescriptorSetLayout(),
-                renderPass
-            );
-
             // Connect meshlet buffer to stream manager for mesh shader data streaming
             if (meshStreamManager)
             {
@@ -127,7 +119,6 @@ namespace render::gpudriven {
         vkDevice.waitIdle();
 
         // Cleanup sub-components
-        if (customShaderCache) customShaderCache->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (meshletBuffer) meshletBuffer->cleanup();
         if (cameraBuffer) cameraBuffer->cleanup();
@@ -242,72 +233,91 @@ namespace render::gpudriven {
             };
         }
 
-        // Create shader group resolver for custom material shaders
-        // Returns 0 for default PBR, 1+ for custom shaders
-        // Handles material instances by resolving to parent's shader group
-        ShaderGroupResolver shaderGroupResolver = nullptr;
-        if (customShaderCache) {
-            // Clear active groups from last frame
-            customShaderCache->clearActiveGroups();
+        // Shader group resolver: materials with Time nodes use group 1 for UV animation
+        // Shader group indices:
+        // 0 = default (no Time node)
+        // 1 = UV animation (Time connected to texture UV)
+        // 2 = Emission animation (Time connected to EmissionStrength)
+        ShaderGroupResolver shaderGroupResolver = [](const std::string& materialPath) -> uint32_t {
+            if (materialPath.empty()) {
+                return 0;
+            }
 
-            // Cache material data lookups per material path
-            auto matDataCache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>>();
-            // Cache instance data lookups
-            auto instanceDataCache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<material::MaterialInstanceData>>>();
+            // Load material and check for Time nodes
+            std::string parentPath = materialPath;
 
-            shaderGroupResolver = [this, matDataCache, instanceDataCache](const std::string& materialPath) -> uint32_t {
-                if (materialPath.empty()) {
-                    return 0;  // Default shader
-                }
-
-                std::string parentPath = materialPath;
-                std::shared_ptr<material::MaterialData> matData;
-
-                // Check if this is a material instance
-                if (material::isInstanceFile(materialPath)) {
-                    // Load instance data
-                    auto instIt = instanceDataCache->find(materialPath);
-                    std::shared_ptr<material::MaterialInstanceData> instanceData;
-                    if (instIt == instanceDataCache->end()) {
-                        instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-                        (*instanceDataCache)[materialPath] = instanceData;
-                    } else {
-                        instanceData = instIt->second;
-                    }
-
-                    if (!instanceData || instanceData->parentMaterialPath.empty()) {
-                        return 0;  // Default shader
-                    }
-
-                    // Register instance->parent mapping for shader sharing
-                    customShaderCache->registerInstance(materialPath, instanceData->parentMaterialPath);
+            // Handle material instances - resolve to parent
+            if (material::isInstanceFile(materialPath)) {
+                auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+                if (instanceData && !instanceData->parentMaterialPath.empty()) {
                     parentPath = instanceData->parentMaterialPath;
-                }
-
-                // Load parent material data
-                auto it = matDataCache->find(parentPath);
-                if (it == matDataCache->end()) {
-                    matData = resource::ResourceManager::loadMaterial(parentPath);
-                    (*matDataCache)[parentPath] = matData;
                 } else {
-                    matData = it->second;
+                    return 0;
                 }
+            }
 
-                if (!matData) {
-                    return 0;  // Default shader
+            auto matData = resource::ResourceManager::loadMaterial(parentPath);
+            if (!matData) {
+                return 0;
+            }
+
+            // Find Time node ID
+            uint32_t timeNodeId = 0;
+            bool hasTimeNode = false;
+            for (const auto& node : matData->graph.nodes) {
+                if (node.type == material::NodeType::Time) {
+                    timeNodeId = node.id;
+                    hasTimeNode = true;
+                    break;
                 }
+            }
 
-                // Check if material has custom shaders
-                if (matData->cachedVertexShader.empty() || matData->cachedFragmentShader.empty()) {
-                    return 0;  // Default shader
+            if (!hasTimeNode) {
+                return 0;
+            }
+
+            // Trace connections from Time node to determine animation type
+            // Use BFS to find what the Time node ultimately connects to
+            std::unordered_set<uint32_t> visitedNodes;
+            std::queue<uint32_t> nodesToVisit;
+            nodesToVisit.push(timeNodeId);
+
+            while (!nodesToVisit.empty()) {
+                uint32_t currentNodeId = nodesToVisit.front();
+                nodesToVisit.pop();
+
+                if (visitedNodes.contains(currentNodeId)) {
+                    continue;
                 }
+                visitedNodes.insert(currentNodeId);
 
-                // Get or create shader group for the PARENT material (instances share parent's shader)
-                uint32_t group = customShaderCache->getOrCreateShaderGroup(parentPath, *matData);
-                customShaderCache->markGroupActive(group);
-                return group;
-            };
-        }
+                // Find all links where this node is the source
+                for (const auto& link : matData->graph.links) {
+                    if (link.sourceNodeId == currentNodeId) {
+                        // Check if target is PBROutput with EmissionStrength pin
+                        for (const auto& node : matData->graph.nodes) {
+                            if (node.id == link.targetNodeId) {
+                                if (node.type == material::NodeType::PBROutput &&
+                                    link.targetPin == "EmissionStrength") {
+                                    return 2;  // Emission animation
+                                }
+                                // Check if target is TextureSample with UV pin
+                                if (node.type == material::NodeType::TextureSample &&
+                                    link.targetPin == "UV") {
+                                    return 1;  // UV animation
+                                }
+                                // Continue tracing through intermediate nodes
+                                nodesToVisit.push(link.targetNodeId);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Default to UV animation if Time node exists but connection unclear
+            return 1;
+        };
 
         // Update object buffer with current frame's render data (pass time for Time node evaluation)
         mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, time);
@@ -411,52 +421,42 @@ namespace render::gpudriven {
         uint32_t batchCount = batchManager->getBatchCount();
         uint32_t commandsPerSection = batchManager->getCommandsPerSection();
 
-        // Get active shader groups (always includes group 0 = default)
-        const std::set<uint32_t>& activeGroups = customShaderCache ?
-            customShaderCache->getActiveGroups() :
-            std::set<uint32_t>{0};
-
         // Use Task+Mesh shader pipeline with indirect count dispatch
         // No vertex/index buffer binding needed - mesh shader fetches from SSBOs
 
-        for (uint32_t shaderGroup : activeGroups)
+        vk::Pipeline activePipeline = meshShaderPipeline->getPipeline();
+        vk::PipelineLayout layout = meshShaderPipeline->getPipelineLayout();
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
+
+        // Bind all 5 descriptor sets:
+        // Set 0: IBL (camera UBO + IBL textures)
+        // Set 1: Per-draw data
+        // Set 2: Bindless textures
+        // Set 3: Meshlet data (meshlet buffer, vertex indices, primitive indices)
+        // Set 4: Vertex data (merged vertex buffer)
+        std::array<vk::DescriptorSet, 5> descriptorSets = {
+            iblDescriptorSet,
+            meshShaderPipeline->getPerDrawDataDescriptorSet(),
+            bindlessTextures->getDescriptorSet(),
+            meshShaderPipeline->getMeshletDataDescriptorSet(),
+            meshShaderPipeline->getVertexDataDescriptorSet()
+        };
+
+        cmd.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
+            layout,
+            0,
+            static_cast<uint32_t>(descriptorSets.size()),
+            descriptorSets.data(),
+            0, nullptr);
+
+        // Get screen dimensions for push constants
+        auto extent = swapChain.getSwapchainExtent();
+
+        // Render shader groups: 0 (default), 1 (UV animation), 2 (emission animation)
+        for (uint32_t shaderGroup = 0; shaderGroup <= 2; ++shaderGroup)
         {
-            vk::Pipeline activePipeline;
-            vk::PipelineLayout layout;
-
-            // Use default mesh shader pipeline for all shader groups
-            // Custom mesh shader variants are not yet implemented, so all objects
-            // use the same pipeline regardless of their material's shader group
-            activePipeline = meshShaderPipeline->getPipeline();
-            layout = meshShaderPipeline->getPipelineLayout();
-
-            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
-
-            // Bind all 5 descriptor sets:
-            // Set 0: IBL (camera UBO + IBL textures)
-            // Set 1: Per-draw data
-            // Set 2: Bindless textures
-            // Set 3: Meshlet data (meshlet buffer, vertex indices, primitive indices)
-            // Set 4: Vertex data (merged vertex buffer)
-            std::array<vk::DescriptorSet, 5> descriptorSets = {
-                iblDescriptorSet,
-                meshShaderPipeline->getPerDrawDataDescriptorSet(),
-                bindlessTextures->getDescriptorSet(),
-                meshShaderPipeline->getMeshletDataDescriptorSet(),
-                meshShaderPipeline->getVertexDataDescriptorSet()
-            };
-
-            cmd.bindDescriptorSets(
-                vk::PipelineBindPoint::eGraphics,
-                layout,
-                0,
-                static_cast<uint32_t>(descriptorSets.size()),
-                descriptorSets.data(),
-                0, nullptr);
-
-            // Get screen dimensions for push constants
-            auto extent = swapChain.getSwapchainExtent();
-
             // Draw all batches for this shader group using mesh shader dispatch
             for (uint32_t batch = 0; batch < batchCount; ++batch)
             {
@@ -709,11 +709,6 @@ namespace render::gpudriven {
         if (meshShaderPipeline)
         {
             meshShaderPipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(), cachedRenderPass);
-        }
-
-        // Update custom shader cache with new render pass and IBL layout
-        if (customShaderCache) {
-            customShaderCache->updateRenderPass(newRenderPass, newIBLLayout);
         }
     }
 

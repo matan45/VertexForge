@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include <material/MaterialInstanceTypes.hpp>
 #include <material/MaterialTypes.hpp>
+#include <material/MaterialGraphHelper.hpp>
 #include <memory>
 #include <string>
 
@@ -19,6 +20,7 @@ namespace windows
         std::string windowTitle;
         std::shared_ptr<material::MaterialInstanceData> instanceData;
         std::shared_ptr<material::MaterialData> parentMaterial;
+        material::ExtractedParentPBR parentPBR;
 
         // Preview rendering
         std::unique_ptr<editor::OrbitCamera> previewCamera;

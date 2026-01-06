@@ -180,16 +180,6 @@ layout(set = 0, binding = 5) uniform sampler2D hiZTexture;
 // Helper Functions
 // ============================================================================
 
-// Get LOD data for a given level (vertex/index based)
-uvec4 getLODData(GPUObjectData obj, uint level) {
-    switch (level) {
-        case 0: return obj.lod0Data;
-        case 1: return obj.lod1Data;
-        case 2: return obj.lod2Data;
-        default: return obj.lod3Data;
-    }
-}
-
 // Get meshlet LOD data for a given level
 // Returns uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
 uvec4 getMeshletLODData(GPUObjectData obj, uint level) {

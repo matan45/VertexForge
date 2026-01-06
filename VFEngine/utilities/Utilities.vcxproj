@@ -95,6 +95,7 @@
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
     <ClInclude Include="material\MaterialAsset.hpp" />
+    <ClInclude Include="material\MaterialGraphHelper.hpp" />
     <ClInclude Include="material\MaterialInstanceAsset.hpp" />
     <ClInclude Include="material\MaterialInstanceTypes.hpp" />
     <ClInclude Include="material\MaterialManager.hpp" />
@@ -134,6 +135,7 @@
   <ItemGroup>
     <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />
+    <ClCompile Include="material\MaterialGraphHelper.cpp" />
     <ClCompile Include="material\MaterialInstanceAsset.cpp" />
     <ClCompile Include="material\MaterialManager.cpp" />
     <ClCompile Include="math\MathHelper.cpp" />

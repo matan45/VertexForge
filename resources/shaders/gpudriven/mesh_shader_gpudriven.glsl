@@ -20,8 +20,7 @@ layout(location = 0) out vec3 fragWorldPos[];
 layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragDrawIndex[];
-layout(location = 4) flat out uint fragDebugVertexIndex[];  // Debug: global vertex index
-layout(location = 5) flat out uint fragMeshletIndex[];      // Debug: meshlet index for colorization
+layout(location = 4) flat out uint fragMeshletIndex[];      // Debug: meshlet index for colorization
 
 // ============================================================================
 // Per-Draw Data (240 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
@@ -250,10 +249,6 @@ void main() {
             // Pass draw index for fragment shader
             fragDrawIndex[localVertexIndex] = drawIndex;
 
-            // Debug: pass the global vertex index
-            uint meshletLocalVertexIdx = meshletVertices[meshlet.vertexOffset + localVertexIndex];
-            fragDebugVertexIndex[localVertexIndex] = meshlet.globalVertexOffset + meshletLocalVertexIdx;
-
             // Debug: pass the meshlet index for colorization
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
 
@@ -294,8 +289,7 @@ layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) in flat uint fragDrawIndex;
-layout(location = 4) in flat uint fragDebugVertexIndex;
-layout(location = 5) in flat uint fragMeshletIndex;
+layout(location = 4) in flat uint fragMeshletIndex;
 
 layout(location = 0) out vec4 outColor;
 
@@ -386,54 +380,11 @@ vec3 unpackORM(vec4 ormSample) {
 }
 
 // PBR Functions
-float DistributionGGX(vec3 N, vec3 H, float roughness) {
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float NdotH = max(dot(N, H), 0.0);
-    float NdotH2 = NdotH * NdotH;
-
-    float nom = a2;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
-
-    return nom / denom;
-}
-
-float GeometrySchlickGGX(float NdotV, float roughness) {
-    float r = (roughness + 1.0);
-    float k = (r * r) / 8.0;
-
-    float nom = NdotV;
-    float denom = NdotV * (1.0 - k) + k;
-
-    return nom / denom;
-}
-
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
-    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
-
-    return ggx1 * ggx2;
-}
-
-vec3 fresnelSchlick(float cosTheta, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
 void main() {
-    // DEBUG: Check for debug marker from mesh shader
-    if (fragDrawIndex == 0xFFFFFFFEu) {
-        // Output solid magenta color for debug triangle
-        outColor = vec4(1.0, 0.0, 1.0, 1.0);
-        return;
-    }
-
     PerDrawData drawData = perDrawData[fragDrawIndex];
 
     vec3 N = normalize(fragNormal);
@@ -450,8 +401,8 @@ void main() {
 
     vec2 texCoords = fragTexCoord;
 
-    // Apply time-based UV animation for materials with Time node (shaderGroupIndex > 0)
-    if (drawData.shaderGroupIndex > 0u) {
+    // Shader group 1: UV animation (Time connected to texture UV)
+    if (drawData.shaderGroupIndex == 1u) {
         texCoords += vec2(camera.time * 0.1, 0.0);
     }
 
@@ -543,11 +494,17 @@ void main() {
     vec3 ambient = (kD * diffuse + specular) * ao;
 
     // Add emission
+    // Shader group 2: Emission animation (Time connected to EmissionStrength)
+    float emissionMultiplier = emission;
+    if (drawData.shaderGroupIndex == 2u) {
+        emissionMultiplier *= cos(camera.time);
+    }
+
     vec3 emissive = vec3(0.0);
     if (isValidTexture(emissionIdx)) {
-        emissive = pow(textureGrad(bindlessTextures[nonuniformEXT(emissionIdx)], texCoords, texDx, texDy).rgb, vec3(2.2)) * emission;
+        emissive = pow(textureGrad(bindlessTextures[nonuniformEXT(emissionIdx)], texCoords, texDx, texDy).rgb, vec3(2.2)) * emissionMultiplier;
     } else {
-        emissive = albedo * emission;
+        emissive = albedo * emissionMultiplier;
     }
 
     vec3 color = ambient + emissive;

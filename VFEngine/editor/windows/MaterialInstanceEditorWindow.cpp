@@ -1,6 +1,7 @@
 #include "MaterialInstanceEditorWindow.hpp"
 #include "../camera/OrbitCamera.hpp"
 #include <material/MaterialManager.hpp>
+#include <material/MaterialGraphHelper.hpp>
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
 #include "events/PreviewEvents.hpp"
@@ -61,6 +62,11 @@ namespace windows
         if (instanceData && !instanceData->parentMaterialPath.empty())
         {
             parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            if (parentMaterial)
+            {
+                // Extract parent PBR values for use when override is disabled
+                parentPBR = material::MaterialGraphHelper::extractPBRFromGraph(*parentMaterial);
+            }
         }
     }
 
@@ -82,7 +88,7 @@ namespace windows
     {
         if (!instanceData || !parentMaterial) return;
 
-        // Initialize temp values from instance overrides or parent defaults
+        // Initialize temp values from instance overrides or parent values
         // Albedo
         if (instanceData->albedoOverride.has_value())
         {
@@ -91,7 +97,7 @@ namespace windows
         }
         else
         {
-            tempAlbedo = glm::vec4(1.0f);
+            tempAlbedo = parentPBR.albedo;
             albedoOverrideEnabled = false;
         }
 
@@ -103,7 +109,7 @@ namespace windows
         }
         else
         {
-            tempMetallic = 0.0f;
+            tempMetallic = parentPBR.metallic;
             metallicOverrideEnabled = false;
         }
 
@@ -115,7 +121,7 @@ namespace windows
         }
         else
         {
-            tempRoughness = 0.5f;
+            tempRoughness = parentPBR.roughness;
             roughnessOverrideEnabled = false;
         }
 
@@ -127,7 +133,7 @@ namespace windows
         }
         else
         {
-            tempAo = 1.0f;
+            tempAo = parentPBR.ao;
             aoOverrideEnabled = false;
         }
 
@@ -139,7 +145,7 @@ namespace windows
         }
         else
         {
-            tempEmission = 0.0f;
+            tempEmission = parentPBR.emission;
             emissionOverrideEnabled = false;
         }
 
@@ -151,7 +157,7 @@ namespace windows
         }
         else
         {
-            tempIblDiffuse = 1.0f;
+            tempIblDiffuse = parentPBR.iblDiffuse;
             iblDiffuseOverrideEnabled = false;
         }
 
@@ -162,7 +168,7 @@ namespace windows
         }
         else
         {
-            tempIblSpecular = 0.5f;
+            tempIblSpecular = parentPBR.iblSpecular;
             iblSpecularOverrideEnabled = false;
         }
     }
@@ -483,19 +489,15 @@ namespace windows
 
         if (!instanceData) return;
 
-        // Get parent textures (would need MaterialPBRExtractor)
-        // For now, use empty strings as placeholders
-        std::string parentAlbedo, parentNormal, parentORM;
-
         bool changed = false;
-        changed |= drawTextureOverrideSlot("Albedo", material::TextureSlot::Albedo, parentAlbedo);
-        changed |= drawTextureOverrideSlot("Normal", material::TextureSlot::Normal, parentNormal);
-        changed |= drawTextureOverrideSlot("ORM", material::TextureSlot::ORM, parentORM);
-        changed |= drawTextureOverrideSlot("Metallic", material::TextureSlot::Metallic, "");
-        changed |= drawTextureOverrideSlot("Roughness", material::TextureSlot::Roughness, "");
-        changed |= drawTextureOverrideSlot("AO", material::TextureSlot::AO, "");
-        changed |= drawTextureOverrideSlot("Emission", material::TextureSlot::Emission, "");
-        changed |= drawTextureOverrideSlot("Height", material::TextureSlot::Height, "");
+        changed |= drawTextureOverrideSlot("Albedo", material::TextureSlot::Albedo, parentPBR.albedoTexturePath);
+        changed |= drawTextureOverrideSlot("Normal", material::TextureSlot::Normal, parentPBR.normalTexturePath);
+        changed |= drawTextureOverrideSlot("ORM", material::TextureSlot::ORM, parentPBR.ormTexturePath);
+        changed |= drawTextureOverrideSlot("Metallic", material::TextureSlot::Metallic, parentPBR.metallicTexturePath);
+        changed |= drawTextureOverrideSlot("Roughness", material::TextureSlot::Roughness, parentPBR.roughnessTexturePath);
+        changed |= drawTextureOverrideSlot("AO", material::TextureSlot::AO, parentPBR.aoTexturePath);
+        changed |= drawTextureOverrideSlot("Emission", material::TextureSlot::Emission, parentPBR.emissionTexturePath);
+        changed |= drawTextureOverrideSlot("Height", material::TextureSlot::Height, parentPBR.heightTexturePath);
 
         if (changed)
         {
@@ -610,32 +612,32 @@ namespace windows
         services::MaterialPreviewParams params;
         params.useCustomShader = false;
 
-        // Apply scalar values (use override if enabled, otherwise defaults)
-        params.albedo = albedoOverrideEnabled ? tempAlbedo : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
-        params.metallic = metallicOverrideEnabled ? tempMetallic : 0.0f;
-        params.roughness = roughnessOverrideEnabled ? tempRoughness : 0.5f;
-        params.ao = aoOverrideEnabled ? tempAo : 1.0f;
-        params.emission = emissionOverrideEnabled ? tempEmission : 0.0f;
+        // Apply scalar values (use override if enabled, otherwise parent values)
+        params.albedo = albedoOverrideEnabled ? tempAlbedo : parentPBR.albedo;
+        params.metallic = metallicOverrideEnabled ? tempMetallic : parentPBR.metallic;
+        params.roughness = roughnessOverrideEnabled ? tempRoughness : parentPBR.roughness;
+        params.ao = aoOverrideEnabled ? tempAo : parentPBR.ao;
+        params.emission = emissionOverrideEnabled ? tempEmission : parentPBR.emission;
 
-        // Helper to get texture override path
-        auto getTexture = [this](material::TextureSlot slot) -> std::string
+        // Helper to get texture path (override or parent)
+        auto getTexture = [this](material::TextureSlot slot, const std::string& parentPath) -> std::string
         {
             if (instanceData->isTextureOverridden(slot))
             {
                 std::string path = instanceData->getTextureOverride(slot);
                 if (path != " " && !path.empty()) return path;
             }
-            return "";
+            return parentPath;
         };
 
-        params.albedoTexturePath = getTexture(material::TextureSlot::Albedo);
-        params.normalTexturePath = getTexture(material::TextureSlot::Normal);
-        params.ormTexturePath = getTexture(material::TextureSlot::ORM);
-        params.metallicTexturePath = getTexture(material::TextureSlot::Metallic);
-        params.roughnessTexturePath = getTexture(material::TextureSlot::Roughness);
-        params.aoTexturePath = getTexture(material::TextureSlot::AO);
-        params.emissionTexturePath = getTexture(material::TextureSlot::Emission);
-        params.heightTexturePath = getTexture(material::TextureSlot::Height);
+        params.albedoTexturePath = getTexture(material::TextureSlot::Albedo, parentPBR.albedoTexturePath);
+        params.normalTexturePath = getTexture(material::TextureSlot::Normal, parentPBR.normalTexturePath);
+        params.ormTexturePath = getTexture(material::TextureSlot::ORM, parentPBR.ormTexturePath);
+        params.metallicTexturePath = getTexture(material::TextureSlot::Metallic, parentPBR.metallicTexturePath);
+        params.roughnessTexturePath = getTexture(material::TextureSlot::Roughness, parentPBR.roughnessTexturePath);
+        params.aoTexturePath = getTexture(material::TextureSlot::AO, parentPBR.aoTexturePath);
+        params.emissionTexturePath = getTexture(material::TextureSlot::Emission, parentPBR.emissionTexturePath);
+        params.heightTexturePath = getTexture(material::TextureSlot::Height, parentPBR.heightTexturePath);
 
         // Send params to preview service
         services::events::preview::SetMaterialParamsCommand cmd;

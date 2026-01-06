@@ -142,7 +142,6 @@
     <ClInclude Include="render\gpudriven\GPUCullLODPipeline.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenCameraBuffer.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenRenderer.hpp" />
-    <ClInclude Include="render\gpudriven\GPUDrivenShaderCache.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenTypes.hpp" />
     <ClInclude Include="render\gpudriven\IndirectBatchManager.hpp" />
     <ClInclude Include="render\gpudriven\MergedMeshBuffer.hpp" />
@@ -213,7 +212,6 @@
     <ClCompile Include="render\gpudriven\GPUCullLODPipeline.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenCameraBuffer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
-    <ClCompile Include="render\gpudriven\GPUDrivenShaderCache.cpp" />
     <ClCompile Include="render\gpudriven\IndirectBatchManager.cpp" />
     <ClCompile Include="render\gpudriven\MergedMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\MeshShaderPipeline.cpp" />
@@ -241,7 +239,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
-    <None Include="..\..\resources\shaders\gpudriven\custom_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_shader_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\task_gpudriven.glsl" />

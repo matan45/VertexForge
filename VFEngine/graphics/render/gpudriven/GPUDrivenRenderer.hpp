@@ -5,7 +5,6 @@
 #include "IndirectBatchManager.hpp"
 #include "BindlessTextureManager.hpp"
 #include "GPUCullLODPipeline.hpp"
-#include "GPUDrivenShaderCache.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
 #include "MeshShaderPipeline.hpp"
 #include "MeshletBuffer.hpp"
@@ -45,7 +44,6 @@ namespace render::gpudriven
         std::unique_ptr<IndirectBatchManager> batchManager;
         std::unique_ptr<BindlessTextureManager> bindlessTextures;
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
-        std::unique_ptr<GPUDrivenShaderCache> customShaderCache;
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
         std::unique_ptr<MeshletBuffer> meshletBuffer;
