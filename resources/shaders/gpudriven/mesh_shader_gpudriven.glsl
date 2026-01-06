@@ -684,5 +684,30 @@ void main() {
         color = mix(color, lodColors[lod], 0.5);
     }
 
+    // Mipmap view mode (viewMode == 3): visualize which mip level is being used
+    if (viewModeValue == 3u) {
+        // Calculate mip level from screen-space derivatives
+        // This approximates what the GPU hardware does for mip selection
+        float dx = max(length(texDx), length(texDy));
+        float mipLevel = log2(max(dx * 1024.0, 1.0)); // Assume 1024 as base texture size
+        mipLevel = clamp(mipLevel, 0.0, 10.0);
+
+        // Color gradient: Blue (mip 0) -> Green (mip 3) -> Yellow (mip 6) -> Red (mip 10+)
+        vec3 mipColors[5] = vec3[5](
+            vec3(0.0, 0.0, 1.0),   // Mip 0: Blue (highest detail)
+            vec3(0.0, 1.0, 1.0),   // Mip 2: Cyan
+            vec3(0.0, 1.0, 0.0),   // Mip 4: Green
+            vec3(1.0, 1.0, 0.0),   // Mip 6: Yellow
+            vec3(1.0, 0.0, 0.0)    // Mip 8+: Red (lowest detail)
+        );
+
+        float t = mipLevel / 2.0; // Scale to 0-5 range for color lookup
+        int idx = int(floor(t));
+        idx = clamp(idx, 0, 3);
+        float frac = fract(t);
+        vec3 mipColor = mix(mipColors[idx], mipColors[idx + 1], frac);
+        color = mipColor;
+    }
+
     outColor = vec4(color, alpha);
 }
