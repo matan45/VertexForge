@@ -45,5 +45,8 @@ namespace services
         bool ensureTrashFolder();
         std::string generateTrashPath(const std::string& originalPath);
         bool isSubPath(const std::filesystem::path& path, const std::filesystem::path& base) const;
+
+        // Security: Validate filename doesn't contain path traversal characters
+        static bool isValidFileName(const std::string& name);
     };
 }

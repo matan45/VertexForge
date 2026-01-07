@@ -2,9 +2,11 @@
 #include "../data/UndoTypes.hpp"
 #include "asset/AssetReferenceScanner.hpp"
 #include "print/EditorLogger.hpp"
+#include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -104,21 +106,111 @@ namespace services
     {
         auto now = std::chrono::system_clock::now();
         auto time = std::chrono::system_clock::to_time_t(now);
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()) % 1000;
+
         std::tm timeInfo{};
         localtime_s(&timeInfo, &time);
+
         std::stringstream ss;
-        ss << std::put_time(&timeInfo, "%Y%m%d_%H%M%S");
+        ss << std::put_time(&timeInfo, "%Y%m%d_%H%M%S")
+           << "_" << std::setfill('0') << std::setw(3) << ms.count();
 
         fs::path original(originalPath);
         std::string filename = original.filename().string();
+        std::string basePath = (trashFolder / (ss.str() + "_" + filename)).string();
 
-        return (trashFolder / (ss.str() + "_" + filename)).string();
+        // Ensure uniqueness by adding counter if path already exists
+        if (!fs::exists(basePath))
+        {
+            return basePath;
+        }
+
+        // Rare case: collision even with milliseconds, add counter
+        for (int counter = 1; counter < 1000; ++counter)
+        {
+            std::string uniquePath = (trashFolder / (ss.str() + "_" + std::to_string(counter) + "_" + filename)).string();
+            if (!fs::exists(uniquePath))
+            {
+                return uniquePath;
+            }
+        }
+
+        // Extremely rare: 1000 collisions, use random suffix
+        return (trashFolder / (ss.str() + "_" + std::to_string(std::rand()) + "_" + filename)).string();
     }
 
     bool FileOperationsServiceImpl::isSubPath(const fs::path& path, const fs::path& base) const
     {
         auto relativePath = fs::relative(path, base);
-        return !relativePath.empty() && relativePath.native()[0] != '.';
+        if (relativePath.empty())
+        {
+            return false;
+        }
+
+        // Get the first component of the relative path
+        auto firstComponent = *relativePath.begin();
+
+        // If relative path starts with ".." it means path is outside base
+        // If relative path is exactly "." it means path equals base (not a subpath)
+        // Hidden files like ".hidden" ARE valid subpaths
+        return firstComponent != ".." && firstComponent != ".";
+    }
+
+    bool FileOperationsServiceImpl::isValidFileName(const std::string& name)
+    {
+        // Empty names are invalid
+        if (name.empty())
+        {
+            return false;
+        }
+
+        // Check for path traversal attempts
+        if (name.find("..") != std::string::npos)
+        {
+            return false;
+        }
+
+        // Check for path separators (both Unix and Windows style)
+        if (name.find('/') != std::string::npos || name.find('\\') != std::string::npos)
+        {
+            return false;
+        }
+
+        // Check for other invalid characters on Windows
+        // These characters are not allowed in file names: < > : " | ? *
+        const std::string invalidChars = "<>:\"|?*";
+        for (char c : invalidChars)
+        {
+            if (name.find(c) != std::string::npos)
+            {
+                return false;
+            }
+        }
+
+        // Check for reserved names on Windows (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+        std::string upperName = name;
+        std::transform(upperName.begin(), upperName.end(), upperName.begin(), ::toupper);
+
+        // Remove extension for comparison
+        size_t dotPos = upperName.find('.');
+        std::string baseName = (dotPos != std::string::npos) ? upperName.substr(0, dotPos) : upperName;
+
+        const std::vector<std::string> reservedNames = {
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        };
+
+        for (const auto& reserved : reservedNames)
+        {
+            if (baseName == reserved)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     FileOperationResult FileOperationsServiceImpl::moveFile(const std::string& sourcePath, const std::string& destPath)
@@ -185,20 +277,36 @@ namespace services
             result.updatedReferences = updateResult.updatedFiles;
         }
 
-        // Create undo command
+        // Create undo command with exception safety
         if (undoRedoService)
         {
-            auto undoCmd = std::make_unique<MoveFileUndoCommand>(sourcePath, dest.string(), result.updatedReferences);
-            undoCmd->originalRefContents.insert(originalContents.begin(), originalContents.end());
-            undoRedoService->pushCommand(std::move(undoCmd));
+            try
+            {
+                auto undoCmd = std::make_unique<MoveFileUndoCommand>(sourcePath, dest.string(), result.updatedReferences, projectRoot);
+                undoCmd->originalRefContents.insert(originalContents.begin(), originalContents.end());
+                undoRedoService->pushCommand(std::move(undoCmd));
+            }
+            catch (const std::exception& e)
+            {
+                // File operation succeeded but undo registration failed
+                // Log warning but don't fail the operation
+                vfLogWarning("Move succeeded but undo registration failed: {}. Undo may not be available.", e.what());
+            }
         }
 
-        // Publish notification
-        events::fileops::FileMovedNotification notification;
-        notification.oldPath = sourcePath;
-        notification.newPath = dest.string();
-        notification.updatedReferences = result.updatedReferences;
-        events::EventDispatcher::instance().publish(notification);
+        // Publish notification (also with exception safety)
+        try
+        {
+            events::fileops::FileMovedNotification notification;
+            notification.oldPath = sourcePath;
+            notification.newPath = dest.string();
+            notification.updatedReferences = result.updatedReferences;
+            events::EventDispatcher::instance().publish(notification);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogWarning("Failed to publish file moved notification: {}", e.what());
+        }
 
         result.success = true;
         vfLogInfo("Moved {} to {}", sourcePath, dest.string());
@@ -253,18 +361,32 @@ namespace services
             return result;
         }
 
-        // Create undo command
+        // Create undo command with exception safety
         if (undoRedoService)
         {
-            auto undoCmd = std::make_unique<CopyFileUndoCommand>(sourcePath, dest.string());
-            undoRedoService->pushCommand(std::move(undoCmd));
+            try
+            {
+                auto undoCmd = std::make_unique<CopyFileUndoCommand>(sourcePath, dest.string());
+                undoRedoService->pushCommand(std::move(undoCmd));
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("Copy succeeded but undo registration failed: {}. Undo may not be available.", e.what());
+            }
         }
 
-        // Publish notification
-        events::fileops::FileCopiedNotification notification;
-        notification.sourcePath = sourcePath;
-        notification.destPath = dest.string();
-        events::EventDispatcher::instance().publish(notification);
+        // Publish notification with exception safety
+        try
+        {
+            events::fileops::FileCopiedNotification notification;
+            notification.sourcePath = sourcePath;
+            notification.destPath = dest.string();
+            events::EventDispatcher::instance().publish(notification);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogWarning("Failed to publish file copied notification: {}", e.what());
+        }
 
         result.success = true;
         vfLogInfo("Copied {} to {}", sourcePath, dest.string());
@@ -324,17 +446,31 @@ namespace services
             return result;
         }
 
-        // Create undo command
+        // Create undo command with exception safety
         if (undoRedoService)
         {
-            auto undoCmd = std::make_unique<DeleteFileUndoCommand>(path, trashPath);
-            undoRedoService->pushCommand(std::move(undoCmd));
+            try
+            {
+                auto undoCmd = std::make_unique<DeleteFileUndoCommand>(path, trashPath);
+                undoRedoService->pushCommand(std::move(undoCmd));
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("Delete succeeded but undo registration failed: {}. Undo may not be available.", e.what());
+            }
         }
 
-        // Publish notification
-        events::fileops::FileDeletedNotification notification;
-        notification.path = path;
-        events::EventDispatcher::instance().publish(notification);
+        // Publish notification with exception safety
+        try
+        {
+            events::fileops::FileDeletedNotification notification;
+            notification.path = path;
+            events::EventDispatcher::instance().publish(notification);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogWarning("Failed to publish file deleted notification: {}", e.what());
+        }
 
         result.success = true;
         vfLogInfo("Deleted {} (backed up to {})", path, trashPath);
@@ -343,6 +479,16 @@ namespace services
 
     FileOperationResult FileOperationsServiceImpl::renameFile(const std::string& path, const std::string& newName)
     {
+        // Validate new name to prevent path traversal attacks
+        if (!isValidFileName(newName))
+        {
+            FileOperationResult result;
+            result.success = false;
+            result.errorMessage = "Invalid file name: " + newName;
+            vfLogWarning("Rejected invalid file name: {}", newName);
+            return result;
+        }
+
         fs::path filePath(path);
         fs::path newPath = filePath.parent_path() / newName;
 
@@ -352,6 +498,15 @@ namespace services
     FileOperationResult FileOperationsServiceImpl::createFolder(const std::string& parentPath, const std::string& folderName)
     {
         FileOperationResult result;
+
+        // Validate folder name to prevent path traversal attacks
+        if (!isValidFileName(folderName))
+        {
+            result.success = false;
+            result.errorMessage = "Invalid folder name: " + folderName;
+            vfLogWarning("Rejected invalid folder name: {}", folderName);
+            return result;
+        }
 
         fs::path newFolder = fs::path(parentPath) / folderName;
 
@@ -374,17 +529,31 @@ namespace services
             return result;
         }
 
-        // Create undo command
+        // Create undo command with exception safety
         if (undoRedoService)
         {
-            auto undoCmd = std::make_unique<CreateFolderUndoCommand>(newFolder.string());
-            undoRedoService->pushCommand(std::move(undoCmd));
+            try
+            {
+                auto undoCmd = std::make_unique<CreateFolderUndoCommand>(newFolder.string());
+                undoRedoService->pushCommand(std::move(undoCmd));
+            }
+            catch (const std::exception& e)
+            {
+                vfLogWarning("Create folder succeeded but undo registration failed: {}. Undo may not be available.", e.what());
+            }
         }
 
-        // Publish notification
-        events::fileops::FolderCreatedNotification notification;
-        notification.path = newFolder.string();
-        events::EventDispatcher::instance().publish(notification);
+        // Publish notification with exception safety
+        try
+        {
+            events::fileops::FolderCreatedNotification notification;
+            notification.path = newFolder.string();
+            events::EventDispatcher::instance().publish(notification);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogWarning("Failed to publish folder created notification: {}", e.what());
+        }
 
         result.success = true;
         vfLogInfo("Created folder: {}", newFolder.string());
@@ -395,6 +564,12 @@ namespace services
     {
         FileOperationResult result;
         result.success = true;
+
+        // Begin batch operation for undo grouping
+        if (undoRedoService && sourcePaths.size() > 1)
+        {
+            undoRedoService->beginBatch("Move " + std::to_string(sourcePaths.size()) + " items");
+        }
 
         for (const auto& source : sourcePaths)
         {
@@ -410,6 +585,12 @@ namespace services
                 moveResult.updatedReferences.begin(), moveResult.updatedReferences.end());
         }
 
+        // End batch operation
+        if (undoRedoService && sourcePaths.size() > 1)
+        {
+            undoRedoService->endBatch();
+        }
+
         return result;
     }
 
@@ -417,6 +598,12 @@ namespace services
     {
         FileOperationResult result;
         result.success = true;
+
+        // Begin batch operation for undo grouping
+        if (undoRedoService && sourcePaths.size() > 1)
+        {
+            undoRedoService->beginBatch("Copy " + std::to_string(sourcePaths.size()) + " items");
+        }
 
         for (const auto& source : sourcePaths)
         {
@@ -430,6 +617,12 @@ namespace services
             }
         }
 
+        // End batch operation
+        if (undoRedoService && sourcePaths.size() > 1)
+        {
+            undoRedoService->endBatch();
+        }
+
         return result;
     }
 
@@ -437,6 +630,12 @@ namespace services
     {
         FileOperationResult result;
         result.success = true;
+
+        // Begin batch operation for undo grouping
+        if (undoRedoService && paths.size() > 1)
+        {
+            undoRedoService->beginBatch("Delete " + std::to_string(paths.size()) + " items");
+        }
 
         for (const auto& path : paths)
         {
@@ -446,6 +645,12 @@ namespace services
                 result.success = false;
                 result.errorMessage += deleteResult.errorMessage + "\n";
             }
+        }
+
+        // End batch operation
+        if (undoRedoService && paths.size() > 1)
+        {
+            undoRedoService->endBatch();
         }
 
         return result;
@@ -529,9 +734,11 @@ namespace services
             throw std::runtime_error("Failed to redo move: " + ec.message());
         }
 
-        // Update references
-        // Note: In a real implementation, you'd need access to the project root
-        // This is a simplified version
+        // Update references after redo
+        if (!projectRoot.empty())
+        {
+            asset::AssetReferenceScanner::updateReferences(sourcePath, destPath, projectRoot);
+        }
     }
 
     void MoveFileUndoCommand::undo()
@@ -582,9 +789,29 @@ namespace services
 
     void DeleteFileUndoCommand::execute()
     {
-        // Re-do: delete again (move to new backup)
+        // Re-do: move file back to backup (not permanent delete, to allow undo again)
         std::error_code ec;
-        fs::remove_all(originalPath, ec);
+        fs::rename(originalPath, backupPath, ec);
+
+        if (ec)
+        {
+            // Try copy + delete if rename fails (cross-filesystem)
+            fs::path original(originalPath);
+            if (fs::is_directory(original))
+            {
+                fs::copy(originalPath, backupPath, fs::copy_options::recursive, ec);
+            }
+            else
+            {
+                fs::copy_file(originalPath, backupPath, ec);
+            }
+
+            if (!ec)
+            {
+                fs::remove_all(originalPath, ec);
+            }
+        }
+
         if (ec)
         {
             throw std::runtime_error("Failed to redo delete: " + ec.message());
@@ -648,6 +875,12 @@ namespace services
         if (ec)
         {
             throw std::runtime_error("Failed to redo rename: " + ec.message());
+        }
+
+        // Update references after redo
+        if (!projectRoot.empty())
+        {
+            asset::AssetReferenceScanner::updateReferences(oldPath, newPath, projectRoot);
         }
     }
 

@@ -29,6 +29,11 @@ namespace services
         size_t getUndoStackSize() const override;
         size_t getRedoStackSize() const override;
 
+        // Batch Operations
+        void beginBatch(const std::string& description) override;
+        void endBatch() override;
+        bool isInBatchMode() const override;
+
         // Configuration
         void setMaxHistoryDepth(size_t maxDepth) override;
         size_t getMaxHistoryDepth() const override;
@@ -40,5 +45,10 @@ namespace services
         std::vector<std::unique_ptr<IUndoableCommand>> undoStack;
         std::vector<std::unique_ptr<IUndoableCommand>> redoStack;
         size_t maxHistoryDepth = 50;  // Default to 50 commands
+
+        // Batch mode state
+        bool inBatchMode = false;
+        std::string batchDescription;
+        std::unique_ptr<BatchUndoCommand> currentBatch;
     };
 }

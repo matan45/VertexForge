@@ -56,6 +56,21 @@ namespace services
         virtual size_t getRedoStackSize() const = 0;
 
         // ============================================
+        // Batch Operations
+        // ============================================
+
+        // Begin a batch operation - commands pushed during batch mode are grouped
+        // into a single composite undo command
+        virtual void beginBatch(const std::string& description) = 0;
+
+        // End a batch operation - creates composite command from all batched commands
+        // If no commands were added during batch, nothing is pushed to the stack
+        virtual void endBatch() = 0;
+
+        // Check if currently in batch mode
+        virtual bool isInBatchMode() const = 0;
+
+        // ============================================
         // Configuration
         // ============================================
 

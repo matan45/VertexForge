@@ -61,6 +61,14 @@ namespace services
             return;
         }
 
+        // If in batch mode, add to current batch instead of undo stack
+        if (inBatchMode && currentBatch)
+        {
+            vfLogInfo("Adding to batch: {}", command->getDescription());
+            currentBatch->addCommand(std::move(command));
+            return;
+        }
+
         // Clear redo stack when new command is pushed
         redoStack.clear();
 
@@ -237,5 +245,53 @@ namespace services
         {
             undoStack.erase(undoStack.begin());
         }
+    }
+
+    void UndoRedoServiceImpl::beginBatch(const std::string& description)
+    {
+        if (inBatchMode)
+        {
+            vfLogWarning("Already in batch mode, ignoring beginBatch call");
+            return;
+        }
+
+        inBatchMode = true;
+        batchDescription = description;
+        currentBatch = std::make_unique<BatchUndoCommand>(description);
+        vfLogInfo("Started batch operation: {}", description);
+    }
+
+    void UndoRedoServiceImpl::endBatch()
+    {
+        if (!inBatchMode)
+        {
+            vfLogWarning("Not in batch mode, ignoring endBatch call");
+            return;
+        }
+
+        inBatchMode = false;
+
+        // Only push if there are commands in the batch
+        if (currentBatch && currentBatch->hasCommands())
+        {
+            vfLogInfo("Completed batch operation: {}", batchDescription);
+            // Use the base pushCommand logic (not batch mode anymore)
+            redoStack.clear();
+            undoStack.push_back(std::move(currentBatch));
+            trimUndoStack();
+            publishStateChanged();
+        }
+        else
+        {
+            vfLogInfo("Batch operation had no commands: {}", batchDescription);
+        }
+
+        currentBatch.reset();
+        batchDescription.clear();
+    }
+
+    bool UndoRedoServiceImpl::isInBatchMode() const
+    {
+        return inBatchMode;
     }
 }

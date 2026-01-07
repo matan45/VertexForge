@@ -30,10 +30,12 @@ namespace services
     {
     public:
         MoveFileUndoCommand(std::string source, std::string dest,
-                           std::vector<std::string> updatedRefs)
+                           std::vector<std::string> updatedRefs,
+                           std::string projRoot)
             : sourcePath(std::move(source))
             , destPath(std::move(dest))
             , updatedReferences(std::move(updatedRefs))
+            , projectRoot(std::move(projRoot))
         {
         }
 
@@ -44,6 +46,7 @@ namespace services
         std::string sourcePath;
         std::string destPath;
         std::vector<std::string> updatedReferences;
+        std::string projectRoot;  // For updating references on redo
         std::map<std::string, std::string> originalRefContents;  // For undo
     };
 
@@ -88,10 +91,12 @@ namespace services
     {
     public:
         RenameFileUndoCommand(std::string oldPath, std::string newPath,
-                              std::vector<std::string> updatedRefs)
+                              std::vector<std::string> updatedRefs,
+                              std::string projRoot)
             : oldPath(std::move(oldPath))
             , newPath(std::move(newPath))
             , updatedReferences(std::move(updatedRefs))
+            , projectRoot(std::move(projRoot))
         {
         }
 
@@ -102,6 +107,7 @@ namespace services
         std::string oldPath;
         std::string newPath;
         std::vector<std::string> updatedReferences;
+        std::string projectRoot;  // For updating references on redo
         std::map<std::string, std::string> originalRefContents;  // For undo
     };
 
@@ -133,6 +139,16 @@ namespace services
         void addCommand(std::unique_ptr<IUndoableCommand> cmd)
         {
             commands.push_back(std::move(cmd));
+        }
+
+        bool hasCommands() const
+        {
+            return !commands.empty();
+        }
+
+        size_t getCommandCount() const
+        {
+            return commands.size();
         }
 
         void execute() override
