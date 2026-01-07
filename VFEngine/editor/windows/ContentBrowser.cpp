@@ -220,7 +220,83 @@ namespace windows
 
         ImGui::SameLine();
 
-        ImGui::Text("Current Path: %s", StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
+        // Copy path button
+        if (ImGui::Button(ICON_FA_COPY "##CopyPath"))
+        {
+            ImGui::SetClipboardText(StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Copy path to clipboard");
+        }
+
+        ImGui::SameLine();
+
+        // Editable path bar
+        float availableWidth = ImGui::GetContentRegionAvail().x - 300.0f; // Reserve space for search
+        if (availableWidth < 200.0f) availableWidth = 200.0f;
+
+        if (!isEditingPath)
+        {
+            // Display mode - clickable text
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+
+            std::string pathStr = StringUtil::wstringToUtf8(currentPath.wstring());
+            ImGui::SetNextItemWidth(availableWidth);
+            if (ImGui::Button(pathStr.c_str(), ImVec2(availableWidth, 0)))
+            {
+                isEditingPath = true;
+                pathEditBuffer = pathStr;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Click to edit path");
+            }
+
+            ImGui::PopStyleColor(2);
+        }
+        else
+        {
+            // Edit mode - input text
+            ImGui::SetNextItemWidth(availableWidth);
+
+            // Auto-focus the input field when entering edit mode
+            if (ImGui::IsWindowAppearing() || pathEditBuffer.empty())
+            {
+                pathEditBuffer = StringUtil::wstringToUtf8(currentPath.wstring());
+            }
+
+            char pathBuffer[1024];
+            std::strncpy(pathBuffer, pathEditBuffer.c_str(), sizeof(pathBuffer) - 1);
+            pathBuffer[sizeof(pathBuffer) - 1] = '\0';
+
+            ImGui::SetKeyboardFocusHere();
+            if (ImGui::InputText("##PathEdit", pathBuffer, sizeof(pathBuffer),
+                                 ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                // Enter pressed - navigate to the path
+                fs::path newPath(pathBuffer);
+                if (fs::exists(newPath) && fs::is_directory(newPath))
+                {
+                    navigateTo(newPath);
+                }
+                isEditingPath = false;
+            }
+            else
+            {
+                pathEditBuffer = pathBuffer;
+            }
+
+            // Cancel editing on Escape or when clicking elsewhere
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+                (!ImGui::IsItemActive() && ImGui::IsMouseClicked(0) && !ImGui::IsItemHovered()))
+            {
+                isEditingPath = false;
+            }
+        }
+
+        ImGui::SameLine();
 
         ImGui::Text("Search:");
         ImGui::SameLine();
@@ -360,6 +436,7 @@ namespace windows
             selectedFile.clear();
             selectedType = AssetType::Other;
             clearSelection();
+            isEditingPath = false;
         }
     }
 

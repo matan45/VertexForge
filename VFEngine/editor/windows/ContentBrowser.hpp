@@ -46,7 +46,7 @@ namespace windows
         bool performPaste();
 
         std::vector<Asset> assets;
-        fs::path currentPath = "C:\\matan";
+        fs::path currentPath = "C:\\matan";//todo
 
         fs::path selectedFile;
         AssetType selectedType = AssetType::Other;
@@ -58,6 +58,10 @@ namespace windows
 
         bool showFileWindow = false;
         bool importLocationSet = false;
+
+        // Path bar state
+        std::string pathEditBuffer;
+        bool isEditingPath = false;
 
         events::SubscriptionToken importCompletedToken;
         events::SubscriptionToken fileMovedToken;
