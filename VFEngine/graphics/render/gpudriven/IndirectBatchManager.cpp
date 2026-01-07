@@ -372,11 +372,13 @@ namespace render::gpudriven
         auto sectionStats = readBackAllStats();
 
         GPUDrivenStats aggregated{};
-        // One draw call per active (batch, shaderGroup) section
-        aggregated.drawCalls = getSectionCount();
 
         for (const auto& section : sectionStats)
         {
+            if (section.drawCount > 0)
+            {
+                aggregated.drawCalls++;
+            }
             aggregated.visibleObjects += section.drawCount;
             aggregated.objectsLOD0 += section.lodCount0;
             aggregated.objectsLOD1 += section.lodCount1;

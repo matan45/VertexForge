@@ -3,103 +3,89 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-// Task shader workgroup size (must match task_gpudriven.glsl)
 const uint TASK_WORKGROUP_SIZE = 32;
 
-// Object flags (must match ObjectFlags namespace in GPUDrivenTypes.hpp)
-const uint FLAG_ALPHA_MASK    = 1u << 4;
 const uint FLAG_NO_CULL       = 1u << 6;
 const uint FLAG_NO_OCCLUDE    = 1u << 7;
 const uint FLAG_UNIFORM_SCALE = 1u << 9;
 
-// ============================================================================
-// GPU Object Data (320 bytes, must match GPUObjectData in GPUDrivenTypes.hpp)
-// ============================================================================
+// Must match GPUObjectData in GPUDrivenTypes.hpp (320 bytes)
 struct GPUObjectData {
-    mat4 modelMatrix;           // 64 bytes
+    mat4 modelMatrix;          
 
-    vec4 boundingSphere;        // 16 bytes - xyz = center (local), w = radius
+    vec4 boundingSphere;       
 
-    uvec4 lod0Data;             // 16 bytes - vertexOffset, indexOffset, indexCount, vertexCount
-    uvec4 lod1Data;             // 16 bytes
-    uvec4 lod2Data;             // 16 bytes
-    uvec4 lod3Data;             // 16 bytes
+    uvec4 lod0Data;             
+    uvec4 lod1Data;             
+    uvec4 lod2Data;             
+    uvec4 lod3Data;            
 
-    vec4 lodThresholds;         // 16 bytes - threshold0, threshold1, threshold2, lodBias
+    vec4 lodThresholds;         
 
-    vec4 albedo;                // 16 bytes
-    vec4 materialParams;        // 16 bytes - metallic, roughness, ao, emission
-    vec4 iblParams;             // 16 bytes - iblDiffuse, iblSpecular, padding, padding
+    vec4 albedo;                
+    vec4 materialParams;        
+    vec4 iblParams;             
 
-    uvec4 textureIndices0;      // 16 bytes - albedo, normal, orm, metallic
-    uvec4 textureIndices1;      // 16 bytes - roughness, ao, emission, height
+    uvec4 textureIndices0;      
+    uvec4 textureIndices1;     
 
-    uint flags;                 // 4 bytes
-    uint entityId;              // 4 bytes
-    uint availableLODMask;      // 4 bytes - bits 0-3: which LODs are ready for streaming
-    uint shaderGroupIndex;      // 4 bytes - 0 = default PBR, 1+ = custom shaders
-    // 256 bytes up to here
+    uint flags;                
+    uint entityId;              
+    uint availableLODMask;      
+    uint shaderGroupIndex;      
 
     // Meshlet LOD data - meshlet locations in meshlet buffer
     // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
-    uvec4 meshletLod0;          // 16 bytes
-    uvec4 meshletLod1;          // 16 bytes
-    uvec4 meshletLod2;          // 16 bytes
-    uvec4 meshletLod3;          // 16 bytes
-    // Total: 320 bytes
+    uvec4 meshletLod0;        
+    uvec4 meshletLod1;         
+    uvec4 meshletLod2;          
+    uvec4 meshletLod3;         
 };
 
-// ============================================================================
-// Per-Draw Data (240 bytes, must match PerDrawData in GPUDrivenTypes.hpp)
-// ============================================================================
+// Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
 struct PerDrawData {
-    mat4 modelMatrix;           // 64 bytes
-    mat4 normalMatrix;          // 64 bytes - pre-computed transpose(inverse(mat3(model)))
+    mat4 modelMatrix;           
+    mat4 normalMatrix;          
 
-    vec4 albedo;                // 16 bytes
-    vec4 materialParams;        // 16 bytes
+    vec4 albedo;                
+    vec4 materialParams;        
 
-    uvec4 textureIndices0;      // 16 bytes
-    uvec4 textureIndices1;      // 16 bytes
+    uvec4 textureIndices0;      
+    uvec4 textureIndices1;      
 
-    uint objectIndex;           // 4 bytes
-    uint flags;                 // 4 bytes
-    float iblDiffuse;           // 4 bytes
-    float iblSpecular;          // 4 bytes
+    uint objectIndex;          
+    uint flags;                 
+    float iblDiffuse;           
+    float iblSpecular;         
 
-    uint lodLevel;              // 4 bytes - selected LOD (for debug)
-    uint shaderGroupIndex;      // 4 bytes - 0 = default PBR, 1+ = custom shaders
+    uint lodLevel;              
+    uint shaderGroupIndex;      
     // Meshlet dispatch info (for mesh shader path)
-    uint meshletOffset;         // 4 bytes - first meshlet index in meshlet buffer
-    uint meshletCount;          // 4 bytes - number of meshlets for selected LOD
+    uint meshletOffset;        
+    uint meshletCount;          
 
-    uint baseVertexOffset;      // 4 bytes - base vertex offset in merged vertex buffer
-    uint padding1;              // 4 bytes
-    uint padding2;              // 4 bytes
-    uint padding3;              // 4 bytes
-    // Total: 240 bytes
+    uint baseVertexOffset;      
+    uint padding1;              
+    uint padding2;              
+    uint padding3;              
 };
 
-// ============================================================================
 // VkDrawMeshTasksIndirectCommandEXT (12 bytes)
-// ============================================================================
 struct MeshTasksCommand {
-    uint groupCountX;   // Number of task shader workgroups in X (ceil(meshletCount / TASK_WORKGROUP_SIZE))
-    uint groupCountY;   // Always 1
-    uint groupCountZ;   // Always 1
+    uint groupCountX;
+    uint groupCountY;
+    uint groupCountZ;
 };
 
-// ============================================================================
-// Camera Data (must match GPUCameraData in GPUDrivenTypes.hpp)
-// ============================================================================
+// Must match GPUCameraData in GPUDrivenTypes.hpp
 struct CameraData {
     mat4 view;
     mat4 projection;
     mat4 viewProjection;
     mat4 invViewProjection;
 
-    vec4 cameraPosition;        // xyz = position, w = nearPlane
-    vec4 screenParams;          // xy = resolution, zw = 1/resolution
+    vec4 cameraPosition;       
+    vec4 screenParams;         
 
     vec4 frustumPlanes[6];
 
@@ -111,77 +97,56 @@ struct CameraData {
     uint enableFrustumCulling;
     uint enableOcclusionCulling;
     uint enableLODSelection;
-    uint batchCount;            // Number of indirect draw batches
+    uint batchCount;            
 
-    uint commandsPerBatch;      // Max draw commands per batch (total, for backwards compat)
-    uint shaderGroupCount;      // Number of shader groups (buffer sections per batch)
+    uint commandsPerBatch;     
+    uint shaderGroupCount;     
     uint padding1;
     uint padding2;
 };
 
-// ============================================================================
-// Descriptor Bindings
-// ============================================================================
-
-// Input: Object data
 layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
     GPUObjectData objects[];
 };
 
-// Input: Camera/culling parameters
 layout(set = 0, binding = 1) uniform CameraUBO {
     CameraData camera;
 };
 
-// Helper: commands per (batch, shaderGroup) section
 uint getCommandsPerSection() {
     return camera.commandsPerBatch / camera.shaderGroupCount;
 }
 
-// Helper: calculate section index for (batch, shaderGroup)
 uint getSectionIndex(uint batch, uint shaderGroup) {
     return batch * camera.shaderGroupCount + shaderGroup;
 }
 
-// Output: Mesh shader dispatch commands
 layout(std430, set = 0, binding = 2) writeonly buffer DrawCommandBuffer {
     MeshTasksCommand drawCommands[];
 };
 
-// Output: Per-draw data (for task/mesh shaders)
 layout(std430, set = 0, binding = 3) writeonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
-// Per-batch statistics (must match BatchDrawStats in GPUDrivenTypes.hpp)
-// Aligned to 32 bytes for GPU efficiency
+// Must match BatchDrawStats in GPUDrivenTypes.hpp
 struct BatchDrawStats {
-    uint drawCount;          // Number of visible objects in this batch
-    uint lodCount0;          // Objects using LOD0
-    uint lodCount1;          // Objects using LOD1
-    uint lodCount2;          // Objects using LOD2
-    uint lodCount3;          // Objects using LOD3
-    uint culledByFrustum;    // Objects culled by frustum
-    uint culledByOcclusion;  // Objects culled by Hi-Z occlusion
-    uint padding;            // Padding to 32 bytes
+    uint drawCount;         
+    uint lodCount0;         
+    uint lodCount1;          
+    uint lodCount2;          
+    uint lodCount3;          
+    uint culledByFrustum;    
+    uint culledByOcclusion;  
+    uint padding;            
 };
 
-// Output: Atomic draw count and statistics per section (batch, shaderGroup)
-// Layout: [Batch0_Group0][Batch0_Group1]...[BatchN_GroupM]
-// Section index = batch * shaderGroupCount + shaderGroup
 layout(std430, set = 0, binding = 4) buffer DrawCountBuffer {
-    BatchDrawStats batchStats[];  // One per section (batchCount * shaderGroupCount)
+    BatchDrawStats batchStats[];
 };
 
-// Input: Hi-Z pyramid texture (for occlusion culling)
 layout(set = 0, binding = 5) uniform sampler2D hiZTexture;
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-// Get meshlet LOD data for a given level
-// Returns uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
 uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
     switch (level) {
         case 0: return obj.meshletLod0;
@@ -191,30 +156,19 @@ uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
     }
 }
 
-// Transform bounding sphere from local to world space
 vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
-    // Transform center
     vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
-
-    // Approximate uniform scale from matrix (use max of axis lengths)
     float scaleX = length(modelMatrix[0].xyz);
     float scaleY = length(modelMatrix[1].xyz);
     float scaleZ = length(modelMatrix[2].xyz);
     float maxScale = max(max(scaleX, scaleY), scaleZ);
-
-    // Scale radius
     float worldRadius = localSphere.w * maxScale;
-
     return vec4(worldCenter, worldRadius);
 }
 
-// Test sphere against frustum planes
 bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
     for (int i = 0; i < 6; i++) {
-        // Distance from sphere center to plane
         float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
-
-        // If sphere is completely behind this plane, it's outside frustum
         if (distance < -sphere.w) {
             return false;
         }
@@ -222,81 +176,50 @@ bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
     return true;
 }
 
-// Project sphere to screen and return diameter in pixels
 float projectSphereToScreen(vec4 worldSphere, mat4 projection, vec2 screenSize) {
-    // Project sphere center to clip space
     vec4 clipPos = projection * vec4(worldSphere.xyz, 1.0);
-
-    // Handle behind camera
     if (clipPos.w <= 0.01) {
-        return 10000.0; // Very close, use highest LOD
+        return 10000.0;
     }
-
-    // Calculate screen-space radius using projection matrix
-    // For perspective projection, the projected size is: radius * |proj[1][1]| / w
-    // Note: Use abs() because Vulkan projection matrices have negative Y for Y-flip
     float projectedRadius = worldSphere.w * abs(projection[1][1]) / clipPos.w;
-
-    // Convert to pixels (projectedRadius is in NDC [-1, 1], so multiply by half screen height)
     float screenDiameter = projectedRadius * screenSize.y;
-
     return screenDiameter;
 }
 
-// Select LOD level based on screen-space size
 uint selectLOD(float screenPixels, vec4 thresholds) {
-    // Apply LOD bias (stored in thresholds.w)
-    // Positive bias = lower quality (higher LOD level)
-    // Negative bias = higher quality (lower LOD level)
     float adjustedPixels = screenPixels * pow(2.0, -thresholds.w);
-
-    if (adjustedPixels > thresholds.x) return 0;  // LOD0 for >= threshold0
-    if (adjustedPixels > thresholds.y) return 1;  // LOD1 for >= threshold1
-    if (adjustedPixels > thresholds.z) return 2;  // LOD2 for >= threshold2
-    return 3;                                      // LOD3 for < threshold2
+    if (adjustedPixels > thresholds.x) return 0;
+    if (adjustedPixels > thresholds.y) return 1;
+    if (adjustedPixels > thresholds.z) return 2;
+    return 3;
 }
 
-// Find the best available LOD given streaming constraints
-// Returns 0xFFFFFFFF if no LOD is available
 uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
-    // If all LODs are available (mask = 0xF or 15), just use target
     if (availableMask == 0xFu) {
         return targetLOD;
     }
-
-    // If no LODs are available, return invalid
     if (availableMask == 0u) {
         return 0xFFFFFFFFu;
     }
-
-    // First try to find a LOD >= target (prefer lower quality if target not ready)
     for (uint lod = targetLOD; lod < 4u; ++lod) {
         if ((availableMask & (1u << lod)) != 0u) {
             return lod;
         }
     }
-
-    // Fallback to any available LOD (prefer higher quality / lower index)
     for (uint lod = 0u; lod < 4u; ++lod) {
         if ((availableMask & (1u << lod)) != 0u) {
             return lod;
         }
     }
-
-    return 0xFFFFFFFFu; // No LOD available (shouldn't reach here)
+    return 0xFFFFFFFFu;
 }
 
-// Project bounding sphere to screen-space AABB and test against Hi-Z pyramid
-// Returns true if object is visible (not occluded)
 bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, uint hiZMipLevels) {
     vec3 center = worldSphere.xyz;
     float radius = worldSphere.w;
-
-    // Calculate 8 corners of world-space AABB from bounding sphere
     vec3 aabbMin = center - vec3(radius);
     vec3 aabbMax = center + vec3(radius);
 
-    // Project all 8 corners to clip space
     vec4 corners[8];
     corners[0] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMin.z, 1.0);
     corners[1] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMin.z, 1.0);
@@ -307,144 +230,98 @@ bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, ui
     corners[6] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMax.z, 1.0);
     corners[7] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMax.z, 1.0);
 
-    // Find screen-space AABB of projected corners
     vec2 ndcMin = vec2(1.0);
     vec2 ndcMax = vec2(-1.0);
     float minDepth = 1.0;
 
     for (int i = 0; i < 8; i++) {
-        // Handle behind-camera case
         if (corners[i].w <= 0.0) {
-            // Some part of AABB is behind camera - consider visible
             return true;
         }
-
-        // Perspective divide
         vec3 ndc = corners[i].xyz / corners[i].w;
-
-        // Update screen-space bounds
         ndcMin = min(ndcMin, ndc.xy);
         ndcMax = max(ndcMax, ndc.xy);
-
-        // Track minimum depth (closest point)
-        // Vulkan uses [0, 1] depth range
         minDepth = min(minDepth, ndc.z);
     }
 
-    // Clamp to valid screen range
     ndcMin = clamp(ndcMin, vec2(-1.0), vec2(1.0));
     ndcMax = clamp(ndcMax, vec2(-1.0), vec2(1.0));
 
-    // If object is completely behind near plane
     if (minDepth < 0.0) {
-        return true; // Visible (touching near plane)
+        return true;
     }
 
-    // Convert NDC to UV [0, 1]
     vec2 uvMin = ndcMin * 0.5 + 0.5;
     vec2 uvMax = ndcMax * 0.5 + 0.5;
-
-    // Calculate screen-space size in pixels
     vec2 sizePixels = (uvMax - uvMin) * screenSize;
     float maxDimension = max(sizePixels.x, sizePixels.y);
-
-    // Select Hi-Z mip level based on projected size
-    // We want to sample a mip where one texel covers approximately the AABB
     float mipLevel = ceil(log2(maxDimension));
     mipLevel = clamp(mipLevel, 0.0, float(hiZMipLevels - 1u));
 
-    // Sample Hi-Z at 4 corners of the screen-space AABB
-    // Use the maximum depth from all samples (conservative)
     float hiZDepth = 0.0;
     hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMin, mipLevel).r);
     hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMax, mipLevel).r);
     hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMin.x, uvMax.y), mipLevel).r);
     hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMax.x, uvMin.y), mipLevel).r);
 
-    // Object is occluded if its nearest point is behind the Hi-Z depth
-    // Add small epsilon to avoid precision issues
     return minDepth <= hiZDepth + 0.0001;
 }
 
-// ============================================================================
-// Main
-// ============================================================================
 void main() {
     uint objectIndex = gl_GlobalInvocationID.x;
-
-    // Bounds check
     if (objectIndex >= camera.objectCount) {
         return;
     }
 
     GPUObjectData obj = objects[objectIndex];
-
-    // Transform bounding sphere to world space
     vec4 worldSphere = transformBoundingSphere(obj.boundingSphere, obj.modelMatrix);
 
-    // Calculate batch (round-robin) and section (batch * shaderGroupCount + shaderGroup)
     uint batchIndex = objectIndex % camera.batchCount;
     uint shaderGroup = obj.shaderGroupIndex;
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
     uint commandsPerSection = getCommandsPerSection();
 
-    // ========================================
     // Frustum Culling
-    // ========================================
     if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
             atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
-            return; // Outside frustum, skip this object
+            return;
         }
     }
 
-    // ========================================
     // Hi-Z Occlusion Culling
-    // ========================================
     if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u) {
         if (camera.hiZMipLevels > 0u) {
             if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
                 atomicAdd(batchStats[sectionIndex].culledByOcclusion, 1);
-                return; // Occluded by Hi-Z, skip this object
+                return;
             }
         }
     }
 
-    // ========================================
-    // LOD Selection (with Streaming Support)
-    // ========================================
+    // LOD Selection
     uint targetLOD = 0;
-
     if (camera.enableLODSelection != 0u) {
-        // Screen-space based LOD selection
-        // Calculate how many pixels the object covers on screen
         vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
         viewSphere.w = worldSphere.w;
         float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
         targetLOD = selectLOD(screenPixels, obj.lodThresholds);
     }
 
-    // Find best available LOD considering streaming state
-    // availableLODMask bits: bit 0 = LOD0 ready, bit 1 = LOD1 ready, etc.
     uint lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);
-
-    // Skip object if no LOD is available (mesh still streaming)
     if (lodLevel == 0xFFFFFFFFu) {
         return;
     }
 
-    // Get meshlet LOD data: (meshletOffset, meshletCount, baseVertexOffset, padding)
     uvec4 meshletLodData = getMeshletLODData(obj, lodLevel);
     uint meshletOffset = meshletLodData.x;
     uint meshletCount = meshletLodData.y;
     uint baseVertexOffset = meshletLodData.z;
 
-    // Additional validation: fallback to lower LODs if meshlet data is invalid
     while (lodLevel > 0u && meshletCount == 0u) {
         lodLevel--;
-        // Check if this lower LOD is available
         if ((obj.availableLODMask & (1u << lodLevel)) == 0u) {
-            continue;  // This LOD not available, try next
+            continue;
         }
         meshletLodData = getMeshletLODData(obj, lodLevel);
         meshletOffset = meshletLodData.x;
@@ -452,25 +329,17 @@ void main() {
         baseVertexOffset = meshletLodData.z;
     }
 
-    // Skip if no valid LOD has meshlet data
     if (meshletCount == 0u) {
         return;
     }
 
-    // ========================================
-    // Emit Mesh Shader Dispatch Command (Section-Aware: batch x shaderGroup)
-    // ========================================
-
-    // Atomically allocate a draw slot within this section
+    // Emit Mesh Shader Dispatch Command
     uint localDrawIndex = atomicAdd(batchStats[sectionIndex].drawCount, 1);
-
-    // Bounds check - if section is full, decrement and skip
     if (localDrawIndex >= commandsPerSection) {
         atomicAdd(batchStats[sectionIndex].drawCount, uint(-1));
         return;
     }
 
-    // Track LOD distribution statistics per section
     switch (lodLevel) {
         case 0u: atomicAdd(batchStats[sectionIndex].lodCount0, 1); break;
         case 1u: atomicAdd(batchStats[sectionIndex].lodCount1, 1); break;
@@ -478,37 +347,23 @@ void main() {
         default: atomicAdd(batchStats[sectionIndex].lodCount3, 1); break;
     }
 
-    // Calculate global indices into combined buffers
-    // Layout: [Batch0_Group0][Batch0_Group1]...[BatchN_GroupM]
     uint globalDrawIndex = sectionIndex * commandsPerSection + localDrawIndex;
-
-    // Calculate task shader workgroup count
-    // Each task workgroup processes TASK_WORKGROUP_SIZE meshlets
     uint taskGroupCount = (meshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
 
-    // Write mesh tasks dispatch command at global index
     drawCommands[globalDrawIndex].groupCountX = taskGroupCount;
     drawCommands[globalDrawIndex].groupCountY = 1u;
     drawCommands[globalDrawIndex].groupCountZ = 1u;
 
-    // Write per-draw data at global index (for task/mesh shaders)
     perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
 
-    // Pre-compute normal matrix (transpose of inverse of upper-left 3x3)
-    // Done once per object here instead of per-vertex in the mesh shader
     mat3 modelMat3 = mat3(obj.modelMatrix);
     mat3 normalMat3;
-
     if ((obj.flags & FLAG_UNIFORM_SCALE) != 0u) {
-        // Fast path: for uniform scale, normalMatrix = modelMatrix / scale
-        // This avoids expensive inverse() computation (~27 ops)
         float scale = length(modelMat3[0]);
         normalMat3 = modelMat3 * (1.0 / scale);
     } else {
-        // General case: full inverse for non-uniform scale
         normalMat3 = transpose(inverse(modelMat3));
     }
-
     perDrawData[globalDrawIndex].normalMatrix = mat4(normalMat3);
 
     perDrawData[globalDrawIndex].albedo = obj.albedo;
@@ -521,7 +376,6 @@ void main() {
     perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
     perDrawData[globalDrawIndex].lodLevel = lodLevel;
     perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
-    // Meshlet dispatch info for task shader
     perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
     perDrawData[globalDrawIndex].meshletCount = meshletCount;
     perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
