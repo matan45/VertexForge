@@ -232,6 +232,23 @@ namespace render
         return false;
     }
 
+    void RenderPassHandler::setViewMode(uint32_t mode)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setViewMode(mode);
+        }
+    }
+
+    uint32_t RenderPassHandler::getViewMode() const
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            return gpuDrivenRenderer->getViewMode();
+        }
+        return 0;
+    }
+
     void RenderPassHandler::updateGPUDrivenHiZ() const
     {
         if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)

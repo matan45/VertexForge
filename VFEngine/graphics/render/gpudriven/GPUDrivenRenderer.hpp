@@ -5,9 +5,9 @@
 #include "IndirectBatchManager.hpp"
 #include "BindlessTextureManager.hpp"
 #include "GPUCullLODPipeline.hpp"
-#include "GPUDrivenShaderCache.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
-#include "GPUDrivenPipeline.hpp"
+#include "MeshShaderPipeline.hpp"
+#include "MeshletBuffer.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -44,18 +44,22 @@ namespace render::gpudriven
         std::unique_ptr<IndirectBatchManager> batchManager;
         std::unique_ptr<BindlessTextureManager> bindlessTextures;
         std::unique_ptr<GPUCullLODPipeline> cullPipeline;
-        std::unique_ptr<GPUDrivenShaderCache> customShaderCache;
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
-        std::unique_ptr<GPUDrivenPipeline> pipeline;
+        std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
+        std::unique_ptr<MeshletBuffer> meshletBuffer;
 
         bool initialized = false;
         bool enabled = false;
         bool frustumCullingEnabled = true;
         bool lodSelectionEnabled = true;
-        bool occlusionCullingEnabled = false; // Disabled by default until Hi-Z is set
+        bool occlusionCullingEnabled = true;
 
-        vk::ImageView cachedHiZView;
-        vk::Sampler cachedHiZSampler;
+        // Per-meshlet culling (task shader level)
+        bool meshletFrustumCullingEnabled = true;
+        bool meshletBackfaceCullingEnabled = true;
+        bool meshShaderSupported = false;
+        uint32_t currentViewMode = 0; 
+
         uint32_t hiZMipLevels = 0;
 
         GPUDrivenStats stats{};
@@ -110,11 +114,25 @@ namespace render::gpudriven
         void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }
         bool isOcclusionCullingEnabled() const { return occlusionCullingEnabled; }
 
+        // Per-meshlet culling (task shader)
+        void setMeshletFrustumCullingEnabled(bool enabled) { meshletFrustumCullingEnabled = enabled; }
+        bool isMeshletFrustumCullingEnabled() const { return meshletFrustumCullingEnabled; }
+        void setMeshletBackfaceCullingEnabled(bool enabled) { meshletBackfaceCullingEnabled = enabled; }
+        bool isMeshletBackfaceCullingEnabled() const { return meshletBackfaceCullingEnabled; }
+
+        bool isMeshShaderSupported() const { return meshShaderSupported; }
+
+        void setViewMode(uint32_t mode) { currentViewMode = mode; }
+        uint32_t getViewMode() const { return currentViewMode; }
+
         void updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels);
 
         const GPUDrivenStats& getStats() const { return stats; }
 
         void updateStatsFromGPU();
+
+        // Meshlet culling stats (from task shader)
+        MeshletCullingStats getMeshletCullingStats();
 
         void setMaterialTextureCache(mesh::MaterialTextureCache* cache) { materialTextureCache = cache; }
 

@@ -95,6 +95,7 @@
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
     <ClInclude Include="material\MaterialAsset.hpp" />
+    <ClInclude Include="material\MaterialGraphHelper.hpp" />
     <ClInclude Include="material\MaterialInstanceAsset.hpp" />
     <ClInclude Include="material\MaterialInstanceTypes.hpp" />
     <ClInclude Include="material\MaterialManager.hpp" />
@@ -108,8 +109,8 @@
     <ClInclude Include="resource\AnimationResource.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
-    <ClInclude Include="resource\MeshResource.hpp" />
     <ClInclude Include="resource\MeshStreamHandle.hpp" />
+    <ClInclude Include="resource\MeshletTypes.hpp" />
     <ClInclude Include="resource\ResourceManager.hpp" />
     <ClInclude Include="resource\ShaderResource.hpp" />
     <ClInclude Include="resource\TextureResource.hpp" />
@@ -133,13 +134,13 @@
   <ItemGroup>
     <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />
+    <ClCompile Include="material\MaterialGraphHelper.cpp" />
     <ClCompile Include="material\MaterialInstanceAsset.cpp" />
     <ClCompile Include="material\MaterialManager.cpp" />
     <ClCompile Include="math\MathHelper.cpp" />
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />
     <ClCompile Include="resource\AudioResource.cpp" />
-    <ClCompile Include="resource\MeshResource.cpp" />
     <ClCompile Include="resource\MeshStreamHandle.cpp" />
     <ClCompile Include="resource\ResourceManager.cpp" />
     <ClCompile Include="resource\ShaderResource.cpp" />

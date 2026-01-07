@@ -1,7 +1,7 @@
 #include "ResourceManager.hpp"
 #include "TextureResource.hpp"
 #include "AudioResource.hpp"
-#include "MeshResource.hpp"
+#include "MeshStreamHandle.hpp"
 #include "../material/MaterialAsset.hpp"
 #include "../material/MaterialInstanceAsset.hpp"
 #include <bit>
@@ -45,6 +45,31 @@ namespace resource
         std::erase_if(materialInstanceCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
+    // Helper to get expected FileType from extension
+    static FileType getExpectedTypeFromExtension(const std::string& ext)
+    {
+        if (ext == ".vfimage") return FileType::TEXTURE;
+        if (ext == ".vfmesh") return FileType::MESH;
+        if (ext == ".vfhdr") return FileType::HDR;
+        if (ext == ".vfaudio") return FileType::AUDIO;
+        if (ext == ".vfanim") return FileType::ANIMATION;
+        return FileType::UNKNOWN;
+    }
+
+    // Helper to get FileType name for logging
+    static const char* getFileTypeName(FileType type)
+    {
+        switch (type) {
+            case FileType::TEXTURE: return "TEXTURE";
+            case FileType::MESH: return "MESH";
+            case FileType::HDR: return "HDR";
+            case FileType::AUDIO: return "AUDIO";
+            case FileType::ANIMATION: return "ANIMATION";
+            case FileType::SCENE: return "SCENE";
+            default: return "UNKNOWN";
+        }
+    }
+
     FileType ResourceManager::readHeaderFile(const fs::path& filePath)
     {
         // Validate file path
@@ -53,7 +78,7 @@ namespace resource
             vfLogError("Empty file path provided");
             return FileType::UNKNOWN;
         }
-        
+
         // Check if file exists
         std::error_code ec;
         if (!fs::exists(filePath, ec) || ec)
@@ -61,16 +86,16 @@ namespace resource
             vfLogError("File does not exist: {}", filePath.string());
             return FileType::UNKNOWN;
         }
-        
+
         // Handle text-based formats by extension
         auto extension = filePath.extension().string();
         std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-        
+
         if (extension == ".vfscene")
         {
             return FileType::SCENE;
         }
-        
+
         // For binary formats, read the header
         std::ifstream file(filePath, std::ios::binary);
         if (!file.is_open())
@@ -87,7 +112,7 @@ namespace resource
             vfLogError("Failed to read header from file: {}", filePath.string());
             return FileType::UNKNOWN;
         }
-        
+
         // Validate the type byte is within valid range
         if (typeByte >= static_cast<uint8_t>(FileType::UNKNOWN))
         {
@@ -95,7 +120,21 @@ namespace resource
             return FileType::UNKNOWN;
         }
 
-        return static_cast<FileType>(typeByte);
+        FileType headerType = static_cast<FileType>(typeByte);
+
+        // Validate header matches file extension
+        FileType expectedType = getExpectedTypeFromExtension(extension);
+        if (expectedType != FileType::UNKNOWN && headerType != expectedType)
+        {
+            vfLogWarning("File header/extension mismatch: {} has header {} but extension expects {} - using extension type",
+                       filePath.string(), getFileTypeName(headerType), getFileTypeName(expectedType));
+            // TODO: Fix corrupted files - the FileType enum order changed, causing old files to have wrong headers.
+            // Old files need to be re-imported or a migration tool should be created.
+            // For now, trust the extension over the header.
+            return expectedType;
+        }
+
+        return headerType;
     }
 
     std::future<std::shared_ptr<TextureData>> ResourceManager::loadTextureAsync(std::string_view path)
@@ -128,7 +167,7 @@ namespace resource
             path,
             meshCache,
             [](std::string_view p) {
-                return MeshResource::loadMesh(p);
+                return MeshStreamResource::loadAll(p);
             });
     }
 

@@ -188,4 +188,14 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setViewMode(uint32_t mode) {
+        if (offScreen) {
+            offScreen->setViewMode(mode);
+        }
+    }
+
+    uint32_t OffScreenAdapter::getViewMode() const {
+        return offScreen ? offScreen->getViewMode() : 0;
+    }
+
 }

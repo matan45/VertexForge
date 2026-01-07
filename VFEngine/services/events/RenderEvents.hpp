@@ -89,6 +89,12 @@ namespace events::render {
         std::string_view getName() const override { return "SetShowGrid"; }
     };
 
+    struct SetViewModeCommand : ICommand<> {
+        uint32_t mode;  // 0=Color, 1=Meshlet, 2=LOD
+
+        std::string_view getName() const override { return "SetViewMode"; }
+    };
+
     struct LoadBillboardAtlasCommand : ICommand<bool> {
         std::string atlasPath;
 
@@ -131,6 +137,10 @@ namespace events::render {
 
     struct GetShowGridQuery : IQuery<bool> {
         std::string_view getName() const override { return "GetShowGrid"; }
+    };
+
+    struct GetViewModeQuery : IQuery<uint32_t> {
+        std::string_view getName() const override { return "GetViewMode"; }
     };
 
     struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {

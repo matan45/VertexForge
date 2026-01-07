@@ -148,32 +148,6 @@ namespace render::gpudriven
         core::BufferUtilities::destroyBuffer(logicalDevice, vertexBuffer, vertexBufferMemory);
     }
 
-    void MergedMeshBuffer::unregisterMesh(const std::string& meshPath)
-    {
-        auto it = meshPathToIndex.find(meshPath);
-        if (it == meshPathToIndex.end())
-        {
-            return;
-        }
-
-        // Note: This doesn't reclaim space, just marks as unused
-        // A full rebuild would be needed to defragment
-        const auto& meshInfo = registeredMeshes[it->second];
-
-        for (const auto& submesh : meshInfo.submeshes)
-        {
-            std::string key = makeSubmeshKey(meshPath, submesh.submeshName, submesh.submeshIndex);
-            submeshKeyToIndex.erase(key);
-        }
-
-        // Mark entry as invalid (empty path)
-        registeredMeshes[it->second].meshPath.clear();
-        meshPathToIndex.erase(it);
-
-        dirty = true;
-        loggerInfo("Unregistered mesh from MergedMeshBuffer: {}", meshPath);
-    }
-
     void MergedMeshBuffer::uploadObjects(vk::CommandBuffer cmd)
     {
         if (currentObjectCount == 0) return;
@@ -226,49 +200,6 @@ namespace render::gpudriven
             return &allSubmeshLocations[it->second];
         }
         return nullptr;
-    }
-
-    void MergedMeshBuffer::resizeObjectBuffer(uint32_t newMaxObjects)
-    {
-        if (newMaxObjects <= maxObjectCount) return;
-
-        const auto& logicalDevice = device.getLogicalDevice();
-        logicalDevice.waitIdle();
-
-        if (objectStagingMapped)
-        {
-            logicalDevice.unmapMemory(objectStagingMemory);
-            objectStagingMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(logicalDevice, objectStagingBuffer, objectStagingMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
-
-        maxObjectCount = newMaxObjects;
-        cpuObjectData.resize(maxObjectCount);
-
-        const auto& physicalDevice = device.getPhysicalDevice();
-        vk::DeviceSize bufferSize = maxObjectCount * sizeof(GPUObjectData);
-
-        {
-            core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = bufferSize;
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
-                vk::BufferUsageFlagBits::eTransferDst;
-            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferMemory);
-        }
-
-        {
-            core::BufferInfoRequest request(logicalDevice, physicalDevice);
-            request.size = bufferSize;
-            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
-            objectStagingMapped = logicalDevice.mapMemory(objectStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
-        }
-
-        loggerInfo("MergedMeshBuffer: resized object buffer to {} objects", maxObjectCount);
     }
 
     // ===== STREAMING SUPPORT IMPLEMENTATION =====
@@ -389,7 +320,6 @@ namespace render::gpudriven
         meshPathToIndex[meshPath] = registeredMeshes.size();
         registeredMeshes.push_back(std::move(meshInfo));
 
-        dirty = true;
         loggerInfo("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes",
                    meshPath, header.numSubmeshes);
         return &registeredMeshes.back();
@@ -482,8 +412,6 @@ namespace render::gpudriven
 
             totalVertexCount = vertexAllocator.getUsedCount();
             totalIndexCount = indexAllocator.getUsedCount();
-
-            dirty = true;
         }
     }
 
@@ -516,42 +444,12 @@ namespace render::gpudriven
         return nullptr;
     }
 
-    StreamingStats MergedMeshBuffer::getStreamingStats() const
+    void MergedMeshBuffer::flushPendingTransfers()
     {
-        StreamingStats stats;
-        stats.totalMeshes = static_cast<uint32_t>(registeredMeshes.size());
-        stats.usedVertexBytes = vertexAllocator.getUsedCount() * vertexStride;
-        stats.usedIndexBytes = indexAllocator.getUsedCount() * sizeof(uint32_t);
-        stats.reservedVertexBytes = vertexAllocator.getReservedCount() * vertexStride;
-        stats.reservedIndexBytes = indexAllocator.getReservedCount() * sizeof(uint32_t);
-
-        for (const auto& meshInfo : registeredMeshes)
+        if (transferManager && transferManager->hasPendingTransfers())
         {
-            if (meshInfo.meshPath.empty()) continue;
-
-            bool hasRenderable = false;
-            for (const auto& submesh : meshInfo.submeshes)
-            {
-                for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
-                {
-                    if (submesh.lodStates[lod] == LODStreamState::Ready)
-                    {
-                        stats.totalLODsReady++;
-                        hasRenderable = true;
-                    }
-                    else if (submesh.lodStates[lod] != LODStreamState::NotRequested)
-                    {
-                        stats.totalLODsPending++;
-                    }
-                }
-            }
-            if (hasRenderable)
-            {
-                stats.meshesWithRenderableData++;
-            }
+            transferManager->waitAll();
         }
-
-        return stats;
     }
 
     // ===== METADATA-BASED REGISTRATION (for streaming path) =====
@@ -623,7 +521,6 @@ namespace render::gpudriven
         meshPathToIndex[meshPath] = registeredMeshes.size();
         registeredMeshes.push_back(std::move(meshInfo));
 
-        dirty = true;
         loggerInfo("MergedMeshBuffer: Reserved space for mesh {} ({} submeshes, metadata path)",
                    meshPath, metadata.subMeshes.size());
         return &registeredMeshes.back();
@@ -639,7 +536,7 @@ namespace render::gpudriven
         obj.modelMatrix = meshRender.modelMatrix;
         obj.boundingSphere = submeshLoc.boundingSphere;
 
-        // LOD data
+        // LOD data (vertex/index based)
         for (uint32_t i = 0; i < LOD_LEVEL_COUNT; ++i)
         {
             glm::uvec4& lodData = (i == 0)
@@ -656,6 +553,33 @@ namespace render::gpudriven
                 submeshLoc.lods[i].vertexCount
             );
         }
+
+        // Meshlet LOD data (for mesh shader path)
+        // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
+        obj.meshletLod0 = glm::uvec4(
+            submeshLoc.meshletLods[0].meshletOffset,
+            submeshLoc.meshletLods[0].meshletCount,
+            submeshLoc.meshletLods[0].baseVertexOffset,
+            0
+        );
+        obj.meshletLod1 = glm::uvec4(
+            submeshLoc.meshletLods[1].meshletOffset,
+            submeshLoc.meshletLods[1].meshletCount,
+            submeshLoc.meshletLods[1].baseVertexOffset,
+            0
+        );
+        obj.meshletLod2 = glm::uvec4(
+            submeshLoc.meshletLods[2].meshletOffset,
+            submeshLoc.meshletLods[2].meshletCount,
+            submeshLoc.meshletLods[2].baseVertexOffset,
+            0
+        );
+        obj.meshletLod3 = glm::uvec4(
+            submeshLoc.meshletLods[3].meshletOffset,
+            submeshLoc.meshletLods[3].meshletCount,
+            submeshLoc.meshletLods[3].baseVertexOffset,
+            0
+        );
 
         float bias = meshRender.lodBias;
         obj.lodThresholds = glm::vec4(

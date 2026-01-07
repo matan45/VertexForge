@@ -46,6 +46,8 @@ namespace core {
 		case eCompute: kind = shaderc_compute_shader; break;
 		case eTessellationControl: kind = shaderc_tess_control_shader; break;
 		case eTessellationEvaluation: kind = shaderc_tess_evaluation_shader; break;
+		case eMeshEXT: kind = shaderc_mesh_shader; break;
+		case eTaskEXT: kind = shaderc_task_shader; break;
 		default:
 			loggerError("Unsupported shader stage");
 			lastCompilationError = "Unsupported shader stage";
@@ -107,6 +109,10 @@ namespace core {
 			return eTessellationControl;
 		case TESS_EVALUATION:
 			return eTessellationEvaluation;
+		case MESH:
+			return eMeshEXT;
+		case TASK:
+			return eTaskEXT;
 		default:
 			loggerError("Unsupported ShaderType.");
 			return vk::ShaderStageFlagBits();
@@ -221,6 +227,14 @@ namespace core {
 				shaderType = resource::ShaderType::COMPUTE;
 			} else if (typeLine == "GEOMETRY" || typeLine == "geometry") {
 				shaderType = resource::ShaderType::GEOMETRY;
+			} else if (typeLine == "TESS_CONTROL" || typeLine == "tess_control") {
+				shaderType = resource::ShaderType::TESS_CONTROL;
+			} else if (typeLine == "TESS_EVALUATION" || typeLine == "tess_evaluation") {
+				shaderType = resource::ShaderType::TESS_EVALUATION;
+			} else if (typeLine == "MESH" || typeLine == "mesh") {
+				shaderType = resource::ShaderType::MESH;
+			} else if (typeLine == "TASK" || typeLine == "task") {
+				shaderType = resource::ShaderType::TASK;
 			}
 
 			if (shaderType != resource::ShaderType::UNKNOWN) {

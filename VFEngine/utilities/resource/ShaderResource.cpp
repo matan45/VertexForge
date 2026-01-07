@@ -87,6 +87,8 @@ namespace resource
         if (shaderType == "GEOMETRY") return GEOMETRY;
         if (shaderType == "CONTROL") return TESS_CONTROL;
         if (shaderType == "EVALUATION") return TESS_EVALUATION;
+        if (shaderType == "TASK") return TASK;
+        if (shaderType == "MESH") return MESH;
         return UNKNOWN;
     }
 }

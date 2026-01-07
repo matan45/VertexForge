@@ -94,6 +94,39 @@ namespace windows
             }
         }
         ImGui::End();
+
+        // Position view mode dropdown in top-right of viewport content area
+        ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
+        float dropdownWidth = 90.0f;
+        ImVec2 dropdownPos = ImVec2(
+            windowPos.x + contentMax.x - dropdownWidth - 8.0f,
+            windowPos.y + contentMin.y + 8.0f
+        );
+
+        ImGui::SetNextWindowPos(dropdownPos);
+        ImGui::SetNextWindowBgAlpha(0.75f);
+
+        if (ImGui::Begin("##ViewModeOverlay", nullptr, overlayFlags))
+        {
+            // Sync view mode from backend in case it was changed externally
+            currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
+
+            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap"};
+            ImGui::SetNextItemWidth(dropdownWidth);
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 4))
+            {
+                events::render::SetViewModeCommand cmd;
+                cmd.mode = static_cast<uint32_t>(currentViewMode);
+                dispatcher.execute(cmd);
+            }
+
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Viewport visualization mode");
+            }
+        }
+        ImGui::End();
+
         ImGui::PopStyleVar(2);
     }
 
@@ -152,7 +185,7 @@ namespace windows
             ImVec2(ICON_SIZE, ICON_SIZE),
             ImVec2(uv0.x, uv0.y),
             ImVec2(uv1.x, uv1.y),
-            ImVec4(0.0f, 0.0f, 0.0f, 0.0f), // bg_col (transparent)
+            ImVec4(0.0f, 0.0f, 0.0f, 0.0f),
             tintColor
         );
 

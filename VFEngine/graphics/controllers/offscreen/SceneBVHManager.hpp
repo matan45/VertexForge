@@ -18,6 +18,11 @@ namespace controllers::offscreen
 
     class SceneBVHManager
     {
+    private:
+        scene::SceneBVH sceneBVH;
+        std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
     public:
         explicit SceneBVHManager();
         ~SceneBVHManager();
@@ -52,11 +57,6 @@ namespace controllers::offscreen
         size_t getDynamicEntityCount() const { return sceneBVH.getDynamicEntityCount(); }
         size_t getStaticNodeCount() const { return sceneBVH.getStaticNodeCount(); }
         size_t getDynamicNodeCount() const { return sceneBVH.getDynamicNodeCount(); }
-
-    private:
-        scene::SceneBVH sceneBVH;
-        std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
-        std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
-        std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
+        
     };
 }

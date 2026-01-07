@@ -62,28 +62,30 @@ namespace render::gpudriven {
         uint32_t getTotalCapacity() const { return batchCount * shaderGroupCount * commandsPerSection; }
         uint32_t getSectionCount() const { return batchCount * shaderGroupCount; }
 
+        uint32_t getSectionIndex(uint32_t batch, uint32_t shaderGroup) const {
+            return batch * shaderGroupCount + shaderGroup;
+        }
+
+        vk::DeviceSize getDrawCommandOffset(uint32_t batch, uint32_t shaderGroup) const {
+            return getSectionIndex(batch, shaderGroup) * commandsPerSection * sizeof(MeshTasksIndirectCommand);
+        }
+
+        vk::DeviceSize getDrawCountOffset(uint32_t batch, uint32_t shaderGroup) const {
+            return getSectionIndex(batch, shaderGroup) * sizeof(BatchDrawStats);
+        }
+
         vk::Buffer getCombinedDrawCommandBuffer() const { return combinedDrawCommandBuffer; }
         vk::Buffer getCombinedDrawCountBuffer() const { return combinedDrawCountBuffer; }
         vk::Buffer getCombinedPerDrawDataBuffer() const { return combinedPerDrawDataBuffer; }
 
         vk::DeviceSize getCombinedDrawCommandBufferSize() const {
-            return batchCount * shaderGroupCount * commandsPerSection * sizeof(DrawIndexedIndirectCommand);
+            return batchCount * shaderGroupCount * commandsPerSection * sizeof(MeshTasksIndirectCommand);
         }
         vk::DeviceSize getCombinedDrawCountBufferSize() const {
             return batchCount * shaderGroupCount * sizeof(BatchDrawStats);
         }
         vk::DeviceSize getCombinedPerDrawDataBufferSize() const {
             return batchCount * shaderGroupCount * commandsPerSection * sizeof(PerDrawData);
-        }
-
-        uint32_t getSectionIndex(uint32_t batch, uint32_t shaderGroup) const {
-            return batch * shaderGroupCount + shaderGroup;
-        }
-        vk::DeviceSize getDrawCommandOffset(uint32_t batch, uint32_t shaderGroup) const {
-            return getSectionIndex(batch, shaderGroup) * commandsPerSection * sizeof(DrawIndexedIndirectCommand);
-        }
-        vk::DeviceSize getDrawCountOffset(uint32_t batch, uint32_t shaderGroup) const {
-            return getSectionIndex(batch, shaderGroup) * sizeof(BatchDrawStats);
         }
 
         GPUDrivenStats readBackAggregatedStats();

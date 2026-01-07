@@ -71,6 +71,10 @@ namespace core
         bool getShowGrid() const override;
         void prepareGrid() override;
 
+        // View Mode API
+        void setViewMode(uint32_t mode) override;
+        uint32_t getViewMode() const override;
+
     private:
         bool playModeActive = false;
     };

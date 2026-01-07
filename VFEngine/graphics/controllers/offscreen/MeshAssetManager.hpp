@@ -14,6 +14,8 @@ namespace controllers::offscreen
 {
     class MeshAssetManager
     {
+    private:
+        render::RenderPassHandler& renderHandler;
     public:
         explicit MeshAssetManager(render::RenderPassHandler& renderHandler);
 
@@ -22,8 +24,5 @@ namespace controllers::offscreen
         bool isLoaded(const std::string& meshPath) const;
         std::vector<std::string> getLoadedMeshes() const;
         std::optional<services::MeshBounds> getBoundingBox(const std::string& meshPath) const;
-
-    private:
-        render::RenderPassHandler& renderHandler;
     };
 }

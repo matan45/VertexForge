@@ -1,11 +1,12 @@
 #include "MeshStreamManager.hpp"
 #include "../gpudriven/MergedMeshBuffer.hpp"
+#include "../gpudriven/MeshletBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "resource/MeshletTypes.hpp"
 #include "resource/Types.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
-#include <cmath>
 
 namespace render::mesh
 {
@@ -45,21 +46,6 @@ namespace render::mesh
         meshStates[meshPath] = std::move(state);
     }
 
-    void MeshStreamManager::releaseMesh(const std::string& meshPath)
-    {
-        std::lock_guard<std::mutex> lock(meshStatesMutex);
-
-        auto it = meshStates.find(meshPath);
-        if (it != meshStates.end())
-        {
-            it->second.referenceCount--;
-            if (it->second.referenceCount == 0)
-            {
-                meshStates.erase(it);
-            }
-        }
-    }
-
     void MeshStreamManager::openMeshStream(const std::string& meshPath)
     {
         auto it = meshStates.find(meshPath);
@@ -69,7 +55,7 @@ namespace render::mesh
         }
 
         auto& state = it->second;
-        
+
         state.handle = resource::MeshStreamResource::openStream(meshPath);
         if (!state.handle)
         {
@@ -78,7 +64,7 @@ namespace render::mesh
         }
 
         state.headerParsed = true;
-        
+
         const auto& header = state.handle->getHeader();
         auto* meshInfo = mergedBuffer.reserveMesh(meshPath, header);
         if (!meshInfo)
@@ -89,6 +75,38 @@ namespace render::mesh
             return;
         }
         
+        if (meshletBuffer && state.handle->hasMeshletData())
+        {
+            auto* meshletAlloc = meshletBuffer->reserveMeshlets(meshPath, header);
+            if (meshletAlloc)
+            {
+                loggerInfo("MeshStreamManager: Reserved meshlet space for {}", meshPath);
+                
+                for (uint32_t subIdx = 0; subIdx < header.numSubmeshes; ++subIdx)
+                {
+                    const auto& submeshInfo = header.submeshes[subIdx];
+                    auto* loc = mergedBuffer.getSubmeshLocationMutable(meshPath, submeshInfo.name, subIdx);
+                    if (loc)
+                    {
+                        const auto* alloc = meshletBuffer->getAllocation(meshPath, submeshInfo.name, subIdx);
+                        if (alloc)
+                        {
+                            for (uint32_t lod = 0; lod < gpudriven::LOD_LEVEL_COUNT; ++lod)
+                            {
+                                loc->meshletLods[lod] = meshletBuffer->getMeshletLODInfo(*alloc, lod);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                loggerWarning(
+                    "MeshStreamManager: Failed to reserve meshlet space for {}, mesh shader rendering will use fallback",
+                    meshPath);
+            }
+        }
+
         scheduleInitialLODs(meshPath);
     }
 
@@ -101,12 +119,11 @@ namespace render::mesh
         }
 
         const auto& header = it->second.handle->getHeader();
-        
+
         for (uint32_t subIdx = 0; subIdx < header.numSubmeshes; ++subIdx)
         {
             const auto& submesh = header.submeshes[subIdx];
-
-            // Start with LOD3 (highest priority for initial visibility)
+            
             StreamingRequest request;
             request.meshPath = meshPath;
             request.submeshName = submesh.name;
@@ -117,23 +134,19 @@ namespace render::mesh
             request.boundingRadius = 1.0f;
 
             streamingQueue.push(request);
-
-            // Mark as queued
+            
             auto* loc = mergedBuffer.getSubmeshLocationMutable(meshPath, submesh.name, subIdx);
             if (loc)
             {
                 loc->lodStates[3] = gpudriven::LODStreamState::Queued;
             }
         }
-
-        stats.lodsQueued += header.numSubmeshes;
     }
 
     void MeshStreamManager::update(const glm::vec3& cameraPos)
     {
         bytesStreamedThisFrame = 0;
-
-        // Open streams for new meshes
+        
         {
             std::lock_guard<std::mutex> lock(meshStatesMutex);
             for (auto& [path, state] : meshStates)
@@ -144,47 +157,27 @@ namespace render::mesh
                 }
             }
         }
-        
+
         processPendingReads();
-        
+
         processPendingUploads();
-        
+
         updatePriorities(cameraPos);
-        
+
         processStreamingQueue();
-        
-        stats.bytesStreamedThisFrame = bytesStreamedThisFrame;
-        stats.totalBytesStreamed += bytesStreamedThisFrame;
-        stats.meshesTracked = static_cast<uint32_t>(meshStates.size());
-        {
-            std::lock_guard<std::mutex> lock(pendingReadsMutex);
-            stats.lodsStreaming = static_cast<uint32_t>(pendingReads.size());
-        }
-        stats.lodsUploading = static_cast<uint32_t>(pendingUploads.size());
-        
-        stats.meshesReady = 0;
-        for (const auto& [path, state] : meshStates)
-        {
-            if (mergedBuffer.hasRenderableData(path))
-            {
-                stats.meshesReady++;
-            }
-        }
     }
 
     void MeshStreamManager::processStreamingQueue()
     {
         std::lock_guard<std::mutex> lock(pendingReadsMutex);
-
-        // Limit concurrent reads
+        
         while (pendingReads.size() < maxPendingReads &&
             !streamingQueue.empty() &&
             bytesStreamedThisFrame < maxBytesPerFrame)
         {
             StreamingRequest request = streamingQueue.top();
             streamingQueue.pop();
-
-            // Check if already streaming or ready
+            
             auto* loc = mergedBuffer.getSubmeshLocationMutable(request.meshPath, request.submeshName,
                                                                request.submeshIndex);
             if (!loc) continue;
@@ -192,14 +185,12 @@ namespace render::mesh
             auto currentState = loc->lodStates[request.lodLevel];
             if (currentState != gpudriven::LODStreamState::Queued)
             {
-                continue; // Already streaming or ready
+                continue; 
             }
 
-            // Mark as streaming
+            
             loc->lodStates[request.lodLevel] = gpudriven::LODStreamState::Streaming;
-            stats.lodsQueued--;
-
-            // Start async read
+            
             auto future = asyncReadLOD(request.meshPath, request.submeshName,
                                        request.submeshIndex, request.lodLevel);
             pendingReads.push_back(std::move(future));
@@ -220,6 +211,44 @@ namespace render::mesh
         );
 
         if (!uploaded) return;
+        
+        if (meshletBuffer)
+        {
+            std::lock_guard<std::mutex> lock(meshStatesMutex);
+            auto it = meshStates.find(result.meshPath);
+            if (it != meshStates.end() && it->second.handle && it->second.handle->hasMeshletData())
+            {
+                resource::SubmeshMeshletData meshletData;
+                if (it->second.handle->readMeshletData(result.submeshIndex, meshletData))
+                {
+                    const auto* loc = mergedBuffer.getSubmeshLocation(
+                        result.meshPath, result.submeshName, result.submeshIndex);
+
+                    if (loc && meshletData.hasMeshletData())
+                    {
+                        const auto& lodInfo = loc->lods[result.lodLevel];
+                        if (lodInfo.vertexCount > 0 && loc->meshletLods[result.lodLevel].meshletCount > 0)
+                        {
+                            meshletBuffer->uploadMeshletData(
+                                result.meshPath,
+                                result.submeshName,
+                                result.submeshIndex,
+                                result.lodLevel,
+                                meshletData,
+                                lodInfo.vertexOffset 
+                            );
+                            loggerInfo("MeshStreamManager: Uploaded meshlet data for {}:{} LOD{}",
+                                       result.meshPath, result.submeshName, result.lodLevel);
+                        }
+                    }
+                }
+                else
+                {
+                    loggerWarning("MeshStreamManager: Failed to read meshlet data for {}:{}",
+                                  result.meshPath, result.submeshName);
+                }
+            }
+        }
 
         PendingUpload pending;
         pending.meshPath = result.meshPath;
@@ -261,7 +290,6 @@ namespace render::mesh
 
                 streamingQueue.push(req);
                 loc->lodStates[lod] = gpudriven::LODStreamState::Queued;
-                stats.lodsQueued++;
             }
         }
     }
@@ -297,7 +325,6 @@ namespace render::mesh
 
     void MeshStreamManager::processPendingUploads()
     {
-        // Mark all pending uploads as ready
         for (const auto& pending : pendingUploads)
         {
             mergedBuffer.markLODReady(pending.meshPath, pending.submeshName, pending.submeshIndex, pending.lodLevel);
@@ -326,10 +353,10 @@ namespace render::mesh
     {
         // Base priority: lower LOD = higher urgency (LOD3 loads first)
         float lodUrgency = (4.0f - static_cast<float>(request.lodLevel)) * 25.0f;
-        
+
         float distance = glm::length(request.worldCenter - cameraPos);
         float distanceFactor = 1.0f / (1.0f + distance * 0.01f);
-        
+
         float screenSize = request.boundingRadius * 2.0f / std::max(1.0f, distance);
         float sizeFactor = std::min(1.0f, screenSize * 10.0f);
 
@@ -377,7 +404,7 @@ namespace render::mesh
             // Use the passed submeshIndex directly (no name lookup needed)
             lodInfo = header.submeshes[submeshIndex].lods[lodLevel];
         }
-        
+
         return std::async(std::launch::async, [meshPath, submeshName, submeshIndex, lodLevel, lodInfo]()
         {
             StreamingResult result;
@@ -392,35 +419,5 @@ namespace render::mesh
 
             return result;
         });
-    }
-
-    void MeshStreamManager::waitForPendingTransfers()
-    {
-        std::lock_guard<std::mutex> lock(pendingReadsMutex);
-        for (auto& future : pendingReads)
-        {
-            if (future.valid())
-            {
-                future.wait();
-            }
-        }
-    }
-
-    bool MeshStreamManager::isMeshRenderable(const std::string& meshPath) const
-    {
-        return mergedBuffer.hasRenderableData(meshPath);
-    }
-
-    uint32_t MeshStreamManager::getBestAvailableLOD(const std::string& meshPath,
-                                                    const std::string& submeshName,
-                                                    uint32_t submeshIndex,
-                                                    uint32_t preferredLOD) const
-    {
-        const auto* loc = mergedBuffer.getSubmeshLocation(meshPath, submeshName, submeshIndex);
-        if (!loc)
-        {
-            return gpudriven::LOD_LEVEL_COUNT;
-        }
-        return loc->getBestAvailableLOD(preferredLOD);
     }
 }

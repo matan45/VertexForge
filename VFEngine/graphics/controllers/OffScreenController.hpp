@@ -125,5 +125,9 @@ namespace controllers
         void setShowGrid(bool show);
         bool getShowGrid() const { return showGrid; }
         void prepareGrid();
+
+        // View Mode API
+        void setViewMode(uint32_t mode);
+        uint32_t getViewMode() const;
     };
 }

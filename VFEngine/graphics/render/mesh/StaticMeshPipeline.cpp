@@ -11,10 +11,10 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "resource/MeshResource.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialManager.hpp"
 #include "material/MaterialTypes.hpp"
+#include "math/Frustum.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
 
@@ -168,11 +168,12 @@ namespace render::mesh
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings(4);
 
-        // Binding 0: Camera UBO (vertex + fragment)
+        // Binding 0: Camera UBO (vertex + fragment + task + mesh for mesh shader pipeline)
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment |
+                                 vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
         bindings[0].pImmutableSamplers = nullptr;
 
         // Binding 1: Irradiance cubemap (fragment only)
@@ -339,18 +340,15 @@ namespace render::mesh
 
     void StaticMeshPipeline::initializeDefaultTextureDescriptors()
     {
-        // Initialize MaterialTextureCache's descriptor resources with our layout
         textureCache->initDescriptorResources(textureDescriptorSetLayout);
-
-        // Ensure default texture is available before updating descriptors
+        
         if (!textureCache->hasDefaultTexture())
         {
             loggerWarning("Default texture not available, skipping default descriptor set creation");
             textureDescriptorsInitialized = false;
             return;
         }
-
-        // Create a default descriptor set for meshes without materials
+        
         if (!textureDescriptorSet)
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
@@ -358,8 +356,7 @@ namespace render::mesh
             allocInfo.descriptorSetCount = 1;
             allocInfo.pSetLayouts = &textureDescriptorSetLayout;
             textureDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-
-            // Fill with default textures
+            
             std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
             for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
             {
@@ -385,7 +382,6 @@ namespace render::mesh
         const std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES>& imageViews,
         const std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES>& samplers)
     {
-        // Update the default descriptor set for preview rendering
         if (!textureDescriptorSet) return;
 
         std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
@@ -409,7 +405,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::createPipelineLayout()
     {
-        // Push constant range for MeshPushConstants
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         pushConstantRange.offset = 0;
@@ -432,7 +427,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::createGraphicsPipeline()
     {
-        // Vertex input state - using MeshVertexInput helper
         auto bindingDescription = MeshVertexInput::getBindingDescription();
         auto attributeDescriptions = MeshVertexInput::getAttributeDescriptions();
 
@@ -557,6 +551,8 @@ namespace render::mesh
         ubo.cameraPos = cameraPos;
         ubo.time = time;
 
+        math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
+
         void* data;
         vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
         if (result == vk::Result::eSuccess)
@@ -639,31 +635,25 @@ namespace render::mesh
 
     void StaticMeshPipeline::cleanUp()
     {
-        // Clear material cache
         if (materialCacheManager)
         {
             materialCacheManager->clear();
         }
-
-        // Clean up material shader cache (per-material compiled pipelines)
+        
         if (materialShaderCache)
         {
             materialShaderCache->cleanUp();
         }
-
-        // Clean up material textures
+        
         if (textureCache)
         {
             textureCache->cleanUp();
         }
-
-        // Unload all meshes (meshCache will wait for pending transfers)
+        
         unloadAllMeshes();
-
-        // Clean up pipeline/descriptor resources
+        
         cleanUpForReinit();
-
-        // Reset caches
+        
         textureCache.reset();
         meshCache.reset();
         materialCacheManager.reset();
@@ -804,14 +794,11 @@ namespace render::mesh
         const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& materialCache,
         RenderState& state) const
     {
-        // Get PBR values from assigned material (or fallback to mesh defaults)
         ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
             meshData, subMesh.name, materialCache, currentTime);
-
-        // Skip if blend mode doesn't match current pass
+        
         if (pbrValues.blendMode != targetBlendMode) return;
-
-        // Try to get material-specific pipeline from shader cache
+        
         vk::Pipeline targetPipeline = graphicsPipeline;
 
         if (materialShaderCache && !pbrValues.materialPath.empty())

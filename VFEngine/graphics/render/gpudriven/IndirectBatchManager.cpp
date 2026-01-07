@@ -5,8 +5,8 @@
 #include "print/Logger.hpp"
 #include <cstring>
 
-namespace render::gpudriven {
-
+namespace render::gpudriven
+{
     IndirectBatchManager::IndirectBatchManager(core::Device& device)
         : device(device)
     {
@@ -18,15 +18,15 @@ namespace render::gpudriven {
     }
 
     vk::DeviceSize IndirectBatchManager::calculateRequiredMemory(uint32_t batchCount,
-                                                                   uint32_t commandsPerBatch,
-                                                                   uint32_t shaderGroupCount)
+                                                                 uint32_t commandsPerBatch,
+                                                                 uint32_t shaderGroupCount)
     {
         uint32_t commandsPerSection = commandsPerBatch / shaderGroupCount;
         uint32_t totalSections = batchCount * shaderGroupCount;
 
         // Use 64-bit arithmetic to prevent overflow in size calculations
         vk::DeviceSize totalCommands = static_cast<vk::DeviceSize>(totalSections) * commandsPerSection;
-        vk::DeviceSize drawCommandSize = totalCommands * sizeof(DrawIndexedIndirectCommand);
+        vk::DeviceSize drawCommandSize = totalCommands * sizeof(MeshTasksIndirectCommand);
         vk::DeviceSize drawCountSize = static_cast<vk::DeviceSize>(totalSections) * sizeof(BatchDrawStats);
         vk::DeviceSize perDrawDataSize = totalCommands * sizeof(PerDrawData);
         vk::DeviceSize stagingSize = drawCountSize;
@@ -36,7 +36,8 @@ namespace render::gpudriven {
 
     bool IndirectBatchManager::initWithAutoConfig()
     {
-        if (initialized) {
+        if (initialized)
+        {
             loggerWarning("IndirectBatchManager already initialized");
             return true;
         }
@@ -60,19 +61,24 @@ namespace render::gpudriven {
         // Device tiers based on VRAM
         constexpr vk::DeviceSize GB = 1024ull * 1024ull * 1024ull;
 
-        if (availableVRAM < 4 * GB) {
+        if (availableVRAM < 4 * GB)
+        {
             // Low-end: < 4GB VRAM
             selectedBatchCount = 2;
             selectedCommands = 100000;
             selectedGroups = 8;
             loggerInfo("IndirectBatchManager: Using LOW-END configuration (< 4GB VRAM)");
-        } else if (availableVRAM < 8 * GB) {
+        }
+        else if (availableVRAM < 8 * GB)
+        {
             // Mid-range: 4-8GB VRAM
             selectedBatchCount = 4;
             selectedCommands = 300000;
             selectedGroups = 16;
             loggerInfo("IndirectBatchManager: Using MID-RANGE configuration (4-8GB VRAM)");
-        } else {
+        }
+        else
+        {
             // High-end: >= 8GB VRAM
             selectedBatchCount = DEFAULT_BATCH_COUNT;
             selectedCommands = MAX_DRAW_COMMANDS;
@@ -82,9 +88,10 @@ namespace render::gpudriven {
 
         // Verify the selected config fits in budget
         vk::DeviceSize requiredMemory = calculateRequiredMemory(selectedBatchCount, selectedCommands, selectedGroups);
-        if (requiredMemory > budgetForIndirect) {
+        if (requiredMemory > budgetForIndirect)
+        {
             loggerWarning("IndirectBatchManager: Selected config requires {} MB but budget is {} MB, reducing further",
-                         requiredMemory / (1024 * 1024), budgetForIndirect / (1024 * 1024));
+                          requiredMemory / (1024 * 1024), budgetForIndirect / (1024 * 1024));
 
             // Scale down commands proportionally
             float scale = static_cast<float>(budgetForIndirect) / static_cast<float>(requiredMemory);
@@ -100,19 +107,22 @@ namespace render::gpudriven {
 
     bool IndirectBatchManager::init(uint32_t batchCount, uint32_t commandsPerBatch, uint32_t shaderGroupCount)
     {
-        if (initialized) {
+        if (initialized)
+        {
             loggerWarning("IndirectBatchManager already initialized");
             return true;
         }
 
         // Validate batch count
-        if (batchCount == 0 || batchCount > MAX_BATCH_COUNT) {
+        if (batchCount == 0 || batchCount > MAX_BATCH_COUNT)
+        {
             loggerError("Invalid batch count: {}. Must be 1-{}", batchCount, MAX_BATCH_COUNT);
             batchCount = DEFAULT_BATCH_COUNT;
         }
 
         // Validate shader group count
-        if (shaderGroupCount == 0 || shaderGroupCount > MAX_SHADER_GROUPS) {
+        if (shaderGroupCount == 0 || shaderGroupCount > MAX_SHADER_GROUPS)
+        {
             loggerError("Invalid shader group count: {}. Must be 1-{}", shaderGroupCount, MAX_SHADER_GROUPS);
             shaderGroupCount = MAX_SHADER_GROUPS;
         }
@@ -123,22 +133,24 @@ namespace render::gpudriven {
         // Each (batch, shaderGroup) section gets equal share of commands
         this->commandsPerSection = commandsPerBatch / shaderGroupCount;
 
-        if (!createBuffers()) {
+        if (!createBuffers())
+        {
             loggerError("IndirectBatchManager: Failed to allocate GPU buffers");
             return false;
         }
 
         initialized = true;
 
-        loggerInfo("IndirectBatchManager initialized: {} batches x {} shader groups x {} commands/section = {} total capacity",
-                   this->batchCount, this->shaderGroupCount, this->commandsPerSection, getTotalCapacity());
+        loggerInfo(
+            "IndirectBatchManager initialized: {} batches x {} shader groups x {} commands/section = {} total capacity",
+            this->batchCount, this->shaderGroupCount, this->commandsPerSection, getTotalCapacity());
         loggerInfo("  Sections (batch*group pairs): {}", getSectionCount());
         loggerInfo("  Draw command buffer: {:.1f} MB", getCombinedDrawCommandBufferSize() / (1024.0f * 1024.0f));
         loggerInfo("  Draw count buffer: {:.1f} KB", getCombinedDrawCountBufferSize() / 1024.0f);
         loggerInfo("  Per-draw data buffer: {:.1f} MB", getCombinedPerDrawDataBufferSize() / (1024.0f * 1024.0f));
         loggerInfo("  Total GPU memory: {:.1f} MB",
                    (getCombinedDrawCommandBufferSize() + getCombinedDrawCountBufferSize() +
-                    getCombinedPerDrawDataBufferSize()) / (1024.0f * 1024.0f));
+                       getCombinedPerDrawDataBufferSize()) / (1024.0f * 1024.0f));
 
         return true;
     }
@@ -159,15 +171,16 @@ namespace render::gpudriven {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
-        try {
+        try
+        {
             // Combined draw command buffer - all batches contiguous
             // Written by compute shader, read by vkCmdDrawIndexedIndirectCount
             {
                 core::BufferInfoRequest request(logicalDevice, physicalDevice);
                 request.size = getCombinedDrawCommandBufferSize();
-                request.usage = vk::BufferUsageFlagBits::eStorageBuffer |      // Compute shader writes
-                               vk::BufferUsageFlagBits::eIndirectBuffer |       // Indirect draw reads
-                               vk::BufferUsageFlagBits::eTransferDst;           // Clear/reset
+                request.usage = vk::BufferUsageFlagBits::eStorageBuffer | // Compute shader writes
+                    vk::BufferUsageFlagBits::eIndirectBuffer | // Indirect draw reads
+                    vk::BufferUsageFlagBits::eTransferDst; // Clear/reset
                 request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
                 core::BufferUtilities::createBuffer(request, combinedDrawCommandBuffer, combinedDrawCommandMemory);
             }
@@ -177,10 +190,10 @@ namespace render::gpudriven {
             {
                 core::BufferInfoRequest request(logicalDevice, physicalDevice);
                 request.size = getCombinedDrawCountBufferSize();
-                request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute shader atomic
-                               vk::BufferUsageFlagBits::eIndirectBuffer |       // Count for indirect
-                               vk::BufferUsageFlagBits::eTransferDst |          // Reset to 0
-                               vk::BufferUsageFlagBits::eTransferSrc;           // Readback for debug
+                request.usage = vk::BufferUsageFlagBits::eStorageBuffer | // Compute shader atomic
+                    vk::BufferUsageFlagBits::eIndirectBuffer | // Count for indirect
+                    vk::BufferUsageFlagBits::eTransferDst | // Reset to 0
+                    vk::BufferUsageFlagBits::eTransferSrc; // Readback for debug
                 request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
                 core::BufferUtilities::createBuffer(request, combinedDrawCountBuffer, combinedDrawCountMemory);
             }
@@ -190,8 +203,8 @@ namespace render::gpudriven {
             {
                 core::BufferInfoRequest request(logicalDevice, physicalDevice);
                 request.size = getCombinedPerDrawDataBufferSize();
-                request.usage = vk::BufferUsageFlagBits::eStorageBuffer |       // Compute writes, VS/FS reads
-                               vk::BufferUsageFlagBits::eTransferDst;           // Clear if needed
+                request.usage = vk::BufferUsageFlagBits::eStorageBuffer | // Compute writes, VS/FS reads
+                    vk::BufferUsageFlagBits::eTransferDst; // Clear if needed
                 request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
                 core::BufferUtilities::createBuffer(request, combinedPerDrawDataBuffer, combinedPerDrawDataMemory);
             }
@@ -201,9 +214,9 @@ namespace render::gpudriven {
                 core::BufferInfoRequest request(logicalDevice, physicalDevice);
                 request.size = getCombinedDrawCountBufferSize();
                 request.usage = vk::BufferUsageFlagBits::eTransferSrc |
-                               vk::BufferUsageFlagBits::eTransferDst;
+                    vk::BufferUsageFlagBits::eTransferDst;
                 request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                    vk::MemoryPropertyFlagBits::eHostCoherent;
+                    vk::MemoryPropertyFlagBits::eHostCoherent;
                 core::BufferUtilities::createBuffer(request, stagingBuffer, stagingMemory);
 
                 stagingMapped = logicalDevice.mapMemory(
@@ -214,16 +227,21 @@ namespace render::gpudriven {
             }
 
             return true;
-
-        } catch (const vk::OutOfDeviceMemoryError& e) {
+        }
+        catch (const vk::OutOfDeviceMemoryError& e)
+        {
             loggerError("IndirectBatchManager: Out of device memory - {}", e.what());
             destroyBuffers();
             return false;
-        } catch (const vk::OutOfHostMemoryError& e) {
+        }
+        catch (const vk::OutOfHostMemoryError& e)
+        {
             loggerError("IndirectBatchManager: Out of host memory - {}", e.what());
             destroyBuffers();
             return false;
-        } catch (const vk::SystemError& e) {
+        }
+        catch (const vk::SystemError& e)
+        {
             loggerError("IndirectBatchManager: Vulkan error during buffer creation - {}", e.what());
             destroyBuffers();
             return false;
@@ -234,7 +252,8 @@ namespace render::gpudriven {
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (stagingMapped) {
+        if (stagingMapped)
+        {
             logicalDevice.unmapMemory(stagingMemory);
             stagingMapped = nullptr;
         }
@@ -248,13 +267,13 @@ namespace render::gpudriven {
     void IndirectBatchManager::resetAllBatches(vk::CommandBuffer cmd)
     {
         std::memset(stagingMapped, 0, getCombinedDrawCountBufferSize());
-        
+
         vk::BufferCopy copyRegion;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = getCombinedDrawCountBufferSize();
         cmd.copyBuffer(stagingBuffer, combinedDrawCountBuffer, copyRegion);
-        
+
         vk::BufferMemoryBarrier barrier;
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
@@ -276,9 +295,9 @@ namespace render::gpudriven {
 
     void IndirectBatchManager::insertBarriersAfterCompute(vk::CommandBuffer cmd)
     {
-        
         std::array<vk::BufferMemoryBarrier, 3> barriers;
-        
+
+        // Draw command buffer: Compute shader write → Indirect command read
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -286,7 +305,8 @@ namespace render::gpudriven {
         barriers[0].buffer = combinedDrawCommandBuffer;
         barriers[0].offset = 0;
         barriers[0].size = VK_WHOLE_SIZE;
-        
+
+        // Draw count buffer: Compute shader write → Indirect command read
         barriers[1].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[1].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -294,7 +314,8 @@ namespace render::gpudriven {
         barriers[1].buffer = combinedDrawCountBuffer;
         barriers[1].offset = 0;
         barriers[1].size = VK_WHOLE_SIZE;
-        
+
+        // Per-draw data buffer: Compute shader write → Task/Mesh shader read
         barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderRead;
         barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -303,9 +324,10 @@ namespace render::gpudriven {
         barriers[2].offset = 0;
         barriers[2].size = VK_WHOLE_SIZE;
 
+        // Mesh shader path: ComputeShader → DrawIndirect + TaskShader
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,
-            vk::PipelineStageFlagBits::eDrawIndirect | vk::PipelineStageFlagBits::eVertexShader,
+            vk::PipelineStageFlagBits::eDrawIndirect | vk::PipelineStageFlagBits::eTaskShaderEXT,
             {},
             {},
             barriers,
@@ -350,10 +372,13 @@ namespace render::gpudriven {
         auto sectionStats = readBackAllStats();
 
         GPUDrivenStats aggregated{};
-        // One draw call per active (batch, shaderGroup) section
-        aggregated.drawCalls = getSectionCount();
 
-        for (const auto& section : sectionStats) {
+        for (const auto& section : sectionStats)
+        {
+            if (section.drawCount > 0)
+            {
+                aggregated.drawCalls++;
+            }
             aggregated.visibleObjects += section.drawCount;
             aggregated.objectsLOD0 += section.lodCount0;
             aggregated.objectsLOD1 += section.lodCount1;
@@ -365,5 +390,4 @@ namespace render::gpudriven {
 
         return aggregated;
     }
-
 }

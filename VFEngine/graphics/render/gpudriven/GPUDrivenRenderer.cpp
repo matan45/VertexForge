@@ -6,10 +6,12 @@
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/SwapChain.hpp"
 #include "print/Logger.hpp"
 #include <array>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 #include <memory>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
@@ -18,8 +20,8 @@
 #endif
 
 
-namespace render::gpudriven {
-
+namespace render::gpudriven
+{
     GPUDrivenRenderer::GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain)
         : device(device), swapChain(swapChain)
     {
@@ -32,7 +34,8 @@ namespace render::gpudriven {
 
     void GPUDrivenRenderer::init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass)
     {
-        if (initialized) {
+        if (initialized)
+        {
             return;
         }
 
@@ -41,22 +44,25 @@ namespace render::gpudriven {
         cachedIBLLayout = iblDescriptorSetLayout;
         cachedRenderPass = renderPass;
 
-        // Initialize sub-components
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
 
         // Create mesh stream manager (streaming enabled by default)
-        if (meshStreamingEnabled) {
+        if (meshStreamingEnabled)
+        {
             meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
             loggerInfo("GPUDrivenRenderer: Mesh streaming enabled by default");
         }
 
         batchManager = std::make_unique<IndirectBatchManager>(device);
-        if (!batchManager->initWithAutoConfig()) {
+        if (!batchManager->initWithAutoConfig())
+        {
             loggerError("GPUDrivenRenderer: Failed to initialize batch manager - GPU memory allocation failed");
             // Fall back to minimal configuration
-            if (!batchManager->init(2, 50000, 8)) {
-                loggerError("GPUDrivenRenderer: Even minimal batch configuration failed - GPU-driven rendering unavailable");
+            if (!batchManager->init(2, 50000, 8))
+            {
+                loggerError(
+                    "GPUDrivenRenderer: Even minimal batch configuration failed - GPU-driven rendering unavailable");
                 batchManager.reset();
             }
         }
@@ -71,18 +77,43 @@ namespace render::gpudriven {
         cameraBuffer = std::make_unique<GPUDrivenCameraBuffer>(device, swapChain);
         cameraBuffer->init();
 
-        // Create graphics pipeline for GPU-driven rendering
-        pipeline = std::make_unique<GPUDrivenPipeline>(device, swapChain);
-        pipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(), renderPass);
+        const auto& meshCaps = device.getMeshShaderCapabilities();
+        meshShaderSupported = meshCaps.meshShaderSupported && meshCaps.taskShaderSupported;
 
-        // Initialize custom shader cache for GPU-driven compatible material shaders
-        customShaderCache = std::make_unique<GPUDrivenShaderCache>(device, swapChain);
-        customShaderCache->init(
-            iblDescriptorSetLayout,
-            pipeline->getPerDrawDataLayout(),
-            bindlessTextures->getDescriptorSetLayout(),
-            renderPass
-        );
+        if (meshShaderSupported &&
+            (MESHLET_MAX_VERTICES > meshCaps.maxMeshOutputVertices ||
+                MESHLET_MAX_PRIMITIVES > meshCaps.maxMeshOutputPrimitives))
+        {
+            loggerError(
+                "GPUDrivenRenderer: Meshlet constants ({} vertices, {} primitives) exceed device limits ({}, {})",
+                MESHLET_MAX_VERTICES, MESHLET_MAX_PRIMITIVES,
+                meshCaps.maxMeshOutputVertices, meshCaps.maxMeshOutputPrimitives);
+            meshShaderSupported = false;
+        }
+
+        if (meshShaderSupported)
+        {
+            loggerInfo("GPUDrivenRenderer: Mesh shader supported - using Task+Mesh shader pipeline");
+
+            meshletBuffer = std::make_unique<MeshletBuffer>(device);
+            meshletBuffer->init();
+
+            meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
+            meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(), renderPass);
+
+            if (meshStreamManager)
+            {
+                meshStreamManager->setMeshletBuffer(meshletBuffer.get());
+                loggerInfo("GPUDrivenRenderer: Meshlet streaming enabled");
+            }
+        }
+        else
+        {
+            loggerError(
+                "GPUDrivenRenderer: Mesh shaders not supported - GPU-driven rendering requires mesh shader support");
+            loggerError("GPUDrivenRenderer: The VK_EXT_mesh_shader extension with task shader support is required");
+            return;
+        }
 
         initialized = true;
         loggerInfo("GPUDrivenRenderer: Initialized successfully");
@@ -90,7 +121,8 @@ namespace render::gpudriven {
 
     void GPUDrivenRenderer::cleanup()
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             return;
         }
 
@@ -98,8 +130,8 @@ namespace render::gpudriven {
         vkDevice.waitIdle();
 
         // Cleanup sub-components
-        if (customShaderCache) customShaderCache->cleanup();
-        if (pipeline) pipeline->cleanup();
+        if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (meshletBuffer) meshletBuffer->cleanup();
         if (cameraBuffer) cameraBuffer->cleanup();
         if (cullPipeline) cullPipeline->cleanup();
         if (bindlessTextures) bindlessTextures->cleanup();
@@ -107,7 +139,8 @@ namespace render::gpudriven {
         if (mergedBuffer) mergedBuffer->cleanup();
 
         meshStreamManager.reset();
-        pipeline.reset();
+        meshShaderPipeline.reset();
+        meshletBuffer.reset();
         cameraBuffer.reset();
         cullPipeline.reset();
         bindlessTextures.reset();
@@ -120,7 +153,8 @@ namespace render::gpudriven {
 
     void GPUDrivenRenderer::setDefaultTexture(vk::ImageView view, vk::Sampler sampler)
     {
-        if (!initialized || !bindlessTextures) {
+        if (!initialized || !bindlessTextures)
+        {
             return;
         }
 
@@ -136,147 +170,188 @@ namespace render::gpudriven {
         float farPlane,
         float time)
     {
-        if (!initialized || !enabled) {
+        if (!initialized || !enabled)
+        {
             return;
         }
 
-        // Update mesh streaming - request all meshes in the scene
-        if (meshStreamManager) {
-            for (const auto& meshRender : opaqueObjects) {
+        if (meshStreamManager)
+        {
+            for (const auto& meshRender : opaqueObjects)
+            {
                 meshStreamManager->requestMesh(meshRender.meshPath);
             }
-            
-            meshStreamManager->update(cameraPosition); // Assume ~60fps delta
+
+            meshStreamManager->update(cameraPosition);
         }
 
-        // Register textures for all materials in the scene (done once per material)
-        if (materialTextureCache && bindlessTextures) {
-            for (const auto& meshRender : opaqueObjects) {
-                // Register default material textures
-                if (!meshRender.defaultMaterialPath.empty()) {
+        if (materialTextureCache && bindlessTextures)
+        {
+            for (const auto& meshRender : opaqueObjects)
+            {
+                if (!meshRender.defaultMaterialPath.empty())
+                {
                     registerMaterialTextures(meshRender.defaultMaterialPath);
                 }
-                // Register submesh material textures
-                for (const auto& [submeshName, subMat] : meshRender.submeshMaterials) {
-                    if (!subMat.materialPath.empty()) {
+
+                for (const auto& [submeshName, subMat] : meshRender.submeshMaterials)
+                {
+                    if (!subMat.materialPath.empty())
+                    {
                         registerMaterialTextures(subMat.materialPath);
                     }
                 }
             }
         }
 
-        // Create texture resolver callback that uses BindlessTextureManager
-        // Use frame-local cache to avoid re-extracting PBR values for same material multiple times
-        // Handles both materials (.vfMat) and material instances (.vfMatInstance)
         TextureIndexResolver textureResolver = nullptr;
-        if (bindlessTextures) {
-            // Cache extracted PBR values per material/instance path (avoids 8x extraction per material)
+        if (bindlessTextures)
+        {
             auto pbrCache = std::make_shared<std::unordered_map<std::string, mesh::ExtractedPBRValues>>();
 
-            textureResolver = [this, pbrCache](const std::string& materialPath, TextureSlotType slot) -> uint32_t {
-                if (materialPath.empty()) {
+            textureResolver = [this, pbrCache](const std::string& materialPath, TextureSlotType slot) -> uint32_t
+            {
+                if (materialPath.empty())
+                {
                     return INVALID_TEXTURE_INDEX;
                 }
 
-                // Check cache first
                 auto it = pbrCache->find(materialPath);
-                if (it == pbrCache->end()) {
-                    // Use unified extraction method that handles both materials and instances
+                if (it == pbrCache->end())
+                {
                     it = pbrCache->emplace(materialPath,
-                        mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
+                                           mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
                 }
 
                 const auto& pbrValues = it->second;
 
-                // Get the appropriate texture path based on slot
                 std::string texPath;
-                switch (slot) {
-                    case TextureSlotType::Albedo:    texPath = pbrValues.albedoTexturePath; break;
-                    case TextureSlotType::Normal:    texPath = pbrValues.normalTexturePath; break;
-                    case TextureSlotType::ORM:       texPath = pbrValues.ormTexturePath; break;
-                    case TextureSlotType::Metallic:  texPath = pbrValues.metallicTexturePath; break;
-                    case TextureSlotType::Roughness: texPath = pbrValues.roughnessTexturePath; break;
-                    case TextureSlotType::AO:        texPath = pbrValues.aoTexturePath; break;
-                    case TextureSlotType::Emission:  texPath = pbrValues.emissionTexturePath; break;
-                    case TextureSlotType::Height:    texPath = pbrValues.heightTexturePath; break;
-                    default: return INVALID_TEXTURE_INDEX;
+                switch (slot)
+                {
+                case TextureSlotType::Albedo: texPath = pbrValues.albedoTexturePath;
+                    break;
+                case TextureSlotType::Normal: texPath = pbrValues.normalTexturePath;
+                    break;
+                case TextureSlotType::ORM: texPath = pbrValues.ormTexturePath;
+                    break;
+                case TextureSlotType::Metallic: texPath = pbrValues.metallicTexturePath;
+                    break;
+                case TextureSlotType::Roughness: texPath = pbrValues.roughnessTexturePath;
+                    break;
+                case TextureSlotType::AO: texPath = pbrValues.aoTexturePath;
+                    break;
+                case TextureSlotType::Emission: texPath = pbrValues.emissionTexturePath;
+                    break;
+                case TextureSlotType::Height: texPath = pbrValues.heightTexturePath;
+                    break;
+                default: return INVALID_TEXTURE_INDEX;
                 }
 
-                if (texPath.empty()) {
+                if (texPath.empty())
+                {
                     return INVALID_TEXTURE_INDEX;
                 }
 
-                // Look up the registered texture index
                 return bindlessTextures->getTextureIndex(texPath);
             };
         }
 
-        // Create shader group resolver for custom material shaders
-        // Returns 0 for default PBR, 1+ for custom shaders
-        // Handles material instances by resolving to parent's shader group
-        ShaderGroupResolver shaderGroupResolver = nullptr;
-        if (customShaderCache) {
-            // Clear active groups from last frame
-            customShaderCache->clearActiveGroups();
+        // Shader group indices:
+        // 0 = default (no Time node)
+        // 1 = UV animation (Time connected to texture UV)
+        // 2 = Emission animation (Time connected to EmissionStrength)
+        ShaderGroupResolver shaderGroupResolver = [](const std::string& materialPath) -> uint32_t
+        {
+            if (materialPath.empty())
+            {
+                return 0;
+            }
 
-            // Cache material data lookups per material path
-            auto matDataCache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>>();
-            // Cache instance data lookups
-            auto instanceDataCache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<material::MaterialInstanceData>>>();
+            std::string parentPath = materialPath;
 
-            shaderGroupResolver = [this, matDataCache, instanceDataCache](const std::string& materialPath) -> uint32_t {
-                if (materialPath.empty()) {
-                    return 0;  // Default shader
-                }
-
-                std::string parentPath = materialPath;
-                std::shared_ptr<material::MaterialData> matData;
-
-                // Check if this is a material instance
-                if (material::isInstanceFile(materialPath)) {
-                    // Load instance data
-                    auto instIt = instanceDataCache->find(materialPath);
-                    std::shared_ptr<material::MaterialInstanceData> instanceData;
-                    if (instIt == instanceDataCache->end()) {
-                        instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-                        (*instanceDataCache)[materialPath] = instanceData;
-                    } else {
-                        instanceData = instIt->second;
-                    }
-
-                    if (!instanceData || instanceData->parentMaterialPath.empty()) {
-                        return 0;  // Default shader
-                    }
-
-                    // Register instance->parent mapping for shader sharing
-                    customShaderCache->registerInstance(materialPath, instanceData->parentMaterialPath);
+            if (material::isInstanceFile(materialPath))
+            {
+                auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+                if (instanceData && !instanceData->parentMaterialPath.empty())
+                {
                     parentPath = instanceData->parentMaterialPath;
                 }
-
-                // Load parent material data
-                auto it = matDataCache->find(parentPath);
-                if (it == matDataCache->end()) {
-                    matData = resource::ResourceManager::loadMaterial(parentPath);
-                    (*matDataCache)[parentPath] = matData;
-                } else {
-                    matData = it->second;
+                else
+                {
+                    return 0;
                 }
+            }
 
-                if (!matData) {
-                    return 0;  // Default shader
+            auto matData = resource::ResourceManager::loadMaterial(parentPath);
+            if (!matData)
+            {
+                return 0;
+            }
+
+            // Find Time node ID
+            uint32_t timeNodeId = 0;
+            bool hasTimeNode = false;
+            for (const auto& node : matData->graph.nodes)
+            {
+                if (node.type == material::NodeType::Time)
+                {
+                    timeNodeId = node.id;
+                    hasTimeNode = true;
+                    break;
                 }
+            }
 
-                // Check if material has custom shaders
-                if (matData->cachedVertexShader.empty() || matData->cachedFragmentShader.empty()) {
-                    return 0;  // Default shader
+            if (!hasTimeNode)
+            {
+                return 0;
+            }
+
+            // Trace connections from Time node to determine animation type
+            // Use BFS to find what the Time node ultimately connects to
+            std::unordered_set<uint32_t> visitedNodes;
+            std::queue<uint32_t> nodesToVisit;
+            nodesToVisit.push(timeNodeId);
+
+            while (!nodesToVisit.empty())
+            {
+                uint32_t currentNodeId = nodesToVisit.front();
+                nodesToVisit.pop();
+
+                if (visitedNodes.contains(currentNodeId))
+                {
+                    continue;
                 }
+                visitedNodes.insert(currentNodeId);
 
-                // Get or create shader group for the PARENT material (instances share parent's shader)
-                uint32_t group = customShaderCache->getOrCreateShaderGroup(parentPath, *matData);
-                customShaderCache->markGroupActive(group);
-                return group;
-            };
-        }
+                for (const auto& link : matData->graph.links)
+                {
+                    if (link.sourceNodeId == currentNodeId)
+                    {
+                        for (const auto& node : matData->graph.nodes)
+                        {
+                            if (node.id == link.targetNodeId)
+                            {
+                                if (node.type == material::NodeType::PBROutput &&
+                                    link.targetPin == "EmissionStrength")
+                                {
+                                    return 2; // Emission animation
+                                }
+
+                                if (node.type == material::NodeType::TextureSample &&
+                                    link.targetPin == "UV")
+                                {
+                                    return 1; // UV animation
+                                }
+                                nodesToVisit.push(link.targetNodeId);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return 1;
+        };
 
         // Update object buffer with current frame's render data (pass time for Time node evaluation)
         mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, time);
@@ -307,8 +382,14 @@ namespace render::gpudriven {
             batchManager->getCombinedDrawCountBuffer()
         );
 
-        // Update per-draw data descriptor for graphics pipeline (uses combined buffer)
-        pipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
+        // Update per-draw data descriptor for mesh shader pipeline (uses combined buffer)
+        // Only update when there's actual data to render
+        if (meshShaderPipeline && mergedBuffer->getObjectCount() > 0)
+        {
+            meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
+            meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
+            meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+        }
 
         // Update stats
         stats.totalObjects = mergedBuffer->getObjectCount();
@@ -321,8 +402,21 @@ namespace render::gpudriven {
             return;
         }
 
-        // Always reset all batch draw counts (clears stale data when no objects)
+        if (mergedBuffer)
+        {
+            mergedBuffer->flushPendingTransfers();
+        }
+        if (meshletBuffer)
+        {
+            meshletBuffer->flushPendingTransfers();
+        }
+
         batchManager->resetAllBatches(cmd);
+
+        if (meshShaderPipeline)
+        {
+            meshShaderPipeline->resetStats(cmd);
+        }
 
         if (stats.totalObjects == 0)
         {
@@ -349,148 +443,147 @@ namespace render::gpudriven {
 
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
     {
-        if (!initialized || !enabled || stats.totalObjects == 0)
+        if (!initialized || !enabled || stats.totalObjects == 0 || !meshShaderPipeline)
         {
             return;
         }
 
-        // Bind merged vertex/index buffers once (shared across all pipelines and batches)
-        vk::Buffer vertBufs[] = { mergedBuffer->getVertexBuffer() };
-        vk::DeviceSize vertOffsets[] = { 0 };
-        cmd.bindVertexBuffers(0, 1, vertBufs, vertOffsets);
-        cmd.bindIndexBuffer(mergedBuffer->getIndexBuffer(), 0, vk::IndexType::eUint32);
-
         uint32_t batchCount = batchManager->getBatchCount();
         uint32_t commandsPerSection = batchManager->getCommandsPerSection();
 
-        // Get active shader groups (always includes group 0 = default)
-        const std::set<uint32_t>& activeGroups = customShaderCache ?
-            customShaderCache->getActiveGroups() :
-            std::set<uint32_t>{0};
+        vk::Pipeline activePipeline = meshShaderPipeline->getPipeline();
+        vk::PipelineLayout layout = meshShaderPipeline->getPipelineLayout();
 
-        // Multi-pipeline rendering: each shader group has its own buffer sections
-        // No fragment discard needed - compute shader outputs to group-specific sections
-        for (uint32_t shaderGroup : activeGroups)
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
+
+        // Bind all 5 descriptor sets:
+        // Set 0: IBL (camera UBO + IBL textures)
+        // Set 1: Per-draw data
+        // Set 2: Bindless textures
+        // Set 3: Meshlet data (meshlet buffer, vertex indices, primitive indices)
+        // Set 4: Vertex data (merged vertex buffer)
+        std::array<vk::DescriptorSet, 5> descriptorSets = {
+            iblDescriptorSet,
+            meshShaderPipeline->getPerDrawDataDescriptorSet(),
+            bindlessTextures->getDescriptorSet(),
+            meshShaderPipeline->getMeshletDataDescriptorSet(),
+            meshShaderPipeline->getVertexDataDescriptorSet()
+        };
+
+        cmd.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
+            layout,
+            0,
+            static_cast<uint32_t>(descriptorSets.size()),
+            descriptorSets.data(),
+            0, nullptr);
+
+        auto extent = swapChain.getSwapchainExtent();
+
+        // Render shader groups: 0 (default), 1 (UV animation), 2 (emission animation)
+        for (uint32_t shaderGroup = 0; shaderGroup <= 2; ++shaderGroup)
         {
-            vk::Pipeline activePipeline;
-            vk::PipelineLayout layout;
-
-            if (shaderGroup == 0) {
-                // Default PBR pipeline
-                activePipeline = pipeline->getPipeline();
-                layout = pipeline->getPipelineLayout();
-            } else {
-                // Custom shader pipeline
-                if (customShaderCache) {
-                    activePipeline = customShaderCache->getPipeline(shaderGroup, false);
-                }
-                if (!activePipeline) {
-                    loggerWarning("GPUDrivenRenderer: No pipeline for shader group {}, skipping", shaderGroup);
-                    continue;
-                }
-                // Custom pipelines use the same layout (shared in shader cache)
-                layout = pipeline->getPipelineLayout();
-            }
-
-            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
-
-            std::array<vk::DescriptorSet, 3> descriptorSets = {
-                iblDescriptorSet,
-                pipeline->getPerDrawDataDescriptorSet(),
-                bindlessTextures->getDescriptorSet()
-            };
-
-            cmd.bindDescriptorSets(
-                vk::PipelineBindPoint::eGraphics,
-                layout,
-                0,
-                static_cast<uint32_t>(descriptorSets.size()),
-                descriptorSets.data(),
-                0, nullptr);
-
-            // Draw all batches for this shader group
-            // Each (batch, shaderGroup) pair has its own section in the buffers
             for (uint32_t batch = 0; batch < batchCount; ++batch)
             {
-                // Get offsets for this (batch, shaderGroup) section
                 vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, shaderGroup);
                 vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, shaderGroup);
 
-                cmd.drawIndexedIndirectCount(
+                MeshShaderPushConstants pushConstants{};
+                pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, shaderGroup) * commandsPerSection;
+
+                pushConstants.viewMode = currentViewMode;
+                if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+                if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+                pushConstants.screenWidth = static_cast<float>(extent.width);
+                pushConstants.screenHeight = static_cast<float>(extent.height);
+
+                cmd.pushConstants(
+                    layout,
+                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT |
+                    vk::ShaderStageFlagBits::eFragment,
+                    0,
+                    sizeof(MeshShaderPushConstants),
+                    &pushConstants);
+
+                cmd.drawMeshTasksIndirectCountEXT(
                     batchManager->getCombinedDrawCommandBuffer(),
                     cmdOffset,
                     batchManager->getCombinedDrawCountBuffer(),
                     countOffset,
                     commandsPerSection,
-                    sizeof(DrawIndexedIndirectCommand));
+                    sizeof(MeshTasksIndirectCommand));
             }
         }
     }
 
     bool GPUDrivenRenderer::registerMaterialTextures(const std::string& materialPath)
     {
-        if (!initialized || !bindlessTextures || !materialTextureCache) {
+        if (!initialized || !bindlessTextures || !materialTextureCache)
+        {
             return false;
         }
-        
-        if (registeredMaterialPaths.contains(materialPath)) {
+
+        if (registeredMaterialPaths.contains(materialPath))
+        {
             return true;
         }
 
         mesh::ExtractedPBRValues pbrValues;
 
-        // Handle material instances
-        if (material::isInstanceFile(materialPath)) {
+        if (material::isInstanceFile(materialPath))
+        {
             auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-            if (!instanceData || instanceData->parentMaterialPath.empty()) {
+            if (!instanceData || instanceData->parentMaterialPath.empty())
+            {
                 loggerWarning("GPUDrivenRenderer: Failed to load material instance: {}", materialPath);
                 return false;
             }
 
-            // Load and cache parent material
             auto parentMatData = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
-            if (!parentMatData) {
-                loggerWarning("GPUDrivenRenderer: Failed to load parent material: {}", instanceData->parentMaterialPath);
+            if (!parentMatData)
+            {
+                loggerWarning("GPUDrivenRenderer: Failed to load parent material: {}",
+                              instanceData->parentMaterialPath);
                 return false;
             }
             loadedMaterials[instanceData->parentMaterialPath] = parentMatData;
-            
+
             pbrValues = mesh::MaterialPBRExtractor::extractPBRFromInstance(*instanceData, *parentMatData);
         }
-        else {
-            // Regular material
+        else
+        {
             auto matData = resource::ResourceManager::loadMaterial(materialPath);
-            if (!matData) {
+            if (!matData)
+            {
                 loggerWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);
                 return false;
             }
-            // Keep material alive by storing in our cache
             loadedMaterials[materialPath] = matData;
-            
+
             pbrValues = mesh::MaterialPBRExtractor::extractPBRFromMaterial(*matData);
         }
 
         bool registered = false;
 
-        // Helper lambda to register a texture
-        auto tryRegister = [&](const std::string& texPath) {
+        auto tryRegister = [&](const std::string& texPath)
+        {
             if (texPath.empty()) return;
 
-            // Load texture via MaterialTextureCache
-            if (!materialTextureCache->loadTexture(texPath)) {
+            if (!materialTextureCache->loadTexture(texPath))
+            {
                 return;
             }
 
-            // Get view and sampler
             vk::ImageView view = materialTextureCache->getViewForPath(texPath);
             vk::Sampler sampler = materialTextureCache->getSamplerForPath(texPath);
 
-            if (view && sampler) {
+            if (view && sampler)
+            {
                 bindlessTextures->registerTexture(texPath, view, sampler);
                 registered = true;
             }
         };
-        
+
         tryRegister(pbrValues.albedoTexturePath);
         tryRegister(pbrValues.normalTexturePath);
         tryRegister(pbrValues.ormTexturePath);
@@ -500,8 +593,8 @@ namespace render::gpudriven {
         tryRegister(pbrValues.emissionTexturePath);
         tryRegister(pbrValues.heightTexturePath);
 
-        // Only mark as registered if at least one texture was successfully registered
-        if (registered) {
+        if (registered)
+        {
             registeredMaterialPaths.insert(materialPath);
         }
 
@@ -510,25 +603,16 @@ namespace render::gpudriven {
 
     void GPUDrivenRenderer::updateHiZPyramid(vk::ImageView hiZView, vk::Sampler hiZSampler, uint32_t mipLevels)
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             return;
         }
 
-        bool wasAvailable = (hiZMipLevels > 0);
-
-        cachedHiZView = hiZView;
-        cachedHiZSampler = hiZSampler;
         hiZMipLevels = mipLevels;
 
-        // Update the cull pipeline descriptor with Hi-Z texture
-        if (cullPipeline && hiZView && hiZSampler) {
+        if (cullPipeline && hiZView && hiZSampler)
+        {
             cullPipeline->updateHiZDescriptor(hiZView, hiZSampler);
-
-            // Auto-enable occlusion culling when Hi-Z first becomes available
-            if (!wasAvailable && mipLevels > 0 && !occlusionCullingEnabled) {
-                occlusionCullingEnabled = true;
-                loggerInfo("GPUDrivenRenderer: Hi-Z occlusion culling enabled ({} mip levels)", mipLevels);
-            }
         }
     }
 
@@ -586,13 +670,14 @@ namespace render::gpudriven {
     {
         if (!batchManager) return 0;
         return batchManager->getCombinedDrawCommandBufferSize() +
-               batchManager->getCombinedDrawCountBufferSize() +
-               batchManager->getCombinedPerDrawDataBufferSize();
+            batchManager->getCombinedDrawCountBufferSize() +
+            batchManager->getCombinedPerDrawDataBufferSize();
     }
 
     void GPUDrivenRenderer::updateStatsFromGPU()
     {
-        if (!initialized || !enabled || !batchManager) {
+        if (!initialized || !enabled || !batchManager)
+        {
             return;
         }
 
@@ -600,7 +685,7 @@ namespace render::gpudriven {
         GPUDrivenStats aggregated = batchManager->readBackAggregatedStats();
 
         stats.visibleObjects = aggregated.visibleObjects;
-        stats.drawCalls = aggregated.drawCalls;  // One draw call per batch
+        stats.drawCalls = aggregated.drawCalls; // One draw call per batch
 
         // LOD distribution from GPU (aggregated across all batches)
         stats.objectsLOD0 = aggregated.objectsLOD0;
@@ -613,11 +698,19 @@ namespace render::gpudriven {
         stats.culledByOcclusion = aggregated.culledByOcclusion;
     }
 
+    MeshletCullingStats GPUDrivenRenderer::getMeshletCullingStats()
+    {
+        if (!meshShaderPipeline)
+        {
+            return MeshletCullingStats{};
+        }
+        return meshShaderPipeline->readStats();
+    }
+
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)
     {
         if (!initialized) return;
 
-        // Check if anything actually changed
         bool renderPassChanged = (cachedRenderPass != newRenderPass);
         bool iblLayoutChanged = (newIBLLayout && cachedIBLLayout != newIBLLayout);
 
@@ -625,21 +718,15 @@ namespace render::gpudriven {
 
         loggerInfo("GPUDrivenRenderer: Updating render pass/IBL layout, recreating pipelines");
 
-        // Update cached values
         cachedRenderPass = newRenderPass;
-        if (newIBLLayout) {
+        if (newIBLLayout)
+        {
             cachedIBLLayout = newIBLLayout;
         }
 
-        // Recreate main graphics pipeline with new render pass and IBL layout
-        if (pipeline) {
-            pipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(), cachedRenderPass);
-        }
-
-        // Update custom shader cache with new render pass and IBL layout
-        if (customShaderCache) {
-            customShaderCache->updateRenderPass(newRenderPass, newIBLLayout);
+        if (meshShaderPipeline)
+        {
+            meshShaderPipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(), cachedRenderPass);
         }
     }
-
 }

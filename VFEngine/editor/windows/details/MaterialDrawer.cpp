@@ -4,7 +4,7 @@
 #include "events/SceneEvents.hpp"
 #include "events/MaterialEvents.hpp"
 #include "nfd/FileDialog.hpp"
-#include "resource/MeshResource.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -213,21 +213,18 @@ namespace windows::details
             return cacheIt->second;
         }
 
-        try
+        std::vector<std::string> names;
+        auto stream = resource::MeshStreamResource::openStream(meshPath);
+        if (stream)
         {
-            resource::MeshesData meshData = resource::MeshResource::loadMesh(meshPath);
-            std::vector<std::string> names;
-            for (size_t i = 0; i < meshData.meshes.size(); ++i)
+            const auto& header = stream->getHeader();
+            for (uint32_t i = 0; i < header.numSubmeshes; ++i)
             {
-                const auto& submesh = meshData.meshes[i];
-                names.push_back(submesh.name.empty() ? "SubMesh_" + std::to_string(i) : submesh.name);
+                const auto& name = header.submeshes[i].name;
+                names.push_back(name.empty() ? "SubMesh_" + std::to_string(i) : name);
             }
-            cacheIt = submeshNameCache.emplace(meshPath, std::move(names)).first;
         }
-        catch (const std::exception&)
-        {
-            cacheIt = submeshNameCache.emplace(meshPath, std::vector<std::string>{}).first;
-        }
+        cacheIt = submeshNameCache.emplace(meshPath, std::move(names)).first;
 
         return cacheIt->second;
     }

@@ -135,6 +135,9 @@ namespace render
         void setGPUDrivenOcclusionCullingEnabled(bool enabled);
         bool isGPUDrivenOcclusionCullingEnabled() const;
 
+        void setViewMode(uint32_t mode);
+        uint32_t getViewMode() const;
+
         // Camera management (delegates to CameraOcclusionManager)
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
         occlusion::CameraRenderData* getCamera(occlusion::CameraId id);

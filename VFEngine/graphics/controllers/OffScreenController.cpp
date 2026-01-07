@@ -280,4 +280,23 @@ namespace controllers
             renderHandler->getDebugRenderer()->setShowGrid(showGrid && !playModeActive);
         }
     }
+
+    void OffScreenController::setViewMode(uint32_t mode)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setViewMode(mode);
+        }
+    }
+
+    uint32_t OffScreenController::getViewMode() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            return renderHandler->getViewMode();
+        }
+        return 0;
+    }
 }

@@ -337,6 +337,21 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowGrid() : true;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetViewModeCommand>(
+            [this](const events::render::SetViewModeCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setViewMode(cmd.mode);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetViewModeQuery>(
+            [this](const events::render::GetViewModeQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getViewMode() : 0u;
+            });
+
         dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
             [this](const events::render::GetCullingStatsQuery&)
             {

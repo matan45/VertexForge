@@ -225,6 +225,7 @@ namespace render::mesh
         alignas(16) glm::mat4 projection;
         alignas(16) glm::vec3 cameraPos;
         float time; // Animation time in seconds
+        alignas(16) glm::vec4 frustumPlanes[6]; // Frustum planes for per-meshlet culling
     };
 
     
