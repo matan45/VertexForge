@@ -11,10 +11,10 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "resource/MeshResource.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialManager.hpp"
 #include "material/MaterialTypes.hpp"
+#include "math/Frustum.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
 
@@ -340,18 +340,15 @@ namespace render::mesh
 
     void StaticMeshPipeline::initializeDefaultTextureDescriptors()
     {
-        // Initialize MaterialTextureCache's descriptor resources with our layout
         textureCache->initDescriptorResources(textureDescriptorSetLayout);
-
-        // Ensure default texture is available before updating descriptors
+        
         if (!textureCache->hasDefaultTexture())
         {
             loggerWarning("Default texture not available, skipping default descriptor set creation");
             textureDescriptorsInitialized = false;
             return;
         }
-
-        // Create a default descriptor set for meshes without materials
+        
         if (!textureDescriptorSet)
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
@@ -359,8 +356,7 @@ namespace render::mesh
             allocInfo.descriptorSetCount = 1;
             allocInfo.pSetLayouts = &textureDescriptorSetLayout;
             textureDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
-
-            // Fill with default textures
+            
             std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
             for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
             {
@@ -386,7 +382,6 @@ namespace render::mesh
         const std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES>& imageViews,
         const std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES>& samplers)
     {
-        // Update the default descriptor set for preview rendering
         if (!textureDescriptorSet) return;
 
         std::array<vk::DescriptorImageInfo, material::MAX_MATERIAL_TEXTURES> imageInfos;
@@ -410,7 +405,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::createPipelineLayout()
     {
-        // Push constant range for MeshPushConstants
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         pushConstantRange.offset = 0;
@@ -433,7 +427,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::createGraphicsPipeline()
     {
-        // Vertex input state - using MeshVertexInput helper
         auto bindingDescription = MeshVertexInput::getBindingDescription();
         auto attributeDescriptions = MeshVertexInput::getAttributeDescriptions();
 
@@ -558,61 +551,7 @@ namespace render::mesh
         ubo.cameraPos = cameraPos;
         ubo.time = time;
 
-        // Extract frustum planes from view-projection matrix
-        // Planes are in world space, normalized (ax + by + cz + d = 0)
-        glm::mat4 vp = projection * view;
-
-        // Left plane
-        ubo.frustumPlanes[0] = glm::vec4(
-            vp[0][3] + vp[0][0],
-            vp[1][3] + vp[1][0],
-            vp[2][3] + vp[2][0],
-            vp[3][3] + vp[3][0]);
-
-        // Right plane
-        ubo.frustumPlanes[1] = glm::vec4(
-            vp[0][3] - vp[0][0],
-            vp[1][3] - vp[1][0],
-            vp[2][3] - vp[2][0],
-            vp[3][3] - vp[3][0]);
-
-        // Bottom plane
-        ubo.frustumPlanes[2] = glm::vec4(
-            vp[0][3] + vp[0][1],
-            vp[1][3] + vp[1][1],
-            vp[2][3] + vp[2][1],
-            vp[3][3] + vp[3][1]);
-
-        // Top plane
-        ubo.frustumPlanes[3] = glm::vec4(
-            vp[0][3] - vp[0][1],
-            vp[1][3] - vp[1][1],
-            vp[2][3] - vp[2][1],
-            vp[3][3] - vp[3][1]);
-
-        // Near plane
-        ubo.frustumPlanes[4] = glm::vec4(
-            vp[0][3] + vp[0][2],
-            vp[1][3] + vp[1][2],
-            vp[2][3] + vp[2][2],
-            vp[3][3] + vp[3][2]);
-
-        // Far plane
-        ubo.frustumPlanes[5] = glm::vec4(
-            vp[0][3] - vp[0][2],
-            vp[1][3] - vp[1][2],
-            vp[2][3] - vp[2][2],
-            vp[3][3] - vp[3][2]);
-
-        // Normalize all planes
-        for (int i = 0; i < 6; ++i)
-        {
-            float length = glm::length(glm::vec3(ubo.frustumPlanes[i]));
-            if (length > 0.0001f)
-            {
-                ubo.frustumPlanes[i] /= length;
-            }
-        }
+        math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
 
         void* data;
         vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
@@ -696,31 +635,25 @@ namespace render::mesh
 
     void StaticMeshPipeline::cleanUp()
     {
-        // Clear material cache
         if (materialCacheManager)
         {
             materialCacheManager->clear();
         }
-
-        // Clean up material shader cache (per-material compiled pipelines)
+        
         if (materialShaderCache)
         {
             materialShaderCache->cleanUp();
         }
-
-        // Clean up material textures
+        
         if (textureCache)
         {
             textureCache->cleanUp();
         }
-
-        // Unload all meshes (meshCache will wait for pending transfers)
+        
         unloadAllMeshes();
-
-        // Clean up pipeline/descriptor resources
+        
         cleanUpForReinit();
-
-        // Reset caches
+        
         textureCache.reset();
         meshCache.reset();
         materialCacheManager.reset();
@@ -861,14 +794,11 @@ namespace render::mesh
         const std::unordered_map<std::string, std::shared_ptr<material::MaterialData>>& materialCache,
         RenderState& state) const
     {
-        // Get PBR values from assigned material (or fallback to mesh defaults)
         ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
             meshData, subMesh.name, materialCache, currentTime);
-
-        // Skip if blend mode doesn't match current pass
+        
         if (pbrValues.blendMode != targetBlendMode) return;
-
-        // Try to get material-specific pipeline from shader cache
+        
         vk::Pipeline targetPipeline = graphicsPipeline;
 
         if (materialShaderCache && !pbrValues.materialPath.empty())

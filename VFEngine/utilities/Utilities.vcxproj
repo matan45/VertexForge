@@ -109,7 +109,6 @@
     <ClInclude Include="resource\AnimationResource.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
-    <ClInclude Include="resource\MeshResource.hpp" />
     <ClInclude Include="resource\MeshStreamHandle.hpp" />
     <ClInclude Include="resource\MeshletTypes.hpp" />
     <ClInclude Include="resource\ResourceManager.hpp" />
@@ -142,7 +141,6 @@
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />
     <ClCompile Include="resource\AudioResource.cpp" />
-    <ClCompile Include="resource\MeshResource.cpp" />
     <ClCompile Include="resource\MeshStreamHandle.cpp" />
     <ClCompile Include="resource\ResourceManager.cpp" />
     <ClCompile Include="resource\ShaderResource.cpp" />

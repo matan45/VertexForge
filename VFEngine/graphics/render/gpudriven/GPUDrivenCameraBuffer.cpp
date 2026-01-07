@@ -3,6 +3,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "math/Frustum.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstring>
 
@@ -86,62 +87,6 @@ namespace render::gpudriven
 
     void GPUDrivenCameraBuffer::extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6])
     {
-        // Extract frustum planes from view-projection matrix (Gribb/Hartmann method)
-        // Each plane is represented as (A, B, C, D) where Ax + By + Cz + D = 0
-
-        // Left plane
-        planes[0] = glm::vec4(
-            viewProjection[0][3] + viewProjection[0][0],
-            viewProjection[1][3] + viewProjection[1][0],
-            viewProjection[2][3] + viewProjection[2][0],
-            viewProjection[3][3] + viewProjection[3][0]
-        );
-
-        // Right plane
-        planes[1] = glm::vec4(
-            viewProjection[0][3] - viewProjection[0][0],
-            viewProjection[1][3] - viewProjection[1][0],
-            viewProjection[2][3] - viewProjection[2][0],
-            viewProjection[3][3] - viewProjection[3][0]
-        );
-
-        // Bottom plane
-        planes[2] = glm::vec4(
-            viewProjection[0][3] + viewProjection[0][1],
-            viewProjection[1][3] + viewProjection[1][1],
-            viewProjection[2][3] + viewProjection[2][1],
-            viewProjection[3][3] + viewProjection[3][1]
-        );
-
-        // Top plane
-        planes[3] = glm::vec4(
-            viewProjection[0][3] - viewProjection[0][1],
-            viewProjection[1][3] - viewProjection[1][1],
-            viewProjection[2][3] - viewProjection[2][1],
-            viewProjection[3][3] - viewProjection[3][1]
-        );
-
-        // Near plane
-        planes[4] = glm::vec4(
-            viewProjection[0][3] + viewProjection[0][2],
-            viewProjection[1][3] + viewProjection[1][2],
-            viewProjection[2][3] + viewProjection[2][2],
-            viewProjection[3][3] + viewProjection[3][2]
-        );
-
-        // Far plane
-        planes[5] = glm::vec4(
-            viewProjection[0][3] - viewProjection[0][2],
-            viewProjection[1][3] - viewProjection[1][2],
-            viewProjection[2][3] - viewProjection[2][2],
-            viewProjection[3][3] - viewProjection[3][2]
-        );
-
-        // Normalize all planes
-        for (int i = 0; i < 6; i++)
-        {
-            float length = glm::length(glm::vec3(planes[i]));
-            planes[i] /= length;
-        }
+        math::extractFrustumPlanes(viewProjection, planes);
     }
 }

@@ -2,7 +2,6 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/TransferManager.hpp"
-#include "resource/MeshResource.hpp"
 #include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
 

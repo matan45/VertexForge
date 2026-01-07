@@ -6,10 +6,6 @@
 
 namespace material
 {
-    /**
-     * Helper to extract PBR values from a material's shader graph.
-     * This is in Utilities so Editor can access it (unlike MaterialPBRExtractor in Graphics).
-     */
     struct ExtractedParentPBR
     {
         glm::vec4 albedo{1.0f};
@@ -33,10 +29,6 @@ namespace material
     class MaterialGraphHelper
     {
     public:
-        /**
-         * Extract PBR values from a material's shader graph by examining
-         * what's connected to the PBROutput node's input pins.
-         */
         static ExtractedParentPBR extractPBRFromGraph(const MaterialData& matData);
 
     private:

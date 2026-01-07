@@ -7,8 +7,8 @@
 #include "print/EditorLogger.hpp"
 #include <cassert>
 
-namespace render::gpudriven {
-
+namespace render::gpudriven
+{
     MeshletBuffer::MeshletBuffer(core::Device& device)
         : device(device)
     {
@@ -28,7 +28,8 @@ namespace render::gpudriven {
 
     void MeshletBuffer::init(uint32_t maxMeshlets, uint32_t maxVertexIndices, uint32_t maxPrimitives)
     {
-        if (initialized) {
+        if (initialized)
+        {
             vfLogWarning("MeshletBuffer: Already initialized");
             return;
         }
@@ -47,16 +48,16 @@ namespace render::gpudriven {
         initialized = true;
 
         vfLogInfo("MeshletBuffer: Initialized with {} meshlets, {} vertex indices, {} primitives",
-                   maxMeshletCount, maxVertexIndexCount, maxPrimitiveCount);
+                  maxMeshletCount, maxVertexIndexCount, maxPrimitiveCount);
         vfLogInfo("MeshletBuffer: Total buffer size: {} MB",
-                   getTotalBufferSize() / (1024 * 1024));
+                  getTotalBufferSize() / (1024 * 1024));
     }
 
     void MeshletBuffer::cleanup()
     {
         if (!initialized) return;
 
-        flushPendingTransfers();  // Wait for all async transfers before destroying buffers
+        flushPendingTransfers();
 
         allocations.clear();
         allocationKeyToIndex.clear();
@@ -116,38 +117,45 @@ namespace render::gpudriven {
     {
         auto logicalDevice = device.getLogicalDevice();
 
-        if (meshletBuffer) {
+        if (meshletBuffer)
+        {
             logicalDevice.destroyBuffer(meshletBuffer);
             meshletBuffer = nullptr;
         }
-        if (meshletBufferMemory) {
+        if (meshletBufferMemory)
+        {
             logicalDevice.freeMemory(meshletBufferMemory);
             meshletBufferMemory = nullptr;
         }
 
-        if (meshletVertexBuffer) {
+        if (meshletVertexBuffer)
+        {
             logicalDevice.destroyBuffer(meshletVertexBuffer);
             meshletVertexBuffer = nullptr;
         }
-        if (meshletVertexBufferMemory) {
+        if (meshletVertexBufferMemory)
+        {
             logicalDevice.freeMemory(meshletVertexBufferMemory);
             meshletVertexBufferMemory = nullptr;
         }
 
-        if (meshletPrimitiveBuffer) {
+        if (meshletPrimitiveBuffer)
+        {
             logicalDevice.destroyBuffer(meshletPrimitiveBuffer);
             meshletPrimitiveBuffer = nullptr;
         }
-        if (meshletPrimitiveBufferMemory) {
+        if (meshletPrimitiveBufferMemory)
+        {
             logicalDevice.freeMemory(meshletPrimitiveBufferMemory);
             meshletPrimitiveBufferMemory = nullptr;
         }
     }
 
     MeshletAllocation* MeshletBuffer::reserveMeshlets(const std::string& meshPath,
-                                                       const resource::MeshStreamHeader& header)
+                                                      const resource::MeshStreamHeader& header)
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             vfLogError("MeshletBuffer: Not initialized");
             return nullptr;
         }
@@ -155,18 +163,19 @@ namespace render::gpudriven {
         // Track all allocations made during this call for cleanup on failure
         std::vector<std::string> allocatedKeys;
 
-        // Create allocations for each submesh
-        for (uint32_t submeshIdx = 0; submeshIdx < header.numSubmeshes; ++submeshIdx) {
+        for (uint32_t submeshIdx = 0; submeshIdx < header.numSubmeshes; ++submeshIdx)
+        {
             const auto& submeshInfo = header.submeshes[submeshIdx];
 
-            if (!submeshInfo.hasMeshletData) {
-                continue;  // No meshlet data for this submesh
+            if (!submeshInfo.hasMeshletData)
+            {
+                continue;
             }
 
             std::string key = makeAllocationKey(meshPath, submeshInfo.name, submeshIdx);
 
-            // Check if already allocated
-            if (allocationKeyToIndex.find(key) != allocationKeyToIndex.end()) {
+            if (allocationKeyToIndex.find(key) != allocationKeyToIndex.end())
+            {
                 continue;
             }
 
@@ -175,51 +184,61 @@ namespace render::gpudriven {
             alloc.submeshName = submeshInfo.name;
             alloc.submeshIndex = submeshIdx;
 
-            // Reserve space for each LOD
             bool allocationFailed = false;
-            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod) {
+            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            {
                 const auto& meshletInfo = submeshInfo.meshletLods[lod];
 
-                if (meshletInfo.meshletCount > 0) {
+                if (meshletInfo.meshletCount > 0)
+                {
                     if (!allocateLODMeshletSpace(alloc.lods[lod],
-                                                  meshletInfo.meshletCount,
-                                                  meshletInfo.vertexIndexCount,
-                                                  meshletInfo.primitiveCount,
-                                                  key + " LOD" + std::to_string(lod))) {
-                        // Failed to allocate - clean up current submesh's LODs
-                        for (uint32_t prevLod = 0; prevLod < lod; ++prevLod) {
+                                                 meshletInfo.meshletCount,
+                                                 meshletInfo.vertexIndexCount,
+                                                 meshletInfo.primitiveCount,
+                                                 key + " LOD" + std::to_string(lod)))
+                    {
+                        for (uint32_t prevLod = 0; prevLod < lod; ++prevLod)
+                        {
                             freeLODMeshletSpace(alloc.lods[prevLod]);
                         }
                         vfLogError("MeshletBuffer: Failed to reserve space for {} LOD{}",
-                                    key, lod);
+                                   key, lod);
                         allocationFailed = true;
                         break;
                     }
                 }
             }
 
-            if (allocationFailed) {
-                // Clean up all previously allocated submeshes from this call
-                for (const auto& prevKey : allocatedKeys) {
+            if (allocationFailed)
+            {
+                for (const auto& prevKey : allocatedKeys)
+                {
                     auto it = allocationKeyToIndex.find(prevKey);
-                    if (it != allocationKeyToIndex.end()) {
-                        auto& prevAlloc = allocations[it->second];
-                        for (auto& lodAlloc : prevAlloc.lods) {
+                    if (it != allocationKeyToIndex.end())
+                    {
+                        size_t allocIndex = it->second;
+                        auto& prevAlloc = allocations[allocIndex];
+                        for (auto& lodAlloc : prevAlloc.lods)
+                        {
                             freeLODMeshletSpace(lodAlloc);
                         }
+                        prevAlloc = MeshletAllocation{};
+                        freeAllocationSlots.push_back(allocIndex);
                         allocationKeyToIndex.erase(it);
                     }
                 }
                 return nullptr;
             }
 
-            // Reuse a free slot if available, otherwise append
             size_t allocIndex;
-            if (!freeAllocationSlots.empty()) {
+            if (!freeAllocationSlots.empty())
+            {
                 allocIndex = freeAllocationSlots.back();
                 freeAllocationSlots.pop_back();
                 allocations[allocIndex] = std::move(alloc);
-            } else {
+            }
+            else
+            {
                 allocIndex = allocations.size();
                 allocations.push_back(std::move(alloc));
             }
@@ -227,12 +246,13 @@ namespace render::gpudriven {
             allocatedKeys.push_back(key);
         }
 
-        // Return the first allocation for this mesh (or nullptr if none)
-        for (uint32_t submeshIdx = 0; submeshIdx < header.numSubmeshes; ++submeshIdx) {
+        for (uint32_t submeshIdx = 0; submeshIdx < header.numSubmeshes; ++submeshIdx)
+        {
             const auto& submeshInfo = header.submeshes[submeshIdx];
             std::string key = makeAllocationKey(meshPath, submeshInfo.name, submeshIdx);
             auto it = allocationKeyToIndex.find(key);
-            if (it != allocationKeyToIndex.end()) {
+            if (it != allocationKeyToIndex.end())
+            {
                 return &allocations[it->second];
             }
         }
@@ -240,38 +260,42 @@ namespace render::gpudriven {
         return nullptr;
     }
 
-    bool MeshletBuffer::allocateLODMeshletSpace(MeshletAllocation::LODAllocation& lodAlloc,
-                                                 uint32_t meshletCount,
-                                                 uint32_t vertexIndexCount,
-                                                 uint32_t primitiveCount,
-                                                 const std::string& debugKey)
+    bool MeshletBuffer::allocateLODMeshletSpace(LODAllocation& lodAlloc,
+                                                uint32_t meshletCount,
+                                                uint32_t vertexIndexCount,
+                                                uint32_t primitiveCount,
+                                                const std::string& debugKey)
     {
-        if (meshletCount == 0) {
+        if (meshletCount == 0)
+        {
             lodAlloc.isAllocated = false;
             return true;
         }
 
         uint32_t meshletOffset = meshletAllocator.allocate(meshletCount);
-        if (meshletOffset == FreeListAllocator::ALLOCATION_FAILED) {
+        if (meshletOffset == FreeListAllocator::ALLOCATION_FAILED)
+        {
             vfLogError("MeshletBuffer: Failed to allocate {} meshlets for {}",
-                        meshletCount, debugKey);
+                       meshletCount, debugKey);
             return false;
         }
 
         uint32_t vertexOffset = vertexIndexAllocator.allocate(vertexIndexCount);
-        if (vertexOffset == FreeListAllocator::ALLOCATION_FAILED) {
+        if (vertexOffset == FreeListAllocator::ALLOCATION_FAILED)
+        {
             meshletAllocator.free(meshletOffset, meshletCount);
             vfLogError("MeshletBuffer: Failed to allocate {} vertex indices for {}",
-                        vertexIndexCount, debugKey);
+                       vertexIndexCount, debugKey);
             return false;
         }
 
         uint32_t primitiveOffset = primitiveAllocator.allocate(primitiveCount);
-        if (primitiveOffset == FreeListAllocator::ALLOCATION_FAILED) {
+        if (primitiveOffset == FreeListAllocator::ALLOCATION_FAILED)
+        {
             meshletAllocator.free(meshletOffset, meshletCount);
             vertexIndexAllocator.free(vertexOffset, vertexIndexCount);
             vfLogError("MeshletBuffer: Failed to allocate {} primitives for {}",
-                        primitiveCount, debugKey);
+                       primitiveCount, debugKey);
             return false;
         }
 
@@ -286,17 +310,20 @@ namespace render::gpudriven {
         return true;
     }
 
-    void MeshletBuffer::freeLODMeshletSpace(MeshletAllocation::LODAllocation& lodAlloc)
+    void MeshletBuffer::freeLODMeshletSpace(LODAllocation& lodAlloc)
     {
         if (!lodAlloc.isAllocated) return;
 
-        if (lodAlloc.meshletCount > 0) {
+        if (lodAlloc.meshletCount > 0)
+        {
             meshletAllocator.free(lodAlloc.meshletOffset, lodAlloc.meshletCount);
         }
-        if (lodAlloc.vertexCount > 0) {
+        if (lodAlloc.vertexCount > 0)
+        {
             vertexIndexAllocator.free(lodAlloc.vertexOffset, lodAlloc.vertexCount);
         }
-        if (lodAlloc.primitiveCount > 0) {
+        if (lodAlloc.primitiveCount > 0)
+        {
             primitiveAllocator.free(lodAlloc.primitiveOffset, lodAlloc.primitiveCount);
         }
 
@@ -304,25 +331,28 @@ namespace render::gpudriven {
     }
 
     bool MeshletBuffer::uploadMeshletData(const std::string& meshPath,
-                                           const std::string& submeshName,
-                                           uint32_t submeshIndex,
-                                           uint32_t lodLevel,
-                                           const resource::SubmeshMeshletData& meshletData,
-                                           uint32_t baseVertexOffset)
+                                          const std::string& submeshName,
+                                          uint32_t submeshIndex,
+                                          uint32_t lodLevel,
+                                          const resource::SubmeshMeshletData& meshletData,
+                                          uint32_t baseVertexOffset)
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             vfLogError("MeshletBuffer: Not initialized");
             return false;
         }
 
-        if (lodLevel >= resource::LOD_LEVEL_COUNT) {
+        if (lodLevel >= resource::LOD_LEVEL_COUNT)
+        {
             vfLogError("MeshletBuffer: Invalid LOD level {}", lodLevel);
             return false;
         }
 
         std::string key = makeAllocationKey(meshPath, submeshName, submeshIndex);
         auto it = allocationKeyToIndex.find(key);
-        if (it == allocationKeyToIndex.end()) {
+        if (it == allocationKeyToIndex.end())
+        {
             vfLogError("MeshletBuffer: No allocation found for {}", key);
             return false;
         }
@@ -330,7 +360,8 @@ namespace render::gpudriven {
         auto& alloc = allocations[it->second];
         auto& lodAlloc = alloc.lods[lodLevel];
 
-        if (!lodAlloc.isAllocated) {
+        if (!lodAlloc.isAllocated)
+        {
             vfLogError("MeshletBuffer: LOD {} not allocated for {}", lodLevel, key);
             return false;
         }
@@ -341,13 +372,11 @@ namespace render::gpudriven {
         std::vector<GPUMeshlet> gpuMeshlets(lodAlloc.meshletCount);
 
         uint32_t localMeshletStart = lodInfo.meshletOffset;
-        for (uint32_t i = 0; i < lodAlloc.meshletCount; ++i) {
+        for (uint32_t i = 0; i < lodAlloc.meshletCount; ++i)
+        {
             const auto& srcMeshlet = meshletData.meshlets[localMeshletStart + i];
             auto& dstMeshlet = gpuMeshlets[i];
 
-            // srcMeshlet.descriptor.vertexOffset is already 0-based for each LOD (from meshopt_buildMeshlets)
-            // lodAlloc.vertexOffset is where this LOD's vertex indices are uploaded in the GPU buffer
-            // No need to subtract lodInfo.vertexDataOffset (that's for CPU-side combined array access)
             dstMeshlet.vertexOffset = lodAlloc.vertexOffset + srcMeshlet.descriptor.vertexOffset;
             dstMeshlet.primitiveOffset = lodAlloc.primitiveOffset + srcMeshlet.descriptor.primitiveOffset;
             dstMeshlet.vertexCount = srcMeshlet.descriptor.vertexCount;
@@ -358,24 +387,22 @@ namespace render::gpudriven {
             dstMeshlet.cone = srcMeshlet.bounds.cone;
         }
 
-        // Upload meshlet descriptors
         uploadMeshletDataAt(lodAlloc.meshletOffset, gpuMeshlets.data(), lodAlloc.meshletCount);
 
-        // Extract and upload vertex indices for this LOD
         std::vector<uint32_t> lodVertexIndices(lodAlloc.vertexCount);
-        for (uint32_t i = 0; i < lodAlloc.vertexCount; ++i) {
+        for (uint32_t i = 0; i < lodAlloc.vertexCount; ++i)
+        {
             lodVertexIndices[i] = meshletData.meshletVertices[lodInfo.vertexDataOffset + i];
         }
         uploadVertexIndicesAt(lodAlloc.vertexOffset, lodVertexIndices.data(), lodAlloc.vertexCount);
 
-        // Extract and upload primitives for this LOD
         std::vector<uint32_t> lodPrimitives(lodAlloc.primitiveCount);
-        for (uint32_t i = 0; i < lodAlloc.primitiveCount; ++i) {
+        for (uint32_t i = 0; i < lodAlloc.primitiveCount; ++i)
+        {
             lodPrimitives[i] = meshletData.meshletPrimitives[lodInfo.primitiveDataOffset + i];
         }
         uploadPrimitivesAt(lodAlloc.primitiveOffset, lodPrimitives.data(), lodAlloc.primitiveCount);
 
-        // Mark allocator space as used
         meshletAllocator.markUsed(lodAlloc.meshletCount);
         vertexIndexAllocator.markUsed(lodAlloc.vertexCount);
         primitiveAllocator.markUsed(lodAlloc.primitiveCount);
@@ -423,59 +450,14 @@ namespace render::gpudriven {
         transferManager->copyToBufferAsync(meshletPrimitiveBuffer, data, dataSize, dstOffset);
     }
 
-    void MeshletBuffer::unregisterMesh(const std::string& meshPath)
-    {
-        flushPendingTransfers();  // Ensure no pending transfers to regions being freed
-
-        // Find and remove all allocations for this mesh
-        std::vector<std::string> keysToRemove;
-
-        for (const auto& [key, index] : allocationKeyToIndex) {
-            if (allocations[index].meshPath == meshPath) {
-                keysToRemove.push_back(key);
-            }
-        }
-
-        for (const auto& key : keysToRemove) {
-            auto it = allocationKeyToIndex.find(key);
-            if (it != allocationKeyToIndex.end()) {
-                size_t allocIndex = it->second;
-                auto& alloc = allocations[allocIndex];
-                for (auto& lodAlloc : alloc.lods) {
-                    freeLODMeshletSpace(lodAlloc);
-                }
-                // Clear the allocation and add slot to free list for reuse
-                alloc = MeshletAllocation{};
-                freeAllocationSlots.push_back(allocIndex);
-                allocationKeyToIndex.erase(it);
-            }
-        }
-
-        // Update counts
-        currentMeshletCount = meshletAllocator.getUsedCount();
-        currentVertexIndexCount = vertexIndexAllocator.getUsedCount();
-        currentPrimitiveCount = primitiveAllocator.getUsedCount();
-    }
-
     const MeshletAllocation* MeshletBuffer::getAllocation(const std::string& meshPath,
-                                                           const std::string& submeshName,
-                                                           uint32_t submeshIndex) const
+                                                          const std::string& submeshName,
+                                                          uint32_t submeshIndex) const
     {
         std::string key = makeAllocationKey(meshPath, submeshName, submeshIndex);
         auto it = allocationKeyToIndex.find(key);
-        if (it != allocationKeyToIndex.end()) {
-            return &allocations[it->second];
-        }
-        return nullptr;
-    }
-
-    MeshletAllocation* MeshletBuffer::getAllocationMutable(const std::string& meshPath,
-                                                            const std::string& submeshName,
-                                                            uint32_t submeshIndex)
-    {
-        std::string key = makeAllocationKey(meshPath, submeshName, submeshIndex);
-        auto it = allocationKeyToIndex.find(key);
-        if (it != allocationKeyToIndex.end()) {
+        if (it != allocationKeyToIndex.end())
+        {
             return &allocations[it->second];
         }
         return nullptr;
@@ -487,10 +469,11 @@ namespace render::gpudriven {
         if (lodLevel >= resource::LOD_LEVEL_COUNT) return info;
 
         const auto& lodAlloc = alloc.lods[lodLevel];
-        if (lodAlloc.isAllocated) {
+        if (lodAlloc.isAllocated)
+        {
             info.meshletOffset = lodAlloc.meshletOffset;
             info.meshletCount = lodAlloc.meshletCount;
-            info.baseVertexOffset = 0;  // Stored in GPUMeshlet.globalVertexOffset instead
+            info.baseVertexOffset = 0; // Stored in GPUMeshlet.globalVertexOffset instead
             info.padding = 0;
         }
 
@@ -504,22 +487,4 @@ namespace render::gpudriven {
             transferManager->waitAll();
         }
     }
-
-    MeshletBufferStats MeshletBuffer::getStats() const
-    {
-        MeshletBufferStats stats;
-        stats.totalMeshlets = maxMeshletCount;
-        stats.usedMeshlets = currentMeshletCount;
-        stats.totalVertexIndices = maxVertexIndexCount;
-        stats.usedVertexIndices = currentVertexIndexCount;
-        stats.totalPrimitives = maxPrimitiveCount;
-        stats.usedPrimitives = currentPrimitiveCount;
-        stats.totalMemoryBytes = getTotalBufferSize();
-        stats.usedMemoryBytes =
-            (currentMeshletCount * sizeof(GPUMeshlet)) +
-            (currentVertexIndexCount * sizeof(uint32_t)) +
-            (currentPrimitiveCount * sizeof(uint32_t));
-        return stats;
-    }
-
 }

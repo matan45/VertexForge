@@ -185,7 +185,7 @@ namespace windows
             ImVec2(ICON_SIZE, ICON_SIZE),
             ImVec2(uv0.x, uv0.y),
             ImVec2(uv1.x, uv1.y),
-            ImVec4(0.0f, 0.0f, 0.0f, 0.0f), // bg_col (transparent)
+            ImVec4(0.0f, 0.0f, 0.0f, 0.0f),
             tintColor
         );
 

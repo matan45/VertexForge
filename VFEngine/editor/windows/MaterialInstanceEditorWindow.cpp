@@ -64,7 +64,6 @@ namespace windows
             parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
             if (parentMaterial)
             {
-                // Extract parent PBR values for use when override is disabled
                 parentPBR = material::MaterialGraphHelper::extractPBRFromGraph(*parentMaterial);
             }
         }

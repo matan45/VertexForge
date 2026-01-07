@@ -58,10 +58,8 @@ namespace render::gpudriven
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
         bool meshShaderSupported = false;
-        uint32_t currentViewMode = 0;  // 0=Color, 1=Meshlet, 2=LOD
+        uint32_t currentViewMode = 0; 
 
-        vk::ImageView cachedHiZView;
-        vk::Sampler cachedHiZSampler;
         uint32_t hiZMipLevels = 0;
 
         GPUDrivenStats stats{};

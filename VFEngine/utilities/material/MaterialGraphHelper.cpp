@@ -156,12 +156,14 @@ namespace material
             else if (std::holds_alternative<glm::vec3>(*val))
             {
                 glm::vec3 emissionColor = std::get<glm::vec3>(*val);
-                pbr.emission = (emissionColor.r * 0.299f + emissionColor.g * 0.587f + emissionColor.b * 0.114f) * emissionStrength;
+                pbr.emission = (emissionColor.r * 0.299f + emissionColor.g * 0.587f + emissionColor.b * 0.114f) *
+                    emissionStrength;
             }
             else if (std::holds_alternative<glm::vec4>(*val))
             {
                 glm::vec4 emissionColor = std::get<glm::vec4>(*val);
-                pbr.emission = (emissionColor.r * 0.299f + emissionColor.g * 0.587f + emissionColor.b * 0.114f) * emissionStrength;
+                pbr.emission = (emissionColor.r * 0.299f + emissionColor.g * 0.587f + emissionColor.b * 0.114f) *
+                    emissionStrength;
             }
         }
         else if (emissionStrength > 0.0f)

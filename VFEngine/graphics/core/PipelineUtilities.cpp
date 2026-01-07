@@ -163,20 +163,17 @@ namespace core
 			uniqueLayout = config.device.createPipelineLayoutUnique(pipelineLayoutInfo);
 			result.pipelineLayout = uniqueLayout.get();
 		}
-
-		// Vertex input
+		
 		vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
 		vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(config.vertexBindings.size());
 		vertexInputInfo.pVertexBindingDescriptions = config.vertexBindings.empty() ? nullptr : config.vertexBindings.data();
 		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(config.vertexAttributes.size());
 		vertexInputInfo.pVertexAttributeDescriptions = config.vertexAttributes.empty() ? nullptr : config.vertexAttributes.data();
-
-		// Input assembly
+		
 		vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
 		inputAssembly.topology = config.topology;
 		inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-		// Viewport and scissor
+		
 		vk::Viewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
@@ -194,8 +191,7 @@ namespace core
 		viewportState.pViewports = &viewport;
 		viewportState.scissorCount = 1;
 		viewportState.pScissors = &scissor;
-
-		// Rasterization
+		
 		vk::PipelineRasterizationStateCreateInfo rasterizer{};
 		rasterizer.depthClampEnable = VK_FALSE;
 		rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -204,21 +200,18 @@ namespace core
 		rasterizer.cullMode = config.cullMode;
 		rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
 		rasterizer.depthBiasEnable = VK_FALSE;
-
-		// Multisampling
+		
 		vk::PipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sampleShadingEnable = VK_FALSE;
 		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-		// Depth stencil
+		
 		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
 		depthStencil.depthTestEnable = config.depthTestEnable ? VK_TRUE : VK_FALSE;
 		depthStencil.depthWriteEnable = config.depthWriteEnable ? VK_TRUE : VK_FALSE;
 		depthStencil.depthCompareOp = config.depthCompareOp;
 		depthStencil.depthBoundsTestEnable = VK_FALSE;
 		depthStencil.stencilTestEnable = VK_FALSE;
-
-		// Color blending
+		
 		vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
 		colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
 		                                      vk::ColorComponentFlagBits::eG |
@@ -244,8 +237,7 @@ namespace core
 		colorBlending.logicOpEnable = VK_FALSE;
 		colorBlending.attachmentCount = 1;
 		colorBlending.pAttachments = &colorBlendAttachment;
-
-		// Create pipeline
+		
 		vk::GraphicsPipelineCreateInfo pipelineInfo{};
 		pipelineInfo.stageCount = static_cast<uint32_t>(config.shaderStages.size());
 		pipelineInfo.pStages = config.shaderStages.data();
@@ -259,14 +251,13 @@ namespace core
 		pipelineInfo.layout = result.pipelineLayout;
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
-
-		// RAII: Use unique handle for automatic cleanup on failure
+		
 		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
 
 		// Success: release ownership to result (caller manages lifetime)
 		if (uniqueLayout)
 		{
-			uniqueLayout.release();  // We already set result.pipelineLayout above
+			uniqueLayout.release();
 		}
 		result.pipeline = uniquePipeline.release();
 
@@ -275,52 +266,6 @@ namespace core
 
 	MeshShaderPipelineResult PipelineUtilities::createMeshShaderPipeline(const MeshShaderPipelineConfig& config)
 	{
-		// Validate shader stages for mesh shader pipeline
-		bool hasMeshShader = false;
-		bool hasTaskShader = false;
-		bool hasFragmentShader = false;
-		bool hasInvalidStage = false;
-		std::string invalidStageName;
-
-		for (const auto& stage : config.shaderStages)
-		{
-			switch (stage.stage)
-			{
-			case vk::ShaderStageFlagBits::eMeshEXT:
-				hasMeshShader = true;
-				break;
-			case vk::ShaderStageFlagBits::eTaskEXT:
-				hasTaskShader = true;
-				break;
-			case vk::ShaderStageFlagBits::eFragment:
-				hasFragmentShader = true;
-				break;
-			case vk::ShaderStageFlagBits::eVertex:
-			case vk::ShaderStageFlagBits::eGeometry:
-			case vk::ShaderStageFlagBits::eTessellationControl:
-			case vk::ShaderStageFlagBits::eTessellationEvaluation:
-				hasInvalidStage = true;
-				invalidStageName = vk::to_string(stage.stage);
-				break;
-			default:
-				break;
-			}
-		}
-
-		if (!hasMeshShader)
-		{
-			throw std::runtime_error("Mesh shader pipeline requires a mesh shader stage (eMeshEXT)");
-		}
-
-		if (hasInvalidStage)
-		{
-			throw std::runtime_error("Mesh shader pipeline cannot contain " + invalidStageName +
-			                         " - only Task, Mesh, and Fragment shaders are allowed");
-		}
-
-		// Note: Task shader is optional, Fragment shader is usually present but not strictly required
-		// (e.g., depth-only passes might skip fragment shader)
-
 		MeshShaderPipelineResult result{};
 
 		// RAII: Use unique handle for layout if we create it (nullptr if using existing)
@@ -349,10 +294,7 @@ namespace core
 			uniqueLayout = config.device.createPipelineLayoutUnique(pipelineLayoutInfo);
 			result.pipelineLayout = uniqueLayout.get();
 		}
-
-		// NOTE: Mesh shader pipelines do NOT use vertex input or input assembly states
-
-		// Viewport and scissor
+		
 		vk::Viewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
@@ -370,8 +312,7 @@ namespace core
 		viewportState.pViewports = &viewport;
 		viewportState.scissorCount = 1;
 		viewportState.pScissors = &scissor;
-
-		// Rasterization
+		
 		vk::PipelineRasterizationStateCreateInfo rasterizer{};
 		rasterizer.depthClampEnable = VK_FALSE;
 		rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -380,21 +321,18 @@ namespace core
 		rasterizer.cullMode = config.cullMode;
 		rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
 		rasterizer.depthBiasEnable = VK_FALSE;
-
-		// Multisampling
+		
 		vk::PipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sampleShadingEnable = VK_FALSE;
 		multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-		// Depth stencil
+		
 		vk::PipelineDepthStencilStateCreateInfo depthStencil{};
 		depthStencil.depthTestEnable = config.depthTestEnable ? VK_TRUE : VK_FALSE;
 		depthStencil.depthWriteEnable = config.depthWriteEnable ? VK_TRUE : VK_FALSE;
 		depthStencil.depthCompareOp = config.depthCompareOp;
 		depthStencil.depthBoundsTestEnable = VK_FALSE;
 		depthStencil.stencilTestEnable = VK_FALSE;
-
-		// Color blending
+		
 		vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
 		colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
 		                                      vk::ColorComponentFlagBits::eG |
@@ -436,14 +374,13 @@ namespace core
 		pipelineInfo.layout = result.pipelineLayout;
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
-
-		// RAII: Use unique handle for automatic cleanup on failure
+		
 		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
 
 		// Success: release ownership to result (caller manages lifetime)
 		if (uniqueLayout)
 		{
-			uniqueLayout.release();  // We already set result.pipelineLayout above
+			uniqueLayout.release(); 
 		}
 		result.pipeline = uniquePipeline.release();
 

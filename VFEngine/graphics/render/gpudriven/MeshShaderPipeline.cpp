@@ -8,13 +8,12 @@
 #include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
 #include <array>
-#include <cstring>
 
 namespace render::gpudriven
 {
     MeshShaderPipeline::MeshShaderPipeline(core::Device& device, core::SwapChain& swapChain)
         : device(device)
-        , swapChain(swapChain)
+          , swapChain(swapChain)
     {
     }
 
@@ -24,8 +23,8 @@ namespace render::gpudriven
     }
 
     void MeshShaderPipeline::init(vk::DescriptorSetLayout iblLayout,
-                                   vk::DescriptorSetLayout bindlessTextureLayout,
-                                   vk::RenderPass renderPass)
+                                  vk::DescriptorSetLayout bindlessTextureLayout,
+                                  vk::RenderPass renderPass)
     {
         createStatsBuffer();
         createPerDrawDataDescriptor();
@@ -78,7 +77,6 @@ namespace render::gpudriven
         // Stats buffer
         core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
 
-        // Per-draw data
         if (perDrawDataPool)
         {
             vkDevice.destroyDescriptorPool(perDrawDataPool);
@@ -90,7 +88,6 @@ namespace render::gpudriven
             perDrawDataLayout = nullptr;
         }
 
-        // Meshlet data
         if (meshletDataPool)
         {
             vkDevice.destroyDescriptorPool(meshletDataPool);
@@ -102,7 +99,6 @@ namespace render::gpudriven
             meshletDataLayout = nullptr;
         }
 
-        // Vertex data
         if (vertexDataPool)
         {
             vkDevice.destroyDescriptorPool(vertexDataPool);
@@ -116,13 +112,12 @@ namespace render::gpudriven
     }
 
     void MeshShaderPipeline::recreate(vk::DescriptorSetLayout iblLayout,
-                                       vk::DescriptorSetLayout bindlessTextureLayout,
-                                       vk::RenderPass renderPass)
+                                      vk::DescriptorSetLayout bindlessTextureLayout,
+                                      vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        // Destroy old pipeline and layout (keep descriptor sets)
         if (graphicsPipeline)
         {
             vkDevice.destroyPipeline(graphicsPipeline);
@@ -225,9 +220,9 @@ namespace render::gpudriven
         perDrawBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
         perDrawBinding.descriptorCount = 1;
         perDrawBinding.stageFlags = vk::ShaderStageFlagBits::eVertex |
-                                    vk::ShaderStageFlagBits::eTaskEXT |
-                                    vk::ShaderStageFlagBits::eMeshEXT |
-                                    vk::ShaderStageFlagBits::eFragment;
+            vk::ShaderStageFlagBits::eTaskEXT |
+            vk::ShaderStageFlagBits::eMeshEXT |
+            vk::ShaderStageFlagBits::eFragment;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = 1;
@@ -235,7 +230,6 @@ namespace render::gpudriven
 
         perDrawDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        // Create descriptor pool
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 1;
@@ -247,7 +241,6 @@ namespace render::gpudriven
 
         perDrawDataPool = vkDevice.createDescriptorPool(poolInfo);
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = perDrawDataPool;
         allocInfo.descriptorSetCount = 1;
@@ -263,7 +256,6 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Create descriptor set layout for meshlet data (Set 3)
         // 4 bindings: meshlet buffer, vertex indices, primitive indices, stats
         std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
 
@@ -297,10 +289,9 @@ namespace render::gpudriven
 
         meshletDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        // Create descriptor pool
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 4;  // 4 storage buffers now
+        poolSize.descriptorCount = 4;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -309,7 +300,6 @@ namespace render::gpudriven
 
         meshletDataPool = vkDevice.createDescriptorPool(poolInfo);
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = meshletDataPool;
         allocInfo.descriptorSetCount = 1;
@@ -318,7 +308,6 @@ namespace render::gpudriven
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         meshletDataDescriptorSet = sets[0];
 
-        // Immediately bind the stats buffer (binding 3)
         vk::DescriptorBufferInfo statsInfo{};
         statsInfo.buffer = statsBuffer;
         statsInfo.offset = 0;
@@ -355,7 +344,6 @@ namespace render::gpudriven
 
         vertexDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        // Create descriptor pool
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 1;
@@ -367,7 +355,6 @@ namespace render::gpudriven
 
         vertexDataPool = vkDevice.createDescriptorPool(poolInfo);
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = vertexDataPool;
         allocInfo.descriptorSetCount = 1;
@@ -380,20 +367,11 @@ namespace render::gpudriven
     }
 
     void MeshShaderPipeline::createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
-                                                               vk::DescriptorSetLayout bindlessTextureLayout,
-                                                               vk::RenderPass renderPass)
+                                                              vk::DescriptorSetLayout bindlessTextureLayout,
+                                                              vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Check mesh shader support
-        const auto& meshCaps = device.getMeshShaderCapabilities();
-        if (!meshCaps.meshShaderSupported || !meshCaps.taskShaderSupported)
-        {
-            loggerError("MeshShaderPipeline: Mesh shaders not supported on this device");
-            return;
-        }
-
-        // Load task + mesh + fragment shader
         meshShader = std::make_unique<core::Shader>(device);
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");
@@ -406,7 +384,6 @@ namespace render::gpudriven
             return;
         }
 
-        // Verify we have the right shader stages
         bool hasTask = false, hasMesh = false, hasFrag = false;
         for (const auto& stage : stages)
         {
@@ -422,26 +399,18 @@ namespace render::gpudriven
             return;
         }
 
-        // Create pipeline layout with 5 descriptor sets:
-        // Set 0: IBL (camera UBO + irradiance + prefilter + brdfLUT)
-        // Set 1: Per-draw data storage buffer
-        // Set 2: Bindless textures
-        // Set 3: Meshlet data (meshlet buffer + vertex indices + primitive indices)
-        // Set 4: Vertex data (interleaved vertex buffer)
         std::array<vk::DescriptorSetLayout, 5> setLayouts = {
-            iblLayout,             // Set 0
-            perDrawDataLayout,     // Set 1
+            iblLayout, // Set 0
+            perDrawDataLayout, // Set 1
             bindlessTextureLayout, // Set 2
-            meshletDataLayout,     // Set 3
-            vertexDataLayout       // Set 4
+            meshletDataLayout, // Set 3
+            vertexDataLayout // Set 4
         };
 
-        // Push constant for base draw index and screen params
-        // Task/Mesh use baseDrawIndex, Fragment uses screenWidth/screenHeight for debug visualization
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |
-                                       vk::ShaderStageFlagBits::eMeshEXT |
-                                       vk::ShaderStageFlagBits::eFragment;
+            vk::ShaderStageFlagBits::eMeshEXT |
+            vk::ShaderStageFlagBits::eFragment;
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(MeshShaderPushConstants);
 
@@ -453,7 +422,6 @@ namespace render::gpudriven
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
 
-        // Create mesh shader pipeline
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
             .renderPass = renderPass,
@@ -469,7 +437,6 @@ namespace render::gpudriven
         {
             auto result = core::PipelineUtilities::createMeshShaderPipeline(config);
             graphicsPipeline = result.pipeline;
-            loggerInfo("MeshShaderPipeline: Created mesh shader graphics pipeline");
         }
         catch (const std::exception& e)
         {
@@ -479,10 +446,8 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::resetStats(vk::CommandBuffer cmd)
     {
-        // Reset stats buffer to zero at the start of each frame
         cmd.fillBuffer(statsBuffer, 0, sizeof(MeshletCullingStats), 0);
 
-        // Add barrier to ensure the fill completes before shaders access it
         vk::BufferMemoryBarrier barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
@@ -514,7 +479,6 @@ namespace render::gpudriven
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Map and read the stats buffer (host-visible, host-coherent)
         void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(MeshletCullingStats));
         std::memcpy(&cachedStats, data, sizeof(MeshletCullingStats));
         vkDevice.unmapMemory(statsBufferMemory);

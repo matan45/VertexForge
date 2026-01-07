@@ -225,12 +225,11 @@ namespace core {
 		vk::PhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
 
-		// Vulkan 1.1 features (required for gl_BaseInstance in shaders)
+		// required for gl_BaseInstance in shaders
 		vk::PhysicalDeviceVulkan11Features vulkan11Features{};
 		vulkan11Features.shaderDrawParameters = VK_TRUE;
 
 		// Vulkan 1.2 features (required for drawIndirectCount and descriptor indexing)
-		// Note: Descriptor indexing features are part of Vulkan 1.2 core
 		vk::PhysicalDeviceVulkan12Features vulkan12Features{};
 		vulkan12Features.drawIndirectCount = VK_TRUE;
 		vulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
@@ -238,18 +237,18 @@ namespace core {
 		vulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
 		vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
 		vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-		vulkan12Features.pNext = &vulkan11Features;  // Chain Vulkan 1.1 features
+		vulkan12Features.pNext = &vulkan11Features; 
 
 		vk::PhysicalDeviceVulkan13Features vulkan13Features{};
 		vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
 		vulkan13Features.maintenance4 = VK_TRUE;  // Required for mesh shader LocalSizeId
-		vulkan13Features.pNext = &vulkan12Features;  // Chain Vulkan 1.2 features
+		vulkan13Features.pNext = &vulkan12Features;  
 
 		// Mesh shader features (VK_EXT_mesh_shader)
 		vk::PhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
 		meshShaderFeatures.taskShader = VK_TRUE;
 		meshShaderFeatures.meshShader = VK_TRUE;
-		meshShaderFeatures.pNext = &vulkan13Features;  // Chain Vulkan 1.3 features
+		meshShaderFeatures.pNext = &vulkan13Features;
 
 		vk::DeviceCreateInfo createInfo{};
 		createInfo.pNext = &meshShaderFeatures;
@@ -331,8 +330,7 @@ namespace core {
 		const bool extensionsSupported = checkDeviceExtensionSupport(device);
 		const vk::PhysicalDeviceFeatures supportedFeatures = device.getFeatures();
 		const vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
-
-		// Log rejection reasons in debug mode
+		
 		if (debug) {
 			const std::string deviceName = deviceProperties.deviceName;
 			if (!indices.isComplete()) {
@@ -358,32 +356,26 @@ namespace core {
 
 	bool Device::checkDeviceExtensionSupport(const vk::PhysicalDevice& device) const
 	{
-		// Convert the required extensions into an unordered set for fast lookup and erasure
 		std::unordered_set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
-
-		// Get available extensions for the current physical device
+		
 		std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
 
 		if (debug) {
 			loggerInfo("Found {} available device extensions.", availableExtensions.size());
 		}
-
-		// Remove each available extension from the required extensions set
+		
 		for (const vk::ExtensionProperties& extension : availableExtensions) {
 			requiredExtensions.erase(extension.extensionName);
-
-			// Optional debug logging to show which extensions are available
+			
 			if (debug) {
 				loggerInfo("Available device extension: {}", extension.extensionName);
 			}
-
-			// Early exit if all required extensions have been found
+			
 			if (requiredExtensions.empty()) {
 				return true;
 			}
 		}
-
-		// If there are missing required extensions, log an error and return false
+		
 		if (!requiredExtensions.empty()) {
 			if (debug) {
 				for (const auto& ext : requiredExtensions) {
@@ -398,9 +390,6 @@ namespace core {
 
 	void Device::queryMeshShaderCapabilities()
 	{
-		// Verify mesh shader extension is available before querying
-		// (Should always be true since VK_EXT_mesh_shader is a required extension,
-		// but defensive check in case requirements change)
 		bool meshShaderExtensionFound = false;
 		for (const auto& ext : physicalDevice.enumerateDeviceExtensionProperties()) {
 			if (strcmp(ext.extensionName.data(), VK_EXT_MESH_SHADER_EXTENSION_NAME) == 0) {
@@ -413,25 +402,21 @@ namespace core {
 			loggerWarning("VK_EXT_mesh_shader not available - mesh shader capabilities will be zero");
 			return;
 		}
-
-		// Query mesh shader properties
+		
 		vk::PhysicalDeviceMeshShaderPropertiesEXT meshProps{};
 		vk::PhysicalDeviceProperties2 props2{};
 		props2.pNext = &meshProps;
 		physicalDevice.getProperties2(&props2);
-
-		// Query mesh shader features to confirm what's actually supported
+		
 		vk::PhysicalDeviceMeshShaderFeaturesEXT meshFeatures{};
 		vk::PhysicalDeviceFeatures2 features2{};
 		features2.pNext = &meshFeatures;
 		physicalDevice.getFeatures2(&features2);
-
-		// Populate capabilities struct
+		
 		meshShaderCapabilities.meshShaderSupported = meshFeatures.meshShader;
 		meshShaderCapabilities.taskShaderSupported = meshFeatures.taskShader;
 		meshShaderCapabilities.meshShaderQueriesSupported = meshFeatures.meshShaderQueries;
-
-		// Mesh shader limits
+		
 		meshShaderCapabilities.maxMeshOutputVertices = meshProps.maxMeshOutputVertices;
 		meshShaderCapabilities.maxMeshOutputPrimitives = meshProps.maxMeshOutputPrimitives;
 		meshShaderCapabilities.maxMeshWorkGroupInvocations = meshProps.maxMeshWorkGroupInvocations;
@@ -442,8 +427,7 @@ namespace core {
 		};
 		meshShaderCapabilities.maxMeshOutputMemorySize = meshProps.maxMeshOutputMemorySize;
 		meshShaderCapabilities.maxMeshPayloadAndOutputMemorySize = meshProps.maxMeshPayloadAndOutputMemorySize;
-
-		// Task shader limits
+		
 		meshShaderCapabilities.maxTaskWorkGroupInvocations = meshProps.maxTaskWorkGroupInvocations;
 		meshShaderCapabilities.maxTaskWorkGroupSize = {
 			meshProps.maxTaskWorkGroupSize[0],
@@ -451,8 +435,7 @@ namespace core {
 			meshProps.maxTaskWorkGroupSize[2]
 		};
 		meshShaderCapabilities.maxTaskPayloadSize = meshProps.maxTaskPayloadSize;
-
-		// Preferred sizes
+		
 		meshShaderCapabilities.maxPreferredMeshWorkGroupInvocations = meshProps.maxPreferredMeshWorkGroupInvocations;
 		meshShaderCapabilities.maxPreferredTaskWorkGroupInvocations = meshProps.maxPreferredTaskWorkGroupInvocations;
 

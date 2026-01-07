@@ -18,12 +18,12 @@ namespace types
         std::vector<uint32_t> indices;
     };
 
-    // Result of meshlet building for a single LOD
+
     struct MeshletBuildResult
     {
         std::vector<resource::Meshlet> meshlets;
-        std::vector<uint32_t> meshletVertices;    // Local vertex indices -> source vertex indices
-        std::vector<uint32_t> meshletPrimitives;  // Packed triangle indices (3 uint8 per uint32)
+        std::vector<uint32_t> meshletVertices;
+        std::vector<uint32_t> meshletPrimitives;
     };
 
     class Mesh

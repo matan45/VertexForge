@@ -1,7 +1,7 @@
 #include "ResourceManager.hpp"
 #include "TextureResource.hpp"
 #include "AudioResource.hpp"
-#include "MeshResource.hpp"
+#include "MeshStreamHandle.hpp"
 #include "../material/MaterialAsset.hpp"
 #include "../material/MaterialInstanceAsset.hpp"
 #include <bit>
@@ -167,7 +167,7 @@ namespace resource
             path,
             meshCache,
             [](std::string_view p) {
-                return MeshResource::loadMesh(p);
+                return MeshStreamResource::loadAll(p);
             });
     }
 

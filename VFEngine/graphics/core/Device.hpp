@@ -5,116 +5,109 @@
 
 #include "Utilities.hpp"
 
-namespace window {
-	class Window;
+namespace window
+{
+    class Window;
 }
 
-namespace core {
+namespace core
+{
+    // GPU memory information for resource allocation decisions
+    struct DeviceMemoryInfo
+    {
+        vk::DeviceSize deviceLocalHeapSize = 0; // Total device-local VRAM
+        vk::DeviceSize hostVisibleHeapSize = 0; // Host-visible memory
+        bool hasUnifiedMemory = false; // APU/integrated GPU
+    };
 
-	// GPU memory information for resource allocation decisions
-	struct DeviceMemoryInfo {
-		vk::DeviceSize deviceLocalHeapSize = 0;      // Total device-local VRAM
-		vk::DeviceSize hostVisibleHeapSize = 0;      // Host-visible memory
-		bool hasUnifiedMemory = false;               // APU/integrated GPU
-	};
+    struct MeshShaderCapabilities
+    {
+        // Feature support flags
+        bool meshShaderSupported = false;
+        bool taskShaderSupported = false;
+        bool meshShaderQueriesSupported = false;
 
-	// Mesh shader capabilities and limits (from VK_EXT_mesh_shader)
-	struct MeshShaderCapabilities {
-		// Feature support flags
-		bool meshShaderSupported = false;
-		bool taskShaderSupported = false;
-		bool meshShaderQueriesSupported = false;
+        uint32_t maxMeshOutputVertices = 0;
+        uint32_t maxMeshOutputPrimitives = 0;
+        uint32_t maxMeshWorkGroupInvocations = 0;
+        std::array<uint32_t, 3> maxMeshWorkGroupSize = {0, 0, 0};
+        uint32_t maxMeshOutputMemorySize = 0;
+        uint32_t maxMeshPayloadAndOutputMemorySize = 0;
 
-		// Mesh shader limits
-		uint32_t maxMeshOutputVertices = 0;
-		uint32_t maxMeshOutputPrimitives = 0;
-		uint32_t maxMeshWorkGroupInvocations = 0;
-		std::array<uint32_t, 3> maxMeshWorkGroupSize = {0, 0, 0};
-		uint32_t maxMeshOutputMemorySize = 0;
-		uint32_t maxMeshPayloadAndOutputMemorySize = 0;
+        uint32_t maxTaskWorkGroupInvocations = 0;
+        std::array<uint32_t, 3> maxTaskWorkGroupSize = {0, 0, 0};
+        uint32_t maxTaskPayloadSize = 0;
 
-		// Task shader limits
-		uint32_t maxTaskWorkGroupInvocations = 0;
-		std::array<uint32_t, 3> maxTaskWorkGroupSize = {0, 0, 0};
-		uint32_t maxTaskPayloadSize = 0;
+        uint32_t maxPreferredMeshWorkGroupInvocations = 0;
+        uint32_t maxPreferredTaskWorkGroupInvocations = 0;
+    };
 
-		// Preferred sizes (for meshlet generation)
-		uint32_t maxPreferredMeshWorkGroupInvocations = 0;
-		uint32_t maxPreferredTaskWorkGroupInvocations = 0;
-	};
+    class Device
+    {
+    private:
+        const window::Window* window;
 
-	class Device
-	{
-	private:
-		const window::Window* window;
+        vk::UniqueInstance instance{nullptr};
+        vk::PhysicalDevice physicalDevice{nullptr};
+        vk::UniqueDevice logicalDevice{nullptr};
 
-		vk::UniqueInstance instance{ nullptr };
-		vk::PhysicalDevice physicalDevice{ nullptr };
-		vk::UniqueDevice logicalDevice{ nullptr };
+        vk::DebugUtilsMessengerEXT debugMessenger{nullptr};
+        vk::detail::DispatchLoaderDynamic dldi;
 
-		vk::DebugUtilsMessengerEXT debugMessenger{ nullptr };
-		vk::detail::DispatchLoaderDynamic dldi;
+        vk::SurfaceKHR surface{nullptr};
+        vk::Queue presentQueue{nullptr};
+        vk::Queue graphicsAndComputeQueue{nullptr};
+        vk::Queue transferQueue{nullptr};
 
-		vk::SurfaceKHR surface{ nullptr };
-		vk::Queue presentQueue{ nullptr };
-		vk::Queue graphicsAndComputeQueue{ nullptr };
-		vk::Queue transferQueue{ nullptr };
+        QueueFamilyIndices queueFamilyIndices{};
 
-		QueueFamilyIndices queueFamilyIndices{};
+        MeshShaderCapabilities meshShaderCapabilities{};
 
-		// Mesh shader capabilities
-		MeshShaderCapabilities meshShaderCapabilities{};
+        // Shared staging command pool for one-time transfer operations
+        vk::UniqueCommandPool stagingCommandPool;
 
-		// Shared staging command pool for one-time transfer operations
-		vk::UniqueCommandPool stagingCommandPool;
+        const std::array<const char*, 1> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+        const std::array<const char*, 2> deviceExtensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            VK_EXT_MESH_SHADER_EXTENSION_NAME
+        };
 
-		const std::array<const char*, 1> validationLayers = { "VK_LAYER_KHRONOS_validation" };
-		const std::array<const char*, 2> deviceExtensions = {
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-			VK_EXT_MESH_SHADER_EXTENSION_NAME
-		};
+        // Private functions for setup and initialization
+        void createInstance();
+        std::vector<const char*> getRequiredExtensions() const;
+        void createDebugMessenger();
+        void pickPhysicalDevice();
+        void createLogicalDevice();
+        void createStagingCommandPool();
+        void queryMeshShaderCapabilities();
+        bool checkValidationLayerSupport() const;
 
-		// Private functions for setup and initialization
-		void createInstance();
-		std::vector<const char*> getRequiredExtensions() const;
-		void createDebugMessenger();
-		void pickPhysicalDevice();
-		void createLogicalDevice();
-		void createStagingCommandPool();
-		void queryMeshShaderCapabilities();
-		bool checkValidationLayerSupport() const;
+        bool isDeviceSuitable(const vk::PhysicalDevice& device) const;
+        bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device) const;
 
-		bool isDeviceSuitable(const vk::PhysicalDevice& device) const;
-		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device) const;
+    public:
+        explicit Device(const window::Window* window);
+        ~Device() = default;
 
-	public:
-		explicit Device(const window::Window* window);
-		~Device() = default;
+        void init();
+        void cleanUp();
 
-		void init();
-		void cleanUp();
+        const vk::SurfaceKHR& getSurface() const { return surface; }
+        const vk::Instance& getInstance() const { return instance.get(); }
+        const vk::PhysicalDevice& getPhysicalDevice() const { return physicalDevice; }
+        const vk::Device& getLogicalDevice() const { return logicalDevice.get(); }
+        const QueueFamilyIndices& getQueueFamilyIndices() const { return queueFamilyIndices; }
+        const vk::Queue& getPresentQueue() const { return presentQueue; }
+        const vk::Queue& getGraphicsQueue() const { return graphicsAndComputeQueue; }
+        const vk::Queue& getTransferQueue() const { return transferQueue; }
+        bool hasDedicatedTransferQueue() const { return queueFamilyIndices.hasDedicatedTransferQueue(); }
 
-		const vk::SurfaceKHR& getSurface() const { return surface; }
-		const vk::Instance& getInstance() const { return instance.get(); }
-		const vk::PhysicalDevice& getPhysicalDevice() const { return physicalDevice; }
-		const vk::Device& getLogicalDevice() const { return logicalDevice.get(); }
-		const QueueFamilyIndices& getQueueFamilyIndices() const { return queueFamilyIndices; }
-		const vk::Queue& getPresentQueue() const { return presentQueue; }
-		const vk::Queue& getGraphicsQueue() const { return graphicsAndComputeQueue; }
-		const vk::Queue& getTransferQueue() const { return transferQueue; }
-		bool hasDedicatedTransferQueue() const { return queueFamilyIndices.hasDedicatedTransferQueue(); }
+        const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
 
-		// Shared staging command pool for one-time transfer operations (texture uploads, buffer copies)
-		const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
+        DeviceMemoryInfo getDeviceMemoryInfo() const;
 
-		// Query device memory information for resource allocation decisions
-		DeviceMemoryInfo getDeviceMemoryInfo() const;
-
-		// Mesh shader capabilities
-		bool isMeshShaderSupported() const { return meshShaderCapabilities.meshShaderSupported; }
-		bool isTaskShaderSupported() const { return meshShaderCapabilities.taskShaderSupported; }
-		const MeshShaderCapabilities& getMeshShaderCapabilities() const { return meshShaderCapabilities; }
-
-	};
-
+        bool isMeshShaderSupported() const { return meshShaderCapabilities.meshShaderSupported; }
+        bool isTaskShaderSupported() const { return meshShaderCapabilities.taskShaderSupported; }
+        const MeshShaderCapabilities& getMeshShaderCapabilities() const { return meshShaderCapabilities; }
+    };
 }

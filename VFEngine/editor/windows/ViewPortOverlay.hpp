@@ -20,7 +20,7 @@ namespace windows
     private:
         services::EditorTextureHandle iconAtlas;
         bool iconsLoaded = false;
-        int currentViewMode = 0;  // 0=Color, 1=Meshlet, 2=LOD
+        int currentViewMode = 0; 
         static constexpr uint32_t ATLAS_COLUMNS = 4;
         static constexpr uint32_t ATLAS_ROWS = 4;
         static constexpr float ICON_SIZE = 32.0f;

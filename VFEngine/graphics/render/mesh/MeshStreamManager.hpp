@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <string_view>
 #include <vector>
 #include <queue>
 #include <unordered_map>
@@ -67,30 +66,19 @@ namespace render::mesh
         bool headerParsed = false;
     };
 
-    struct Stats
-    {
-        uint32_t meshesTracked = 0;
-        uint32_t meshesReady = 0;
-        uint32_t lodsQueued = 0;
-        uint32_t lodsStreaming = 0;
-        uint32_t lodsUploading = 0;
-        size_t bytesStreamedThisFrame = 0;
-        size_t totalBytesStreamed = 0;
-    };
-
     class MeshStreamManager
     {
     private:
         core::Device& device;
         gpudriven::MergedMeshBuffer& mergedBuffer;
-        gpudriven::MeshletBuffer* meshletBuffer = nullptr;  // Optional, for mesh shader rendering
-        
+        gpudriven::MeshletBuffer* meshletBuffer = nullptr; 
+
         std::unordered_map<std::string, MeshStreamingState> meshStates;
         mutable std::mutex meshStatesMutex;
 
-        // Priority queue for LOD streaming
+       
         std::priority_queue<StreamingRequest> streamingQueue;
-        
+
         std::vector<std::future<StreamingResult>> pendingReads;
         mutable std::mutex pendingReadsMutex;
 
@@ -103,14 +91,12 @@ namespace render::mesh
         };
 
         std::vector<PendingUpload> pendingUploads;
-        
+
         size_t maxBytesPerFrame = 4 * 1024 * 1024; // 4MB per frame
         uint32_t maxPendingReads = 4;
         uint32_t maxPendingUploads = 8;
-        
-        size_t bytesStreamedThisFrame = 0;
 
-        Stats stats{};
+        size_t bytesStreamedThisFrame = 0;
 
     public:
         explicit MeshStreamManager(core::Device& device,
@@ -120,31 +106,12 @@ namespace render::mesh
         MeshStreamManager& operator=(const MeshStreamManager&) = delete;
 
         void requestMesh(const std::string& meshPath);
-        void releaseMesh(const std::string& meshPath);
 
         void update(const glm::vec3& cameraPos);
 
-        void waitForPendingTransfers();
-
-        bool isMeshRenderable(const std::string& meshPath) const;
-
-        uint32_t getBestAvailableLOD(const std::string& meshPath,
-                                     const std::string& submeshName,
-                                     uint32_t submeshIndex,
-                                     uint32_t preferredLOD) const;
-
-        // Configuration
-        void setMaxBytesPerFrame(size_t bytes) { maxBytesPerFrame = bytes; }
-        void setMaxPendingReads(uint32_t count) { maxPendingReads = count; }
-        void setMaxPendingUploads(uint32_t count) { maxPendingUploads = count; }
-
-        // Set meshlet buffer for mesh shader rendering (optional)
         void setMeshletBuffer(gpudriven::MeshletBuffer* buffer) { meshletBuffer = buffer; }
 
-        const Stats& getStats() const { return stats; }
-
     private:
-       
         void openMeshStream(const std::string& meshPath);
         void scheduleInitialLODs(const std::string& meshPath);
         void processStreamingQueue();
@@ -154,10 +121,10 @@ namespace render::mesh
 
         void handleCompletedRead(const StreamingResult& result);
         void queueHigherQualityLODs(const StreamingResult& result);
-        
+
         float calculatePriority(const StreamingRequest& request,
                                 const glm::vec3& cameraPos) const;
-        
+
         std::future<StreamingResult> asyncReadLOD(const std::string& meshPath,
                                                   const std::string& submeshName,
                                                   uint32_t submeshIndex,
