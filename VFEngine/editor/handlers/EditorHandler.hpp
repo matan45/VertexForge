@@ -10,6 +10,8 @@
 #include "interfaces/IEditorModeService.hpp"
 #include "interfaces/IAudioService.hpp"
 #include "interfaces/IScriptingService.hpp"
+#include "interfaces/IUndoRedoService.hpp"
+#include "interfaces/IFileOperationsService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -38,6 +40,8 @@ namespace handlers {
 		std::shared_ptr<services::IEditorModeService> editorModeService;
 		std::shared_ptr<services::IAudioService> audioService;
 		std::shared_ptr<services::IScriptingService> scriptingService;
+		std::shared_ptr<services::IUndoRedoService> undoRedoService;
+		std::shared_ptr<services::IFileOperationsService> fileOperationsService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 
 		events::SubscriptionToken resizeSubscription;

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <memory>
 #include <vector>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -28,9 +29,21 @@ namespace windows
         void navigateTo(const fs::path& path);
 
         void drawToolbar();
-        void drawFolderStructurePanel();
-        void drawFolderTree(const fs::path& path);
         void drawContentPanel();
+
+        // Keyboard shortcut handling
+        void handleKeyboardShortcuts();
+
+        // Multi-selection helpers
+        void selectAsset(size_t index, bool ctrlHeld, bool shiftHeld);
+        void clearSelection();
+        std::vector<std::string> getSelectedPaths() const;
+        void updateCutState();
+
+        // Clipboard operations
+        void performCut();
+        void performCopy();
+        bool performPaste();
 
         std::vector<Asset> assets;
         fs::path currentPath = "C:\\matan";
@@ -39,10 +52,16 @@ namespace windows
         AssetType selectedType = AssetType::Other;
         std::string searchQuery;
 
+        // Multi-selection state
+        std::unordered_set<std::string> selectedPaths;
+        int lastSelectedIndex = -1;
+
         bool showFileWindow = false;
         bool importLocationSet = false;
 
         events::SubscriptionToken importCompletedToken;
+        events::SubscriptionToken fileMovedToken;
+        events::SubscriptionToken folderSelectedToken;
 
         std::unique_ptr<AssetGridRenderer> gridRenderer;
         std::unique_ptr<ContentBrowserModals> modals;

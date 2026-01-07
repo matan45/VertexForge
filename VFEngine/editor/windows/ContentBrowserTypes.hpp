@@ -39,5 +39,7 @@ namespace windows
         std::string name;
         std::string path;
         AssetType type;
+        bool isSelected = false;  // For multi-selection
+        bool isCut = false;       // For visual dimming of cut items
     };
 }

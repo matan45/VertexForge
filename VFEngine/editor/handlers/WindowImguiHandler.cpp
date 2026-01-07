@@ -6,6 +6,7 @@
 #include "../windows/ViewPort.hpp"
 #include "../windows/MainImguiWindow.hpp"
 #include "../windows/ContentBrowser.hpp"
+#include "../windows/FolderStructureWindow.hpp"
 #include "../windows/ImportProgressWindow.hpp"
 
 namespace handlers
@@ -23,6 +24,7 @@ namespace handlers
         controllers::imguiHandler::ImguiWindowHandler::add(mainWindow);
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ConsoleLog>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::ContentBrowser>());
+        controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::FolderStructureWindow>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::SceneHierarchyPanel>());
         controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<windows::EntityDetailsPanel>());
         controllers::imguiHandler::ImguiWindowHandler::add(viewPort);

@@ -101,6 +101,8 @@
   <ItemGroup>
     <ClInclude Include="camera\EditorCamera.hpp" />
     <ClInclude Include="camera\OrbitCamera.hpp" />
+    <ClInclude Include="clipboard\ClipboardManager.hpp" />
+    <ClInclude Include="dragdrop\DragDropManager.hpp" />
     <ClInclude Include="graph\ShaderGraphCompiler.hpp" />
     <ClInclude Include="graph\ShaderGraphEditor.hpp" />
     <ClInclude Include="graph\nodes\ConstantNodes.hpp" />
@@ -119,6 +121,7 @@
     <ClInclude Include="windows\CullingStatsWindow.hpp" />
     <ClInclude Include="windows\EditorCameraWindow.hpp" />
     <ClInclude Include="windows\EntityDetailsPanel.hpp" />
+    <ClInclude Include="windows\FolderStructureWindow.hpp" />
     <ClInclude Include="windows\IBLWindow.hpp" />
     <ClInclude Include="windows\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\ImportModalDialog.hpp" />
@@ -152,6 +155,8 @@
   <ItemGroup>
     <ClCompile Include="camera\EditorCamera.cpp" />
     <ClCompile Include="camera\OrbitCamera.cpp" />
+    <ClCompile Include="clipboard\ClipboardManager.cpp" />
+    <ClCompile Include="dragdrop\DragDropManager.cpp" />
     <ClCompile Include="graph\ShaderGraphCompiler.cpp" />
     <ClCompile Include="graph\ShaderGraphEditor.cpp" />
     <ClCompile Include="graph\ShaderGraphEditorDraw.cpp" />
@@ -169,6 +174,7 @@
     <ClCompile Include="windows\CullingStatsWindow.cpp" />
     <ClCompile Include="windows\EditorCameraWindow.cpp" />
     <ClCompile Include="windows\EntityDetailsPanel.cpp" />
+    <ClCompile Include="windows\FolderStructureWindow.cpp" />
     <ClCompile Include="windows\IBLWindow.cpp" />
     <ClCompile Include="windows\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\ImportModalDialog.cpp" />

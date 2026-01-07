@@ -8,6 +8,8 @@
 #include "impl/EditorModeServiceImpl.hpp"
 #include "impl/AudioServiceImpl.hpp"
 #include "impl/ScriptingServiceImpl.hpp"
+#include "impl/UndoRedoServiceImpl.hpp"
+#include "impl/FileOperationsServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "time/Timer.hpp"
@@ -80,6 +82,8 @@ namespace handlers
         renderService.reset();
         sceneService.reset();
 
+        fileOperationsService.reset();
+        undoRedoService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -112,6 +116,12 @@ namespace handlers
         );
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
 
+        // Create undo/redo service (standalone, no providers needed)
+        undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
+
+        // Create file operations service with undo/redo integration
+        fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
+
         // Register event handlers for command/query pattern
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
@@ -121,6 +131,8 @@ namespace handlers
         editorModeService->registerEventHandlers();
         audioService->registerEventHandlers();
         scriptingService->registerEventHandlers();
+        undoRedoService->registerEventHandlers();
+        fileOperationsService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
