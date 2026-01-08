@@ -1,0 +1,226 @@
+#include "PhysicsServiceImpl.hpp"
+#include "../events/PhysicsEvents.hpp"
+#include "../events/EventDispatcher.hpp"
+#include <cassert>
+
+namespace services {
+
+    PhysicsServiceImpl::PhysicsServiceImpl(IPhysicsProvider* physicsProvider)
+        : physicsProvider(physicsProvider) {
+        assert(physicsProvider && "PhysicsProvider must not be null");
+    }
+
+    PhysicsServiceImpl::~PhysicsServiceImpl() = default;
+
+    void PhysicsServiceImpl::registerEventHandlers() {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        // === Commands ===
+
+        dispatcher.registerCommandHandler<events::physics::SetGravityCommand>(
+            [this](const auto& cmd) {
+                setGravity(cmd.gravity);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::AddRigidBodyCommand>(
+            [this](const auto& cmd) {
+                physicsProvider->addRigidBody(cmd.entity, cmd.rigidBody, cmd.collider);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::RemoveRigidBodyCommand>(
+            [this](const auto& cmd) {
+                removeRigidBody(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::AddColliderCommand>(
+            [this](const auto& cmd) {
+                addCollider(cmd.entity, cmd.collider);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::RemoveColliderCommand>(
+            [this](const auto& cmd) {
+                removeCollider(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::ApplyForceCommand>(
+            [this](const auto& cmd) {
+                applyForce(cmd.entity, cmd.force);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::ApplyForceAtPositionCommand>(
+            [this](const auto& cmd) {
+                applyForceAtPosition(cmd.entity, cmd.force, cmd.position);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::ApplyImpulseCommand>(
+            [this](const auto& cmd) {
+                applyImpulse(cmd.entity, cmd.impulse);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::ApplyTorqueCommand>(
+            [this](const auto& cmd) {
+                applyTorque(cmd.entity, cmd.torque);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetLinearVelocityCommand>(
+            [this](const auto& cmd) {
+                setLinearVelocity(cmd.entity, cmd.velocity);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetAngularVelocityCommand>(
+            [this](const auto& cmd) {
+                setAngularVelocity(cmd.entity, cmd.velocity);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetPhysicsPositionCommand>(
+            [this](const auto& cmd) {
+                physicsProvider->setPosition(cmd.entity, cmd.position);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetPhysicsRotationCommand>(
+            [this](const auto& cmd) {
+                physicsProvider->setRotation(cmd.entity, cmd.rotation);
+            });
+
+        // === Queries ===
+
+        dispatcher.registerQueryHandler<events::physics::GetGravityQuery>(
+            [this](const auto& query) {
+                return getGravity();
+            });
+
+        dispatcher.registerQueryHandler<events::physics::HasRigidBodyQuery>(
+            [this](const auto& query) {
+                return hasRigidBody(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetRigidBodyQuery>(
+            [this](const auto& query) {
+                return getRigidBody(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetLinearVelocityQuery>(
+            [this](const auto& query) {
+                return getLinearVelocity(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetAngularVelocityQuery>(
+            [this](const auto& query) {
+                return getAngularVelocity(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetPhysicsPositionQuery>(
+            [this](const auto& query) {
+                return physicsProvider->getPosition(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetPhysicsRotationQuery>(
+            [this](const auto& query) {
+                return physicsProvider->getRotation(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::RaycastQuery>(
+            [this](const auto& query) {
+                return raycast(query.origin, query.direction, query.maxDistance);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::RaycastAllQuery>(
+            [this](const auto& query) {
+                return raycastAll(query.origin, query.direction, query.maxDistance);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::IsOverlappingQuery>(
+            [this](const auto& query) {
+                return isOverlapping(query.entityA, query.entityB);
+            });
+    }
+
+    void PhysicsServiceImpl::stepSimulation(float deltaTime) {
+        physicsProvider->update(deltaTime);
+    }
+
+    void PhysicsServiceImpl::setGravity(const glm::vec3& gravity) {
+        physicsProvider->setGravity(gravity);
+    }
+
+    glm::vec3 PhysicsServiceImpl::getGravity() const {
+        return physicsProvider->getGravity();
+    }
+
+    void PhysicsServiceImpl::addRigidBody(EntityHandle entity, const RigidBodyData& data) {
+        // Create a default box collider if not specified
+        ColliderData defaultCollider;
+        defaultCollider.shape = ColliderData::Shape::Box;
+        defaultCollider.size = glm::vec3(1.0f);
+        physicsProvider->addRigidBody(entity, data, defaultCollider);
+    }
+
+    void PhysicsServiceImpl::removeRigidBody(EntityHandle entity) {
+        physicsProvider->removeRigidBody(entity);
+    }
+
+    bool PhysicsServiceImpl::hasRigidBody(EntityHandle entity) const {
+        return physicsProvider->hasRigidBody(entity);
+    }
+
+    std::optional<RigidBodyData> PhysicsServiceImpl::getRigidBody(EntityHandle entity) const {
+        return physicsProvider->getRigidBody(entity);
+    }
+
+    void PhysicsServiceImpl::addCollider(EntityHandle entity, const ColliderData& data) {
+        physicsProvider->addCollider(entity, data);
+    }
+
+    void PhysicsServiceImpl::removeCollider(EntityHandle entity) {
+        physicsProvider->removeCollider(entity);
+    }
+
+    void PhysicsServiceImpl::applyForce(EntityHandle entity, const glm::vec3& force) {
+        physicsProvider->applyForce(entity, force);
+    }
+
+    void PhysicsServiceImpl::applyForceAtPosition(EntityHandle entity, const glm::vec3& force,
+        const glm::vec3& position) {
+        physicsProvider->applyForceAtPosition(entity, force, position);
+    }
+
+    void PhysicsServiceImpl::applyImpulse(EntityHandle entity, const glm::vec3& impulse) {
+        physicsProvider->applyImpulse(entity, impulse);
+    }
+
+    void PhysicsServiceImpl::applyTorque(EntityHandle entity, const glm::vec3& torque) {
+        physicsProvider->applyTorque(entity, torque);
+    }
+
+    void PhysicsServiceImpl::setLinearVelocity(EntityHandle entity, const glm::vec3& velocity) {
+        physicsProvider->setLinearVelocity(entity, velocity);
+    }
+
+    glm::vec3 PhysicsServiceImpl::getLinearVelocity(EntityHandle entity) const {
+        return physicsProvider->getLinearVelocity(entity);
+    }
+
+    void PhysicsServiceImpl::setAngularVelocity(EntityHandle entity, const glm::vec3& velocity) {
+        physicsProvider->setAngularVelocity(entity, velocity);
+    }
+
+    glm::vec3 PhysicsServiceImpl::getAngularVelocity(EntityHandle entity) const {
+        return physicsProvider->getAngularVelocity(entity);
+    }
+
+    RaycastHit PhysicsServiceImpl::raycast(const glm::vec3& origin, const glm::vec3& direction,
+        float maxDistance) {
+        return physicsProvider->raycast(origin, direction, maxDistance);
+    }
+
+    std::vector<RaycastHit> PhysicsServiceImpl::raycastAll(const glm::vec3& origin,
+        const glm::vec3& direction,
+        float maxDistance) {
+        return physicsProvider->raycastAll(origin, direction, maxDistance);
+    }
+
+    bool PhysicsServiceImpl::isOverlapping(EntityHandle entityA, EntityHandle entityB) const {
+        return physicsProvider->isOverlapping(entityA, entityB);
+    }
+
+}

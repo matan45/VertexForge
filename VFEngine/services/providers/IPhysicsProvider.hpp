@@ -1,105 +1,82 @@
 #pragma once
+
 #include "../data/EntityHandle.hpp"
+#include "../interfaces/IPhysicsService.hpp"
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <optional>
 #include <vector>
 
 namespace services {
 
-    
-    struct RigidBodyData {
-        enum class Type { Static, Dynamic, Kinematic };
-
-        Type type = Type::Dynamic;
-        float mass = 1.0f;
-        float linearDamping = 0.0f;
-        float angularDamping = 0.05f;
-        bool useGravity = true;
-        glm::vec3 linearVelocity{ 0.0f };
-        glm::vec3 angularVelocity{ 0.0f };
-    };
-    
-    struct ColliderData {
-        enum class Shape { Box, Sphere, Capsule, Mesh };
-
-        Shape shape = Shape::Box;
-        glm::vec3 size{ 1.0f };     // Box half-extents or sphere/capsule radius
-        float height = 1.0f;        // Capsule height
-        bool isTrigger = false;
-        glm::vec3 offset{ 0.0f };   // Local offset from entity center
-    };
-    
-    struct RaycastHit {
-        EntityHandle entity;
-        glm::vec3 point;
-        glm::vec3 normal;
-        float distance = 0.0f;
-        bool hit = false;
-    };
-    
-    class IPhysicsService {
+    class IPhysicsProvider {
     public:
-        virtual ~IPhysicsService() = default;
+        virtual ~IPhysicsProvider() = default;
 
-        // === Event Handler Registration ===
+        // === Lifecycle ===
 
-        virtual void registerEventHandlers() = 0;
+        virtual bool init() = 0;
+        virtual void cleanUp() = 0;
+        virtual bool isInitialized() const = 0;
 
-        // === Simulation Control ===
-        
-        virtual void stepSimulation(float deltaTime) = 0;
-        
+        // Update physics simulation (called each frame with variable delta)
+        // Internally uses fixed timestep accumulator
+        virtual void update(float deltaTime) = 0;
+
+        // === Gravity ===
+
         virtual void setGravity(const glm::vec3& gravity) = 0;
-        
         virtual glm::vec3 getGravity() const = 0;
 
         // === Rigid Body Operations ===
 
-        virtual void addRigidBody(EntityHandle entity, const RigidBodyData& data) = 0;
-        
+        virtual void addRigidBody(EntityHandle entity, const RigidBodyData& data,
+            const ColliderData& collider) = 0;
         virtual void removeRigidBody(EntityHandle entity) = 0;
-        
         virtual bool hasRigidBody(EntityHandle entity) const = 0;
-        
         virtual std::optional<RigidBodyData> getRigidBody(EntityHandle entity) const = 0;
 
         // === Collider Operations ===
-        
+
         virtual void addCollider(EntityHandle entity, const ColliderData& data) = 0;
-        
         virtual void removeCollider(EntityHandle entity) = 0;
 
         // === Force and Impulse ===
-        
+
         virtual void applyForce(EntityHandle entity, const glm::vec3& force) = 0;
-        
         virtual void applyForceAtPosition(EntityHandle entity, const glm::vec3& force,
-                                          const glm::vec3& position) = 0;
-        
+            const glm::vec3& position) = 0;
         virtual void applyImpulse(EntityHandle entity, const glm::vec3& impulse) = 0;
-        
         virtual void applyTorque(EntityHandle entity, const glm::vec3& torque) = 0;
 
         // === Velocity Control ===
-        
+
         virtual void setLinearVelocity(EntityHandle entity, const glm::vec3& velocity) = 0;
-        
         virtual glm::vec3 getLinearVelocity(EntityHandle entity) const = 0;
-        
         virtual void setAngularVelocity(EntityHandle entity, const glm::vec3& velocity) = 0;
-        
         virtual glm::vec3 getAngularVelocity(EntityHandle entity) const = 0;
 
+        // === Transform Access ===
+        // Used to sync physics transforms back to entity transforms
+
+        virtual glm::vec3 getPosition(EntityHandle entity) const = 0;
+        virtual glm::quat getRotation(EntityHandle entity) const = 0;
+        virtual void setPosition(EntityHandle entity, const glm::vec3& position) = 0;
+        virtual void setRotation(EntityHandle entity, const glm::quat& rotation) = 0;
+
         // === Queries ===
-        
+
         virtual RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
-                                   float maxDistance) = 0;
-        
+            float maxDistance) = 0;
         virtual std::vector<RaycastHit> raycastAll(const glm::vec3& origin,
-                                                    const glm::vec3& direction,
-                                                    float maxDistance) = 0;
-        
+            const glm::vec3& direction,
+            float maxDistance) = 0;
         virtual bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const = 0;
+
+        // === Interpolation ===
+        // Get alpha for smooth rendering between physics states
+
+        virtual double getInterpolationAlpha() const = 0;
     };
 
 }

@@ -104,10 +104,11 @@ project "Core"
 	  "dependencies/imgui/backends",
 	  "dependencies/openal-soft/include", -- OpenAL headers
 	  "dependencies/mtype/mType",         -- mType scripting language
-	  vulkanLibPath.."/Include"
+	  vulkanLibPath.."/Include",
+	  "dependencies/JoltPhysics"          -- Jolt Physics headers
    }
 
-   links { "Graphics", "mType" }  -- Link against Graphics, mType (Services is a higher layer, no link needed)
+   links { "Graphics", "mType", "jolt" }  -- Link against Graphics, mType, jolt (Services is a higher layer, no link needed)
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
    filter "configurations:Debug"

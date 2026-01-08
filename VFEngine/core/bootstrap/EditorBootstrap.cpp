@@ -7,6 +7,7 @@
 #include "../adapters/MeshPreviewAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
+#include "../adapters/PhysicsAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 #include "print/Logger.hpp"
 
@@ -30,10 +31,12 @@ namespace core
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
+        physicsAdapter = std::make_unique<PhysicsAdapter>();
 
         offScreen->init();
         audioAdapter->init();
         scriptingAdapter->init();
+        physicsAdapter->init();
 
         
         coreInterface->setResizeCallback([this]()
@@ -64,12 +67,18 @@ namespace core
             scriptingAdapter->cleanUp();
         }
 
+        if (physicsAdapter)
+        {
+            physicsAdapter->cleanUp();
+        }
+
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
         textureAdapter.reset();
         offScreenAdapter.reset();
         audioAdapter.reset();
         scriptingAdapter.reset();
+        physicsAdapter.reset();
 
         if (coreInterface)
         {
@@ -105,6 +114,11 @@ namespace core
     services::IScriptingProvider* EditorBootstrap::getScriptingProvider()
     {
         return scriptingAdapter.get();
+    }
+
+    services::IPhysicsProvider* EditorBootstrap::getPhysicsProvider()
+    {
+        return physicsAdapter.get();
     }
 
     window::Window* EditorBootstrap::getWindow()
