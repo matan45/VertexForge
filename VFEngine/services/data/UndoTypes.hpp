@@ -1,5 +1,4 @@
 #pragma once
-#include "FileOperationsTypes.hpp"
 #include <string>
 #include <memory>
 #include <map>
@@ -7,7 +6,6 @@
 
 namespace services
 {
-    // Base class for undoable commands
     class IUndoableCommand
     {
     public:
@@ -17,119 +15,73 @@ namespace services
         virtual std::string getDescription() const = 0;
     };
 
-    // Stores backup data for file operations
-    struct FileBackupData
-    {
-        std::string originalPath;
-        std::string backupPath;  // Temp location for deleted files
-        std::map<std::string, std::string> originalReferences;  // filepath -> original JSON content
-    };
-
-    // Undoable command for file move operations
     class MoveFileUndoCommand : public IUndoableCommand
     {
     public:
         MoveFileUndoCommand(std::string source, std::string dest,
-                           std::vector<std::string> updatedRefs,
-                           std::string projRoot)
+                            std::vector<std::string> updatedRefs,
+                            std::string projRoot)
             : sourcePath(std::move(source))
-            , destPath(std::move(dest))
-            , updatedReferences(std::move(updatedRefs))
-            , projectRoot(std::move(projRoot))
+              , destPath(std::move(dest))
+              , updatedReferences(std::move(updatedRefs))
+              , projectRoot(std::move(projRoot))
         {
         }
 
-        void execute() override;  // Re-do: move from source to dest
-        void undo() override;     // Move from dest back to source, restore refs
+        void execute() override;
+        void undo() override;
         std::string getDescription() const override { return "Move " + sourcePath; }
 
         std::string sourcePath;
         std::string destPath;
         std::vector<std::string> updatedReferences;
-        std::string projectRoot;  // For updating references on redo
-        std::map<std::string, std::string> originalRefContents;  // For undo
+        std::string projectRoot;
+        std::map<std::string, std::string> originalRefContents;
     };
 
-    // Undoable command for file copy operations
+
     class CopyFileUndoCommand : public IUndoableCommand
     {
     public:
         CopyFileUndoCommand(std::string source, std::string dest)
             : sourcePath(std::move(source))
-            , destPath(std::move(dest))
+              , destPath(std::move(dest))
         {
         }
 
-        void execute() override;  // Re-do: copy again
-        void undo() override;     // Delete the copied file
+        void execute() override;
+        void undo() override;
         std::string getDescription() const override { return "Copy " + sourcePath; }
 
         std::string sourcePath;
         std::string destPath;
     };
 
-    // Undoable command for file delete operations
+
     class DeleteFileUndoCommand : public IUndoableCommand
     {
     public:
         DeleteFileUndoCommand(std::string path, std::string backup)
             : originalPath(std::move(path))
-            , backupPath(std::move(backup))
+              , backupPath(std::move(backup))
         {
         }
 
-        void execute() override;  // Re-do: delete again
-        void undo() override;     // Restore from backup
+        void execute() override;
+        void undo() override;
         std::string getDescription() const override { return "Delete " + originalPath; }
 
         std::string originalPath;
         std::string backupPath;
     };
 
-    // Undoable command for file rename operations
-    class RenameFileUndoCommand : public IUndoableCommand
-    {
-    public:
-        RenameFileUndoCommand(std::string oldPath, std::string newPath,
-                              std::vector<std::string> updatedRefs,
-                              std::string projRoot)
-            : oldPath(std::move(oldPath))
-            , newPath(std::move(newPath))
-            , updatedReferences(std::move(updatedRefs))
-            , projectRoot(std::move(projRoot))
-        {
-        }
 
-        void execute() override;  // Re-do: rename again
-        void undo() override;     // Rename back
-        std::string getDescription() const override { return "Rename " + oldPath; }
-
-        std::string oldPath;
-        std::string newPath;
-        std::vector<std::string> updatedReferences;
-        std::string projectRoot;  // For updating references on redo
-        std::map<std::string, std::string> originalRefContents;  // For undo
-    };
-
-    // Undoable command for folder creation
-    class CreateFolderUndoCommand : public IUndoableCommand
-    {
-    public:
-        explicit CreateFolderUndoCommand(std::string path)
-            : folderPath(std::move(path))
-        {
-        }
-
-        void execute() override;  // Re-do: create folder
-        void undo() override;     // Delete folder
-        std::string getDescription() const override { return "Create folder " + folderPath; }
-
-        std::string folderPath;
-    };
-
-    // Composite command for batch operations
     class BatchUndoCommand : public IUndoableCommand
     {
+    private:
+        std::string description;
+        std::vector<std::unique_ptr<IUndoableCommand>> commands;
+
     public:
         explicit BatchUndoCommand(std::string desc)
             : description(std::move(desc))
@@ -161,7 +113,6 @@ namespace services
 
         void undo() override
         {
-            // Undo in reverse order
             for (auto it = commands.rbegin(); it != commands.rend(); ++it)
             {
                 (*it)->undo();
@@ -169,9 +120,5 @@ namespace services
         }
 
         std::string getDescription() const override { return description; }
-
-    private:
-        std::string description;
-        std::vector<std::unique_ptr<IUndoableCommand>> commands;
     };
 }

@@ -10,23 +10,15 @@ namespace asset
 {
     using json = nlohmann::json;
 
-    // Namespace-level helper for path normalization (accessible to all functions)
-    static std::string normalizePathHelper(const std::string& path)
+    std::string AssetReferenceScanner::normalizePath(const std::string& path)
     {
         std::string normalized = path;
-        // Convert all backslashes to forward slashes for consistent comparison
         std::replace(normalized.begin(), normalized.end(), '\\', '/');
-        // Remove trailing slashes
         while (!normalized.empty() && normalized.back() == '/')
         {
             normalized.pop_back();
         }
         return normalized;
-    }
-
-    std::string AssetReferenceScanner::normalizePath(const std::string& path)
-    {
-        return normalizePathHelper(path);
     }
 
     std::vector<fs::path> AssetReferenceScanner::collectAssetFiles(const fs::path& searchRoot)
@@ -39,7 +31,8 @@ namespace asset
         }
 
         std::error_code ec;
-        for (const auto& entry : fs::recursive_directory_iterator(searchRoot, fs::directory_options::skip_permission_denied, ec))
+        for (const auto& entry : fs::recursive_directory_iterator(
+                 searchRoot, fs::directory_options::skip_permission_denied, ec))
         {
             if (ec)
             {
@@ -53,7 +46,7 @@ namespace asset
             }
 
             std::string ext = entry.path().extension().string();
-            // Convert to lowercase for comparison
+
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
             if (ext == ".vfscene" || ext == ".vfprefab" || ext == ".vfmat" || ext == ".vfmatinstance")
@@ -76,21 +69,18 @@ namespace asset
             }
 
             std::string content((std::istreambuf_iterator<char>(file)),
-                               std::istreambuf_iterator<char>());
+                                std::istreambuf_iterator<char>());
             file.close();
 
             std::string normalizedTarget = normalizePath(targetPath);
 
-            // Check for path in content (as JSON string value)
-            // Also check with backslashes as JSON escapes them
             std::string targetWithBackslash = targetPath;
             std::replace(targetWithBackslash.begin(), targetWithBackslash.end(), '/', '\\');
 
-            // Simple string search - if the target path appears anywhere in the file
-            // This catches: meshPath, defaultMaterial, subMeshMaterials, fileName, audioFilePath, scriptPath
+
             return content.find(targetPath) != std::string::npos ||
-                   content.find(targetWithBackslash) != std::string::npos ||
-                   content.find(normalizedTarget) != std::string::npos;
+                content.find(targetWithBackslash) != std::string::npos ||
+                content.find(normalizedTarget) != std::string::npos;
         }
         catch (const std::exception&)
         {
@@ -100,36 +90,12 @@ namespace asset
 
     bool AssetReferenceScanner::scanMaterialFile(const fs::path& filePath, const std::string& targetPath)
     {
-        // Material files contain texture paths in node properties
         return scanSceneOrPrefabFile(filePath, targetPath);
     }
 
     bool AssetReferenceScanner::scanMaterialInstanceFile(const fs::path& filePath, const std::string& targetPath)
     {
-        // Material instance files contain parent material path and texture overrides
         return scanSceneOrPrefabFile(filePath, targetPath);
-    }
-
-    bool AssetReferenceScanner::fileContainsReference(const std::string& filePath, const std::string& targetPath)
-    {
-        fs::path path(filePath);
-        std::string ext = path.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-        if (ext == ".vfscene" || ext == ".vfprefab")
-        {
-            return scanSceneOrPrefabFile(path, targetPath);
-        }
-        else if (ext == ".vfmat")
-        {
-            return scanMaterialFile(path, targetPath);
-        }
-        else if (ext == ".vfmatinstance")
-        {
-            return scanMaterialInstanceFile(path, targetPath);
-        }
-
-        return false;
     }
 
     ReferenceScanResult AssetReferenceScanner::findReferencingFiles(
@@ -142,7 +108,7 @@ namespace asset
 
         for (const auto& file : files)
         {
-            if (fileContainsReference(file.string(), assetPath))
+            if (scanSceneOrPrefabFile(file, assetPath))
             {
                 result.referencingFiles.push_back(file.string());
             }
@@ -151,22 +117,20 @@ namespace asset
         return result;
     }
 
-    // Helper to recursively update JSON string values
-    static bool updateJsonStrings(json& j, const std::string& oldPath, const std::string& newPath,
-                                  const std::string& oldPathNorm, const std::string& newPathNorm,
-                                  const std::string& oldPathBackslash, const std::string& newPathBackslash)
+    bool AssetReferenceScanner::updateJsonStrings(json& j, const std::string& oldPath, const std::string& newPath,
+                                                  const std::string& oldPathNorm, const std::string& newPathNorm,
+                                                  const std::string& oldPathBackslash,
+                                                  const std::string& newPathBackslash)
     {
         bool modified = false;
 
         if (j.is_string())
         {
             std::string value = j.get<std::string>();
-            std::string normalizedValue = normalizePathHelper(value);
+            std::string normalizedValue = normalizePath(value);
 
-            // Check if this string matches the old path
             if (value == oldPath || value == oldPathBackslash || normalizedValue == oldPathNorm)
             {
-                // Preserve the original path separator style
                 if (value.find('\\') != std::string::npos)
                 {
                     j = newPathBackslash;
@@ -182,7 +146,8 @@ namespace asset
         {
             for (auto& [key, val] : j.items())
             {
-                if (updateJsonStrings(val, oldPath, newPath, oldPathNorm, newPathNorm, oldPathBackslash, newPathBackslash))
+                if (updateJsonStrings(val, oldPath, newPath, oldPathNorm, newPathNorm, oldPathBackslash,
+                                      newPathBackslash))
                 {
                     modified = true;
                 }
@@ -192,7 +157,8 @@ namespace asset
         {
             for (auto& item : j)
             {
-                if (updateJsonStrings(item, oldPath, newPath, oldPathNorm, newPathNorm, oldPathBackslash, newPathBackslash))
+                if (updateJsonStrings(item, oldPath, newPath, oldPathNorm, newPathNorm, oldPathBackslash,
+                                      newPathBackslash))
                 {
                     modified = true;
                 }
@@ -202,7 +168,8 @@ namespace asset
         return modified;
     }
 
-    bool AssetReferenceScanner::updateSceneOrPrefabFile(const fs::path& filePath, const std::string& oldPath, const std::string& newPath)
+    bool AssetReferenceScanner::updateSceneOrPrefabFile(const fs::path& filePath, const std::string& oldPath,
+                                                        const std::string& newPath)
     {
         try
         {
@@ -226,7 +193,8 @@ namespace asset
             std::string newPathBackslash = newPath;
             std::replace(newPathBackslash.begin(), newPathBackslash.end(), '/', '\\');
 
-            bool modified = updateJsonStrings(j, oldPath, newPath, oldPathNorm, newPathNorm, oldPathBackslash, newPathBackslash);
+            bool modified = updateJsonStrings(j, oldPath, newPath, oldPathNorm, newPathNorm, oldPathBackslash,
+                                              newPathBackslash);
 
             if (modified)
             {
@@ -253,12 +221,14 @@ namespace asset
         }
     }
 
-    bool AssetReferenceScanner::updateMaterialFile(const fs::path& filePath, const std::string& oldPath, const std::string& newPath)
+    bool AssetReferenceScanner::updateMaterialFile(const fs::path& filePath, const std::string& oldPath,
+                                                   const std::string& newPath)
     {
         return updateSceneOrPrefabFile(filePath, oldPath, newPath);
     }
 
-    bool AssetReferenceScanner::updateMaterialInstanceFile(const fs::path& filePath, const std::string& oldPath, const std::string& newPath)
+    bool AssetReferenceScanner::updateMaterialInstanceFile(const fs::path& filePath, const std::string& oldPath,
+                                                           const std::string& newPath)
     {
         return updateSceneOrPrefabFile(filePath, oldPath, newPath);
     }

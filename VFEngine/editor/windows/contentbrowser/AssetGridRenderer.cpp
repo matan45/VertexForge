@@ -2,8 +2,7 @@
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
-#include "../dragdrop/DragDropManager.hpp"
-#include <IconsFontAwesome6.h>
+#include "../../dragdrop/DragDropManager.hpp"
 #include <algorithm>
 
 namespace windows
@@ -64,10 +63,19 @@ namespace windows
 
     AssetClickResult AssetGridRenderer::draw(
         const std::vector<Asset>& assets,
-        const fs::path& selectedFile,
         const std::string& searchQuery)
     {
         AssetClickResult result;
+
+        // Collect all selected paths for multi-selection drag
+        std::vector<std::string> selectedPaths;
+        for (const auto& asset : assets)
+        {
+            if (asset.isSelected)
+            {
+                selectedPaths.push_back(asset.path);
+            }
+        }
 
         float panelWidth = ImGui::GetContentRegionAvail().x;
         float cellSize = PADDING + THUMBNAIL_SIZE;
@@ -81,7 +89,7 @@ namespace windows
             if (matchesSearchQuery(asset, searchQuery))
             {
                 // Use Asset.isSelected for multi-selection support
-                drawAssetItem(asset, asset.isSelected, result);
+                drawAssetItem(asset, asset.isSelected, selectedPaths, result);
 
                 if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
                 {
@@ -103,8 +111,14 @@ namespace windows
         return result;
     }
 
-    void AssetGridRenderer::drawAssetItem(const Asset& asset, bool isSelected, AssetClickResult& result)
+    void AssetGridRenderer::drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result)
     {
+        // Determine which paths to drag: all selected if this item is selected, otherwise just this item
+        std::vector<std::string> singlePath = {asset.path};
+        const std::vector<std::string>& pathsToDrag = (isSelected && selectedPaths.size() > 1)
+            ? selectedPaths
+            : singlePath;
+        ImGui::PushID(asset.path.c_str());
         ImVec2 cursorPos = ImGui::GetCursorScreenPos();
         float itemWidth = THUMBNAIL_SIZE + PADDING;
         float itemHeight = THUMBNAIL_SIZE + ImGui::GetTextLineHeightWithSpacing() + 4.0f;
@@ -126,6 +140,7 @@ namespace windows
 
         if (!iconAtlas.isValid())
         {
+            ImGui::PopID();
             ImGui::NextColumn();
             return;
         }
@@ -195,7 +210,7 @@ namespace windows
             // Unified drag source for folders (for content browser operations)
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
             {
-                DragDropManager::instance().beginDrag({asset.path});
+                DragDropManager::instance().beginDrag(pathsToDrag);
                 DragDropManager::instance().setDragPayload();
                 DragDropManager::instance().drawDragPreview();
                 ImGui::EndDragDropSource();
@@ -211,12 +226,10 @@ namespace windows
                 bool isValid = DragDropManager::instance().isValidDropTarget(asset.path);
                 DragDropManager::drawDropTargetHighlight(dropRect, isValid);
 
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
+                const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER);
+                if (payload && isValid)
                 {
-                    if (isValid)
-                    {
-                        DragDropManager::instance().acceptDrop(asset.path);
-                    }
+                    DragDropManager::instance().acceptDrop(asset.path);
                 }
                 ImGui::EndDragDropTarget();
             }
@@ -236,26 +249,12 @@ namespace windows
             // Unified drag source for files (for content browser operations)
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
             {
-                DragDropManager::instance().beginDrag({asset.path});
+                DragDropManager::instance().beginDrag(pathsToDrag);
                 DragDropManager::instance().setDragPayload();
                 DragDropManager::instance().drawDragPreview();
                 ImGui::EndDragDropSource();
             }
 
-            // Keep specific drag payloads for prefabs and textures (for scene/material editors)
-            if (asset.type == AssetType::Prefab && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
-            {
-                ImGui::SetDragDropPayload("DND_PREFAB_PATH", asset.path.c_str(), asset.path.size() + 1);
-                ImGui::Text("Instantiate %s", asset.name.c_str());
-                ImGui::EndDragDropSource();
-            }
-
-            if (asset.type == AssetType::Texture && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
-            {
-                ImGui::SetDragDropPayload("DND_TEXTURE_PATH", asset.path.c_str(), asset.path.size() + 1);
-                ImGui::Text("Texture: %s", asset.name.c_str());
-                ImGui::EndDragDropSource();
-            }
 
             ImGui::TextWrapped("%s", asset.name.c_str());
             ImGui::EndGroup();
@@ -267,6 +266,7 @@ namespace windows
             ImGui::PopStyleVar();
         }
 
+        ImGui::PopID();
         ImGui::NextColumn();
     }
 }

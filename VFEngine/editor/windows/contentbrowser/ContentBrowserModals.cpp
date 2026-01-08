@@ -15,7 +15,7 @@ namespace windows
     }
 
     void ContentBrowserModals::setClipboardCallbacks(ClipboardCallback onCut, ClipboardCallback onCopy,
-                                                      PasteCallback onPaste, std::function<bool()> hasClipboardItems)
+                                                     PasteCallback onPaste, std::function<bool()> hasClipboardItems)
     {
         cutCallback = std::move(onCut);
         copyCallback = std::move(onCopy);
@@ -41,30 +41,6 @@ namespace windows
         errorMessage = message;
         errorDetails = details;
         showErrorModal = true;
-    }
-
-    void ContentBrowserModals::showOperationError(const services::FileOperationResult& result)
-    {
-        if (!result.success)
-        {
-            showError("File Operation Failed", result.errorMessage, result.conflicts);
-        }
-    }
-
-    void ContentBrowserModals::showConflict(const std::string& sourcePath, const std::string& destPath,
-                                            std::function<void(ConflictResolution, const std::string&)> callback)
-    {
-        conflictSourcePath = sourcePath;
-        conflictDestPath = destPath;
-        conflictCallback = std::move(callback);
-
-        // Generate default new name
-        fs::path source(sourcePath);
-        std::string baseName = source.stem().string();
-        std::string extension = source.extension().string();
-        conflictNewName = baseName + "_copy" + extension;
-
-        showConflictModal = true;
     }
 
     void ContentBrowserModals::processModals(const fs::path& currentPath, const fs::path& selectedFile)
@@ -104,12 +80,6 @@ namespace windows
             ImGui::OpenPopup("Error##FileOpsError");
         }
         drawErrorModal();
-
-        if (showConflictModal)
-        {
-            ImGui::OpenPopup("File Conflict##FileConflict");
-        }
-        drawConflictModal();
     }
 
     void ContentBrowserModals::drawContextMenu(const fs::path& selectedFile)
@@ -421,14 +391,11 @@ namespace windows
         if (showErrorModal &&
             ImGui::BeginPopupModal("Error##FileOpsError", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            // Error icon and title
             ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Error: %s", errorTitle.c_str());
             ImGui::Separator();
 
-            // Main message
             ImGui::TextWrapped("%s", errorMessage.c_str());
 
-            // Show details if available
             if (!errorDetails.empty())
             {
                 ImGui::Spacing();
@@ -455,89 +422,6 @@ namespace windows
                 errorMessage.clear();
                 errorDetails.clear();
             }
-            ImGui::EndPopup();
-        }
-    }
-
-    void ContentBrowserModals::drawConflictModal()
-    {
-        if (showConflictModal &&
-            ImGui::BeginPopupModal("File Conflict##FileConflict", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-        {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "File Already Exists");
-            ImGui::Separator();
-
-            fs::path source(conflictSourcePath);
-            fs::path dest(conflictDestPath);
-
-            ImGui::Text("Source: %s", source.filename().string().c_str());
-            ImGui::Text("Destination: %s", dest.string().c_str());
-            ImGui::Spacing();
-            ImGui::Text("A file with this name already exists at the destination.");
-            ImGui::Text("What would you like to do?");
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            // Rename option with input
-            ImGui::Text("Rename to:");
-            ImGui::SameLine();
-            char buffer[256];
-            std::strncpy(buffer, conflictNewName.c_str(), sizeof(buffer) - 1);
-            buffer[sizeof(buffer) - 1] = '\0';
-            ImGui::SetNextItemWidth(200);
-            if (ImGui::InputText("##NewName", buffer, sizeof(buffer)))
-            {
-                conflictNewName = std::string(buffer);
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Rename", ImVec2(80, 0)))
-            {
-                if (conflictCallback)
-                {
-                    conflictCallback(ConflictResolution::Rename, conflictNewName);
-                }
-                ImGui::CloseCurrentPopup();
-                showConflictModal = false;
-            }
-
-            ImGui::Spacing();
-
-            // Skip and Overwrite buttons
-            if (ImGui::Button("Skip", ImVec2(120, 0)))
-            {
-                if (conflictCallback)
-                {
-                    conflictCallback(ConflictResolution::Skip, "");
-                }
-                ImGui::CloseCurrentPopup();
-                showConflictModal = false;
-            }
-            ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
-            if (ImGui::Button("Overwrite", ImVec2(120, 0)))
-            {
-                if (conflictCallback)
-                {
-                    conflictCallback(ConflictResolution::Overwrite, "");
-                }
-                ImGui::CloseCurrentPopup();
-                showConflictModal = false;
-            }
-            ImGui::PopStyleColor(2);
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(120, 0)))
-            {
-                if (conflictCallback)
-                {
-                    conflictCallback(ConflictResolution::None, "");
-                }
-                ImGui::CloseCurrentPopup();
-                showConflictModal = false;
-            }
-
             ImGui::EndPopup();
         }
     }

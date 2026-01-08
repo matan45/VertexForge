@@ -1,4 +1,5 @@
 #include "UndoRedoServiceImpl.hpp"
+#include "../events/UndoRedoEvents.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace services
@@ -23,34 +24,16 @@ namespace services
                 return redo();
             });
 
-        dispatcher.registerCommandHandler<events::undoredo::ClearHistoryCommand>(
-            [this](const events::undoredo::ClearHistoryCommand&)
+        dispatcher.registerCommandHandler<events::undoredo::BeginBatchCommand>(
+            [this](const events::undoredo::BeginBatchCommand& cmd)
             {
-                clear();
+                beginBatch(cmd.description);
             });
 
-        dispatcher.registerQueryHandler<events::undoredo::CanUndoQuery>(
-            [this](const events::undoredo::CanUndoQuery&)
+        dispatcher.registerCommandHandler<events::undoredo::EndBatchCommand>(
+            [this](const events::undoredo::EndBatchCommand&)
             {
-                return canUndo();
-            });
-
-        dispatcher.registerQueryHandler<events::undoredo::CanRedoQuery>(
-            [this](const events::undoredo::CanRedoQuery&)
-            {
-                return canRedo();
-            });
-
-        dispatcher.registerQueryHandler<events::undoredo::GetUndoDescriptionQuery>(
-            [this](const events::undoredo::GetUndoDescriptionQuery&)
-            {
-                return getUndoDescription();
-            });
-
-        dispatcher.registerQueryHandler<events::undoredo::GetRedoDescriptionQuery>(
-            [this](const events::undoredo::GetRedoDescriptionQuery&)
-            {
-                return getRedoDescription();
+                endBatch();
             });
     }
 
@@ -61,7 +44,6 @@ namespace services
             return;
         }
 
-        // If in batch mode, add to current batch instead of undo stack
         if (inBatchMode && currentBatch)
         {
             vfLogInfo("Adding to batch: {}", command->getDescription());
@@ -69,17 +51,11 @@ namespace services
             return;
         }
 
-        // Clear redo stack when new command is pushed
         redoStack.clear();
 
-        // Add command to undo stack
         undoStack.push_back(std::move(command));
 
-        // Trim if necessary
         trimUndoStack();
-
-        // Notify listeners
-        publishStateChanged();
 
         vfLogInfo("Pushed undo command: {}", undoStack.back()->getDescription());
     }
@@ -91,7 +67,6 @@ namespace services
             return false;
         }
 
-        // Pop from undo stack
         auto command = std::move(undoStack.back());
         undoStack.pop_back();
 
@@ -99,19 +74,9 @@ namespace services
 
         try
         {
-            // Execute undo
             command->undo();
 
-            // Move to redo stack
             redoStack.push_back(std::move(command));
-
-            // Notify listeners
-            publishStateChanged();
-
-            // Publish undo performed notification
-            events::undoredo::UndoPerformedNotification notification;
-            notification.description = description;
-            events::EventDispatcher::instance().publish(notification);
 
             vfLogInfo("Undo: {}", description);
             return true;
@@ -119,7 +84,6 @@ namespace services
         catch (const std::exception& e)
         {
             vfLogError("Undo failed: {}", e.what());
-            // Put command back on undo stack
             undoStack.push_back(std::move(command));
             return false;
         }
@@ -132,7 +96,6 @@ namespace services
             return false;
         }
 
-        // Pop from redo stack
         auto command = std::move(redoStack.back());
         redoStack.pop_back();
 
@@ -140,19 +103,9 @@ namespace services
 
         try
         {
-            // Execute redo
             command->execute();
 
-            // Move to undo stack
             undoStack.push_back(std::move(command));
-
-            // Notify listeners
-            publishStateChanged();
-
-            // Publish redo performed notification
-            events::undoredo::RedoPerformedNotification notification;
-            notification.description = description;
-            events::EventDispatcher::instance().publish(notification);
 
             vfLogInfo("Redo: {}", description);
             return true;
@@ -160,7 +113,6 @@ namespace services
         catch (const std::exception& e)
         {
             vfLogError("Redo failed: {}", e.what());
-            // Put command back on redo stack
             redoStack.push_back(std::move(command));
             return false;
         }
@@ -170,7 +122,6 @@ namespace services
     {
         undoStack.clear();
         redoStack.clear();
-        publishStateChanged();
         vfLogInfo("Undo history cleared");
     }
 
@@ -202,43 +153,11 @@ namespace services
         return redoStack.back()->getDescription();
     }
 
-    size_t UndoRedoServiceImpl::getUndoStackSize() const
-    {
-        return undoStack.size();
-    }
-
-    size_t UndoRedoServiceImpl::getRedoStackSize() const
-    {
-        return redoStack.size();
-    }
-
-    void UndoRedoServiceImpl::setMaxHistoryDepth(size_t maxDepth)
-    {
-        maxHistoryDepth = maxDepth;
-        trimUndoStack();
-    }
-
-    size_t UndoRedoServiceImpl::getMaxHistoryDepth() const
-    {
-        return maxHistoryDepth;
-    }
-
-    void UndoRedoServiceImpl::publishStateChanged()
-    {
-        events::undoredo::UndoStateChangedNotification notification;
-        notification.canUndo = canUndo();
-        notification.canRedo = canRedo();
-        notification.undoDescription = getUndoDescription();
-        notification.redoDescription = getRedoDescription();
-
-        events::EventDispatcher::instance().publish(notification);
-    }
-
     void UndoRedoServiceImpl::trimUndoStack()
     {
         if (maxHistoryDepth == 0)
         {
-            return; // Unlimited
+            return;
         }
 
         while (undoStack.size() > maxHistoryDepth)
@@ -271,15 +190,12 @@ namespace services
 
         inBatchMode = false;
 
-        // Only push if there are commands in the batch
         if (currentBatch && currentBatch->hasCommands())
         {
             vfLogInfo("Completed batch operation: {}", batchDescription);
-            // Use the base pushCommand logic (not batch mode anymore)
             redoStack.clear();
             undoStack.push_back(std::move(currentBatch));
             trimUndoStack();
-            publishStateChanged();
         }
         else
         {
@@ -288,10 +204,5 @@ namespace services
 
         currentBatch.reset();
         batchDescription.clear();
-    }
-
-    bool UndoRedoServiceImpl::isInBatchMode() const
-    {
-        return inBatchMode;
     }
 }

@@ -65,6 +65,7 @@ namespace windows
 
         events::SubscriptionToken importCompletedToken;
         events::SubscriptionToken fileMovedToken;
+        events::SubscriptionToken fileDeletedToken;
         events::SubscriptionToken folderSelectedToken;
 
         std::unique_ptr<AssetGridRenderer> gridRenderer;

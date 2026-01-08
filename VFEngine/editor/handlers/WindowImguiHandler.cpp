@@ -5,7 +5,7 @@
 #include "../windows/EntityDetailsPanel.hpp"
 #include "../windows/ViewPort.hpp"
 #include "../windows/MainImguiWindow.hpp"
-#include "../windows/ContentBrowser.hpp"
+#include "../windows/contentbrowser/ContentBrowser.hpp"
 #include "../windows/FolderStructureWindow.hpp"
 #include "../windows/ImportProgressWindow.hpp"
 

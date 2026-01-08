@@ -1,7 +1,7 @@
 #include "DragDropManager.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/FileOperationsEvents.hpp"
-#include "print/EditorLogger.hpp"
+#include "events/UndoRedoEvents.hpp"
 #include <filesystem>
 
 namespace fs = std::filesystem;
@@ -17,8 +17,7 @@ namespace windows
     void DragDropManager::beginDrag(const std::vector<std::string>& paths)
     {
         dragPaths = paths;
-        dragging = true;
-        moveOperation = true;  // Default to move
+        moveOperation = true;
         updateModifiers();
     }
 
@@ -29,25 +28,27 @@ namespace windows
             return;
         }
 
-        ContentBrowserDragPayload payload;
-        payload.paths = dragPaths;
-        payload.isMove = moveOperation;
-
-        ImGui::SetDragDropPayload(DND_CONTENT_BROWSER, &payload, sizeof(ContentBrowserDragPayload));
+        // Use a simple marker - actual data is stored in DragDropManager
+        static const char marker = 1;
+        ImGui::SetDragDropPayload(DND_CONTENT_BROWSER, &marker, sizeof(marker));
     }
 
-    services::FileOperationResult DragDropManager::acceptDrop(const std::string& targetPath)
+    services::FileOperationResult DragDropManager::acceptDrop(const std::string& targetPathRef)
     {
+        // Make copies - references may become invalid if UI refreshes during operation
+        std::string targetPath = targetPathRef;
+        std::vector<std::string> pathsToMove = dragPaths;
+        bool isMove = moveOperation;
+
         services::FileOperationResult result;
 
-        if (dragPaths.empty())
+        if (pathsToMove.empty())
         {
             result.success = false;
             result.errorMessage = "No items being dragged";
             return result;
         }
 
-        // Verify target is a directory
         if (!fs::is_directory(targetPath))
         {
             result.success = false;
@@ -57,35 +58,61 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        if (moveOperation)
+        // End drag early to prevent re-entry issues
+        endDrag();
+
+        // Begin batch for grouped undo
+        if (pathsToMove.size() > 1)
         {
-            events::fileops::MoveFilesCommand cmd;
-            cmd.sourcePaths = dragPaths;
-            cmd.destFolder = targetPath;
-            result = dispatcher.execute(cmd);
-        }
-        else
-        {
-            events::fileops::CopyFilesCommand cmd;
-            cmd.sourcePaths = dragPaths;
-            cmd.destFolder = targetPath;
-            result = dispatcher.execute(cmd);
+            events::undoredo::BeginBatchCommand batchCmd;
+            batchCmd.description = (isMove ? "Move " : "Copy ") + std::to_string(pathsToMove.size()) + " items";
+            dispatcher.execute(batchCmd);
         }
 
-        // Clear drag state after drop
-        endDrag();
+        result.success = true;
+        for (const auto& sourcePath : pathsToMove)
+        {
+            services::FileOperationResult opResult;
+            if (isMove)
+            {
+                events::fileops::MoveFileCommand cmd;
+                cmd.sourcePath = sourcePath;
+                cmd.destPath = targetPath;
+                opResult = dispatcher.execute(cmd);
+            }
+            else
+            {
+                events::fileops::CopyFileCommand cmd;
+                cmd.sourcePath = sourcePath;
+                cmd.destPath = targetPath;
+                opResult = dispatcher.execute(cmd);
+            }
+
+            if (!opResult.success)
+            {
+                result.success = false;
+                result.errorMessage += opResult.errorMessage + "\n";
+            }
+            result.updatedReferences.insert(result.updatedReferences.end(),
+                opResult.updatedReferences.begin(), opResult.updatedReferences.end());
+        }
+
+        // End batch
+        if (pathsToMove.size() > 1)
+        {
+            dispatcher.execute(events::undoredo::EndBatchCommand{});
+        }
 
         return result;
     }
 
     bool DragDropManager::isValidDropTarget(const std::string& targetPath) const
     {
-        if (!dragging || dragPaths.empty())
+        if (dragPaths.empty())
         {
             return false;
         }
 
-        // Target must be a directory
         if (!fs::exists(targetPath) || !fs::is_directory(targetPath))
         {
             return false;
@@ -93,21 +120,17 @@ namespace windows
 
         fs::path target(targetPath);
 
-        // Check each source path
         for (const auto& sourcePath : dragPaths)
         {
             fs::path source(sourcePath);
 
-            // Can't drop on self
             if (fs::equivalent(source.parent_path(), target))
             {
                 return false;
             }
 
-            // Can't drop a folder into itself or its descendants
             if (fs::is_directory(source))
             {
-                // Check if target is inside source
                 auto relative = fs::relative(target, source);
                 if (!relative.empty() && relative.native()[0] != '.')
                 {
@@ -115,11 +138,10 @@ namespace windows
                 }
             }
 
-            // Check for name conflicts
             fs::path destFile = target / source.filename();
             if (fs::exists(destFile))
             {
-                return false;  // Would need conflict resolution
+                return false;
             }
         }
 
@@ -128,7 +150,7 @@ namespace windows
 
     void DragDropManager::drawDragPreview()
     {
-        if (!dragging || dragPaths.empty())
+        if (dragPaths.empty())
         {
             return;
         }
@@ -160,38 +182,14 @@ namespace windows
         drawList->AddRectFilled(rect.Min, rect.Max, color);
     }
 
-    void DragDropManager::drawDropTargetBorder(const ImRect& rect, bool isValid)
-    {
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        ImU32 color = isValid ? DragDropColors::DROP_TARGET_BORDER_VALID : DragDropColors::DROP_TARGET_BORDER_INVALID;
-        drawList->AddRect(rect.Min, rect.Max, color, 0.0f, 0, 2.0f);
-    }
-
-    bool DragDropManager::isDragging() const
-    {
-        return dragging;
-    }
-
-    const std::vector<std::string>& DragDropManager::getDragPaths() const
-    {
-        return dragPaths;
-    }
-
-    bool DragDropManager::isMove() const
-    {
-        return moveOperation;
-    }
-
     void DragDropManager::endDrag()
     {
         dragPaths.clear();
-        dragging = false;
         moveOperation = true;
     }
 
     void DragDropManager::updateModifiers()
     {
-        // Check if Ctrl is held - switches to copy mode
         moveOperation = !ImGui::IsKeyDown(ImGuiMod_Ctrl);
     }
 }

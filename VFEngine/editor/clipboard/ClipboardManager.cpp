@@ -1,6 +1,7 @@
 #include "ClipboardManager.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/FileOperationsEvents.hpp"
+#include "events/UndoRedoEvents.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace windows
@@ -23,7 +24,7 @@ namespace windows
     {
         items = itemsToCopy;
         operation = ClipboardOperation::Copy;
-        cutPathsSet.clear();  // No cut paths when copying
+        cutPathsSet.clear();
         vfLogInfo("Copied {} items to clipboard", items.size());
     }
 
@@ -47,42 +48,59 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Collect all source paths
-        std::vector<std::string> sourcePaths;
-        for (const auto& item : items)
-        {
-            sourcePaths.push_back(item.path);
-        }
-
-        if (operation == ClipboardOperation::Cut)
-        {
-            // Move files
-            events::fileops::MoveFilesCommand cmd;
-            cmd.sourcePaths = sourcePaths;
-            cmd.destFolder = targetFolder;
-
-            result = dispatcher.execute(cmd);
-
-            // Clear clipboard after successful cut-paste
-            if (result.success)
-            {
-                clear();
-            }
-        }
-        else if (operation == ClipboardOperation::Copy)
-        {
-            // Copy files
-            events::fileops::CopyFilesCommand cmd;
-            cmd.sourcePaths = sourcePaths;
-            cmd.destFolder = targetFolder;
-
-            result = dispatcher.execute(cmd);
-            // Don't clear clipboard after copy - allow multiple pastes
-        }
-        else
+        if (operation != ClipboardOperation::Cut && operation != ClipboardOperation::Copy)
         {
             result.success = false;
             result.errorMessage = "Invalid clipboard operation";
+            return result;
+        }
+
+        // Begin batch for grouped undo
+        if (items.size() > 1)
+        {
+            events::undoredo::BeginBatchCommand batchCmd;
+            batchCmd.description = (operation == ClipboardOperation::Cut ? "Move " : "Copy ") +
+                                   std::to_string(items.size()) + " items";
+            dispatcher.execute(batchCmd);
+        }
+
+        result.success = true;
+        for (const auto& item : items)
+        {
+            services::FileOperationResult opResult;
+            if (operation == ClipboardOperation::Cut)
+            {
+                events::fileops::MoveFileCommand cmd;
+                cmd.sourcePath = item.path;
+                cmd.destPath = targetFolder;
+                opResult = dispatcher.execute(cmd);
+            }
+            else
+            {
+                events::fileops::CopyFileCommand cmd;
+                cmd.sourcePath = item.path;
+                cmd.destPath = targetFolder;
+                opResult = dispatcher.execute(cmd);
+            }
+
+            if (!opResult.success)
+            {
+                result.success = false;
+                result.errorMessage += opResult.errorMessage + "\n";
+            }
+            result.updatedReferences.insert(result.updatedReferences.end(),
+                opResult.updatedReferences.begin(), opResult.updatedReferences.end());
+        }
+
+        // End batch
+        if (items.size() > 1)
+        {
+            dispatcher.execute(events::undoredo::EndBatchCommand{});
+        }
+
+        if (operation == ClipboardOperation::Cut && result.success)
+        {
+            clear();
         }
 
         return result;
@@ -96,21 +114,6 @@ namespace windows
     bool ClipboardManager::isCut() const
     {
         return operation == ClipboardOperation::Cut;
-    }
-
-    bool ClipboardManager::isCopy() const
-    {
-        return operation == ClipboardOperation::Copy;
-    }
-
-    const std::vector<ClipboardItem>& ClipboardManager::getItems() const
-    {
-        return items;
-    }
-
-    bool ClipboardManager::isPathCut(const std::string& path) const
-    {
-        return cutPathsSet.find(path) != cutPathsSet.end();
     }
 
     const std::unordered_set<std::string>& ClipboardManager::getCutPaths() const

@@ -2,6 +2,7 @@
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/FileOperationsEvents.hpp"
+#include "../dragdrop/DragDropManager.hpp"
 #include "print/EditorLogger.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>
@@ -17,19 +18,9 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Subscribe to file operation notifications to refresh view
-        fileMovedToken = dispatcher.subscribe<events::fileops::FileMovedNotification>(
-            [this](const events::fileops::FileMovedNotification&) {
-                // View will refresh automatically on next draw
-            });
-
-        fileDeletedToken = dispatcher.subscribe<events::fileops::FileDeletedNotification>(
-            [this](const events::fileops::FileDeletedNotification&) {
-                // View will refresh automatically on next draw
-            });
-
         folderCreatedToken = dispatcher.subscribe<events::fileops::FolderCreatedNotification>(
-            [this](const events::fileops::FolderCreatedNotification& notification) {
+            [this](const events::fileops::FolderCreatedNotification& notification)
+            {
                 // Auto-expand parent of new folder
                 fs::path newFolder(notification.path);
                 fs::path parent = newFolder.parent_path();
@@ -39,19 +30,9 @@ namespace windows
 
     FolderStructureWindow::~FolderStructureWindow()
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        if (fileMovedToken.isValid())
-        {
-            dispatcher.unsubscribe(fileMovedToken);
-        }
-        if (fileDeletedToken.isValid())
-        {
-            dispatcher.unsubscribe(fileDeletedToken);
-        }
         if (folderCreatedToken.isValid())
         {
-            dispatcher.unsubscribe(folderCreatedToken);
+            events::EventDispatcher::instance().unsubscribe(folderCreatedToken);
         }
     }
 
@@ -59,11 +40,9 @@ namespace windows
     {
         if (ImGui::Begin("Folder Structure", nullptr, ImGuiWindowFlags_NoCollapse))
         {
-            // Root folder header
             ImGui::Text(ICON_FA_FOLDER_OPEN " %s", StringUtil::wstringToUtf8(rootPath.filename().wstring()).c_str());
             ImGui::Separator();
 
-            // Draw folder tree
             if (fs::exists(rootPath) && fs::is_directory(rootPath))
             {
                 drawFolderTree(rootPath);
@@ -92,9 +71,9 @@ namespace windows
             bool isSelected = (selectedFolder == entry.path());
             bool hasChildren = false;
 
-            // Check if folder has subfolders
             std::error_code childEc;
-            for (auto& child : fs::directory_iterator(entry.path(), fs::directory_options::skip_permission_denied, childEc))
+            for (auto& child : fs::directory_iterator(entry.path(), fs::directory_options::skip_permission_denied,
+                                                      childEc))
             {
                 if (child.is_directory())
                 {
@@ -103,7 +82,6 @@ namespace windows
                 }
             }
 
-            // Tree node flags
             ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
             if (!hasChildren)
             {
@@ -118,38 +96,30 @@ namespace windows
                 flags |= ImGuiTreeNodeFlags_DefaultOpen;
             }
 
-            // Push ID for unique node identification
             ImGui::PushID(folderPathStr.c_str());
 
-            // Folder icon
             ImGui::Text(ICON_FA_FOLDER);
             ImGui::SameLine();
 
-            // Tree node
             bool nodeOpen = ImGui::TreeNodeEx(folderName.c_str(), flags);
 
-            // Track expanded state
             if (nodeOpen != isExpanded(entry.path()))
             {
                 setExpanded(entry.path(), nodeOpen);
             }
 
-            // Handle selection
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
             {
                 selectedFolder = entry.path();
             }
 
-            // Double-click to navigate
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
-                // Publish folder selection notification
                 FolderSelectedNotification notification;
                 notification.folderPath = folderPathStr;
                 events::EventDispatcher::instance().publish(notification);
             }
 
-            // Drag source for folders
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
             {
                 DragDropManager::instance().beginDrag({folderPathStr});
@@ -159,12 +129,10 @@ namespace windows
                 ImGui::EndDragDropSource();
             }
 
-            // Drop target for folders
             handleDragDrop(entry.path());
 
             ImGui::PopID();
 
-            // Recurse into children
             if (nodeOpen)
             {
                 drawFolderTree(entry.path(), depth + 1);
@@ -177,7 +145,6 @@ namespace windows
     {
         if (ImGui::BeginDragDropTarget())
         {
-            // Visual feedback
             ImVec2 min = ImGui::GetItemRectMin();
             ImVec2 max = ImGui::GetItemRectMax();
             ImRect dropRect(min, max);
@@ -185,16 +152,13 @@ namespace windows
             bool isValid = DragDropManager::instance().isValidDropTarget(folderPath.string());
             DragDropManager::drawDropTargetHighlight(dropRect, isValid);
 
-            // Accept the drop
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
+            const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER);
+            if (payload && isValid)
             {
-                if (isValid)
+                auto result = DragDropManager::instance().acceptDrop(folderPath.string());
+                if (!result.success)
                 {
-                    auto result = DragDropManager::instance().acceptDrop(folderPath.string());
-                    if (!result.success)
-                    {
-                        vfLogError("Drop failed: {}", result.errorMessage);
-                    }
+                    vfLogError("Drop failed: {}", result.errorMessage);
                 }
             }
 
@@ -217,22 +181,5 @@ namespace windows
         {
             expandedFolders.erase(path.string());
         }
-    }
-
-    void FolderStructureWindow::setRootPath(const std::string& path)
-    {
-        rootPath = path;
-        expandedFolders.clear();
-        expandedFolders.insert(path);
-    }
-
-    std::string FolderStructureWindow::getRootPath() const
-    {
-        return rootPath.string();
-    }
-
-    void FolderStructureWindow::setSelectedFolder(const std::string& path)
-    {
-        selectedFolder = path;
     }
 }

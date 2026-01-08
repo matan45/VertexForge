@@ -1,13 +1,13 @@
 #include "ContentBrowser.hpp"
-#include "FolderStructureWindow.hpp"
+#include "../FolderStructureWindow.hpp"
 #include "resource/ResourceManager.hpp"
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ResourceEvents.hpp"
 #include "events/FileOperationsEvents.hpp"
 #include "events/UndoRedoEvents.hpp"
-#include "../clipboard/ClipboardManager.hpp"
-#include "../dragdrop/DragDropManager.hpp"
+#include "../../clipboard/ClipboardManager.hpp"
+#include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>
@@ -18,8 +18,8 @@ namespace windows
 {
     ContentBrowser::ContentBrowser()
         : gridRenderer(std::make_unique<AssetGridRenderer>())
-        , modals(std::make_unique<ContentBrowserModals>([this]() { loadDirectory(currentPath); }))
-        , previewManager(std::make_unique<PreviewWindowManager>())
+          , modals(std::make_unique<ContentBrowserModals>([this]() { loadDirectory(currentPath); }))
+          , previewManager(std::make_unique<PreviewWindowManager>())
     {
         // Set up clipboard callbacks for context menu
         modals->setClipboardCallbacks(
@@ -29,31 +29,45 @@ namespace windows
             []() { return ClipboardManager::instance().hasItems(); }
         );
 
-        if (fs::exists(currentPath) && fs::is_directory(currentPath)) {
+        if (fs::exists(currentPath) && fs::is_directory(currentPath))
+        {
             loadDirectory(currentPath);
         }
 
         auto& dispatcher = events::EventDispatcher::instance();
 
         importCompletedToken = dispatcher.subscribe<events::resource::ImportCompletedNotification>(
-            [this](const events::resource::ImportCompletedNotification&) {
-                if (fs::exists(currentPath) && fs::is_directory(currentPath)) {
+            [this](const events::resource::ImportCompletedNotification&)
+            {
+                if (fs::exists(currentPath) && fs::is_directory(currentPath))
+                {
                     loadDirectory(currentPath);
                 }
             });
 
-        // Refresh view when files are moved/deleted
         fileMovedToken = dispatcher.subscribe<events::fileops::FileMovedNotification>(
-            [this](const events::fileops::FileMovedNotification&) {
-                if (fs::exists(currentPath) && fs::is_directory(currentPath)) {
+            [this](const events::fileops::FileMovedNotification&)
+            {
+                if (fs::exists(currentPath) && fs::is_directory(currentPath))
+                {
                     loadDirectory(currentPath);
                     clearSelection();
                 }
             });
 
-        // Navigate when folder is selected from Folder Structure window
+        fileDeletedToken = dispatcher.subscribe<events::fileops::FileDeletedNotification>(
+            [this](const events::fileops::FileDeletedNotification&)
+            {
+                if (fs::exists(currentPath) && fs::is_directory(currentPath))
+                {
+                    loadDirectory(currentPath);
+                    clearSelection();
+                }
+            });
+
         folderSelectedToken = dispatcher.subscribe<FolderSelectedNotification>(
-            [this](const FolderSelectedNotification& notification) {
+            [this](const FolderSelectedNotification& notification)
+            {
                 navigateTo(notification.folderPath);
             });
     }
@@ -61,13 +75,20 @@ namespace windows
     ContentBrowser::~ContentBrowser()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        if (importCompletedToken.isValid()) {
+        if (importCompletedToken.isValid())
+        {
             dispatcher.unsubscribe(importCompletedToken);
         }
-        if (fileMovedToken.isValid()) {
+        if (fileMovedToken.isValid())
+        {
             dispatcher.unsubscribe(fileMovedToken);
         }
-        if (folderSelectedToken.isValid()) {
+        if (fileDeletedToken.isValid())
+        {
+            dispatcher.unsubscribe(fileDeletedToken);
+        }
+        if (folderSelectedToken.isValid())
+        {
             dispatcher.unsubscribe(folderSelectedToken);
         }
     }
@@ -76,12 +97,12 @@ namespace windows
     {
         gridRenderer->ensureIconsLoaded();
 
-        if (!importLocationSet) {
+        if (!importLocationSet)
+        {
             controllers::Import::setLocation(currentPath.string());
             importLocationSet = true;
         }
 
-        // Update cut state for visual feedback
         updateCutState();
 
         modals->processModals(currentPath, selectedFile);
@@ -92,7 +113,6 @@ namespace windows
     {
         if (ImGui::Begin("Content Folder"))
         {
-            // Handle keyboard shortcuts when window is focused
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
             {
                 handleKeyboardShortcuts();
@@ -127,20 +147,18 @@ namespace windows
             ImVec2 contentSize = ImGui::GetWindowSize();
             ImRect dropRect(dropZoneStart, ImVec2(dropZoneStart.x + contentSize.x, dropZoneStart.y + contentSize.y));
 
-            // Update selection state in assets before drawing
             for (auto& asset : assets)
             {
                 asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
             }
 
-            AssetClickResult clickResult = gridRenderer->draw(assets, selectedFile, searchQuery);
+            AssetClickResult clickResult = gridRenderer->draw(assets, searchQuery);
 
             if (clickResult.wasClicked)
             {
                 selectedFile = clickResult.clickedPath;
                 selectedType = clickResult.clickedType;
 
-                // Find the clicked asset index
                 int clickedIndex = -1;
                 for (size_t i = 0; i < assets.size(); ++i)
                 {
@@ -156,13 +174,18 @@ namespace windows
                     bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
                     bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
                     selectAsset(static_cast<size_t>(clickedIndex), ctrlHeld, shiftHeld);
+
+                    // Update isSelected flag on all assets to reflect current selection
+                    for (auto& asset : assets)
+                    {
+                        asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
+                    }
                 }
 
                 if (clickResult.wasDoubleClicked)
                 {
                     if (selectedType == AssetType::Script)
                     {
-                        // Open .mt files with VS Code
                         std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
                         std::string args = "\"" + filePath + "\"";
                         ShellExecuteA(nullptr, "open", "code", args.c_str(), nullptr, SW_SHOWNORMAL);
@@ -181,7 +204,6 @@ namespace windows
 
             ImGui::Columns(1);
 
-            // Handle drag-drop for scene entities (prefabs)
             if (ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("ContentFolderDropZone")))
             {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))
@@ -190,7 +212,6 @@ namespace windows
                     modals->triggerSavePrefabModal(entity);
                 }
 
-                // Handle content browser drag-drop
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
                 {
                     bool isValid = DragDropManager::instance().isValidDropTarget(currentPath.string());
@@ -220,7 +241,6 @@ namespace windows
 
         ImGui::SameLine();
 
-        // Copy path button
         if (ImGui::Button(ICON_FA_COPY "##CopyPath"))
         {
             ImGui::SetClipboardText(StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
@@ -232,13 +252,11 @@ namespace windows
 
         ImGui::SameLine();
 
-        // Editable path bar
         float availableWidth = ImGui::GetContentRegionAvail().x - 300.0f; // Reserve space for search
         if (availableWidth < 200.0f) availableWidth = 200.0f;
 
         if (!isEditingPath)
         {
-            // Display mode - clickable text
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
 
@@ -258,10 +276,8 @@ namespace windows
         }
         else
         {
-            // Edit mode - input text
             ImGui::SetNextItemWidth(availableWidth);
 
-            // Auto-focus the input field when entering edit mode
             if (ImGui::IsWindowAppearing() || pathEditBuffer.empty())
             {
                 pathEditBuffer = StringUtil::wstringToUtf8(currentPath.wstring());
@@ -275,7 +291,6 @@ namespace windows
             if (ImGui::InputText("##PathEdit", pathBuffer, sizeof(pathBuffer),
                                  ImGuiInputTextFlags_EnterReturnsTrue))
             {
-                // Enter pressed - navigate to the path
                 fs::path newPath(pathBuffer);
                 if (fs::exists(newPath) && fs::is_directory(newPath))
                 {
@@ -288,7 +303,6 @@ namespace windows
                 pathEditBuffer = pathBuffer;
             }
 
-            // Cancel editing on Escape or when clicking elsewhere
             if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
                 (!ImGui::IsItemActive() && ImGui::IsMouseClicked(0) && !ImGui::IsItemHovered()))
             {
@@ -325,7 +339,6 @@ namespace windows
 
             try
             {
-                // Skip problematic entries (reserved Windows names, etc.)
                 std::string filename = entry.path().filename().string();
                 if (filename.empty() || filename == "nul" || filename == "con" ||
                     filename == "prn" || filename == "aux" || filename == "." || filename == "..")
@@ -342,7 +355,6 @@ namespace windows
                 bool isDir = entry.is_directory(statusEc);
                 if (statusEc)
                 {
-                    // Can't determine file type, skip
                     continue;
                 }
 
@@ -371,11 +383,9 @@ namespace windows
                     }
                     else
                     {
-                        // Only read header for VFEngine asset files
-                        // These have custom binary format with file type in header
                         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||
-                                          extension == ".vfMesh" || extension == ".vfAudio" ||
-                                          extension == ".vfAnim" || extension == ".vfScene");
+                            extension == ".vfMesh" || extension == ".vfAudio" ||
+                            extension == ".vfAnim" || extension == ".vfScene");
 
                         if (isVfAsset)
                         {
@@ -503,7 +513,6 @@ namespace windows
             auto paths = getSelectedPaths();
             if (!paths.empty())
             {
-                // Trigger delete confirmation through modals
                 if (!selectedFile.empty())
                 {
                     modals->triggerDeleteModal();
@@ -523,7 +532,6 @@ namespace windows
 
         if (shiftHeld && lastSelectedIndex >= 0)
         {
-            // Range selection
             size_t start = std::min(static_cast<size_t>(lastSelectedIndex), index);
             size_t end = std::max(static_cast<size_t>(lastSelectedIndex), index);
 
@@ -539,7 +547,6 @@ namespace windows
         }
         else if (ctrlHeld)
         {
-            // Toggle selection
             if (selectedPaths.find(path) != selectedPaths.end())
             {
                 selectedPaths.erase(path);
@@ -551,9 +558,13 @@ namespace windows
         }
         else
         {
-            // Single selection
-            selectedPaths.clear();
-            selectedPaths.insert(path);
+            // If clicking on already selected item, keep selection (allows multi-drag)
+            // If clicking on unselected item, clear and select only that item
+            if (selectedPaths.find(path) == selectedPaths.end())
+            {
+                selectedPaths.clear();
+                selectedPaths.insert(path);
+            }
         }
 
         lastSelectedIndex = static_cast<int>(index);
