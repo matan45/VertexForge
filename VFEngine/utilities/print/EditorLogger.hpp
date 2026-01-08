@@ -12,6 +12,7 @@
 #include <sstream>
 #include <vector>
 #include <mutex>
+#include <atomic>
 
 
 #define vfLogInfo(...) util::infoLogEditor(__VA_ARGS__)
@@ -42,8 +43,8 @@ namespace util {
 	// Buffer to store log messages for ImGui console
 	inline std::vector<LogEntry> imguiConsoleBuffer;
 
-	// Sequence counter for stable ordering
-	inline uint64_t logSequenceCounter = 0;
+	// Sequence counter for stable ordering (atomic for lock-free thread safety)
+	inline std::atomic<uint64_t> logSequenceCounter{0};
 
 	// Append log message to ImGui buffer (thread-safe)
 	inline void appendToImGuiConsoleEditor(const std::string& message, LogLevel level) {

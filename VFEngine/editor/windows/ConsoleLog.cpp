@@ -24,7 +24,7 @@ namespace windows
         {
             std::lock_guard<std::mutex> lock(util::imguiConsoleBufferMutex);
             util::imguiConsoleBuffer.clear();
-            util::logSequenceCounter = 0;
+            util::logSequenceCounter.store(0, std::memory_order_relaxed);
             cachedBuffer.clear();
             filteredView.clear();
             selectedEntries.clear();
@@ -84,15 +84,19 @@ namespace windows
             currentBufferSize = util::imguiConsoleBuffer.size();
         }
 
-        // Rebuild cached buffer and filtered view if needed
-        if (currentBufferSize != lastBufferSize || currentFilter != lastFilter)
+        // Only copy buffer when new entries added (expensive operation)
+        bool bufferChanged = currentBufferSize != lastBufferSize;
+        if (bufferChanged)
         {
-            {
-                std::lock_guard<std::mutex> lock(util::imguiConsoleBufferMutex);
-                cachedBuffer = util::imguiConsoleBuffer;
-            }
-            rebuildFilteredView(cachedBuffer);
+            std::lock_guard<std::mutex> lock(util::imguiConsoleBufferMutex);
+            cachedBuffer = util::imguiConsoleBuffer;
             lastBufferSize = currentBufferSize;
+        }
+
+        // Rebuild filtered view when buffer OR filter changes
+        if (bufferChanged || currentFilter != lastFilter)
+        {
+            rebuildFilteredView(cachedBuffer);
             lastFilter = currentFilter;
         }
 
@@ -132,7 +136,7 @@ namespace windows
                 const util::LogEntry* entry = filteredView[i];
                 bool isSelected = selectedEntries.count(entry->sequenceNumber) > 0;
 
-                ImGui::PushID(static_cast<int>(entry->sequenceNumber));
+                ImGui::PushID(entry);  // Use pointer for guaranteed unique ID
 
                 ImVec4 textColor = getColorForLevel(entry->level);
                 ImGui::PushStyleColor(ImGuiCol_Text, textColor);
