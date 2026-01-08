@@ -5,12 +5,14 @@
 
 #include "spdlog/spdlog.h"
 #include "spdlog/fmt/bundled/core.h"  // fmt library used by spdlog
+#include "LogEntry.hpp"
 
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <vector>
 #include <mutex>
+#include <atomic>
 
 
 #define vfLogInfo(...) util::infoLogEditor(__VA_ARGS__)
@@ -39,12 +41,15 @@ namespace util {
 	inline std::mutex imguiConsoleBufferMutex;
 
 	// Buffer to store log messages for ImGui console
-	inline std::vector<std::string> imguiConsoleBuffer;
+	inline std::vector<LogEntry> imguiConsoleBuffer;
+
+	// Sequence counter for stable ordering (atomic for lock-free thread safety)
+	inline std::atomic<uint64_t> logSequenceCounter{0};
 
 	// Append log message to ImGui buffer (thread-safe)
-	inline void appendToImGuiConsoleEditor(const std::string& message) {
+	inline void appendToImGuiConsoleEditor(const std::string& message, LogLevel level) {
 		std::lock_guard<std::mutex> lock(imguiConsoleBufferMutex);
-		imguiConsoleBuffer.push_back(message);
+		imguiConsoleBuffer.emplace_back(message, level, logSequenceCounter++);
 	}
 
 	// Helper function to set console text color (Windows-specific)
@@ -78,7 +83,7 @@ namespace util {
 		spdlog::info(formattedMessage);
 
 		// Append the log with a timestamp to ImGui buffer
-		appendToImGuiConsoleEditor(fullMessage);
+		appendToImGuiConsoleEditor(fullMessage, LogLevel::Info);
 	}
 
 	// Warning logging function (without file name and line)
@@ -99,7 +104,7 @@ namespace util {
 		spdlog::warn(formattedMessage);
 
 		// Append the log with a timestamp to ImGui buffer
-		appendToImGuiConsoleEditor(fullMessage);
+		appendToImGuiConsoleEditor(fullMessage, LogLevel::Warning);
 	}
 
 	// Error logging function (without file name and line)
@@ -120,7 +125,7 @@ namespace util {
 		spdlog::error(formattedMessage);
 
 		// Append the log with a timestamp to ImGui buffer
-		appendToImGuiConsoleEditor(fullMessage);
+		appendToImGuiConsoleEditor(fullMessage, LogLevel::Error);
 	}
 
 }  // namespace util
