@@ -91,6 +91,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
@@ -132,6 +133,7 @@
     <ClInclude Include="uuid\UUID.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="asset\AssetReferenceScanner.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />
     <ClCompile Include="material\MaterialGraphHelper.cpp" />

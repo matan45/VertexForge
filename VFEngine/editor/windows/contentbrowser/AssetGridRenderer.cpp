@@ -2,7 +2,7 @@
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
-#include <IconsFontAwesome6.h>
+#include "../../dragdrop/DragDropManager.hpp"
 #include <algorithm>
 
 namespace windows
@@ -63,10 +63,19 @@ namespace windows
 
     AssetClickResult AssetGridRenderer::draw(
         const std::vector<Asset>& assets,
-        const fs::path& selectedFile,
         const std::string& searchQuery)
     {
         AssetClickResult result;
+
+        // Collect all selected paths for multi-selection drag
+        std::vector<std::string> selectedPaths;
+        for (const auto& asset : assets)
+        {
+            if (asset.isSelected)
+            {
+                selectedPaths.push_back(asset.path);
+            }
+        }
 
         float panelWidth = ImGui::GetContentRegionAvail().x;
         float cellSize = PADDING + THUMBNAIL_SIZE;
@@ -79,8 +88,8 @@ namespace windows
         {
             if (matchesSearchQuery(asset, searchQuery))
             {
-                bool isSelected = (selectedFile == fs::path(asset.path));
-                drawAssetItem(asset, isSelected, result);
+                // Use Asset.isSelected for multi-selection support
+                drawAssetItem(asset, asset.isSelected, selectedPaths, result);
 
                 if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
                 {
@@ -102,16 +111,25 @@ namespace windows
         return result;
     }
 
-    void AssetGridRenderer::drawAssetItem(const Asset& asset, bool isSelected, AssetClickResult& result)
+    void AssetGridRenderer::drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result)
     {
+        // Determine which paths to drag: all selected if this item is selected, otherwise just this item
+        std::vector<std::string> singlePath = {asset.path};
+        const std::vector<std::string>& pathsToDrag = (isSelected && selectedPaths.size() > 1)
+            ? selectedPaths
+            : singlePath;
+        ImGui::PushID(asset.path.c_str());
         ImVec2 cursorPos = ImGui::GetCursorScreenPos();
         float itemWidth = THUMBNAIL_SIZE + PADDING;
         float itemHeight = THUMBNAIL_SIZE + ImGui::GetTextLineHeightWithSpacing() + 4.0f;
 
+        // Apply dimming for cut items
+        float alphaMultiplier = asset.isCut ? DragDropColors::CUT_ITEM_ALPHA : 1.0f;
+
         if (isSelected)
         {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
-            ImU32 highlightColor = IM_COL32(70, 130, 180, 100);
+            ImU32 highlightColor = IM_COL32(70, 130, 180, static_cast<int>(100 * alphaMultiplier));
             drawList->AddRectFilled(
                 cursorPos,
                 ImVec2(cursorPos.x + itemWidth, cursorPos.y + itemHeight),
@@ -122,8 +140,15 @@ namespace windows
 
         if (!iconAtlas.isValid())
         {
+            ImGui::PopID();
             ImGui::NextColumn();
             return;
+        }
+
+        // Push alpha for cut items
+        if (asset.isCut)
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alphaMultiplier);
         }
 
         AtlasIcon icon = AtlasIcon::File;
@@ -181,6 +206,34 @@ namespace windows
             std::string folderName = asset.name;
             ImGui::ImageButton(folderName.c_str(), iconAtlas.imguiDescriptorSet,
                                ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
+
+            // Unified drag source for folders (for content browser operations)
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            {
+                DragDropManager::instance().beginDrag(pathsToDrag);
+                DragDropManager::instance().setDragPayload();
+                DragDropManager::instance().drawDragPreview();
+                ImGui::EndDragDropSource();
+            }
+
+            // Drop target for folders
+            if (ImGui::BeginDragDropTarget())
+            {
+                ImVec2 min = ImGui::GetItemRectMin();
+                ImVec2 max = ImGui::GetItemRectMax();
+                ImRect dropRect(min, max);
+
+                bool isValid = DragDropManager::instance().isValidDropTarget(asset.path);
+                DragDropManager::drawDropTargetHighlight(dropRect, isValid);
+
+                const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER);
+                if (payload && isValid)
+                {
+                    DragDropManager::instance().acceptDrop(asset.path);
+                }
+                ImGui::EndDragDropTarget();
+            }
+
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
                 result.pendingNavigation = asset.path;
@@ -193,24 +246,27 @@ namespace windows
             ImGui::BeginGroup();
             ImGui::Image(iconAtlas.imguiDescriptorSet, ImVec2(THUMBNAIL_SIZE, THUMBNAIL_SIZE), uv0, uv1);
 
-            if (asset.type == AssetType::Prefab && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            // Unified drag source for files (for content browser operations)
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
             {
-                ImGui::SetDragDropPayload("DND_PREFAB_PATH", asset.path.c_str(), asset.path.size() + 1);
-                ImGui::Text("Instantiate %s", asset.name.c_str());
+                DragDropManager::instance().beginDrag(pathsToDrag);
+                DragDropManager::instance().setDragPayload();
+                DragDropManager::instance().drawDragPreview();
                 ImGui::EndDragDropSource();
             }
 
-            if (asset.type == AssetType::Texture && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
-            {
-                ImGui::SetDragDropPayload("DND_TEXTURE_PATH", asset.path.c_str(), asset.path.size() + 1);
-                ImGui::Text("Texture: %s", asset.name.c_str());
-                ImGui::EndDragDropSource();
-            }
 
             ImGui::TextWrapped("%s", asset.name.c_str());
             ImGui::EndGroup();
         }
 
+        // Pop alpha style for cut items
+        if (asset.isCut)
+        {
+            ImGui::PopStyleVar();
+        }
+
+        ImGui::PopID();
         ImGui::NextColumn();
     }
 }

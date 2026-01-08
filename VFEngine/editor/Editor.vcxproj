@@ -101,6 +101,8 @@
   <ItemGroup>
     <ClInclude Include="camera\EditorCamera.hpp" />
     <ClInclude Include="camera\OrbitCamera.hpp" />
+    <ClInclude Include="clipboard\ClipboardManager.hpp" />
+    <ClInclude Include="dragdrop\DragDropManager.hpp" />
     <ClInclude Include="graph\ShaderGraphCompiler.hpp" />
     <ClInclude Include="graph\ShaderGraphEditor.hpp" />
     <ClInclude Include="graph\nodes\ConstantNodes.hpp" />
@@ -110,15 +112,12 @@
     <ClInclude Include="graph\nodes\ShaderNode.hpp" />
     <ClInclude Include="handlers\EditorHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
-    <ClInclude Include="windows\AssetGridRenderer.hpp" />
     <ClInclude Include="windows\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
-    <ClInclude Include="windows\ContentBrowser.hpp" />
-    <ClInclude Include="windows\ContentBrowserModals.hpp" />
-    <ClInclude Include="windows\ContentBrowserTypes.hpp" />
     <ClInclude Include="windows\CullingStatsWindow.hpp" />
     <ClInclude Include="windows\EditorCameraWindow.hpp" />
     <ClInclude Include="windows\EntityDetailsPanel.hpp" />
+    <ClInclude Include="windows\FolderStructureWindow.hpp" />
     <ClInclude Include="windows\IBLWindow.hpp" />
     <ClInclude Include="windows\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\ImportModalDialog.hpp" />
@@ -129,12 +128,16 @@
     <ClInclude Include="windows\MaterialInstanceEditorWindow.hpp" />
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
     <ClInclude Include="windows\PrefabPreviewWindow.hpp" />
-    <ClInclude Include="windows\PreviewWindowManager.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
     <ClInclude Include="windows\ViewPortGizmo.hpp" />
     <ClInclude Include="windows\ViewPortOverlay.hpp" />
     <ClInclude Include="windows\ViewPortPicker.hpp" />
+    <ClInclude Include="windows\contentbrowser\AssetGridRenderer.hpp" />
+    <ClInclude Include="windows\contentbrowser\ContentBrowser.hpp" />
+    <ClInclude Include="windows\contentbrowser\ContentBrowserModals.hpp" />
+    <ClInclude Include="windows\contentbrowser\ContentBrowserTypes.hpp" />
+    <ClInclude Include="windows\contentbrowser\PreviewWindowManager.hpp" />
     <ClInclude Include="windows\details\AddComponentPopup.hpp" />
     <ClInclude Include="windows\details\AudioSource2DDrawer.hpp" />
     <ClInclude Include="windows\details\AudioSource3DDrawer.hpp" />
@@ -152,6 +155,8 @@
   <ItemGroup>
     <ClCompile Include="camera\EditorCamera.cpp" />
     <ClCompile Include="camera\OrbitCamera.cpp" />
+    <ClCompile Include="clipboard\ClipboardManager.cpp" />
+    <ClCompile Include="dragdrop\DragDropManager.cpp" />
     <ClCompile Include="graph\ShaderGraphCompiler.cpp" />
     <ClCompile Include="graph\ShaderGraphEditor.cpp" />
     <ClCompile Include="graph\ShaderGraphEditorDraw.cpp" />
@@ -161,14 +166,12 @@
     <ClCompile Include="handlers\EditorHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />
-    <ClCompile Include="windows\AssetGridRenderer.cpp" />
     <ClCompile Include="windows\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\ConsoleLog.cpp" />
-    <ClCompile Include="windows\ContentBrowser.cpp" />
-    <ClCompile Include="windows\ContentBrowserModals.cpp" />
     <ClCompile Include="windows\CullingStatsWindow.cpp" />
     <ClCompile Include="windows\EditorCameraWindow.cpp" />
     <ClCompile Include="windows\EntityDetailsPanel.cpp" />
+    <ClCompile Include="windows\FolderStructureWindow.cpp" />
     <ClCompile Include="windows\IBLWindow.cpp" />
     <ClCompile Include="windows\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\ImportModalDialog.cpp" />
@@ -179,12 +182,15 @@
     <ClCompile Include="windows\MaterialInstanceEditorWindow.cpp" />
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
     <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
-    <ClCompile Include="windows\PreviewWindowManager.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
     <ClCompile Include="windows\ViewPortGizmo.cpp" />
     <ClCompile Include="windows\ViewPortOverlay.cpp" />
     <ClCompile Include="windows\ViewPortPicker.cpp" />
+    <ClCompile Include="windows\contentbrowser\AssetGridRenderer.cpp" />
+    <ClCompile Include="windows\contentbrowser\ContentBrowser.cpp" />
+    <ClCompile Include="windows\contentbrowser\ContentBrowserModals.cpp" />
+    <ClCompile Include="windows\contentbrowser\PreviewWindowManager.cpp" />
     <ClCompile Include="windows\details\AddComponentPopup.cpp" />
     <ClCompile Include="windows\details\AudioSource2DDrawer.cpp" />
     <ClCompile Include="windows\details\AudioSource3DDrawer.cpp" />
