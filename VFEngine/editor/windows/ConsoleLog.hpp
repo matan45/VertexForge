@@ -23,8 +23,7 @@ namespace windows
         std::unordered_set<uint64_t> selectedEntries;
         int64_t lastClickedIndex = -1;
         int64_t anchorIndex = -1;
-
-        // Cached buffer copy (must persist for filteredView pointers to remain valid)
+        
         std::vector<util::LogEntry> cachedBuffer;
         std::vector<const util::LogEntry*> filteredView;
         size_t lastBufferSize = 0;
