@@ -1,4 +1,6 @@
 #include "PhysicsAdapter.hpp"
+#include "../../services/events/PhysicsEvents.hpp"
+#include "../../services/events/EventDispatcher.hpp"
 
 namespace core {
 
@@ -12,7 +14,73 @@ namespace core {
     }
 
     bool PhysicsAdapter::init() {
-        return physicsWorld->init();
+        if (!physicsWorld->init()) {
+            return false;
+        }
+
+        // Set up contact callbacks to publish CQRS notifications
+        physicsWorld->setContactAddedCallback([this](const physics::ContactEvent& event) {
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            // Map body IDs to entity handles
+            uint64_t entityIdA = physicsWorld->getEntityForBody(event.bodyA);
+            uint64_t entityIdB = physicsWorld->getEntityForBody(event.bodyB);
+
+            if (entityIdA == 0 || entityIdB == 0) {
+                return;  // Skip if entities not found
+            }
+
+            services::EntityHandle entityA{ entityIdA };
+            services::EntityHandle entityB{ entityIdB };
+
+            if (event.isSensor) {
+                // Publish trigger enter notification
+                events::physics::TriggerEnterNotification notification;
+                notification.triggerEntity = entityA;
+                notification.otherEntity = entityB;
+                dispatcher.publish(notification);
+            } else {
+                // Publish collision start notification
+                events::physics::CollisionStartNotification notification;
+                notification.entityA = entityA;
+                notification.entityB = entityB;
+                notification.contactPoint = event.contactPoint;
+                notification.normal = event.normal;
+                notification.penetrationDepth = event.penetrationDepth;
+                dispatcher.publish(notification);
+            }
+        });
+
+        physicsWorld->setContactRemovedCallback([this](const physics::ContactEvent& event) {
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            // Map body IDs to entity handles
+            uint64_t entityIdA = physicsWorld->getEntityForBody(event.bodyA);
+            uint64_t entityIdB = physicsWorld->getEntityForBody(event.bodyB);
+
+            if (entityIdA == 0 || entityIdB == 0) {
+                return;  // Skip if entities not found
+            }
+
+            services::EntityHandle entityA{ entityIdA };
+            services::EntityHandle entityB{ entityIdB };
+
+            if (event.isSensor) {
+                // Publish trigger exit notification
+                events::physics::TriggerExitNotification notification;
+                notification.triggerEntity = entityA;
+                notification.otherEntity = entityB;
+                dispatcher.publish(notification);
+            } else {
+                // Publish collision end notification
+                events::physics::CollisionEndNotification notification;
+                notification.entityA = entityA;
+                notification.entityB = entityB;
+                dispatcher.publish(notification);
+            }
+        });
+
+        return true;
     }
 
     void PhysicsAdapter::cleanUp() {
@@ -90,12 +158,31 @@ namespace core {
             return std::nullopt;
         }
 
-        // Return basic rigid body data
         services::RigidBodyData data;
+
+        // Convert physics body type to service body type
+        auto bodyType = physicsWorld->getBodyType(bodyId);
+        switch (bodyType) {
+        case physics::BodyType::Static:
+            data.type = services::RigidBodyData::Type::Static;
+            break;
+        case physics::BodyType::Kinematic:
+            data.type = services::RigidBodyData::Type::Kinematic;
+            break;
+        case physics::BodyType::Dynamic:
+        default:
+            data.type = services::RigidBodyData::Type::Dynamic;
+            break;
+        }
+
+        // Query all properties from Jolt
+        data.mass = physicsWorld->getMass(bodyId);
+        data.linearDamping = physicsWorld->getLinearDamping(bodyId);
+        data.angularDamping = physicsWorld->getAngularDamping(bodyId);
+        data.useGravity = physicsWorld->getUseGravity(bodyId);
         data.linearVelocity = physicsWorld->getLinearVelocity(bodyId);
         data.angularVelocity = physicsWorld->getAngularVelocity(bodyId);
-        // Note: Other properties would need to be stored separately as Jolt doesn't
-        // expose them directly through the interface
+
         return data;
     }
 
@@ -310,9 +397,18 @@ namespace core {
 
     bool PhysicsAdapter::isOverlapping(services::EntityHandle entityA,
         services::EntityHandle entityB) const {
-        // Would require additional Jolt query - simplified for now
-        // Could use ContactConstraintManager::WereBodiesInContact
-        return false;
+        if (!physicsWorld) {
+            return false;
+        }
+
+        auto bodyA = physicsWorld->getBodyForEntity(entityA.id);
+        auto bodyB = physicsWorld->getBodyForEntity(entityB.id);
+
+        if (bodyA.IsInvalid() || bodyB.IsInvalid()) {
+            return false;
+        }
+
+        return physicsWorld->areBodiesInContact(bodyA, bodyB);
     }
 
     double PhysicsAdapter::getInterpolationAlpha() const {

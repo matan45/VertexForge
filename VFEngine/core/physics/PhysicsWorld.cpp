@@ -4,6 +4,7 @@
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
+#include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
@@ -324,6 +325,89 @@ namespace core::physics {
         return toGlm(physicsSystem->GetBodyInterface().GetAngularVelocity(bodyId));
     }
 
+    BodyType PhysicsWorld::getBodyType(JPH::BodyID bodyId) const {
+        if (!physicsSystem || bodyId.IsInvalid()) {
+            return BodyType::Static;
+        }
+        auto motionType = physicsSystem->GetBodyInterface().GetMotionType(bodyId);
+        switch (motionType) {
+        case JPH::EMotionType::Static:
+            return BodyType::Static;
+        case JPH::EMotionType::Kinematic:
+            return BodyType::Kinematic;
+        case JPH::EMotionType::Dynamic:
+        default:
+            return BodyType::Dynamic;
+        }
+    }
+
+    float PhysicsWorld::getMass(JPH::BodyID bodyId) const {
+        if (!physicsSystem || bodyId.IsInvalid()) {
+            return 0.0f;
+        }
+        // Need to lock the body to access motion properties for mass
+        JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), bodyId);
+        if (lock.Succeeded()) {
+            const JPH::Body& body = lock.GetBody();
+            if (body.GetMotionProperties()) {
+                float inverseMass = body.GetMotionProperties()->GetInverseMass();
+                return inverseMass > 0.0f ? 1.0f / inverseMass : 0.0f;
+            }
+        }
+        return 0.0f;
+    }
+
+    float PhysicsWorld::getFriction(JPH::BodyID bodyId) const {
+        if (!physicsSystem || bodyId.IsInvalid()) {
+            return 0.2f;
+        }
+        return physicsSystem->GetBodyInterface().GetFriction(bodyId);
+    }
+
+    float PhysicsWorld::getRestitution(JPH::BodyID bodyId) const {
+        if (!physicsSystem || bodyId.IsInvalid()) {
+            return 0.0f;
+        }
+        return physicsSystem->GetBodyInterface().GetRestitution(bodyId);
+    }
+
+    float PhysicsWorld::getLinearDamping(JPH::BodyID bodyId) const {
+        if (!physicsSystem || bodyId.IsInvalid()) {
+            return 0.05f;
+        }
+        // Need to lock the body to access motion properties
+        JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), bodyId);
+        if (lock.Succeeded()) {
+            const JPH::Body& body = lock.GetBody();
+            if (body.GetMotionProperties()) {
+                return body.GetMotionProperties()->GetLinearDamping();
+            }
+        }
+        return 0.05f;
+    }
+
+    float PhysicsWorld::getAngularDamping(JPH::BodyID bodyId) const {
+        if (!physicsSystem || bodyId.IsInvalid()) {
+            return 0.05f;
+        }
+        // Need to lock the body to access motion properties
+        JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), bodyId);
+        if (lock.Succeeded()) {
+            const JPH::Body& body = lock.GetBody();
+            if (body.GetMotionProperties()) {
+                return body.GetMotionProperties()->GetAngularDamping();
+            }
+        }
+        return 0.05f;
+    }
+
+    bool PhysicsWorld::getUseGravity(JPH::BodyID bodyId) const {
+        if (!physicsSystem || bodyId.IsInvalid()) {
+            return true;
+        }
+        return physicsSystem->GetBodyInterface().GetGravityFactor(bodyId) > 0.0f;
+    }
+
     void PhysicsWorld::applyForce(JPH::BodyID bodyId, const glm::vec3& force) {
         if (!physicsSystem || bodyId.IsInvalid()) {
             return;
@@ -361,13 +445,14 @@ namespace core::physics {
             return result;
         }
 
-        JPH::RRayCast ray(toJoltR(origin), toJolt(glm::normalize(direction) * maxDistance));
+        glm::vec3 normalizedDir = glm::normalize(direction);
+        JPH::RRayCast ray(toJoltR(origin), toJolt(normalizedDir * maxDistance));
         JPH::RayCastResult hit;
 
         if (physicsSystem->GetNarrowPhaseQuery().CastRay(ray, hit)) {
             result.hit = true;
             result.distance = hit.mFraction * maxDistance;
-            result.point = origin + glm::normalize(direction) * result.distance;
+            result.point = origin + normalizedDir * result.distance;
 
             // Get entity ID from body
             auto it = bodyToEntity.find(hit.mBodyID.GetIndex());
@@ -375,8 +460,19 @@ namespace core::physics {
                 result.entityId = it->second;
             }
 
-            // Get normal (would need additional query for accurate normal)
-            result.normal = -glm::normalize(direction);  // Approximate
+            // Get accurate surface normal from the hit body's shape
+            JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), hit.mBodyID);
+            if (lock.Succeeded()) {
+                const JPH::Body& body = lock.GetBody();
+                JPH::Vec3 surfaceNormal = body.GetWorldSpaceSurfaceNormal(
+                    hit.mSubShapeID2,
+                    ray.GetPointOnRay(hit.mFraction)
+                );
+                result.normal = toGlm(surfaceNormal);
+            } else {
+                // Fallback to approximate normal if body lock fails
+                result.normal = -normalizedDir;
+            }
         }
 
         return result;
@@ -391,27 +487,54 @@ namespace core::physics {
             return results;
         }
 
-        JPH::RayCast ray(toJolt(origin), toJolt(glm::normalize(direction) * maxDistance));
-        JPH::AllHitCollisionCollector<JPH::RayCastBodyCollector> collector;
+        glm::vec3 normalizedDir = glm::normalize(direction);
+        JPH::RRayCast ray(toJoltR(origin), toJolt(normalizedDir * maxDistance));
 
-        physicsSystem->GetBroadPhaseQuery().CastRay(ray, collector, {}, {});
+        // Use NarrowPhaseQuery with CastRayCollector for detailed hit info including SubShapeID
+        JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
+        JPH::RayCastSettings settings;  // Use default settings
+
+        physicsSystem->GetNarrowPhaseQuery().CastRay(ray, settings, collector);
+
+        // Sort hits by distance
+        collector.Sort();
 
         for (const auto& hit : collector.mHits) {
             RaycastResult result;
             result.hit = true;
             result.distance = hit.mFraction * maxDistance;
-            result.point = origin + glm::normalize(direction) * result.distance;
+            result.point = origin + normalizedDir * result.distance;
 
             auto it = bodyToEntity.find(hit.mBodyID.GetIndex());
             if (it != bodyToEntity.end()) {
                 result.entityId = it->second;
             }
 
-            result.normal = -glm::normalize(direction);
+            // Get accurate surface normal from the hit body's shape
+            JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), hit.mBodyID);
+            if (lock.Succeeded()) {
+                const JPH::Body& body = lock.GetBody();
+                JPH::Vec3 surfaceNormal = body.GetWorldSpaceSurfaceNormal(
+                    hit.mSubShapeID2,
+                    ray.GetPointOnRay(hit.mFraction)
+                );
+                result.normal = toGlm(surfaceNormal);
+            } else {
+                // Fallback to approximate normal if body lock fails
+                result.normal = -normalizedDir;
+            }
+
             results.push_back(result);
         }
 
         return results;
+    }
+
+    bool PhysicsWorld::areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const {
+        if (!physicsSystem || bodyA.IsInvalid() || bodyB.IsInvalid()) {
+            return false;
+        }
+        return physicsSystem->WereBodiesInContact(bodyA, bodyB);
     }
 
     JPH::BodyID PhysicsWorld::getBodyForEntity(uint64_t entityId) const {

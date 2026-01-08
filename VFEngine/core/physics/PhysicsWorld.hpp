@@ -103,6 +103,15 @@ namespace core::physics {
         void setAngularVelocity(JPH::BodyID bodyId, const glm::vec3& velocity);
         glm::vec3 getAngularVelocity(JPH::BodyID bodyId) const;
 
+        // Body Properties (for getRigidBody queries)
+        BodyType getBodyType(JPH::BodyID bodyId) const;
+        float getMass(JPH::BodyID bodyId) const;
+        float getFriction(JPH::BodyID bodyId) const;
+        float getRestitution(JPH::BodyID bodyId) const;
+        float getLinearDamping(JPH::BodyID bodyId) const;
+        float getAngularDamping(JPH::BodyID bodyId) const;
+        bool getUseGravity(JPH::BodyID bodyId) const;
+
         // Forces
         void applyForce(JPH::BodyID bodyId, const glm::vec3& force);
         void applyForceAtPosition(JPH::BodyID bodyId, const glm::vec3& force,
@@ -116,6 +125,7 @@ namespace core::physics {
         std::vector<RaycastResult> raycastAll(const glm::vec3& origin,
             const glm::vec3& direction,
             float maxDistance) const;
+        bool areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const;
 
         // Entity-Body mapping
         JPH::BodyID getBodyForEntity(uint64_t entityId) const;
