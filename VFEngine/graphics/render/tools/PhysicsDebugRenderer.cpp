@@ -5,6 +5,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include <cmath>
+#include <stdexcept>
 
 namespace render::mesh
 {
@@ -35,9 +36,23 @@ namespace render::mesh
 
     void PhysicsDebugRenderer::init(vk::RenderPass renderPass)
     {
+        // Note: BufferUtilities and vulkan-hpp throw exceptions on allocation failure.
+        // If any step fails, the exception propagates and initialized remains false.
+        // The render() method has null checks for each buffer as additional safety.
         loadShader();
         createPipeline(renderPass);
         createBuffers();
+
+        // Validate critical resources were created
+        if (!wireframePipeline || !wireframePipelineLayout)
+        {
+            throw std::runtime_error("PhysicsDebugRenderer: Failed to create pipeline");
+        }
+        if (!boxVertexBuffer || !sphereVertexBuffer || !capsuleVertexBuffer)
+        {
+            throw std::runtime_error("PhysicsDebugRenderer: Failed to create geometry buffers");
+        }
+
         initialized = true;
     }
 
@@ -154,6 +169,11 @@ namespace render::mesh
 
     void PhysicsDebugRenderer::createBuffers()
     {
+        // NOTE: All geometry buffers are created upfront for simplicity.
+        // Future optimization: lazy initialization - create buffers only when
+        // the corresponding collider type is first encountered in the scene.
+        // Given the small size of these debug geometries (~1KB total), this is
+        // acceptable for now but worth revisiting if memory becomes a concern.
         createBoxBuffers();
         createSphereBuffers();
         createCapsuleBuffers();
@@ -487,7 +507,7 @@ namespace render::mesh
 
             switch (collider.shape)
             {
-            case PhysicsColliderShape::Box:
+            case types::ColliderShape::Box:
             {
                 if (!boxVertexBuffer) break;
 
@@ -510,7 +530,7 @@ namespace render::mesh
                 break;
             }
 
-            case PhysicsColliderShape::Sphere:
+            case types::ColliderShape::Sphere:
             {
                 if (!sphereVertexBuffer) break;
 
@@ -533,7 +553,7 @@ namespace render::mesh
                 break;
             }
 
-            case PhysicsColliderShape::Capsule:
+            case types::ColliderShape::Capsule:
             {
                 if (!capsuleVertexBuffer) break;
 
@@ -563,9 +583,32 @@ namespace render::mesh
                 break;
             }
 
-            default:
-                // ConvexMesh and TriangleMesh not yet supported - could render as AABB
+            case types::ColliderShape::ConvexMesh:
+            case types::ColliderShape::TriangleMesh:
+            {
+                // Render mesh colliders as AABB approximation using yellow color
+                if (!boxVertexBuffer) break;
+
+                // Use yellow color to indicate this is an approximation
+                pushConstants.color = glm::vec4(0.9f, 0.9f, 0.2f, 0.8f);
+
+                glm::mat4 model = collider.worldMatrix;
+                model = glm::scale(model, collider.size);
+
+                pushConstants.mvp = viewProj * model;
+
+                commandBuffer.bindIndexBuffer(boxIndexBuffer, 0, vk::IndexType::eUint32);
+                vk::Buffer vertexBuffers[] = {boxVertexBuffer};
+                vk::DeviceSize offsets[] = {0};
+                commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+                commandBuffer.pushConstants(wireframePipelineLayout,
+                                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                            0, sizeof(PhysicsDebugPushConstants), &pushConstants);
+
+                commandBuffer.drawIndexed(boxIndexCount, 1, 0, 0, 0);
                 break;
+            }
             }
         }
     }

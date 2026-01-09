@@ -495,11 +495,16 @@ namespace controllers::offscreen
 
             render::mesh::PhysicsColliderRenderData renderData;
 
-            // Apply collider offset to world matrix
+            // Build collider world matrix:
+            // - worldTransform.worldMatrix contains entity's full transform (position, rotation, scale)
+            // - colliderComp.offset shifts the collider in local space relative to entity center
+            // - colliderComp.size is NOT applied here; it's passed separately and used by
+            //   PhysicsDebugRenderer to scale the unit geometry (box, sphere, capsule)
+            // This means collider size is in local space and IS affected by entity scale.
             glm::mat4 offsetMatrix = glm::translate(glm::mat4(1.0f), colliderComp.offset);
             renderData.worldMatrix = worldTransform.worldMatrix * offsetMatrix;
 
-            renderData.shape = static_cast<render::mesh::PhysicsColliderShape>(colliderComp.shape);
+            renderData.shape = colliderComp.shape;
             renderData.size = colliderComp.size;
             renderData.radius = colliderComp.size.x; // For sphere/capsule, radius is stored in size.x
             renderData.height = colliderComp.height;

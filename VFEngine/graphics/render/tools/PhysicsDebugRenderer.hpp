@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include <cstdint>
+#include "../../../utilities/types/PhysicsTypes.hpp"
 
 namespace core
 {
@@ -15,18 +16,10 @@ namespace core
 
 namespace render::mesh
 {
-    // Local enum matching components::ColliderShape values
-    enum class PhysicsColliderShape : uint8_t
-    {
-        Box = 0,
-        Sphere = 1,
-        Capsule = 2
-    };
-
     struct PhysicsColliderRenderData
     {
         glm::mat4 worldMatrix;
-        PhysicsColliderShape shape = PhysicsColliderShape::Box;
+        types::ColliderShape shape = types::ColliderShape::Box;
         glm::vec3 size{1.0f};           // Box half-extents
         float radius = 0.5f;            // Sphere/capsule radius
         float height = 2.0f;            // Capsule total height

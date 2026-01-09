@@ -6,6 +6,7 @@
 #include <optional>
 #include <cstdint>
 #include "../uuid/UUID.hpp"
+#include "../types/PhysicsTypes.hpp"
 
 namespace components
 {
@@ -378,21 +379,9 @@ namespace components
     // Physics Components
     // ============================================================
 
-    enum class RigidBodyType : uint8_t
-    {
-        Static,     // Never moves, optimized for static geometry
-        Dynamic,    // Fully simulated with mass and forces
-        Kinematic   // Script-controlled movement, affects dynamic bodies
-    };
-
-    enum class ColliderShape : uint8_t
-    {
-        Box,
-        Sphere,
-        Capsule,
-        ConvexMesh,    // For dynamic objects with complex shapes
-        TriangleMesh   // For static objects only (world geometry)
-    };
+    // Use shared physics types from types::
+    using RigidBodyType = types::RigidBodyType;
+    using ColliderShape = types::ColliderShape;
 
     struct ColliderComponent
     {
