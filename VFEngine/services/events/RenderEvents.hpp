@@ -89,6 +89,12 @@ namespace events::render {
         std::string_view getName() const override { return "SetShowGrid"; }
     };
 
+    struct SetShowPhysicsDebugCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowPhysicsDebug"; }
+    };
+
     struct SetViewModeCommand : ICommand<> {
         uint32_t mode;  // 0=Color, 1=Meshlet, 2=LOD
 
@@ -137,6 +143,10 @@ namespace events::render {
 
     struct GetShowGridQuery : IQuery<bool> {
         std::string_view getName() const override { return "GetShowGrid"; }
+    };
+
+    struct GetShowPhysicsDebugQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowPhysicsDebug"; }
     };
 
     struct GetViewModeQuery : IQuery<uint32_t> {

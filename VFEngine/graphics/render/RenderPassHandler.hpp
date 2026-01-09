@@ -34,6 +34,7 @@ namespace render
         struct MeshRenderData;
         struct CameraFrustumRenderData;
         struct AudioSphereRenderData;
+        struct PhysicsColliderRenderData;
     }
 
     namespace billboard
@@ -120,6 +121,9 @@ namespace render
         void initDebugRenderer();
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
         void setAudioSphereDrawList(std::vector<mesh::AudioSphereRenderData>&& spheres);
+        void setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders);
+        void setShowPhysicsDebug(bool show);
+        bool getShowPhysicsDebug() const;
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
         DebugRenderer* getDebugRenderer() const { return debugRenderer.get(); }

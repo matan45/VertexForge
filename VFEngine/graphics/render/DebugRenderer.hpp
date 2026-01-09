@@ -19,10 +19,12 @@ namespace render::mesh
     class FrustumDebugRenderer;
     class AudioSphereDebugRenderer;
     class GridRenderer;
+    class PhysicsDebugRenderer;
     struct MeshRenderData;
     struct MeshGPUData;
     struct CameraFrustumRenderData;
     struct AudioSphereRenderData;
+    struct PhysicsColliderRenderData;
 }
 
 namespace render
@@ -37,6 +39,7 @@ namespace render
         std::unique_ptr<mesh::FrustumDebugRenderer> frustumRenderer;
         std::unique_ptr<mesh::AudioSphereDebugRenderer> audioSphereRenderer;
         std::unique_ptr<mesh::GridRenderer> gridRenderer;
+        std::unique_ptr<mesh::PhysicsDebugRenderer> physicsDebugRenderer;
 
         // Camera frustum draw list for current frame
         std::vector<mesh::CameraFrustumRenderData> cameraFrustumDrawList;
@@ -44,8 +47,12 @@ namespace render
         // Audio sphere draw list for current frame
         std::vector<mesh::AudioSphereRenderData> audioSphereDrawList;
 
+        // Physics collider draw list for current frame
+        std::vector<mesh::PhysicsColliderRenderData> physicsColliderDrawList;
+
         bool initialized = false;
         bool showGrid = true;
+        bool showPhysicsDebug = false;
         bool hasBoundingBoxesToRender = false;
 
     public:
@@ -58,8 +65,12 @@ namespace render
         void cleanUpShaders();
         
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
-        
+
         void setAudioSphereDrawList(std::vector<mesh::AudioSphereRenderData>&& spheres);
+
+        void setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders);
+        void setShowPhysicsDebug(bool show) { showPhysicsDebug = show; }
+        bool getShowPhysicsDebug() const { return showPhysicsDebug; }
         
         void render(const vk::CommandBuffer& commandBuffer,
                     const std::vector<mesh::MeshRenderData>& meshDrawList,

@@ -9,6 +9,7 @@
 #include "../../render/DebugRenderer.hpp"
 #include "../../render/tools/FrustumDebugRenderer.hpp"
 #include "../../render/tools/AudioSphereDebugRenderer.hpp"
+#include "../../render/tools/PhysicsDebugRenderer.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -460,5 +461,77 @@ namespace controllers::offscreen
             renderHandler->initDebugRenderer();
             renderHandler->getDebugRenderer()->setShowGrid(true);
         }
+    }
+
+    void FramePreparationSystem::preparePhysicsColliders(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        if (!ctx.showPhysicsDebug)
+        {
+            renderHandler->setPhysicsColliderDrawList({});
+            return;
+        }
+
+        std::vector<render::mesh::PhysicsColliderRenderData> colliderDrawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ColliderComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            // Skip inactive entities
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& colliderComp = view.get<components::ColliderComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::PhysicsColliderRenderData renderData;
+
+            // Apply collider offset to world matrix
+            glm::mat4 offsetMatrix = glm::translate(glm::mat4(1.0f), colliderComp.offset);
+            renderData.worldMatrix = worldTransform.worldMatrix * offsetMatrix;
+
+            renderData.shape = static_cast<render::mesh::PhysicsColliderShape>(colliderComp.shape);
+            renderData.size = colliderComp.size;
+            renderData.radius = colliderComp.size.x; // For sphere/capsule, radius is stored in size.x
+            renderData.height = colliderComp.height;
+            renderData.isTrigger = colliderComp.isTrigger;
+
+            // Determine body type from RigidBodyComponent if present
+            if (registry.all_of<components::RigidBodyComponent>(entity))
+            {
+                const auto& rbComp = registry.get<components::RigidBodyComponent>(entity);
+                renderData.bodyType = static_cast<uint8_t>(rbComp.type);
+            }
+            else
+            {
+                // No rigid body = static collider
+                renderData.bodyType = 0; // Static
+            }
+
+            colliderDrawList.push_back(renderData);
+        }
+
+        if (!colliderDrawList.empty())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+
+        renderHandler->setPhysicsColliderDrawList(std::move(colliderDrawList));
     }
 }

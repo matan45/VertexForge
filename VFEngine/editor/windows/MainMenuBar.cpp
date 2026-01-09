@@ -175,6 +175,14 @@ namespace windows
                 dispatcher.execute(cmd);
             }
 
+            bool showPhysicsDebug = dispatcher.query(events::render::GetShowPhysicsDebugQuery{});
+            if (ImGui::MenuItem("Show Physics Colliders", nullptr, showPhysicsDebug))
+            {
+                events::render::SetShowPhysicsDebugCommand cmd;
+                cmd.show = !showPhysicsDebug;
+                dispatcher.execute(cmd);
+            }
+
             bool cullingVisible = cullingStatsWindow ? cullingStatsWindow->isVisible() : false;
             if (ImGui::MenuItem("Culling Stats", nullptr, cullingVisible))
             {

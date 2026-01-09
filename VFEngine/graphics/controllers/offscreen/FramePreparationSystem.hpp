@@ -23,6 +23,7 @@ namespace controllers::offscreen
         bool showDebugRendering = true;
         bool showBillboardIcons = true;
         bool showGrid = true;
+        bool showPhysicsDebug = false;
     };
 
     class FramePreparationSystem
@@ -41,6 +42,7 @@ namespace controllers::offscreen
         void prepareCameraFrustums(const FrameContext& ctx);
         void prepareAudioSpheres(const FrameContext& ctx);
         void prepareGrid(const FrameContext& ctx);
+        void preparePhysicsColliders(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
         

@@ -11,6 +11,7 @@
 #include "billboard/BillboardTypes.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
+#include "tools/PhysicsDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "print/Logger.hpp"
@@ -291,6 +292,31 @@ namespace render
         {
             debugRenderer->setAudioSphereDrawList(std::move(spheres));
         }
+    }
+
+    void RenderPassHandler::setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setPhysicsColliderDrawList(std::move(colliders));
+        }
+    }
+
+    void RenderPassHandler::setShowPhysicsDebug(bool show)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setShowPhysicsDebug(show);
+        }
+    }
+
+    bool RenderPassHandler::getShowPhysicsDebug() const
+    {
+        if (debugRenderer)
+        {
+            return debugRenderer->getShowPhysicsDebug();
+        }
+        return false;
     }
 
     void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)

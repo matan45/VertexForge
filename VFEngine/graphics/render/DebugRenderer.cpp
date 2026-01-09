@@ -3,6 +3,7 @@
 #include "tools/FrustumDebugRenderer.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/GridRenderer.hpp"
+#include "tools/PhysicsDebugRenderer.hpp"
 
 namespace render
 {
@@ -13,6 +14,7 @@ namespace render
         frustumRenderer = std::make_unique<mesh::FrustumDebugRenderer>(device, swapChain);
         audioSphereRenderer = std::make_unique<mesh::AudioSphereDebugRenderer>(device, swapChain);
         gridRenderer = std::make_unique<mesh::GridRenderer>(device, swapChain);
+        physicsDebugRenderer = std::make_unique<mesh::PhysicsDebugRenderer>(device, swapChain);
     }
 
     DebugRenderer::~DebugRenderer() = default;
@@ -23,6 +25,7 @@ namespace render
         frustumRenderer->init(renderPass);
         audioSphereRenderer->init(renderPass);
         gridRenderer->init(renderPass);
+        physicsDebugRenderer->init(renderPass);
         initialized = true;
     }
 
@@ -32,6 +35,7 @@ namespace render
         frustumRenderer->recreate(renderPass);
         audioSphereRenderer->recreate(renderPass);
         gridRenderer->recreate(renderPass);
+        physicsDebugRenderer->recreate(renderPass);
     }
 
     void DebugRenderer::cleanUp()
@@ -51,6 +55,10 @@ namespace render
         if (gridRenderer)
         {
             gridRenderer->cleanUp();
+        }
+        if (physicsDebugRenderer)
+        {
+            physicsDebugRenderer->cleanUp();
         }
         initialized = false;
     }
@@ -73,6 +81,10 @@ namespace render
         {
             gridRenderer->cleanUpShader();
         }
+        if (physicsDebugRenderer)
+        {
+            physicsDebugRenderer->cleanUpShader();
+        }
     }
 
     void DebugRenderer::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
@@ -85,6 +97,11 @@ namespace render
         audioSphereDrawList = std::move(spheres);
     }
 
+    void DebugRenderer::setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders)
+    {
+        physicsColliderDrawList = std::move(colliders);
+    }
+
     void DebugRenderer::render(const vk::CommandBuffer& commandBuffer,
                                const std::vector<mesh::MeshRenderData>& meshDrawList,
                                const glm::mat4& view,
@@ -95,27 +112,32 @@ namespace render
         {
             gridRenderer->render(commandBuffer, view, projection);
         }
-        
+
         if (aabbRenderer)
         {
             aabbRenderer->render(commandBuffer, meshDrawList, view, projection, getMeshFunc);
         }
-        
+
         if (frustumRenderer && !cameraFrustumDrawList.empty())
         {
             frustumRenderer->render(commandBuffer, cameraFrustumDrawList, view, projection);
         }
-        
+
         if (audioSphereRenderer && !audioSphereDrawList.empty())
         {
             audioSphereRenderer->render(commandBuffer, audioSphereDrawList, view, projection);
+        }
+
+        if (physicsDebugRenderer && showPhysicsDebug && !physicsColliderDrawList.empty())
+        {
+            physicsDebugRenderer->render(commandBuffer, physicsColliderDrawList, view, projection);
         }
     }
 
     bool DebugRenderer::hasItemsToRender() const
     {
         return showGrid || !cameraFrustumDrawList.empty() || !audioSphereDrawList.empty() ||
-            hasBoundingBoxesToRender;
+            hasBoundingBoxesToRender || (showPhysicsDebug && !physicsColliderDrawList.empty());
     }
 
     void DebugRenderer::setShowGrid(bool show)

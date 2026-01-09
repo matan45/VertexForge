@@ -309,6 +309,9 @@ namespace services
                 glm::vec3 eulerDeg = glm::degrees(eulerRad);
                 transform.rotation = eulerDeg;
             }
+
+            // Mark transform as dirty so WorldTransformComponent gets updated
+            transform.isDirty = true;
         }
     }
 }

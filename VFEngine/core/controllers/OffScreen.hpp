@@ -81,6 +81,11 @@ namespace controllers {
 		bool getShowGrid() const;
 		void prepareGrid();
 
+		// Physics Debug API
+		void setShowPhysicsDebug(bool show);
+		bool getShowPhysicsDebug() const;
+		void prepareFramePhysicsColliders();
+
 		// View Mode API
 		void setViewMode(uint32_t mode);
 		uint32_t getViewMode() const;
