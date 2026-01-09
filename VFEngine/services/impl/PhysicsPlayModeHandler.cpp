@@ -11,6 +11,72 @@
 
 namespace services
 {
+    namespace
+    {
+        constexpr float MIN_DIMENSION = 0.001f;
+
+        // Validates collider dimensions and settings, returns error message or empty string if valid
+        std::string validateCollider(const components::ColliderComponent& collider,
+                                     const components::RigidBodyComponent& rigidBody,
+                                     const std::string& entityName)
+        {
+            switch (collider.shape)
+            {
+            case components::ColliderShape::Box:
+                if (collider.size.x <= 0.0f || collider.size.y <= 0.0f || collider.size.z <= 0.0f)
+                {
+                    return fmt::format("Entity '{}': Box collider has invalid dimensions ({}, {}, {})",
+                        entityName, collider.size.x, collider.size.y, collider.size.z);
+                }
+                break;
+
+            case components::ColliderShape::Sphere:
+                if (collider.size.x <= 0.0f)
+                {
+                    return fmt::format("Entity '{}': Sphere collider has invalid radius ({})",
+                        entityName, collider.size.x);
+                }
+                break;
+
+            case components::ColliderShape::Capsule:
+                if (collider.size.x <= 0.0f)
+                {
+                    return fmt::format("Entity '{}': Capsule collider has invalid radius ({})",
+                        entityName, collider.size.x);
+                }
+                if (collider.height <= 0.0f)
+                {
+                    return fmt::format("Entity '{}': Capsule collider has invalid height ({})",
+                        entityName, collider.height);
+                }
+                break;
+
+            case components::ColliderShape::ConvexMesh:
+                if (collider.meshPath.empty())
+                {
+                    return fmt::format("Entity '{}': ConvexMesh collider has no mesh path specified",
+                        entityName);
+                }
+                break;
+
+            case components::ColliderShape::TriangleMesh:
+                if (collider.meshPath.empty())
+                {
+                    return fmt::format("Entity '{}': TriangleMesh collider has no mesh path specified",
+                        entityName);
+                }
+                // Triangle meshes must be static - they cannot be dynamic in physics engines
+                if (rigidBody.type == components::RigidBodyType::Dynamic)
+                {
+                    return fmt::format("Entity '{}': TriangleMesh collider cannot be used with Dynamic rigid body (use Static or Kinematic)",
+                        entityName);
+                }
+                break;
+            }
+
+            return ""; // Valid
+        }
+    }
     PhysicsPlayModeHandler::PhysicsPlayModeHandler(IPhysicsProvider* physicsProvider)
         : physicsProvider(physicsProvider)
     {
@@ -96,9 +162,27 @@ namespace services
 
             // Get collider data if entity has ColliderComponent
             ColliderData colData;
-            if (registry.all_of<components::ColliderComponent>(entity))
+            bool hasCollider = registry.all_of<components::ColliderComponent>(entity);
+
+            if (hasCollider)
             {
                 const auto& collider = registry.get<components::ColliderComponent>(entity);
+
+                // Get entity name for error messages
+                std::string entityName = "Unknown";
+                if (registry.all_of<components::NameComponent>(entity))
+                {
+                    entityName = registry.get<components::NameComponent>(entity).name;
+                }
+
+                // Validate collider configuration
+                std::string validationError = validateCollider(collider, rigidBody, entityName);
+                if (!validationError.empty())
+                {
+                    vfLogWarning("{} - skipping physics body creation", validationError);
+                    continue;
+                }
+
                 switch (collider.shape)
                 {
                 case components::ColliderShape::Box:

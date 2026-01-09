@@ -36,23 +36,6 @@ namespace core::physics {
     }
 #endif
 
-    // Jolt memory allocation callbacks (using default allocator)
-    static void* JoltAllocate(size_t inSize) {
-        return malloc(inSize);
-    }
-
-    static void* JoltAlignedAllocate(size_t inSize, size_t inAlignment) {
-        return _aligned_malloc(inSize, inAlignment);
-    }
-
-    static void JoltFree(void* inBlock) {
-        free(inBlock);
-    }
-
-    static void JoltAlignedFree(void* inBlock) {
-        _aligned_free(inBlock);
-    }
-
     PhysicsWorld::PhysicsWorld() = default;
 
     PhysicsWorld::~PhysicsWorld() {

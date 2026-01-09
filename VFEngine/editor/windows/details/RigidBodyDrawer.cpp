@@ -52,6 +52,24 @@ namespace windows::details
 
             if (changed)
             {
+                // Enforce constraint: Dynamic body type not allowed with TriangleMesh collider
+                if (rigidBodyData.type == services::RigidBodyTypeData::Dynamic)
+                {
+                    events::scene::HasColliderComponentQuery hasColQuery;
+                    hasColQuery.entity = handle;
+                    if (dispatcher.query(hasColQuery))
+                    {
+                        events::scene::GetColliderDataQuery colQuery;
+                        colQuery.entity = handle;
+                        auto colOpt = dispatcher.query(colQuery);
+                        if (colOpt.has_value() && colOpt->shape == services::ColliderShapeType::TriangleMesh)
+                        {
+                            // Revert to Static - TriangleMesh cannot be Dynamic
+                            rigidBodyData.type = services::RigidBodyTypeData::Static;
+                        }
+                    }
+                }
+
                 events::scene::SetRigidBodyDataCommand cmd;
                 cmd.entity = handle;
                 cmd.rigidBodyData = rigidBodyData;

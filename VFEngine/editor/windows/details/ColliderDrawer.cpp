@@ -51,6 +51,29 @@ namespace windows::details
 
             if (changed)
             {
+                // Enforce TriangleMesh constraint: must be Static, auto-adjust if needed
+                if (colliderData.shape == services::ColliderShapeType::TriangleMesh)
+                {
+                    events::scene::HasRigidBodyComponentQuery hasRbQuery;
+                    hasRbQuery.entity = handle;
+                    if (dispatcher.query(hasRbQuery))
+                    {
+                        events::scene::GetRigidBodyDataQuery rbQuery;
+                        rbQuery.entity = handle;
+                        auto rbOpt = dispatcher.query(rbQuery);
+                        if (rbOpt.has_value() && rbOpt->type == services::RigidBodyTypeData::Dynamic)
+                        {
+                            // Auto-adjust to Static
+                            services::RigidBodyComponentData rbData = *rbOpt;
+                            rbData.type = services::RigidBodyTypeData::Static;
+                            events::scene::SetRigidBodyDataCommand rbCmd;
+                            rbCmd.entity = handle;
+                            rbCmd.rigidBodyData = rbData;
+                            dispatcher.execute(rbCmd);
+                        }
+                    }
+                }
+
                 events::scene::SetColliderDataCommand cmd;
                 cmd.entity = handle;
                 cmd.colliderData = colliderData;

@@ -52,6 +52,11 @@ namespace handlers
             {
                 float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
 
+                // Update order is critical:
+                // 1. Physics - steps simulation and syncs transforms to ECS
+                // 2. Scripts - can read updated transforms and apply game logic
+                // 3. Audio   - uses final camera/listener positions
+
                 if (physicsPlayModeHandler)
                 {
                     physicsPlayModeHandler->update(deltaTime);
