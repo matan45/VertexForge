@@ -85,6 +85,40 @@ namespace services {
                 physicsProvider->setRotation(cmd.entity, cmd.rotation);
             });
 
+        // === Script-oriented commands (individual property modification) ===
+        // Note: These modify ECS components. Changes affect physics body on next play mode start.
+
+        dispatcher.registerCommandHandler<events::physics::SetMassCommand>(
+            [this](const auto& cmd) {
+                // Modification of mass requires provider method or ECS access
+                // For now, this is handled directly in native API via ECS
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetBodyTypeCommand>(
+            [this](const auto& cmd) {
+                // Body type changes are complex - handled via ECS in native API
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetLinearDampingCommand>(
+            [this](const auto& cmd) {
+                // Handled via ECS in native API
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetAngularDampingCommand>(
+            [this](const auto& cmd) {
+                // Handled via ECS in native API
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetColliderTriggerCommand>(
+            [this](const auto& cmd) {
+                // Handled via ECS in native API
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetCollisionLayerCommand>(
+            [this](const auto& cmd) {
+                // Handled via ECS in native API
+            });
+
         // === Queries ===
 
         dispatcher.registerQueryHandler<events::physics::GetGravityQuery>(
@@ -135,6 +169,43 @@ namespace services {
         dispatcher.registerQueryHandler<events::physics::IsOverlappingQuery>(
             [this](const auto& query) {
                 return isOverlapping(query.entityA, query.entityB);
+            });
+
+        // === Script-oriented queries (individual property access) ===
+
+        dispatcher.registerQueryHandler<events::physics::GetMassQuery>(
+            [this](const auto& query) -> float {
+                auto rb = getRigidBody(query.entity);
+                return rb ? rb->mass : 1.0f;
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetLinearDampingQuery>(
+            [this](const auto& query) -> float {
+                auto rb = getRigidBody(query.entity);
+                return rb ? rb->linearDamping : 0.0f;
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetAngularDampingQuery>(
+            [this](const auto& query) -> float {
+                auto rb = getRigidBody(query.entity);
+                return rb ? rb->angularDamping : 0.05f;
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetBodyTypeQuery>(
+            [this](const auto& query) -> RigidBodyData::Type {
+                auto rb = getRigidBody(query.entity);
+                return rb ? rb->type : RigidBodyData::Type::Dynamic;
+            });
+
+        dispatcher.registerQueryHandler<events::physics::HasColliderQuery>(
+            [this](const auto& query) -> bool {
+                return physicsProvider->hasRigidBody(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetColliderDataQuery>(
+            [this](const auto& query) -> std::optional<ColliderData> {
+                // TODO: Add getCollider method to provider
+                return std::nullopt;
             });
 
         // === Physics Settings Commands ===

@@ -34,5 +34,6 @@ namespace core
         void registerLogClass();
         void registerAudioClass();
         void registerInputClass();
+        void registerPhysicsClass();
     };
 }

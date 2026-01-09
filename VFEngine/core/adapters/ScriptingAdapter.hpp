@@ -1,5 +1,6 @@
 #pragma once
 #include "../../services/providers/IScriptingProvider.hpp"
+#include "../../services/events/EventDispatcher.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <memory>
 #include <unordered_map>
@@ -33,6 +34,12 @@ namespace core
         std::string scriptLibraryPath;
         bool initialized = false;
         bool compiled = false;
+
+        // Physics collision callback subscription tokens
+        ::events::SubscriptionToken collisionStartToken;
+        ::events::SubscriptionToken collisionEndToken;
+        ::events::SubscriptionToken triggerEnterToken;
+        ::events::SubscriptionToken triggerExitToken;
 
     public:
         explicit ScriptingAdapter();
@@ -73,9 +80,15 @@ namespace core
     private:
         void setError(::services::ScriptError::Type type, const std::string& message,
                       const std::string& file = "", int line = 0);
-        
+
         std::string extractClassName(const std::string& scriptPath);
-        
+
         std::string getLibraryPath(const std::string& manifestPath) const;
+
+        // Physics collision callback helpers
+        void subscribeToPhysicsEvents();
+        void unsubscribeFromPhysicsEvents();
+        void dispatchCollisionCallback(const char* methodName,
+            ::services::EntityHandle self, ::services::EntityHandle other);
     };
 }

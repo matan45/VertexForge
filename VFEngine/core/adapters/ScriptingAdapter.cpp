@@ -1,15 +1,24 @@
-#include "ScriptingAdapter.hpp"
-#include "NativeAPIRegistry.hpp"
+// mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
 #include <project/ProjectBuilder.hpp>
 #include <project/ProjectConfigParser.hpp>
-#include <value/ValueType.hpp>
+
+#include "ScriptingAdapter.hpp"
+#include "NativeAPIRegistry.hpp"
 #include <filesystem>
 #include <fstream>
 #include <regex>
 
 // Include editor logger for console output
 #include "print/EditorLogger.hpp"
+
+// Include physics events for collision callbacks
+#include "../../services/events/PhysicsEvents.hpp"
+
+// Include ECS for finding scripts on entities
+#include "../../utilities/scene/EntityRegistry.hpp"
+#include "../../utilities/components/Components.hpp"
+#include "../../services/data/EntityConversion.hpp"
 
 namespace core
 {
@@ -34,6 +43,9 @@ namespace core
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
             apiRegistry->registerEngineAPIs();
 
+            // Subscribe to physics collision events for script callbacks
+            subscribeToPhysicsEvents();
+
             initialized = true;
             vfLogInfo("[ScriptingAdapter] Initialized mType scripting system");
             return true;
@@ -53,7 +65,10 @@ namespace core
         {
             return;
         }
-        
+
+        // Unsubscribe from physics events before cleanup
+        unsubscribeFromPhysicsEvents();
+
         instanceToClassName.clear();
         instanceToEntity.clear();
         instanceToObject.clear();
@@ -463,5 +478,122 @@ namespace core
         }
 
         return "";
+    }
+
+    void ScriptingAdapter::subscribeToPhysicsEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        // Subscribe to collision start events
+        collisionStartToken = dispatcher.subscribe<::events::physics::CollisionStartNotification>(
+            [this](const ::events::physics::CollisionStartNotification& notif) {
+                // Dispatch to both entities involved in the collision
+                dispatchCollisionCallback("onCollisionEnter", notif.entityA, notif.entityB);
+                dispatchCollisionCallback("onCollisionEnter", notif.entityB, notif.entityA);
+            });
+
+        // Subscribe to collision end events
+        collisionEndToken = dispatcher.subscribe<::events::physics::CollisionEndNotification>(
+            [this](const ::events::physics::CollisionEndNotification& notif) {
+                dispatchCollisionCallback("onCollisionExit", notif.entityA, notif.entityB);
+                dispatchCollisionCallback("onCollisionExit", notif.entityB, notif.entityA);
+            });
+
+        // Subscribe to trigger enter events
+        triggerEnterToken = dispatcher.subscribe<::events::physics::TriggerEnterNotification>(
+            [this](const ::events::physics::TriggerEnterNotification& notif) {
+                // Trigger entity receives notification about the other entity
+                dispatchCollisionCallback("onTriggerEnter", notif.triggerEntity, notif.otherEntity);
+            });
+
+        // Subscribe to trigger exit events
+        triggerExitToken = dispatcher.subscribe<::events::physics::TriggerExitNotification>(
+            [this](const ::events::physics::TriggerExitNotification& notif) {
+                dispatchCollisionCallback("onTriggerExit", notif.triggerEntity, notif.otherEntity);
+            });
+
+        vfLogInfo("[ScriptingAdapter] Subscribed to physics collision events");
+    }
+
+    void ScriptingAdapter::unsubscribeFromPhysicsEvents()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        if (collisionStartToken.isValid())
+        {
+            dispatcher.unsubscribe(collisionStartToken);
+        }
+        if (collisionEndToken.isValid())
+        {
+            dispatcher.unsubscribe(collisionEndToken);
+        }
+        if (triggerEnterToken.isValid())
+        {
+            dispatcher.unsubscribe(triggerEnterToken);
+        }
+        if (triggerExitToken.isValid())
+        {
+            dispatcher.unsubscribe(triggerExitToken);
+        }
+
+        vfLogInfo("[ScriptingAdapter] Unsubscribed from physics collision events");
+    }
+
+    void ScriptingAdapter::dispatchCollisionCallback(const char* methodName,
+        ::services::EntityHandle self, ::services::EntityHandle other)
+    {
+        // Find all script instances attached to the 'self' entity
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        // Check if entity is valid
+        if (!registry.valid(static_cast<entt::entity>(self.id)))
+        {
+            return;
+        }
+
+        // Check if entity has a ScriptComponent
+        auto* scriptComp = registry.try_get<components::ScriptComponent>(
+            static_cast<entt::entity>(self.id));
+
+        if (!scriptComp)
+        {
+            return;
+        }
+
+        // Find script instances for this entity and call the method
+        for (const auto& [instanceId, entityHandle] : instanceToEntity)
+        {
+            if (entityHandle.id == self.id)
+            {
+                auto objIt = instanceToObject.find(instanceId);
+                if (objIt != instanceToObject.end())
+                {
+                    try
+                    {
+                        // Set current entity context
+                        NativeAPIRegistry::setCurrentEntity(self);
+
+                        // Get the script instance and call the collision method
+                        auto& instance = std::any_cast<value::Value&>(objIt->second);
+
+                        // Pass the other entity's ID as an int argument
+                        interpreter->callMethod(instance, methodName,
+                            {value::Value(static_cast<int>(other.id))});
+                    }
+                    catch (const std::exception& e)
+                    {
+                        // Method might not exist on the script - that's OK, just skip
+                        // Only log actual runtime errors, not missing method errors
+                        std::string errorMsg = e.what();
+                        if (errorMsg.find("Method not found") == std::string::npos &&
+                            errorMsg.find("does not exist") == std::string::npos)
+                        {
+                            vfLogWarning("[ScriptingAdapter] {} callback error: {}",
+                                methodName, e.what());
+                        }
+                    }
+                }
+            }
+        }
     }
 }
