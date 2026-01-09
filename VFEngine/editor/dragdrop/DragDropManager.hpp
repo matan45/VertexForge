@@ -45,6 +45,10 @@ namespace windows
 
         void updateModifiers();
 
+        const std::vector<std::string>& getDragPaths() const { return dragPaths; }
+
+        bool isDragging() const { return !dragPaths.empty(); }
+
     private:
         DragDropManager() = default;
         ~DragDropManager() = default;
