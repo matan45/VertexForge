@@ -1,5 +1,6 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
+#include "../../../utilities/types/PhysicsTypes.hpp"
 #include <memory>
 #include <optional>
 #include <string>
@@ -36,5 +37,9 @@ namespace services
         bool savePrefab(EntityHandle entity, const std::string& filePath);
         std::optional<EntityHandle> loadPrefab(const std::string& filePath,
                                                std::optional<EntityHandle> parent = std::nullopt);
+
+        // Physics settings (stored at scene level)
+        types::PhysicsSettings getPhysicsSettings() const;
+        bool setPhysicsSettings(const types::PhysicsSettings& settings);
     };
 }

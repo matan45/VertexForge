@@ -1,9 +1,10 @@
 #include "PhysicsConfigWindow.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/PhysicsSettingsEvents.hpp"
-#include "../../utilities/serialization/PhysicsSettingsSerialization.hpp"
+#include "../../services/events/SceneEvents.hpp"
 #include <imgui.h>
 #include <algorithm>
+#include <vector>
 
 namespace windows
 {
@@ -12,7 +13,7 @@ namespace windows
         visible = true;
         if (!settingsLoaded)
         {
-            loadSettings();
+            loadFromScene();
         }
     }
 
@@ -41,14 +42,14 @@ namespace windows
             ImGui::Spacing();
 
             // Action buttons
-            if (ImGui::Button("Save", ImVec2(80, 0)))
+            if (ImGui::Button("Save to Scene", ImVec2(100, 0)))
             {
-                saveSettings();
+                saveToScene();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Load", ImVec2(80, 0)))
+            if (ImGui::Button("Reload", ImVec2(80, 0)))
             {
-                loadSettings();
+                loadFromScene();
             }
             ImGui::SameLine();
             if (ImGui::Button("Apply", ImVec2(80, 0)))
@@ -64,8 +65,11 @@ namespace windows
             if (isDirty)
             {
                 ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Unsaved changes)");
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
             }
+
+            ImGui::Spacing();
+            ImGui::TextDisabled("Physics settings are saved with the scene file.");
         }
         ImGui::End();
     }
@@ -317,30 +321,64 @@ namespace windows
         }
     }
 
-    void PhysicsConfigWindow::loadSettings()
+    void PhysicsConfigWindow::loadFromScene()
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-        events::physics::GetPhysicsSettingsQuery query;
-        settings = dispatcher.query(query);
+        // Load physics settings from current scene
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::GetPhysicsSettingsQuery query;
+            settings = dispatcher.query(query);
+        }
+        catch (...)
+        {
+            // If query fails, use default settings
+            settings = types::PhysicsSettings::createDefault();
+        }
+
+        // Ensure we have valid default settings if layers are empty
+        if (settings.layers.empty())
+        {
+            settings = types::PhysicsSettings::createDefault();
+        }
+
         settingsLoaded = true;
         isDirty = false;
     }
 
-    void PhysicsConfigWindow::saveSettings()
+    void PhysicsConfigWindow::saveToScene()
     {
-        events::physics::SavePhysicsSettingsCommand cmd;
-        cmd.settings = settings;
-        auto& dispatcher = events::EventDispatcher::instance();
-        dispatcher.execute(cmd);
-        isDirty = false;
+        // Save physics settings to current scene
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::SetPhysicsSettingsCommand cmd;
+            cmd.settings = settings;
+            dispatcher.execute(cmd);
+            isDirty = false;
+        }
+        catch (...)
+        {
+            // Save failed silently
+        }
+
+        // Also apply to physics system immediately
+        applySettings();
     }
 
     void PhysicsConfigWindow::applySettings()
     {
-        events::physics::ApplyPhysicsSettingsCommand cmd;
-        cmd.settings = settings;
-        auto& dispatcher = events::EventDispatcher::instance();
-        dispatcher.execute(cmd);
+        try
+        {
+            events::physics::ApplyPhysicsSettingsCommand cmd;
+            cmd.settings = settings;
+            auto& dispatcher = events::EventDispatcher::instance();
+            dispatcher.execute(cmd);
+        }
+        catch (...)
+        {
+            // Apply failed silently
+        }
     }
 
     void PhysicsConfigWindow::resetToDefaults()

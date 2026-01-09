@@ -3,6 +3,7 @@
 #include <functional>
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
+#include "../types/PhysicsTypes.hpp"
 
 namespace scene
 {
@@ -82,5 +83,9 @@ namespace serialization
 
         static json serializeRigidBody(const components::RigidBodyComponent& rigidBody);
         static void deserializeRigidBody(const json& j, components::RigidBodyComponent& rigidBody);
+
+        // Physics settings serialization (stored at scene level)
+        static json serializePhysicsSettings(const types::PhysicsSettings& settings);
+        static void deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings);
     };
 }

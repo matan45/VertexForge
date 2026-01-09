@@ -539,6 +539,118 @@ namespace serialization {
 		}
 	}
 
+	json SceneSerialization::serializePhysicsSettings(const types::PhysicsSettings& settings) {
+		json j;
+
+		// Gravity
+		j["gravity"] = json::array({settings.gravity.x, settings.gravity.y, settings.gravity.z});
+		j["gravityScale"] = settings.gravityScale;
+
+		// Simulation
+		j["simulation"] = {
+			{"fixedTimestep", settings.fixedTimestep},
+			{"maxAccumulator", settings.maxAccumulator},
+			{"maxStepsPerFrame", settings.maxStepsPerFrame}
+		};
+
+		// Sleep thresholds
+		j["sleepThresholds"] = {
+			{"linearVelocity", settings.linearSleepThreshold},
+			{"angularVelocity", settings.angularSleepThreshold},
+			{"timeToSleep", settings.timeToSleep}
+		};
+
+		// Collision layers
+		j["collisionLayers"] = json::array();
+		for (const auto& layer : settings.layers) {
+			j["collisionLayers"].push_back({
+				{"index", layer.index},
+				{"name", layer.name},
+				{"builtIn", layer.isBuiltIn}
+			});
+		}
+
+		// Collision matrix
+		j["collisionMatrix"] = json::array();
+		for (size_t i = 0; i < settings.layers.size(); ++i) {
+			json row = json::array();
+			for (size_t k = 0; k < settings.layers.size(); ++k) {
+				row.push_back(settings.collisionMatrix[i].test(k));
+			}
+			j["collisionMatrix"].push_back(row);
+		}
+
+		return j;
+	}
+
+	void SceneSerialization::deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings) {
+		// Gravity
+		if (j.contains("gravity") && j["gravity"].is_array() && j["gravity"].size() == 3) {
+			settings.gravity.x = j["gravity"][0].get<float>();
+			settings.gravity.y = j["gravity"][1].get<float>();
+			settings.gravity.z = j["gravity"][2].get<float>();
+		}
+		if (j.contains("gravityScale")) {
+			settings.gravityScale = j["gravityScale"].get<float>();
+		}
+
+		// Simulation
+		if (j.contains("simulation")) {
+			const auto& sim = j["simulation"];
+			if (sim.contains("fixedTimestep"))
+				settings.fixedTimestep = sim["fixedTimestep"].get<double>();
+			if (sim.contains("maxAccumulator"))
+				settings.maxAccumulator = sim["maxAccumulator"].get<double>();
+			if (sim.contains("maxStepsPerFrame"))
+				settings.maxStepsPerFrame = sim["maxStepsPerFrame"].get<int>();
+		}
+
+		// Sleep thresholds
+		if (j.contains("sleepThresholds")) {
+			const auto& sleep = j["sleepThresholds"];
+			if (sleep.contains("linearVelocity"))
+				settings.linearSleepThreshold = sleep["linearVelocity"].get<float>();
+			if (sleep.contains("angularVelocity"))
+				settings.angularSleepThreshold = sleep["angularVelocity"].get<float>();
+			if (sleep.contains("timeToSleep"))
+				settings.timeToSleep = sleep["timeToSleep"].get<float>();
+		}
+
+		// Collision layers
+		if (j.contains("collisionLayers") && j["collisionLayers"].is_array()) {
+			settings.layers.clear();
+			for (const auto& layerJson : j["collisionLayers"]) {
+				types::CollisionLayer layer;
+				if (layerJson.contains("index"))
+					layer.index = layerJson["index"].get<uint8_t>();
+				if (layerJson.contains("name"))
+					layer.name = layerJson["name"].get<std::string>();
+				if (layerJson.contains("builtIn"))
+					layer.isBuiltIn = layerJson["builtIn"].get<bool>();
+				settings.layers.push_back(layer);
+			}
+		}
+
+		// Collision matrix
+		if (j.contains("collisionMatrix") && j["collisionMatrix"].is_array()) {
+			// Reset all collision matrix entries
+			for (auto& row : settings.collisionMatrix) {
+				row.reset();
+			}
+
+			const auto& matrix = j["collisionMatrix"];
+			for (size_t i = 0; i < matrix.size() && i < types::PhysicsSettings::MAX_LAYERS; ++i) {
+				if (matrix[i].is_array()) {
+					for (size_t k = 0; k < matrix[i].size() && k < types::PhysicsSettings::MAX_LAYERS; ++k) {
+						if (matrix[i][k].is_boolean() && matrix[i][k].get<bool>()) {
+							settings.collisionMatrix[i].set(k);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
 		for (const auto& childJson : childrenJson) {
@@ -741,6 +853,17 @@ namespace serialization {
 
 			sceneGraph.clearScene();
 
+			// Deserialize physics settings if present
+			if (sceneJson.contains("physicsSettings") && sceneJson["physicsSettings"].is_object()) {
+				types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
+				deserializePhysicsSettings(sceneJson["physicsSettings"], settings);
+				sceneGraph.setPhysicsSettings(settings);
+				vfLogInfo("Physics settings loaded from scene file");
+			} else {
+				// Use default physics settings for older scenes
+				sceneGraph.setPhysicsSettings(types::PhysicsSettings::createDefault());
+			}
+
 			// Deserialize root entity
 			scene::Entity& root = sceneGraph.GetRoot();
 			deserializeEntity(sceneJson["root"], root, sceneGraph, true, progressCallback, entitiesLoaded, totalEntities);
@@ -760,11 +883,14 @@ namespace serialization {
 	{
 		try {
 			json sceneJson;
-			sceneJson["version"] = "1.0";
+			sceneJson["version"] = "1.1";
 
 			scene::Entity& root = sceneGraph.GetRoot();
 
 			sceneJson["root"] = serializeEntity(root);
+
+			// Serialize physics settings at scene level
+			sceneJson["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
 
 			// Write to file with UTF-8 encoding, no BOM, pretty-printed
 			std::string filePath{filename};
@@ -790,10 +916,13 @@ namespace serialization {
 	{
 		try {
 			json snapshot;
-			snapshot["version"] = "1.0";
+			snapshot["version"] = "1.1";
 
 			scene::Entity& root = sceneGraph.GetRoot();
 			snapshot["root"] = serializeEntity(root);
+
+			// Include physics settings in snapshot
+			snapshot["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
 
 			return snapshot;
 		}
@@ -819,6 +948,13 @@ namespace serialization {
 
 			// Clear current scene and restore from snapshot
 			sceneGraph.clearScene();
+
+			// Restore physics settings if present
+			if (snapshot.contains("physicsSettings") && snapshot["physicsSettings"].is_object()) {
+				types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
+				deserializePhysicsSettings(snapshot["physicsSettings"], settings);
+				sceneGraph.setPhysicsSettings(settings);
+			}
 
 			// Deserialize root entity (no progress callback for snapshot restore)
 			scene::Entity& root = sceneGraph.GetRoot();

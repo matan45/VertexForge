@@ -3,6 +3,7 @@
 #include "../data/EntityHandle.hpp"
 #include "../data/DTOs.hpp"
 #include "../interfaces/IAudioService.hpp"
+#include "../../utilities/types/PhysicsTypes.hpp"
 #include <optional>
 #include <vector>
 #include <string>
@@ -235,6 +236,13 @@ namespace events::scene {
         std::string_view getName() const override { return "SetRigidBodyData"; }
     };
 
+    // Physics Settings Commands (stored at scene level)
+    struct SetPhysicsSettingsCommand : ICommand<bool> {
+        types::PhysicsSettings settings;
+
+        std::string_view getName() const override { return "SetPhysicsSettings"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================
@@ -371,6 +379,11 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetRigidBodyData"; }
+    };
+
+    // Physics Settings Query (stored at scene level)
+    struct GetPhysicsSettingsQuery : IQuery<types::PhysicsSettings> {
+        std::string_view getName() const override { return "GetPhysicsSettings"; }
     };
 
     // ============================================

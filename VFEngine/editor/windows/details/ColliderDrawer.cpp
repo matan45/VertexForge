@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/PhysicsSettingsEvents.hpp"
+#include "types/PhysicsTypes.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 
@@ -287,11 +288,23 @@ namespace windows::details
     {
         bool changed = false;
 
-        auto& dispatcher = events::EventDispatcher::instance();
+        std::vector<types::CollisionLayer> layers;
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::physics::GetCollisionLayersQuery layersQuery;
+            layers = dispatcher.query(layersQuery);
+        }
+        catch (...)
+        {
+            // Query failed, use default layers
+        }
 
-        // Get available collision layers
-        events::physics::GetCollisionLayersQuery layersQuery;
-        auto layers = dispatcher.query(layersQuery);
+        if (layers.empty())
+        {
+            // Use default layer names if query failed
+            layers = types::PhysicsSettings::createDefault().layers;
+        }
 
         if (layers.empty())
         {

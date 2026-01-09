@@ -9,7 +9,7 @@ namespace windows
     {
     private:
         bool visible = false;
-        types::PhysicsSettings settings;
+        types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
         bool settingsLoaded = false;
 
         // For adding new layers
@@ -24,8 +24,8 @@ namespace windows
         void drawLayersSection();
         void drawCollisionMatrixSection();
 
-        void loadSettings();
-        void saveSettings();
+        void loadFromScene();
+        void saveToScene();
         void applySettings();
         void resetToDefaults();
 
