@@ -7,6 +7,48 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
 
+// =============================================================================
+// Static assertions to ensure enum synchronization: types:: <-> services:: DTOs
+// =============================================================================
+// These enums are duplicated for layer separation. PhysicsComponentService
+// uses static_cast between them, so values must stay in sync.
+
+// RigidBodyType: types::RigidBodyType <-> services::RigidBodyTypeData
+static_assert(
+    static_cast<int>(types::RigidBodyType::Static) ==
+    static_cast<int>(services::RigidBodyTypeData::Static),
+    "RigidBodyType::Static mismatch between types:: and services::DTOs");
+static_assert(
+    static_cast<int>(types::RigidBodyType::Dynamic) ==
+    static_cast<int>(services::RigidBodyTypeData::Dynamic),
+    "RigidBodyType::Dynamic mismatch between types:: and services::DTOs");
+static_assert(
+    static_cast<int>(types::RigidBodyType::Kinematic) ==
+    static_cast<int>(services::RigidBodyTypeData::Kinematic),
+    "RigidBodyType::Kinematic mismatch between types:: and services::DTOs");
+
+// ColliderShape: types::ColliderShape <-> services::ColliderShapeType
+static_assert(
+    static_cast<int>(types::ColliderShape::Box) ==
+    static_cast<int>(services::ColliderShapeType::Box),
+    "ColliderShape::Box mismatch between types:: and services::DTOs");
+static_assert(
+    static_cast<int>(types::ColliderShape::Sphere) ==
+    static_cast<int>(services::ColliderShapeType::Sphere),
+    "ColliderShape::Sphere mismatch between types:: and services::DTOs");
+static_assert(
+    static_cast<int>(types::ColliderShape::Capsule) ==
+    static_cast<int>(services::ColliderShapeType::Capsule),
+    "ColliderShape::Capsule mismatch between types:: and services::DTOs");
+static_assert(
+    static_cast<int>(types::ColliderShape::ConvexMesh) ==
+    static_cast<int>(services::ColliderShapeType::ConvexMesh),
+    "ColliderShape::ConvexMesh mismatch between types:: and services::DTOs");
+static_assert(
+    static_cast<int>(types::ColliderShape::TriangleMesh) ==
+    static_cast<int>(services::ColliderShapeType::TriangleMesh),
+    "ColliderShape::TriangleMesh mismatch between types:: and services::DTOs");
+
 namespace services {
 
     PhysicsComponentService::PhysicsComponentService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)

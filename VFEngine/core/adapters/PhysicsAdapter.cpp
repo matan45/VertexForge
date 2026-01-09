@@ -2,6 +2,41 @@
 #include "../../services/events/PhysicsEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 
+// =============================================================================
+// Static assertions to ensure enum synchronization across namespaces
+// =============================================================================
+// These enums are duplicated for architectural separation (core vs services layer).
+// If any assertion fails, update the corresponding enum to maintain sync.
+
+// BodyType enums: core::physics::BodyType <-> services::RigidBodyData::Type
+static_assert(
+    static_cast<int>(core::physics::BodyType::Static) ==
+    static_cast<int>(services::RigidBodyData::Type::Static),
+    "BodyType::Static mismatch between core::physics and services");
+static_assert(
+    static_cast<int>(core::physics::BodyType::Dynamic) ==
+    static_cast<int>(services::RigidBodyData::Type::Dynamic),
+    "BodyType::Dynamic mismatch between core::physics and services");
+static_assert(
+    static_cast<int>(core::physics::BodyType::Kinematic) ==
+    static_cast<int>(services::RigidBodyData::Type::Kinematic),
+    "BodyType::Kinematic mismatch between core::physics and services");
+
+// ColliderShape enums: core::physics::ColliderShape <-> services::ColliderData::Shape
+// Note: services has additional shapes (Mesh) not yet supported in core::physics
+static_assert(
+    static_cast<int>(core::physics::ColliderShape::Box) ==
+    static_cast<int>(services::ColliderData::Shape::Box),
+    "ColliderShape::Box mismatch between core::physics and services");
+static_assert(
+    static_cast<int>(core::physics::ColliderShape::Sphere) ==
+    static_cast<int>(services::ColliderData::Shape::Sphere),
+    "ColliderShape::Sphere mismatch between core::physics and services");
+static_assert(
+    static_cast<int>(core::physics::ColliderShape::Capsule) ==
+    static_cast<int>(services::ColliderData::Shape::Capsule),
+    "ColliderShape::Capsule mismatch between core::physics and services");
+
 namespace core {
 
     PhysicsAdapter::PhysicsAdapter()

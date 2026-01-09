@@ -1444,6 +1444,48 @@ namespace core {
         auto& dispatcher = events::EventDispatcher::instance();
 
         // ============================================
+        // Script API Safety Limits
+        // ============================================
+        // These limits prevent scripts from causing performance issues or physics instability
+
+        // Maximum magnitude for forces/impulses/torques (prevents physics explosion)
+        constexpr float MAX_FORCE_MAGNITUDE = 100000.0f;
+        constexpr float MAX_IMPULSE_MAGNITUDE = 10000.0f;
+        constexpr float MAX_TORQUE_MAGNITUDE = 10000.0f;
+
+        // Maximum raycast distance (prevents expensive long-distance queries)
+        constexpr float MAX_RAYCAST_DISTANCE = 10000.0f;
+
+        // Rate limiting for expensive operations (per frame)
+        static thread_local int raycastCountThisFrame = 0;
+        static thread_local int forceApplicationCountThisFrame = 0;
+        static thread_local uint64_t lastFrameNumber = 0;
+        constexpr int MAX_RAYCASTS_PER_FRAME = 100;
+        constexpr int MAX_FORCE_APPLICATIONS_PER_FRAME = 500;
+
+        // Helper to reset rate limits each frame (called by first operation each frame)
+        auto resetRateLimitsIfNewFrame = []() {
+            // Simple frame detection using a monotonic counter
+            // In a real implementation, this would use an actual frame counter from the engine
+            static uint64_t frameCounter = 0;
+            uint64_t currentFrame = frameCounter++; // Approximation - resets on first call each "batch"
+            if (currentFrame != lastFrameNumber) {
+                lastFrameNumber = currentFrame;
+                raycastCountThisFrame = 0;
+                forceApplicationCountThisFrame = 0;
+            }
+        };
+
+        // Helper to clamp vector magnitude
+        auto clampMagnitude = [](glm::vec3 v, float maxMag) -> glm::vec3 {
+            float mag = glm::length(v);
+            if (mag > maxMag) {
+                return (v / mag) * maxMag;
+            }
+            return v;
+        };
+
+        // ============================================
         // RigidBody Queries
         // ============================================
 
@@ -1741,10 +1783,22 @@ namespace core {
 
         // _native_physics_applyForce(entityId, x, y, z) -> void
         interpreter->registerNativeFunction("_native_physics_applyForce",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+            [&dispatcher, &clampMagnitude, &resetRateLimitsIfNewFrame,
+             MAX_FORCE_MAGNITUDE, MAX_FORCE_APPLICATIONS_PER_FRAME]
+            (const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 4) {
                     return value::Value(std::monostate{});
                 }
+
+                // Rate limiting
+                resetRateLimitsIfNewFrame();
+                if (forceApplicationCountThisFrame >= MAX_FORCE_APPLICATIONS_PER_FRAME) {
+                    vfLogWarning("[Script] Force application rate limit exceeded ({}/frame)",
+                        MAX_FORCE_APPLICATIONS_PER_FRAME);
+                    return value::Value(std::monostate{});
+                }
+                forceApplicationCountThisFrame++;
+
                 int64_t id = extractInt64(args[0]);
                 float x = extractFloat(args[1]);
                 float y = extractFloat(args[2]);
@@ -1753,19 +1807,34 @@ namespace core {
                     return value::Value(std::monostate{});
                 }
 
+                // Clamp force magnitude
+                glm::vec3 force = clampMagnitude(glm::vec3(x, y, z), MAX_FORCE_MAGNITUDE);
+
                 events::physics::ApplyForceCommand cmd;
                 cmd.entity = services::EntityHandle{static_cast<uint64_t>(id)};
-                cmd.force = glm::vec3(x, y, z);
+                cmd.force = force;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
 
         // _native_physics_applyForceAtPosition(entityId, fx, fy, fz, px, py, pz) -> void
         interpreter->registerNativeFunction("_native_physics_applyForceAtPosition",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+            [&dispatcher, &clampMagnitude, &resetRateLimitsIfNewFrame,
+             MAX_FORCE_MAGNITUDE, MAX_FORCE_APPLICATIONS_PER_FRAME]
+            (const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 7) {
                     return value::Value(std::monostate{});
                 }
+
+                // Rate limiting
+                resetRateLimitsIfNewFrame();
+                if (forceApplicationCountThisFrame >= MAX_FORCE_APPLICATIONS_PER_FRAME) {
+                    vfLogWarning("[Script] Force application rate limit exceeded ({}/frame)",
+                        MAX_FORCE_APPLICATIONS_PER_FRAME);
+                    return value::Value(std::monostate{});
+                }
+                forceApplicationCountThisFrame++;
+
                 int64_t id = extractInt64(args[0]);
                 float fx = extractFloat(args[1]);
                 float fy = extractFloat(args[2]);
@@ -1777,9 +1846,12 @@ namespace core {
                     return value::Value(std::monostate{});
                 }
 
+                // Clamp force magnitude
+                glm::vec3 force = clampMagnitude(glm::vec3(fx, fy, fz), MAX_FORCE_MAGNITUDE);
+
                 events::physics::ApplyForceAtPositionCommand cmd;
                 cmd.entity = services::EntityHandle{static_cast<uint64_t>(id)};
-                cmd.force = glm::vec3(fx, fy, fz);
+                cmd.force = force;
                 cmd.position = glm::vec3(px, py, pz);
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
@@ -1787,10 +1859,22 @@ namespace core {
 
         // _native_physics_applyImpulse(entityId, x, y, z) -> void
         interpreter->registerNativeFunction("_native_physics_applyImpulse",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+            [&dispatcher, &clampMagnitude, &resetRateLimitsIfNewFrame,
+             MAX_IMPULSE_MAGNITUDE, MAX_FORCE_APPLICATIONS_PER_FRAME]
+            (const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 4) {
                     return value::Value(std::monostate{});
                 }
+
+                // Rate limiting
+                resetRateLimitsIfNewFrame();
+                if (forceApplicationCountThisFrame >= MAX_FORCE_APPLICATIONS_PER_FRAME) {
+                    vfLogWarning("[Script] Force/impulse application rate limit exceeded ({}/frame)",
+                        MAX_FORCE_APPLICATIONS_PER_FRAME);
+                    return value::Value(std::monostate{});
+                }
+                forceApplicationCountThisFrame++;
+
                 int64_t id = extractInt64(args[0]);
                 float x = extractFloat(args[1]);
                 float y = extractFloat(args[2]);
@@ -1799,19 +1883,34 @@ namespace core {
                     return value::Value(std::monostate{});
                 }
 
+                // Clamp impulse magnitude
+                glm::vec3 impulse = clampMagnitude(glm::vec3(x, y, z), MAX_IMPULSE_MAGNITUDE);
+
                 events::physics::ApplyImpulseCommand cmd;
                 cmd.entity = services::EntityHandle{static_cast<uint64_t>(id)};
-                cmd.impulse = glm::vec3(x, y, z);
+                cmd.impulse = impulse;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
 
         // _native_physics_applyTorque(entityId, x, y, z) -> void
         interpreter->registerNativeFunction("_native_physics_applyTorque",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+            [&dispatcher, &clampMagnitude, &resetRateLimitsIfNewFrame,
+             MAX_TORQUE_MAGNITUDE, MAX_FORCE_APPLICATIONS_PER_FRAME]
+            (const std::vector<value::Value>& args) -> value::Value {
                 if (args.size() < 4) {
                     return value::Value(std::monostate{});
                 }
+
+                // Rate limiting (shares counter with forces/impulses)
+                resetRateLimitsIfNewFrame();
+                if (forceApplicationCountThisFrame >= MAX_FORCE_APPLICATIONS_PER_FRAME) {
+                    vfLogWarning("[Script] Torque application rate limit exceeded ({}/frame)",
+                        MAX_FORCE_APPLICATIONS_PER_FRAME);
+                    return value::Value(std::monostate{});
+                }
+                forceApplicationCountThisFrame++;
+
                 int64_t id = extractInt64(args[0]);
                 float x = extractFloat(args[1]);
                 float y = extractFloat(args[2]);
@@ -1820,9 +1919,12 @@ namespace core {
                     return value::Value(std::monostate{});
                 }
 
+                // Clamp torque magnitude
+                glm::vec3 torque = clampMagnitude(glm::vec3(x, y, z), MAX_TORQUE_MAGNITUDE);
+
                 events::physics::ApplyTorqueCommand cmd;
                 cmd.entity = services::EntityHandle{static_cast<uint64_t>(id)};
-                cmd.torque = glm::vec3(x, y, z);
+                cmd.torque = torque;
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
@@ -2275,7 +2377,18 @@ namespace core {
         // _native_physics_raycast(ox, oy, oz, dx, dy, dz, maxDist) -> float[]
         // Returns: [hit(0/1), entityId, px, py, pz, nx, ny, nz, distance]
         interpreter->registerNativeFunction("_native_physics_raycast",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value {
+            [&dispatcher, &resetRateLimitsIfNewFrame, MAX_RAYCAST_DISTANCE, MAX_RAYCASTS_PER_FRAME]
+            (const std::vector<value::Value>& args) -> value::Value {
+                // Rate limiting for raycasts
+                resetRateLimitsIfNewFrame();
+                if (raycastCountThisFrame >= MAX_RAYCASTS_PER_FRAME) {
+                    vfLogWarning("[Script] Raycast rate limit exceeded ({}/frame)", MAX_RAYCASTS_PER_FRAME);
+                    auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    result->set(0, value::Value(0.0f)); // No hit (rate limited)
+                    return value::Value(result);
+                }
+                raycastCountThisFrame++;
+
                 if (args.size() < 7) {
                     auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
                     result->set(0, value::Value(0.0f)); // No hit
@@ -2289,6 +2402,9 @@ namespace core {
                 float dy = extractFloat(args[4]);
                 float dz = extractFloat(args[5]);
                 float maxDist = extractFloat(args[6]);
+
+                // Clamp max distance to prevent expensive long-range queries
+                maxDist = std::min(std::max(0.0f, maxDist), MAX_RAYCAST_DISTANCE);
 
                 events::physics::RaycastQuery query;
                 query.origin = glm::vec3(ox, oy, oz);

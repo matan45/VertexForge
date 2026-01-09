@@ -61,6 +61,11 @@ namespace core::physics {
 #endif
 
         // Create factory
+        // NOTE: Raw new/delete is required here because JPH::Factory::sInstance is a global
+        // static raw pointer that Jolt's type registration system (RegisterTypes/UnregisterTypes)
+        // depends on. Jolt's API expects direct assignment to this static member. The factory
+        // lifetime is managed manually: created before RegisterTypes() and destroyed after
+        // UnregisterTypes() in cleanUp(). This follows Jolt's official initialization pattern.
         JPH::Factory::sInstance = new JPH::Factory();
 
         // Register physics types
@@ -139,7 +144,7 @@ namespace core::physics {
         jobSystem.reset();
         tempAllocator.reset();
 
-        // Unregister types and destroy factory
+        // Unregister types and destroy factory (see comment in init() for why raw delete is used)
         JPH::UnregisterTypes();
         delete JPH::Factory::sInstance;
         JPH::Factory::sInstance = nullptr;
@@ -187,9 +192,14 @@ namespace core::physics {
         }
 
         // Use the explicit collision layer from collider info (clamped to valid range)
-        uint8_t clampedLayer = colliderInfo.collisionLayer < MAX_COLLISION_LAYERS
-            ? colliderInfo.collisionLayer
-            : static_cast<uint8_t>(Layers::DYNAMIC);  // Default to Dynamic if out of range
+        uint8_t clampedLayer;
+        if (colliderInfo.collisionLayer < MAX_COLLISION_LAYERS) {
+            clampedLayer = colliderInfo.collisionLayer;
+        } else {
+            clampedLayer = static_cast<uint8_t>(Layers::DYNAMIC);
+            loggerWarning("Entity {}: Invalid collision layer {} (max: {}), defaulting to DYNAMIC ({})",
+                entityId, colliderInfo.collisionLayer, MAX_COLLISION_LAYERS - 1, clampedLayer);
+        }
         JPH::ObjectLayer layer = static_cast<JPH::ObjectLayer>(clampedLayer);
         JPH::EMotionType motionType = getMotionType(bodyInfo.type);
 
@@ -214,9 +224,15 @@ namespace core::physics {
         settings.mUserData = entityId;
 
         // Set mass for dynamic bodies
-        if (bodyInfo.type == BodyType::Dynamic && bodyInfo.mass > 0.0f) {
-            settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
-            settings.mMassPropertiesOverride.mMass = bodyInfo.mass;
+        if (bodyInfo.type == BodyType::Dynamic) {
+            if (bodyInfo.mass > 0.0f) {
+                settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+                settings.mMassPropertiesOverride.mMass = bodyInfo.mass;
+            } else {
+                // Invalid mass - Jolt will calculate from shape density
+                loggerWarning("Entity {}: Invalid mass {} for dynamic body, using shape-calculated mass",
+                    entityId, bodyInfo.mass);
+            }
         }
 
         // Create and add body
@@ -580,18 +596,46 @@ namespace core::physics {
     }
 
     JPH::Ref<JPH::Shape> PhysicsWorld::createShape(const ColliderCreateInfo& info) {
+        // Minimum values to prevent Jolt assertions
+        constexpr float MIN_DIMENSION = 0.001f;
+
         switch (info.shape) {
-        case ColliderShape::Box:
-            return new JPH::BoxShape(toJolt(info.halfExtents));
+        case ColliderShape::Box: {
+            // Clamp half-extents to minimum valid size
+            glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+            if (safeExtents != info.halfExtents) {
+                loggerWarning("Box collider half-extents clamped from ({}, {}, {}) to ({}, {}, {})",
+                    info.halfExtents.x, info.halfExtents.y, info.halfExtents.z,
+                    safeExtents.x, safeExtents.y, safeExtents.z);
+            }
+            return new JPH::BoxShape(toJolt(safeExtents));
+        }
 
-        case ColliderShape::Sphere:
-            return new JPH::SphereShape(info.radius);
+        case ColliderShape::Sphere: {
+            // Clamp radius to minimum valid size
+            float safeRadius = std::max(info.radius, MIN_DIMENSION);
+            if (safeRadius != info.radius) {
+                loggerWarning("Sphere collider radius clamped from {} to {}", info.radius, safeRadius);
+            }
+            return new JPH::SphereShape(safeRadius);
+        }
 
-        case ColliderShape::Capsule:
-            // Jolt capsule uses half-height, not full height
-            return new JPH::CapsuleShape(info.height * 0.5f - info.radius, info.radius);
+        case ColliderShape::Capsule: {
+            // Clamp radius to minimum valid size
+            float safeRadius = std::max(info.radius, MIN_DIMENSION);
+            // Jolt capsule uses half-height of the cylindrical part (not including hemispheres)
+            // Total height = 2 * halfHeight + 2 * radius, so halfHeight = (height - 2*radius) / 2
+            // Minimum half-height must be >= 0 (can be 0 for a sphere-like shape)
+            float halfHeight = std::max(0.0f, info.height * 0.5f - safeRadius);
+            if (safeRadius != info.radius || halfHeight != (info.height * 0.5f - info.radius)) {
+                loggerWarning("Capsule collider adjusted: radius {} -> {}, halfHeight {} (from height {})",
+                    info.radius, safeRadius, halfHeight, info.height);
+            }
+            return new JPH::CapsuleShape(halfHeight, safeRadius);
+        }
 
         default:
+            loggerWarning("Unknown collider shape type {}, defaulting to unit box", static_cast<int>(info.shape));
             return new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
         }
     }
@@ -632,7 +676,13 @@ namespace core::physics {
     }
 
     JPH::Quat PhysicsWorld::toJolt(const glm::quat& q) {
-        return JPH::Quat(q.x, q.y, q.z, q.w);
+        // Normalize quaternion to prevent Jolt assertions on non-unit quaternions
+        glm::quat normalized = glm::normalize(q);
+        // Handle degenerate case (zero quaternion)
+        if (glm::any(glm::isnan(normalized))) {
+            return JPH::Quat::sIdentity();
+        }
+        return JPH::Quat(normalized.x, normalized.y, normalized.z, normalized.w);
     }
 
     JPH::RVec3 PhysicsWorld::toJoltR(const glm::vec3& v) {

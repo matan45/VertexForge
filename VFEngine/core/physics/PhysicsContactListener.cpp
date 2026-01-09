@@ -14,25 +14,32 @@ namespace core::physics {
 
     void PhysicsContactListener::processContactEvents() {
         // Process added events
+        // Copy events locally and release lock before invoking callbacks to:
+        // 1. Avoid blocking physics threads during callback execution
+        // 2. Prevent potential deadlocks if callbacks acquire other locks
+        std::vector<ContactEvent> localAddedEvents;
         {
             std::lock_guard lock(addedMutex);
-            if (onContactAdded) {
-                for (const auto& event : addedEvents) {
-                    onContactAdded(event);
-                }
-            }
+            localAddedEvents = std::move(addedEvents);
             addedEvents.clear();
         }
+        if (onContactAdded) {
+            for (const auto& event : localAddedEvents) {
+                onContactAdded(event);
+            }
+        }
 
-        // Process removed events
+        // Process removed events (same pattern)
+        std::vector<ContactEvent> localRemovedEvents;
         {
             std::lock_guard lock(removedMutex);
-            if (onContactRemoved) {
-                for (const auto& event : removedEvents) {
-                    onContactRemoved(event);
-                }
-            }
+            localRemovedEvents = std::move(removedEvents);
             removedEvents.clear();
+        }
+        if (onContactRemoved) {
+            for (const auto& event : localRemovedEvents) {
+                onContactRemoved(event);
+            }
         }
     }
 
