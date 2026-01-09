@@ -186,8 +186,11 @@ namespace core::physics {
             return JPH::BodyID();
         }
 
-        // Use the explicit collision layer from collider info
-        JPH::ObjectLayer layer = static_cast<JPH::ObjectLayer>(colliderInfo.collisionLayer);
+        // Use the explicit collision layer from collider info (clamped to valid range)
+        uint8_t clampedLayer = colliderInfo.collisionLayer < MAX_COLLISION_LAYERS
+            ? colliderInfo.collisionLayer
+            : static_cast<uint8_t>(Layers::DYNAMIC);  // Default to Dynamic if out of range
+        JPH::ObjectLayer layer = static_cast<JPH::ObjectLayer>(clampedLayer);
         JPH::EMotionType motionType = getMotionType(bodyInfo.type);
 
         // Create body settings

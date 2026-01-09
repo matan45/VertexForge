@@ -476,7 +476,10 @@ namespace core {
     }
 
     void PhysicsAdapter::applySettings(const types::PhysicsSettings& settings) {
-        currentSettings = settings;
+        {
+            std::lock_guard<std::mutex> lock(settingsMutex);
+            currentSettings = settings;
+        }
 
         if (physicsWorld) {
             // Apply gravity (scaled)
@@ -496,6 +499,7 @@ namespace core {
     }
 
     types::PhysicsSettings PhysicsAdapter::getCurrentSettings() const {
+        std::lock_guard<std::mutex> lock(settingsMutex);
         return currentSettings;
     }
 

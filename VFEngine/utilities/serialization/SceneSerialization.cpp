@@ -481,7 +481,9 @@ namespace serialization {
 			collider.isTrigger = it->get<bool>();
 		}
 		if (auto it = j.find("collisionLayer"); it != j.end() && it->is_number_unsigned()) {
-			collider.collisionLayer = it->get<uint8_t>();
+			uint8_t layer = it->get<uint8_t>();
+			// Clamp to valid range (0-15), default to 1 (Dynamic) if out of range
+			collider.collisionLayer = layer < 16 ? layer : 1;
 		}
 		if (auto it = j.find("friction"); it != j.end() && it->is_number()) {
 			collider.friction = it->get<float>();

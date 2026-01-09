@@ -4,6 +4,7 @@
 #include "../physics/PhysicsWorld.hpp"
 #include "../physics/FixedTimestep.hpp"
 #include <memory>
+#include <mutex>
 
 namespace core {
 
@@ -86,6 +87,7 @@ namespace core {
         std::unique_ptr<physics::PhysicsWorld> physicsWorld;
         std::unique_ptr<physics::FixedTimestep> fixedTimestep;
         types::PhysicsSettings currentSettings;
+        mutable std::mutex settingsMutex;  // Protects currentSettings access
 
         // Helper to convert service types to physics types
         physics::RigidBodyCreateInfo toPhysicsBodyInfo(const services::RigidBodyData& data) const;

@@ -3,6 +3,7 @@
 #include "../events/PhysicsSettingsEvents.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../../utilities/serialization/PhysicsSettingsSerialization.hpp"
+#include <algorithm>
 #include <cassert>
 
 namespace services {
@@ -170,6 +171,85 @@ namespace services {
                 auto settings = physicsProvider->getCurrentSettings();
                 settings.setLayerCollision(cmd.layer1, cmd.layer2, cmd.shouldCollide);
                 physicsProvider->applySettings(settings);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::AddCollisionLayerCommand>(
+            [this](const auto& cmd) {
+                auto settings = physicsProvider->getCurrentSettings();
+
+                // Check if we've reached the maximum number of layers
+                uint8_t nextIndex = settings.getNextAvailableLayerIndex();
+                if (nextIndex >= types::PhysicsSettings::MAX_LAYERS) {
+                    return false;  // Cannot add more layers
+                }
+
+                // Check for empty name
+                if (cmd.name.empty()) {
+                    return false;
+                }
+
+                // Add the new layer
+                types::CollisionLayer newLayer;
+                newLayer.name = cmd.name;
+                newLayer.index = nextIndex;
+                newLayer.isBuiltIn = false;
+                settings.layers.push_back(newLayer);
+
+                physicsProvider->applySettings(settings);
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<events::physics::RemoveCollisionLayerCommand>(
+            [this](const auto& cmd) {
+                auto settings = physicsProvider->getCurrentSettings();
+
+                // Find the layer by index
+                auto it = std::find_if(settings.layers.begin(), settings.layers.end(),
+                    [&cmd](const types::CollisionLayer& layer) {
+                        return layer.index == cmd.layerIndex;
+                    });
+
+                if (it == settings.layers.end()) {
+                    return false;  // Layer not found
+                }
+
+                // Cannot remove built-in layers
+                if (it->isBuiltIn) {
+                    return false;
+                }
+
+                settings.layers.erase(it);
+                physicsProvider->applySettings(settings);
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<events::physics::RenameCollisionLayerCommand>(
+            [this](const auto& cmd) {
+                auto settings = physicsProvider->getCurrentSettings();
+
+                // Find the layer by index
+                auto it = std::find_if(settings.layers.begin(), settings.layers.end(),
+                    [&cmd](const types::CollisionLayer& layer) {
+                        return layer.index == cmd.layerIndex;
+                    });
+
+                if (it == settings.layers.end()) {
+                    return false;  // Layer not found
+                }
+
+                // Cannot rename built-in layers
+                if (it->isBuiltIn) {
+                    return false;
+                }
+
+                // Check for empty name
+                if (cmd.newName.empty()) {
+                    return false;
+                }
+
+                it->name = cmd.newName;
+                physicsProvider->applySettings(settings);
+                return true;
             });
 
         // === Physics Settings Queries ===

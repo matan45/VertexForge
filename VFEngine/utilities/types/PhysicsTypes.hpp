@@ -38,6 +38,80 @@ namespace types {
         // Maximum number of collision layers supported
         static constexpr uint8_t MAX_LAYERS = 16;
 
+    private:
+        // Lookup cache: maps layer index -> position in layers vector (-1 if not present)
+        // Mutable because it's a cache that can be rebuilt from const methods
+        mutable std::array<int8_t, MAX_LAYERS> layerIndexCache;
+        mutable bool cacheValid = false;
+
+        void rebuildCache() const
+        {
+            layerIndexCache.fill(-1);
+            for (size_t i = 0; i < layers.size(); ++i)
+            {
+                if (layers[i].index < MAX_LAYERS)
+                {
+                    layerIndexCache[layers[i].index] = static_cast<int8_t>(i);
+                }
+            }
+            cacheValid = true;
+        }
+
+    public:
+        // Invalidate cache when layers are modified
+        void invalidateLayerCache() { cacheValid = false; }
+
+        // Copy/move operations invalidate cache to ensure correctness after modification
+        PhysicsSettings() = default;
+        PhysicsSettings(const PhysicsSettings& other)
+            : gravity(other.gravity), gravityScale(other.gravityScale)
+            , fixedTimestep(other.fixedTimestep), maxAccumulator(other.maxAccumulator)
+            , maxStepsPerFrame(other.maxStepsPerFrame)
+            , linearSleepThreshold(other.linearSleepThreshold)
+            , angularSleepThreshold(other.angularSleepThreshold)
+            , timeToSleep(other.timeToSleep)
+            , layers(other.layers), collisionMatrix(other.collisionMatrix)
+            , cacheValid(false) {}  // Invalidate cache on copy
+
+        PhysicsSettings& operator=(const PhysicsSettings& other)
+        {
+            if (this != &other)
+            {
+                gravity = other.gravity;
+                gravityScale = other.gravityScale;
+                fixedTimestep = other.fixedTimestep;
+                maxAccumulator = other.maxAccumulator;
+                maxStepsPerFrame = other.maxStepsPerFrame;
+                linearSleepThreshold = other.linearSleepThreshold;
+                angularSleepThreshold = other.angularSleepThreshold;
+                timeToSleep = other.timeToSleep;
+                layers = other.layers;
+                collisionMatrix = other.collisionMatrix;
+                cacheValid = false;  // Invalidate cache on assignment
+            }
+            return *this;
+        }
+
+        PhysicsSettings(PhysicsSettings&& other) noexcept = default;
+        PhysicsSettings& operator=(PhysicsSettings&& other) noexcept
+        {
+            if (this != &other)
+            {
+                gravity = other.gravity;
+                gravityScale = other.gravityScale;
+                fixedTimestep = other.fixedTimestep;
+                maxAccumulator = other.maxAccumulator;
+                maxStepsPerFrame = other.maxStepsPerFrame;
+                linearSleepThreshold = other.linearSleepThreshold;
+                angularSleepThreshold = other.angularSleepThreshold;
+                timeToSleep = other.timeToSleep;
+                layers = std::move(other.layers);
+                collisionMatrix = std::move(other.collisionMatrix);
+                cacheValid = false;  // Invalidate cache on move assignment
+            }
+            return *this;
+        }
+
         // Gravity
         glm::vec3 gravity{0.0f, -9.81f, 0.0f};
         float gravityScale = 1.0f;
@@ -113,14 +187,16 @@ namespace types {
             collisionMatrix[layer2].set(layer1, shouldCollide);
         }
 
-        // Get layer by index, returns nullptr if not found
+        // Get layer by index, returns nullptr if not found (O(1) with cache)
         const CollisionLayer* getLayerByIndex(uint8_t index) const
         {
-            for (const auto& layer : layers)
-            {
-                if (layer.index == index) return &layer;
-            }
-            return nullptr;
+            if (index >= MAX_LAYERS) return nullptr;
+
+            if (!cacheValid) rebuildCache();
+
+            int8_t pos = layerIndexCache[index];
+            if (pos < 0 || static_cast<size_t>(pos) >= layers.size()) return nullptr;
+            return &layers[static_cast<size_t>(pos)];
         }
 
         // Get next available layer index (returns MAX_LAYERS if none available)
