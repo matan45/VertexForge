@@ -14,7 +14,6 @@ namespace services {
         float mass = 1.0f;
         float linearDamping = 0.0f;
         float angularDamping = 0.05f;
-        bool useGravity = true;
         glm::vec3 linearVelocity{ 0.0f };
         glm::vec3 angularVelocity{ 0.0f };
     };
@@ -26,6 +25,7 @@ namespace services {
         glm::vec3 size{ 1.0f };     // Box half-extents or sphere/capsule radius
         float height = 1.0f;        // Capsule height
         bool isTrigger = false;
+        uint8_t collisionLayer = 1; // Collision layer (0-15, default 1 = Dynamic)
         glm::vec3 offset{ 0.0f };   // Local offset from entity center
     };
     

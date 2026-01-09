@@ -3,6 +3,7 @@
 #include "EditorCameraWindow.hpp"
 #include "CullingStatsWindow.hpp"
 #include "ImportModalDialog.hpp"
+#include "PhysicsConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -94,6 +95,13 @@ namespace windows
                 if (editorCameraWindow)
                 {
                     editorCameraWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Physics Config"))
+            {
+                if (physicsConfigWindow)
+                {
+                    physicsConfigWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Layout Style"))

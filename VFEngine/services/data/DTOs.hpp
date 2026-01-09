@@ -202,6 +202,7 @@ namespace services
         glm::vec3 offset{0.0f};
         std::string meshPath;
         bool isTrigger = false;
+        uint8_t collisionLayer = 1;  // 0-15, default 1 = Dynamic layer
         float friction = 0.5f;
         float restitution = 0.0f;
     };
@@ -211,8 +212,6 @@ namespace services
         float mass = 1.0f;
         float linearDamping = 0.0f;
         float angularDamping = 0.05f;
-        bool useGravity = true;
-        float gravityScale = 1.0f;
         bool freezePositionX = false;
         bool freezePositionY = false;
         bool freezePositionZ = false;

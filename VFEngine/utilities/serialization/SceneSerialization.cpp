@@ -455,6 +455,7 @@ namespace serialization {
 		}
 		j["meshPath"] = cleanPath;
 		j["isTrigger"] = collider.isTrigger;
+		j["collisionLayer"] = collider.collisionLayer;
 		j["friction"] = collider.friction;
 		j["restitution"] = collider.restitution;
 		return j;
@@ -479,6 +480,9 @@ namespace serialization {
 		if (auto it = j.find("isTrigger"); it != j.end() && it->is_boolean()) {
 			collider.isTrigger = it->get<bool>();
 		}
+		if (auto it = j.find("collisionLayer"); it != j.end() && it->is_number_unsigned()) {
+			collider.collisionLayer = it->get<uint8_t>();
+		}
 		if (auto it = j.find("friction"); it != j.end() && it->is_number()) {
 			collider.friction = it->get<float>();
 		}
@@ -493,8 +497,6 @@ namespace serialization {
 		j["mass"] = rigidBody.mass;
 		j["linearDamping"] = rigidBody.linearDamping;
 		j["angularDamping"] = rigidBody.angularDamping;
-		j["useGravity"] = rigidBody.useGravity;
-		j["gravityScale"] = rigidBody.gravityScale;
 		j["freezePositionX"] = rigidBody.freezePositionX;
 		j["freezePositionY"] = rigidBody.freezePositionY;
 		j["freezePositionZ"] = rigidBody.freezePositionZ;
@@ -516,12 +518,6 @@ namespace serialization {
 		}
 		if (auto it = j.find("angularDamping"); it != j.end() && it->is_number()) {
 			rigidBody.angularDamping = it->get<float>();
-		}
-		if (auto it = j.find("useGravity"); it != j.end() && it->is_boolean()) {
-			rigidBody.useGravity = it->get<bool>();
-		}
-		if (auto it = j.find("gravityScale"); it != j.end() && it->is_number()) {
-			rigidBody.gravityScale = it->get<float>();
 		}
 		if (auto it = j.find("freezePositionX"); it != j.end() && it->is_boolean()) {
 			rigidBody.freezePositionX = it->get<bool>();

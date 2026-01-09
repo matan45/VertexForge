@@ -46,8 +46,6 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawDampingSettings(rigidBodyData);
             ImGui::Spacing();
-            changed |= drawGravitySettings(rigidBodyData);
-            ImGui::Spacing();
             changed |= drawConstraints(rigidBodyData);
 
             if (changed)
@@ -196,39 +194,6 @@ namespace windows::details
         {
             ImGui::SetTooltip("Reduces angular velocity over time (rotational friction)");
         }
-
-        ImGui::Unindent(10.0f);
-
-        if (isStatic) ImGui::EndDisabled();
-
-        return changed;
-    }
-
-    bool RigidBodyDrawer::drawGravitySettings(services::RigidBodyComponentData& rigidBodyData)
-    {
-        bool changed = false;
-
-        bool isStatic = rigidBodyData.type == services::RigidBodyTypeData::Static;
-        if (isStatic) ImGui::BeginDisabled();
-
-        ImGui::Text("Gravity:");
-        ImGui::Indent(10.0f);
-
-        if (ImGui::Checkbox("Use Gravity", &rigidBodyData.useGravity))
-        {
-            changed = true;
-        }
-
-        if (!rigidBodyData.useGravity) ImGui::BeginDisabled();
-        if (ImGui::SliderFloat("Gravity Scale", &rigidBodyData.gravityScale, -2.0f, 2.0f, "%.2f"))
-        {
-            changed = true;
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Multiplier for gravity effect (1 = normal, 0 = no gravity, negative = reverse)");
-        }
-        if (!rigidBodyData.useGravity) ImGui::EndDisabled();
 
         ImGui::Unindent(10.0f);
 

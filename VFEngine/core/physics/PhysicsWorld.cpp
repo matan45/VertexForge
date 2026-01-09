@@ -186,8 +186,8 @@ namespace core::physics {
             return JPH::BodyID();
         }
 
-        // Determine object layer
-        JPH::ObjectLayer layer = getObjectLayer(bodyInfo.type, colliderInfo.isTrigger);
+        // Use the explicit collision layer from collider info
+        JPH::ObjectLayer layer = static_cast<JPH::ObjectLayer>(colliderInfo.collisionLayer);
         JPH::EMotionType motionType = getMotionType(bodyInfo.type);
 
         // Create body settings
@@ -206,7 +206,7 @@ namespace core::physics {
         settings.mRestitution = bodyInfo.restitution;
         settings.mLinearDamping = bodyInfo.linearDamping;
         settings.mAngularDamping = bodyInfo.angularDamping;
-        settings.mGravityFactor = bodyInfo.useGravity ? 1.0f : 0.0f;
+        settings.mGravityFactor = 1.0f;
         settings.mIsSensor = colliderInfo.isTrigger;
         settings.mUserData = entityId;
 
@@ -410,11 +410,10 @@ namespace core::physics {
         return 0.05f;
     }
 
-    bool PhysicsWorld::getUseGravity(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
-            return true;
+    void PhysicsWorld::setCollisionMatrix(const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& matrix) {
+        if (objectLayerPairFilter) {
+            objectLayerPairFilter->setCollisionMatrix(matrix);
         }
-        return physicsSystem->GetBodyInterface().GetGravityFactor(bodyId) > 0.0f;
     }
 
     void PhysicsWorld::applyForce(JPH::BodyID bodyId, const glm::vec3& force) {

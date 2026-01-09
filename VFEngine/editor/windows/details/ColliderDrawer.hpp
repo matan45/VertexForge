@@ -15,5 +15,6 @@ namespace windows::details
         bool drawShapeParameters(services::ColliderComponentData& colliderData);
         bool drawPhysicsMaterial(services::ColliderComponentData& colliderData);
         bool drawTriggerSettings(services::ColliderComponentData& colliderData);
+        bool drawCollisionLayer(services::ColliderComponentData& colliderData);
     };
 }

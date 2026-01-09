@@ -400,6 +400,9 @@ namespace components
         // Behavior
         bool isTrigger = false;      // Trigger/Sensor mode (no physical response)
 
+        // Collision layer (0-15, default 1 = Dynamic layer)
+        uint8_t collisionLayer = 1;
+
         // Physics material properties
         float friction = 0.5f;
         float restitution = 0.0f;    // Bounciness
@@ -415,10 +418,6 @@ namespace components
         // Damping
         float linearDamping = 0.0f;
         float angularDamping = 0.05f;
-
-        // Gravity
-        bool useGravity = true;
-        float gravityScale = 1.0f;
 
         // Axis constraints (lock movement/rotation on specific axes)
         bool freezePositionX = false;

@@ -71,6 +71,7 @@ namespace services {
         data.offset = comp.offset;
         data.meshPath = comp.meshPath;
         data.isTrigger = comp.isTrigger;
+        data.collisionLayer = comp.collisionLayer;
         data.friction = comp.friction;
         data.restitution = comp.restitution;
         return data;
@@ -94,6 +95,7 @@ namespace services {
         comp.offset = colliderData.offset;
         comp.meshPath = colliderData.meshPath;
         comp.isTrigger = colliderData.isTrigger;
+        comp.collisionLayer = colliderData.collisionLayer;
         comp.friction = colliderData.friction;
         comp.restitution = colliderData.restitution;
         return true;
@@ -156,8 +158,6 @@ namespace services {
         data.mass = comp.mass;
         data.linearDamping = comp.linearDamping;
         data.angularDamping = comp.angularDamping;
-        data.useGravity = comp.useGravity;
-        data.gravityScale = comp.gravityScale;
         data.freezePositionX = comp.freezePositionX;
         data.freezePositionY = comp.freezePositionY;
         data.freezePositionZ = comp.freezePositionZ;
@@ -183,8 +183,6 @@ namespace services {
         comp.mass = rigidBodyData.mass;
         comp.linearDamping = rigidBodyData.linearDamping;
         comp.angularDamping = rigidBodyData.angularDamping;
-        comp.useGravity = rigidBodyData.useGravity;
-        comp.gravityScale = rigidBodyData.gravityScale;
         comp.freezePositionX = rigidBodyData.freezePositionX;
         comp.freezePositionY = rigidBodyData.freezePositionY;
         comp.freezePositionZ = rigidBodyData.freezePositionZ;

@@ -2,6 +2,7 @@
 
 #include "../data/EntityHandle.hpp"
 #include "../interfaces/IPhysicsService.hpp"
+#include "../../utilities/types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
@@ -77,6 +78,14 @@ namespace services {
         // Get alpha for smooth rendering between physics states
 
         virtual double getInterpolationAlpha() const = 0;
+
+        // === Physics Settings ===
+
+        // Apply physics settings (gravity, timestep, collision matrix, etc.)
+        virtual void applySettings(const types::PhysicsSettings& settings) = 0;
+
+        // Get current physics settings
+        virtual types::PhysicsSettings getCurrentSettings() const = 0;
     };
 
 }

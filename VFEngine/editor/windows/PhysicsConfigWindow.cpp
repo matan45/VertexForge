@@ -1,0 +1,351 @@
+#include "PhysicsConfigWindow.hpp"
+#include "../../services/events/EventDispatcher.hpp"
+#include "../../services/events/PhysicsSettingsEvents.hpp"
+#include "../../utilities/serialization/PhysicsSettingsSerialization.hpp"
+#include <imgui.h>
+#include <algorithm>
+
+namespace windows
+{
+    void PhysicsConfigWindow::show()
+    {
+        visible = true;
+        if (!settingsLoaded)
+        {
+            loadSettings();
+        }
+    }
+
+    void PhysicsConfigWindow::draw()
+    {
+        if (!visible)
+        {
+            return;
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(500, 650), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Physics Configuration", &visible))
+        {
+            drawGravitySection();
+            ImGui::Spacing();
+            drawSimulationSection();
+            ImGui::Spacing();
+            drawSleepSection();
+            ImGui::Spacing();
+            drawLayersSection();
+            ImGui::Spacing();
+            drawCollisionMatrixSection();
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Action buttons
+            if (ImGui::Button("Save", ImVec2(80, 0)))
+            {
+                saveSettings();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load", ImVec2(80, 0)))
+            {
+                loadSettings();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Apply", ImVec2(80, 0)))
+            {
+                applySettings();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Reset Defaults", ImVec2(100, 0)))
+            {
+                resetToDefaults();
+            }
+
+            if (isDirty)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Unsaved changes)");
+            }
+        }
+        ImGui::End();
+    }
+
+    void PhysicsConfigWindow::drawGravitySection()
+    {
+        if (ImGui::CollapsingHeader("Gravity", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            ImGui::Text("Gravity Vector");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat3("##GravityVec", &settings.gravity.x, 0.1f, -100.0f, 100.0f, "%.2f"))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Text("Global Scale");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat("##GravityScale", &settings.gravityScale, 0.01f, 0.0f, 10.0f, "%.2f"))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            // Show effective gravity
+            glm::vec3 effective = settings.gravity * settings.gravityScale;
+            ImGui::TextDisabled("Effective: (%.2f, %.2f, %.2f)", effective.x, effective.y, effective.z);
+
+            ImGui::Unindent();
+        }
+    }
+
+    void PhysicsConfigWindow::drawSimulationSection()
+    {
+        if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            // Fixed timestep as Hz
+            float hz = static_cast<float>(1.0 / settings.fixedTimestep);
+            ImGui::Text("Update Rate");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat("##UpdateRate", &hz, 1.0f, 30.0f, 240.0f, "%.0f Hz"))
+            {
+                settings.fixedTimestep = 1.0 / static_cast<double>(hz);
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Text("Max Steps Per Frame");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragInt("##MaxSteps", &settings.maxStepsPerFrame, 1, 1, 32))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            float maxAccum = static_cast<float>(settings.maxAccumulator * 1000.0);
+            ImGui::Text("Max Accumulator");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat("##MaxAccum", &maxAccum, 1.0f, 50.0f, 500.0f, "%.0f ms"))
+            {
+                settings.maxAccumulator = static_cast<double>(maxAccum) / 1000.0;
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Unindent();
+        }
+    }
+
+    void PhysicsConfigWindow::drawSleepSection()
+    {
+        if (ImGui::CollapsingHeader("Sleep Thresholds"))
+        {
+            ImGui::Indent();
+
+            ImGui::Text("Linear Velocity Threshold");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat("##LinSleep", &settings.linearSleepThreshold, 0.001f, 0.0f, 1.0f, "%.3f m/s"))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Text("Angular Velocity Threshold");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat("##AngSleep", &settings.angularSleepThreshold, 0.001f, 0.0f, 1.0f, "%.3f rad/s"))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Text("Time to Sleep");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat("##TimeToSleep", &settings.timeToSleep, 0.01f, 0.1f, 5.0f, "%.2f s"))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Unindent();
+        }
+    }
+
+    void PhysicsConfigWindow::drawLayersSection()
+    {
+        if (ImGui::CollapsingHeader("Collision Layers", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            // List existing layers
+            for (size_t i = 0; i < settings.layers.size(); ++i)
+            {
+                auto& layer = settings.layers[i];
+                ImGui::PushID(static_cast<int>(i));
+
+                // Show layer index
+                ImGui::Text("[%d]", layer.index);
+                ImGui::SameLine();
+
+                // Layer name (editable for non-built-in)
+                if (layer.isBuiltIn)
+                {
+                    ImGui::TextDisabled("%s (built-in)", layer.name.c_str());
+                }
+                else
+                {
+                    char nameBuffer[64];
+                    strncpy_s(nameBuffer, layer.name.c_str(), sizeof(nameBuffer) - 1);
+                    ImGui::PushItemWidth(150);
+                    if (ImGui::InputText("##LayerName", nameBuffer, sizeof(nameBuffer)))
+                    {
+                        layer.name = nameBuffer;
+                        isDirty = true;
+                    }
+                    ImGui::PopItemWidth();
+                    ImGui::SameLine();
+
+                    // Delete button for user-defined layers
+                    if (ImGui::SmallButton("X"))
+                    {
+                        settings.layers.erase(settings.layers.begin() + i);
+                        isDirty = true;
+                        ImGui::PopID();
+                        break;
+                    }
+                }
+
+                ImGui::PopID();
+            }
+
+            // Add new layer
+            if (settings.layers.size() < types::PhysicsSettings::MAX_LAYERS)
+            {
+                ImGui::Spacing();
+                ImGui::PushItemWidth(150);
+                ImGui::InputText("##NewLayerName", newLayerName, sizeof(newLayerName));
+                ImGui::PopItemWidth();
+                ImGui::SameLine();
+                if (ImGui::Button("Add Layer"))
+                {
+                    if (strlen(newLayerName) > 0)
+                    {
+                        uint8_t nextIndex = settings.getNextAvailableLayerIndex();
+                        if (nextIndex < types::PhysicsSettings::MAX_LAYERS)
+                        {
+                            types::CollisionLayer newLayer;
+                            newLayer.name = newLayerName;
+                            newLayer.index = nextIndex;
+                            newLayer.isBuiltIn = false;
+                            settings.layers.push_back(newLayer);
+                            newLayerName[0] = '\0';
+                            isDirty = true;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("Maximum layers reached (16)");
+            }
+
+            ImGui::Unindent();
+        }
+    }
+
+    void PhysicsConfigWindow::drawCollisionMatrixSection()
+    {
+        if (ImGui::CollapsingHeader("Collision Matrix", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            if (settings.layers.empty())
+            {
+                ImGui::TextDisabled("No collision layers defined");
+                ImGui::Unindent();
+                return;
+            }
+
+            // Create a grid of checkboxes
+            ImGui::BeginTable("CollisionMatrix", static_cast<int>(settings.layers.size()) + 1,
+                ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit);
+
+            // Header row with layer names (abbreviated)
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            for (const auto& layer : settings.layers)
+            {
+                ImGui::TableSetupColumn(layer.name.substr(0, 4).c_str(),
+                    ImGuiTableColumnFlags_WidthFixed, 40.0f);
+            }
+            ImGui::TableHeadersRow();
+
+            // Draw matrix rows
+            for (size_t row = 0; row < settings.layers.size(); ++row)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+
+                // Row header - layer name
+                ImGui::Text("%s", settings.layers[row].name.c_str());
+
+                // Checkboxes for each column
+                for (size_t col = 0; col < settings.layers.size(); ++col)
+                {
+                    ImGui::TableNextColumn();
+
+                    // Only show upper triangle (since matrix is symmetric)
+                    // But we want to see the full matrix for clarity
+                    uint8_t layerA = settings.layers[row].index;
+                    uint8_t layerB = settings.layers[col].index;
+
+                    bool collides = settings.shouldLayersCollide(layerA, layerB);
+
+                    ImGui::PushID(static_cast<int>(row * 16 + col));
+                    if (ImGui::Checkbox("##MatrixCell", &collides))
+                    {
+                        settings.setLayerCollision(layerA, layerB, collides);
+                        isDirty = true;
+                    }
+                    ImGui::PopID();
+                }
+            }
+
+            ImGui::EndTable();
+            ImGui::Unindent();
+        }
+    }
+
+    void PhysicsConfigWindow::loadSettings()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::physics::GetPhysicsSettingsQuery query;
+        settings = dispatcher.query(query);
+        settingsLoaded = true;
+        isDirty = false;
+    }
+
+    void PhysicsConfigWindow::saveSettings()
+    {
+        events::physics::SavePhysicsSettingsCommand cmd;
+        cmd.settings = settings;
+        auto& dispatcher = events::EventDispatcher::instance();
+        dispatcher.execute(cmd);
+        isDirty = false;
+    }
+
+    void PhysicsConfigWindow::applySettings()
+    {
+        events::physics::ApplyPhysicsSettingsCommand cmd;
+        cmd.settings = settings;
+        auto& dispatcher = events::EventDispatcher::instance();
+        dispatcher.execute(cmd);
+    }
+
+    void PhysicsConfigWindow::resetToDefaults()
+    {
+        settings = types::PhysicsSettings::createDefault();
+        isDirty = true;
+    }
+}

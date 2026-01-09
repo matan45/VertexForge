@@ -10,6 +10,9 @@
 #include "../adapters/PhysicsAdapter.hpp"
 #include "scene/LevelHandler.hpp"
 #include "print/Logger.hpp"
+#include "../../utilities/serialization/PhysicsSettingsSerialization.hpp"
+#include "../../utilities/types/PhysicsTypes.hpp"
+#include <filesystem>
 
 namespace core
 {
@@ -38,7 +41,9 @@ namespace core
         scriptingAdapter->init();
         physicsAdapter->init();
 
-        
+        // Load physics settings from project file
+        loadPhysicsSettings();
+
         coreInterface->setResizeCallback([this]()
         {
             offScreen->recreate();
@@ -166,6 +171,43 @@ namespace core
         if (coreInterface)
         {
             coreInterface->triggerResize();
+        }
+    }
+
+    void EditorBootstrap::loadPhysicsSettings()
+    {
+        if (!physicsAdapter)
+        {
+            return;
+        }
+
+        std::string settingsFile = serialization::PhysicsSettingsSerialization::getDefaultFilename();
+
+        // Check if settings file exists
+        if (std::filesystem::exists(settingsFile))
+        {
+            types::PhysicsSettings settings;
+            if (serialization::PhysicsSettingsSerialization::load(settingsFile, settings))
+            {
+                physicsAdapter->applySettings(settings);
+                vfLogInfo("Physics settings loaded from: {}", settingsFile);
+            }
+            else
+            {
+                vfLogWarning("Failed to load physics settings from: {}", settingsFile);
+                // Apply default settings
+                physicsAdapter->applySettings(types::PhysicsSettings::createDefault());
+            }
+        }
+        else
+        {
+            // Create default settings file
+            types::PhysicsSettings defaultSettings = types::PhysicsSettings::createDefault();
+            if (serialization::PhysicsSettingsSerialization::save(defaultSettings, settingsFile))
+            {
+                vfLogInfo("Created default physics settings: {}", settingsFile);
+            }
+            physicsAdapter->applySettings(defaultSettings);
         }
     }
 }

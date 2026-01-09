@@ -7,6 +7,7 @@ namespace windows
     class EditorCameraWindow;
     class CullingStatsWindow;
     class ImportModalDialog;
+    class PhysicsConfigWindow;
 
     class MainMenuBar
     {
@@ -18,17 +19,20 @@ namespace windows
         EditorCameraWindow* editorCameraWindow = nullptr;
         CullingStatsWindow* cullingStatsWindow = nullptr;
         ImportModalDialog* importDialog = nullptr;
+        PhysicsConfigWindow* physicsConfigWindow = nullptr;
 
     public:
         void draw();
 
         void setWindows(IBLWindow* ibl, EditorCameraWindow* camera,
-                        CullingStatsWindow* culling, ImportModalDialog* import)
+                        CullingStatsWindow* culling, ImportModalDialog* import,
+                        PhysicsConfigWindow* physicsConfig)
         {
             iblWindow = ibl;
             editorCameraWindow = camera;
             cullingStatsWindow = culling;
             importDialog = import;
+            physicsConfigWindow = physicsConfig;
         }
 
     private:

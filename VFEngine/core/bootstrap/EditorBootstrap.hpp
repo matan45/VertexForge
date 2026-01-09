@@ -95,5 +95,9 @@ namespace core
 
         // Trigger window resize handling
         void triggerResize();
+
+    private:
+        // Load physics settings from project file
+        void loadPhysicsSettings();
     };
 }

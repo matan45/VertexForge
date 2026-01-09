@@ -2,6 +2,7 @@
 #include "../EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/PhysicsSettingsEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 
@@ -48,6 +49,8 @@ namespace windows::details
             changed |= drawPhysicsMaterial(colliderData);
             ImGui::Spacing();
             changed |= drawTriggerSettings(colliderData);
+            ImGui::Spacing();
+            changed |= drawCollisionLayer(colliderData);
 
             if (changed)
             {
@@ -275,6 +278,63 @@ namespace windows::details
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("Trigger colliders detect overlaps but don't cause physical collisions");
+        }
+
+        return changed;
+    }
+
+    bool ColliderDrawer::drawCollisionLayer(services::ColliderComponentData& colliderData)
+    {
+        bool changed = false;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Get available collision layers
+        events::physics::GetCollisionLayersQuery layersQuery;
+        auto layers = dispatcher.query(layersQuery);
+
+        if (layers.empty())
+        {
+            ImGui::TextDisabled("No collision layers available");
+            return false;
+        }
+
+        ImGui::Text("Collision Layer:");
+
+        // Build combo items
+        std::vector<std::string> layerNames;
+        int currentIndex = 0;
+
+        for (size_t i = 0; i < layers.size(); ++i)
+        {
+            layerNames.push_back(layers[i].name + " [" + std::to_string(layers[i].index) + "]");
+            if (layers[i].index == colliderData.collisionLayer)
+            {
+                currentIndex = static_cast<int>(i);
+            }
+        }
+
+        // Create combo
+        if (ImGui::BeginCombo("##CollisionLayer", layerNames[currentIndex].c_str()))
+        {
+            for (size_t i = 0; i < layers.size(); ++i)
+            {
+                bool isSelected = (layers[i].index == colliderData.collisionLayer);
+                if (ImGui::Selectable(layerNames[i].c_str(), isSelected))
+                {
+                    colliderData.collisionLayer = layers[i].index;
+                    changed = true;
+                }
+                if (isSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Collision layer determines which objects this collider can interact with");
         }
 
         return changed;

@@ -14,7 +14,6 @@ namespace windows::details
         bool drawBodyType(services::RigidBodyComponentData& rigidBodyData);
         bool drawMassSettings(services::RigidBodyComponentData& rigidBodyData);
         bool drawDampingSettings(services::RigidBodyComponentData& rigidBodyData);
-        bool drawGravitySettings(services::RigidBodyComponentData& rigidBodyData);
         bool drawConstraints(services::RigidBodyComponentData& rigidBodyData);
     };
 }

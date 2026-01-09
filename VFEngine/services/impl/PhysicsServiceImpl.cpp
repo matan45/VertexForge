@@ -1,6 +1,8 @@
 #include "PhysicsServiceImpl.hpp"
 #include "../events/PhysicsEvents.hpp"
+#include "../events/PhysicsSettingsEvents.hpp"
 #include "../events/EventDispatcher.hpp"
+#include "../../utilities/serialization/PhysicsSettingsSerialization.hpp"
 #include <cassert>
 
 namespace services {
@@ -132,6 +134,66 @@ namespace services {
         dispatcher.registerQueryHandler<events::physics::IsOverlappingQuery>(
             [this](const auto& query) {
                 return isOverlapping(query.entityA, query.entityB);
+            });
+
+        // === Physics Settings Commands ===
+
+        dispatcher.registerCommandHandler<events::physics::ApplyPhysicsSettingsCommand>(
+            [this](const auto& cmd) {
+                physicsProvider->applySettings(cmd.settings);
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SavePhysicsSettingsCommand>(
+            [this](const auto& cmd) {
+                std::string filename = cmd.filename.empty()
+                    ? serialization::PhysicsSettingsSerialization::getDefaultFilename()
+                    : cmd.filename;
+                return serialization::PhysicsSettingsSerialization::save(cmd.settings, filename);
+            });
+
+        dispatcher.registerCommandHandler<events::physics::LoadPhysicsSettingsCommand>(
+            [this](const auto& cmd) {
+                std::string filename = cmd.filename.empty()
+                    ? serialization::PhysicsSettingsSerialization::getDefaultFilename()
+                    : cmd.filename;
+                types::PhysicsSettings settings;
+                if (serialization::PhysicsSettingsSerialization::load(filename, settings)) {
+                    physicsProvider->applySettings(settings);
+                    return true;
+                }
+                return false;
+            });
+
+        dispatcher.registerCommandHandler<events::physics::SetLayerCollisionCommand>(
+            [this](const auto& cmd) {
+                auto settings = physicsProvider->getCurrentSettings();
+                settings.setLayerCollision(cmd.layer1, cmd.layer2, cmd.shouldCollide);
+                physicsProvider->applySettings(settings);
+            });
+
+        // === Physics Settings Queries ===
+
+        dispatcher.registerQueryHandler<events::physics::GetPhysicsSettingsQuery>(
+            [this](const auto& query) {
+                return physicsProvider->getCurrentSettings();
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetCollisionLayersQuery>(
+            [this](const auto& query) {
+                return physicsProvider->getCurrentSettings().layers;
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetLayerNameQuery>(
+            [this](const auto& query) {
+                const auto& settings = physicsProvider->getCurrentSettings();
+                const auto* layer = settings.getLayerByIndex(query.layerIndex);
+                return layer ? layer->name : std::string("Unknown");
+            });
+
+        dispatcher.registerQueryHandler<events::physics::ShouldLayersCollideQuery>(
+            [this](const auto& query) {
+                return physicsProvider->getCurrentSettings().shouldLayersCollide(query.layer1, query.layer2);
             });
     }
 

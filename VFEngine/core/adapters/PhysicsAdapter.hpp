@@ -77,9 +77,15 @@ namespace core {
 
         double getInterpolationAlpha() const override;
 
+        // === Physics Settings ===
+
+        void applySettings(const types::PhysicsSettings& settings) override;
+        types::PhysicsSettings getCurrentSettings() const override;
+
     private:
         std::unique_ptr<physics::PhysicsWorld> physicsWorld;
         std::unique_ptr<physics::FixedTimestep> fixedTimestep;
+        types::PhysicsSettings currentSettings;
 
         // Helper to convert service types to physics types
         physics::RigidBodyCreateInfo toPhysicsBodyInfo(const services::RigidBodyData& data) const;

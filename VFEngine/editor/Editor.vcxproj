@@ -127,6 +127,7 @@
     <ClInclude Include="windows\MaterialEditorWindow.hpp" />
     <ClInclude Include="windows\MaterialInstanceEditorWindow.hpp" />
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
+    <ClInclude Include="windows\PhysicsConfigWindow.hpp" />
     <ClInclude Include="windows\PrefabPreviewWindow.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
@@ -183,6 +184,7 @@
     <ClCompile Include="windows\MaterialEditorWindow.cpp" />
     <ClCompile Include="windows\MaterialInstanceEditorWindow.cpp" />
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
+    <ClCompile Include="windows\PhysicsConfigWindow.cpp" />
     <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />

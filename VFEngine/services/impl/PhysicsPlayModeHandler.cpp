@@ -156,7 +156,6 @@ namespace services
             rbData.mass = rigidBody.mass;
             rbData.linearDamping = rigidBody.linearDamping;
             rbData.angularDamping = rigidBody.angularDamping;
-            rbData.useGravity = rigidBody.useGravity;
             rbData.linearVelocity = glm::vec3(0.0f);
             rbData.angularVelocity = glm::vec3(0.0f);
 
@@ -203,6 +202,7 @@ namespace services
                 colData.height = collider.height;
                 colData.isTrigger = collider.isTrigger;
                 colData.offset = collider.offset;
+                colData.collisionLayer = collider.collisionLayer;
             }
             else
             {

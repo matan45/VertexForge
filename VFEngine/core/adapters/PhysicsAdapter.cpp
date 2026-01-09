@@ -6,7 +6,8 @@ namespace core {
 
     PhysicsAdapter::PhysicsAdapter()
         : physicsWorld(std::make_unique<physics::PhysicsWorld>())
-        , fixedTimestep(std::make_unique<physics::FixedTimestep>()) {
+        , fixedTimestep(std::make_unique<physics::FixedTimestep>())
+        , currentSettings(types::PhysicsSettings::createDefault()) {
     }
 
     PhysicsAdapter::~PhysicsAdapter() {
@@ -179,7 +180,6 @@ namespace core {
         data.mass = physicsWorld->getMass(bodyId);
         data.linearDamping = physicsWorld->getLinearDamping(bodyId);
         data.angularDamping = physicsWorld->getAngularDamping(bodyId);
-        data.useGravity = physicsWorld->getUseGravity(bodyId);
         data.linearVelocity = physicsWorld->getLinearVelocity(bodyId);
         data.angularVelocity = physicsWorld->getAngularVelocity(bodyId);
 
@@ -437,7 +437,6 @@ namespace core {
         info.mass = data.mass;
         info.linearDamping = data.linearDamping;
         info.angularDamping = data.angularDamping;
-        info.useGravity = data.useGravity;
         info.linearVelocity = data.linearVelocity;
         info.angularVelocity = data.angularVelocity;
 
@@ -471,8 +470,33 @@ namespace core {
 
         info.offset = data.offset;
         info.isTrigger = data.isTrigger;
+        info.collisionLayer = data.collisionLayer;
 
         return info;
+    }
+
+    void PhysicsAdapter::applySettings(const types::PhysicsSettings& settings) {
+        currentSettings = settings;
+
+        if (physicsWorld) {
+            // Apply gravity (scaled)
+            glm::vec3 scaledGravity = settings.gravity * settings.gravityScale;
+            physicsWorld->setGravity(scaledGravity);
+
+            // Apply collision matrix
+            physicsWorld->setCollisionMatrix(settings.collisionMatrix);
+        }
+
+        if (fixedTimestep) {
+            // Apply timestep settings
+            fixedTimestep->setTimestep(settings.fixedTimestep);
+            fixedTimestep->setMaxAccumulator(settings.maxAccumulator);
+            fixedTimestep->setMaxStepsPerFrame(settings.maxStepsPerFrame);
+        }
+    }
+
+    types::PhysicsSettings PhysicsAdapter::getCurrentSettings() const {
+        return currentSettings;
     }
 
 }

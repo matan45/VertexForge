@@ -108,6 +108,7 @@
     <ClInclude Include="events\InputEvents.hpp" />
     <ClInclude Include="events\MaterialEvents.hpp" />
     <ClInclude Include="events\PhysicsEvents.hpp" />
+    <ClInclude Include="events\PhysicsSettingsEvents.hpp" />
     <ClInclude Include="events\PreviewEvents.hpp" />
     <ClInclude Include="events\RenderEvents.hpp" />
     <ClInclude Include="events\ResourceEvents.hpp" />

@@ -38,7 +38,6 @@ namespace core::physics {
         float restitution = 0.0f;
         float linearDamping = 0.05f;
         float angularDamping = 0.05f;
-        bool useGravity = true;
         glm::vec3 linearVelocity{ 0.0f };
         glm::vec3 angularVelocity{ 0.0f };
     };
@@ -50,6 +49,7 @@ namespace core::physics {
         float height = 1.0f;            // Capsule total height
         glm::vec3 offset{ 0.0f };       // Local offset
         bool isTrigger = false;
+        uint8_t collisionLayer = 1;     // Collision layer (0-15, default 1 = Dynamic)
     };
 
     struct RaycastResult {
@@ -110,7 +110,10 @@ namespace core::physics {
         float getRestitution(JPH::BodyID bodyId) const;
         float getLinearDamping(JPH::BodyID bodyId) const;
         float getAngularDamping(JPH::BodyID bodyId) const;
-        bool getUseGravity(JPH::BodyID bodyId) const;
+
+        // Collision matrix configuration
+        void setCollisionMatrix(const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& matrix);
+        DynamicObjectLayerPairFilter* getObjectLayerPairFilter() { return objectLayerPairFilter.get(); }
 
         // Forces
         void applyForce(JPH::BodyID bodyId, const glm::vec3& force);
