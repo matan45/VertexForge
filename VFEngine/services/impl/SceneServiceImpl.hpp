@@ -19,6 +19,7 @@ namespace services
     class MaterialComponentService;
     class AudioComponentService;
     class IBLComponentService;
+    class PhysicsComponentService;
 
     // New extracted services
     class HierarchyService;
@@ -38,6 +39,7 @@ namespace services
         std::unique_ptr<MaterialComponentService> materialService;
         std::unique_ptr<AudioComponentService> audioService;
         std::unique_ptr<IBLComponentService> iblService;
+        std::unique_ptr<PhysicsComponentService> physicsService;
 
         // New extracted services
         std::unique_ptr<HierarchyService> hierarchyService;

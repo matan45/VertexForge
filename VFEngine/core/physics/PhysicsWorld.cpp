@@ -11,10 +11,30 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include "print/Logger.hpp"
 
 #include <thread>
+#include <cstdarg>
 
 namespace core::physics {
+
+    // Jolt trace callback for debug output
+    static void JoltTraceImpl(const char* inFMT, ...) {
+        va_list list;
+        va_start(list, inFMT);
+        char buffer[1024];
+        vsnprintf(buffer, sizeof(buffer), inFMT, list);
+        va_end(list);
+        loggerInfo("Jolt: {}", buffer);
+    }
+
+#ifdef JPH_ENABLE_ASSERTS
+    // Jolt assertion callback
+    static bool JoltAssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile, unsigned int inLine) {
+        loggerError("Jolt Assertion Failed: {} - {} ({}:{})", inExpression, inMessage ? inMessage : "", inFile, inLine);
+        return true; // Return true to break into debugger
+    }
+#endif
 
     // Jolt memory allocation callbacks (using default allocator)
     static void* JoltAllocate(size_t inSize) {
@@ -46,11 +66,16 @@ namespace core::physics {
             return true;
         }
 
-        // Register allocation hook
-        JPH::Allocate = JoltAllocate;
-        JPH::AlignedAllocate = JoltAlignedAllocate;
-        JPH::Free = JoltFree;
-        JPH::AlignedFree = JoltAlignedFree;
+        // Register default allocator - must be done before any other Jolt function
+        JPH::RegisterDefaultAllocator();
+
+        // Set up Jolt trace handler for debug output
+        JPH::Trace = JoltTraceImpl;
+
+#ifdef JPH_ENABLE_ASSERTS
+        // Set up assertion handler
+        JPH::AssertFailed = JoltAssertFailedImpl;
+#endif
 
         // Create factory
         JPH::Factory::sInstance = new JPH::Factory();
@@ -102,6 +127,7 @@ namespace core::physics {
         physicsSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
 
         initialized = true;
+        loggerInfo("Physics system initialized with {} threads", numThreads);
         return true;
     }
 

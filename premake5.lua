@@ -109,10 +109,10 @@ project "Core"
    }
 
    links { "Graphics", "mType", "jolt" }  -- Link against Graphics, mType, jolt (Services is a higher layer, no link needed)
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM" }
 
    filter "configurations:Debug"
-      defines { "DEBUG" }
+      defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
       symbols "On"
       libdirs { "dependencies/openal-soft/build/Debug" }
       links { "OpenAL32.lib" }
@@ -463,7 +463,7 @@ project "imgui"
       defines { "NDEBUG" }
       optimize "On"
 
--- Project: JoltPhysics (Moved under libs group)	  
+-- Project: JoltPhysics (Moved under libs group)
 project "jolt"
    kind "StaticLib"
    language "C++"
@@ -476,12 +476,16 @@ project "jolt"
    }
 
    includedirs {
-      "dependencies/JoltPhysics"            
+      "dependencies/JoltPhysics"
    }
-   
+
+   -- Jolt Physics configuration defines
+   defines {
+      "JPH_OBJECT_STREAM"  -- Enable object serialization
+   }
 
    filter "configurations:Debug"
-      defines { "DEBUG" }
+      defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
       symbols "On"
 
    filter "configurations:Release"

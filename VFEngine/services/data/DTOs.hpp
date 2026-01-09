@@ -178,4 +178,46 @@ namespace services
         float maxDistance = 100.0f;
         bool showDebugSpheres = false;
     };
+
+    // Physics component enums
+    enum class ColliderShapeType : uint8_t {
+        Box,
+        Sphere,
+        Capsule,
+        ConvexMesh,
+        TriangleMesh
+    };
+
+    enum class RigidBodyTypeData : uint8_t {
+        Static,
+        Dynamic,
+        Kinematic
+    };
+
+    // Physics component data structs
+    struct ColliderComponentData {
+        ColliderShapeType shape = ColliderShapeType::Box;
+        glm::vec3 size{1.0f};
+        float height = 2.0f;
+        glm::vec3 offset{0.0f};
+        std::string meshPath;
+        bool isTrigger = false;
+        float friction = 0.5f;
+        float restitution = 0.0f;
+    };
+
+    struct RigidBodyComponentData {
+        RigidBodyTypeData type = RigidBodyTypeData::Dynamic;
+        float mass = 1.0f;
+        float linearDamping = 0.0f;
+        float angularDamping = 0.05f;
+        bool useGravity = true;
+        float gravityScale = 1.0f;
+        bool freezePositionX = false;
+        bool freezePositionY = false;
+        bool freezePositionZ = false;
+        bool freezeRotationX = false;
+        bool freezeRotationY = false;
+        bool freezeRotationZ = false;
+    };
 }

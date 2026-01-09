@@ -195,6 +195,46 @@ namespace events::scene {
         std::string_view getName() const override { return "DuplicateEntity"; }
     };
 
+    // Collider Component Commands
+    struct AddColliderComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddColliderComponent"; }
+    };
+
+    struct RemoveColliderComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveColliderComponent"; }
+    };
+
+    struct SetColliderDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::ColliderComponentData colliderData;
+
+        std::string_view getName() const override { return "SetColliderData"; }
+    };
+
+    // RigidBody Component Commands
+    struct AddRigidBodyComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddRigidBodyComponent"; }
+    };
+
+    struct RemoveRigidBodyComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveRigidBodyComponent"; }
+    };
+
+    struct SetRigidBodyDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::RigidBodyComponentData rigidBodyData;
+
+        std::string_view getName() const override { return "SetRigidBodyData"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================
@@ -305,6 +345,32 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetAudioSource3DData"; }
+    };
+
+    // Collider Component Queries
+    struct HasColliderComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasColliderComponent"; }
+    };
+
+    struct GetColliderDataQuery : IQuery<std::optional<services::ColliderComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetColliderData"; }
+    };
+
+    // RigidBody Component Queries
+    struct HasRigidBodyComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasRigidBodyComponent"; }
+    };
+
+    struct GetRigidBodyDataQuery : IQuery<std::optional<services::RigidBodyComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetRigidBodyData"; }
     };
 
     // ============================================

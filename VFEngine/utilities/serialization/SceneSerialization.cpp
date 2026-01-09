@@ -106,6 +106,14 @@ namespace serialization {
 			componentsJson["script"] = serializeScript(entity.getComponent<components::ScriptComponent>());
 		}
 
+		if (entity.hasComponent<components::ColliderComponent>()) {
+			componentsJson["collider"] = serializeCollider(entity.getComponent<components::ColliderComponent>());
+		}
+
+		if (entity.hasComponent<components::RigidBodyComponent>()) {
+			componentsJson["rigidBody"] = serializeRigidBody(entity.getComponent<components::RigidBodyComponent>());
+		}
+
 		entityJson["components"] = componentsJson;
 
 		// Serialize children recursively
@@ -401,6 +409,140 @@ namespace serialization {
 		}
 	}
 
+	// Physics enum conversion helpers
+	static std::string rigidBodyTypeToString(components::RigidBodyType type) {
+		switch (type) {
+		case components::RigidBodyType::Static: return "static";
+		case components::RigidBodyType::Kinematic: return "kinematic";
+		default: return "dynamic";
+		}
+	}
+
+	static components::RigidBodyType stringToRigidBodyType(const std::string& str) {
+		if (str == "static") return components::RigidBodyType::Static;
+		if (str == "kinematic") return components::RigidBodyType::Kinematic;
+		return components::RigidBodyType::Dynamic;
+	}
+
+	static std::string colliderShapeToString(components::ColliderShape shape) {
+		switch (shape) {
+		case components::ColliderShape::Sphere: return "sphere";
+		case components::ColliderShape::Capsule: return "capsule";
+		case components::ColliderShape::ConvexMesh: return "convexMesh";
+		case components::ColliderShape::TriangleMesh: return "triangleMesh";
+		default: return "box";
+		}
+	}
+
+	static components::ColliderShape stringToColliderShape(const std::string& str) {
+		if (str == "sphere") return components::ColliderShape::Sphere;
+		if (str == "capsule") return components::ColliderShape::Capsule;
+		if (str == "convexMesh") return components::ColliderShape::ConvexMesh;
+		if (str == "triangleMesh") return components::ColliderShape::TriangleMesh;
+		return components::ColliderShape::Box;
+	}
+
+	json SceneSerialization::serializeCollider(const components::ColliderComponent& collider) {
+		json j;
+		j["shape"] = colliderShapeToString(collider.shape);
+		j["size"] = json::array({ collider.size.x, collider.size.y, collider.size.z });
+		j["height"] = collider.height;
+		j["offset"] = json::array({ collider.offset.x, collider.offset.y, collider.offset.z });
+		// Clean mesh path
+		std::string cleanPath = collider.meshPath;
+		if (auto pos = cleanPath.find('\0'); pos != std::string::npos) {
+			cleanPath.resize(pos);
+		}
+		j["meshPath"] = cleanPath;
+		j["isTrigger"] = collider.isTrigger;
+		j["friction"] = collider.friction;
+		j["restitution"] = collider.restitution;
+		return j;
+	}
+
+	void SceneSerialization::deserializeCollider(const json& j, components::ColliderComponent& collider) {
+		if (auto it = j.find("shape"); it != j.end() && it->is_string()) {
+			collider.shape = stringToColliderShape(it->get<std::string>());
+		}
+		if (auto it = j.find("size"); it != j.end() && it->is_array() && it->size() >= 3) {
+			collider.size = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+		}
+		if (auto it = j.find("height"); it != j.end() && it->is_number()) {
+			collider.height = it->get<float>();
+		}
+		if (auto it = j.find("offset"); it != j.end() && it->is_array() && it->size() >= 3) {
+			collider.offset = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+		}
+		if (auto it = j.find("meshPath"); it != j.end() && it->is_string()) {
+			collider.meshPath = it->get<std::string>();
+		}
+		if (auto it = j.find("isTrigger"); it != j.end() && it->is_boolean()) {
+			collider.isTrigger = it->get<bool>();
+		}
+		if (auto it = j.find("friction"); it != j.end() && it->is_number()) {
+			collider.friction = it->get<float>();
+		}
+		if (auto it = j.find("restitution"); it != j.end() && it->is_number()) {
+			collider.restitution = it->get<float>();
+		}
+	}
+
+	json SceneSerialization::serializeRigidBody(const components::RigidBodyComponent& rigidBody) {
+		json j;
+		j["type"] = rigidBodyTypeToString(rigidBody.type);
+		j["mass"] = rigidBody.mass;
+		j["linearDamping"] = rigidBody.linearDamping;
+		j["angularDamping"] = rigidBody.angularDamping;
+		j["useGravity"] = rigidBody.useGravity;
+		j["gravityScale"] = rigidBody.gravityScale;
+		j["freezePositionX"] = rigidBody.freezePositionX;
+		j["freezePositionY"] = rigidBody.freezePositionY;
+		j["freezePositionZ"] = rigidBody.freezePositionZ;
+		j["freezeRotationX"] = rigidBody.freezeRotationX;
+		j["freezeRotationY"] = rigidBody.freezeRotationY;
+		j["freezeRotationZ"] = rigidBody.freezeRotationZ;
+		return j;
+	}
+
+	void SceneSerialization::deserializeRigidBody(const json& j, components::RigidBodyComponent& rigidBody) {
+		if (auto it = j.find("type"); it != j.end() && it->is_string()) {
+			rigidBody.type = stringToRigidBodyType(it->get<std::string>());
+		}
+		if (auto it = j.find("mass"); it != j.end() && it->is_number()) {
+			rigidBody.mass = it->get<float>();
+		}
+		if (auto it = j.find("linearDamping"); it != j.end() && it->is_number()) {
+			rigidBody.linearDamping = it->get<float>();
+		}
+		if (auto it = j.find("angularDamping"); it != j.end() && it->is_number()) {
+			rigidBody.angularDamping = it->get<float>();
+		}
+		if (auto it = j.find("useGravity"); it != j.end() && it->is_boolean()) {
+			rigidBody.useGravity = it->get<bool>();
+		}
+		if (auto it = j.find("gravityScale"); it != j.end() && it->is_number()) {
+			rigidBody.gravityScale = it->get<float>();
+		}
+		if (auto it = j.find("freezePositionX"); it != j.end() && it->is_boolean()) {
+			rigidBody.freezePositionX = it->get<bool>();
+		}
+		if (auto it = j.find("freezePositionY"); it != j.end() && it->is_boolean()) {
+			rigidBody.freezePositionY = it->get<bool>();
+		}
+		if (auto it = j.find("freezePositionZ"); it != j.end() && it->is_boolean()) {
+			rigidBody.freezePositionZ = it->get<bool>();
+		}
+		if (auto it = j.find("freezeRotationX"); it != j.end() && it->is_boolean()) {
+			rigidBody.freezeRotationX = it->get<bool>();
+		}
+		if (auto it = j.find("freezeRotationY"); it != j.end() && it->is_boolean()) {
+			rigidBody.freezeRotationY = it->get<bool>();
+		}
+		if (auto it = j.find("freezeRotationZ"); it != j.end() && it->is_boolean()) {
+			rigidBody.freezeRotationZ = it->get<bool>();
+		}
+	}
+
 	void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent, scene::SceneGraphSystem& sceneGraph,
 											   SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded, size_t totalEntities) {
 		for (const auto& childJson : childrenJson) {
@@ -518,8 +660,18 @@ namespace serialization {
 				auto& scriptComp = entity.addOrReplaceComponent<components::ScriptComponent>();
 				deserializeScript(componentsJson["script"], scriptComp);
 			}
+
+			if (componentsJson.contains("collider")) {
+				auto& colliderComp = entity.addOrReplaceComponent<components::ColliderComponent>();
+				deserializeCollider(componentsJson["collider"], colliderComp);
+			}
+
+			if (componentsJson.contains("rigidBody")) {
+				auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
+				deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
+			}
 		}
-		
+
 		if (entityJson.contains("children") && entityJson["children"].is_array()) {
 			deserializeChildren(entityJson["children"], entity, sceneGraph, progressCallback, entitiesLoaded, totalEntities);
 		}

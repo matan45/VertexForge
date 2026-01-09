@@ -7,7 +7,8 @@
 namespace windows::details
 {
     void AddComponentPopup::draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
-                                 bool hasAudio2D, bool hasAudio3D, bool hasScript)
+                                 bool hasAudio2D, bool hasAudio3D, bool hasScript,
+                                 bool hasCollider, bool hasRigidBody)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -105,8 +106,44 @@ namespace windows::details
                 }
             }
 
-            if (hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript)
+            // Physics components section
+            ImGui::Spacing();
+            ImGui::TextDisabled("Physics");
+            ImGui::Separator();
+
+            if (!hasCollider)
             {
+                if (ImGui::Selectable("  Collider"))
+                {
+                    events::scene::AddColliderComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Collision shape (Box, Sphere, Capsule, or Mesh)");
+                }
+            }
+
+            if (!hasRigidBody)
+            {
+                if (ImGui::Selectable("  Rigid Body"))
+                {
+                    events::scene::AddRigidBodyComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Physics body for dynamics simulation");
+                }
+            }
+
+            bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
+                           hasCollider && hasRigidBody;
+            if (allAdded)
+            {
+                ImGui::Spacing();
                 ImGui::TextDisabled("All components added");
             }
 

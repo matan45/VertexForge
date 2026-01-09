@@ -10,6 +10,7 @@
 #include "impl/ScriptingServiceImpl.hpp"
 #include "impl/UndoRedoServiceImpl.hpp"
 #include "impl/FileOperationsServiceImpl.hpp"
+#include "impl/PhysicsPlayModeHandler.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "time/Timer.hpp"
@@ -49,9 +50,15 @@ namespace handlers
 
             if (editorModeService && editorModeService->isPlayMode())
             {
+                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+
+                if (physicsPlayModeHandler)
+                {
+                    physicsPlayModeHandler->update(deltaTime);
+                }
+
                 if (scriptingService)
                 {
-                    float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
                     scriptingService->updateScripts(deltaTime);
                 }
 
@@ -84,6 +91,7 @@ namespace handlers
 
         fileOperationsService.reset();
         undoRedoService.reset();
+        physicsPlayModeHandler.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -115,6 +123,13 @@ namespace handlers
             bootstrap->getSceneGraphSystem()
         );
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
+
+        // Create physics play mode handler
+        if (auto* physicsProvider = bootstrap->getPhysicsProvider())
+        {
+            physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
+            physicsPlayModeHandler->subscribeToEvents();
+        }
 
         // Create undo/redo service (standalone, no providers needed)
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();

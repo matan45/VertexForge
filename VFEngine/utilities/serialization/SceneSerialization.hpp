@@ -76,5 +76,11 @@ namespace serialization
 
         static json serializeScript(const components::ScriptComponent& script);
         static void deserializeScript(const json& j, components::ScriptComponent& script);
+
+        static json serializeCollider(const components::ColliderComponent& collider);
+        static void deserializeCollider(const json& j, components::ColliderComponent& collider);
+
+        static json serializeRigidBody(const components::RigidBodyComponent& rigidBody);
+        static void deserializeRigidBody(const json& j, components::RigidBodyComponent& rigidBody);
     };
 }

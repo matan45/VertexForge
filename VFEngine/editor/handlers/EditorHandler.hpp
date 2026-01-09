@@ -22,6 +22,10 @@ namespace core::audio {
 	class AudioSceneUpdater;
 }
 
+namespace services {
+	class PhysicsPlayModeHandler;
+}
+
 namespace handlers {
 
 	class EditorHandler
@@ -43,6 +47,7 @@ namespace handlers {
 		std::shared_ptr<services::IUndoRedoService> undoRedoService;
 		std::shared_ptr<services::IFileOperationsService> fileOperationsService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
+		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 
 		events::SubscriptionToken resizeSubscription;
 

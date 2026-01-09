@@ -119,6 +119,7 @@
     <ClInclude Include="impl\EditorRenderServiceImpl.hpp" />
     <ClInclude Include="impl\FileOperationsServiceImpl.hpp" />
     <ClInclude Include="impl\InputServiceImpl.hpp" />
+    <ClInclude Include="impl\PhysicsPlayModeHandler.hpp" />
     <ClInclude Include="impl\PhysicsServiceImpl.hpp" />
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
     <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
@@ -131,6 +132,7 @@
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
     <ClInclude Include="impl\components\MaterialComponentService.hpp" />
     <ClInclude Include="impl\components\MeshComponentService.hpp" />
+    <ClInclude Include="impl\components\PhysicsComponentService.hpp" />
     <ClInclude Include="impl\scene\EntityQueryService.hpp" />
     <ClInclude Include="impl\scene\EntityStateService.hpp" />
     <ClInclude Include="impl\scene\HierarchyService.hpp" />
@@ -166,6 +168,7 @@
     <ClCompile Include="impl\EditorRenderServiceImpl.cpp" />
     <ClCompile Include="impl\FileOperationsServiceImpl.cpp" />
     <ClCompile Include="impl\InputServiceImpl.cpp" />
+    <ClCompile Include="impl\PhysicsPlayModeHandler.cpp" />
     <ClCompile Include="impl\PhysicsServiceImpl.cpp" />
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />
     <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />
@@ -178,6 +181,7 @@
     <ClCompile Include="impl\components\IBLComponentService.cpp" />
     <ClCompile Include="impl\components\MaterialComponentService.cpp" />
     <ClCompile Include="impl\components\MeshComponentService.cpp" />
+    <ClCompile Include="impl\components\PhysicsComponentService.cpp" />
     <ClCompile Include="impl\scene\EntityQueryService.cpp" />
     <ClCompile Include="impl\scene\EntityStateService.cpp" />
     <ClCompile Include="impl\scene\HierarchyService.cpp" />

@@ -142,9 +142,11 @@
     <ClInclude Include="windows\details\AudioSource2DDrawer.hpp" />
     <ClInclude Include="windows\details\AudioSource3DDrawer.hpp" />
     <ClInclude Include="windows\details\CameraDrawer.hpp" />
+    <ClInclude Include="windows\details\ColliderDrawer.hpp" />
     <ClInclude Include="windows\details\IBLDrawer.hpp" />
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
+    <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
     <ClInclude Include="windows\details\TransformDrawer.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
@@ -195,9 +197,11 @@
     <ClCompile Include="windows\details\AudioSource2DDrawer.cpp" />
     <ClCompile Include="windows\details\AudioSource3DDrawer.cpp" />
     <ClCompile Include="windows\details\CameraDrawer.cpp" />
+    <ClCompile Include="windows\details\ColliderDrawer.cpp" />
     <ClCompile Include="windows\details\IBLDrawer.cpp" />
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
+    <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />
     <ClCompile Include="windows\details\TransformDrawer.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />

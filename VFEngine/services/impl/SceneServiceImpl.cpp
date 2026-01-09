@@ -4,6 +4,7 @@
 #include "components/MaterialComponentService.hpp"
 #include "components/AudioComponentService.hpp"
 #include "components/IBLComponentService.hpp"
+#include "components/PhysicsComponentService.hpp"
 #include "scene/HierarchyService.hpp"
 #include "scene/EntityQueryService.hpp"
 #include "scene/TransformComponentService.hpp"
@@ -22,6 +23,7 @@ namespace services
         , materialService(std::make_unique<MaterialComponentService>(sceneGraph))
         , audioService(std::make_unique<AudioComponentService>(sceneGraph))
         , iblService(std::make_unique<IBLComponentService>(sceneGraph))
+        , physicsService(std::make_unique<PhysicsComponentService>(sceneGraph))
         // New extracted services
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))
@@ -43,6 +45,7 @@ namespace services
         materialService->registerEventHandlers(dispatcher);
         audioService->registerEventHandlers(dispatcher);
         iblService->registerEventHandlers(dispatcher);
+        physicsService->registerEventHandlers(dispatcher);
 
         // New extracted services
         hierarchyService->registerEventHandlers(dispatcher);
