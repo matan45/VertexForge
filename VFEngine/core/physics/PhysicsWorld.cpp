@@ -1,5 +1,4 @@
 #include "PhysicsWorld.hpp"
-
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
@@ -10,20 +9,18 @@
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
-#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include "PhysicsMeshLoader.hpp"
 #include <Jolt/Physics/Collision/CastResult.h>
-#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include "print/Logger.hpp"
 
 #include <thread>
 #include <cstdarg>
 
-namespace core::physics {
-
-    // Jolt trace callback for debug output
-    static void JoltTraceImpl(const char* inFMT, ...) {
+namespace core::physics
+{
+    static void JoltTraceImpl(const char* inFMT, ...)
+    {
         va_list list;
         va_start(list, inFMT);
         char buffer[1024];
@@ -33,8 +30,9 @@ namespace core::physics {
     }
 
 #ifdef JPH_ENABLE_ASSERTS
-    // Jolt assertion callback
-    static bool JoltAssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile, unsigned int inLine) {
+    static bool JoltAssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile,
+                                     unsigned int inLine)
+    {
         loggerError("Jolt Assertion Failed: {} - {} ({}:{})", inExpression, inMessage ? inMessage : "", inFile, inLine);
         return true; // Return true to break into debugger
     }
@@ -42,43 +40,38 @@ namespace core::physics {
 
     PhysicsWorld::PhysicsWorld() = default;
 
-    PhysicsWorld::~PhysicsWorld() {
-        if (initialized) {
+    PhysicsWorld::~PhysicsWorld()
+    {
+        if (initialized)
+        {
             cleanUp();
         }
     }
 
-    bool PhysicsWorld::init() {
-        if (initialized) {
+    bool PhysicsWorld::init()
+    {
+        if (initialized)
+        {
             return true;
         }
 
-        // Register default allocator - must be done before any other Jolt function
         JPH::RegisterDefaultAllocator();
-
-        // Set up Jolt trace handler for debug output
         JPH::Trace = JoltTraceImpl;
 
 #ifdef JPH_ENABLE_ASSERTS
-        // Set up assertion handler
         JPH::AssertFailed = JoltAssertFailedImpl;
 #endif
 
-        // Create factory
         // NOTE: Raw new/delete is required here because JPH::Factory::sInstance is a global
         // static raw pointer that Jolt's type registration system (RegisterTypes/UnregisterTypes)
         // depends on. Jolt's API expects direct assignment to this static member. The factory
         // lifetime is managed manually: created before RegisterTypes() and destroyed after
         // UnregisterTypes() in cleanUp(). This follows Jolt's official initialization pattern.
         JPH::Factory::sInstance = new JPH::Factory();
-
-        // Register physics types
         JPH::RegisterTypes();
 
-        // Create temp allocator (10 MB)
         tempAllocator = std::make_unique<JPH::TempAllocatorImpl>(10 * 1024 * 1024);
 
-        // Create job system (use hardware threads - 1 for background work)
         int numThreads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
         jobSystem = std::make_unique<JPH::JobSystemThreadPool>(
             JPH::cMaxPhysicsJobs,
@@ -86,16 +79,12 @@ namespace core::physics {
             numThreads
         );
 
-        // Create layer interfaces
         broadPhaseLayerInterface = std::make_unique<BroadPhaseLayerInterfaceImpl>();
         objectVsBroadPhaseFilter = std::make_unique<ObjectVsBroadPhaseLayerFilterImpl>();
         objectLayerPairFilter = std::make_unique<ObjectLayerPairFilterImpl>();
 
-        // Create physics system
         physicsSystem = std::make_unique<JPH::PhysicsSystem>();
 
-        // Initialize physics system
-        // Max 10240 bodies, auto-detect mutexes, 65536 body pairs, 10240 contacts
         constexpr uint32_t maxBodies = 10240;
         constexpr uint32_t numBodyMutexes = 0; // auto-detect
         constexpr uint32_t maxBodyPairs = 65536;
@@ -111,11 +100,8 @@ namespace core::physics {
             *objectLayerPairFilter
         );
 
-        // Create and set contact listener
         contactListener = std::make_unique<PhysicsContactListener>();
         physicsSystem->SetContactListener(contactListener.get());
-
-        // Set default gravity
         physicsSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
 
         initialized = true;
@@ -123,15 +109,18 @@ namespace core::physics {
         return true;
     }
 
-    void PhysicsWorld::cleanUp() {
-        if (!initialized) {
+    void PhysicsWorld::cleanUp()
+    {
+        if (!initialized)
+        {
             return;
         }
 
-        // Remove all bodies
         auto& bodyInterface = physicsSystem->GetBodyInterface();
-        for (auto& [entityId, bodyId] : entityToBody) {
-            if (bodyInterface.IsAdded(bodyId)) {
+        for (auto& [entityId, bodyId] : entityToBody)
+        {
+            if (bodyInterface.IsAdded(bodyId))
+            {
                 bodyInterface.RemoveBody(bodyId);
             }
             bodyInterface.DestroyBody(bodyId);
@@ -139,7 +128,6 @@ namespace core::physics {
         entityToBody.clear();
         bodyToEntity.clear();
 
-        // Clean up in reverse order
         contactListener.reset();
         physicsSystem.reset();
         objectLayerPairFilter.reset();
@@ -148,7 +136,6 @@ namespace core::physics {
         jobSystem.reset();
         tempAllocator.reset();
 
-        // Unregister types and destroy factory (see comment in init() for why raw delete is used)
         JPH::UnregisterTypes();
         delete JPH::Factory::sInstance;
         JPH::Factory::sInstance = nullptr;
@@ -156,58 +143,69 @@ namespace core::physics {
         initialized = false;
     }
 
-    void PhysicsWorld::step(float deltaTime, int collisionSteps) {
-        if (!initialized || !physicsSystem) {
+    void PhysicsWorld::step(float deltaTime, int collisionSteps)
+    {
+        if (!initialized || !physicsSystem)
+        {
             return;
         }
 
         physicsSystem->Update(deltaTime, collisionSteps, tempAllocator.get(), jobSystem.get());
     }
 
-    void PhysicsWorld::processContactEvents() {
-        if (contactListener) {
+    void PhysicsWorld::processContactEvents()
+    {
+        if (contactListener)
+        {
             contactListener->processContactEvents();
         }
     }
 
-    void PhysicsWorld::setGravity(const glm::vec3& gravity) {
-        if (physicsSystem) {
+    void PhysicsWorld::setGravity(const glm::vec3& gravity)
+    {
+        if (physicsSystem)
+        {
             physicsSystem->SetGravity(toJolt(gravity));
         }
     }
 
-    glm::vec3 PhysicsWorld::getGravity() const {
-        if (physicsSystem) {
+    glm::vec3 PhysicsWorld::getGravity() const
+    {
+        if (physicsSystem)
+        {
             return toGlm(physicsSystem->GetGravity());
         }
         return glm::vec3(0.0f, -9.81f, 0.0f);
     }
 
     JPH::BodyID PhysicsWorld::addRigidBody(uint64_t entityId, const RigidBodyCreateInfo& bodyInfo,
-        const ColliderCreateInfo& colliderInfo) {
-        if (!initialized || !physicsSystem) {
+                                           const ColliderCreateInfo& colliderInfo)
+    {
+        if (!initialized || !physicsSystem)
+        {
             return JPH::BodyID();
         }
 
-        // Create shape
         JPH::Ref<JPH::Shape> shape = createShape(colliderInfo);
-        if (!shape) {
+        if (!shape)
+        {
             return JPH::BodyID();
         }
 
-        // Use the explicit collision layer from collider info (clamped to valid range)
         uint8_t clampedLayer;
-        if (colliderInfo.collisionLayer < MAX_COLLISION_LAYERS) {
+        if (colliderInfo.collisionLayer < MAX_COLLISION_LAYERS)
+        {
             clampedLayer = colliderInfo.collisionLayer;
-        } else {
+        }
+        else
+        {
             clampedLayer = static_cast<uint8_t>(Layers::DYNAMIC);
             loggerWarning("Entity {}: Invalid collision layer {} (max: {}), defaulting to DYNAMIC ({})",
-                entityId, colliderInfo.collisionLayer, MAX_COLLISION_LAYERS - 1, clampedLayer);
+                          entityId, colliderInfo.collisionLayer, MAX_COLLISION_LAYERS - 1, clampedLayer);
         }
         JPH::ObjectLayer layer = static_cast<JPH::ObjectLayer>(clampedLayer);
         JPH::EMotionType motionType = getMotionType(bodyInfo.type);
 
-        // Create body settings
         JPH::BodyCreationSettings settings(
             shape,
             toJoltR(bodyInfo.position),
@@ -216,7 +214,6 @@ namespace core::physics {
             layer
         );
 
-        // Set body properties
         settings.mLinearVelocity = toJolt(bodyInfo.linearVelocity);
         settings.mAngularVelocity = toJolt(bodyInfo.angularVelocity);
         settings.mFriction = bodyInfo.friction;
@@ -227,26 +224,28 @@ namespace core::physics {
         settings.mIsSensor = colliderInfo.isTrigger;
         settings.mUserData = entityId;
 
-        // Set mass for dynamic bodies
-        if (bodyInfo.type == BodyType::Dynamic) {
-            if (bodyInfo.mass > 0.0f) {
+        if (bodyInfo.type == BodyType::Dynamic)
+        {
+            if (bodyInfo.mass > 0.0f)
+            {
                 settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
                 settings.mMassPropertiesOverride.mMass = bodyInfo.mass;
-            } else {
-                // Invalid mass - Jolt will calculate from shape density
+            }
+            else
+            {
                 loggerWarning("Entity {}: Invalid mass {} for dynamic body, using shape-calculated mass",
-                    entityId, bodyInfo.mass);
+                              entityId, bodyInfo.mass);
             }
         }
 
-        // Create and add body
         auto& bodyInterface = physicsSystem->GetBodyInterface();
         JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(
             settings,
             JPH::EActivation::Activate
         );
 
-        if (!bodyId.IsInvalid()) {
+        if (!bodyId.IsInvalid())
+        {
             entityToBody[entityId] = bodyId;
             bodyToEntity[bodyId.GetIndex()] = entityId;
         }
@@ -254,61 +253,65 @@ namespace core::physics {
         return bodyId;
     }
 
-    void PhysicsWorld::removeRigidBody(JPH::BodyID bodyId) {
-        if (!initialized || !physicsSystem || bodyId.IsInvalid()) {
+    void PhysicsWorld::removeRigidBody(JPH::BodyID bodyId)
+    {
+        if (!initialized || !physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
 
         auto& bodyInterface = physicsSystem->GetBodyInterface();
 
-        // Find and remove entity mapping
         auto it = bodyToEntity.find(bodyId.GetIndex());
-        if (it != bodyToEntity.end()) {
+        if (it != bodyToEntity.end())
+        {
             entityToBody.erase(it->second);
             bodyToEntity.erase(it);
         }
 
-        // Remove and destroy body
-        if (bodyInterface.IsAdded(bodyId)) {
+        if (bodyInterface.IsAdded(bodyId))
+        {
             bodyInterface.RemoveBody(bodyId);
         }
         bodyInterface.DestroyBody(bodyId);
     }
 
-    void PhysicsWorld::removeRigidBodyByEntity(uint64_t entityId) {
+    void PhysicsWorld::removeRigidBodyByEntity(uint64_t entityId)
+    {
         auto it = entityToBody.find(entityId);
-        if (it != entityToBody.end()) {
+        if (it != entityToBody.end())
+        {
             removeRigidBody(it->second);
         }
     }
 
-    bool PhysicsWorld::hasBody(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
-            return false;
-        }
-        return physicsSystem->GetBodyInterface().IsAdded(bodyId);
-    }
-
-    bool PhysicsWorld::hasEntityBody(uint64_t entityId) const {
+    bool PhysicsWorld::hasEntityBody(uint64_t entityId) const
+    {
         return entityToBody.find(entityId) != entityToBody.end();
     }
 
-    glm::vec3 PhysicsWorld::getPosition(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    glm::vec3 PhysicsWorld::getPosition(JPH::BodyID bodyId) const
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return glm::vec3(0.0f);
         }
         return toGlmR(physicsSystem->GetBodyInterface().GetPosition(bodyId));
     }
 
-    glm::quat PhysicsWorld::getRotation(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    glm::quat PhysicsWorld::getRotation(JPH::BodyID bodyId) const
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
         }
         return toGlm(physicsSystem->GetBodyInterface().GetRotation(bodyId));
     }
 
-    void PhysicsWorld::setPosition(JPH::BodyID bodyId, const glm::vec3& position) {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    void PhysicsWorld::setPosition(JPH::BodyID bodyId, const glm::vec3& position)
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
         physicsSystem->GetBodyInterface().SetPosition(
@@ -318,8 +321,10 @@ namespace core::physics {
         );
     }
 
-    void PhysicsWorld::setRotation(JPH::BodyID bodyId, const glm::quat& rotation) {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    void PhysicsWorld::setRotation(JPH::BodyID bodyId, const glm::quat& rotation)
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
         physicsSystem->GetBodyInterface().SetRotation(
@@ -329,40 +334,51 @@ namespace core::physics {
         );
     }
 
-    void PhysicsWorld::setLinearVelocity(JPH::BodyID bodyId, const glm::vec3& velocity) {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    void PhysicsWorld::setLinearVelocity(JPH::BodyID bodyId, const glm::vec3& velocity)
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
         physicsSystem->GetBodyInterface().SetLinearVelocity(bodyId, toJolt(velocity));
     }
 
-    glm::vec3 PhysicsWorld::getLinearVelocity(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    glm::vec3 PhysicsWorld::getLinearVelocity(JPH::BodyID bodyId) const
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return glm::vec3(0.0f);
         }
         return toGlm(physicsSystem->GetBodyInterface().GetLinearVelocity(bodyId));
     }
 
-    void PhysicsWorld::setAngularVelocity(JPH::BodyID bodyId, const glm::vec3& velocity) {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    void PhysicsWorld::setAngularVelocity(JPH::BodyID bodyId, const glm::vec3& velocity)
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
         physicsSystem->GetBodyInterface().SetAngularVelocity(bodyId, toJolt(velocity));
     }
 
-    glm::vec3 PhysicsWorld::getAngularVelocity(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    glm::vec3 PhysicsWorld::getAngularVelocity(JPH::BodyID bodyId) const
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return glm::vec3(0.0f);
         }
         return toGlm(physicsSystem->GetBodyInterface().GetAngularVelocity(bodyId));
     }
 
-    BodyType PhysicsWorld::getBodyType(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    BodyType PhysicsWorld::getBodyType(JPH::BodyID bodyId) const
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return BodyType::Static;
         }
         auto motionType = physicsSystem->GetBodyInterface().GetMotionType(bodyId);
-        switch (motionType) {
+        switch (motionType)
+        {
         case JPH::EMotionType::Static:
             return BodyType::Static;
         case JPH::EMotionType::Kinematic:
@@ -373,15 +389,18 @@ namespace core::physics {
         }
     }
 
-    float PhysicsWorld::getMass(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    float PhysicsWorld::getMass(JPH::BodyID bodyId) const
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return 0.0f;
         }
-        // Need to lock the body to access motion properties for mass
         JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), bodyId);
-        if (lock.Succeeded()) {
+        if (lock.Succeeded())
+        {
             const JPH::Body& body = lock.GetBody();
-            if (body.GetMotionProperties()) {
+            if (body.GetMotionProperties())
+            {
                 float inverseMass = body.GetMotionProperties()->GetInverseMass();
                 return inverseMass > 0.0f ? 1.0f / inverseMass : 0.0f;
             }
@@ -389,90 +408,95 @@ namespace core::physics {
         return 0.0f;
     }
 
-    float PhysicsWorld::getFriction(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
-            return 0.2f;
-        }
-        return physicsSystem->GetBodyInterface().GetFriction(bodyId);
-    }
-
-    float PhysicsWorld::getRestitution(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
-            return 0.0f;
-        }
-        return physicsSystem->GetBodyInterface().GetRestitution(bodyId);
-    }
-
-    float PhysicsWorld::getLinearDamping(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    float PhysicsWorld::getLinearDamping(JPH::BodyID bodyId) const
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return 0.05f;
         }
-        // Need to lock the body to access motion properties
         JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), bodyId);
-        if (lock.Succeeded()) {
+        if (lock.Succeeded())
+        {
             const JPH::Body& body = lock.GetBody();
-            if (body.GetMotionProperties()) {
+            if (body.GetMotionProperties())
+            {
                 return body.GetMotionProperties()->GetLinearDamping();
             }
         }
         return 0.05f;
     }
 
-    float PhysicsWorld::getAngularDamping(JPH::BodyID bodyId) const {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    float PhysicsWorld::getAngularDamping(JPH::BodyID bodyId) const
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return 0.05f;
         }
-        // Need to lock the body to access motion properties
         JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), bodyId);
-        if (lock.Succeeded()) {
+        if (lock.Succeeded())
+        {
             const JPH::Body& body = lock.GetBody();
-            if (body.GetMotionProperties()) {
+            if (body.GetMotionProperties())
+            {
                 return body.GetMotionProperties()->GetAngularDamping();
             }
         }
         return 0.05f;
     }
 
-    void PhysicsWorld::setCollisionMatrix(const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& matrix) {
-        if (objectLayerPairFilter) {
+    void PhysicsWorld::setCollisionMatrix(
+        const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& matrix)
+    {
+        if (objectLayerPairFilter)
+        {
             objectLayerPairFilter->setCollisionMatrix(matrix);
         }
     }
 
-    void PhysicsWorld::applyForce(JPH::BodyID bodyId, const glm::vec3& force) {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    void PhysicsWorld::applyForce(JPH::BodyID bodyId, const glm::vec3& force)
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
         physicsSystem->GetBodyInterface().AddForce(bodyId, toJolt(force));
     }
 
     void PhysicsWorld::applyForceAtPosition(JPH::BodyID bodyId, const glm::vec3& force,
-        const glm::vec3& position) {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+                                            const glm::vec3& position)
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
         physicsSystem->GetBodyInterface().AddForce(bodyId, toJolt(force), toJoltR(position));
     }
 
-    void PhysicsWorld::applyImpulse(JPH::BodyID bodyId, const glm::vec3& impulse) {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    void PhysicsWorld::applyImpulse(JPH::BodyID bodyId, const glm::vec3& impulse)
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
         physicsSystem->GetBodyInterface().AddImpulse(bodyId, toJolt(impulse));
     }
 
-    void PhysicsWorld::applyTorque(JPH::BodyID bodyId, const glm::vec3& torque) {
-        if (!physicsSystem || bodyId.IsInvalid()) {
+    void PhysicsWorld::applyTorque(JPH::BodyID bodyId, const glm::vec3& torque)
+    {
+        if (!physicsSystem || bodyId.IsInvalid())
+        {
             return;
         }
         physicsSystem->GetBodyInterface().AddTorque(bodyId, toJolt(torque));
     }
 
     RaycastResult PhysicsWorld::raycast(const glm::vec3& origin, const glm::vec3& direction,
-        float maxDistance) const {
+                                        float maxDistance) const
+    {
         RaycastResult result;
 
-        if (!physicsSystem) {
+        if (!physicsSystem)
+        {
             return result;
         }
 
@@ -480,28 +504,30 @@ namespace core::physics {
         JPH::RRayCast ray(toJoltR(origin), toJolt(normalizedDir * maxDistance));
         JPH::RayCastResult hit;
 
-        if (physicsSystem->GetNarrowPhaseQuery().CastRay(ray, hit)) {
+        if (physicsSystem->GetNarrowPhaseQuery().CastRay(ray, hit))
+        {
             result.hit = true;
             result.distance = hit.mFraction * maxDistance;
             result.point = origin + normalizedDir * result.distance;
 
-            // Get entity ID from body
             auto it = bodyToEntity.find(hit.mBodyID.GetIndex());
-            if (it != bodyToEntity.end()) {
+            if (it != bodyToEntity.end())
+            {
                 result.entityId = it->second;
             }
 
-            // Get accurate surface normal from the hit body's shape
             JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), hit.mBodyID);
-            if (lock.Succeeded()) {
+            if (lock.Succeeded())
+            {
                 const JPH::Body& body = lock.GetBody();
                 JPH::Vec3 surfaceNormal = body.GetWorldSpaceSurfaceNormal(
                     hit.mSubShapeID2,
                     ray.GetPointOnRay(hit.mFraction)
                 );
                 result.normal = toGlm(surfaceNormal);
-            } else {
-                // Fallback to approximate normal if body lock fails
+            }
+            else
+            {
                 result.normal = -normalizedDir;
             }
         }
@@ -509,221 +535,187 @@ namespace core::physics {
         return result;
     }
 
-    std::vector<RaycastResult> PhysicsWorld::raycastAll(const glm::vec3& origin,
-        const glm::vec3& direction,
-        float maxDistance) const {
-        std::vector<RaycastResult> results;
-
-        if (!physicsSystem) {
-            return results;
-        }
-
-        glm::vec3 normalizedDir = glm::normalize(direction);
-        JPH::RRayCast ray(toJoltR(origin), toJolt(normalizedDir * maxDistance));
-
-        // Use NarrowPhaseQuery with CastRayCollector for detailed hit info including SubShapeID
-        JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
-        JPH::RayCastSettings settings;  // Use default settings
-
-        physicsSystem->GetNarrowPhaseQuery().CastRay(ray, settings, collector);
-
-        // Sort hits by distance
-        collector.Sort();
-
-        for (const auto& hit : collector.mHits) {
-            RaycastResult result;
-            result.hit = true;
-            result.distance = hit.mFraction * maxDistance;
-            result.point = origin + normalizedDir * result.distance;
-
-            auto it = bodyToEntity.find(hit.mBodyID.GetIndex());
-            if (it != bodyToEntity.end()) {
-                result.entityId = it->second;
-            }
-
-            // Get accurate surface normal from the hit body's shape
-            JPH::BodyLockRead lock(physicsSystem->GetBodyLockInterface(), hit.mBodyID);
-            if (lock.Succeeded()) {
-                const JPH::Body& body = lock.GetBody();
-                JPH::Vec3 surfaceNormal = body.GetWorldSpaceSurfaceNormal(
-                    hit.mSubShapeID2,
-                    ray.GetPointOnRay(hit.mFraction)
-                );
-                result.normal = toGlm(surfaceNormal);
-            } else {
-                // Fallback to approximate normal if body lock fails
-                result.normal = -normalizedDir;
-            }
-
-            results.push_back(result);
-        }
-
-        return results;
-    }
-
-    bool PhysicsWorld::areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const {
-        if (!physicsSystem || bodyA.IsInvalid() || bodyB.IsInvalid()) {
+    bool PhysicsWorld::areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const
+    {
+        if (!physicsSystem || bodyA.IsInvalid() || bodyB.IsInvalid())
+        {
             return false;
         }
         return physicsSystem->WereBodiesInContact(bodyA, bodyB);
     }
 
-    JPH::BodyID PhysicsWorld::getBodyForEntity(uint64_t entityId) const {
+    JPH::BodyID PhysicsWorld::getBodyForEntity(uint64_t entityId) const
+    {
         auto it = entityToBody.find(entityId);
-        if (it != entityToBody.end()) {
+        if (it != entityToBody.end())
+        {
             return it->second;
         }
         return JPH::BodyID();
     }
 
-    uint64_t PhysicsWorld::getEntityForBody(JPH::BodyID bodyId) const {
-        if (bodyId.IsInvalid()) {
+    uint64_t PhysicsWorld::getEntityForBody(JPH::BodyID bodyId) const
+    {
+        if (bodyId.IsInvalid())
+        {
             return 0;
         }
         auto it = bodyToEntity.find(bodyId.GetIndex());
-        if (it != bodyToEntity.end()) {
+        if (it != bodyToEntity.end())
+        {
             return it->second;
         }
         return 0;
     }
 
-    void PhysicsWorld::setContactAddedCallback(ContactCallback callback) {
-        if (contactListener) {
+    void PhysicsWorld::setContactAddedCallback(ContactCallback callback)
+    {
+        if (contactListener)
+        {
             contactListener->setOnContactAdded(std::move(callback));
         }
     }
 
-    void PhysicsWorld::setContactRemovedCallback(ContactCallback callback) {
-        if (contactListener) {
+    void PhysicsWorld::setContactRemovedCallback(ContactCallback callback)
+    {
+        if (contactListener)
+        {
             contactListener->setOnContactRemoved(std::move(callback));
         }
     }
 
-    JPH::Ref<JPH::Shape> PhysicsWorld::createShape(const ColliderCreateInfo& info) {
-        // Minimum values to prevent Jolt assertions
+    JPH::Ref<JPH::Shape> PhysicsWorld::createShape(const ColliderCreateInfo& info)
+    {
         constexpr float MIN_DIMENSION = 0.001f;
 
-        switch (info.shape) {
-        case ColliderShape::Box: {
-            // Clamp half-extents to minimum valid size
-            glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-            if (safeExtents != info.halfExtents) {
-                loggerWarning("Box collider half-extents clamped from ({}, {}, {}) to ({}, {}, {})",
-                    info.halfExtents.x, info.halfExtents.y, info.halfExtents.z,
-                    safeExtents.x, safeExtents.y, safeExtents.z);
-            }
-            return new JPH::BoxShape(toJolt(safeExtents));
-        }
-
-        case ColliderShape::Sphere: {
-            // Clamp radius to minimum valid size
-            float safeRadius = std::max(info.radius, MIN_DIMENSION);
-            if (safeRadius != info.radius) {
-                loggerWarning("Sphere collider radius clamped from {} to {}", info.radius, safeRadius);
-            }
-            return new JPH::SphereShape(safeRadius);
-        }
-
-        case ColliderShape::Capsule: {
-            // Clamp radius to minimum valid size
-            float safeRadius = std::max(info.radius, MIN_DIMENSION);
-            // Jolt capsule uses half-height of the cylindrical part (not including hemispheres)
-            // Total height = 2 * halfHeight + 2 * radius, so halfHeight = (height - 2*radius) / 2
-            // Minimum half-height must be >= 0 (can be 0 for a sphere-like shape)
-            float halfHeight = std::max(0.0f, info.height * 0.5f - safeRadius);
-            if (safeRadius != info.radius || halfHeight != (info.height * 0.5f - info.radius)) {
-                loggerWarning("Capsule collider adjusted: radius {} -> {}, halfHeight {} (from height {})",
-                    info.radius, safeRadius, halfHeight, info.height);
-            }
-            return new JPH::CapsuleShape(halfHeight, safeRadius);
-        }
-
-        case ColliderShape::ConvexMesh: {
-            if (info.meshPath.empty()) {
-                loggerWarning("ConvexMesh collider has no mesh path, using box fallback");
+        switch (info.shape)
+        {
+        case ColliderShape::Box:
+            {
                 glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                if (safeExtents != info.halfExtents)
+                {
+                    loggerWarning("Box collider half-extents clamped from ({}, {}, {}) to ({}, {}, {})",
+                                  info.halfExtents.x, info.halfExtents.y, info.halfExtents.z,
+                                  safeExtents.x, safeExtents.y, safeExtents.z);
+                }
                 return new JPH::BoxShape(toJolt(safeExtents));
             }
 
-            // Load mesh data
-            auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
-            if (!meshData || meshData->vertices.empty()) {
-                loggerWarning("ConvexMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
-                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                return new JPH::BoxShape(toJolt(safeExtents));
+        case ColliderShape::Sphere:
+            {
+                float safeRadius = std::max(info.radius, MIN_DIMENSION);
+                if (safeRadius != info.radius)
+                {
+                    loggerWarning("Sphere collider radius clamped from {} to {}", info.radius, safeRadius);
+                }
+                return new JPH::SphereShape(safeRadius);
             }
 
-            // Convert vertices to Jolt format
-            JPH::Array<JPH::Vec3> joltVertices;
-            joltVertices.reserve(meshData->vertices.size());
-            for (const auto& v : meshData->vertices) {
-                joltVertices.push_back(JPH::Vec3(v.x, v.y, v.z));
+        case ColliderShape::Capsule:
+            {
+                float safeRadius = std::max(info.radius, MIN_DIMENSION);
+                // Jolt capsule uses half-height of the cylindrical part (not including hemispheres)
+                // Total height = 2 * halfHeight + 2 * radius, so halfHeight = (height - 2*radius) / 2
+                // Minimum half-height must be >= 0 (can be 0 for a sphere-like shape)
+                float halfHeight = std::max(0.0f, info.height * 0.5f - safeRadius);
+                if (safeRadius != info.radius || halfHeight != (info.height * 0.5f - info.radius))
+                {
+                    loggerWarning("Capsule collider adjusted: radius {} -> {}, halfHeight {} (from height {})",
+                                  info.radius, safeRadius, halfHeight, info.height);
+                }
+                return new JPH::CapsuleShape(halfHeight, safeRadius);
             }
 
-            // Create convex hull shape
-            JPH::ConvexHullShapeSettings settings(joltVertices.data(), static_cast<int>(joltVertices.size()));
-            settings.mMaxConvexRadius = 0.05f; // Small convex radius for better fit
+        case ColliderShape::ConvexMesh:
+            {
+                if (info.meshPath.empty())
+                {
+                    loggerWarning("ConvexMesh collider has no mesh path, using box fallback");
+                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                    return new JPH::BoxShape(toJolt(safeExtents));
+                }
 
-            auto result = settings.Create();
-            if (result.HasError()) {
-                loggerWarning("ConvexMesh collider creation failed: {}, using box fallback",
-                    result.GetError().c_str());
-                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                return new JPH::BoxShape(toJolt(safeExtents));
+                auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
+                if (!meshData || meshData->vertices.empty())
+                {
+                    loggerWarning("ConvexMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
+                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                    return new JPH::BoxShape(toJolt(safeExtents));
+                }
+
+                JPH::Array<JPH::Vec3> joltVertices;
+                joltVertices.reserve(meshData->vertices.size());
+                for (const auto& v : meshData->vertices)
+                {
+                    joltVertices.push_back(JPH::Vec3(v.x, v.y, v.z));
+                }
+
+                JPH::ConvexHullShapeSettings settings(joltVertices.data(), static_cast<int>(joltVertices.size()));
+                settings.mMaxConvexRadius = 0.05f; // Small convex radius for better fit
+
+                auto result = settings.Create();
+                if (result.HasError())
+                {
+                    loggerWarning("ConvexMesh collider creation failed: {}, using box fallback",
+                                  result.GetError().c_str());
+                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                    return new JPH::BoxShape(toJolt(safeExtents));
+                }
+
+                loggerInfo("Created ConvexMesh collider with {} vertices from: {}",
+                           meshData->vertices.size(), info.meshPath);
+                return result.Get();
             }
 
-            loggerInfo("Created ConvexMesh collider with {} vertices from: {}",
-                meshData->vertices.size(), info.meshPath);
-            return result.Get();
-        }
+        case ColliderShape::TriangleMesh:
+            {
+                if (info.meshPath.empty())
+                {
+                    loggerWarning("TriangleMesh collider has no mesh path, using box fallback");
+                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                    return new JPH::BoxShape(toJolt(safeExtents));
+                }
 
-        case ColliderShape::TriangleMesh: {
-            // Note: TriangleMesh should only be used for static bodies
-            if (info.meshPath.empty()) {
-                loggerWarning("TriangleMesh collider has no mesh path, using box fallback");
-                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                return new JPH::BoxShape(toJolt(safeExtents));
+                auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
+                if (!meshData || meshData->vertices.empty() || meshData->indices.empty())
+                {
+                    loggerWarning("TriangleMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
+                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                    return new JPH::BoxShape(toJolt(safeExtents));
+                }
+
+                JPH::TriangleList triangles;
+                triangles.reserve(meshData->indices.size() / 3);
+
+                for (size_t i = 0; i + 2 < meshData->indices.size(); i += 3)
+                {
+                    const auto& v0 = meshData->vertices[meshData->indices[i]];
+                    const auto& v1 = meshData->vertices[meshData->indices[i + 1]];
+                    const auto& v2 = meshData->vertices[meshData->indices[i + 2]];
+
+                    triangles.push_back(JPH::Triangle(
+                        JPH::Float3(v0.x, v0.y, v0.z),
+                        JPH::Float3(v1.x, v1.y, v1.z),
+                        JPH::Float3(v2.x, v2.y, v2.z)
+                    ));
+                }
+
+                JPH::MeshShapeSettings settings(triangles);
+
+                auto result = settings.Create();
+                if (result.HasError())
+                {
+                    loggerWarning("TriangleMesh collider creation failed: {}, using box fallback",
+                                  result.GetError().c_str());
+                    glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                    return new JPH::BoxShape(toJolt(safeExtents));
+                }
+
+                loggerInfo("Created TriangleMesh collider with {} triangles from: {}",
+                           triangles.size(), info.meshPath);
+                return result.Get();
             }
-
-            // Load mesh data
-            auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
-            if (!meshData || meshData->vertices.empty() || meshData->indices.empty()) {
-                loggerWarning("TriangleMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
-                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                return new JPH::BoxShape(toJolt(safeExtents));
-            }
-
-            // Create triangle list
-            JPH::TriangleList triangles;
-            triangles.reserve(meshData->indices.size() / 3);
-
-            for (size_t i = 0; i + 2 < meshData->indices.size(); i += 3) {
-                const auto& v0 = meshData->vertices[meshData->indices[i]];
-                const auto& v1 = meshData->vertices[meshData->indices[i + 1]];
-                const auto& v2 = meshData->vertices[meshData->indices[i + 2]];
-
-                triangles.push_back(JPH::Triangle(
-                    JPH::Float3(v0.x, v0.y, v0.z),
-                    JPH::Float3(v1.x, v1.y, v1.z),
-                    JPH::Float3(v2.x, v2.y, v2.z)
-                ));
-            }
-
-            // Create mesh shape
-            JPH::MeshShapeSettings settings(triangles);
-
-            auto result = settings.Create();
-            if (result.HasError()) {
-                loggerWarning("TriangleMesh collider creation failed: {}, using box fallback",
-                    result.GetError().c_str());
-                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
-                return new JPH::BoxShape(toJolt(safeExtents));
-            }
-
-            loggerInfo("Created TriangleMesh collider with {} triangles from: {}",
-                triangles.size(), info.meshPath);
-            return result.Get();
-        }
 
         default:
             loggerWarning("Unknown collider shape type {}, defaulting to unit box", static_cast<int>(info.shape));
@@ -731,12 +723,15 @@ namespace core::physics {
         }
     }
 
-    JPH::ObjectLayer PhysicsWorld::getObjectLayer(BodyType type, bool isTrigger) {
-        if (isTrigger) {
+    JPH::ObjectLayer PhysicsWorld::getObjectLayer(BodyType type, bool isTrigger)
+    {
+        if (isTrigger)
+        {
             return Layers::SENSOR;
         }
 
-        switch (type) {
+        switch (type)
+        {
         case BodyType::Static:
             return Layers::STATIC;
         case BodyType::Dynamic:
@@ -748,8 +743,10 @@ namespace core::physics {
         }
     }
 
-    JPH::EMotionType PhysicsWorld::getMotionType(BodyType type) {
-        switch (type) {
+    JPH::EMotionType PhysicsWorld::getMotionType(BodyType type)
+    {
+        switch (type)
+        {
         case BodyType::Static:
             return JPH::EMotionType::Static;
         case BodyType::Dynamic:
@@ -761,30 +758,33 @@ namespace core::physics {
         }
     }
 
-    // Type conversion helpers
-    JPH::Vec3 PhysicsWorld::toJolt(const glm::vec3& v) {
+    JPH::Vec3 PhysicsWorld::toJolt(const glm::vec3& v)
+    {
         return JPH::Vec3(v.x, v.y, v.z);
     }
 
-    JPH::Quat PhysicsWorld::toJolt(const glm::quat& q) {
-        // Normalize quaternion to prevent Jolt assertions on non-unit quaternions
+    JPH::Quat PhysicsWorld::toJolt(const glm::quat& q)
+    {
         glm::quat normalized = glm::normalize(q);
-        // Handle degenerate case (zero quaternion)
-        if (glm::any(glm::isnan(normalized))) {
+        if (glm::any(glm::isnan(normalized)))
+        {
             return JPH::Quat::sIdentity();
         }
         return JPH::Quat(normalized.x, normalized.y, normalized.z, normalized.w);
     }
 
-    JPH::RVec3 PhysicsWorld::toJoltR(const glm::vec3& v) {
+    JPH::RVec3 PhysicsWorld::toJoltR(const glm::vec3& v)
+    {
         return JPH::RVec3(v.x, v.y, v.z);
     }
 
-    glm::vec3 PhysicsWorld::toGlm(const JPH::Vec3& v) {
+    glm::vec3 PhysicsWorld::toGlm(const JPH::Vec3& v)
+    {
         return glm::vec3(v.GetX(), v.GetY(), v.GetZ());
     }
 
-    glm::vec3 PhysicsWorld::toGlmR(const JPH::RVec3& v) {
+    glm::vec3 PhysicsWorld::toGlmR(const JPH::RVec3& v)
+    {
         return glm::vec3(
             static_cast<float>(v.GetX()),
             static_cast<float>(v.GetY()),
@@ -792,8 +792,8 @@ namespace core::physics {
         );
     }
 
-    glm::quat PhysicsWorld::toGlm(const JPH::Quat& q) {
+    glm::quat PhysicsWorld::toGlm(const JPH::Quat& q)
+    {
         return glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
     }
-
 }

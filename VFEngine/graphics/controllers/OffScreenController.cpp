@@ -17,8 +17,8 @@ namespace controllers
 {
     OffScreenController::OffScreenController()
         : swapChain{*core::VulkanContext::getSwapChain()}
-        , device{*core::VulkanContext::getDevice()}
-        , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
+          , device{*core::VulkanContext::getDevice()}
+          , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
     {
     }
 

@@ -2,8 +2,8 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/PhysicsSettingsEvents.hpp"
 #include "../../services/events/SceneEvents.hpp"
+#include "print/EditorLogger.hpp"
 #include <imgui.h>
-#include <algorithm>
 #include <vector>
 
 namespace windows
@@ -41,7 +41,6 @@ namespace windows
             ImGui::Separator();
             ImGui::Spacing();
 
-            // Action buttons
             if (ImGui::Button("Save to Scene", ImVec2(100, 0)))
             {
                 saveToScene();
@@ -96,7 +95,6 @@ namespace windows
             }
             ImGui::PopItemWidth();
 
-            // Show effective gravity
             glm::vec3 effective = settings.gravity * settings.gravityScale;
             ImGui::TextDisabled("Effective: (%.2f, %.2f, %.2f)", effective.x, effective.y, effective.z);
 
@@ -110,7 +108,6 @@ namespace windows
         {
             ImGui::Indent();
 
-            // Fixed timestep as Hz
             float hz = static_cast<float>(1.0 / settings.fixedTimestep);
             ImGui::Text("Update Rate");
             ImGui::PushItemWidth(-1);
@@ -183,17 +180,14 @@ namespace windows
         {
             ImGui::Indent();
 
-            // List existing layers
             for (size_t i = 0; i < settings.layers.size(); ++i)
             {
                 auto& layer = settings.layers[i];
                 ImGui::PushID(static_cast<int>(i));
 
-                // Show layer index
                 ImGui::Text("[%d]", layer.index);
                 ImGui::SameLine();
 
-                // Layer name (editable for non-built-in)
                 if (layer.isBuiltIn)
                 {
                     ImGui::TextDisabled("%s (built-in)", layer.name.c_str());
@@ -211,7 +205,6 @@ namespace windows
                     ImGui::PopItemWidth();
                     ImGui::SameLine();
 
-                    // Delete button for user-defined layers
                     if (ImGui::SmallButton("X"))
                     {
                         settings.layers.erase(settings.layers.begin() + i);
@@ -224,7 +217,6 @@ namespace windows
                 ImGui::PopID();
             }
 
-            // Add new layer
             if (settings.layers.size() < types::PhysicsSettings::MAX_LAYERS)
             {
                 ImGui::Spacing();
@@ -272,35 +264,28 @@ namespace windows
                 return;
             }
 
-            // Create a grid of checkboxes
             ImGui::BeginTable("CollisionMatrix", static_cast<int>(settings.layers.size()) + 1,
-                ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit);
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit);
 
-            // Header row with layer names (abbreviated)
             ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 80.0f);
             for (const auto& layer : settings.layers)
             {
                 ImGui::TableSetupColumn(layer.name.substr(0, 4).c_str(),
-                    ImGuiTableColumnFlags_WidthFixed, 40.0f);
+                                        ImGuiTableColumnFlags_WidthFixed, 40.0f);
             }
             ImGui::TableHeadersRow();
 
-            // Draw matrix rows
             for (size_t row = 0; row < settings.layers.size(); ++row)
             {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
 
-                // Row header - layer name
                 ImGui::Text("%s", settings.layers[row].name.c_str());
 
-                // Checkboxes for each column
                 for (size_t col = 0; col < settings.layers.size(); ++col)
                 {
                     ImGui::TableNextColumn();
 
-                    // Only show upper triangle (since matrix is symmetric)
-                    // But we want to see the full matrix for clarity
                     uint8_t layerA = settings.layers[row].index;
                     uint8_t layerB = settings.layers[col].index;
 
@@ -323,7 +308,6 @@ namespace windows
 
     void PhysicsConfigWindow::loadFromScene()
     {
-        // Load physics settings from current scene
         try
         {
             auto& dispatcher = events::EventDispatcher::instance();
@@ -332,11 +316,9 @@ namespace windows
         }
         catch (...)
         {
-            // If query fails, use default settings
             settings = types::PhysicsSettings::createDefault();
         }
 
-        // Ensure we have valid default settings if layers are empty
         if (settings.layers.empty())
         {
             settings = types::PhysicsSettings::createDefault();
@@ -348,7 +330,6 @@ namespace windows
 
     void PhysicsConfigWindow::saveToScene()
     {
-        // Save physics settings to current scene
         try
         {
             auto& dispatcher = events::EventDispatcher::instance();
@@ -357,12 +338,12 @@ namespace windows
             dispatcher.execute(cmd);
             isDirty = false;
         }
-        catch (...)
+        catch (const std::exception& e)
         {
-            // Save failed silently
+            vfLogError("Failed to save physics settings: {}", e.what());
+            return;
         }
 
-        // Also apply to physics system immediately
         applySettings();
     }
 
@@ -375,9 +356,9 @@ namespace windows
             auto& dispatcher = events::EventDispatcher::instance();
             dispatcher.execute(cmd);
         }
-        catch (...)
+        catch (const std::exception& e)
         {
-            // Apply failed silently
+            vfLogError("Failed to apply physics settings: {}", e.what());
         }
     }
 

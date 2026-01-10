@@ -78,8 +78,7 @@ namespace windows
         bool hasAudio2D = audio2DDrawer.draw(handle);
         bool hasAudio3D = audio3DDrawer.draw(handle);
         bool hasScript = scriptDrawer.draw(handle);
-
-        // Physics components
+        
         bool hasCollider = colliderDrawer.draw(handle);
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
 

@@ -12,6 +12,7 @@
 #include "interfaces/IScriptingService.hpp"
 #include "interfaces/IUndoRedoService.hpp"
 #include "interfaces/IFileOperationsService.hpp"
+#include "interfaces/IPhysicsService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -46,6 +47,7 @@ namespace handlers {
 		std::shared_ptr<services::IScriptingService> scriptingService;
 		std::shared_ptr<services::IUndoRedoService> undoRedoService;
 		std::shared_ptr<services::IFileOperationsService> fileOperationsService;
+		std::shared_ptr<services::IPhysicsService> physicsService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
-#include "../../../utilities/types/PhysicsTypes.hpp"
+#include "types/PhysicsTypes.hpp"
 #include <memory>
 #include <optional>
 #include <string>
@@ -26,8 +26,8 @@ namespace services
         EntityStateService* entityStateService;
 
     public:
-        ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
-                                EntityStateService* entityStateService);
+        explicit ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
+                                         EntityStateService* entityStateService);
 
         void registerEventHandlers(events::EventDispatcher& dispatcher);
 

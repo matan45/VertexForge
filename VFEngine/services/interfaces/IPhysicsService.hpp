@@ -1,5 +1,6 @@
 #pragma once
 #include "../data/EntityHandle.hpp"
+#include "../../utilities/types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>
@@ -7,9 +8,8 @@
 
 namespace services {
 
-    
     struct RigidBodyData {
-        enum class Type { Static, Dynamic, Kinematic };
+        using Type = types::RigidBodyType;
 
         Type type = Type::Dynamic;
         float mass = 1.0f;
@@ -18,18 +18,17 @@ namespace services {
         glm::vec3 linearVelocity{ 0.0f };
         glm::vec3 angularVelocity{ 0.0f };
     };
-    
+
     struct ColliderData {
-        // Shape enum values must match types::ColliderShape for static_assert validation
-        enum class Shape { Box = 0, Sphere = 1, Capsule = 2, ConvexMesh = 3, TriangleMesh = 4 };
+        using Shape = types::ColliderShape;
 
         Shape shape = Shape::Box;
-        glm::vec3 size{ 1.0f };     // Box half-extents or sphere/capsule radius
-        float height = 1.0f;        // Capsule height
+        glm::vec3 size{ 1.0f };
+        float height = 1.0f;
         bool isTrigger = false;
-        uint8_t collisionLayer = 1; // Collision layer (0-15, default 1 = Dynamic)
-        glm::vec3 offset{ 0.0f };   // Local offset from entity center
-        std::string meshPath;       // Path to mesh for ConvexMesh/TriangleMesh shapes
+        uint8_t collisionLayer = 1;
+        glm::vec3 offset{ 0.0f };
+        std::string meshPath;
     };
     
     struct RaycastHit {

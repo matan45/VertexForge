@@ -2,6 +2,7 @@
 #include "../EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
+#include "types/PhysicsTypes.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -51,7 +52,7 @@ namespace windows::details
             if (changed)
             {
                 // Enforce constraint: Dynamic body type not allowed with TriangleMesh collider
-                if (rigidBodyData.type == services::RigidBodyTypeData::Dynamic)
+                if (rigidBodyData.type == types::RigidBodyType::Dynamic)
                 {
                     events::scene::HasColliderComponentQuery hasColQuery;
                     hasColQuery.entity = handle;
@@ -60,10 +61,10 @@ namespace windows::details
                         events::scene::GetColliderDataQuery colQuery;
                         colQuery.entity = handle;
                         auto colOpt = dispatcher.query(colQuery);
-                        if (colOpt.has_value() && colOpt->shape == services::ColliderShapeType::TriangleMesh)
+                        if (colOpt.has_value() && colOpt->shape == types::ColliderShape::TriangleMesh)
                         {
                             // Revert to Static - TriangleMesh cannot be Dynamic
-                            rigidBodyData.type = services::RigidBodyTypeData::Static;
+                            rigidBodyData.type = types::RigidBodyType::Static;
                         }
                     }
                 }
@@ -118,20 +119,20 @@ namespace windows::details
 
         if (ImGui::Combo("Body Type", &currentType, typeNames, IM_ARRAYSIZE(typeNames)))
         {
-            rigidBodyData.type = static_cast<services::RigidBodyTypeData>(currentType);
+            rigidBodyData.type = static_cast<types::RigidBodyType>(currentType);
             changed = true;
         }
 
         // Show description based on type
         switch (rigidBodyData.type)
         {
-        case services::RigidBodyTypeData::Static:
+        case types::RigidBodyType::Static:
             ImGui::TextDisabled("Static: Never moves, optimized for world geometry");
             break;
-        case services::RigidBodyTypeData::Dynamic:
+        case types::RigidBodyType::Dynamic:
             ImGui::TextDisabled("Dynamic: Fully simulated with physics");
             break;
-        case services::RigidBodyTypeData::Kinematic:
+        case types::RigidBodyType::Kinematic:
             ImGui::TextDisabled("Kinematic: Script-controlled, affects dynamic bodies");
             break;
         }
@@ -144,7 +145,7 @@ namespace windows::details
         bool changed = false;
 
         // Mass is only relevant for dynamic bodies
-        bool isStatic = rigidBodyData.type == services::RigidBodyTypeData::Static;
+        bool isStatic = rigidBodyData.type == types::RigidBodyType::Static;
         if (isStatic) ImGui::BeginDisabled();
 
         ImGui::Text("Mass Settings:");
@@ -171,7 +172,7 @@ namespace windows::details
     {
         bool changed = false;
 
-        bool isStatic = rigidBodyData.type == services::RigidBodyTypeData::Static;
+        bool isStatic = rigidBodyData.type == types::RigidBodyType::Static;
         if (isStatic) ImGui::BeginDisabled();
 
         ImGui::Text("Damping:");
@@ -206,7 +207,7 @@ namespace windows::details
     {
         bool changed = false;
 
-        bool isStatic = rigidBodyData.type == services::RigidBodyTypeData::Static;
+        bool isStatic = rigidBodyData.type == types::RigidBodyType::Static;
         if (isStatic) ImGui::BeginDisabled();
 
         ImGui::Text("Constraints:");

@@ -10,10 +10,6 @@
 
 namespace events::scene {
 
-    // ============================================
-    // COMMANDS - Operations that modify scene state
-    // ============================================
-
     struct CreateEntityCommand : ICommand<services::EntityHandle> {
         std::string name;
         std::optional<services::EntityHandle> parent;
@@ -118,8 +114,7 @@ namespace events::scene {
 
         std::string_view getName() const override { return "SetEntityStatic"; }
     };
-    
-    // 2D Audio Source (streaming, for background music/ambient)
+
     struct AddAudioSource2DComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -139,7 +134,6 @@ namespace events::scene {
         std::string_view getName() const override { return "SetAudioSource2DData"; }
     };
 
-    // 3D Audio Source (cached, for spatial sound effects)
     struct AddAudioSource3DComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -175,7 +169,6 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadScene"; }
     };
 
-    // Prefab commands
     struct SavePrefabCommand : ICommand<bool> {
         services::EntityHandle entity;
         std::string filePath;
@@ -196,7 +189,6 @@ namespace events::scene {
         std::string_view getName() const override { return "DuplicateEntity"; }
     };
 
-    // Collider Component Commands
     struct AddColliderComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -216,7 +208,6 @@ namespace events::scene {
         std::string_view getName() const override { return "SetColliderData"; }
     };
 
-    // RigidBody Component Commands
     struct AddRigidBodyComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -236,16 +227,11 @@ namespace events::scene {
         std::string_view getName() const override { return "SetRigidBodyData"; }
     };
 
-    // Physics Settings Commands (stored at scene level)
     struct SetPhysicsSettingsCommand : ICommand<bool> {
         types::PhysicsSettings settings;
 
         std::string_view getName() const override { return "SetPhysicsSettings"; }
     };
-
-    // ============================================
-    // QUERIES - Read-only operations
-    // ============================================
 
     struct GetEntityQuery : IQuery<std::optional<services::EntityData>> {
         services::EntityHandle entity;
@@ -328,8 +314,7 @@ namespace events::scene {
 
         std::string_view getName() const override { return "IsEntityStatic"; }
     };
-    
-    // 2D Audio Source queries
+
     struct HasAudioSource2DComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
@@ -342,7 +327,6 @@ namespace events::scene {
         std::string_view getName() const override { return "GetAudioSource2DData"; }
     };
 
-    // 3D Audio Source queries
     struct HasAudioSource3DComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
@@ -355,7 +339,6 @@ namespace events::scene {
         std::string_view getName() const override { return "GetAudioSource3DData"; }
     };
 
-    // Collider Component Queries
     struct HasColliderComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
@@ -368,7 +351,6 @@ namespace events::scene {
         std::string_view getName() const override { return "GetColliderData"; }
     };
 
-    // RigidBody Component Queries
     struct HasRigidBodyComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
@@ -381,14 +363,9 @@ namespace events::scene {
         std::string_view getName() const override { return "GetRigidBodyData"; }
     };
 
-    // Physics Settings Query (stored at scene level)
     struct GetPhysicsSettingsQuery : IQuery<types::PhysicsSettings> {
         std::string_view getName() const override { return "GetPhysicsSettings"; }
     };
-
-    // ============================================
-    // NOTIFICATIONS - State change broadcasts
-    // ============================================
 
     struct EntityCreatedNotification : INotification {
         services::EntityHandle entity;

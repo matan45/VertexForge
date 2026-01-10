@@ -10,10 +10,6 @@
 
 namespace events::physics {
 
-    // ============================================================
-    // COMMANDS - Modify physics state
-    // ============================================================
-
     struct SetGravityCommand : ::events::ICommand<void> {
         glm::vec3 gravity;
         std::string_view getName() const override { return "SetGravity"; }
@@ -91,48 +87,6 @@ namespace events::physics {
         std::string_view getName() const override { return "SetPhysicsRotation"; }
     };
 
-    // === Script-oriented commands (individual property modification) ===
-
-    struct SetMassCommand : ::events::ICommand<void> {
-        services::EntityHandle entity;
-        float mass;
-        std::string_view getName() const override { return "SetMass"; }
-    };
-
-    struct SetBodyTypeCommand : ::events::ICommand<void> {
-        services::EntityHandle entity;
-        services::RigidBodyData::Type type;
-        std::string_view getName() const override { return "SetBodyType"; }
-    };
-
-    struct SetLinearDampingCommand : ::events::ICommand<void> {
-        services::EntityHandle entity;
-        float damping;
-        std::string_view getName() const override { return "SetLinearDamping"; }
-    };
-
-    struct SetAngularDampingCommand : ::events::ICommand<void> {
-        services::EntityHandle entity;
-        float damping;
-        std::string_view getName() const override { return "SetAngularDamping"; }
-    };
-
-    struct SetColliderTriggerCommand : ::events::ICommand<void> {
-        services::EntityHandle entity;
-        bool isTrigger;
-        std::string_view getName() const override { return "SetColliderTrigger"; }
-    };
-
-    struct SetCollisionLayerCommand : ::events::ICommand<void> {
-        services::EntityHandle entity;
-        uint8_t layer;
-        std::string_view getName() const override { return "SetCollisionLayer"; }
-    };
-
-    // ============================================================
-    // QUERIES - Read physics state
-    // ============================================================
-
     struct GetGravityQuery : ::events::IQuery<glm::vec3> {
         std::string_view getName() const override { return "GetGravity"; }
     };
@@ -180,8 +134,6 @@ namespace events::physics {
         std::string_view getName() const override { return "IsOverlapping"; }
     };
 
-    // === Script-oriented queries (individual property access) ===
-
     struct GetMassQuery : ::events::IQuery<float> {
         services::EntityHandle entity;
         std::string_view getName() const override { return "GetMass"; }
@@ -201,20 +153,6 @@ namespace events::physics {
         services::EntityHandle entity;
         std::string_view getName() const override { return "GetBodyType"; }
     };
-
-    struct HasColliderQuery : ::events::IQuery<bool> {
-        services::EntityHandle entity;
-        std::string_view getName() const override { return "HasCollider"; }
-    };
-
-    struct GetColliderDataQuery : ::events::IQuery<std::optional<services::ColliderData>> {
-        services::EntityHandle entity;
-        std::string_view getName() const override { return "GetColliderData"; }
-    };
-
-    // ============================================================
-    // NOTIFICATIONS - Physics events (pub/sub)
-    // ============================================================
 
     struct CollisionStartNotification : ::events::INotification {
         services::EntityHandle entityA;

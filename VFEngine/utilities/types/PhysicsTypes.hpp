@@ -6,8 +6,8 @@
 #include <bitset>
 #include <glm/glm.hpp>
 
-namespace types {
-
+namespace types
+{
     enum class ColliderShape : uint8_t
     {
         Box = 0,
@@ -28,19 +28,15 @@ namespace types {
     struct CollisionLayer
     {
         std::string name;
-        uint8_t index = 0;      // 0-15
+        uint8_t index = 0; // 0-15
         bool isBuiltIn = false; // Built-in layers cannot be deleted
     };
 
-    // Global physics configuration
     struct PhysicsSettings
     {
-        // Maximum number of collision layers supported
         static constexpr uint8_t MAX_LAYERS = 16;
 
     private:
-        // Lookup cache: maps layer index -> position in layers vector (-1 if not present)
-        // Mutable because it's a cache that can be rebuilt from const methods
         mutable std::array<int8_t, MAX_LAYERS> layerIndexCache;
         mutable bool cacheValid = false;
 
@@ -58,20 +54,18 @@ namespace types {
         }
 
     public:
-        // Invalidate cache when layers are modified
-        void invalidateLayerCache() { cacheValid = false; }
-
-        // Copy/move operations invalidate cache to ensure correctness after modification
         PhysicsSettings() = default;
+
         PhysicsSettings(const PhysicsSettings& other)
             : gravity(other.gravity), gravityScale(other.gravityScale)
-            , fixedTimestep(other.fixedTimestep), maxAccumulator(other.maxAccumulator)
-            , maxStepsPerFrame(other.maxStepsPerFrame)
-            , linearSleepThreshold(other.linearSleepThreshold)
-            , angularSleepThreshold(other.angularSleepThreshold)
-            , timeToSleep(other.timeToSleep)
-            , layers(other.layers), collisionMatrix(other.collisionMatrix)
-            , cacheValid(false) {}  // Invalidate cache on copy
+              , fixedTimestep(other.fixedTimestep), maxAccumulator(other.maxAccumulator)
+              , maxStepsPerFrame(other.maxStepsPerFrame)
+              , linearSleepThreshold(other.linearSleepThreshold)
+              , angularSleepThreshold(other.angularSleepThreshold)
+              , timeToSleep(other.timeToSleep)
+              , layers(other.layers), collisionMatrix(other.collisionMatrix)
+        {
+        } // Invalidate cache on copy
 
         PhysicsSettings& operator=(const PhysicsSettings& other)
         {
@@ -87,12 +81,13 @@ namespace types {
                 timeToSleep = other.timeToSleep;
                 layers = other.layers;
                 collisionMatrix = other.collisionMatrix;
-                cacheValid = false;  // Invalidate cache on assignment
+                cacheValid = false; // Invalidate cache on assignment
             }
             return *this;
         }
 
         PhysicsSettings(PhysicsSettings&& other) noexcept = default;
+
         PhysicsSettings& operator=(PhysicsSettings&& other) noexcept
         {
             if (this != &other)
@@ -107,7 +102,7 @@ namespace types {
                 timeToSleep = other.timeToSleep;
                 layers = std::move(other.layers);
                 collisionMatrix = std::move(other.collisionMatrix);
-                cacheValid = false;  // Invalidate cache on move assignment
+                cacheValid = false; // Invalidate cache on move assignment
             }
             return *this;
         }
@@ -117,27 +112,23 @@ namespace types {
         float gravityScale = 1.0f;
 
         // Timestep configuration
-        double fixedTimestep = 1.0 / 60.0;  // 60 Hz physics
-        double maxAccumulator = 0.25;       // Max 250ms accumulator
-        int maxStepsPerFrame = 8;           // Limit steps per frame
+        double fixedTimestep = 1.0 / 60.0; // 60 Hz physics
+        double maxAccumulator = 0.25; // Max 250ms accumulator
+        int maxStepsPerFrame = 8; // Limit steps per frame
 
         // Sleep thresholds
-        float linearSleepThreshold = 0.05f;   // m/s
-        float angularSleepThreshold = 0.05f;  // rad/s
-        float timeToSleep = 0.5f;             // seconds
+        float linearSleepThreshold = 0.05f; // m/s
+        float angularSleepThreshold = 0.05f; // rad/s
+        float timeToSleep = 0.5f; // seconds
 
-        // Collision layers
         std::vector<CollisionLayer> layers;
 
-        // Collision matrix: collisionMatrix[i][j] = true means layer i collides with layer j
         std::array<std::bitset<MAX_LAYERS>, MAX_LAYERS> collisionMatrix;
 
-        // Create default settings with built-in layers
         static PhysicsSettings createDefault()
         {
             PhysicsSettings settings;
 
-            // Built-in layers (matching PhysicsLayers.hpp)
             settings.layers = {
                 {"Static", 0, true},
                 {"Dynamic", 1, true},
@@ -172,14 +163,12 @@ namespace types {
             return settings;
         }
 
-        // Check if two layers should collide
         bool shouldLayersCollide(uint8_t layer1, uint8_t layer2) const
         {
             if (layer1 >= MAX_LAYERS || layer2 >= MAX_LAYERS) return false;
             return collisionMatrix[layer1].test(layer2);
         }
 
-        // Set collision between two layers (symmetric)
         void setLayerCollision(uint8_t layer1, uint8_t layer2, bool shouldCollide)
         {
             if (layer1 >= MAX_LAYERS || layer2 >= MAX_LAYERS) return;
@@ -214,5 +203,4 @@ namespace types {
             return MAX_LAYERS;
         }
     };
-
 }

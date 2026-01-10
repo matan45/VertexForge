@@ -13,9 +13,6 @@ namespace services
 {
     namespace
     {
-        constexpr float MIN_DIMENSION = 0.001f;
-
-        // Validates collider dimensions and settings, returns error message or empty string if valid
         std::string validateCollider(const components::ColliderComponent& collider,
                                      const components::RigidBodyComponent& rigidBody,
                                      const std::string& entityName)
@@ -74,7 +71,7 @@ namespace services
                 break;
             }
 
-            return ""; // Valid
+            return "";
         }
     }
     PhysicsPlayModeHandler::PhysicsPlayModeHandler(IPhysicsProvider* physicsProvider)
@@ -130,8 +127,6 @@ namespace services
         }
 
         auto& registry = scene::EntityRegistry::getRegistry();
-
-        // Find all entities with RigidBodyComponent
         auto view = registry.view<components::RigidBodyComponent, components::TransformComponent>();
 
         for (auto entity : view)
@@ -139,7 +134,6 @@ namespace services
             const auto& rigidBody = view.get<components::RigidBodyComponent>(entity);
             const auto& transform = view.get<components::TransformComponent>(entity);
 
-            // Convert ECS component to physics data
             RigidBodyData rbData;
             switch (rigidBody.type)
             {
@@ -159,7 +153,6 @@ namespace services
             rbData.linearVelocity = glm::vec3(0.0f);
             rbData.angularVelocity = glm::vec3(0.0f);
 
-            // Get collider data if entity has ColliderComponent
             ColliderData colData;
             bool hasCollider = registry.all_of<components::ColliderComponent>(entity);
 
@@ -167,14 +160,12 @@ namespace services
             {
                 const auto& collider = registry.get<components::ColliderComponent>(entity);
 
-                // Get entity name for error messages
                 std::string entityName = "Unknown";
                 if (registry.all_of<components::NameComponent>(entity))
                 {
                     entityName = registry.get<components::NameComponent>(entity).name;
                 }
 
-                // Validate collider configuration
                 std::string validationError = validateCollider(collider, rigidBody, entityName);
                 if (!validationError.empty())
                 {
@@ -195,7 +186,6 @@ namespace services
                     break;
                 case components::ColliderShape::ConvexMesh:
                     colData.shape = ColliderData::Shape::ConvexMesh;
-                    // Use collider's meshPath, or fall back to MeshComponent's path
                     if (!collider.meshPath.empty())
                     {
                         colData.meshPath = collider.meshPath;
@@ -207,7 +197,6 @@ namespace services
                     break;
                 case components::ColliderShape::TriangleMesh:
                     colData.shape = ColliderData::Shape::TriangleMesh;
-                    // Use collider's meshPath, or fall back to MeshComponent's path
                     if (!collider.meshPath.empty())
                     {
                         colData.meshPath = collider.meshPath;
@@ -226,18 +215,15 @@ namespace services
             }
             else
             {
-                // Default box collider
                 colData.shape = ColliderData::Shape::Box;
                 colData.size = glm::vec3(1.0f);
             }
 
             EntityHandle handle = internal::toHandle(entity);
 
-            // Set initial position/rotation from transform before adding to physics
             physicsProvider->addRigidBody(handle, rbData, colData);
             physicsProvider->setPosition(handle, transform.position);
 
-            // Convert Euler angles (degrees) to quaternion
             glm::vec3 eulerRad = glm::radians(transform.rotation);
             glm::quat rotQuat = glm::quat(eulerRad);
             physicsProvider->setRotation(handle, rotQuat);
@@ -256,7 +242,6 @@ namespace services
             return;
         }
 
-        // Remove all physics bodies we created
         for (const auto& handle : activePhysicsBodies)
         {
             physicsProvider->removeRigidBody(handle);
@@ -275,10 +260,7 @@ namespace services
             return;
         }
 
-        // Step the physics simulation
         physicsProvider->update(deltaTime);
-
-        // Sync transforms from physics back to ECS
         syncTransformsFromPhysics();
     }
 
@@ -297,13 +279,11 @@ namespace services
 
             auto& rigidBody = registry.get<components::RigidBodyComponent>(entity);
 
-            // Only sync dynamic bodies (static and kinematic are controlled by other means)
             if (rigidBody.type == components::RigidBodyType::Static)
             {
                 continue;
             }
 
-            // Check constraints - if all position axes are frozen, skip position sync
             bool allPositionFrozen = rigidBody.freezePositionX && rigidBody.freezePositionY && rigidBody.freezePositionZ;
             bool allRotationFrozen = rigidBody.freezeRotationX && rigidBody.freezeRotationY && rigidBody.freezeRotationZ;
 
@@ -313,7 +293,6 @@ namespace services
             {
                 glm::vec3 physPos = physicsProvider->getPosition(handle);
 
-                // Apply individual axis constraints
                 if (rigidBody.freezePositionX) physPos.x = transform.position.x;
                 if (rigidBody.freezePositionY) physPos.y = transform.position.y;
                 if (rigidBody.freezePositionZ) physPos.z = transform.position.z;
@@ -324,13 +303,11 @@ namespace services
             if (!allRotationFrozen)
             {
                 glm::quat physRot = physicsProvider->getRotation(handle);
-                // Convert quaternion to Euler angles (degrees)
                 glm::vec3 eulerRad = glm::eulerAngles(physRot);
                 glm::vec3 eulerDeg = glm::degrees(eulerRad);
                 transform.rotation = eulerDeg;
             }
 
-            // Mark transform as dirty so WorldTransformComponent gets updated
             transform.isDirty = true;
         }
     }

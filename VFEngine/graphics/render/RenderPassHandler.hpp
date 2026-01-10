@@ -80,12 +80,6 @@ namespace render
         mutable float currentFarPlane = 1000.0f;
         mutable float currentTime = 0.0f;
 
-        // Private helper to initialize GPU-driven renderer (called from initMeshPipeline)
-        void initGPUDrivenRenderer();
-
-        // Private helper to pass Hi-Z pyramid to GPU-driven renderer
-        void updateGPUDrivenHiZ() const;
-
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
                                    core::OffscreenResources& offscreenResources);
@@ -135,9 +129,6 @@ namespace render
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
-        
-        void setGPUDrivenOcclusionCullingEnabled(bool enabled);
-        bool isGPUDrivenOcclusionCullingEnabled() const;
 
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;
@@ -155,14 +146,16 @@ namespace render
         bool isHiZInitialized(occlusion::CameraId cameraId) const;
 
         // GPU occlusion culling methods
-        void initOcclusionCulling(occlusion::CameraId cameraId);
         void updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects);
         void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);
-        std::vector<uint32_t> getOcclusionVisibility(occlusion::CameraId cameraId);
-        bool isOcclusionCullingInitialized(occlusion::CameraId cameraId) const;
 
         void cleanUp() const;
 
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        
+    private:
+        void initGPUDrivenRenderer();
+        
+        void updateGPUDrivenHiZ() const;
     };
 }

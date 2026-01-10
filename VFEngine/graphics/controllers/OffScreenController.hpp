@@ -6,10 +6,12 @@
 #include <string_view>
 #include <string>
 #include <vector>
-#include <cstdint>
 #include <optional>
 
-namespace events { struct SubscriptionToken; }
+namespace events
+{
+    struct SubscriptionToken;
+}
 
 namespace core
 {

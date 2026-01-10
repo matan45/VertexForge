@@ -2,7 +2,6 @@
 #include "../events/PhysicsEvents.hpp"
 #include "../events/PhysicsSettingsEvents.hpp"
 #include "../events/EventDispatcher.hpp"
-#include "../../utilities/serialization/PhysicsSettingsSerialization.hpp"
 #include <algorithm>
 #include <cassert>
 
@@ -85,40 +84,6 @@ namespace services {
                 physicsProvider->setRotation(cmd.entity, cmd.rotation);
             });
 
-        // === Script-oriented commands (individual property modification) ===
-        // Note: These modify ECS components. Changes affect physics body on next play mode start.
-
-        dispatcher.registerCommandHandler<events::physics::SetMassCommand>(
-            [this](const auto& cmd) {
-                // Modification of mass requires provider method or ECS access
-                // For now, this is handled directly in native API via ECS
-            });
-
-        dispatcher.registerCommandHandler<events::physics::SetBodyTypeCommand>(
-            [this](const auto& cmd) {
-                // Body type changes are complex - handled via ECS in native API
-            });
-
-        dispatcher.registerCommandHandler<events::physics::SetLinearDampingCommand>(
-            [this](const auto& cmd) {
-                // Handled via ECS in native API
-            });
-
-        dispatcher.registerCommandHandler<events::physics::SetAngularDampingCommand>(
-            [this](const auto& cmd) {
-                // Handled via ECS in native API
-            });
-
-        dispatcher.registerCommandHandler<events::physics::SetColliderTriggerCommand>(
-            [this](const auto& cmd) {
-                // Handled via ECS in native API
-            });
-
-        dispatcher.registerCommandHandler<events::physics::SetCollisionLayerCommand>(
-            [this](const auto& cmd) {
-                // Handled via ECS in native API
-            });
-
         // === Queries ===
 
         dispatcher.registerQueryHandler<events::physics::GetGravityQuery>(
@@ -192,44 +157,12 @@ namespace services {
                 return rb ? rb->type : RigidBodyData::Type::Dynamic;
             });
 
-        dispatcher.registerQueryHandler<events::physics::HasColliderQuery>(
-            [this](const auto& query) -> bool {
-                return physicsProvider->hasRigidBody(query.entity);
-            });
-
-        dispatcher.registerQueryHandler<events::physics::GetColliderDataQuery>(
-            [this](const auto& query) -> std::optional<ColliderData> {
-                // TODO: Add getCollider method to provider
-                return std::nullopt;
-            });
-
         // === Physics Settings Commands ===
 
         dispatcher.registerCommandHandler<events::physics::ApplyPhysicsSettingsCommand>(
             [this](const auto& cmd) {
                 physicsProvider->applySettings(cmd.settings);
                 return true;
-            });
-
-        dispatcher.registerCommandHandler<events::physics::SavePhysicsSettingsCommand>(
-            [this](const auto& cmd) {
-                std::string filename = cmd.filename.empty()
-                    ? serialization::PhysicsSettingsSerialization::getDefaultFilename()
-                    : cmd.filename;
-                return serialization::PhysicsSettingsSerialization::save(cmd.settings, filename);
-            });
-
-        dispatcher.registerCommandHandler<events::physics::LoadPhysicsSettingsCommand>(
-            [this](const auto& cmd) {
-                std::string filename = cmd.filename.empty()
-                    ? serialization::PhysicsSettingsSerialization::getDefaultFilename()
-                    : cmd.filename;
-                types::PhysicsSettings settings;
-                if (serialization::PhysicsSettingsSerialization::load(filename, settings)) {
-                    physicsProvider->applySettings(settings);
-                    return true;
-                }
-                return false;
             });
 
         dispatcher.registerCommandHandler<events::physics::SetLayerCollisionCommand>(

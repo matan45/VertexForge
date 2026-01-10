@@ -6,8 +6,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
-#include <cstdint>
-#include "../../../utilities/types/PhysicsTypes.hpp"
+#include "types/PhysicsTypes.hpp"
 
 namespace core
 {
@@ -22,12 +21,12 @@ namespace render::mesh
     {
         glm::mat4 worldMatrix;
         types::ColliderShape shape = types::ColliderShape::Box;
-        glm::vec3 size{1.0f};           // Box half-extents
-        float radius = 0.5f;            // Sphere/capsule radius
-        float height = 2.0f;            // Capsule total height
-        uint8_t bodyType = 1;           // 0=Static, 1=Dynamic, 2=Kinematic
+        glm::vec3 size{1.0f}; // Box half-extents
+        float radius = 0.5f; // Sphere/capsule radius
+        float height = 2.0f; // Capsule total height
+        uint8_t bodyType = 1; // 0=Static, 1=Dynamic, 2=Kinematic
         bool isTrigger = false;
-        std::string meshPath;           // Path to mesh for ConvexMesh/TriangleMesh shapes
+        std::string meshPath; // Path to mesh for ConvexMesh/TriangleMesh shapes
     };
 
     // Cached mesh data for debug rendering
@@ -99,8 +98,6 @@ namespace render::mesh
                     const std::vector<PhysicsColliderRenderData>& colliders,
                     const glm::mat4& view,
                     const glm::mat4& projection) const;
-
-        bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();

@@ -19,7 +19,7 @@ namespace services
     ScenePersistenceService::ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                                                      EntityStateService* entityStateService)
         : sceneGraph(sceneGraph)
-        , entityStateService(entityStateService)
+          , entityStateService(entityStateService)
     {
     }
 
@@ -237,7 +237,7 @@ namespace services
     }
 
     std::optional<EntityHandle> ScenePersistenceService::loadPrefab(const std::string& filePath,
-                                                                     std::optional<EntityHandle> parent)
+                                                                    std::optional<EntityHandle> parent)
     {
         scene::Entity parentEntity = sceneGraph->GetRoot();
         if (parent.has_value() && parent->isValid())

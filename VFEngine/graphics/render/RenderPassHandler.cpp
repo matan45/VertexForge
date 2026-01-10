@@ -216,23 +216,6 @@ namespace render
         currentTime = time;
     }
 
-    void RenderPassHandler::setGPUDrivenOcclusionCullingEnabled(bool enabled)
-    {
-        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-        {
-            gpuDrivenRenderer->setOcclusionCullingEnabled(enabled);
-        }
-    }
-
-    bool RenderPassHandler::isGPUDrivenOcclusionCullingEnabled() const
-    {
-        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-        {
-            return gpuDrivenRenderer->isOcclusionCullingEnabled();
-        }
-        return false;
-    }
-
     void RenderPassHandler::setViewMode(uint32_t mode)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
@@ -324,7 +307,7 @@ namespace render
         currentView = view;
         currentProjection = projection;
     }
-    
+
     occlusion::CameraRenderData* RenderPassHandler::createCamera(occlusion::CameraId id, bool enableOcclusion)
     {
         return cameraOcclusionManager->createCamera(id, enableOcclusion);
@@ -361,11 +344,6 @@ namespace render
         return cameraOcclusionManager->isHiZInitialized(cameraId);
     }
 
-    void RenderPassHandler::initOcclusionCulling(occlusion::CameraId cameraId)
-    {
-        cameraOcclusionManager->initCameraOcclusionCulling(cameraId);
-    }
-
     void RenderPassHandler::updateOcclusionObjects(occlusion::CameraId cameraId,
                                                    const std::vector<occlusion::GPUObjectData>& objects)
     {
@@ -378,16 +356,6 @@ namespace render
         cameraOcclusionManager->updateCamera(cameraId, viewProj, nearPlane);
     }
 
-    std::vector<uint32_t> RenderPassHandler::getOcclusionVisibility(occlusion::CameraId cameraId)
-    {
-        return cameraOcclusionManager->getVisibilityResults(cameraId);
-    }
-
-    bool RenderPassHandler::isOcclusionCullingInitialized(occlusion::CameraId cameraId) const
-    {
-        return cameraOcclusionManager->isOcclusionInitialized(cameraId);
-    }
-
     void RenderPassHandler::recreate()
     {
         iblRenderer->recreate();
@@ -396,7 +364,7 @@ namespace render
         if (meshPipelineInitialized)
         {
             meshPipeline->recreate();
-            
+
             if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
             {
                 gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
@@ -491,15 +459,15 @@ namespace render
             if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
                 updateGPUDrivenHiZ();
-                
+
                 gpuDrivenRenderer->dispatchCompute(commandBuffer);
-                
+
                 vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
-                
+
                 meshPipeline->beginRenderPass(commandBuffer, imageIndex);
-                
+
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
-                
+
                 if (debugRendererPtr)
                 {
                     debugRendererPtr->render(commandBuffer, currentMeshDrawList, currentView, currentProjection,

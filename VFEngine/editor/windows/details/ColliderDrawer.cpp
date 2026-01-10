@@ -55,7 +55,7 @@ namespace windows::details
             if (changed)
             {
                 // Enforce TriangleMesh constraint: must be Static, auto-adjust if needed
-                if (colliderData.shape == services::ColliderShapeType::TriangleMesh)
+                if (colliderData.shape == types::ColliderShape::TriangleMesh)
                 {
                     events::scene::HasRigidBodyComponentQuery hasRbQuery;
                     hasRbQuery.entity = handle;
@@ -64,11 +64,11 @@ namespace windows::details
                         events::scene::GetRigidBodyDataQuery rbQuery;
                         rbQuery.entity = handle;
                         auto rbOpt = dispatcher.query(rbQuery);
-                        if (rbOpt.has_value() && rbOpt->type == services::RigidBodyTypeData::Dynamic)
+                        if (rbOpt.has_value() && rbOpt->type == types::RigidBodyType::Dynamic)
                         {
                             // Auto-adjust to Static
                             services::RigidBodyComponentData rbData = *rbOpt;
-                            rbData.type = services::RigidBodyTypeData::Static;
+                            rbData.type = types::RigidBodyType::Static;
                             events::scene::SetRigidBodyDataCommand rbCmd;
                             rbCmd.entity = handle;
                             rbCmd.rigidBodyData = rbData;
@@ -127,7 +127,7 @@ namespace windows::details
 
         if (ImGui::Combo("Shape", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames)))
         {
-            colliderData.shape = static_cast<services::ColliderShapeType>(currentShape);
+            colliderData.shape = static_cast<types::ColliderShape>(currentShape);
             changed = true;
         }
 
@@ -140,7 +140,7 @@ namespace windows::details
 
         switch (colliderData.shape)
         {
-        case services::ColliderShapeType::Box:
+        case types::ColliderShape::Box:
             ImGui::Text("Box Dimensions:");
             if (ImGui::DragFloat3("Size (Half Extents)", &colliderData.size.x, 0.01f, 0.01f, 100.0f, "%.2f"))
             {
@@ -152,7 +152,7 @@ namespace windows::details
             }
             break;
 
-        case services::ColliderShapeType::Sphere:
+        case types::ColliderShape::Sphere:
             ImGui::Text("Sphere Dimensions:");
             if (ImGui::DragFloat("Radius", &colliderData.size.x, 0.01f, 0.01f, 100.0f, "%.2f"))
             {
@@ -160,7 +160,7 @@ namespace windows::details
             }
             break;
 
-        case services::ColliderShapeType::Capsule:
+        case types::ColliderShape::Capsule:
             ImGui::Text("Capsule Dimensions:");
             if (ImGui::DragFloat("Radius", &colliderData.size.x, 0.01f, 0.01f, 100.0f, "%.2f"))
             {
@@ -176,17 +176,17 @@ namespace windows::details
             }
             break;
 
-        case services::ColliderShapeType::ConvexMesh:
-        case services::ColliderShapeType::TriangleMesh:
-        {
-            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Uses mesh from Mesh Component");
-
-            if (colliderData.shape == services::ColliderShapeType::TriangleMesh)
+        case types::ColliderShape::ConvexMesh:
+        case types::ColliderShape::TriangleMesh:
             {
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Triangle meshes are static only");
+                ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Uses mesh from Mesh Component");
+
+                if (colliderData.shape == types::ColliderShape::TriangleMesh)
+                {
+                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Triangle meshes are static only");
+                }
+                break;
             }
-            break;
-        }
         }
 
         ImGui::Spacing();

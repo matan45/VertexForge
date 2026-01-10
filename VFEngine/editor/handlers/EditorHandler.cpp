@@ -10,6 +10,7 @@
 #include "impl/ScriptingServiceImpl.hpp"
 #include "impl/UndoRedoServiceImpl.hpp"
 #include "impl/FileOperationsServiceImpl.hpp"
+#include "impl/PhysicsServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
@@ -73,7 +74,7 @@ namespace handlers
                 }
             }
         });
-        
+
         setupEventSubscriptions();
 
         windowImguiHandler->init();
@@ -96,6 +97,7 @@ namespace handlers
 
         fileOperationsService.reset();
         undoRedoService.reset();
+        physicsService.reset();
         physicsPlayModeHandler.reset();
         audioSceneUpdater.reset();
         audioService.reset();
@@ -109,7 +111,6 @@ namespace handlers
 
     void EditorHandler::initializeServices()
     {
-        // Create service implementations using providers from bootstrap
         sceneService = std::make_shared<services::SceneServiceImpl>(bootstrap->getSceneGraphSystem());
         renderService = std::make_shared<services::EditorRenderServiceImpl>(
             bootstrap->getOffScreenProvider(),
@@ -129,20 +130,17 @@ namespace handlers
         );
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
 
-        // Create physics play mode handler
         if (auto* physicsProvider = bootstrap->getPhysicsProvider())
         {
+            physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
             physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
             physicsPlayModeHandler->subscribeToEvents();
         }
 
-        // Create undo/redo service (standalone, no providers needed)
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
 
-        // Create file operations service with undo/redo integration
         fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
 
-        // Register event handlers for command/query pattern
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
@@ -153,6 +151,8 @@ namespace handlers
         scriptingService->registerEventHandlers();
         undoRedoService->registerEventHandlers();
         fileOperationsService->registerEventHandlers();
+        physicsService->registerEventHandlers();
+
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

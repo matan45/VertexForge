@@ -6,117 +6,105 @@
 #include <array>
 #include <bitset>
 
-namespace core::physics {
-
-    // Maximum number of collision layers supported (matches PhysicsSettings::MAX_LAYERS)
+namespace core::physics
+{
     static constexpr uint8_t MAX_COLLISION_LAYERS = 16;
 
-    // Object layers - defines what types of physics objects exist
-    // Built-in layers (0-3), user-defined layers (4-15)
-    namespace Layers {
-        static constexpr JPH::ObjectLayer STATIC = 0;      // Non-moving objects (ground, walls)
-        static constexpr JPH::ObjectLayer DYNAMIC = 1;     // Moving objects with physics
-        static constexpr JPH::ObjectLayer KINEMATIC = 2;   // Moving objects controlled by game logic
-        static constexpr JPH::ObjectLayer SENSOR = 3;      // Trigger volumes (no collision response)
+    namespace Layers
+    {
+        static constexpr JPH::ObjectLayer STATIC = 0; // Non-moving objects (ground, walls)
+        static constexpr JPH::ObjectLayer DYNAMIC = 1; // Moving objects with physics
+        static constexpr JPH::ObjectLayer KINEMATIC = 2; // Moving objects controlled by game logic
+        static constexpr JPH::ObjectLayer SENSOR = 3; // Trigger volumes (no collision response)
         static constexpr JPH::ObjectLayer NUM_LAYERS = MAX_COLLISION_LAYERS;
     }
 
-    // Broad-phase layers - for spatial partitioning optimization
-    // Groups object layers into fewer categories for efficient broad-phase queries
-    namespace BroadPhaseLayers {
-        static constexpr JPH::BroadPhaseLayer NON_MOVING{ 0 };
-        static constexpr JPH::BroadPhaseLayer MOVING{ 1 };
+    namespace BroadPhaseLayers
+    {
+        static constexpr JPH::BroadPhaseLayer NON_MOVING{0};
+        static constexpr JPH::BroadPhaseLayer MOVING{1};
         static constexpr unsigned int NUM_LAYERS = 2;
     }
 
-    // Maps object layers to broad-phase layers
-    class BroadPhaseLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface {
+    class BroadPhaseLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface
+    {
+    private:
+        JPH::BroadPhaseLayer objectToBroadPhase[MAX_COLLISION_LAYERS];
+
     public:
-        BroadPhaseLayerInterfaceImpl() {
-            // Layer 0 (Static) goes to NON_MOVING broad phase
-            // All other layers go to MOVING broad phase
-            for (uint8_t i = 0; i < MAX_COLLISION_LAYERS; ++i) {
+        explicit BroadPhaseLayerInterfaceImpl()
+        {
+            for (uint8_t i = 0; i < MAX_COLLISION_LAYERS; ++i)
+            {
                 objectToBroadPhase[i] = (i == Layers::STATIC) ? BroadPhaseLayers::NON_MOVING : BroadPhaseLayers::MOVING;
             }
         }
 
-        unsigned int GetNumBroadPhaseLayers() const override {
+        unsigned int GetNumBroadPhaseLayers() const override
+        {
             return BroadPhaseLayers::NUM_LAYERS;
         }
 
-        JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer inLayer) const override {
+        JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer inLayer) const override
+        {
             if (inLayer >= MAX_COLLISION_LAYERS) return BroadPhaseLayers::MOVING;
             return objectToBroadPhase[inLayer];
         }
-
-#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
-        const char* GetBroadPhaseLayerName(JPH::BroadPhaseLayer inLayer) const override {
-            switch (static_cast<JPH::BroadPhaseLayer::Type>(inLayer)) {
-            case static_cast<JPH::BroadPhaseLayer::Type>(BroadPhaseLayers::NON_MOVING):
-                return "NON_MOVING";
-            case static_cast<JPH::BroadPhaseLayer::Type>(BroadPhaseLayers::MOVING):
-                return "MOVING";
-            default:
-                JPH_ASSERT(false);
-                return "INVALID";
-            }
-        }
-#endif
-
-    private:
-        JPH::BroadPhaseLayer objectToBroadPhase[MAX_COLLISION_LAYERS];
     };
 
-    // Determines if an object layer can collide with a broad-phase layer
-    class ObjectVsBroadPhaseLayerFilterImpl final : public JPH::ObjectVsBroadPhaseLayerFilter {
+    class ObjectVsBroadPhaseLayerFilterImpl final : public JPH::ObjectVsBroadPhaseLayerFilter
+    {
     public:
-        bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const override {
-            // Layer 0 (Static) only collides with moving objects
-            if (inLayer1 == Layers::STATIC) {
+        bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const override
+        {
+            if (inLayer1 == Layers::STATIC)
+            {
                 return inLayer2 == BroadPhaseLayers::MOVING;
             }
-            // All other layers can collide with both moving and non-moving
             return true;
         }
     };
 
-    // Dynamic collision matrix - determines which object layers can collide with each other
-    // Uses a runtime-configurable collision matrix instead of hardcoded rules
-    class DynamicObjectLayerPairFilter final : public JPH::ObjectLayerPairFilter {
+    class DynamicObjectLayerPairFilter final : public JPH::ObjectLayerPairFilter
+    {
     public:
-        DynamicObjectLayerPairFilter() {
-            // Initialize with default collision rules
+        explicit DynamicObjectLayerPairFilter()
+        {
             initializeDefaultMatrix();
         }
 
-        bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::ObjectLayer inLayer2) const override {
-            if (inLayer1 >= MAX_COLLISION_LAYERS || inLayer2 >= MAX_COLLISION_LAYERS) {
+        bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::ObjectLayer inLayer2) const override
+        {
+            if (inLayer1 >= MAX_COLLISION_LAYERS || inLayer2 >= MAX_COLLISION_LAYERS)
+            {
                 return false;
             }
             return collisionMatrix[inLayer1].test(inLayer2);
         }
 
-        // Set collision between two layers (automatically symmetric)
-        void setLayerCollision(uint8_t layer1, uint8_t layer2, bool shouldCollide) {
+        void setLayerCollision(uint8_t layer1, uint8_t layer2, bool shouldCollide)
+        {
             if (layer1 >= MAX_COLLISION_LAYERS || layer2 >= MAX_COLLISION_LAYERS) return;
             collisionMatrix[layer1].set(layer2, shouldCollide);
             collisionMatrix[layer2].set(layer1, shouldCollide);
         }
 
-        // Set entire collision matrix from PhysicsSettings
-        void setCollisionMatrix(const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& matrix) {
+        void setCollisionMatrix(const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& matrix)
+        {
             collisionMatrix = matrix;
         }
 
-        // Get collision matrix for saving
-        const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& getCollisionMatrix() const {
+        const std::array<std::bitset<MAX_COLLISION_LAYERS>, MAX_COLLISION_LAYERS>& getCollisionMatrix() const
+        {
             return collisionMatrix;
         }
 
     private:
-        void initializeDefaultMatrix() {
+        void initializeDefaultMatrix()
+        {
             // Reset all
-            for (auto& row : collisionMatrix) {
+            for (auto& row : collisionMatrix)
+            {
                 row.reset();
             }
 
@@ -145,5 +133,4 @@ namespace core::physics {
 
     // Legacy alias for backward compatibility
     using ObjectLayerPairFilterImpl = DynamicObjectLayerPairFilter;
-
 }

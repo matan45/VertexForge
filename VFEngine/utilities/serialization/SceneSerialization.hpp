@@ -14,11 +14,7 @@ namespace serialization
 {
     using json = nlohmann::json;
 
-    // Progress callback for scene loading
-    // Parameters: currentEntityName, entitiesLoaded, totalEntities
     using SceneLoadProgressCallback = std::function<void(const std::string&, size_t, size_t)>;
-
-    class PrefabSerialization;
 
     class SceneSerialization
     {
@@ -30,12 +26,8 @@ namespace serialization
                                   SceneLoadProgressCallback progressCallback = nullptr);
         static bool saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename);
 
-        // In-memory snapshot methods for play mode state capture/restore
         static json createSnapshot(scene::SceneGraphSystem& sceneGraph);
         static bool restoreFromSnapshot(const json& snapshot, scene::SceneGraphSystem& sceneGraph);
-
-        // Count entities in JSON for progress tracking
-
 
     private:
         static json serializeEntity(scene::Entity& entity);
@@ -84,7 +76,6 @@ namespace serialization
         static json serializeRigidBody(const components::RigidBodyComponent& rigidBody);
         static void deserializeRigidBody(const json& j, components::RigidBodyComponent& rigidBody);
 
-        // Physics settings serialization (stored at scene level)
         static json serializePhysicsSettings(const types::PhysicsSettings& settings);
         static void deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings);
     };

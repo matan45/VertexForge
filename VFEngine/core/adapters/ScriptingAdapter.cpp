@@ -9,16 +9,10 @@
 #include <fstream>
 #include <regex>
 
-// Include editor logger for console output
 #include "print/EditorLogger.hpp"
-
-// Include physics events for collision callbacks
 #include "../../services/events/PhysicsEvents.hpp"
-
-// Include ECS for finding scripts on entities
 #include "../../utilities/scene/EntityRegistry.hpp"
 #include "../../utilities/components/Components.hpp"
-#include "../../services/data/EntityConversion.hpp"
 
 namespace core
 {
@@ -39,11 +33,9 @@ namespace core
         try
         {
             interpreter = std::make_unique<::services::ScriptInterpreter>();
-            
+
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
             apiRegistry->registerEngineAPIs();
-
-            // Subscribe to physics collision events for script callbacks
             subscribeToPhysicsEvents();
 
             initialized = true;
@@ -66,7 +58,6 @@ namespace core
             return;
         }
 
-        // Unsubscribe from physics events before cleanup
         unsubscribeFromPhysicsEvents();
 
         instanceToClassName.clear();
@@ -101,10 +92,8 @@ namespace core
         {
             vfLogInfo("[ScriptingAdapter] Building scripts from manifest: {}", manifestPath);
 
-            // Clean first
             cleanScripts(manifestPath);
 
-            // Parse manifest
             project::ProjectConfigParser parser;
             auto config = parser.parse(manifestPath);
 
@@ -158,7 +147,6 @@ namespace core
         {
             vfLogInfo("[Script] Cleaning scripts...");
 
-            // Parse manifest to get output directory and clean compiled files
             project::ProjectConfigParser parser;
             auto config = parser.parse(manifestPath);
 
@@ -168,7 +156,6 @@ namespace core
                 builder.clean(*config);
             }
 
-            // Clear cached state
             pathToClassName.clear();
             compiled = false;
 
@@ -228,10 +215,7 @@ namespace core
 
     std::string ScriptingAdapter::getLibraryPath(const std::string& manifestPath) const
     {
-        // Get the directory containing the manifest
         std::filesystem::path manifestDir = std::filesystem::path(manifestPath).parent_path();
-
-        // The library is output to the 'compiled' subdirectory as 'scripts.mtcLib'
         return (manifestDir / "compiled" / "scripts.mtcLib").string();
     }
 
@@ -245,7 +229,6 @@ namespace core
             return std::nullopt;
         }
 
-        // Check if scripts are compiled
         if (!compiled)
         {
             setError(services::ScriptError::Type::Runtime,
@@ -256,10 +239,8 @@ namespace core
 
         try
         {
-            // Get full path for extracting class name
             std::string fullPath = scriptLibraryPath.empty() ? scriptPath : scriptLibraryPath + "/" + scriptPath;
 
-            // Get the class name from cache or extract from file
             std::string className;
             auto pathIt = pathToClassName.find(scriptPath);
             if (pathIt != pathToClassName.end())
@@ -268,7 +249,6 @@ namespace core
             }
             else
             {
-                // Extract class name from script file
                 className = extractClassName(fullPath);
                 if (className.empty())
                 {
@@ -279,18 +259,25 @@ namespace core
                 pathToClassName[scriptPath] = className;
             }
 
-            // Create script instance from pre-compiled bytecode
             auto instance = interpreter->createObject(className);
-
-            // Assign instance ID
             uint64_t instanceId = nextInstanceId++;
 
-            // Store mappings
             instanceToClassName[instanceId] = className;
             instanceToEntity[instanceId] = entity;
             instanceToObject[instanceId] = std::any(instance);
 
-            // Build result
+            // Cache implemented interfaces for collision/trigger callbacks
+            std::unordered_set<std::string> interfaces;
+            if (interpreter->classImplementsInterface(className, "ICollisionListener"))
+            {
+                interfaces.insert("ICollisionListener");
+            }
+            if (interpreter->classImplementsInterface(className, "ITriggerListener"))
+            {
+                interfaces.insert("ITriggerListener");
+            }
+            instanceToInterfaces[instanceId] = std::move(interfaces);
+
             services::ScriptInstanceInfo info;
             info.instanceId = instanceId;
             info.className = className;
@@ -317,6 +304,7 @@ namespace core
             instanceToClassName.erase(it);
             instanceToEntity.erase(instanceId);
             instanceToObject.erase(instanceId);
+            instanceToInterfaces.erase(instanceId);
         }
     }
 
@@ -325,6 +313,7 @@ namespace core
         instanceToClassName.clear();
         instanceToEntity.clear();
         instanceToObject.clear();
+        instanceToInterfaces.clear();
         nextInstanceId = 1;
         vfLogInfo("[ScriptingAdapter] All scripts unloaded, instance counter reset");
     }
@@ -347,20 +336,9 @@ namespace core
             auto objIt = instanceToObject.find(instanceId);
             if (objIt != instanceToObject.end())
             {
-                // Set current entity for callbacks
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-
-                // Get the script instance and call onStart
-                vfLogInfo("[ScriptingAdapter] Calling interpreter->callMethod for onStart (instance {})",
-                          instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, "onStart", {});
-
-                vfLogInfo("[ScriptingAdapter] onStart completed successfully for instance {}", instanceId);
-            }
-            else
-            {
-                vfLogWarning("[ScriptingAdapter] callOnStart: instance {} not found in instanceToObject", instanceId);
             }
         }
         catch (const std::exception& e)
@@ -383,10 +361,7 @@ namespace core
             auto objIt = instanceToObject.find(instanceId);
             if (objIt != instanceToObject.end())
             {
-                // Set current context for callbacks
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-
-                // Get the script instance and call onUpdate with deltaTime argument
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, "onUpdate", {value::Value(deltaTime)});
             }
@@ -412,8 +387,6 @@ namespace core
             if (objIt != instanceToObject.end())
             {
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
-
-                // Get the script instance and call onDestroy
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, "onDestroy", {});
             }
@@ -450,7 +423,6 @@ namespace core
 
     std::string ScriptingAdapter::extractClassName(const std::string& scriptPath)
     {
-        // Read the script file and extract the class name
         std::ifstream file(scriptPath);
         if (!file.is_open())
         {
@@ -460,8 +432,7 @@ namespace core
         std::string content((std::istreambuf_iterator<char>(file)),
                             std::istreambuf_iterator<char>());
 
-        // Look for "@Script" annotation followed by a class definition
-        // Pattern matches: @Script followed by optional whitespace/newlines, then class ClassName
+        // Pattern: @Script followed by optional whitespace/newlines, then class ClassName
         std::regex scriptAnnotationPattern(R"(@Script\s+(?:public\s+)?class\s+(\w+)\b)");
         std::smatch match;
 
@@ -470,7 +441,7 @@ namespace core
             return match[1].str();
         }
 
-        // Fallback: look for any class definition (for backwards compatibility)
+        // Fallback for backwards compatibility
         std::regex anyClassPattern(R"(\bclass\s+(\w+)\b)");
         if (std::regex_search(content, match, anyClassPattern))
         {
@@ -484,31 +455,29 @@ namespace core
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Subscribe to collision start events
         collisionStartToken = dispatcher.subscribe<::events::physics::CollisionStartNotification>(
-            [this](const ::events::physics::CollisionStartNotification& notif) {
-                // Dispatch to both entities involved in the collision
+            [this](const ::events::physics::CollisionStartNotification& notif)
+            {
                 dispatchCollisionCallback("onCollisionEnter", notif.entityA, notif.entityB);
                 dispatchCollisionCallback("onCollisionEnter", notif.entityB, notif.entityA);
             });
 
-        // Subscribe to collision end events
         collisionEndToken = dispatcher.subscribe<::events::physics::CollisionEndNotification>(
-            [this](const ::events::physics::CollisionEndNotification& notif) {
+            [this](const ::events::physics::CollisionEndNotification& notif)
+            {
                 dispatchCollisionCallback("onCollisionExit", notif.entityA, notif.entityB);
                 dispatchCollisionCallback("onCollisionExit", notif.entityB, notif.entityA);
             });
 
-        // Subscribe to trigger enter events
         triggerEnterToken = dispatcher.subscribe<::events::physics::TriggerEnterNotification>(
-            [this](const ::events::physics::TriggerEnterNotification& notif) {
-                // Trigger entity receives notification about the other entity
+            [this](const ::events::physics::TriggerEnterNotification& notif)
+            {
                 dispatchCollisionCallback("onTriggerEnter", notif.triggerEntity, notif.otherEntity);
             });
 
-        // Subscribe to trigger exit events
         triggerExitToken = dispatcher.subscribe<::events::physics::TriggerExitNotification>(
-            [this](const ::events::physics::TriggerExitNotification& notif) {
+            [this](const ::events::physics::TriggerExitNotification& notif)
+            {
                 dispatchCollisionCallback("onTriggerExit", notif.triggerEntity, notif.otherEntity);
             });
 
@@ -540,18 +509,15 @@ namespace core
     }
 
     void ScriptingAdapter::dispatchCollisionCallback(const char* methodName,
-        ::services::EntityHandle self, ::services::EntityHandle other)
+                                                     ::services::EntityHandle self, ::services::EntityHandle other)
     {
-        // Find all script instances attached to the 'self' entity
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Check if entity is valid
         if (!registry.valid(static_cast<entt::entity>(self.id)))
         {
             return;
         }
 
-        // Check if entity has a ScriptComponent
         auto* scriptComp = registry.try_get<components::ScriptComponent>(
             static_cast<entt::entity>(self.id));
 
@@ -560,37 +526,45 @@ namespace core
             return;
         }
 
-        // Find script instances for this entity and call the method
+        std::string requiredInterface;
+        std::string methodStr(methodName);
+        if (methodStr == "onCollisionEnter" || methodStr == "onCollisionExit")
+        {
+            requiredInterface = "ICollisionListener";
+        }
+        else if (methodStr == "onTriggerEnter" || methodStr == "onTriggerExit")
+        {
+            requiredInterface = "ITriggerListener";
+        }
+        else
+        {
+            return;
+        }
+
         for (const auto& [instanceId, entityHandle] : instanceToEntity)
         {
             if (entityHandle.id == self.id)
             {
+                auto interfaceIt = instanceToInterfaces.find(instanceId);
+                if (interfaceIt == instanceToInterfaces.end() ||
+                    interfaceIt->second.find(requiredInterface) == interfaceIt->second.end())
+                {
+                    continue;
+                }
+
                 auto objIt = instanceToObject.find(instanceId);
                 if (objIt != instanceToObject.end())
                 {
                     try
                     {
-                        // Set current entity context
                         NativeAPIRegistry::setCurrentEntity(self);
-
-                        // Get the script instance and call the collision method
                         auto& instance = std::any_cast<value::Value&>(objIt->second);
-
-                        // Pass the other entity's ID as an int argument
                         interpreter->callMethod(instance, methodName,
-                            {value::Value(static_cast<int>(other.id))});
+                                                {value::Value(static_cast<int>(other.id))});
                     }
                     catch (const std::exception& e)
                     {
-                        // Method might not exist on the script - that's OK, just skip
-                        // Only log actual runtime errors, not missing method errors
-                        std::string errorMsg = e.what();
-                        if (errorMsg.find("Method not found") == std::string::npos &&
-                            errorMsg.find("does not exist") == std::string::npos)
-                        {
-                            vfLogWarning("[ScriptingAdapter] {} callback error: {}",
-                                methodName, e.what());
-                        }
+                        vfLogWarning("[ScriptingAdapter] {} callback error: {}", methodName, e.what());
                     }
                 }
             }

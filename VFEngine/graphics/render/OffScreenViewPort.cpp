@@ -9,7 +9,6 @@
 #include "../../utilities/types/CameraTypes.hpp"
 #include <imgui_impl_vulkan.h>
 
-
 namespace render
 {
     OffScreenViewPort::OffScreenViewPort(core::Device& device, core::SwapChain& swapChain) : device{device}
@@ -73,6 +72,7 @@ namespace render
             1, &commandBuffer,
             0, nullptr
         );
+
         device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
 
         device.getGraphicsQueue().waitIdle();

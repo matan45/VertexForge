@@ -33,7 +33,6 @@ namespace controllers::offscreen
             return &it->second;
         }
 
-        // Use unified extraction that handles both materials and instances
         auto [inserted, success] = pbrCache.emplace(materialPath,
                                                     render::mesh::MaterialPBRExtractor::extractPBRFromPath(
                                                         materialPath));
@@ -75,7 +74,6 @@ namespace controllers::offscreen
             return;
         }
 
-        // Get active camera's frustum for culling
         auto* cameraManager = renderHandler->getCameraOcclusionManager();
         auto* activeCamera = cameraManager->getCamera(cameraManager->getActiveCameraId());
         const math::Frustum* activeFrustum = activeCamera ? &activeCamera->frustum : nullptr;
@@ -115,13 +113,11 @@ namespace controllers::offscreen
             dynamicBvhCooldown = 5;
         }
 
-        // Check if GPU-driven rendering is enabled
         auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
         bool useGPUDrivenCulling = renderHandler->isGPUDrivenRendererInitialized()
             && gpuDrivenRenderer
             && gpuDrivenRenderer->isEnabled();
 
-        // Helper lambda to build render data from entity
         auto buildRenderData = [&](entt::entity entity, const components::MeshComponent& meshComp,
                                    const components::WorldTransformComponent& worldTransform) ->
             render::mesh::MeshRenderData
@@ -167,12 +163,10 @@ namespace controllers::offscreen
 
         if (useGPUDrivenCulling)
         {
-            // GPU-driven path: iterate ALL mesh entities without CPU frustum culling
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
 
             for (auto entity : view)
             {
-                // Skip inactive entities
                 if (registry.all_of<components::NameComponent>(entity))
                 {
                     const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -195,7 +189,6 @@ namespace controllers::offscreen
         }
         else if (ctx.bvhManager->isBuilt() && frustumReady)
         {
-            // CPU BVH frustum culling path
             std::vector<uint32_t> visibleEntities;
             ctx.bvhManager->queryFrustum(*activeFrustum, visibleEntities);
 
@@ -208,7 +201,6 @@ namespace controllers::offscreen
                     continue;
                 }
 
-                // Skip inactive entities
                 if (registry.all_of<components::NameComponent>(entity))
                 {
                     const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -231,12 +223,10 @@ namespace controllers::offscreen
         }
         else
         {
-            // Fallback: iterate all entities with per-entity frustum culling
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
 
             for (auto entity : view)
             {
-                // Skip inactive entities
                 if (registry.all_of<components::NameComponent>(entity))
                 {
                     const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -269,8 +259,6 @@ namespace controllers::offscreen
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
-
-        // Update occlusion culling data for next frame
         ctx.bvhManager->updateOcclusionCullingData(renderHandler);
     }
 
@@ -293,7 +281,6 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -342,7 +329,6 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -400,7 +386,6 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -480,7 +465,6 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -495,24 +479,18 @@ namespace controllers::offscreen
 
             render::mesh::PhysicsColliderRenderData renderData;
 
-            // Build collider world matrix:
-            // - worldTransform.worldMatrix contains entity's full transform (position, rotation, scale)
-            // - colliderComp.offset shifts the collider in local space relative to entity center
-            // - colliderComp.size is NOT applied here; it's passed separately and used by
-            //   PhysicsDebugRenderer to scale the unit geometry (box, sphere, capsule)
-            // This means collider size is in local space and IS affected by entity scale.
+            // Size is passed separately to PhysicsDebugRenderer which scales unit geometry
             glm::mat4 offsetMatrix = glm::translate(glm::mat4(1.0f), colliderComp.offset);
             renderData.worldMatrix = worldTransform.worldMatrix * offsetMatrix;
 
             renderData.shape = colliderComp.shape;
             renderData.size = colliderComp.size;
-            renderData.radius = colliderComp.size.x; // For sphere/capsule, radius is stored in size.x
+            renderData.radius = colliderComp.size.x;
             renderData.height = colliderComp.height;
             renderData.isTrigger = colliderComp.isTrigger;
 
-            // For mesh colliders, use collider's meshPath or fall back to MeshComponent's path
             if ((colliderComp.shape == components::ColliderShape::ConvexMesh ||
-                 colliderComp.shape == components::ColliderShape::TriangleMesh))
+                colliderComp.shape == components::ColliderShape::TriangleMesh))
             {
                 if (!colliderComp.meshPath.empty())
                 {
@@ -525,7 +503,6 @@ namespace controllers::offscreen
                 }
             }
 
-            // Determine body type from RigidBodyComponent if present
             if (registry.all_of<components::RigidBodyComponent>(entity))
             {
                 const auto& rbComp = registry.get<components::RigidBodyComponent>(entity);
@@ -533,8 +510,7 @@ namespace controllers::offscreen
             }
             else
             {
-                // No rigid body = static collider
-                renderData.bodyType = 0; // Static
+                renderData.bodyType = 0;
             }
 
             colliderDrawList.push_back(renderData);

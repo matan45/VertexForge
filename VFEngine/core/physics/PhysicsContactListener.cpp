@@ -2,42 +2,44 @@
 #include <Jolt/Physics/Collision/Shape/SubShapeIDPair.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
 
-namespace core::physics {
-
-    void PhysicsContactListener::setOnContactAdded(ContactCallback callback) {
+namespace core::physics
+{
+    void PhysicsContactListener::setOnContactAdded(ContactCallback callback)
+    {
         onContactAdded = std::move(callback);
     }
 
-    void PhysicsContactListener::setOnContactRemoved(ContactCallback callback) {
+    void PhysicsContactListener::setOnContactRemoved(ContactCallback callback)
+    {
         onContactRemoved = std::move(callback);
     }
 
-    void PhysicsContactListener::processContactEvents() {
-        // Process added events
-        // Copy events locally and release lock before invoking callbacks to:
-        // 1. Avoid blocking physics threads during callback execution
-        // 2. Prevent potential deadlocks if callbacks acquire other locks
+    void PhysicsContactListener::processContactEvents()
+    {
         std::vector<ContactEvent> localAddedEvents;
         {
             std::lock_guard lock(addedMutex);
             localAddedEvents = std::move(addedEvents);
             addedEvents.clear();
         }
-        if (onContactAdded) {
-            for (const auto& event : localAddedEvents) {
+        if (onContactAdded)
+        {
+            for (const auto& event : localAddedEvents)
+            {
                 onContactAdded(event);
             }
         }
 
-        // Process removed events (same pattern)
         std::vector<ContactEvent> localRemovedEvents;
         {
             std::lock_guard lock(removedMutex);
             localRemovedEvents = std::move(removedEvents);
             removedEvents.clear();
         }
-        if (onContactRemoved) {
-            for (const auto& event : localRemovedEvents) {
+        if (onContactRemoved)
+        {
+            for (const auto& event : localRemovedEvents)
+            {
                 onContactRemoved(event);
             }
         }
@@ -47,7 +49,8 @@ namespace core::physics {
         const JPH::Body& inBody1,
         const JPH::Body& inBody2,
         JPH::RVec3Arg inBaseOffset,
-        const JPH::CollideShapeResult& inCollisionResult) {
+        const JPH::CollideShapeResult& inCollisionResult)
+    {
         // Accept all contacts by default
         // Can be extended later for custom filtering
         return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
@@ -57,16 +60,16 @@ namespace core::physics {
         const JPH::Body& inBody1,
         const JPH::Body& inBody2,
         const JPH::ContactManifold& inManifold,
-        JPH::ContactSettings& ioSettings) {
-
+        JPH::ContactSettings& ioSettings)
+    {
         ContactEvent event;
         event.bodyA = inBody1.GetID();
         event.bodyB = inBody2.GetID();
         event.penetrationDepth = inManifold.mPenetrationDepth;
         event.isSensor = ioSettings.mIsSensor;
 
-        // Get contact point (first point if available)
-        if (!inManifold.mRelativeContactPointsOn1.empty()) {
+        if (!inManifold.mRelativeContactPointsOn1.empty())
+        {
             JPH::RVec3 worldPoint = inManifold.GetWorldSpaceContactPointOn1(0);
             event.contactPoint = glm::vec3(
                 static_cast<float>(worldPoint.GetX()),
@@ -75,7 +78,6 @@ namespace core::physics {
             );
         }
 
-        // Get normal
         event.normal = glm::vec3(
             inManifold.mWorldSpaceNormal.GetX(),
             inManifold.mWorldSpaceNormal.GetY(),
@@ -86,16 +88,8 @@ namespace core::physics {
         addedEvents.push_back(event);
     }
 
-    void PhysicsContactListener::OnContactPersisted(
-        const JPH::Body& inBody1,
-        const JPH::Body& inBody2,
-        const JPH::ContactManifold& inManifold,
-        JPH::ContactSettings& ioSettings) {
-        // Can be extended to track ongoing collisions if needed
-        // For now, we only care about add/remove events
-    }
-
-    void PhysicsContactListener::OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair) {
+    void PhysicsContactListener::OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair)
+    {
         ContactEvent event;
         event.bodyA = inSubShapePair.GetBody1ID();
         event.bodyB = inSubShapePair.GetBody2ID();
@@ -103,5 +97,4 @@ namespace core::physics {
         std::lock_guard lock(removedMutex);
         removedEvents.push_back(event);
     }
-
 }

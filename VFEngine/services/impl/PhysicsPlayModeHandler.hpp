@@ -10,6 +10,12 @@ namespace services
 {
     class PhysicsPlayModeHandler
     {
+    private:
+        IPhysicsProvider* physicsProvider = nullptr;
+        ::events::SubscriptionToken editorModeChangedToken;
+        std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsBodies;
+        bool physicsActive = false;
+
     public:
         explicit PhysicsPlayModeHandler(IPhysicsProvider* physicsProvider);
         ~PhysicsPlayModeHandler();
@@ -20,20 +26,12 @@ namespace services
         void subscribeToEvents();
         void unsubscribeFromEvents();
 
-        // Called each frame during play mode to step physics and sync transforms
         void update(float deltaTime);
-
-        bool isPhysicsActive() const { return physicsActive; }
 
     private:
         void onEditorModeChanged(EditorMode previousMode, EditorMode currentMode);
         void enterPlayMode();
         void exitPlayMode();
         void syncTransformsFromPhysics();
-
-        IPhysicsProvider* physicsProvider = nullptr;
-        ::events::SubscriptionToken editorModeChangedToken;
-        std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsBodies;
-        bool physicsActive = false;
     };
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "EntityHandle.hpp"
+#include "types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -99,18 +100,6 @@ namespace services
     {
         EntityHandle root;
         std::vector<EntityData> entities;
-
-        const EntityData* findEntity(EntityHandle handle) const
-        {
-            for (const auto& entity : entities)
-            {
-                if (entity.handle == handle)
-                {
-                    return &entity;
-                }
-            }
-            return nullptr;
-        }
     };
 
     struct ViewportTextureHandle
@@ -122,19 +111,19 @@ namespace services
         bool isValid() const { return imguiDescriptorSet != nullptr; }
     };
 
-    struct ImportFileRequest
-    {
-        std::string path;
-        bool flipVertically = false;
-    };
-
     struct ImportResult
     {
         std::string sourcePath;
         bool success = false;
         std::string errorMessage;
     };
-    
+
+    struct ImportFileRequest
+    {
+        std::string path;
+        bool flipVertically = false;
+    };
+
     struct EditorTextureHandle
     {
         void* imguiDescriptorSet = nullptr;
@@ -179,36 +168,20 @@ namespace services
         bool showDebugSpheres = false;
     };
 
-    // Physics component enums
-    enum class ColliderShapeType : uint8_t {
-        Box,
-        Sphere,
-        Capsule,
-        ConvexMesh,
-        TriangleMesh
-    };
-
-    enum class RigidBodyTypeData : uint8_t {
-        Static,
-        Dynamic,
-        Kinematic
-    };
-
-    // Physics component data structs
     struct ColliderComponentData {
-        ColliderShapeType shape = ColliderShapeType::Box;
+        types::ColliderShape shape = types::ColliderShape::Box;
         glm::vec3 size{1.0f};
         float height = 2.0f;
         glm::vec3 offset{0.0f};
         std::string meshPath;
         bool isTrigger = false;
-        uint8_t collisionLayer = 1;  // 0-15, default 1 = Dynamic layer
+        uint8_t collisionLayer = 1;
         float friction = 0.5f;
         float restitution = 0.0f;
     };
 
     struct RigidBodyComponentData {
-        RigidBodyTypeData type = RigidBodyTypeData::Dynamic;
+        types::RigidBodyType type = types::RigidBodyType::Dynamic;
         float mass = 1.0f;
         float linearDamping = 0.0f;
         float angularDamping = 0.05f;

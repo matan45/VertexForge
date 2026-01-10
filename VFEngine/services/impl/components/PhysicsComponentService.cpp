@@ -1,92 +1,60 @@
 #include "PhysicsComponentService.hpp"
-#include "../../../utilities/scene/SceneGraphSystem.hpp"
-#include "../../../utilities/scene/Entity.hpp"
-#include "../../../utilities/scene/EntityRegistry.hpp"
-#include "../../../utilities/components/Components.hpp"
+#include "scene/SceneGraphSystem.hpp"
+#include "scene/Entity.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
 
-// =============================================================================
-// Static assertions to ensure enum synchronization: types:: <-> services:: DTOs
-// =============================================================================
-// These enums are duplicated for layer separation. PhysicsComponentService
-// uses static_cast between them, so values must stay in sync.
-
-// RigidBodyType: types::RigidBodyType <-> services::RigidBodyTypeData
-static_assert(
-    static_cast<int>(types::RigidBodyType::Static) ==
-    static_cast<int>(services::RigidBodyTypeData::Static),
-    "RigidBodyType::Static mismatch between types:: and services::DTOs");
-static_assert(
-    static_cast<int>(types::RigidBodyType::Dynamic) ==
-    static_cast<int>(services::RigidBodyTypeData::Dynamic),
-    "RigidBodyType::Dynamic mismatch between types:: and services::DTOs");
-static_assert(
-    static_cast<int>(types::RigidBodyType::Kinematic) ==
-    static_cast<int>(services::RigidBodyTypeData::Kinematic),
-    "RigidBodyType::Kinematic mismatch between types:: and services::DTOs");
-
-// ColliderShape: types::ColliderShape <-> services::ColliderShapeType
-static_assert(
-    static_cast<int>(types::ColliderShape::Box) ==
-    static_cast<int>(services::ColliderShapeType::Box),
-    "ColliderShape::Box mismatch between types:: and services::DTOs");
-static_assert(
-    static_cast<int>(types::ColliderShape::Sphere) ==
-    static_cast<int>(services::ColliderShapeType::Sphere),
-    "ColliderShape::Sphere mismatch between types:: and services::DTOs");
-static_assert(
-    static_cast<int>(types::ColliderShape::Capsule) ==
-    static_cast<int>(services::ColliderShapeType::Capsule),
-    "ColliderShape::Capsule mismatch between types:: and services::DTOs");
-static_assert(
-    static_cast<int>(types::ColliderShape::ConvexMesh) ==
-    static_cast<int>(services::ColliderShapeType::ConvexMesh),
-    "ColliderShape::ConvexMesh mismatch between types:: and services::DTOs");
-static_assert(
-    static_cast<int>(types::ColliderShape::TriangleMesh) ==
-    static_cast<int>(services::ColliderShapeType::TriangleMesh),
-    "ColliderShape::TriangleMesh mismatch between types:: and services::DTOs");
-
-namespace services {
-
+namespace services
+{
     PhysicsComponentService::PhysicsComponentService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
-        : sceneGraph(std::move(sceneGraph)) {}
+        : sceneGraph(std::move(sceneGraph))
+    {
+    }
 
     // ========== COLLIDER COMPONENT OPERATIONS ==========
 
-    bool PhysicsComponentService::addColliderComponent(EntityHandle entity) {
+    bool PhysicsComponentService::addColliderComponent(EntityHandle entity)
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::ColliderComponent>()) {
+        if (!sceneEntity.hasComponent<components::ColliderComponent>())
+        {
             sceneEntity.addComponent<components::ColliderComponent>();
             return true;
         }
         return false;
     }
 
-    bool PhysicsComponentService::removeColliderComponent(EntityHandle entity) {
+    bool PhysicsComponentService::removeColliderComponent(EntityHandle entity)
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::ColliderComponent>()) {
+        if (sceneEntity.hasComponent<components::ColliderComponent>())
+        {
             sceneEntity.removeComponent<components::ColliderComponent>();
             return true;
         }
         return false;
     }
 
-    bool PhysicsComponentService::hasColliderComponent(EntityHandle entity) const {
+    bool PhysicsComponentService::hasColliderComponent(EntityHandle entity) const
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return false;
         }
 
@@ -94,20 +62,23 @@ namespace services {
         return sceneEntity.hasComponent<components::ColliderComponent>();
     }
 
-    std::optional<ColliderComponentData> PhysicsComponentService::getColliderData(EntityHandle entity) const {
+    std::optional<ColliderComponentData> PhysicsComponentService::getColliderData(EntityHandle entity) const
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return std::nullopt;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::ColliderComponent>()) {
+        if (!sceneEntity.hasComponent<components::ColliderComponent>())
+        {
             return std::nullopt;
         }
 
         const auto& comp = sceneEntity.getComponent<components::ColliderComponent>();
         ColliderComponentData data;
-        data.shape = static_cast<ColliderShapeType>(comp.shape);
+        data.shape = comp.shape;
         data.size = comp.size;
         data.height = comp.height;
         data.offset = comp.offset;
@@ -119,19 +90,22 @@ namespace services {
         return data;
     }
 
-    bool PhysicsComponentService::setColliderData(EntityHandle entity, const ColliderComponentData& colliderData) {
+    bool PhysicsComponentService::setColliderData(EntityHandle entity, const ColliderComponentData& colliderData)
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::ColliderComponent>()) {
+        if (!sceneEntity.hasComponent<components::ColliderComponent>())
+        {
             sceneEntity.addComponent<components::ColliderComponent>();
         }
 
         auto& comp = sceneEntity.getComponent<components::ColliderComponent>();
-        comp.shape = static_cast<components::ColliderShape>(colliderData.shape);
+        comp.shape = colliderData.shape;
         comp.size = colliderData.size;
         comp.height = colliderData.height;
         comp.offset = colliderData.offset;
@@ -145,37 +119,45 @@ namespace services {
 
     // ========== RIGID BODY COMPONENT OPERATIONS ==========
 
-    bool PhysicsComponentService::addRigidBodyComponent(EntityHandle entity) {
+    bool PhysicsComponentService::addRigidBodyComponent(EntityHandle entity)
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::RigidBodyComponent>()) {
+        if (!sceneEntity.hasComponent<components::RigidBodyComponent>())
+        {
             sceneEntity.addComponent<components::RigidBodyComponent>();
             return true;
         }
         return false;
     }
 
-    bool PhysicsComponentService::removeRigidBodyComponent(EntityHandle entity) {
+    bool PhysicsComponentService::removeRigidBodyComponent(EntityHandle entity)
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::RigidBodyComponent>()) {
+        if (sceneEntity.hasComponent<components::RigidBodyComponent>())
+        {
             sceneEntity.removeComponent<components::RigidBodyComponent>();
             return true;
         }
         return false;
     }
 
-    bool PhysicsComponentService::hasRigidBodyComponent(EntityHandle entity) const {
+    bool PhysicsComponentService::hasRigidBodyComponent(EntityHandle entity) const
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return false;
         }
 
@@ -183,20 +165,23 @@ namespace services {
         return sceneEntity.hasComponent<components::RigidBodyComponent>();
     }
 
-    std::optional<RigidBodyComponentData> PhysicsComponentService::getRigidBodyData(EntityHandle entity) const {
+    std::optional<RigidBodyComponentData> PhysicsComponentService::getRigidBodyData(EntityHandle entity) const
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return std::nullopt;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::RigidBodyComponent>()) {
+        if (!sceneEntity.hasComponent<components::RigidBodyComponent>())
+        {
             return std::nullopt;
         }
 
         const auto& comp = sceneEntity.getComponent<components::RigidBodyComponent>();
         RigidBodyComponentData data;
-        data.type = static_cast<RigidBodyTypeData>(comp.type);
+        data.type = comp.type;
         data.mass = comp.mass;
         data.linearDamping = comp.linearDamping;
         data.angularDamping = comp.angularDamping;
@@ -209,19 +194,22 @@ namespace services {
         return data;
     }
 
-    bool PhysicsComponentService::setRigidBodyData(EntityHandle entity, const RigidBodyComponentData& rigidBodyData) {
+    bool PhysicsComponentService::setRigidBodyData(EntityHandle entity, const RigidBodyComponentData& rigidBodyData)
+    {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry)) {
+        if (!internal::isValidHandle(entity, registry))
+        {
             return false;
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::RigidBodyComponent>()) {
+        if (!sceneEntity.hasComponent<components::RigidBodyComponent>())
+        {
             sceneEntity.addComponent<components::RigidBodyComponent>();
         }
 
         auto& comp = sceneEntity.getComponent<components::RigidBodyComponent>();
-        comp.type = static_cast<components::RigidBodyType>(rigidBodyData.type);
+        comp.type = rigidBodyData.type;
         comp.mass = rigidBodyData.mass;
         comp.linearDamping = rigidBodyData.linearDamping;
         comp.angularDamping = rigidBodyData.angularDamping;
@@ -236,58 +224,68 @@ namespace services {
 
     // ========== EVENT HANDLER REGISTRATION ==========
 
-    void PhysicsComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
+    void PhysicsComponentService::registerEventHandlers(events::EventDispatcher& dispatcher)
+    {
         // Collider component handlers
         dispatcher.registerCommandHandler<events::scene::AddColliderComponentCommand>(
-            [this](const events::scene::AddColliderComponentCommand& cmd) {
+            [this](const events::scene::AddColliderComponentCommand& cmd)
+            {
                 return addColliderComponent(cmd.entity);
             });
 
         dispatcher.registerCommandHandler<events::scene::RemoveColliderComponentCommand>(
-            [this](const events::scene::RemoveColliderComponentCommand& cmd) {
+            [this](const events::scene::RemoveColliderComponentCommand& cmd)
+            {
                 return removeColliderComponent(cmd.entity);
             });
 
         dispatcher.registerCommandHandler<events::scene::SetColliderDataCommand>(
-            [this](const events::scene::SetColliderDataCommand& cmd) {
+            [this](const events::scene::SetColliderDataCommand& cmd)
+            {
                 return setColliderData(cmd.entity, cmd.colliderData);
             });
 
         dispatcher.registerQueryHandler<events::scene::HasColliderComponentQuery>(
-            [this](const events::scene::HasColliderComponentQuery& query) {
+            [this](const events::scene::HasColliderComponentQuery& query)
+            {
                 return hasColliderComponent(query.entity);
             });
 
         dispatcher.registerQueryHandler<events::scene::GetColliderDataQuery>(
-            [this](const events::scene::GetColliderDataQuery& query) {
+            [this](const events::scene::GetColliderDataQuery& query)
+            {
                 return getColliderData(query.entity);
             });
 
         // RigidBody component handlers
         dispatcher.registerCommandHandler<events::scene::AddRigidBodyComponentCommand>(
-            [this](const events::scene::AddRigidBodyComponentCommand& cmd) {
+            [this](const events::scene::AddRigidBodyComponentCommand& cmd)
+            {
                 return addRigidBodyComponent(cmd.entity);
             });
 
         dispatcher.registerCommandHandler<events::scene::RemoveRigidBodyComponentCommand>(
-            [this](const events::scene::RemoveRigidBodyComponentCommand& cmd) {
+            [this](const events::scene::RemoveRigidBodyComponentCommand& cmd)
+            {
                 return removeRigidBodyComponent(cmd.entity);
             });
 
         dispatcher.registerCommandHandler<events::scene::SetRigidBodyDataCommand>(
-            [this](const events::scene::SetRigidBodyDataCommand& cmd) {
+            [this](const events::scene::SetRigidBodyDataCommand& cmd)
+            {
                 return setRigidBodyData(cmd.entity, cmd.rigidBodyData);
             });
 
         dispatcher.registerQueryHandler<events::scene::HasRigidBodyComponentQuery>(
-            [this](const events::scene::HasRigidBodyComponentQuery& query) {
+            [this](const events::scene::HasRigidBodyComponentQuery& query)
+            {
                 return hasRigidBodyComponent(query.entity);
             });
 
         dispatcher.registerQueryHandler<events::scene::GetRigidBodyDataQuery>(
-            [this](const events::scene::GetRigidBodyDataQuery& query) {
+            [this](const events::scene::GetRigidBodyDataQuery& query)
+            {
                 return getRigidBodyData(query.entity);
             });
     }
-
 }

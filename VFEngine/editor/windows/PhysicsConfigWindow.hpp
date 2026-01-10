@@ -1,7 +1,6 @@
 #pragma once
 
-#include "../../utilities/types/PhysicsTypes.hpp"
-#include <string>
+#include "types/PhysicsTypes.hpp"
 
 namespace windows
 {
@@ -11,11 +10,9 @@ namespace windows
         bool visible = false;
         types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
         bool settingsLoaded = false;
-
-        // For adding new layers
+        
         char newLayerName[64] = "";
-
-        // Track if settings have been modified
+        
         bool isDirty = false;
 
         void drawGravitySection();
@@ -31,9 +28,6 @@ namespace windows
 
     public:
         void draw();
-
         void show();
-        void hide() { visible = false; }
-        bool isVisible() const { return visible; }
     };
 }

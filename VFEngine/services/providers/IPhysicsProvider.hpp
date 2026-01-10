@@ -2,15 +2,15 @@
 
 #include "../data/EntityHandle.hpp"
 #include "../interfaces/IPhysicsService.hpp"
-#include "../../utilities/types/PhysicsTypes.hpp"
+#include "types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
-#include <vector>
 
-namespace services {
-
-    class IPhysicsProvider {
+namespace services
+{
+    class IPhysicsProvider
+    {
     public:
         virtual ~IPhysicsProvider() = default;
 
@@ -32,7 +32,7 @@ namespace services {
         // === Rigid Body Operations ===
 
         virtual void addRigidBody(EntityHandle entity, const RigidBodyData& data,
-            const ColliderData& collider) = 0;
+                                  const ColliderData& collider) = 0;
         virtual void removeRigidBody(EntityHandle entity) = 0;
         virtual bool hasRigidBody(EntityHandle entity) const = 0;
         virtual std::optional<RigidBodyData> getRigidBody(EntityHandle entity) const = 0;
@@ -46,7 +46,7 @@ namespace services {
 
         virtual void applyForce(EntityHandle entity, const glm::vec3& force) = 0;
         virtual void applyForceAtPosition(EntityHandle entity, const glm::vec3& force,
-            const glm::vec3& position) = 0;
+                                          const glm::vec3& position) = 0;
         virtual void applyImpulse(EntityHandle entity, const glm::vec3& impulse) = 0;
         virtual void applyTorque(EntityHandle entity, const glm::vec3& torque) = 0;
 
@@ -68,7 +68,7 @@ namespace services {
         // === Queries ===
 
         virtual RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
-            float maxDistance) = 0;
+                                   float maxDistance) = 0;
         virtual bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const = 0;
 
         // === Physics Settings ===
@@ -79,5 +79,4 @@ namespace services {
         // Get current physics settings
         virtual types::PhysicsSettings getCurrentSettings() const = 0;
     };
-
 }

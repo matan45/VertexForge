@@ -4,6 +4,7 @@
 #include "NativeAPIRegistry.hpp"
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <any>
 
@@ -26,10 +27,13 @@ namespace core
         std::unordered_map<uint64_t, std::any> instanceToObject; // instanceId -> script object instance (type-erased)
         std::unordered_map<std::string, std::string> pathToClassName; // scriptPath -> class name
 
+        // Interface implementation cache (for collision/trigger callbacks)
+        std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces; // instanceId -> implemented interfaces
+
         // Error tracking
         mutable std::optional<::services::ScriptError> lastError;
 
-       
+
         uint64_t nextInstanceId = 1;
         std::string scriptLibraryPath;
         bool initialized = false;
@@ -71,10 +75,10 @@ namespace core
         void callOnStart(uint64_t instanceId) override;
         void callOnUpdate(uint64_t instanceId, float deltaTime) override;
         void callOnDestroy(uint64_t instanceId) override;
-        
+
         std::optional<::services::ScriptError> getLastError() const override;
         void clearError() override;
-        
+
         void setScriptLibraryPath(const std::string& path) override;
 
     private:
@@ -89,6 +93,6 @@ namespace core
         void subscribeToPhysicsEvents();
         void unsubscribeFromPhysicsEvents();
         void dispatchCollisionCallback(const char* methodName,
-            ::services::EntityHandle self, ::services::EntityHandle other);
+                                       ::services::EntityHandle self, ::services::EntityHandle other);
     };
 }
