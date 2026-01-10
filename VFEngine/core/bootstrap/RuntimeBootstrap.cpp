@@ -4,6 +4,8 @@
 #include "../adapters/OffScreenAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
+#include "../adapters/PhysicsAdapter.hpp"
+#include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 
 namespace core
@@ -23,10 +25,12 @@ namespace core
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
+        physicsAdapter = std::make_unique<PhysicsAdapter>();
 
         offScreen->init();
         audioAdapter->init();
         scriptingAdapter->init();
+        physicsAdapter->init();
 
         // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
         coreInterface->setResizeCallback([this]()
@@ -57,9 +61,15 @@ namespace core
             scriptingAdapter->cleanUp();
         }
 
+        if (physicsAdapter)
+        {
+            physicsAdapter->cleanUp();
+        }
+
         offScreenAdapter.reset();
         audioAdapter.reset();
         scriptingAdapter.reset();
+        physicsAdapter.reset();
 
         if (coreInterface)
         {
@@ -82,6 +92,11 @@ namespace core
         return scriptingAdapter.get();
     }
 
+    services::IPhysicsProvider* RuntimeBootstrap::getPhysicsProvider()
+    {
+        return physicsAdapter.get();
+    }
+
     window::Window* RuntimeBootstrap::getWindow()
     {
         return coreInterface ? coreInterface->getWindow() : nullptr;
@@ -100,6 +115,9 @@ namespace core
             // Wrap the callback to also update audio each frame
             coreInterface->setFrameCallback([this, cb = std::move(callback)]()
             {
+                // Reset per-frame rate limiters for script API
+                NativeAPIRegistry::beginFrame();
+
                 if (audioAdapter)
                 {
                     audioAdapter->update();

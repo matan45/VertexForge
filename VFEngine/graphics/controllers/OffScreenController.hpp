@@ -6,10 +6,12 @@
 #include <string_view>
 #include <string>
 #include <vector>
-#include <cstdint>
 #include <optional>
 
-namespace events { struct SubscriptionToken; }
+namespace events
+{
+    struct SubscriptionToken;
+}
 
 namespace core
 {
@@ -56,6 +58,7 @@ namespace controllers
         bool showBillboardIcons = true;
         bool showDebugRendering = true;
         bool showGrid = true;
+        bool showPhysicsDebug = false;
         bool playModeActive = false;
 
     public:
@@ -125,6 +128,11 @@ namespace controllers
         void setShowGrid(bool show);
         bool getShowGrid() const { return showGrid; }
         void prepareGrid();
+
+        // Physics Debug API
+        void setShowPhysicsDebug(bool show);
+        bool getShowPhysicsDebug() const { return showPhysicsDebug; }
+        void prepareFramePhysicsColliders();
 
         // View Mode API
         void setViewMode(uint32_t mode);

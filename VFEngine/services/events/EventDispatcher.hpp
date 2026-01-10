@@ -11,7 +11,6 @@
 #include <unordered_map>
 #include <vector>
 #include <future>
-#include <queue>
 
 namespace events {
 
@@ -128,7 +127,7 @@ namespace events {
                 handler(notification);
             }
             catch (const std::exception&) {
-                // Log error but continue notifying other subscribers
+                // Silently ignore notification handler exceptions
             }
         }
     }

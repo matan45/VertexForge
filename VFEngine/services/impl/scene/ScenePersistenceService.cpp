@@ -10,6 +10,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/RenderEvents.hpp"
+#include "../../events/PhysicsSettingsEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <functional>
 
@@ -18,7 +19,7 @@ namespace services
     ScenePersistenceService::ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                                                      EntityStateService* entityStateService)
         : sceneGraph(sceneGraph)
-        , entityStateService(entityStateService)
+          , entityStateService(entityStateService)
     {
     }
 
@@ -53,6 +54,19 @@ namespace services
             {
                 return loadPrefab(cmd.filePath, cmd.parent);
             });
+
+        // Physics settings handlers
+        dispatcher.registerQueryHandler<events::scene::GetPhysicsSettingsQuery>(
+            [this](const events::scene::GetPhysicsSettingsQuery&)
+            {
+                return getPhysicsSettings();
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetPhysicsSettingsCommand>(
+            [this](const events::scene::SetPhysicsSettingsCommand& cmd)
+            {
+                return setPhysicsSettings(cmd.settings);
+            });
     }
 
     bool ScenePersistenceService::newScene()
@@ -69,6 +83,12 @@ namespace services
         dispatcher.execute(removeIblCmd);
 
         sceneGraph->clearScene();
+
+        // Reset physics settings to defaults for new scene
+        sceneGraph->setPhysicsSettings(types::PhysicsSettings::createDefault());
+        events::physics::ApplyPhysicsSettingsCommand physicsCmd;
+        physicsCmd.settings = sceneGraph->getPhysicsSettings();
+        dispatcher.execute(physicsCmd);
 
         if (entityStateService)
         {
@@ -174,6 +194,11 @@ namespace services
                 }
             }
 
+            // Apply physics settings from the loaded scene
+            events::physics::ApplyPhysicsSettingsCommand physicsCmd;
+            physicsCmd.settings = sceneGraph->getPhysicsSettings();
+            dispatcher.execute(physicsCmd);
+
             events::scene::SceneLoadedNotification notification;
             notification.scenePath = filePath;
             dispatcher.publish(notification);
@@ -212,7 +237,7 @@ namespace services
     }
 
     std::optional<EntityHandle> ScenePersistenceService::loadPrefab(const std::string& filePath,
-                                                                     std::optional<EntityHandle> parent)
+                                                                    std::optional<EntityHandle> parent)
     {
         scene::Entity parentEntity = sceneGraph->GetRoot();
         if (parent.has_value() && parent->isValid())
@@ -261,5 +286,24 @@ namespace services
         }
 
         return std::nullopt;
+    }
+
+    types::PhysicsSettings ScenePersistenceService::getPhysicsSettings() const
+    {
+        if (!sceneGraph)
+        {
+            return types::PhysicsSettings::createDefault();
+        }
+        return sceneGraph->getPhysicsSettings();
+    }
+
+    bool ScenePersistenceService::setPhysicsSettings(const types::PhysicsSettings& settings)
+    {
+        if (!sceneGraph)
+        {
+            return false;
+        }
+        sceneGraph->setPhysicsSettings(settings);
+        return true;
     }
 }

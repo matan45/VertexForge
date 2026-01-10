@@ -70,6 +70,18 @@ namespace serialization
                 entity.getComponent<components::AudioSource3DComponent>());
         }
 
+        if (entity.hasComponent<components::ColliderComponent>())
+        {
+            componentsJson["collider"] = SceneSerialization::serializeCollider(
+                entity.getComponent<components::ColliderComponent>());
+        }
+
+        if (entity.hasComponent<components::RigidBodyComponent>())
+        {
+            componentsJson["rigidBody"] = SceneSerialization::serializeRigidBody(
+                entity.getComponent<components::RigidBodyComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -142,6 +154,18 @@ namespace serialization
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                 billboard.iconType = components::BillboardIconType::AudioSource;
             }
+        }
+
+        if (componentsJson.contains("collider"))
+        {
+            auto& colliderComp = entity.addOrReplaceComponent<components::ColliderComponent>();
+            SceneSerialization::deserializeCollider(componentsJson["collider"], colliderComp);
+        }
+
+        if (componentsJson.contains("rigidBody"))
+        {
+            auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
+            SceneSerialization::deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
         }
     }
 

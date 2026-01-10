@@ -71,6 +71,11 @@ namespace core
         bool getShowGrid() const override;
         void prepareGrid() override;
 
+        // Physics Debug API
+        void setShowPhysicsDebug(bool show) override;
+        bool getShowPhysicsDebug() const override;
+        void prepareFramePhysicsColliders() override;
+
         // View Mode API
         void setViewMode(uint32_t mode) override;
         uint32_t getViewMode() const override;

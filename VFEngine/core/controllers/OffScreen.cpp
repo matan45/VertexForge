@@ -185,6 +185,21 @@ namespace controllers {
 		offScreenController->prepareGrid();
 	}
 
+	void OffScreen::setShowPhysicsDebug(bool show)
+	{
+		offScreenController->setShowPhysicsDebug(show);
+	}
+
+	bool OffScreen::getShowPhysicsDebug() const
+	{
+		return offScreenController->getShowPhysicsDebug();
+	}
+
+	void OffScreen::prepareFramePhysicsColliders()
+	{
+		offScreenController->prepareFramePhysicsColliders();
+	}
+
 	void OffScreen::setViewMode(uint32_t mode)
 	{
 		offScreenController->setViewMode(mode);

@@ -60,6 +60,7 @@ namespace services
         void prepareFrameBillboards();
         void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();
+        void prepareFramePhysicsColliders();
         void prepareGrid();
     };
 }

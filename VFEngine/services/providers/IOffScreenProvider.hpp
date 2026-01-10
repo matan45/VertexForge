@@ -150,6 +150,11 @@ namespace services {
         virtual bool getShowGrid() const = 0;
         virtual void prepareGrid() = 0;
 
+        // Physics Debug API
+        virtual void setShowPhysicsDebug(bool show) = 0;
+        virtual bool getShowPhysicsDebug() const = 0;
+        virtual void prepareFramePhysicsColliders() = 0;
+
         // View Mode API
         virtual void setViewMode(uint32_t mode) = 0;
         virtual uint32_t getViewMode() const = 0;

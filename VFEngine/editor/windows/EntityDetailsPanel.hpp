@@ -10,6 +10,8 @@
 #include "details/AudioSource2DDrawer.hpp"
 #include "details/AudioSource3DDrawer.hpp"
 #include "details/ScriptDrawer.hpp"
+#include "details/ColliderDrawer.hpp"
+#include "details/RigidBodyDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -28,6 +30,8 @@ namespace windows
         details::AudioSource2DDrawer audio2DDrawer;
         details::AudioSource3DDrawer audio3DDrawer;
         details::ScriptDrawer scriptDrawer;
+        details::ColliderDrawer colliderDrawer;
+        details::RigidBodyDrawer rigidBodyDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

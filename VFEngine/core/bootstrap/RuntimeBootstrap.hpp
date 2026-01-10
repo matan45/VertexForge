@@ -7,6 +7,7 @@ namespace services
     class IOffScreenProvider;
     class IAudioProvider;
     class IScriptingProvider;
+    class IPhysicsProvider;
 }
 
 namespace window
@@ -30,6 +31,7 @@ namespace core
     class OffScreenAdapter;
     class AudioAdapter;
     class ScriptingAdapter;
+    class PhysicsAdapter;
 
     class RuntimeBootstrap
     {
@@ -40,6 +42,7 @@ namespace core
         std::unique_ptr<OffScreenAdapter> offScreenAdapter;
         std::unique_ptr<AudioAdapter> audioAdapter;
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
+        std::unique_ptr<PhysicsAdapter> physicsAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -62,6 +65,8 @@ namespace core
         services::IAudioProvider* getAudioProvider();
 
         services::IScriptingProvider* getScriptingProvider();
+
+        services::IPhysicsProvider* getPhysicsProvider();
 
         // === Other Accessors ===
 

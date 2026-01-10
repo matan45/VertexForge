@@ -1,32 +1,34 @@
 #pragma once
 #include "../data/EntityHandle.hpp"
+#include "../../utilities/types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>
+#include <string>
 
 namespace services {
 
-    
     struct RigidBodyData {
-        enum class Type { Static, Dynamic, Kinematic };
+        using Type = types::RigidBodyType;
 
         Type type = Type::Dynamic;
         float mass = 1.0f;
         float linearDamping = 0.0f;
         float angularDamping = 0.05f;
-        bool useGravity = true;
         glm::vec3 linearVelocity{ 0.0f };
         glm::vec3 angularVelocity{ 0.0f };
     };
-    
+
     struct ColliderData {
-        enum class Shape { Box, Sphere, Capsule, Mesh };
+        using Shape = types::ColliderShape;
 
         Shape shape = Shape::Box;
-        glm::vec3 size{ 1.0f };     // Box half-extents or sphere/capsule radius
-        float height = 1.0f;        // Capsule height
+        glm::vec3 size{ 1.0f };
+        float height = 1.0f;
         bool isTrigger = false;
-        glm::vec3 offset{ 0.0f };   // Local offset from entity center
+        uint8_t collisionLayer = 1;
+        glm::vec3 offset{ 0.0f };
+        std::string meshPath;
     };
     
     struct RaycastHit {
@@ -40,6 +42,10 @@ namespace services {
     class IPhysicsService {
     public:
         virtual ~IPhysicsService() = default;
+
+        // === Event Handler Registration ===
+
+        virtual void registerEventHandlers() = 0;
 
         // === Simulation Control ===
         
@@ -90,11 +96,7 @@ namespace services {
         
         virtual RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
                                    float maxDistance) = 0;
-        
-        virtual std::vector<RaycastHit> raycastAll(const glm::vec3& origin,
-                                                    const glm::vec3& direction,
-                                                    float maxDistance) = 0;
-        
+
         virtual bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const = 0;
     };
 

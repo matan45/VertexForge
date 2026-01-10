@@ -73,7 +73,9 @@ namespace windows
                     {"material", "Material"},
                     {"billboard", "Billboard"},
                     {"audioSource2D", "AudioSource2D"},
-                    {"audioSource3D", "AudioSource3D"}
+                    {"audioSource3D", "AudioSource3D"},
+                    {"collider", "Collider"},
+                    {"rigidBody", "RigidBody"}
                 };
 
                 for (const auto& [key, displayName] : componentMap)

@@ -9,6 +9,7 @@
 #include "../../render/DebugRenderer.hpp"
 #include "../../render/tools/FrustumDebugRenderer.hpp"
 #include "../../render/tools/AudioSphereDebugRenderer.hpp"
+#include "../../render/tools/PhysicsDebugRenderer.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -32,7 +33,6 @@ namespace controllers::offscreen
             return &it->second;
         }
 
-        // Use unified extraction that handles both materials and instances
         auto [inserted, success] = pbrCache.emplace(materialPath,
                                                     render::mesh::MaterialPBRExtractor::extractPBRFromPath(
                                                         materialPath));
@@ -74,7 +74,6 @@ namespace controllers::offscreen
             return;
         }
 
-        // Get active camera's frustum for culling
         auto* cameraManager = renderHandler->getCameraOcclusionManager();
         auto* activeCamera = cameraManager->getCamera(cameraManager->getActiveCameraId());
         const math::Frustum* activeFrustum = activeCamera ? &activeCamera->frustum : nullptr;
@@ -114,13 +113,11 @@ namespace controllers::offscreen
             dynamicBvhCooldown = 5;
         }
 
-        // Check if GPU-driven rendering is enabled
         auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
         bool useGPUDrivenCulling = renderHandler->isGPUDrivenRendererInitialized()
             && gpuDrivenRenderer
             && gpuDrivenRenderer->isEnabled();
 
-        // Helper lambda to build render data from entity
         auto buildRenderData = [&](entt::entity entity, const components::MeshComponent& meshComp,
                                    const components::WorldTransformComponent& worldTransform) ->
             render::mesh::MeshRenderData
@@ -166,12 +163,10 @@ namespace controllers::offscreen
 
         if (useGPUDrivenCulling)
         {
-            // GPU-driven path: iterate ALL mesh entities without CPU frustum culling
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
 
             for (auto entity : view)
             {
-                // Skip inactive entities
                 if (registry.all_of<components::NameComponent>(entity))
                 {
                     const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -194,7 +189,6 @@ namespace controllers::offscreen
         }
         else if (ctx.bvhManager->isBuilt() && frustumReady)
         {
-            // CPU BVH frustum culling path
             std::vector<uint32_t> visibleEntities;
             ctx.bvhManager->queryFrustum(*activeFrustum, visibleEntities);
 
@@ -207,7 +201,6 @@ namespace controllers::offscreen
                     continue;
                 }
 
-                // Skip inactive entities
                 if (registry.all_of<components::NameComponent>(entity))
                 {
                     const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -230,12 +223,10 @@ namespace controllers::offscreen
         }
         else
         {
-            // Fallback: iterate all entities with per-entity frustum culling
             auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
 
             for (auto entity : view)
             {
-                // Skip inactive entities
                 if (registry.all_of<components::NameComponent>(entity))
                 {
                     const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -268,8 +259,6 @@ namespace controllers::offscreen
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
-
-        // Update occlusion culling data for next frame
         ctx.bvhManager->updateOcclusionCullingData(renderHandler);
     }
 
@@ -292,7 +281,6 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -341,7 +329,6 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -399,7 +386,6 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -460,5 +446,88 @@ namespace controllers::offscreen
             renderHandler->initDebugRenderer();
             renderHandler->getDebugRenderer()->setShowGrid(true);
         }
+    }
+
+    void FramePreparationSystem::preparePhysicsColliders(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        if (!ctx.showPhysicsDebug)
+        {
+            renderHandler->setPhysicsColliderDrawList({});
+            return;
+        }
+
+        std::vector<render::mesh::PhysicsColliderRenderData> colliderDrawList;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ColliderComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& colliderComp = view.get<components::ColliderComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::PhysicsColliderRenderData renderData;
+
+            // Size is passed separately to PhysicsDebugRenderer which scales unit geometry
+            glm::mat4 offsetMatrix = glm::translate(glm::mat4(1.0f), colliderComp.offset);
+            renderData.worldMatrix = worldTransform.worldMatrix * offsetMatrix;
+
+            renderData.shape = colliderComp.shape;
+            renderData.size = colliderComp.size;
+            renderData.radius = colliderComp.size.x;
+            renderData.height = colliderComp.height;
+            renderData.isTrigger = colliderComp.isTrigger;
+
+            if ((colliderComp.shape == components::ColliderShape::ConvexMesh ||
+                colliderComp.shape == components::ColliderShape::TriangleMesh))
+            {
+                if (!colliderComp.meshPath.empty())
+                {
+                    renderData.meshPath = colliderComp.meshPath;
+                }
+                else if (registry.all_of<components::MeshComponent>(entity))
+                {
+                    const auto& meshComp = registry.get<components::MeshComponent>(entity);
+                    renderData.meshPath = meshComp.meshPath;
+                }
+            }
+
+            if (registry.all_of<components::RigidBodyComponent>(entity))
+            {
+                const auto& rbComp = registry.get<components::RigidBodyComponent>(entity);
+                renderData.bodyType = static_cast<uint8_t>(rbComp.type);
+            }
+            else
+            {
+                renderData.bodyType = 0;
+            }
+
+            colliderDrawList.push_back(renderData);
+        }
+
+        if (!colliderDrawList.empty())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+
+        renderHandler->setPhysicsColliderDrawList(std::move(colliderDrawList));
     }
 }

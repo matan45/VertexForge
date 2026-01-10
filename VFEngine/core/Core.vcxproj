@@ -56,8 +56,8 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;..\..\dependencies\mtype\mType;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;JPH_OBJECT_STREAM;DEBUG;JPH_ENABLE_ASSERTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;..\..\dependencies\mtype\mType;C:\VulkanSDK\1.4.335.0\Include;..\..\dependencies\JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
@@ -77,8 +77,8 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;..\..\dependencies\mtype\mType;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;JPH_OBJECT_STREAM;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\graphics\controllers;..\window\controllers;..\..\dependencies\spdlog\include;..\..\dependencies\entt\single_include;..\utilities;..\services;..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\glm;..\..\dependencies\glfw\include;..\..\dependencies\imgui\backends;..\..\dependencies\openal-soft\include;..\..\dependencies\mtype\mType;C:\VulkanSDK\1.4.335.0\Include;..\..\dependencies\JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -105,7 +105,14 @@
     <ClInclude Include="adapters\MeshPreviewAdapter.hpp" />
     <ClInclude Include="adapters\NativeAPIRegistry.hpp" />
     <ClInclude Include="adapters\OffScreenAdapter.hpp" />
+    <ClInclude Include="adapters\PhysicsAdapter.hpp" />
     <ClInclude Include="adapters\ScriptingAdapter.hpp" />
+    <ClInclude Include="adapters\api\AudioAPI.hpp" />
+    <ClInclude Include="adapters\api\EntityAPI.hpp" />
+    <ClInclude Include="adapters\api\InputAPI.hpp" />
+    <ClInclude Include="adapters\api\LogAPI.hpp" />
+    <ClInclude Include="adapters\api\NativeHelpers.hpp" />
+    <ClInclude Include="adapters\api\PhysicsAPI.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
     <ClInclude Include="audio\AudioListener.hpp" />
@@ -126,6 +133,11 @@
     <ClInclude Include="core\MainLoop.hpp" />
     <ClInclude Include="handlers\GraphicesHandler.hpp" />
     <ClInclude Include="handlers\WindowHandler.hpp" />
+    <ClInclude Include="physics\FixedTimestep.hpp" />
+    <ClInclude Include="physics\PhysicsContactListener.hpp" />
+    <ClInclude Include="physics\PhysicsLayers.hpp" />
+    <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
+    <ClInclude Include="physics\PhysicsWorld.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="adapters\AudioAdapter.cpp" />
@@ -134,7 +146,13 @@
     <ClCompile Include="adapters\MeshPreviewAdapter.cpp" />
     <ClCompile Include="adapters\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
+    <ClCompile Include="adapters\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\ScriptingAdapter.cpp" />
+    <ClCompile Include="adapters\api\AudioAPI.cpp" />
+    <ClCompile Include="adapters\api\EntityAPI.cpp" />
+    <ClCompile Include="adapters\api\InputAPI.cpp" />
+    <ClCompile Include="adapters\api\LogAPI.cpp" />
+    <ClCompile Include="adapters\api\PhysicsAPI.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
     <ClCompile Include="audio\AudioListener.cpp" />
@@ -154,6 +172,10 @@
     <ClCompile Include="core\MainLoop.cpp" />
     <ClCompile Include="handlers\GraphicesHandler.cpp" />
     <ClCompile Include="handlers\WindowHandler.cpp" />
+    <ClCompile Include="physics\FixedTimestep.cpp" />
+    <ClCompile Include="physics\PhysicsContactListener.cpp" />
+    <ClCompile Include="physics\PhysicsMeshLoader.cpp" />
+    <ClCompile Include="physics\PhysicsWorld.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\graphics\Graphics.vcxproj">
@@ -161,6 +183,9 @@
     </ProjectReference>
     <ProjectReference Include="..\mType.vcxproj">
       <Project>{7490E30F-E0A4-0BC1-A926-AF2015FA07F2}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\jolt.vcxproj">
+      <Project>{3E16997C-2A4D-9A0D-D339-8010BF4F160F}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

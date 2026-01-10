@@ -4,6 +4,7 @@
 #include "EditorCameraWindow.hpp"
 #include "IBLWindow.hpp"
 #include "ImportModalDialog.hpp"
+#include "PhysicsConfigWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 
@@ -24,6 +25,7 @@ namespace windows
         EditorCameraWindow editorCameraWindow;
         IBLWindow iblWindow;
         ImportModalDialog importDialog;
+        PhysicsConfigWindow physicsConfigWindow;
         MainMenuBar menuBar;
 
         // Event subscription

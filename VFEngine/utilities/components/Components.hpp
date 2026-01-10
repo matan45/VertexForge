@@ -6,6 +6,7 @@
 #include <optional>
 #include <cstdint>
 #include "../uuid/UUID.hpp"
+#include "../types/PhysicsTypes.hpp"
 
 namespace components
 {
@@ -17,10 +18,12 @@ namespace components
     struct AudioSource2DComponent;
     struct AudioSource3DComponent;
     struct ScriptComponent;
+    struct ColliderComponent;
+    struct RigidBodyComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
-                                               ScriptComponent>;
+                                               ScriptComponent, ColliderComponent, RigidBodyComponent>;
 
     struct WorldTransformComponent
     {
@@ -369,5 +372,59 @@ namespace components
             }
             return false;
         }
+    };
+
+
+    // ============================================================
+    // Physics Components
+    // ============================================================
+
+    // Use shared physics types from types::
+    using RigidBodyType = types::RigidBodyType;
+    using ColliderShape = types::ColliderShape;
+
+    struct ColliderComponent
+    {
+        ColliderShape shape = ColliderShape::Box;
+
+        // Shape dimensions
+        glm::vec3 size{1.0f};       // Box half-extents, or x=radius for sphere/capsule
+        float height = 2.0f;         // Capsule total height
+
+        // Transform offset from entity center
+        glm::vec3 offset{0.0f};
+
+        // Mesh collider path (for ConvexMesh/TriangleMesh)
+        std::string meshPath;
+
+        // Behavior
+        bool isTrigger = false;      // Trigger/Sensor mode (no physical response)
+
+        // Collision layer (0-15, default 1 = Dynamic layer)
+        uint8_t collisionLayer = 1;
+
+        // Physics material properties
+        float friction = 0.5f;
+        float restitution = 0.0f;    // Bounciness
+    };
+
+    struct RigidBodyComponent
+    {
+        RigidBodyType type = RigidBodyType::Dynamic;
+
+        // Mass properties (ignored for Static bodies)
+        float mass = 1.0f;
+
+        // Damping
+        float linearDamping = 0.0f;
+        float angularDamping = 0.05f;
+
+        // Axis constraints (lock movement/rotation on specific axes)
+        bool freezePositionX = false;
+        bool freezePositionY = false;
+        bool freezePositionZ = false;
+        bool freezeRotationX = false;
+        bool freezeRotationY = false;
+        bool freezeRotationZ = false;
     };
 }

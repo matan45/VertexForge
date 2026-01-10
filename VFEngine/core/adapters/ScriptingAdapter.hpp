@@ -1,8 +1,10 @@
 #pragma once
 #include "../../services/providers/IScriptingProvider.hpp"
+#include "../../services/events/EventDispatcher.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <any>
 
@@ -25,14 +27,23 @@ namespace core
         std::unordered_map<uint64_t, std::any> instanceToObject; // instanceId -> script object instance (type-erased)
         std::unordered_map<std::string, std::string> pathToClassName; // scriptPath -> class name
 
+        // Interface implementation cache (for collision/trigger callbacks)
+        std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces; // instanceId -> implemented interfaces
+
         // Error tracking
         mutable std::optional<::services::ScriptError> lastError;
 
-       
+
         uint64_t nextInstanceId = 1;
         std::string scriptLibraryPath;
         bool initialized = false;
         bool compiled = false;
+
+        // Physics collision callback subscription tokens
+        ::events::SubscriptionToken collisionStartToken;
+        ::events::SubscriptionToken collisionEndToken;
+        ::events::SubscriptionToken triggerEnterToken;
+        ::events::SubscriptionToken triggerExitToken;
 
     public:
         explicit ScriptingAdapter();
@@ -64,18 +75,24 @@ namespace core
         void callOnStart(uint64_t instanceId) override;
         void callOnUpdate(uint64_t instanceId, float deltaTime) override;
         void callOnDestroy(uint64_t instanceId) override;
-        
+
         std::optional<::services::ScriptError> getLastError() const override;
         void clearError() override;
-        
+
         void setScriptLibraryPath(const std::string& path) override;
 
     private:
         void setError(::services::ScriptError::Type type, const std::string& message,
                       const std::string& file = "", int line = 0);
-        
+
         std::string extractClassName(const std::string& scriptPath);
-        
+
         std::string getLibraryPath(const std::string& manifestPath) const;
+
+        // Physics collision callback helpers
+        void subscribeToPhysicsEvents();
+        void unsubscribeFromPhysicsEvents();
+        void dispatchCollisionCallback(const char* methodName,
+                                       ::services::EntityHandle self, ::services::EntityHandle other);
     };
 }

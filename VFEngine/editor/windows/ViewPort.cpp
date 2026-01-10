@@ -9,9 +9,11 @@
 #include "components/Components.hpp"
 #include "data/DTOs.hpp"
 #include "data/EntityConversion.hpp"
+#include "../dragdrop/DragDropManager.hpp"
 #include <imgui.h>
 #include "ImGuizmo.h"
 #include <glm/gtc/type_ptr.hpp>
+#include <filesystem>
 
 namespace windows
 {
@@ -167,40 +169,54 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_PREFAB_PATH"))
+        // Accept drops from content browser
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
         {
-            std::string prefabPath(static_cast<const char*>(payload->Data));
+            const auto& dragPaths = DragDropManager::instance().getDragPaths();
 
-            events::scene::LoadPrefabCommand loadCmd;
-            loadCmd.filePath = prefabPath;
-            loadCmd.parent = std::nullopt;
-            auto result = dispatcher.execute(loadCmd);
-
-            if (result.has_value())
+            for (const auto& path : dragPaths)
             {
-                events::scene::GetTransformQuery transformQuery;
-                transformQuery.entity = *result;
-                auto prefabTransform = dispatcher.query(transformQuery);
+                std::filesystem::path fsPath(path);
 
-                if (prefabTransform.has_value())
+                // Only handle prefab files
+                if (fsPath.extension() != ".vfPrefab")
                 {
-                    glm::vec3 spawnPos = editorCamera->position + editorCamera->getForwardDirection() * 5.0f;
-
-                    services::TransformData transform;
-                    transform.position = spawnPos;
-                    transform.rotation = prefabTransform->rotation;
-                    transform.scale = prefabTransform->scale;
-
-                    events::scene::SetTransformCommand transformCmd;
-                    transformCmd.entity = *result;
-                    transformCmd.transform = transform;
-                    dispatcher.execute(transformCmd);
+                    continue;
                 }
 
-                events::scene::SelectEntityCommand selectCmd;
-                selectCmd.entity = *result;
-                dispatcher.execute(selectCmd);
+                events::scene::LoadPrefabCommand loadCmd;
+                loadCmd.filePath = path;
+                loadCmd.parent = std::nullopt;
+                auto result = dispatcher.execute(loadCmd);
+
+                if (result.has_value())
+                {
+                    events::scene::GetTransformQuery transformQuery;
+                    transformQuery.entity = *result;
+                    auto prefabTransform = dispatcher.query(transformQuery);
+
+                    if (prefabTransform.has_value())
+                    {
+                        glm::vec3 spawnPos = editorCamera->position + editorCamera->getForwardDirection() * 5.0f;
+
+                        services::TransformData transform;
+                        transform.position = spawnPos;
+                        transform.rotation = prefabTransform->rotation;
+                        transform.scale = prefabTransform->scale;
+
+                        events::scene::SetTransformCommand transformCmd;
+                        transformCmd.entity = *result;
+                        transformCmd.transform = transform;
+                        dispatcher.execute(transformCmd);
+                    }
+
+                    events::scene::SelectEntityCommand selectCmd;
+                    selectCmd.entity = *result;
+                    dispatcher.execute(selectCmd);
+                }
             }
+
+            DragDropManager::instance().endDrag();
         }
         ImGui::EndDragDropTarget();
     }

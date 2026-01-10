@@ -1,5 +1,6 @@
 #pragma once
 #include "Entity.hpp"
+#include "../types/PhysicsTypes.hpp"
 
 namespace scene {
 
@@ -7,6 +8,7 @@ namespace scene {
 	{
 	private:
 		Entity root;
+		types::PhysicsSettings physicsSettings = types::PhysicsSettings::createDefault();
 	public:
 		explicit SceneGraphSystem();
 		~SceneGraphSystem() = default;
@@ -24,6 +26,18 @@ namespace scene {
 
 		Entity& GetRoot() {
 			return root;
+		}
+
+		types::PhysicsSettings& getPhysicsSettings() {
+			return physicsSettings;
+		}
+
+		const types::PhysicsSettings& getPhysicsSettings() const {
+			return physicsSettings;
+		}
+
+		void setPhysicsSettings(const types::PhysicsSettings& settings) {
+			physicsSettings = settings;
 		}
 		
 	private:

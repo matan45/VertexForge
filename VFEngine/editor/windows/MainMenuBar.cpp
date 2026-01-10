@@ -3,6 +3,7 @@
 #include "EditorCameraWindow.hpp"
 #include "CullingStatsWindow.hpp"
 #include "ImportModalDialog.hpp"
+#include "PhysicsConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -96,6 +97,13 @@ namespace windows
                     editorCameraWindow->show();
                 }
             }
+            else if (ImGui::MenuItem("Physics Config"))
+            {
+                if (physicsConfigWindow)
+                {
+                    physicsConfigWindow->show();
+                }
+            }
             else if (ImGui::MenuItem("Layout Style"))
             {
             }
@@ -172,6 +180,14 @@ namespace windows
             {
                 events::render::SetShowDebugRenderingCommand cmd;
                 cmd.show = !showDebugRendering;
+                dispatcher.execute(cmd);
+            }
+
+            bool showPhysicsDebug = dispatcher.query(events::render::GetShowPhysicsDebugQuery{});
+            if (ImGui::MenuItem("Show Physics Colliders", nullptr, showPhysicsDebug))
+            {
+                events::render::SetShowPhysicsDebugCommand cmd;
+                cmd.show = !showPhysicsDebug;
                 dispatcher.execute(cmd);
             }
 

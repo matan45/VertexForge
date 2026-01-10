@@ -188,6 +188,22 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setShowPhysicsDebug(bool show) {
+        if (offScreen) {
+            offScreen->setShowPhysicsDebug(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowPhysicsDebug() const {
+        return offScreen ? offScreen->getShowPhysicsDebug() : false;
+    }
+
+    void OffScreenAdapter::prepareFramePhysicsColliders() {
+        if (offScreen) {
+            offScreen->prepareFramePhysicsColliders();
+        }
+    }
+
     void OffScreenAdapter::setViewMode(uint32_t mode) {
         if (offScreen) {
             offScreen->setViewMode(mode);

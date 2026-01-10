@@ -3,15 +3,12 @@
 #include "../data/EntityHandle.hpp"
 #include "../data/DTOs.hpp"
 #include "../interfaces/IAudioService.hpp"
+#include "../../utilities/types/PhysicsTypes.hpp"
 #include <optional>
 #include <vector>
 #include <string>
 
 namespace events::scene {
-
-    // ============================================
-    // COMMANDS - Operations that modify scene state
-    // ============================================
 
     struct CreateEntityCommand : ICommand<services::EntityHandle> {
         std::string name;
@@ -117,8 +114,7 @@ namespace events::scene {
 
         std::string_view getName() const override { return "SetEntityStatic"; }
     };
-    
-    // 2D Audio Source (streaming, for background music/ambient)
+
     struct AddAudioSource2DComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -138,7 +134,6 @@ namespace events::scene {
         std::string_view getName() const override { return "SetAudioSource2DData"; }
     };
 
-    // 3D Audio Source (cached, for spatial sound effects)
     struct AddAudioSource3DComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -174,7 +169,6 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadScene"; }
     };
 
-    // Prefab commands
     struct SavePrefabCommand : ICommand<bool> {
         services::EntityHandle entity;
         std::string filePath;
@@ -195,9 +189,49 @@ namespace events::scene {
         std::string_view getName() const override { return "DuplicateEntity"; }
     };
 
-    // ============================================
-    // QUERIES - Read-only operations
-    // ============================================
+    struct AddColliderComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddColliderComponent"; }
+    };
+
+    struct RemoveColliderComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveColliderComponent"; }
+    };
+
+    struct SetColliderDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::ColliderComponentData colliderData;
+
+        std::string_view getName() const override { return "SetColliderData"; }
+    };
+
+    struct AddRigidBodyComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddRigidBodyComponent"; }
+    };
+
+    struct RemoveRigidBodyComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveRigidBodyComponent"; }
+    };
+
+    struct SetRigidBodyDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::RigidBodyComponentData rigidBodyData;
+
+        std::string_view getName() const override { return "SetRigidBodyData"; }
+    };
+
+    struct SetPhysicsSettingsCommand : ICommand<bool> {
+        types::PhysicsSettings settings;
+
+        std::string_view getName() const override { return "SetPhysicsSettings"; }
+    };
 
     struct GetEntityQuery : IQuery<std::optional<services::EntityData>> {
         services::EntityHandle entity;
@@ -280,8 +314,7 @@ namespace events::scene {
 
         std::string_view getName() const override { return "IsEntityStatic"; }
     };
-    
-    // 2D Audio Source queries
+
     struct HasAudioSource2DComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
@@ -294,7 +327,6 @@ namespace events::scene {
         std::string_view getName() const override { return "GetAudioSource2DData"; }
     };
 
-    // 3D Audio Source queries
     struct HasAudioSource3DComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
@@ -307,9 +339,33 @@ namespace events::scene {
         std::string_view getName() const override { return "GetAudioSource3DData"; }
     };
 
-    // ============================================
-    // NOTIFICATIONS - State change broadcasts
-    // ============================================
+    struct HasColliderComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasColliderComponent"; }
+    };
+
+    struct GetColliderDataQuery : IQuery<std::optional<services::ColliderComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetColliderData"; }
+    };
+
+    struct HasRigidBodyComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasRigidBodyComponent"; }
+    };
+
+    struct GetRigidBodyDataQuery : IQuery<std::optional<services::RigidBodyComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetRigidBodyData"; }
+    };
+
+    struct GetPhysicsSettingsQuery : IQuery<types::PhysicsSettings> {
+        std::string_view getName() const override { return "GetPhysicsSettings"; }
+    };
 
     struct EntityCreatedNotification : INotification {
         services::EntityHandle entity;

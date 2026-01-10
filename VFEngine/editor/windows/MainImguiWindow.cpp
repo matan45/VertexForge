@@ -14,7 +14,7 @@ namespace windows
         windowFlags = window_flags;
 
         // Wire up menu bar to sub-windows
-        menuBar.setWindows(&iblWindow, &editorCameraWindow, &cullingStatsWindow, &importDialog);
+        menuBar.setWindows(&iblWindow, &editorCameraWindow, &cullingStatsWindow, &importDialog, &physicsConfigWindow);
 
         subscribeToEvents();
     }
@@ -57,6 +57,7 @@ namespace windows
             iblWindow.draw();
             editorCameraWindow.draw();
             cullingStatsWindow.draw();
+            physicsConfigWindow.draw();
         }
         ImGui::End();
     }

@@ -42,6 +42,7 @@ namespace services
         prepareFrameBillboards();
         prepareFrameCameraFrustums();
         prepareFrameAudioSpheres();
+        prepareFramePhysicsColliders();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -337,6 +338,21 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowGrid() : true;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShowPhysicsDebugCommand>(
+            [this](const events::render::SetShowPhysicsDebugCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowPhysicsDebug(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowPhysicsDebugQuery>(
+            [this](const events::render::GetShowPhysicsDebugQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowPhysicsDebug() : false;
+            });
+
         dispatcher.registerCommandHandler<events::render::SetViewModeCommand>(
             [this](const events::render::SetViewModeCommand& cmd)
             {
@@ -489,5 +505,15 @@ namespace services
         }
 
         offScreenProvider->prepareGrid();
+    }
+
+    void EditorRenderServiceImpl::prepareFramePhysicsColliders()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFramePhysicsColliders();
     }
 }

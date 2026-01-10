@@ -45,6 +45,8 @@ namespace services {
         AudioSource2D,
         AudioSource3D,
         Script,
+        Collider,
+        RigidBody,
         // Add more as needed
     };
 

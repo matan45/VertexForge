@@ -17,8 +17,8 @@ namespace controllers
 {
     OffScreenController::OffScreenController()
         : swapChain{*core::VulkanContext::getSwapChain()}
-        , device{*core::VulkanContext::getDevice()}
-        , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
+          , device{*core::VulkanContext::getDevice()}
+          , offScreen{std::make_unique<render::OffScreenViewPort>(device, swapChain)}
     {
     }
 
@@ -268,6 +268,39 @@ namespace controllers
                 renderHandler->getDebugRenderer()->setShowGrid(show && !playModeActive);
             }
         }
+    }
+
+    void OffScreenController::setShowPhysicsDebug(bool show)
+    {
+        showPhysicsDebug = show;
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            if (show && renderHandler->isMeshPipelineInitialized() && !renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+
+            if (renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->setShowPhysicsDebug(show);
+            }
+        }
+    }
+
+    void OffScreenController::prepareFramePhysicsColliders()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.showDebugRendering = showDebugRendering;
+        ctx.showBillboardIcons = showBillboardIcons;
+        ctx.showGrid = showGrid;
+        ctx.showPhysicsDebug = showPhysicsDebug;
+
+        framePreparation->preparePhysicsColliders(ctx);
     }
 
     void OffScreenController::setPlayMode(bool playMode)

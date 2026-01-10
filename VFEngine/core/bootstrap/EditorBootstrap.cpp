@@ -7,8 +7,11 @@
 #include "../adapters/MeshPreviewAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
+#include "../adapters/PhysicsAdapter.hpp"
+#include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 #include "print/Logger.hpp"
+#include "../../utilities/types/PhysicsTypes.hpp"
 
 namespace core
 {
@@ -30,12 +33,17 @@ namespace core
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
+        physicsAdapter = std::make_unique<PhysicsAdapter>();
 
         offScreen->init();
         audioAdapter->init();
         scriptingAdapter->init();
+        physicsAdapter->init();
 
-        
+        // Apply default physics settings on startup
+        // Scene-specific settings will be loaded when a scene is loaded
+        physicsAdapter->applySettings(types::PhysicsSettings::createDefault());
+
         coreInterface->setResizeCallback([this]()
         {
             offScreen->recreate();
@@ -64,12 +72,18 @@ namespace core
             scriptingAdapter->cleanUp();
         }
 
+        if (physicsAdapter)
+        {
+            physicsAdapter->cleanUp();
+        }
+
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
         textureAdapter.reset();
         offScreenAdapter.reset();
         audioAdapter.reset();
         scriptingAdapter.reset();
+        physicsAdapter.reset();
 
         if (coreInterface)
         {
@@ -107,6 +121,11 @@ namespace core
         return scriptingAdapter.get();
     }
 
+    services::IPhysicsProvider* EditorBootstrap::getPhysicsProvider()
+    {
+        return physicsAdapter.get();
+    }
+
     window::Window* EditorBootstrap::getWindow()
     {
         return coreInterface ? coreInterface->getWindow() : nullptr;
@@ -125,6 +144,9 @@ namespace core
             // Wrap the callback to also update audio and async loading each frame
             coreInterface->setFrameCallback([this, cb = std::move(callback)]()
             {
+                // Reset per-frame rate limiters for script API
+                NativeAPIRegistry::beginFrame();
+
                 if (audioAdapter)
                 {
                     audioAdapter->update();
@@ -154,4 +176,5 @@ namespace core
             coreInterface->triggerResize();
         }
     }
+
 }

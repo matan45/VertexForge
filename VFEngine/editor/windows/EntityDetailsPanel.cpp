@@ -78,8 +78,12 @@ namespace windows
         bool hasAudio2D = audio2DDrawer.draw(handle);
         bool hasAudio3D = audio3DDrawer.draw(handle);
         bool hasScript = scriptDrawer.draw(handle);
+        
+        bool hasCollider = colliderDrawer.draw(handle);
+        bool hasRigidBody = rigidBodyDrawer.draw(handle);
 
-        addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript);
+        addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
+                               hasCollider, hasRigidBody);
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)
