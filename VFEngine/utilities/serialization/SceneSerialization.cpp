@@ -699,15 +699,12 @@ namespace serialization
 
     void SceneSerialization::deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings)
     {
-        vfLogInfo("[PhysicsSettings] Starting deserialization...");
-
         // Gravity
         if (j.contains("gravity") && j["gravity"].is_array() && j["gravity"].size() == 3)
         {
             settings.gravity.x = j["gravity"][0].get<float>();
             settings.gravity.y = j["gravity"][1].get<float>();
             settings.gravity.z = j["gravity"][2].get<float>();
-            vfLogInfo("[PhysicsSettings] Gravity: ({}, {}, {})", settings.gravity.x, settings.gravity.y, settings.gravity.z);
         }
         if (j.contains("gravityScale"))
         {
@@ -741,7 +738,6 @@ namespace serialization
         // Collision layers
         if (j.contains("collisionLayers") && j["collisionLayers"].is_array())
         {
-            vfLogInfo("[PhysicsSettings] Loading collision layers...");
             settings.layers.clear();
             for (const auto& layerJson : j["collisionLayers"])
             {
@@ -753,14 +749,12 @@ namespace serialization
                 if (layerJson.contains("builtIn"))
                     layer.isBuiltIn = layerJson["builtIn"].get<bool>();
                 settings.layers.push_back(layer);
-                vfLogInfo("[PhysicsSettings] Loaded layer: {} (index={})", layer.name, layer.index);
             }
         }
 
         // Collision matrix
         if (j.contains("collisionMatrix") && j["collisionMatrix"].is_array())
         {
-            vfLogInfo("[PhysicsSettings] Loading collision matrix...");
             // Reset all collision matrix entries
             for (auto& row : settings.collisionMatrix)
             {
@@ -768,7 +762,6 @@ namespace serialization
             }
 
             const auto& matrix = j["collisionMatrix"];
-            vfLogInfo("[PhysicsSettings] Matrix size: {}", matrix.size());
             for (size_t i = 0; i < matrix.size() && i < types::PhysicsSettings::MAX_LAYERS; ++i)
             {
                 if (matrix[i].is_array())
@@ -782,9 +775,7 @@ namespace serialization
                     }
                 }
             }
-            vfLogInfo("[PhysicsSettings] Collision matrix loaded");
         }
-        vfLogInfo("[PhysicsSettings] Deserialization complete");
     }
 
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
@@ -833,7 +824,6 @@ namespace serialization
             entityName = entityJson["name"].get<std::string>();
             entity.setName(entityName);
         }
-        vfLogInfo("[Entity] Deserializing entity: '{}' (isRoot={})", entityName, isRoot);
 
         // Restore active state
         if (entityJson.contains("isActive") && entityJson["isActive"].is_boolean())
@@ -941,20 +931,16 @@ namespace serialization
 
             if (componentsJson.contains("rigidBody"))
             {
-                vfLogInfo("[Entity] '{}': Loading rigidBody component", entityName);
                 auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
                 deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
             }
         }
-        vfLogInfo("[Entity] '{}': Components loaded", entityName);
 
         if (entityJson.contains("children") && entityJson["children"].is_array())
         {
-            vfLogInfo("[Entity] '{}': Loading {} children", entityName, entityJson["children"].size());
             deserializeChildren(entityJson["children"], entity, sceneGraph, progressCallback, entitiesLoaded,
                                 totalEntities);
         }
-        vfLogInfo("[Entity] '{}': Deserialization complete", entityName);
     }
 
     scene::SceneGraphSystem SceneSerialization::loadScene(std::string_view filename)
@@ -1009,11 +995,6 @@ namespace serialization
                 return false;
             }
 
-            if (sceneJson.contains("version") && sceneJson["version"].is_string())
-            {
-                std::string version = sceneJson["version"].get<std::string>();
-                vfLogInfo("Loading scene version: {}", version);
-            }
         }
         catch (const json::parse_error& e)
         {
@@ -1029,38 +1010,27 @@ namespace serialization
         // Phase 2: File validated successfully - now safe to clear and load
         try
         {
-            vfLogInfo("[SceneLoad] Counting entities...");
             size_t totalEntities = countEntities(sceneJson["root"]);
             size_t entitiesLoaded = 0;
-            vfLogInfo("[SceneLoad] Total entities to load: {}", totalEntities);
 
-            vfLogInfo("[SceneLoad] Clearing existing scene...");
             sceneGraph.clearScene();
-            vfLogInfo("[SceneLoad] Scene cleared");
 
             // Deserialize physics settings if present
             if (sceneJson.contains("physicsSettings") && sceneJson["physicsSettings"].is_object())
             {
-                vfLogInfo("[SceneLoad] Deserializing physics settings...");
                 types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
                 deserializePhysicsSettings(sceneJson["physicsSettings"], settings);
-                vfLogInfo("[SceneLoad] Physics settings deserialized, applying to scene graph...");
                 sceneGraph.setPhysicsSettings(settings);
-                vfLogInfo("Physics settings loaded from scene file");
             }
             else
             {
-                vfLogInfo("[SceneLoad] No physics settings in file, using defaults");
                 sceneGraph.setPhysicsSettings(types::PhysicsSettings::createDefault());
             }
 
-            vfLogInfo("[SceneLoad] Getting root entity...");
             scene::Entity& root = sceneGraph.GetRoot();
-            vfLogInfo("[SceneLoad] Deserializing root entity and children...");
             deserializeEntity(sceneJson["root"], root, sceneGraph, true, progressCallback, entitiesLoaded,
                               totalEntities);
 
-            vfLogInfo("Scene loaded successfully from: {}", filename);
             return true;
         }
         catch (const std::exception& e)

@@ -231,6 +231,81 @@ namespace services
             activePhysicsBodies.insert(handle);
         }
 
+        // Also add entities with ColliderComponent but no RigidBodyComponent as static bodies
+        auto colliderOnlyView = registry.view<components::ColliderComponent, components::TransformComponent>(
+            entt::exclude<components::RigidBodyComponent>);
+
+        for (auto entity : colliderOnlyView)
+        {
+            const auto& collider = colliderOnlyView.get<components::ColliderComponent>(entity);
+            const auto& transform = colliderOnlyView.get<components::TransformComponent>(entity);
+
+            std::string entityName = "Unknown";
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                entityName = registry.get<components::NameComponent>(entity).name;
+            }
+
+            // Create a static rigid body for standalone colliders
+            RigidBodyData rbData;
+            rbData.type = RigidBodyData::Type::Static;
+            rbData.mass = 0.0f;
+            rbData.linearDamping = 0.0f;
+            rbData.angularDamping = 0.0f;
+
+            ColliderData colData;
+            switch (collider.shape)
+            {
+            case components::ColliderShape::Box:
+                colData.shape = ColliderData::Shape::Box;
+                break;
+            case components::ColliderShape::Sphere:
+                colData.shape = ColliderData::Shape::Sphere;
+                break;
+            case components::ColliderShape::Capsule:
+                colData.shape = ColliderData::Shape::Capsule;
+                break;
+            case components::ColliderShape::ConvexMesh:
+                colData.shape = ColliderData::Shape::ConvexMesh;
+                if (!collider.meshPath.empty())
+                {
+                    colData.meshPath = collider.meshPath;
+                }
+                else if (registry.all_of<components::MeshComponent>(entity))
+                {
+                    colData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                }
+                break;
+            case components::ColliderShape::TriangleMesh:
+                colData.shape = ColliderData::Shape::TriangleMesh;
+                if (!collider.meshPath.empty())
+                {
+                    colData.meshPath = collider.meshPath;
+                }
+                else if (registry.all_of<components::MeshComponent>(entity))
+                {
+                    colData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                }
+                break;
+            }
+            colData.size = collider.size;
+            colData.height = collider.height;
+            colData.isTrigger = collider.isTrigger;
+            colData.offset = collider.offset;
+            colData.collisionLayer = collider.collisionLayer;
+
+            EntityHandle handle = internal::toHandle(entity);
+
+            physicsProvider->addRigidBody(handle, rbData, colData);
+            physicsProvider->setPosition(handle, transform.position);
+
+            glm::vec3 eulerRad = glm::radians(transform.rotation);
+            glm::quat rotQuat = glm::quat(eulerRad);
+            physicsProvider->setRotation(handle, rotQuat);
+
+            activePhysicsBodies.insert(handle);
+        }
+
         physicsActive = true;
         vfLogInfo("Physics play mode started with {} bodies", activePhysicsBodies.size());
     }
@@ -273,6 +348,12 @@ namespace services
             auto entity = internal::fromHandle(handle);
 
             if (!registry.valid(entity))
+            {
+                continue;
+            }
+
+            // Skip entities without RigidBodyComponent (standalone colliders are static)
+            if (!registry.all_of<components::RigidBodyComponent>(entity))
             {
                 continue;
             }
