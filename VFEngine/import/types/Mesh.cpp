@@ -12,6 +12,10 @@
 #include <assimp/postprocess.h>
 #include <meshoptimizer.h>
 
+// V-HACD for convex decomposition (header-only, implementation in this TU)
+#define ENABLE_VHACD_IMPLEMENTATION 1
+#include <VHACD.h>
+
 namespace types
 {
     void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
@@ -32,7 +36,7 @@ namespace types
 
         if (progressCallback) progressCallback(0.2f);
 
-        saveToFileStreamingWithLOD(location, fileName, scene, progressCallback);
+        saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback);
 
         if (progressCallback) progressCallback(1.0f);
     }
@@ -416,7 +420,8 @@ namespace types
     }
 
     void Mesh::saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
-                                          const aiScene* scene, MeshProgressCallback progressCallback) const
+                                          const aiScene* scene, const importConfig::ImportConfig& config,
+                                          MeshProgressCallback progressCallback) const
     {
         std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." +
             FileExtension::mesh);
@@ -428,11 +433,11 @@ namespace types
             return;
         }
 
-        // Write header with version 0.0.4 (LOD + Meshlet support)
+        // Write header with version 0.0.5 (LOD + Meshlet + Convex Decomposition support)
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
         resource::endian::writeLE<uint32_t>(outFile, 0); // major
         resource::endian::writeLE<uint32_t>(outFile, 0); // minor
-        resource::endian::writeLE<uint32_t>(outFile, 4); // patch - version 0.0.4 for meshlets
+        resource::endian::writeLE<uint32_t>(outFile, 5); // patch - version 0.0.5 for convex decomposition
         resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
 
         vfLogInfo("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
@@ -482,6 +487,12 @@ namespace types
             // Write meshlet data
             writeMeshletData(outFile, meshletResults);
 
+            // Generate and write convex decomposition (v0.0.5+)
+            // Use LOD0 for best accuracy in convex decomposition
+            resource::ConvexDecompositionData convexData = generateConvexDecomposition(
+                lod0, config.meshConfig);
+            writeConvexDecompositionData(outFile, convexData);
+
             // Report progress: 20% + (i+1)/totalMeshes * 80%
             if (progressCallback)
             {
@@ -492,5 +503,154 @@ namespace types
 
         outFile.close();
         vfLogInfo("Mesh with LOD and meshlets saved to: {}", newFileLocation.string());
+    }
+
+    resource::ConvexDecompositionData Mesh::generateConvexDecomposition(
+        const LODMeshData& meshData,
+        const importConfig::MeshImportConfig& config) const
+    {
+        resource::ConvexDecompositionData result;
+
+        if (!config.generateConvexDecomposition || meshData.vertices.empty() || meshData.indices.empty())
+        {
+            return result;
+        }
+
+        vfLogInfo("  Running V-HACD convex decomposition...");
+
+        // Prepare vertex data (convert to double for V-HACD)
+        std::vector<double> points;
+        points.reserve(meshData.vertices.size() * 3);
+        for (const auto& v : meshData.vertices)
+        {
+            points.push_back(static_cast<double>(v.position.x));
+            points.push_back(static_cast<double>(v.position.y));
+            points.push_back(static_cast<double>(v.position.z));
+        }
+
+        // Configure V-HACD parameters
+        VHACD::IVHACD::Parameters params;
+        params.m_maxConvexHulls = config.maxConvexHulls;
+        params.m_resolution = config.vhacdResolution;
+        params.m_maxNumVerticesPerCH = config.maxVerticesPerHull;
+        params.m_minimumVolumePercentErrorAllowed = static_cast<double>(config.minVolumePercentError);
+        params.m_maxRecursionDepth = 10;
+        params.m_shrinkWrap = true;
+        params.m_asyncACD = false;  // Synchronous for import pipeline
+
+        // Create V-HACD instance and compute
+        VHACD::IVHACD* vhacd = VHACD::CreateVHACD();
+
+        bool success = vhacd->Compute(
+            points.data(),
+            static_cast<uint32_t>(meshData.vertices.size()),
+            meshData.indices.data(),
+            static_cast<uint32_t>(meshData.indices.size() / 3),
+            params
+        );
+
+        if (success)
+        {
+            uint32_t numHulls = vhacd->GetNConvexHulls();
+            vfLogInfo("  V-HACD generated {} convex hulls", numHulls);
+
+            result.hasDecomposition = true;
+            result.params.maxConvexHulls = config.maxConvexHulls;
+            result.params.resolution = config.vhacdResolution;
+            result.params.maxVerticesPerHull = config.maxVerticesPerHull;
+            result.params.minVolumePercentError = config.minVolumePercentError;
+
+            result.hulls.resize(numHulls);
+
+            for (uint32_t i = 0; i < numHulls; ++i)
+            {
+                VHACD::IVHACD::ConvexHull hull;
+                vhacd->GetConvexHull(i, hull);
+
+                auto& outHull = result.hulls[i];
+                outHull.vertices.reserve(hull.m_points.size());
+
+                for (const auto& p : hull.m_points)
+                {
+                    outHull.vertices.emplace_back(
+                        static_cast<float>(p.mX),
+                        static_cast<float>(p.mY),
+                        static_cast<float>(p.mZ)
+                    );
+                }
+
+                outHull.indices.reserve(hull.m_triangles.size() * 3);
+                for (const auto& tri : hull.m_triangles)
+                {
+                    outHull.indices.push_back(tri.mI0);
+                    outHull.indices.push_back(tri.mI1);
+                    outHull.indices.push_back(tri.mI2);
+                }
+
+                outHull.center = glm::vec3(
+                    static_cast<float>(hull.m_center.GetX()),
+                    static_cast<float>(hull.m_center.GetY()),
+                    static_cast<float>(hull.m_center.GetZ())
+                );
+                outHull.volume = static_cast<float>(hull.m_volume);
+            }
+
+            vfLogInfo("  Total convex hull vertices: {}", result.getTotalVertexCount());
+        }
+        else
+        {
+            vfLogWarning("  V-HACD decomposition failed");
+        }
+
+        vhacd->Release();
+        return result;
+    }
+
+    void Mesh::writeConvexDecompositionData(std::ofstream& outFile,
+                                            const resource::ConvexDecompositionData& decomposition) const
+    {
+        // Write flag indicating whether decomposition data exists
+        resource::endian::writeLE<uint8_t>(outFile, decomposition.hasDecomposition ? 1 : 0);
+
+        if (!decomposition.hasDecomposition)
+        {
+            return;
+        }
+
+        // Write parameters (for reproducibility/debugging)
+        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxConvexHulls);
+        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.resolution);
+        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxVerticesPerHull);
+        resource::endian::writeLE<float>(outFile, decomposition.params.minVolumePercentError);
+        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxRecursionDepth);
+
+        // Write hull count
+        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(decomposition.hulls.size()));
+
+        // Write each hull
+        for (const auto& hull : decomposition.hulls)
+        {
+            // Vertex count and vertices
+            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(hull.vertices.size()));
+            for (const auto& v : hull.vertices)
+            {
+                resource::endian::writeLE<float>(outFile, v.x);
+                resource::endian::writeLE<float>(outFile, v.y);
+                resource::endian::writeLE<float>(outFile, v.z);
+            }
+
+            // Index count and indices (for visualization/debug, not needed for physics)
+            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(hull.indices.size()));
+            for (uint32_t idx : hull.indices)
+            {
+                resource::endian::writeLE<uint32_t>(outFile, idx);
+            }
+
+            // Center and volume
+            resource::endian::writeLE<float>(outFile, hull.center.x);
+            resource::endian::writeLE<float>(outFile, hull.center.y);
+            resource::endian::writeLE<float>(outFile, hull.center.z);
+            resource::endian::writeLE<float>(outFile, hull.volume);
+        }
     }
 }

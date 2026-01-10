@@ -142,7 +142,8 @@ project "Import"
       "dependencies/assimp/include",           -- Assimp headers
       "dependencies/assimp/build/include",     -- Assimp generated headers (config.h)
 	  "dependencies/glm",
-	  "dependencies/meshoptimizer/src"  -- meshoptimizer for LOD generation
+	  "dependencies/meshoptimizer/src",  -- meshoptimizer for LOD generation
+	  "dependencies/v-hacd"              -- V-HACD for convex decomposition
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }

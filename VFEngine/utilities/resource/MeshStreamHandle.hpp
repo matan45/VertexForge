@@ -8,6 +8,7 @@
 #include <mutex>
 #include "Types.hpp"
 #include "MeshletTypes.hpp"
+#include "ConvexHullTypes.hpp"
 
 namespace resource
 {
@@ -34,6 +35,10 @@ namespace resource
         std::array<LODMeshletFileInfo, LOD_LEVEL_COUNT> meshletLods{};
         std::streampos meshletDataOffset = 0; // File position where meshlet data starts
         bool hasMeshletData = false;
+
+        // Convex decomposition (v0.0.5+)
+        std::streampos convexDataOffset = 0; // File position where convex data starts
+        bool hasConvexData = false;
     };
 
     struct MeshStreamHeader
@@ -58,6 +63,7 @@ namespace resource
         MeshStreamHeader header;
         std::string filePath;
         bool hasMeshlets = false; // True if file has meshlet data (v0.0.4+)
+        bool hasConvexHulls = false; // True if file has convex hull data (v0.0.5+)
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:
@@ -84,7 +90,11 @@ namespace resource
 
         bool readMeshletData(uint32_t submeshIdx, SubmeshMeshletData& outMeshletData);
 
+        bool readConvexDecomposition(uint32_t submeshIdx, ConvexDecompositionData& outData);
+
         bool hasMeshletData() const { return hasMeshlets; }
+
+        bool hasConvexData() const { return hasConvexHulls; }
 
         uint32_t getTotalVertexCount(uint32_t lodLevel) const;
 
@@ -94,6 +104,8 @@ namespace resource
         bool parseHeader();
 
         bool parseMeshletHeaders(uint32_t meshIdx);
+
+        bool parseConvexHeaders(uint32_t meshIdx);
     };
 
     class MeshStreamResource

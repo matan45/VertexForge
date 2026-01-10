@@ -127,4 +127,54 @@ namespace core::physics
 
         return result;
     }
+
+    std::optional<resource::ConvexDecompositionData> PhysicsMeshLoader::loadConvexDecomposition(
+        std::string_view meshPath,
+        uint32_t submeshIndex)
+    {
+        if (meshPath.empty())
+        {
+            loggerWarning("PhysicsMeshLoader: Empty mesh path provided");
+            return std::nullopt;
+        }
+
+        auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
+        if (!streamHandle)
+        {
+            loggerWarning("PhysicsMeshLoader: Failed to open mesh file: {}", meshPath);
+            return std::nullopt;
+        }
+
+        if (!streamHandle->hasConvexData())
+        {
+            // File doesn't have convex data - not an error
+            return std::nullopt;
+        }
+
+        const auto& header = streamHandle->getHeader();
+        if (submeshIndex >= header.numSubmeshes)
+        {
+            loggerWarning("PhysicsMeshLoader: Submesh index {} out of range (file has {} submeshes)",
+                          submeshIndex, header.numSubmeshes);
+            return std::nullopt;
+        }
+
+        resource::ConvexDecompositionData result;
+        if (!streamHandle->readConvexDecomposition(submeshIndex, result))
+        {
+            loggerWarning("PhysicsMeshLoader: Failed to read convex decomposition from: {}", meshPath);
+            return std::nullopt;
+        }
+
+        if (!result.isValid())
+        {
+            // No convex data for this submesh - not an error
+            return std::nullopt;
+        }
+
+        loggerInfo("PhysicsMeshLoader: Loaded convex decomposition with {} hulls from {}",
+                   result.hulls.size(), meshPath);
+
+        return result;
+    }
 }

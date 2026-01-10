@@ -31,9 +31,20 @@ struct FileExtension
 
 namespace importConfig
 {
+    // Mesh-specific import settings for V-HACD convex decomposition
+    struct MeshImportConfig
+    {
+        bool generateConvexDecomposition = false;
+        uint32_t maxConvexHulls = 16;
+        uint32_t vhacdResolution = 100000;
+        uint32_t maxVerticesPerHull = 32;
+        float minVolumePercentError = 1.0f;
+    };
+
     struct ImportConfig
     {
         bool isImageFlipVertically = false;
+        MeshImportConfig meshConfig;
     };
 
     struct ImportFiles

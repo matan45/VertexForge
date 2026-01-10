@@ -1,5 +1,6 @@
 #pragma once
 #include "nfd/FileDialog.hpp"
+#include "config/Config.hpp"
 #include <vector>
 #include <string>
 
@@ -11,6 +12,7 @@ namespace windows
         nfd::FileDialog fileDialog;
         std::vector<std::string> files;
         std::vector<bool> isFlip;
+        std::vector<importConfig::MeshImportConfig> meshConfigs;
         bool openModal = false;
 
     public:

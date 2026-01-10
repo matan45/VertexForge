@@ -5,6 +5,7 @@
 #include "config/Config.hpp"
 #include "resource/Types.hpp"
 #include "resource/MeshletTypes.hpp"
+#include "resource/ConvexHullTypes.hpp"
 struct aiScene;
 struct aiMesh;
 
@@ -39,7 +40,8 @@ namespace types
 
 
         void saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
-                                        const aiScene* scene, MeshProgressCallback progressCallback) const;
+                                        const aiScene* scene, const importConfig::ImportConfig& config,
+                                        MeshProgressCallback progressCallback) const;
 
         LODMeshData convertAssimpMesh(const aiMesh* assimpMesh) const;
 
@@ -54,5 +56,13 @@ namespace types
 
         void writeMeshletData(std::ofstream& outFile,
                               const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const;
+
+        // V-HACD convex decomposition
+        resource::ConvexDecompositionData generateConvexDecomposition(
+            const LODMeshData& meshData,
+            const importConfig::MeshImportConfig& config) const;
+
+        void writeConvexDecompositionData(std::ofstream& outFile,
+                                          const resource::ConvexDecompositionData& decomposition) const;
     };
 }
