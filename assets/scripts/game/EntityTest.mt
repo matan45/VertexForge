@@ -1,9 +1,9 @@
 // EntityTest - Test script demonstrating Entity API usage
 // Attach this script to an entity to test entity/component queries
 
-import * from "../lib/engine/Log.mt";
-import * from "../lib/engine/Entity.mt";
-import * from "../lib/engine/ComponentType.mt";
+import * from "engine/Log.mt";
+import * from "engine/Entity.mt";
+import * from "engine/ComponentType.mt";
 
 @Script
 public class EntityTest {

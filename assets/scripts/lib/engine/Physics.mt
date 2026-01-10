@@ -9,32 +9,30 @@
 //   bool hasRb = Physics::hasRigidBody(self);
 //
 // ============================================
-// Collision Callbacks (implement in your @Script class)
+// Collision/Trigger Callbacks
 // ============================================
-// These optional methods are called automatically when physics events occur:
+// Implement ICollisionListener and/or ITriggerListener interfaces to receive physics events:
 //
-//   // Called when this entity starts colliding with another solid entity
-//   public function onCollisionEnter(int otherEntityId): void { }
+//   import engine::ICollisionListener;
+//   import engine::ITriggerListener;
 //
-//   // Called when this entity stops colliding with another solid entity
-//   public function onCollisionExit(int otherEntityId): void { }
-//
-//   // Called when another entity enters this entity's trigger collider
-//   public function onTriggerEnter(int otherEntityId): void { }
-//
-//   // Called when another entity exits this entity's trigger collider
-//   public function onTriggerExit(int otherEntityId): void { }
-//
-// Example usage in a script:
 //   @Script
-//   public class PlayerController {
+//   public class PlayerController implements ICollisionListener, ITriggerListener {
+//       @Override
 //       public function onCollisionEnter(int otherEntityId): void {
 //           Log::info("Player collided with entity: " + otherEntityId);
 //       }
+//       @Override
+//       public function onCollisionExit(int otherEntityId): void { }
+//       @Override
 //       public function onTriggerEnter(int otherEntityId): void {
 //           Log::info("Player entered trigger zone");
 //       }
+//       @Override
+//       public function onTriggerExit(int otherEntityId): void { }
 //   }
+//
+// You can also implement just the callbacks you need without using interfaces (duck typing).
 
 public class Physics {
     // ============================================

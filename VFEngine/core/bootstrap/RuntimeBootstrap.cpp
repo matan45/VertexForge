@@ -5,6 +5,7 @@
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
+#include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 
 namespace core
@@ -114,6 +115,9 @@ namespace core
             // Wrap the callback to also update audio each frame
             coreInterface->setFrameCallback([this, cb = std::move(callback)]()
             {
+                // Reset per-frame rate limiters for script API
+                NativeAPIRegistry::beginFrame();
+
                 if (audioAdapter)
                 {
                     audioAdapter->update();

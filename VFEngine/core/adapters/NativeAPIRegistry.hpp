@@ -29,11 +29,7 @@ namespace core
         static void setCurrentEntity(const ::services::EntityHandle& entity);
         static ::services::EntityHandle getCurrentEntity();
 
-    private:
-        void registerEntityClass();
-        void registerLogClass();
-        void registerAudioClass();
-        void registerInputClass();
-        void registerPhysicsClass();
+        // Called at the start of each frame to reset rate limiters
+        static void beginFrame();
     };
 }

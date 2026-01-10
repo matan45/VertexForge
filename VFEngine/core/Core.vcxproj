@@ -107,6 +107,12 @@
     <ClInclude Include="adapters\OffScreenAdapter.hpp" />
     <ClInclude Include="adapters\PhysicsAdapter.hpp" />
     <ClInclude Include="adapters\ScriptingAdapter.hpp" />
+    <ClInclude Include="adapters\api\AudioAPI.hpp" />
+    <ClInclude Include="adapters\api\EntityAPI.hpp" />
+    <ClInclude Include="adapters\api\InputAPI.hpp" />
+    <ClInclude Include="adapters\api\LogAPI.hpp" />
+    <ClInclude Include="adapters\api\NativeHelpers.hpp" />
+    <ClInclude Include="adapters\api\PhysicsAPI.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
     <ClInclude Include="audio\AudioListener.hpp" />
@@ -141,6 +147,11 @@
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
     <ClCompile Include="adapters\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\ScriptingAdapter.cpp" />
+    <ClCompile Include="adapters\api\AudioAPI.cpp" />
+    <ClCompile Include="adapters\api\EntityAPI.cpp" />
+    <ClCompile Include="adapters\api\InputAPI.cpp" />
+    <ClCompile Include="adapters\api\LogAPI.cpp" />
+    <ClCompile Include="adapters\api\PhysicsAPI.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
     <ClCompile Include="audio\AudioListener.cpp" />
