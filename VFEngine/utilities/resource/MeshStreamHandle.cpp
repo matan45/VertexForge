@@ -268,18 +268,36 @@ namespace resource
         // Skip parameters (5 fields: maxConvexHulls, resolution, maxVerticesPerHull, minVolumePercentError, maxRecursionDepth)
         file.seekg(4 + 4 + 4 + 4 + 4, std::ios::cur); // 20 bytes
 
-        // Read hull count
+        // Read hull count with validation
         uint32_t numHulls = endian::readLE<uint32_t>(file);
+        if (numHulls > maxConvexHullCount)
+        {
+            vfLogError("MeshStreamHandle: Hull count {} exceeds limit {} in submesh {}",
+                       numHulls, maxConvexHullCount, meshIdx);
+            return false;
+        }
 
-        // Skip hull data
+        // Skip hull data with validation
         for (uint32_t h = 0; h < numHulls; ++h)
         {
-            // Skip vertices
+            // Read and validate vertex count before skipping
             uint32_t vertexCount = endian::readLE<uint32_t>(file);
+            if (vertexCount > maxHullVertexCount)
+            {
+                vfLogError("MeshStreamHandle: Hull {} vertex count {} exceeds limit {} in submesh {}",
+                           h, vertexCount, maxHullVertexCount, meshIdx);
+                return false;
+            }
             file.seekg(vertexCount * 3 * sizeof(float), std::ios::cur);
 
-            // Skip indices
+            // Read and validate index count before skipping
             uint32_t indexCount = endian::readLE<uint32_t>(file);
+            if (indexCount > maxHullIndexCount)
+            {
+                vfLogError("MeshStreamHandle: Hull {} index count {} exceeds limit {} in submesh {}",
+                           h, indexCount, maxHullIndexCount, meshIdx);
+                return false;
+            }
             file.seekg(indexCount * sizeof(uint32_t), std::ios::cur);
 
             // Skip center (3 floats) and volume (1 float)
@@ -548,8 +566,15 @@ namespace resource
         outData.params.minVolumePercentError = endian::readLE<float>(file);
         outData.params.maxRecursionDepth = endian::readLE<uint32_t>(file);
 
-        // Read hull count
+        // Read hull count with safety validation
         uint32_t numHulls = endian::readLE<uint32_t>(file);
+        if (numHulls > maxConvexHullCount)
+        {
+            vfLogError("MeshStreamHandle: Hull count {} exceeds limit {} in submesh {}",
+                       numHulls, maxConvexHullCount, submeshIdx);
+            return false;
+        }
+
         outData.hulls.resize(numHulls);
 
         // Read each hull
@@ -557,8 +582,15 @@ namespace resource
         {
             auto& hull = outData.hulls[h];
 
-            // Read vertices
+            // Read vertices with safety validation
             uint32_t vertexCount = endian::readLE<uint32_t>(file);
+            if (vertexCount > maxHullVertexCount)
+            {
+                vfLogError("MeshStreamHandle: Hull {} vertex count {} exceeds limit {} in submesh {}",
+                           h, vertexCount, maxHullVertexCount, submeshIdx);
+                return false;
+            }
+
             hull.vertices.resize(vertexCount);
             for (uint32_t v = 0; v < vertexCount; ++v)
             {
@@ -567,8 +599,15 @@ namespace resource
                 hull.vertices[v].z = endian::readLE<float>(file);
             }
 
-            // Read indices
+            // Read indices with safety validation
             uint32_t indexCount = endian::readLE<uint32_t>(file);
+            if (indexCount > maxHullIndexCount)
+            {
+                vfLogError("MeshStreamHandle: Hull {} index count {} exceeds limit {} in submesh {}",
+                           h, indexCount, maxHullIndexCount, submeshIdx);
+                return false;
+            }
+
             hull.indices.resize(indexCount);
             for (uint32_t i = 0; i < indexCount; ++i)
             {

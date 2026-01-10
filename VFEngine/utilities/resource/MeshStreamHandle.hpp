@@ -58,6 +58,9 @@ namespace resource
         static constexpr uint32_t maxIndexCount = 30'000'000;
         static constexpr uint32_t maxSubmeshCount = 10'000;
         static constexpr uint32_t maxMeshletCount = 1'000'000;
+        static constexpr uint32_t maxConvexHullCount = 256;      // Per submesh
+        static constexpr uint32_t maxHullVertexCount = 256;      // Jolt Physics limit
+        static constexpr uint32_t maxHullIndexCount = 4096;      // Triangle indices per hull
 
         std::ifstream file;
         MeshStreamHeader header;

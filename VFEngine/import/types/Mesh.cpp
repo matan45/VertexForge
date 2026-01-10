@@ -560,14 +560,34 @@ namespace types
             result.params.maxVerticesPerHull = config.maxVerticesPerHull;
             result.params.minVolumePercentError = config.minVolumePercentError;
 
-            result.hulls.resize(numHulls);
+            // Jolt Physics hard limit for convex hull vertices
+            constexpr uint32_t joltMaxVertices = 256;
+            const uint32_t effectiveMaxVertices = std::min(config.maxVerticesPerHull, joltMaxVertices);
+
+            uint32_t skippedHulls = 0;
 
             for (uint32_t i = 0; i < numHulls; ++i)
             {
                 VHACD::IVHACD::ConvexHull hull;
                 vhacd->GetConvexHull(i, hull);
 
-                auto& outHull = result.hulls[i];
+                // Validate hull vertex count against Jolt's limit
+                if (hull.m_points.size() > effectiveMaxVertices)
+                {
+                    vfLogWarning("  Hull {} has {} vertices (exceeds limit of {}), skipping",
+                                 i, hull.m_points.size(), effectiveMaxVertices);
+                    ++skippedHulls;
+                    continue;
+                }
+
+                if (hull.m_points.empty())
+                {
+                    ++skippedHulls;
+                    continue;
+                }
+
+                result.hulls.emplace_back();
+                auto& outHull = result.hulls.back();
                 outHull.vertices.reserve(hull.m_points.size());
 
                 for (const auto& p : hull.m_points)
@@ -595,7 +615,21 @@ namespace types
                 outHull.volume = static_cast<float>(hull.m_volume);
             }
 
-            vfLogInfo("  Total convex hull vertices: {}", result.getTotalVertexCount());
+            if (skippedHulls > 0)
+            {
+                vfLogWarning("  Skipped {} hulls due to vertex count limits", skippedHulls);
+            }
+
+            if (result.hulls.empty())
+            {
+                vfLogWarning("  All hulls were skipped, decomposition invalid");
+                result.hasDecomposition = false;
+            }
+            else
+            {
+                vfLogInfo("  Final hull count: {}, total vertices: {}",
+                          result.hulls.size(), result.getTotalVertexCount());
+            }
         }
         else
         {
