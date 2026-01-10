@@ -23,7 +23,6 @@ static_assert(
     "BodyType::Kinematic mismatch between core::physics and services");
 
 // ColliderShape enums: core::physics::ColliderShape <-> services::ColliderData::Shape
-// Note: services has additional shapes (Mesh) not yet supported in core::physics
 static_assert(
     static_cast<int>(core::physics::ColliderShape::Box) ==
     static_cast<int>(services::ColliderData::Shape::Box),
@@ -36,6 +35,14 @@ static_assert(
     static_cast<int>(core::physics::ColliderShape::Capsule) ==
     static_cast<int>(services::ColliderData::Shape::Capsule),
     "ColliderShape::Capsule mismatch between core::physics and services");
+static_assert(
+    static_cast<int>(core::physics::ColliderShape::ConvexMesh) ==
+    static_cast<int>(services::ColliderData::Shape::ConvexMesh),
+    "ColliderShape::ConvexMesh mismatch between core::physics and services");
+static_assert(
+    static_cast<int>(core::physics::ColliderShape::TriangleMesh) ==
+    static_cast<int>(services::ColliderData::Shape::TriangleMesh),
+    "ColliderShape::TriangleMesh mismatch between core::physics and services");
 
 namespace core {
 
@@ -402,34 +409,6 @@ namespace core {
         return result;
     }
 
-    std::vector<services::RaycastHit> PhysicsAdapter::raycastAll(const glm::vec3& origin,
-        const glm::vec3& direction,
-        float maxDistance) {
-        std::vector<services::RaycastHit> results;
-
-        if (!physicsWorld) {
-            return results;
-        }
-
-        auto physicsResults = physicsWorld->raycastAll(origin, direction, maxDistance);
-
-        for (const auto& physicsResult : physicsResults) {
-            services::RaycastHit result;
-            result.hit = physicsResult.hit;
-            result.point = physicsResult.point;
-            result.normal = physicsResult.normal;
-            result.distance = physicsResult.distance;
-
-            if (physicsResult.entityId != 0) {
-                result.entity = services::EntityHandle{ physicsResult.entityId };
-            }
-
-            results.push_back(result);
-        }
-
-        return results;
-    }
-
     bool PhysicsAdapter::isOverlapping(services::EntityHandle entityA,
         services::EntityHandle entityB) const {
         if (!physicsWorld) {
@@ -444,13 +423,6 @@ namespace core {
         }
 
         return physicsWorld->areBodiesInContact(bodyA, bodyB);
-    }
-
-    double PhysicsAdapter::getInterpolationAlpha() const {
-        if (fixedTimestep) {
-            return fixedTimestep->getAlpha();
-        }
-        return 1.0;
     }
 
     physics::RigidBodyCreateInfo PhysicsAdapter::toPhysicsBodyInfo(
@@ -496,10 +468,15 @@ namespace core {
             info.radius = data.size.x;
             info.height = data.height;
             break;
-        case services::ColliderData::Shape::Mesh:
-            // Mesh colliders will be handled separately in future
-            info.shape = physics::ColliderShape::Box;
-            info.halfExtents = data.size * 0.5f;
+        case services::ColliderData::Shape::ConvexMesh:
+            info.shape = physics::ColliderShape::ConvexMesh;
+            info.halfExtents = data.size * 0.5f;  // Fallback size if mesh loading fails
+            info.meshPath = data.meshPath;
+            break;
+        case services::ColliderData::Shape::TriangleMesh:
+            info.shape = physics::ColliderShape::TriangleMesh;
+            info.halfExtents = data.size * 0.5f;  // Fallback size if mesh loading fails
+            info.meshPath = data.meshPath;
             break;
         }
 

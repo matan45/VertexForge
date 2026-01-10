@@ -174,13 +174,6 @@ namespace events::physics {
         std::string_view getName() const override { return "Raycast"; }
     };
 
-    struct RaycastAllQuery : ::events::IQuery<std::vector<services::RaycastHit>> {
-        glm::vec3 origin;
-        glm::vec3 direction;
-        float maxDistance;
-        std::string_view getName() const override { return "RaycastAll"; }
-    };
-
     struct IsOverlappingQuery : ::events::IQuery<bool> {
         services::EntityHandle entityA;
         services::EntityHandle entityB;

@@ -4,7 +4,6 @@
 #include "events/SceneEvents.hpp"
 #include "events/PhysicsSettingsEvents.hpp"
 #include "types/PhysicsTypes.hpp"
-#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -180,41 +179,7 @@ namespace windows::details
         case services::ColliderShapeType::ConvexMesh:
         case services::ColliderShapeType::TriangleMesh:
         {
-            ImGui::Text("Mesh Collider:");
-            if (!colliderData.meshPath.empty())
-            {
-                std::string filename = colliderData.meshPath;
-                auto lastSlash = filename.find_last_of("/\\");
-                if (lastSlash != std::string::npos)
-                {
-                    filename = filename.substr(lastSlash + 1);
-                }
-                ImGui::Text("File: %s", filename.c_str());
-            }
-            else
-            {
-                ImGui::TextDisabled("No mesh file selected");
-            }
-
-            if (ImGui::Button("Select Mesh##Collider"))
-            {
-                nfd::FileDialog fileDialog;
-                std::string path = fileDialog.openFileDialog(
-                    {{L"VF Mesh Files (*.vfMesh)", L"*.vfMesh"}});
-                if (!path.empty())
-                {
-                    colliderData.meshPath = path;
-                    changed = true;
-                }
-            }
-            ImGui::SameLine();
-            if (colliderData.meshPath.empty()) ImGui::BeginDisabled();
-            if (ImGui::Button("Clear##MeshCollider"))
-            {
-                colliderData.meshPath = "";
-                changed = true;
-            }
-            if (colliderData.meshPath.empty()) ImGui::EndDisabled();
+            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Uses mesh from Mesh Component");
 
             if (colliderData.shape == services::ColliderShapeType::TriangleMesh)
             {

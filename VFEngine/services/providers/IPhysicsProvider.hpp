@@ -69,15 +69,7 @@ namespace services {
 
         virtual RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
             float maxDistance) = 0;
-        virtual std::vector<RaycastHit> raycastAll(const glm::vec3& origin,
-            const glm::vec3& direction,
-            float maxDistance) = 0;
         virtual bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const = 0;
-
-        // === Interpolation ===
-        // Get alpha for smooth rendering between physics states
-
-        virtual double getInterpolationAlpha() const = 0;
 
         // === Physics Settings ===
 

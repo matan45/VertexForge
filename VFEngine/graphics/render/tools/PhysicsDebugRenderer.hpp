@@ -4,6 +4,8 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
+#include <string>
+#include <unordered_map>
 #include <cstdint>
 #include "../../../utilities/types/PhysicsTypes.hpp"
 
@@ -25,6 +27,18 @@ namespace render::mesh
         float height = 2.0f;            // Capsule total height
         uint8_t bodyType = 1;           // 0=Static, 1=Dynamic, 2=Kinematic
         bool isTrigger = false;
+        std::string meshPath;           // Path to mesh for ConvexMesh/TriangleMesh shapes
+    };
+
+    // Cached mesh data for debug rendering
+    struct MeshDebugData
+    {
+        vk::Buffer vertexBuffer;
+        vk::DeviceMemory vertexMemory;
+        vk::Buffer indexBuffer;
+        vk::DeviceMemory indexMemory;
+        uint32_t indexCount = 0;
+        bool isValid = false;
     };
 
     struct PhysicsDebugPushConstants
@@ -65,6 +79,9 @@ namespace render::mesh
         vk::DeviceMemory capsuleIndexMemory;
         uint32_t capsuleIndexCount = 0;
 
+        // Mesh collider cache (path -> buffers)
+        mutable std::unordered_map<std::string, MeshDebugData> meshCache;
+
         bool initialized = false;
 
         static constexpr int SPHERE_SEGMENTS = 24;
@@ -93,6 +110,10 @@ namespace render::mesh
         void createBoxBuffers();
         void createSphereBuffers();
         void createCapsuleBuffers();
+
+        // Get or create mesh debug buffers from cache
+        const MeshDebugData* getOrCreateMeshBuffers(const std::string& meshPath) const;
+        void cleanupMeshCache();
 
         glm::vec4 getColorForCollider(const PhysicsColliderRenderData& data) const;
     };

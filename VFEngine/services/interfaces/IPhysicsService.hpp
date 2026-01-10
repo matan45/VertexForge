@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>
+#include <string>
 
 namespace services {
 
@@ -19,7 +20,8 @@ namespace services {
     };
     
     struct ColliderData {
-        enum class Shape { Box, Sphere, Capsule, Mesh };
+        // Shape enum values must match types::ColliderShape for static_assert validation
+        enum class Shape { Box = 0, Sphere = 1, Capsule = 2, ConvexMesh = 3, TriangleMesh = 4 };
 
         Shape shape = Shape::Box;
         glm::vec3 size{ 1.0f };     // Box half-extents or sphere/capsule radius
@@ -27,6 +29,7 @@ namespace services {
         bool isTrigger = false;
         uint8_t collisionLayer = 1; // Collision layer (0-15, default 1 = Dynamic)
         glm::vec3 offset{ 0.0f };   // Local offset from entity center
+        std::string meshPath;       // Path to mesh for ConvexMesh/TriangleMesh shapes
     };
     
     struct RaycastHit {
@@ -94,11 +97,7 @@ namespace services {
         
         virtual RaycastHit raycast(const glm::vec3& origin, const glm::vec3& direction,
                                    float maxDistance) = 0;
-        
-        virtual std::vector<RaycastHit> raycastAll(const glm::vec3& origin,
-                                                    const glm::vec3& direction,
-                                                    float maxDistance) = 0;
-        
+
         virtual bool isOverlapping(EntityHandle entityA, EntityHandle entityB) const = 0;
     };
 

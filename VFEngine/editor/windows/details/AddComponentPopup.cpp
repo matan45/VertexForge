@@ -121,7 +121,7 @@ namespace windows::details
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Collision shape (Box, Sphere, Capsule, or Mesh)");
+                    ImGui::SetTooltip("Collision shape (Box, Sphere, Capsule, Convex Mesh, or Triangle Mesh)");
                 }
             }
 

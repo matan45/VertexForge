@@ -8,7 +8,11 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
+#include "PhysicsMeshLoader.hpp"
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include "print/Logger.hpp"
@@ -632,6 +636,93 @@ namespace core::physics {
                     info.radius, safeRadius, halfHeight, info.height);
             }
             return new JPH::CapsuleShape(halfHeight, safeRadius);
+        }
+
+        case ColliderShape::ConvexMesh: {
+            if (info.meshPath.empty()) {
+                loggerWarning("ConvexMesh collider has no mesh path, using box fallback");
+                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                return new JPH::BoxShape(toJolt(safeExtents));
+            }
+
+            // Load mesh data
+            auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
+            if (!meshData || meshData->vertices.empty()) {
+                loggerWarning("ConvexMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
+                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                return new JPH::BoxShape(toJolt(safeExtents));
+            }
+
+            // Convert vertices to Jolt format
+            JPH::Array<JPH::Vec3> joltVertices;
+            joltVertices.reserve(meshData->vertices.size());
+            for (const auto& v : meshData->vertices) {
+                joltVertices.push_back(JPH::Vec3(v.x, v.y, v.z));
+            }
+
+            // Create convex hull shape
+            JPH::ConvexHullShapeSettings settings(joltVertices.data(), static_cast<int>(joltVertices.size()));
+            settings.mMaxConvexRadius = 0.05f; // Small convex radius for better fit
+
+            auto result = settings.Create();
+            if (result.HasError()) {
+                loggerWarning("ConvexMesh collider creation failed: {}, using box fallback",
+                    result.GetError().c_str());
+                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                return new JPH::BoxShape(toJolt(safeExtents));
+            }
+
+            loggerInfo("Created ConvexMesh collider with {} vertices from: {}",
+                meshData->vertices.size(), info.meshPath);
+            return result.Get();
+        }
+
+        case ColliderShape::TriangleMesh: {
+            // Note: TriangleMesh should only be used for static bodies
+            if (info.meshPath.empty()) {
+                loggerWarning("TriangleMesh collider has no mesh path, using box fallback");
+                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                return new JPH::BoxShape(toJolt(safeExtents));
+            }
+
+            // Load mesh data
+            auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
+            if (!meshData || meshData->vertices.empty() || meshData->indices.empty()) {
+                loggerWarning("TriangleMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
+                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                return new JPH::BoxShape(toJolt(safeExtents));
+            }
+
+            // Create triangle list
+            JPH::TriangleList triangles;
+            triangles.reserve(meshData->indices.size() / 3);
+
+            for (size_t i = 0; i + 2 < meshData->indices.size(); i += 3) {
+                const auto& v0 = meshData->vertices[meshData->indices[i]];
+                const auto& v1 = meshData->vertices[meshData->indices[i + 1]];
+                const auto& v2 = meshData->vertices[meshData->indices[i + 2]];
+
+                triangles.push_back(JPH::Triangle(
+                    JPH::Float3(v0.x, v0.y, v0.z),
+                    JPH::Float3(v1.x, v1.y, v1.z),
+                    JPH::Float3(v2.x, v2.y, v2.z)
+                ));
+            }
+
+            // Create mesh shape
+            JPH::MeshShapeSettings settings(triangles);
+
+            auto result = settings.Create();
+            if (result.HasError()) {
+                loggerWarning("TriangleMesh collider creation failed: {}, using box fallback",
+                    result.GetError().c_str());
+                glm::vec3 safeExtents = glm::max(info.halfExtents, glm::vec3(MIN_DIMENSION));
+                return new JPH::BoxShape(toJolt(safeExtents));
+            }
+
+            loggerInfo("Created TriangleMesh collider with {} triangles from: {}",
+                triangles.size(), info.meshPath);
+            return result.Get();
         }
 
         default:

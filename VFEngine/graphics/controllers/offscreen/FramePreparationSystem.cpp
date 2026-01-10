@@ -510,6 +510,21 @@ namespace controllers::offscreen
             renderData.height = colliderComp.height;
             renderData.isTrigger = colliderComp.isTrigger;
 
+            // For mesh colliders, use collider's meshPath or fall back to MeshComponent's path
+            if ((colliderComp.shape == components::ColliderShape::ConvexMesh ||
+                 colliderComp.shape == components::ColliderShape::TriangleMesh))
+            {
+                if (!colliderComp.meshPath.empty())
+                {
+                    renderData.meshPath = colliderComp.meshPath;
+                }
+                else if (registry.all_of<components::MeshComponent>(entity))
+                {
+                    const auto& meshComp = registry.get<components::MeshComponent>(entity);
+                    renderData.meshPath = meshComp.meshPath;
+                }
+            }
+
             // Determine body type from RigidBodyComponent if present
             if (registry.all_of<components::RigidBodyComponent>(entity))
             {

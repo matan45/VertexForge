@@ -194,8 +194,28 @@ namespace services
                     colData.shape = ColliderData::Shape::Capsule;
                     break;
                 case components::ColliderShape::ConvexMesh:
+                    colData.shape = ColliderData::Shape::ConvexMesh;
+                    // Use collider's meshPath, or fall back to MeshComponent's path
+                    if (!collider.meshPath.empty())
+                    {
+                        colData.meshPath = collider.meshPath;
+                    }
+                    else if (registry.all_of<components::MeshComponent>(entity))
+                    {
+                        colData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                    }
+                    break;
                 case components::ColliderShape::TriangleMesh:
-                    colData.shape = ColliderData::Shape::Mesh;
+                    colData.shape = ColliderData::Shape::TriangleMesh;
+                    // Use collider's meshPath, or fall back to MeshComponent's path
+                    if (!collider.meshPath.empty())
+                    {
+                        colData.meshPath = collider.meshPath;
+                    }
+                    else if (registry.all_of<components::MeshComponent>(entity))
+                    {
+                        colData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                    }
                     break;
                 }
                 colData.size = collider.size;

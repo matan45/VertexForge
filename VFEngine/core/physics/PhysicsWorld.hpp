@@ -12,6 +12,7 @@
 #include <memory>
 #include <unordered_map>
 #include <cstdint>
+#include <string>
 
 namespace core::physics {
 
@@ -22,11 +23,13 @@ namespace core::physics {
         Kinematic
     };
 
-    // Collider shape enum
+    // Collider shape enum (must match types::ColliderShape values)
     enum class ColliderShape {
-        Box,
-        Sphere,
-        Capsule
+        Box = 0,
+        Sphere = 1,
+        Capsule = 2,
+        ConvexMesh = 3,
+        TriangleMesh = 4
     };
 
     struct RigidBodyCreateInfo {
@@ -50,6 +53,7 @@ namespace core::physics {
         glm::vec3 offset{ 0.0f };       // Local offset
         bool isTrigger = false;
         uint8_t collisionLayer = 1;     // Collision layer (0-15, default 1 = Dynamic)
+        std::string meshPath;           // Path to mesh for ConvexMesh/TriangleMesh shapes
     };
 
     struct RaycastResult {

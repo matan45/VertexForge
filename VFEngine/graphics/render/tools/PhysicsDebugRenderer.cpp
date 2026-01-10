@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "../../../utilities/resource/MeshStreamHandle.hpp"
 #include <cmath>
 #include <stdexcept>
 
@@ -135,7 +136,164 @@ namespace render::mesh
             capsuleIndexMemory = nullptr;
         }
 
+        // Mesh cache
+        cleanupMeshCache();
+
         initialized = false;
+    }
+
+    void PhysicsDebugRenderer::cleanupMeshCache()
+    {
+        auto& dev = device.getLogicalDevice();
+
+        for (auto& [path, meshData] : meshCache)
+        {
+            if (meshData.vertexBuffer)
+            {
+                dev.destroyBuffer(meshData.vertexBuffer);
+                dev.freeMemory(meshData.vertexMemory);
+            }
+            if (meshData.indexBuffer)
+            {
+                dev.destroyBuffer(meshData.indexBuffer);
+                dev.freeMemory(meshData.indexMemory);
+            }
+        }
+        meshCache.clear();
+    }
+
+    const MeshDebugData* PhysicsDebugRenderer::getOrCreateMeshBuffers(const std::string& meshPath) const
+    {
+        if (meshPath.empty())
+        {
+            return nullptr;
+        }
+
+        // Check cache first
+        auto it = meshCache.find(meshPath);
+        if (it != meshCache.end())
+        {
+            return it->second.isValid ? &it->second : nullptr;
+        }
+
+        // Load mesh data
+        auto streamHandle = resource::MeshStreamResource::openStream(meshPath);
+        if (!streamHandle)
+        {
+            meshCache[meshPath] = MeshDebugData{}; // Cache as invalid
+            return nullptr;
+        }
+
+        // Use LOD 2 for debug rendering (balance of detail and performance)
+        std::vector<resource::Vertex> vertices;
+        std::vector<uint32_t> triangleIndices;
+
+        if (!streamHandle->readLODLevel(0, 2, vertices, triangleIndices))
+        {
+            meshCache[meshPath] = MeshDebugData{};
+            return nullptr;
+        }
+
+        if (vertices.empty() || triangleIndices.empty())
+        {
+            meshCache[meshPath] = MeshDebugData{};
+            return nullptr;
+        }
+
+        // Convert triangle indices to line indices for wireframe rendering
+        // Each triangle (3 vertices) becomes 3 edges (6 indices)
+        std::vector<uint32_t> lineIndices;
+        lineIndices.reserve((triangleIndices.size() / 3) * 6);
+
+        for (size_t i = 0; i + 2 < triangleIndices.size(); i += 3)
+        {
+            uint32_t i0 = triangleIndices[i];
+            uint32_t i1 = triangleIndices[i + 1];
+            uint32_t i2 = triangleIndices[i + 2];
+
+            // Edge 0-1
+            lineIndices.push_back(i0);
+            lineIndices.push_back(i1);
+            // Edge 1-2
+            lineIndices.push_back(i1);
+            lineIndices.push_back(i2);
+            // Edge 2-0
+            lineIndices.push_back(i2);
+            lineIndices.push_back(i0);
+        }
+
+        // Extract positions
+        std::vector<glm::vec3> positions;
+        positions.reserve(vertices.size());
+        for (const auto& v : vertices)
+        {
+            positions.push_back(v.position);
+        }
+
+        // Create GPU buffers
+        MeshDebugData meshData;
+
+        try
+        {
+            // Vertex buffer
+            vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * positions.size();
+            core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            vertexRequest.size = vertexBufferSize;
+            vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(vertexRequest, meshData.vertexBuffer, meshData.vertexMemory);
+
+            core::BufferUtilities::copyToBuffer(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                device.getGraphicsQueue(),
+                device.getStagingCommandPool(),
+                meshData.vertexBuffer,
+                positions.data(),
+                vertexBufferSize
+            );
+
+            // Index buffer
+            vk::DeviceSize indexBufferSize = sizeof(uint32_t) * lineIndices.size();
+            core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
+            indexRequest.size = indexBufferSize;
+            indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(indexRequest, meshData.indexBuffer, meshData.indexMemory);
+
+            core::BufferUtilities::copyToBuffer(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                device.getGraphicsQueue(),
+                device.getStagingCommandPool(),
+                meshData.indexBuffer,
+                lineIndices.data(),
+                indexBufferSize
+            );
+
+            meshData.indexCount = static_cast<uint32_t>(lineIndices.size());
+            meshData.isValid = true;
+        }
+        catch (...)
+        {
+            // Clean up on failure
+            auto& dev = device.getLogicalDevice();
+            if (meshData.vertexBuffer)
+            {
+                dev.destroyBuffer(meshData.vertexBuffer);
+                dev.freeMemory(meshData.vertexMemory);
+            }
+            if (meshData.indexBuffer)
+            {
+                dev.destroyBuffer(meshData.indexBuffer);
+                dev.freeMemory(meshData.indexMemory);
+            }
+            meshCache[meshPath] = MeshDebugData{};
+            return nullptr;
+        }
+
+        meshCache[meshPath] = std::move(meshData);
+        return &meshCache[meshPath];
     }
 
     void PhysicsDebugRenderer::cleanUpShader()
@@ -586,27 +744,50 @@ namespace render::mesh
             case types::ColliderShape::ConvexMesh:
             case types::ColliderShape::TriangleMesh:
             {
-                // Render mesh colliders as AABB approximation using yellow color
-                if (!boxVertexBuffer) break;
+                // Try to render actual mesh wireframe
+                const MeshDebugData* meshData = getOrCreateMeshBuffers(collider.meshPath);
 
-                // Use yellow color to indicate this is an approximation
-                pushConstants.color = glm::vec4(0.9f, 0.9f, 0.2f, 0.8f);
+                if (meshData && meshData->isValid)
+                {
+                    // Render actual mesh wireframe
+                    glm::mat4 model = collider.worldMatrix;
 
-                glm::mat4 model = collider.worldMatrix;
-                model = glm::scale(model, collider.size);
+                    pushConstants.mvp = viewProj * model;
 
-                pushConstants.mvp = viewProj * model;
+                    commandBuffer.bindIndexBuffer(meshData->indexBuffer, 0, vk::IndexType::eUint32);
+                    vk::Buffer vertexBuffers[] = {meshData->vertexBuffer};
+                    vk::DeviceSize offsets[] = {0};
+                    commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-                commandBuffer.bindIndexBuffer(boxIndexBuffer, 0, vk::IndexType::eUint32);
-                vk::Buffer vertexBuffers[] = {boxVertexBuffer};
-                vk::DeviceSize offsets[] = {0};
-                commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+                    commandBuffer.pushConstants(wireframePipelineLayout,
+                                                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                                0, sizeof(PhysicsDebugPushConstants), &pushConstants);
 
-                commandBuffer.pushConstants(wireframePipelineLayout,
-                                            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                                            0, sizeof(PhysicsDebugPushConstants), &pushConstants);
+                    commandBuffer.drawIndexed(meshData->indexCount, 1, 0, 0, 0);
+                }
+                else
+                {
+                    // Fallback: render AABB approximation using yellow color
+                    if (!boxVertexBuffer) break;
 
-                commandBuffer.drawIndexed(boxIndexCount, 1, 0, 0, 0);
+                    pushConstants.color = glm::vec4(0.9f, 0.9f, 0.2f, 0.8f);
+
+                    glm::mat4 model = collider.worldMatrix;
+                    model = glm::scale(model, collider.size);
+
+                    pushConstants.mvp = viewProj * model;
+
+                    commandBuffer.bindIndexBuffer(boxIndexBuffer, 0, vk::IndexType::eUint32);
+                    vk::Buffer vertexBuffers[] = {boxVertexBuffer};
+                    vk::DeviceSize offsets[] = {0};
+                    commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+
+                    commandBuffer.pushConstants(wireframePipelineLayout,
+                                                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                                0, sizeof(PhysicsDebugPushConstants), &pushConstants);
+
+                    commandBuffer.drawIndexed(boxIndexCount, 1, 0, 0, 0);
+                }
                 break;
             }
             }

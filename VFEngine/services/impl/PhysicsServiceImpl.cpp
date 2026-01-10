@@ -161,11 +161,6 @@ namespace services {
                 return raycast(query.origin, query.direction, query.maxDistance);
             });
 
-        dispatcher.registerQueryHandler<events::physics::RaycastAllQuery>(
-            [this](const auto& query) {
-                return raycastAll(query.origin, query.direction, query.maxDistance);
-            });
-
         dispatcher.registerQueryHandler<events::physics::IsOverlappingQuery>(
             [this](const auto& query) {
                 return isOverlapping(query.entityA, query.entityB);
@@ -424,12 +419,6 @@ namespace services {
     RaycastHit PhysicsServiceImpl::raycast(const glm::vec3& origin, const glm::vec3& direction,
         float maxDistance) {
         return physicsProvider->raycast(origin, direction, maxDistance);
-    }
-
-    std::vector<RaycastHit> PhysicsServiceImpl::raycastAll(const glm::vec3& origin,
-        const glm::vec3& direction,
-        float maxDistance) {
-        return physicsProvider->raycastAll(origin, direction, maxDistance);
     }
 
     bool PhysicsServiceImpl::isOverlapping(EntityHandle entityA, EntityHandle entityB) const {

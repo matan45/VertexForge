@@ -136,6 +136,7 @@
     <ClInclude Include="physics\FixedTimestep.hpp" />
     <ClInclude Include="physics\PhysicsContactListener.hpp" />
     <ClInclude Include="physics\PhysicsLayers.hpp" />
+    <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
     <ClInclude Include="physics\PhysicsWorld.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -173,6 +174,7 @@
     <ClCompile Include="handlers\WindowHandler.cpp" />
     <ClCompile Include="physics\FixedTimestep.cpp" />
     <ClCompile Include="physics\PhysicsContactListener.cpp" />
+    <ClCompile Include="physics\PhysicsMeshLoader.cpp" />
     <ClCompile Include="physics\PhysicsWorld.cpp" />
   </ItemGroup>
   <ItemGroup>
