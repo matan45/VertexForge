@@ -256,7 +256,6 @@ namespace resource
 
         submeshInfo.convexDataOffset = file.tellg();
 
-        // Read hasDecomposition flag
         uint8_t hasDecomp = endian::readLE<uint8_t>(file);
         submeshInfo.hasConvexData = (hasDecomp != 0);
 
@@ -265,10 +264,8 @@ namespace resource
             return !file.fail();
         }
 
-        // Skip parameters (5 fields: maxConvexHulls, resolution, maxVerticesPerHull, minVolumePercentError, maxRecursionDepth)
-        file.seekg(4 + 4 + 4 + 4 + 4, std::ios::cur); // 20 bytes
+        file.seekg(20, std::ios::cur); // Skip parameters
 
-        // Read hull count with validation
         uint32_t numHulls = endian::readLE<uint32_t>(file);
         if (numHulls > maxConvexHullCount)
         {
@@ -277,10 +274,8 @@ namespace resource
             return false;
         }
 
-        // Skip hull data with validation
         for (uint32_t h = 0; h < numHulls; ++h)
         {
-            // Read and validate vertex count before skipping
             uint32_t vertexCount = endian::readLE<uint32_t>(file);
             if (vertexCount > maxHullVertexCount)
             {
@@ -290,7 +285,6 @@ namespace resource
             }
             file.seekg(vertexCount * 3 * sizeof(float), std::ios::cur);
 
-            // Read and validate index count before skipping
             uint32_t indexCount = endian::readLE<uint32_t>(file);
             if (indexCount > maxHullIndexCount)
             {
@@ -299,9 +293,7 @@ namespace resource
                 return false;
             }
             file.seekg(indexCount * sizeof(uint32_t), std::ios::cur);
-
-            // Skip center (3 floats) and volume (1 float)
-            file.seekg(4 * sizeof(float), std::ios::cur);
+            file.seekg(4 * sizeof(float), std::ios::cur); // center + volume
         }
 
         if (file.fail())
@@ -525,7 +517,6 @@ namespace resource
 
         if (!hasConvexHulls)
         {
-            // File doesn't support convex data - not an error, just no data
             return true;
         }
 
@@ -539,7 +530,6 @@ namespace resource
         const auto& submeshInfo = header.submeshes[submeshIdx];
         if (!submeshInfo.hasConvexData)
         {
-            // Submesh doesn't have convex data - not an error
             return true;
         }
 
@@ -550,7 +540,6 @@ namespace resource
             return false;
         }
 
-        // Read hasDecomposition flag
         uint8_t hasDecomp = endian::readLE<uint8_t>(file);
         outData.hasDecomposition = (hasDecomp != 0);
 
@@ -559,14 +548,12 @@ namespace resource
             return true;
         }
 
-        // Read parameters
         outData.params.maxConvexHulls = endian::readLE<uint32_t>(file);
         outData.params.resolution = endian::readLE<uint32_t>(file);
         outData.params.maxVerticesPerHull = endian::readLE<uint32_t>(file);
         outData.params.minVolumePercentError = endian::readLE<float>(file);
         outData.params.maxRecursionDepth = endian::readLE<uint32_t>(file);
 
-        // Read hull count with safety validation
         uint32_t numHulls = endian::readLE<uint32_t>(file);
         if (numHulls > maxConvexHullCount)
         {
@@ -577,12 +564,10 @@ namespace resource
 
         outData.hulls.resize(numHulls);
 
-        // Read each hull
         for (uint32_t h = 0; h < numHulls; ++h)
         {
             auto& hull = outData.hulls[h];
 
-            // Read vertices with safety validation
             uint32_t vertexCount = endian::readLE<uint32_t>(file);
             if (vertexCount > maxHullVertexCount)
             {
@@ -599,7 +584,6 @@ namespace resource
                 hull.vertices[v].z = endian::readLE<float>(file);
             }
 
-            // Read indices with safety validation
             uint32_t indexCount = endian::readLE<uint32_t>(file);
             if (indexCount > maxHullIndexCount)
             {
@@ -614,7 +598,6 @@ namespace resource
                 hull.indices[i] = endian::readLE<uint32_t>(file);
             }
 
-            // Read center and volume
             hull.center.x = endian::readLE<float>(file);
             hull.center.y = endian::readLE<float>(file);
             hull.center.z = endian::readLE<float>(file);

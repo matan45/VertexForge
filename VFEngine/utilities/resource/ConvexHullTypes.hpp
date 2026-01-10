@@ -5,32 +5,29 @@
 
 namespace resource
 {
-    // Single convex hull from V-HACD decomposition
     struct ConvexHull
     {
-        std::vector<glm::vec3> vertices;  // Hull vertices
-        std::vector<uint32_t> indices;    // Triangle indices (for visualization/debug)
-        glm::vec3 center{0.0f};           // Hull center of mass
-        float volume = 0.0f;              // Hull volume
+        std::vector<glm::vec3> vertices;
+        std::vector<uint32_t> indices;  // For visualization/debug only
+        glm::vec3 center{0.0f};
+        float volume = 0.0f;
     };
 
-    // V-HACD decomposition parameters (stored with mesh for reproducibility)
     struct ConvexDecompositionParams
     {
-        uint32_t maxConvexHulls = 16;          // Target max number of hulls
-        uint32_t resolution = 100000;          // Voxel resolution (higher = more accurate, slower)
-        uint32_t maxVerticesPerHull = 32;      // Max vertices per convex hull (Jolt limit is 256)
-        float minVolumePercentError = 1.0f;    // Minimum volume error allowed (higher = fewer hulls)
-        uint32_t maxRecursionDepth = 10;       // Max decomposition depth
-        bool shrinkWrap = true;                // Project hull vertices to source mesh surface
+        uint32_t maxConvexHulls = 16;
+        uint32_t resolution = 100000;          // Higher = more accurate, slower
+        uint32_t maxVerticesPerHull = 32;      // Jolt limit is 256
+        float minVolumePercentError = 1.0f;    // Higher = fewer hulls
+        uint32_t maxRecursionDepth = 10;
+        bool shrinkWrap = true;
     };
 
-    // Collection of convex hulls for a submesh
     struct ConvexDecompositionData
     {
         bool hasDecomposition = false;
-        ConvexDecompositionParams params;      // Parameters used for generation
-        std::vector<ConvexHull> hulls;         // Generated convex hulls
+        ConvexDecompositionParams params;
+        std::vector<ConvexHull> hulls;
 
         bool isValid() const
         {
