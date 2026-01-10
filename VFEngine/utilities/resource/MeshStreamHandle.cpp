@@ -86,6 +86,7 @@ namespace resource
         }
 
         hasMeshlets = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 4);
+        hasConvexHulls = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 5);
 
         header.numSubmeshes = endian::readLE<uint32_t>(file);
 
@@ -187,6 +188,14 @@ namespace resource
                     return false;
                 }
             }
+
+            if (hasConvexHulls)
+            {
+                if (!parseConvexHeaders(meshIdx))
+                {
+                    return false;
+                }
+            }
         }
 
         return true;
@@ -235,6 +244,61 @@ namespace resource
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to skip meshlet data for submesh {}", meshIdx);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool MeshStreamHandle::parseConvexHeaders(uint32_t meshIdx)
+    {
+        auto& submeshInfo = header.submeshes[meshIdx];
+
+        submeshInfo.convexDataOffset = file.tellg();
+
+        uint8_t hasDecomp = endian::readLE<uint8_t>(file);
+        submeshInfo.hasConvexData = (hasDecomp != 0);
+
+        if (!submeshInfo.hasConvexData)
+        {
+            return !file.fail();
+        }
+
+        file.seekg(20, std::ios::cur); // Skip parameters
+
+        uint32_t numHulls = endian::readLE<uint32_t>(file);
+        if (numHulls > maxConvexHullCount)
+        {
+            vfLogError("MeshStreamHandle: Hull count {} exceeds limit {} in submesh {}",
+                       numHulls, maxConvexHullCount, meshIdx);
+            return false;
+        }
+
+        for (uint32_t h = 0; h < numHulls; ++h)
+        {
+            uint32_t vertexCount = endian::readLE<uint32_t>(file);
+            if (vertexCount > maxHullVertexCount)
+            {
+                vfLogError("MeshStreamHandle: Hull {} vertex count {} exceeds limit {} in submesh {}",
+                           h, vertexCount, maxHullVertexCount, meshIdx);
+                return false;
+            }
+            file.seekg(vertexCount * 3 * sizeof(float), std::ios::cur);
+
+            uint32_t indexCount = endian::readLE<uint32_t>(file);
+            if (indexCount > maxHullIndexCount)
+            {
+                vfLogError("MeshStreamHandle: Hull {} index count {} exceeds limit {} in submesh {}",
+                           h, indexCount, maxHullIndexCount, meshIdx);
+                return false;
+            }
+            file.seekg(indexCount * sizeof(uint32_t), std::ios::cur);
+            file.seekg(4 * sizeof(float), std::ios::cur); // center + volume
+        }
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to parse convex data for submesh {}", meshIdx);
             return false;
         }
 
@@ -433,6 +497,116 @@ namespace resource
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to read meshlet primitives for submesh {}", submeshIdx);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool MeshStreamHandle::readConvexDecomposition(uint32_t submeshIdx, ConvexDecompositionData& outData)
+    {
+        std::lock_guard<std::mutex> lock(fileMutex);
+
+        outData = ConvexDecompositionData{}; // Reset output
+
+        if (!file.is_open())
+        {
+            vfLogError("MeshStreamHandle: File not open");
+            return false;
+        }
+
+        if (!hasConvexHulls)
+        {
+            return true;
+        }
+
+        if (submeshIdx >= header.numSubmeshes)
+        {
+            vfLogError("MeshStreamHandle: Invalid submesh index {} (max {})",
+                       submeshIdx, header.numSubmeshes);
+            return false;
+        }
+
+        const auto& submeshInfo = header.submeshes[submeshIdx];
+        if (!submeshInfo.hasConvexData)
+        {
+            return true;
+        }
+
+        file.seekg(submeshInfo.convexDataOffset);
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to seek to convex data for submesh {}", submeshIdx);
+            return false;
+        }
+
+        uint8_t hasDecomp = endian::readLE<uint8_t>(file);
+        outData.hasDecomposition = (hasDecomp != 0);
+
+        if (!outData.hasDecomposition)
+        {
+            return true;
+        }
+
+        outData.params.maxConvexHulls = endian::readLE<uint32_t>(file);
+        outData.params.resolution = endian::readLE<uint32_t>(file);
+        outData.params.maxVerticesPerHull = endian::readLE<uint32_t>(file);
+        outData.params.minVolumePercentError = endian::readLE<float>(file);
+        outData.params.maxRecursionDepth = endian::readLE<uint32_t>(file);
+
+        uint32_t numHulls = endian::readLE<uint32_t>(file);
+        if (numHulls > maxConvexHullCount)
+        {
+            vfLogError("MeshStreamHandle: Hull count {} exceeds limit {} in submesh {}",
+                       numHulls, maxConvexHullCount, submeshIdx);
+            return false;
+        }
+
+        outData.hulls.resize(numHulls);
+
+        for (uint32_t h = 0; h < numHulls; ++h)
+        {
+            auto& hull = outData.hulls[h];
+
+            uint32_t vertexCount = endian::readLE<uint32_t>(file);
+            if (vertexCount > maxHullVertexCount)
+            {
+                vfLogError("MeshStreamHandle: Hull {} vertex count {} exceeds limit {} in submesh {}",
+                           h, vertexCount, maxHullVertexCount, submeshIdx);
+                return false;
+            }
+
+            hull.vertices.resize(vertexCount);
+            for (uint32_t v = 0; v < vertexCount; ++v)
+            {
+                hull.vertices[v].x = endian::readLE<float>(file);
+                hull.vertices[v].y = endian::readLE<float>(file);
+                hull.vertices[v].z = endian::readLE<float>(file);
+            }
+
+            uint32_t indexCount = endian::readLE<uint32_t>(file);
+            if (indexCount > maxHullIndexCount)
+            {
+                vfLogError("MeshStreamHandle: Hull {} index count {} exceeds limit {} in submesh {}",
+                           h, indexCount, maxHullIndexCount, submeshIdx);
+                return false;
+            }
+
+            hull.indices.resize(indexCount);
+            for (uint32_t i = 0; i < indexCount; ++i)
+            {
+                hull.indices[i] = endian::readLE<uint32_t>(file);
+            }
+
+            hull.center.x = endian::readLE<float>(file);
+            hull.center.y = endian::readLE<float>(file);
+            hull.center.z = endian::readLE<float>(file);
+            hull.volume = endian::readLE<float>(file);
+        }
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to read convex data for submesh {}", submeshIdx);
             return false;
         }
 

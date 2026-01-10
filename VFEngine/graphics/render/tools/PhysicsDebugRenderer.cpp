@@ -5,6 +5,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "resource/ConvexHullTypes.hpp"
 #include <cmath>
 #include <stdexcept>
 
@@ -180,43 +181,85 @@ namespace render::mesh
             return nullptr;
         }
 
-        std::vector<resource::Vertex> vertices;
-        std::vector<uint32_t> triangleIndices;
-
-        if (!streamHandle->readLODLevel(0, 2, vertices, triangleIndices))
-        {
-            meshCache[meshPath] = MeshDebugData{};
-            return nullptr;
-        }
-
-        if (vertices.empty() || triangleIndices.empty())
-        {
-            meshCache[meshPath] = MeshDebugData{};
-            return nullptr;
-        }
-
-        std::vector<uint32_t> lineIndices;
-        lineIndices.reserve((triangleIndices.size() / 3) * 6);
-
-        for (size_t i = 0; i + 2 < triangleIndices.size(); i += 3)
-        {
-            uint32_t i0 = triangleIndices[i];
-            uint32_t i1 = triangleIndices[i + 1];
-            uint32_t i2 = triangleIndices[i + 2];
-
-            lineIndices.push_back(i0);
-            lineIndices.push_back(i1);
-            lineIndices.push_back(i1);
-            lineIndices.push_back(i2);
-            lineIndices.push_back(i2);
-            lineIndices.push_back(i0);
-        }
-
         std::vector<glm::vec3> positions;
-        positions.reserve(vertices.size());
-        for (const auto& v : vertices)
+        std::vector<uint32_t> lineIndices;
+
+        // First try to load convex decomposition data for accurate debug visualization
+        resource::ConvexDecompositionData convexData;
+        if (streamHandle->readConvexDecomposition(0, convexData) && convexData.isValid())
         {
-            positions.push_back(v.position);
+            // Build wireframe from convex hulls
+            uint32_t vertexOffset = 0;
+            for (const auto& hull : convexData.hulls)
+            {
+                // Add hull vertices
+                for (const auto& v : hull.vertices)
+                {
+                    positions.push_back(v);
+                }
+
+                // Convert hull triangles to line indices
+                for (size_t i = 0; i + 2 < hull.indices.size(); i += 3)
+                {
+                    uint32_t i0 = hull.indices[i] + vertexOffset;
+                    uint32_t i1 = hull.indices[i + 1] + vertexOffset;
+                    uint32_t i2 = hull.indices[i + 2] + vertexOffset;
+
+                    lineIndices.push_back(i0);
+                    lineIndices.push_back(i1);
+                    lineIndices.push_back(i1);
+                    lineIndices.push_back(i2);
+                    lineIndices.push_back(i2);
+                    lineIndices.push_back(i0);
+                }
+
+                vertexOffset += static_cast<uint32_t>(hull.vertices.size());
+            }
+        }
+        else
+        {
+            // Fallback: use mesh LOD data
+            std::vector<resource::Vertex> vertices;
+            std::vector<uint32_t> triangleIndices;
+
+            if (!streamHandle->readLODLevel(0, 2, vertices, triangleIndices))
+            {
+                meshCache[meshPath] = MeshDebugData{};
+                return nullptr;
+            }
+
+            if (vertices.empty() || triangleIndices.empty())
+            {
+                meshCache[meshPath] = MeshDebugData{};
+                return nullptr;
+            }
+
+            positions.reserve(vertices.size());
+            for (const auto& v : vertices)
+            {
+                positions.push_back(v.position);
+            }
+
+            lineIndices.reserve((triangleIndices.size() / 3) * 6);
+            for (size_t i = 0; i + 2 < triangleIndices.size(); i += 3)
+            {
+                uint32_t i0 = triangleIndices[i];
+                uint32_t i1 = triangleIndices[i + 1];
+                uint32_t i2 = triangleIndices[i + 2];
+
+                lineIndices.push_back(i0);
+                lineIndices.push_back(i1);
+                lineIndices.push_back(i1);
+                lineIndices.push_back(i2);
+                lineIndices.push_back(i2);
+                lineIndices.push_back(i0);
+            }
+        }
+
+        if (positions.empty() || lineIndices.empty())
+        {
+            meshCache[meshPath] = MeshDebugData{};
+            return nullptr;
         }
 
         MeshDebugData meshData;

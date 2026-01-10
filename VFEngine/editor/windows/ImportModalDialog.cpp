@@ -40,6 +40,7 @@ namespace windows
             std::vector<services::ImportFileRequest> requests;
             requests.reserve(files.size());
             isFlip.resize(files.size(), false);
+            meshConfigs.resize(files.size());
 
             ImGui::Text("Files Dropped:");
             for (size_t i = 0; i < files.size(); i++)
@@ -52,6 +53,30 @@ namespace windows
                     bool flip = isFlip[i];
                     ImGui::Checkbox("Flip Vertically", &flip);
                     isFlip[i] = flip;
+                }
+
+                if (files::FileUtils::isMeshFile(files[i]))
+                {
+                    ImGui::Indent();
+                    auto& meshConfig = meshConfigs[i];
+
+                    ImGui::Checkbox("Generate Convex Decomposition", &meshConfig.generateConvexDecomposition);
+
+                    if (meshConfig.generateConvexDecomposition)
+                    {
+                        int maxHulls = static_cast<int>(meshConfig.maxConvexHulls);
+                        if (ImGui::SliderInt("Max Hulls", &maxHulls, 1, 64))
+                        {
+                            meshConfig.maxConvexHulls = static_cast<uint32_t>(maxHulls);
+                        }
+
+                        int maxVerts = static_cast<int>(meshConfig.maxVerticesPerHull);
+                        if (ImGui::SliderInt("Max Vertices Per Hull", &maxVerts, 8, 256))
+                        {
+                            meshConfig.maxVerticesPerHull = static_cast<uint32_t>(maxVerts);
+                        }
+                    }
+                    ImGui::Unindent();
                 }
 
                 services::ImportFileRequest request;
@@ -67,10 +92,12 @@ namespace windows
                 // Convert to Import controller format
                 std::vector<importConfig::ImportFiles> importFiles;
                 std::vector<std::string> filePaths;
-                for (const auto& req : requests)
+                for (size_t i = 0; i < requests.size(); ++i)
                 {
+                    const auto& req = requests[i];
                     importConfig::ImportConfig config;
                     config.isImageFlipVertically = req.flipVertically;
+                    config.meshConfig = meshConfigs[i];
                     importFiles.emplace_back(req.path, config);
                     filePaths.push_back(req.path);
                 }

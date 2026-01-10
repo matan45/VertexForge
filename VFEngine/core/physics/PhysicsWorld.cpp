@@ -9,6 +9,7 @@
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include "PhysicsMeshLoader.hpp"
 #include <Jolt/Physics/Collision/CastResult.h>
@@ -636,6 +637,49 @@ namespace core::physics
                     return new JPH::BoxShape(toJolt(safeExtents));
                 }
 
+                // First try to load pre-computed convex decomposition
+                auto decomposition = PhysicsMeshLoader::loadConvexDecomposition(info.meshPath);
+                if (decomposition && !decomposition->hulls.empty())
+                {
+                    // Create compound shape from multiple convex hulls
+                    JPH::StaticCompoundShapeSettings compoundSettings;
+
+                    for (const auto& hull : decomposition->hulls)
+                    {
+                        if (hull.vertices.empty())
+                            continue;
+
+                        JPH::Array<JPH::Vec3> hullVerts;
+                        hullVerts.reserve(hull.vertices.size());
+                        for (const auto& v : hull.vertices)
+                        {
+                            hullVerts.push_back(JPH::Vec3(v.x, v.y, v.z));
+                        }
+
+                        JPH::ConvexHullShapeSettings hullSettings(hullVerts.data(), static_cast<int>(hullVerts.size()));
+                        hullSettings.mMaxConvexRadius = 0.05f;
+
+                        auto hullResult = hullSettings.Create();
+                        if (!hullResult.HasError())
+                        {
+                            compoundSettings.AddShape(JPH::Vec3::sZero(), JPH::Quat::sIdentity(), hullResult.Get());
+                        }
+                    }
+
+                    if (compoundSettings.mSubShapes.size() > 0)
+                    {
+                        auto result = compoundSettings.Create();
+                        if (!result.HasError())
+                        {
+                            loggerInfo("Created ConvexMesh compound collider with {} hulls from: {}",
+                                       compoundSettings.mSubShapes.size(), info.meshPath);
+                            return result.Get();
+                        }
+                    }
+                    // Fall through to single hull if compound creation failed
+                }
+
+                // Fallback: create single convex hull from mesh vertices
                 auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
                 if (!meshData || meshData->vertices.empty())
                 {
@@ -652,7 +696,7 @@ namespace core::physics
                 }
 
                 JPH::ConvexHullShapeSettings settings(joltVertices.data(), static_cast<int>(joltVertices.size()));
-                settings.mMaxConvexRadius = 0.05f; // Small convex radius for better fit
+                settings.mMaxConvexRadius = 0.05f;
 
                 auto result = settings.Create();
                 if (result.HasError())

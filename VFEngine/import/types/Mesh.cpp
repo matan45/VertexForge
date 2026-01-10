@@ -12,6 +12,10 @@
 #include <assimp/postprocess.h>
 #include <meshoptimizer.h>
 
+// V-HACD for convex decomposition (header-only, implementation in this TU)
+#define ENABLE_VHACD_IMPLEMENTATION 1
+#include <VHACD.h>
+
 namespace types
 {
     void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
@@ -32,7 +36,7 @@ namespace types
 
         if (progressCallback) progressCallback(0.2f);
 
-        saveToFileStreamingWithLOD(location, fileName, scene, progressCallback);
+        saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback);
 
         if (progressCallback) progressCallback(1.0f);
     }
@@ -42,7 +46,6 @@ namespace types
         LODMeshData result;
         result.vertices.reserve(assimpMesh->mNumVertices);
 
-        // Convert vertices
         for (unsigned int v = 0; v < assimpMesh->mNumVertices; ++v)
         {
             resource::Vertex vertex;
@@ -106,7 +109,6 @@ namespace types
             return source;
         }
 
-        // If ratio is 1.0, just return a copy
         if (targetRatio >= 1.0f)
         {
             return source;
@@ -161,7 +163,6 @@ namespace types
             }
         }
 
-        // Create compacted vertex buffer
         result.vertices.resize(uniqueVertexCount);
         for (size_t i = 0; i < source.vertices.size(); ++i)
         {
@@ -171,7 +172,6 @@ namespace types
             }
         }
 
-        // Remap indices to use new vertex indices
         for (size_t i = 0; i < result.indices.size(); ++i)
         {
             result.indices[i] = remap[result.indices[i]];
@@ -218,12 +218,10 @@ namespace types
             resource::MAX_MESHLET_PRIMITIVES
         );
 
-        // Allocate temporary buffers for meshoptimizer output
         std::vector<meshopt_Meshlet> meshoptMeshlets(maxMeshlets);
         std::vector<unsigned int> meshletVertexIndices(maxMeshlets * resource::MAX_MESHLET_VERTICES);
         std::vector<unsigned char> meshletTriangleIndices(maxMeshlets * resource::MAX_MESHLET_PRIMITIVES * 3);
 
-        // Build meshlets
         size_t meshletCount = meshopt_buildMeshlets(
             meshoptMeshlets.data(),
             meshletVertexIndices.data(),
@@ -243,7 +241,6 @@ namespace types
             return result;
         }
 
-        // Trim to actual size
         const auto& lastMeshlet = meshoptMeshlets[meshletCount - 1];
         size_t totalVertexIndices = lastMeshlet.vertex_offset + lastMeshlet.vertex_count;
         size_t totalTriangleIndices = lastMeshlet.triangle_offset + ((lastMeshlet.triangle_count * 3 + 3) & ~3);
@@ -257,7 +254,6 @@ namespace types
         result.meshletVertices.resize(totalVertexIndices);
         result.meshletPrimitives.reserve((totalTriangleIndices + 3) / 4);
 
-        // Copy vertex indices
         for (size_t i = 0; i < totalVertexIndices; ++i)
         {
             result.meshletVertices[i] = meshletVertexIndices[i];
@@ -278,14 +274,12 @@ namespace types
             }
         }
 
-        // Convert meshlets and compute bounds
         uint32_t primitiveOffset = 0;
         for (size_t i = 0; i < meshletCount; ++i)
         {
             const auto& m = meshoptMeshlets[i];
             auto& outMeshlet = result.meshlets[i];
 
-            // Set descriptor
             outMeshlet.descriptor.vertexOffset = m.vertex_offset;
             outMeshlet.descriptor.primitiveOffset = primitiveOffset;
             outMeshlet.descriptor.vertexCount = static_cast<uint8_t>(m.vertex_count);
@@ -294,7 +288,6 @@ namespace types
 
             primitiveOffset += m.triangle_count;
 
-            // Compute bounding sphere and cone
             meshopt_Bounds bounds = meshopt_computeMeshletBounds(
                 &meshletVertexIndices[m.vertex_offset],
                 &meshletTriangleIndices[m.triangle_offset],
@@ -324,7 +317,6 @@ namespace types
     void Mesh::writeMeshletData(std::ofstream& outFile,
                                 const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const
     {
-        // Write per-LOD meshlet info header
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
             const auto& result = meshletResults[lod];
@@ -333,19 +325,16 @@ namespace types
             resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(result.meshletPrimitives.size()));
         }
 
-        // Write all meshlet descriptors and bounds
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
             for (const auto& meshlet : meshletResults[lod].meshlets)
             {
-                // Write descriptor (12 bytes)
                 resource::endian::writeLE<uint32_t>(outFile, meshlet.descriptor.vertexOffset);
                 resource::endian::writeLE<uint32_t>(outFile, meshlet.descriptor.primitiveOffset);
                 resource::endian::writeLE<uint8_t>(outFile, meshlet.descriptor.vertexCount);
                 resource::endian::writeLE<uint8_t>(outFile, meshlet.descriptor.primitiveCount);
                 resource::endian::writeLE<uint16_t>(outFile, 0); // padding
 
-                // Write bounds (32 bytes)
                 resource::endian::writeLE<float>(outFile, meshlet.bounds.boundingSphere.x);
                 resource::endian::writeLE<float>(outFile, meshlet.bounds.boundingSphere.y);
                 resource::endian::writeLE<float>(outFile, meshlet.bounds.boundingSphere.z);
@@ -357,7 +346,6 @@ namespace types
             }
         }
 
-        // Write all meshlet vertex indices
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
             for (uint32_t idx : meshletResults[lod].meshletVertices)
@@ -366,7 +354,6 @@ namespace types
             }
         }
 
-        // Write all meshlet primitive data (packed)
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
             for (uint32_t packed : meshletResults[lod].meshletPrimitives)
@@ -380,10 +367,8 @@ namespace types
     {
         constexpr size_t verticesPerChunk = chunkSize / sizeof(resource::Vertex);
 
-        // Write vertex count
         resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(lodMesh.vertices.size()));
 
-        // Write vertices in chunks
         for (size_t v = 0; v < lodMesh.vertices.size(); v += verticesPerChunk)
         {
             size_t chunkEnd = std::min(v + verticesPerChunk, lodMesh.vertices.size());
@@ -402,10 +387,8 @@ namespace types
             }
         }
 
-        // Write index count
         resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(lodMesh.indices.size()));
 
-        // Write indices in chunks
         constexpr size_t indicesPerChunk = chunkSize / sizeof(uint32_t);
         for (size_t i = 0; i < lodMesh.indices.size(); i += indicesPerChunk)
         {
@@ -416,7 +399,8 @@ namespace types
     }
 
     void Mesh::saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
-                                          const aiScene* scene, MeshProgressCallback progressCallback) const
+                                          const aiScene* scene, const importConfig::ImportConfig& config,
+                                          MeshProgressCallback progressCallback) const
     {
         std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." +
             FileExtension::mesh);
@@ -428,16 +412,15 @@ namespace types
             return;
         }
 
-        // Write header with version 0.0.4 (LOD + Meshlet support)
+        // Write header with version 0.0.5 (LOD + Meshlet + Convex Decomposition support)
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
         resource::endian::writeLE<uint32_t>(outFile, 0); // major
         resource::endian::writeLE<uint32_t>(outFile, 0); // minor
-        resource::endian::writeLE<uint32_t>(outFile, 4); // patch - version 0.0.4 for meshlets
+        resource::endian::writeLE<uint32_t>(outFile, 5); // patch - version 0.0.5 for convex decomposition
         resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
 
         vfLogInfo("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
 
-        // Process each mesh
         for (unsigned int i = 0; i < scene->mNumMeshes; ++i)
         {
             const aiMesh* assimpMesh = scene->mMeshes[i];
@@ -448,7 +431,6 @@ namespace types
                       assimpMesh->mNumVertices,
                       assimpMesh->mNumFaces);
 
-            // Write submesh name
             uint32_t nameLength = static_cast<uint32_t>(meshName.length());
             resource::endian::writeLE<uint32_t>(outFile, nameLength);
             if (nameLength > 0)
@@ -456,22 +438,16 @@ namespace types
                 outFile.write(meshName.data(), nameLength);
             }
 
-            // Write LOD level count
             resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
 
-            // Convert Assimp mesh to LODMeshData (LOD0)
             LODMeshData lod0 = convertAssimpMesh(assimpMesh);
-
-            // Generate all LOD levels
             auto lodLevels = generateLODLevels(lod0);
 
-            // Write each LOD level (vertex/index data)
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
             {
                 writeLODLevel(outFile, lodLevels[lod]);
             }
 
-            // Generate meshlets for each LOD level
             vfLogInfo("  Generating meshlets...");
             std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
@@ -479,10 +455,13 @@ namespace types
                 meshletResults[lod] = buildMeshletsForLOD(lodLevels[lod]);
             }
 
-            // Write meshlet data
             writeMeshletData(outFile, meshletResults);
 
-            // Report progress: 20% + (i+1)/totalMeshes * 80%
+            // Use LOD0 for best accuracy in convex decomposition
+            resource::ConvexDecompositionData convexData = generateConvexDecomposition(
+                lod0, config.meshConfig);
+            writeConvexDecompositionData(outFile, convexData);
+
             if (progressCallback)
             {
                 float progress = 0.2f + (static_cast<float>(i + 1) / scene->mNumMeshes) * 0.8f;
@@ -492,5 +471,178 @@ namespace types
 
         outFile.close();
         vfLogInfo("Mesh with LOD and meshlets saved to: {}", newFileLocation.string());
+    }
+
+    resource::ConvexDecompositionData Mesh::generateConvexDecomposition(
+        const LODMeshData& meshData,
+        const importConfig::MeshImportConfig& config) const
+    {
+        resource::ConvexDecompositionData result;
+
+        if (!config.generateConvexDecomposition || meshData.vertices.empty() || meshData.indices.empty())
+        {
+            return result;
+        }
+
+        vfLogInfo("  Running V-HACD convex decomposition...");
+
+        std::vector<double> points;
+        points.reserve(meshData.vertices.size() * 3);
+        for (const auto& v : meshData.vertices)
+        {
+            points.push_back(static_cast<double>(v.position.x));
+            points.push_back(static_cast<double>(v.position.y));
+            points.push_back(static_cast<double>(v.position.z));
+        }
+
+        VHACD::IVHACD::Parameters params;
+        params.m_maxConvexHulls = config.maxConvexHulls;
+        params.m_resolution = config.vhacdResolution;
+        params.m_maxNumVerticesPerCH = config.maxVerticesPerHull;
+        params.m_minimumVolumePercentErrorAllowed = static_cast<double>(config.minVolumePercentError);
+        params.m_maxRecursionDepth = 10;
+        params.m_shrinkWrap = true;
+        params.m_asyncACD = false;  // Synchronous for import pipeline
+
+        VHACD::IVHACD* vhacd = VHACD::CreateVHACD();
+
+        bool success = vhacd->Compute(
+            points.data(),
+            static_cast<uint32_t>(meshData.vertices.size()),
+            meshData.indices.data(),
+            static_cast<uint32_t>(meshData.indices.size() / 3),
+            params
+        );
+
+        if (success)
+        {
+            uint32_t numHulls = vhacd->GetNConvexHulls();
+            vfLogInfo("  V-HACD generated {} convex hulls", numHulls);
+
+            result.hasDecomposition = true;
+            result.params.maxConvexHulls = config.maxConvexHulls;
+            result.params.resolution = config.vhacdResolution;
+            result.params.maxVerticesPerHull = config.maxVerticesPerHull;
+            result.params.minVolumePercentError = config.minVolumePercentError;
+
+            // Jolt Physics hard limit for convex hull vertices
+            constexpr uint32_t joltMaxVertices = 256;
+            const uint32_t effectiveMaxVertices = std::min(config.maxVerticesPerHull, joltMaxVertices);
+
+            uint32_t skippedHulls = 0;
+
+            for (uint32_t i = 0; i < numHulls; ++i)
+            {
+                VHACD::IVHACD::ConvexHull hull;
+                vhacd->GetConvexHull(i, hull);
+
+                // Validate hull vertex count against Jolt's limit
+                if (hull.m_points.size() > effectiveMaxVertices)
+                {
+                    vfLogWarning("  Hull {} has {} vertices (exceeds limit of {}), skipping",
+                                 i, hull.m_points.size(), effectiveMaxVertices);
+                    ++skippedHulls;
+                    continue;
+                }
+
+                if (hull.m_points.empty())
+                {
+                    ++skippedHulls;
+                    continue;
+                }
+
+                result.hulls.emplace_back();
+                auto& outHull = result.hulls.back();
+                outHull.vertices.reserve(hull.m_points.size());
+
+                for (const auto& p : hull.m_points)
+                {
+                    outHull.vertices.emplace_back(
+                        static_cast<float>(p.mX),
+                        static_cast<float>(p.mY),
+                        static_cast<float>(p.mZ)
+                    );
+                }
+
+                outHull.indices.reserve(hull.m_triangles.size() * 3);
+                for (const auto& tri : hull.m_triangles)
+                {
+                    outHull.indices.push_back(tri.mI0);
+                    outHull.indices.push_back(tri.mI1);
+                    outHull.indices.push_back(tri.mI2);
+                }
+
+                outHull.center = glm::vec3(
+                    static_cast<float>(hull.m_center.GetX()),
+                    static_cast<float>(hull.m_center.GetY()),
+                    static_cast<float>(hull.m_center.GetZ())
+                );
+                outHull.volume = static_cast<float>(hull.m_volume);
+            }
+
+            if (skippedHulls > 0)
+            {
+                vfLogWarning("  Skipped {} hulls due to vertex count limits", skippedHulls);
+            }
+
+            if (result.hulls.empty())
+            {
+                vfLogWarning("  All hulls were skipped, decomposition invalid");
+                result.hasDecomposition = false;
+            }
+            else
+            {
+                vfLogInfo("  Final hull count: {}, total vertices: {}",
+                          result.hulls.size(), result.getTotalVertexCount());
+            }
+        }
+        else
+        {
+            vfLogWarning("  V-HACD decomposition failed");
+        }
+
+        vhacd->Release();
+        return result;
+    }
+
+    void Mesh::writeConvexDecompositionData(std::ofstream& outFile,
+                                            const resource::ConvexDecompositionData& decomposition) const
+    {
+        resource::endian::writeLE<uint8_t>(outFile, decomposition.hasDecomposition ? 1 : 0);
+
+        if (!decomposition.hasDecomposition)
+        {
+            return;
+        }
+
+        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxConvexHulls);
+        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.resolution);
+        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxVerticesPerHull);
+        resource::endian::writeLE<float>(outFile, decomposition.params.minVolumePercentError);
+        resource::endian::writeLE<uint32_t>(outFile, decomposition.params.maxRecursionDepth);
+
+        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(decomposition.hulls.size()));
+
+        for (const auto& hull : decomposition.hulls)
+        {
+            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(hull.vertices.size()));
+            for (const auto& v : hull.vertices)
+            {
+                resource::endian::writeLE<float>(outFile, v.x);
+                resource::endian::writeLE<float>(outFile, v.y);
+                resource::endian::writeLE<float>(outFile, v.z);
+            }
+
+            resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(hull.indices.size()));
+            for (uint32_t idx : hull.indices)
+            {
+                resource::endian::writeLE<uint32_t>(outFile, idx);
+            }
+
+            resource::endian::writeLE<float>(outFile, hull.center.x);
+            resource::endian::writeLE<float>(outFile, hull.center.y);
+            resource::endian::writeLE<float>(outFile, hull.center.z);
+            resource::endian::writeLE<float>(outFile, hull.volume);
+        }
     }
 }
