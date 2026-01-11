@@ -166,6 +166,12 @@ namespace windows
         case Scene:
             icon = AtlasIcon::Scene;
             break;
+        case Project:
+            icon = AtlasIcon::Project;
+            break;
+        case Font:
+            icon = AtlasIcon::Font;
+            break;
         case Model:
             icon = AtlasIcon::Mesh;
             break;

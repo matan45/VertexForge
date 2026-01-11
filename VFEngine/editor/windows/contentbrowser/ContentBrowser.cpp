@@ -369,6 +369,14 @@ namespace windows
                     {
                         asset.type = Material;
                     }
+                    if (extension == ".vfFont")
+                    {
+                        asset.type = Font;
+                    }
+                    if (extension == ".vfProject")
+                    {
+                        asset.type = Project;
+                    }
                     else if (extension == ".vfMatInstance")
                     {
                         asset.type = MaterialInstance;

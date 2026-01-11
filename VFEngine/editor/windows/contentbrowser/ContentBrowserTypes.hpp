@@ -16,6 +16,8 @@ namespace windows
         MaterialInstance,
         Prefab,
         Script,
+        Font,
+        Project,
         Other
     };
 
@@ -31,7 +33,9 @@ namespace windows
         Hdr = 7,
         Audio = 8,
         File = 9,
-        Prefab = 10
+        Prefab = 10,
+        Font = 11,
+        Project = 12
     };
 
     struct Asset
