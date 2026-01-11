@@ -30,6 +30,7 @@ namespace windows
 
         // Event subscription
         events::SubscriptionToken sceneClearedToken;
+        events::SubscriptionToken openImportDialogToken;
 
     public:
         explicit MainImguiWindow();

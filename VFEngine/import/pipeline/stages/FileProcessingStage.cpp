@@ -18,10 +18,14 @@ namespace pipeline::stages
             {
                 processAudio(context);
             }
-            else if (context.fileType == "OBJ" || context.fileType == "FBX" || 
+            else if (context.fileType == "OBJ" || context.fileType == "FBX" ||
                      context.fileType == "DAE" || context.fileType == "GLTF" || context.fileType == "GLB")
             {
                 processMesh(context);
+            }
+            else if (context.fileType == "TTF" || context.fileType == "OTF")
+            {
+                processFont(context);
             }
             else
             {
@@ -103,5 +107,22 @@ namespace pipeline::stages
         }
 
         meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
+    }
+
+    void FileProcessingStage::processFont(ImportContext& context)
+    {
+        // Create a font progress callback that wraps the import progress callback
+        types::FontProgressCallback fontProgress = nullptr;
+        if (context.progressCallback)
+        {
+            fontProgress = [&context](float progress) {
+                // Report font progress through the import progress callback
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, progress);
+            };
+        }
+
+        types::FontImportConfig config;
+        fontProcessor.loadFromFile(context.file, context.fileName, context.location, config, fontProgress);
     }
 }

@@ -1,5 +1,6 @@
 #include "MainImguiWindow.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/ApplicationEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -21,7 +22,9 @@ namespace windows
 
     MainImguiWindow::~MainImguiWindow()
     {
-        events::EventDispatcher::instance().unsubscribe(sceneClearedToken);
+        auto& dispatcher = events::EventDispatcher::instance();
+        dispatcher.unsubscribe(sceneClearedToken);
+        dispatcher.unsubscribe(openImportDialogToken);
     }
 
     void MainImguiWindow::subscribeToEvents()
@@ -32,6 +35,12 @@ namespace windows
             [this](const events::scene::SceneClearedNotification&)
             {
                 onSceneCleared();
+            });
+
+        openImportDialogToken = dispatcher.subscribe<events::application::OpenImportDialogNotification>(
+            [this](const events::application::OpenImportDialogNotification&)
+            {
+                importDialog.openImportDialog();
             });
     }
 

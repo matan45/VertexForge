@@ -53,6 +53,7 @@ namespace resource
         if (ext == ".vfhdr") return FileType::HDR;
         if (ext == ".vfaudio") return FileType::AUDIO;
         if (ext == ".vfanim") return FileType::ANIMATION;
+        if (ext == ".vffont") return FileType::FONT;
         return FileType::UNKNOWN;
     }
 
@@ -66,6 +67,7 @@ namespace resource
             case FileType::AUDIO: return "AUDIO";
             case FileType::ANIMATION: return "ANIMATION";
             case FileType::SCENE: return "SCENE";
+            case FileType::FONT: return "FONT";
             default: return "UNKNOWN";
         }
     }
