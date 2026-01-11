@@ -56,8 +56,8 @@ namespace resource
         uint32_t levels = 1;
         while (width > 1 || height > 1)
         {
-            width = std::max(1u, width / 2);
-            height = std::max(1u, height / 2);
+            width = (std::max)(1u, width / 2);
+            height = (std::max)(1u, height / 2);
             levels++;
         }
         return levels;

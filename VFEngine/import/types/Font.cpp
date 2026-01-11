@@ -166,6 +166,21 @@ namespace types
                 return false;
             }
 
+            // Check for CFF-based OpenType fonts (not supported by stb_truetype)
+            // The 'OTTO' signature at the start indicates CFF outlines
+            if (fontBuffer.size() >= 4)
+            {
+                bool isCFF = (fontBuffer[0] == 'O' && fontBuffer[1] == 'T' &&
+                             fontBuffer[2] == 'T' && fontBuffer[3] == 'O');
+                if (isCFF)
+                {
+                    vfLogError("Font file uses CFF (PostScript) outlines which are not supported: {}", path);
+                    vfLogError("Please convert this OTF font to TTF format using a font converter tool, "
+                              "or use a TTF version of this font.");
+                    return false;
+                }
+            }
+
             return true;
         }
         catch (const std::bad_alloc& e)

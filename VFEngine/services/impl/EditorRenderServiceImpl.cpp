@@ -151,6 +151,32 @@ namespace services
         return handle;
     }
 
+    EditorTextureHandle EditorRenderServiceImpl::loadEditorTextureFromData(resource::TextureData&& textureData)
+    {
+        if (!textureProvider)
+        {
+            return EditorTextureHandle{};
+        }
+
+        auto result = textureProvider->loadTextureFromData(std::move(textureData));
+
+        if (!result.valid)
+        {
+            return EditorTextureHandle{};
+        }
+
+        EditorTextureHandle handle;
+        handle.imguiDescriptorSet = result.descriptorSet;
+        handle.width = static_cast<uint32_t>(result.width);
+        handle.height = static_cast<uint32_t>(result.height);
+        handle.mipLevels = static_cast<uint32_t>(result.mipLevels);
+        handle.mipDescriptorSets = result.mipDescriptorSets;
+
+        loadedTextures[handle.imguiDescriptorSet] = handle;
+
+        return handle;
+    }
+
     void EditorRenderServiceImpl::releaseEditorTexture(const EditorTextureHandle& handle)
     {
         if (textureProvider && loadedTextures.count(handle.imguiDescriptorSet))
@@ -213,6 +239,12 @@ namespace services
                 EditorTextureHandle handle;
                 handle.imguiDescriptorSet = cmd.handle;
                 releaseEditorTexture(handle);
+            });
+
+        dispatcher.registerCommandHandler<events::render::LoadEditorTextureFromDataCommand>(
+            [this](const events::render::LoadEditorTextureFromDataCommand& cmd)
+            {
+                return loadEditorTextureFromData(std::move(cmd.textureData));
             });
 
         dispatcher.registerCommandHandler<events::render::LoadEditorTextureAsyncCommand>(

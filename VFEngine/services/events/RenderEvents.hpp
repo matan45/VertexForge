@@ -3,6 +3,7 @@
 #include "../data/DTOs.hpp"
 #include "../data/AsyncLoadingTypes.hpp"
 #include "../providers/IOffScreenProvider.hpp"
+#include "resource/Types.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <string>
@@ -46,6 +47,12 @@ namespace events::render {
         void* handle;
 
         std::string_view getName() const override { return "ReleaseEditorTexture"; }
+    };
+
+    struct LoadEditorTextureFromDataCommand : ICommand<services::EditorTextureHandle> {
+        mutable resource::TextureData textureData;  // mutable to allow move from const ref
+
+        std::string_view getName() const override { return "LoadEditorTextureFromData"; }
     };
 
     struct LoadEditorTextureAsyncCommand : ICommand<> {

@@ -24,6 +24,7 @@ namespace core
         ~EditorTextureAdapter() override;
 
         services::EditorTextureData loadTexture(std::string_view path) override;
+        services::EditorTextureData loadTextureFromData(resource::TextureData&& textureData) override;
         void releaseTexture(void* descriptorSet) override;
 
         // Async loading interface

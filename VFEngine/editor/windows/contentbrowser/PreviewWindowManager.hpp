@@ -15,6 +15,7 @@ namespace windows
     class MaterialEditorWindow;
     class MaterialInstanceEditorWindow;
     class PrefabPreviewWindow;
+    class FontPreviewWindow;
 
     class PreviewWindowManager
     {
@@ -25,6 +26,7 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<MaterialEditorWindow>> openMaterialEditors;
         std::unordered_map<std::string, std::weak_ptr<MaterialInstanceEditorWindow>> openInstanceEditors;
         std::unordered_map<std::string, std::weak_ptr<PrefabPreviewWindow>> openPrefabPreviews;
+        std::unordered_map<std::string, std::weak_ptr<FontPreviewWindow>> openFontPreviews;
     public:
         explicit PreviewWindowManager() = default;
         ~PreviewWindowManager() = default;
@@ -39,5 +41,6 @@ namespace windows
         void openMaterialEditor(const std::string& path);
         void openMaterialInstanceEditor(const std::string& path);
         void openPrefabPreview(const std::string& path);
+        void openFontPreview(const std::string& path);
     };
 }

@@ -40,6 +40,7 @@ namespace services
         std::optional<std::string> getIBLPath() const override;
 
         EditorTextureHandle loadEditorTexture(const std::string& path) override;
+        EditorTextureHandle loadEditorTextureFromData(resource::TextureData&& textureData);
         void releaseEditorTexture(const EditorTextureHandle& handle) override;
 
         // Render State

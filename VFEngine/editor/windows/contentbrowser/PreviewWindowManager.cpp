@@ -5,6 +5,7 @@
 #include "../MaterialEditorWindow.hpp"
 #include "../MaterialInstanceEditorWindow.hpp"
 #include "../PrefabPreviewWindow.hpp"
+#include "../FontPreviewWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
 
@@ -37,6 +38,9 @@ namespace windows
         case AssetType::Prefab:
             openPrefabPreview(path);
             return true;
+        case AssetType::Font:
+            openFontPreview(path);
+            return true;
         default:
             return false;
         }
@@ -66,6 +70,10 @@ namespace windows
 
         auto prefabIt = openPrefabPreviews.find(path);
         if (prefabIt != openPrefabPreviews.end() && !prefabIt->second.expired())
+            return true;
+
+        auto fontIt = openFontPreviews.find(path);
+        if (fontIt != openFontPreviews.end() && !fontIt->second.expired())
             return true;
 
         return false;
@@ -134,6 +142,17 @@ namespace windows
             auto previewWindow = std::make_shared<PrefabPreviewWindow>(path);
             controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
             openPrefabPreviews[path] = previewWindow;
+        }
+    }
+
+    void PreviewWindowManager::openFontPreview(const std::string& path)
+    {
+        auto it = openFontPreviews.find(path);
+        if (it == openFontPreviews.end() || it->second.expired())
+        {
+            auto previewWindow = std::make_shared<FontPreviewWindow>(path);
+            controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+            openFontPreviews[path] = previewWindow;
         }
     }
 }

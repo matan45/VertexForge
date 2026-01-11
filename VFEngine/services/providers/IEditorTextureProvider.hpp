@@ -1,5 +1,6 @@
 #pragma once
 #include "../data/AsyncLoadingTypes.hpp"
+#include "resource/Types.hpp"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,6 +25,7 @@ namespace services {
 
         // Synchronous loading (blocking) - used for small UI resources like icon atlases
         virtual EditorTextureData loadTexture(std::string_view path) = 0;
+        virtual EditorTextureData loadTextureFromData(resource::TextureData&& textureData) = 0;
         virtual void releaseTexture(void* descriptorSet) = 0;
 
         // Async loading (non-blocking)
