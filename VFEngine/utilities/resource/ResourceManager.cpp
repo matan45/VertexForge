@@ -1,6 +1,7 @@
 #include "ResourceManager.hpp"
 #include "TextureResource.hpp"
 #include "AudioResource.hpp"
+#include "FontResource.hpp"
 #include "MeshStreamHandle.hpp"
 #include "../material/MaterialAsset.hpp"
 #include "../material/MaterialInstanceAsset.hpp"
@@ -43,6 +44,7 @@ namespace resource
         std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(materialCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(materialInstanceCache, [](const auto& pair) { return pair.second.expired(); });
+        std::erase_if(fontCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
     // Helper to get expected FileType from extension
@@ -186,6 +188,14 @@ namespace resource
             [](std::string_view p) { return ShaderResource::readShaderFile(p); });
     }
 
+    std::future<std::shared_ptr<FontData>> ResourceManager::loadFontAsync(std::string_view path)
+    {
+        return loadResourceAsync<FontData>(
+            path,
+            fontCache,
+            [](std::string_view p) { return FontResource::loadFont(p); });
+    }
+
     void ResourceManager::init()
     {
         running = true;
@@ -218,6 +228,7 @@ namespace resource
         shaderCache.clear();
         materialCache.clear();
         materialInstanceCache.clear();
+        fontCache.clear();
 
         vfLogInfo("All resource caches cleared");
     }
