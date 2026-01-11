@@ -4,6 +4,7 @@
 #include "EndianUtils.hpp"
 
 #include <fstream>
+#include <limits>
 
 namespace resource
 {
@@ -170,7 +171,8 @@ namespace resource
         fontData.atlas.format = static_cast<FontAtlasFormat>(readLE<uint32_t>(inFile));
 
         // Validate atlas dimensions
-        if (fontData.atlas.width > 8192 || fontData.atlas.height > 8192)
+        if (fontData.atlas.width == 0 || fontData.atlas.height == 0 ||
+            fontData.atlas.width > 8192 || fontData.atlas.height > 8192)
         {
             vfLogError("Invalid atlas dimensions: {}x{}", fontData.atlas.width, fontData.atlas.height);
             return {};
@@ -178,11 +180,17 @@ namespace resource
 
         uint32_t atlasDataSize = readLE<uint32_t>(inFile);
 
-        // Validate atlas data size
-        uint32_t expectedSize = fontData.atlas.width * fontData.atlas.height;
+        // Validate atlas data size (use size_t to prevent overflow)
+        size_t expectedSize = static_cast<size_t>(fontData.atlas.width) * fontData.atlas.height;
         if (fontData.atlas.format == FontAtlasFormat::RGBA_32)
         {
             expectedSize *= 4;
+        }
+
+        if (expectedSize > std::numeric_limits<uint32_t>::max())
+        {
+            vfLogError("Atlas size too large: {}", expectedSize);
+            return {};
         }
 
         if (atlasDataSize != expectedSize && atlasDataSize > 0)
