@@ -120,22 +120,64 @@ namespace types
 
     bool Font::loadFontFile(std::string_view path, std::vector<unsigned char>& fontBuffer) const
     {
-        std::ifstream file(std::string(path), std::ios::binary | std::ios::ate);
-        if (!file.is_open())
+        try
         {
+            std::ifstream file(std::string(path), std::ios::binary | std::ios::ate);
+            if (!file.is_open())
+            {
+                vfLogError("Failed to open font file: {}", path);
+                return false;
+            }
+
+            std::streampos pos = file.tellg();
+            if (pos == std::streampos(-1))
+            {
+                vfLogError("Failed to get font file size: {}", path);
+                return false;
+            }
+
+            auto size = static_cast<std::streamsize>(pos);
+            if (size <= 0)
+            {
+                vfLogError("Font file is empty or invalid: {}", path);
+                return false;
+            }
+
+            // Sanity check for file size (fonts shouldn't be gigabytes)
+            constexpr std::streamsize maxFontSize = 100 * 1024 * 1024;  // 100 MB
+            if (size > maxFontSize)
+            {
+                vfLogError("Font file too large ({} bytes, max {} bytes): {}",
+                          size, maxFontSize, path);
+                return false;
+            }
+
+            file.seekg(0, std::ios::beg);
+            if (!file)
+            {
+                vfLogError("Failed to seek to beginning of font file: {}", path);
+                return false;
+            }
+
+            fontBuffer.resize(static_cast<size_t>(size));
+            if (!file.read(reinterpret_cast<char*>(fontBuffer.data()), size))
+            {
+                vfLogError("Failed to read font file data: {}", path);
+                return false;
+            }
+
+            return true;
+        }
+        catch (const std::bad_alloc& e)
+        {
+            vfLogError("Failed to allocate memory for font file {}: {}", path, e.what());
             return false;
         }
-
-        std::streamsize size = file.tellg();
-        file.seekg(0, std::ios::beg);
-
-        fontBuffer.resize(static_cast<size_t>(size));
-        if (!file.read(reinterpret_cast<char*>(fontBuffer.data()), size))
+        catch (const std::exception& e)
         {
+            vfLogError("Exception while loading font file {}: {}", path, e.what());
             return false;
         }
-
-        return true;
     }
 
     void Font::extractFontMetrics(const void* fontInfoPtr, float scale,
@@ -234,7 +276,7 @@ namespace types
         std::vector<stbrp_rect> rects;
         rects.reserve(totalGlyphs);
 
-        // Temporary storage for glyph data
+        // Temporary storage for glyph data (including cached SDF bitmap)
         struct GlyphTemp
         {
             uint32_t codepoint;
@@ -242,9 +284,22 @@ namespace types
             int width, height;
             int xoff, yoff;
             int advanceWidth, leftSideBearing;
+            unsigned char* sdfBitmap = nullptr;  // Cached SDF bitmap to avoid double generation
         };
         std::vector<GlyphTemp> glyphTemps;
         glyphTemps.reserve(totalGlyphs);
+
+        // RAII cleanup for SDF bitmaps on any exit path
+        auto cleanupBitmaps = [&glyphTemps]() {
+            for (auto& temp : glyphTemps)
+            {
+                if (temp.sdfBitmap)
+                {
+                    stbtt_FreeSDF(temp.sdfBitmap, nullptr);
+                    temp.sdfBitmap = nullptr;
+                }
+            }
+        };
 
         // Padding for SDF
         int padding = static_cast<int>(config.sdfPadding);
@@ -269,19 +324,15 @@ namespace types
                 int advanceWidth, leftSideBearing;
                 stbtt_GetGlyphHMetrics(fontInfo, glyphIndex, &advanceWidth, &leftSideBearing);
 
-                // Get SDF bitmap dimensions
+                // Get SDF bitmap and cache it for later rendering
                 int width = 0, height = 0, xoff = 0, yoff = 0;
+                unsigned char* sdfBitmap = nullptr;
 
                 if (glyphIndex != 0)
                 {
-                    unsigned char* sdfBitmap = stbtt_GetGlyphSDF(
+                    sdfBitmap = stbtt_GetGlyphSDF(
                         fontInfo, scale, glyphIndex, padding, onEdge, pixelDistScale,
                         &width, &height, &xoff, &yoff);
-
-                    if (sdfBitmap)
-                    {
-                        stbtt_FreeSDF(sdfBitmap, nullptr);
-                    }
                 }
 
                 GlyphTemp temp;
@@ -293,6 +344,7 @@ namespace types
                 temp.yoff = yoff;
                 temp.advanceWidth = advanceWidth;
                 temp.leftSideBearing = leftSideBearing;
+                temp.sdfBitmap = sdfBitmap;  // Cache the bitmap
                 glyphTemps.push_back(temp);
 
                 // Add to rect packer (with atlas padding)
@@ -310,6 +362,7 @@ namespace types
         if (rects.empty())
         {
             vfLogWarning("No valid glyphs found in font");
+            cleanupBitmaps();
             return false;
         }
 
@@ -359,6 +412,11 @@ namespace types
         // Phase 4: Render each glyph into atlas
         fontData.glyphs.reserve(glyphTemps.size());
 
+        // Track unpacked glyphs for validation
+        std::vector<uint32_t> unpackedGlyphs;
+        uint32_t emptyGlyphCount = 0;
+        uint32_t packedCount = 0;
+
         for (size_t i = 0; i < glyphTemps.size(); ++i)
         {
             const auto& temp = glyphTemps[i];
@@ -380,39 +438,105 @@ namespace types
                 glyph.atlasWidth = static_cast<uint32_t>(temp.width);
                 glyph.atlasHeight = static_cast<uint32_t>(temp.height);
 
-                // Render SDF glyph into atlas
-                int width, height, xoff, yoff;
-                unsigned char* sdfBitmap = stbtt_GetGlyphSDF(
-                    fontInfo, scale, temp.glyphIndex, padding, onEdge, pixelDistScale,
-                    &width, &height, &xoff, &yoff);
-
-                if (sdfBitmap)
+                // Use cached SDF bitmap (already generated in Phase 1)
+                if (temp.sdfBitmap)
                 {
-                    // Copy to atlas
-                    for (int y = 0; y < height; ++y)
+                    // Bounds validation before copying to atlas
+                    uint32_t destEndX = static_cast<uint32_t>(rect.x) + static_cast<uint32_t>(temp.width);
+                    uint32_t destEndY = static_cast<uint32_t>(rect.y) + static_cast<uint32_t>(temp.height);
+
+                    if (destEndX > actualWidth || destEndY > actualHeight)
                     {
-                        for (int x = 0; x < width; ++x)
+                        vfLogError("Glyph U+{:04X} would overflow atlas bounds: dest ({},{}) to ({},{}) exceeds atlas {}x{}",
+                                  temp.codepoint, rect.x, rect.y, destEndX, destEndY, actualWidth, actualHeight);
+                        unpackedGlyphs.push_back(temp.codepoint);
+                        glyph.atlasX = 0;
+                        glyph.atlasY = 0;
+                        glyph.atlasWidth = 0;
+                        glyph.atlasHeight = 0;
+                    }
+                    else
+                    {
+                        // Copy to atlas - bounds are validated
+                        size_t atlasSize = fontData.atlas.pixels.size();
+                        for (int y = 0; y < temp.height; ++y)
                         {
-                            size_t atlasIdx = (static_cast<size_t>(rect.y) + y) * actualWidth
-                                            + (static_cast<size_t>(rect.x) + x);
-                            size_t srcIdx = static_cast<size_t>(y) * width + x;
-                            fontData.atlas.pixels[atlasIdx] = sdfBitmap[srcIdx];
+                            for (int x = 0; x < temp.width; ++x)
+                            {
+                                size_t atlasIdx = (static_cast<size_t>(rect.y) + y) * actualWidth
+                                                + (static_cast<size_t>(rect.x) + x);
+                                size_t srcIdx = static_cast<size_t>(y) * temp.width + x;
+
+                                // Safety check (should never trigger after bounds validation above)
+                                if (atlasIdx < atlasSize)
+                                {
+                                    fontData.atlas.pixels[atlasIdx] = temp.sdfBitmap[srcIdx];
+                                }
+                            }
                         }
                     }
-                    stbtt_FreeSDF(sdfBitmap, nullptr);
                 }
+                ++packedCount;
             }
             else
             {
-                // Empty glyph or didn't fit
+                // Determine if this is an empty glyph (like space) or failed to pack
                 glyph.atlasX = 0;
                 glyph.atlasY = 0;
                 glyph.atlasWidth = 0;
                 glyph.atlasHeight = 0;
+
+                if (temp.width > 0 && temp.height > 0)
+                {
+                    // Glyph has dimensions but failed to pack - atlas too small
+                    unpackedGlyphs.push_back(temp.codepoint);
+                }
+                else
+                {
+                    // Empty glyph (space, control characters, etc.) - this is normal
+                    ++emptyGlyphCount;
+                }
             }
 
             fontData.glyphs.push_back(glyph);
         }
+
+        // Log validation results
+        if (!unpackedGlyphs.empty())
+        {
+            std::string failedChars;
+            for (size_t i = 0; i < unpackedGlyphs.size() && i < 20; ++i)
+            {
+                uint32_t cp = unpackedGlyphs[i];
+                if (cp >= 32 && cp < 127)
+                {
+                    failedChars += static_cast<char>(cp);
+                }
+                else
+                {
+                    failedChars += "U+" + std::to_string(cp);
+                }
+                if (i < unpackedGlyphs.size() - 1 && i < 19)
+                {
+                    failedChars += ", ";
+                }
+            }
+            if (unpackedGlyphs.size() > 20)
+            {
+                failedChars += "... and " + std::to_string(unpackedGlyphs.size() - 20) + " more";
+            }
+
+            vfLogWarning("Font atlas too small: {} glyphs could not be packed. "
+                        "Consider increasing atlas size (current: {}x{}). Failed characters: {}",
+                        unpackedGlyphs.size(), actualWidth, actualHeight, failedChars);
+        }
+
+        vfLogInfo("Font atlas generated: {} glyphs packed, {} empty glyphs, {} failed to pack. "
+                 "Atlas size: {}x{}",
+                 packedCount, emptyGlyphCount, unpackedGlyphs.size(), actualWidth, actualHeight);
+
+        // Free all cached SDF bitmaps
+        cleanupBitmaps();
 
         return true;
     }
@@ -474,88 +598,143 @@ namespace types
         std::filesystem::path filePath = std::filesystem::path(location) /
             (std::string(fileName) + "." + FileExtension::font);
 
-        std::ofstream outFile(filePath, std::ios::binary);
-        if (!outFile)
+        // Write to temporary file first, then rename for atomic operation
+        std::filesystem::path tempPath = filePath;
+        tempPath += ".tmp";
+
+        try
         {
-            vfLogError("Failed to open file for writing: {}", filePath.string());
+            std::ofstream outFile(tempPath, std::ios::binary);
+            if (!outFile)
+            {
+                vfLogError("Failed to open temp file for writing: {}", tempPath.string());
+                return;
+            }
+
+            // Enable exceptions for write errors
+            outFile.exceptions(std::ios::badbit | std::ios::failbit);
+
+            using namespace resource::endian;
+
+            // Write header
+            writeLE<uint8_t>(outFile, static_cast<uint8_t>(fontData.headerFileType));
+            writeLE<uint32_t>(outFile, Version::major);
+            writeLE<uint32_t>(outFile, Version::minor);
+            writeLE<uint32_t>(outFile, Version::patch);
+            writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.formatFlags));
+
+            // Write metadata
+            auto nameBytes = static_cast<uint32_t>(fontData.metadata.fontName.size());
+            writeLE<uint32_t>(outFile, nameBytes);
+            outFile.write(fontData.metadata.fontName.data(), nameBytes);
+
+            auto styleBytes = static_cast<uint32_t>(fontData.metadata.fontStyle.size());
+            writeLE<uint32_t>(outFile, styleBytes);
+            outFile.write(fontData.metadata.fontStyle.data(), styleBytes);
+
+            writeLE<uint32_t>(outFile, fontData.metadata.baseFontSize);
+            writeLE<float>(outFile, fontData.metadata.lineHeight);
+            writeLE<float>(outFile, fontData.metadata.ascender);
+            writeLE<float>(outFile, fontData.metadata.descender);
+            writeLE<float>(outFile, fontData.metadata.underlinePosition);
+            writeLE<float>(outFile, fontData.metadata.underlineThickness);
+
+            // Write SDF parameters
+            writeLE<float>(outFile, fontData.sdfParams.spread);
+            writeLE<uint32_t>(outFile, fontData.sdfParams.padding);
+            writeLE<float>(outFile, fontData.sdfParams.edgeValue);
+            writeLE<uint32_t>(outFile, fontData.sdfParams.reserved);
+
+            // Write character ranges
+            writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.characterRanges.size()));
+            for (const auto& range : fontData.characterRanges)
+            {
+                writeLE<uint32_t>(outFile, range.rangeStart);
+                writeLE<uint32_t>(outFile, range.rangeEnd);
+            }
+
+            // Write glyphs
+            writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.glyphs.size()));
+            for (const auto& glyph : fontData.glyphs)
+            {
+                writeLE<uint32_t>(outFile, glyph.codepoint);
+                writeLE<float>(outFile, glyph.advanceX);
+                writeLE<float>(outFile, glyph.advanceY);
+                writeLE<float>(outFile, glyph.bearingX);
+                writeLE<float>(outFile, glyph.bearingY);
+                writeLE<float>(outFile, glyph.glyphWidth);
+                writeLE<float>(outFile, glyph.glyphHeight);
+                writeLE<uint32_t>(outFile, glyph.atlasX);
+                writeLE<uint32_t>(outFile, glyph.atlasY);
+                writeLE<uint32_t>(outFile, glyph.atlasWidth);
+                writeLE<uint32_t>(outFile, glyph.atlasHeight);
+                writeLE<uint32_t>(outFile, glyph.reserved);
+            }
+
+            // Write kerning pairs
+            writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.kerningPairs.size()));
+            for (const auto& pair : fontData.kerningPairs)
+            {
+                writeLE<uint32_t>(outFile, pair.leftCodepoint);
+                writeLE<uint32_t>(outFile, pair.rightCodepoint);
+                writeLE<float>(outFile, pair.kerningAmount);
+            }
+
+            // Write atlas
+            writeLE<uint32_t>(outFile, fontData.atlas.width);
+            writeLE<uint32_t>(outFile, fontData.atlas.height);
+            writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.atlas.format));
+
+            auto dataSize = static_cast<uint32_t>(fontData.atlas.pixels.size());
+            writeLE<uint32_t>(outFile, dataSize);
+            outFile.write(reinterpret_cast<const char*>(fontData.atlas.pixels.data()), dataSize);
+
+            // Flush and close
+            outFile.flush();
+            outFile.close();
+
+            // Verify the file was written correctly
+            if (!outFile)
+            {
+                vfLogError("Failed to flush/close font file: {}", tempPath.string());
+                std::filesystem::remove(tempPath);
+                return;
+            }
+
+            // Atomic rename: remove existing file and rename temp to final
+            std::error_code ec;
+            if (std::filesystem::exists(filePath, ec))
+            {
+                std::filesystem::remove(filePath, ec);
+                if (ec)
+                {
+                    vfLogError("Failed to remove existing font file {}: {}", filePath.string(), ec.message());
+                    std::filesystem::remove(tempPath);
+                    return;
+                }
+            }
+
+            std::filesystem::rename(tempPath, filePath, ec);
+            if (ec)
+            {
+                vfLogError("Failed to rename temp file to {}: {}", filePath.string(), ec.message());
+                std::filesystem::remove(tempPath);
+                return;
+            }
+        }
+        catch (const std::ios_base::failure& e)
+        {
+            vfLogError("I/O error while writing font file {}: {}", tempPath.string(), e.what());
+            std::error_code ec;
+            std::filesystem::remove(tempPath, ec);
             return;
         }
-
-        using namespace resource::endian;
-
-        // Write header
-        writeLE<uint8_t>(outFile, static_cast<uint8_t>(fontData.headerFileType));
-        writeLE<uint32_t>(outFile, Version::major);
-        writeLE<uint32_t>(outFile, Version::minor);
-        writeLE<uint32_t>(outFile, Version::patch);
-        writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.formatFlags));
-
-        // Write metadata
-        auto nameBytes = static_cast<uint32_t>(fontData.metadata.fontName.size());
-        writeLE<uint32_t>(outFile, nameBytes);
-        outFile.write(fontData.metadata.fontName.data(), nameBytes);
-
-        auto styleBytes = static_cast<uint32_t>(fontData.metadata.fontStyle.size());
-        writeLE<uint32_t>(outFile, styleBytes);
-        outFile.write(fontData.metadata.fontStyle.data(), styleBytes);
-
-        writeLE<uint32_t>(outFile, fontData.metadata.baseFontSize);
-        writeLE<float>(outFile, fontData.metadata.lineHeight);
-        writeLE<float>(outFile, fontData.metadata.ascender);
-        writeLE<float>(outFile, fontData.metadata.descender);
-        writeLE<float>(outFile, fontData.metadata.underlinePosition);
-        writeLE<float>(outFile, fontData.metadata.underlineThickness);
-
-        // Write SDF parameters
-        writeLE<float>(outFile, fontData.sdfParams.spread);
-        writeLE<uint32_t>(outFile, fontData.sdfParams.padding);
-        writeLE<float>(outFile, fontData.sdfParams.edgeValue);
-        writeLE<uint32_t>(outFile, fontData.sdfParams.reserved);
-
-        // Write character ranges
-        writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.characterRanges.size()));
-        for (const auto& range : fontData.characterRanges)
+        catch (const std::exception& e)
         {
-            writeLE<uint32_t>(outFile, range.rangeStart);
-            writeLE<uint32_t>(outFile, range.rangeEnd);
+            vfLogError("Exception while writing font file {}: {}", tempPath.string(), e.what());
+            std::error_code ec;
+            std::filesystem::remove(tempPath, ec);
+            return;
         }
-
-        // Write glyphs
-        writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.glyphs.size()));
-        for (const auto& glyph : fontData.glyphs)
-        {
-            writeLE<uint32_t>(outFile, glyph.codepoint);
-            writeLE<float>(outFile, glyph.advanceX);
-            writeLE<float>(outFile, glyph.advanceY);
-            writeLE<float>(outFile, glyph.bearingX);
-            writeLE<float>(outFile, glyph.bearingY);
-            writeLE<float>(outFile, glyph.glyphWidth);
-            writeLE<float>(outFile, glyph.glyphHeight);
-            writeLE<uint32_t>(outFile, glyph.atlasX);
-            writeLE<uint32_t>(outFile, glyph.atlasY);
-            writeLE<uint32_t>(outFile, glyph.atlasWidth);
-            writeLE<uint32_t>(outFile, glyph.atlasHeight);
-            writeLE<uint32_t>(outFile, glyph.reserved);
-        }
-
-        // Write kerning pairs
-        writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.kerningPairs.size()));
-        for (const auto& pair : fontData.kerningPairs)
-        {
-            writeLE<uint32_t>(outFile, pair.leftCodepoint);
-            writeLE<uint32_t>(outFile, pair.rightCodepoint);
-            writeLE<float>(outFile, pair.kerningAmount);
-        }
-
-        // Write atlas
-        writeLE<uint32_t>(outFile, fontData.atlas.width);
-        writeLE<uint32_t>(outFile, fontData.atlas.height);
-        writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.atlas.format));
-
-        auto dataSize = static_cast<uint32_t>(fontData.atlas.pixels.size());
-        writeLE<uint32_t>(outFile, dataSize);
-        outFile.write(reinterpret_cast<const char*>(fontData.atlas.pixels.data()), dataSize);
-
-        outFile.close();
     }
 }
