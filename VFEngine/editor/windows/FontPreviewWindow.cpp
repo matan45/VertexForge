@@ -2,6 +2,7 @@
 #include "resource/FontResource.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
+#include "math/MathHelper.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <cstring>
@@ -25,18 +26,41 @@ namespace windows
 
     FontPreviewWindow::~FontPreviewWindow()
     {
+        // Signal cancellation to background thread
         loadingCancelled.store(true);
 
+        // Wait for async operation to complete (required before destroying this object)
         if (loadFuture.valid())
         {
-            loadFuture.wait();
+            try
+            {
+                loadFuture.wait();
+                // Discard any pending result to ensure future is consumed
+                if (loadFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+                {
+                    (void)loadFuture.get();
+                }
+            }
+            catch (...)
+            {
+                // Suppress exceptions in destructor - nothing we can do here
+            }
         }
 
+        // Release GPU resources
         if (atlasHandle.isValid())
         {
-            events::render::ReleaseEditorTextureCommand releaseCmd;
-            releaseCmd.handle = atlasHandle.imguiDescriptorSet;
-            events::EventDispatcher::instance().execute(releaseCmd);
+            try
+            {
+                events::render::ReleaseEditorTextureCommand releaseCmd;
+                releaseCmd.handle = atlasHandle.imguiDescriptorSet;
+                events::EventDispatcher::instance().execute(releaseCmd);
+            }
+            catch (...)
+            {
+                // Suppress exceptions in destructor - GPU resource may leak
+                // but we cannot throw from destructor
+            }
         }
     }
 
@@ -116,14 +140,17 @@ namespace windows
 
                 if (result.success)
                 {
-                    fontData = std::move(result.fontData);
-
-                    // Upload atlas texture to GPU
+                    // Upload atlas texture to GPU first (may throw)
+                    // Do this before modifying member state for exception safety
                     auto& dispatcher = events::EventDispatcher::instance();
                     events::render::LoadEditorTextureFromDataCommand loadCmd;
                     loadCmd.textureData = std::move(result.atlasAsRGBA);
-                    atlasHandle = dispatcher.execute(loadCmd);
+                    services::EditorTextureHandle newHandle = dispatcher.execute(loadCmd);
 
+                    // Only update member state after all operations that may throw succeed
+                    // This ensures consistent state if an exception occurs
+                    fontData = std::move(result.fontData);
+                    atlasHandle = newHandle;
                     fontLoaded = true;
                 }
                 else
@@ -135,7 +162,12 @@ namespace windows
             catch (const std::exception& e)
             {
                 loadFailed = true;
-                errorMessage = e.what();
+                errorMessage = std::string("Exception: ") + e.what();
+            }
+            catch (...)
+            {
+                loadFailed = true;
+                errorMessage = "Unknown exception during font loading";
             }
 
             loadingInProgress.store(false);
@@ -164,18 +196,31 @@ namespace windows
 
             if (loadingCancelled.load())
             {
+                // Clean up already-loaded font data before returning
+                result.fontData = resource::FontData{};
                 result.errorMessage = "Cancelled";
                 return result;
             }
 
-            // Convert atlas to RGBA for ImGui
+            // Convert atlas to RGBA for ImGui (may throw std::bad_alloc)
             result.atlasAsRGBA = convertAtlasToRGBA(result.fontData.atlas);
 
             result.success = true;
         }
+        catch (const std::bad_alloc& e)
+        {
+            // Memory allocation failure - clean up partial state
+            result.fontData = resource::FontData{};
+            result.atlasAsRGBA = resource::TextureData{};
+            result.errorMessage = std::string("Out of memory: ") + e.what();
+        }
         catch (const std::exception& e)
         {
-            result.errorMessage = e.what();
+            result.errorMessage = std::string("Error: ") + e.what();
+        }
+        catch (...)
+        {
+            result.errorMessage = "Unknown error during font loading";
         }
 
         return result;
@@ -195,30 +240,13 @@ namespace windows
         if (atlas.format == resource::FontAtlasFormat::SDF_8)
         {
             // SDF format: convert distance field to alpha using smoothstep
-            // Edge value is typically 0.5 (128 in byte terms)
-            // Values > 128 are inside the glyph, < 128 are outside
-            constexpr float edgeCenter = 128.0f;
-            constexpr float smoothWidth = 16.0f;  // Smoothing width for anti-aliasing
-
+            // Uses shared utility to ensure consistency with shader logic
             for (size_t i = 0; i < pixelCount; ++i)
             {
-                float sdfValue = static_cast<float>(atlas.pixels[i]);
-
-                // Apply smoothstep for anti-aliased edges
-                float edge0 = edgeCenter - smoothWidth;
-                float edge1 = edgeCenter + smoothWidth;
-
-                // Clamp and normalize
-                float t = (sdfValue - edge0) / (edge1 - edge0);
-                t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
-
-                // Smoothstep: 3t^2 - 2t^3
-                float alpha = t * t * (3.0f - 2.0f * t);
-
                 rgbaData[i * 4 + 0] = 255;    // R
                 rgbaData[i * 4 + 1] = 255;    // G
                 rgbaData[i * 4 + 2] = 255;    // B
-                rgbaData[i * 4 + 3] = static_cast<unsigned char>(alpha * 255.0f);
+                rgbaData[i * 4 + 3] = sdf::sdfToAlphaByte(atlas.pixels[i]);
             }
         }
         else if (atlas.format == resource::FontAtlasFormat::GRAYSCALE_8)
@@ -655,45 +683,85 @@ namespace windows
 
         unsigned char c = static_cast<unsigned char>(text[index]);
 
-        // ASCII
+        // Helper lambda to validate continuation byte (must be 10xxxxxx pattern)
+        auto isValidContinuation = [&text](size_t idx) -> bool {
+            if (idx >= text.size()) return false;
+            unsigned char b = static_cast<unsigned char>(text[idx]);
+            return (b & 0xC0) == 0x80;
+        };
+
+        // ASCII (0xxxxxxx)
         if ((c & 0x80) == 0)
         {
             index++;
             return c;
         }
 
-        // 2-byte sequence
-        if ((c & 0xE0) == 0xC0 && index + 1 < text.size())
+        // 2-byte sequence (110xxxxx 10xxxxxx)
+        if ((c & 0xE0) == 0xC0)
         {
+            if (!isValidContinuation(index + 1))
+            {
+                index++;
+                return 0xFFFD;
+            }
             uint32_t codepoint = (c & 0x1F) << 6;
             codepoint |= (static_cast<unsigned char>(text[index + 1]) & 0x3F);
             index += 2;
+            // Reject overlong encodings (codepoint must be >= 0x80 for 2-byte)
+            if (codepoint < 0x80)
+            {
+                return 0xFFFD;
+            }
             return codepoint;
         }
 
-        // 3-byte sequence
-        if ((c & 0xF0) == 0xE0 && index + 2 < text.size())
+        // 3-byte sequence (1110xxxx 10xxxxxx 10xxxxxx)
+        if ((c & 0xF0) == 0xE0)
         {
+            if (!isValidContinuation(index + 1) || !isValidContinuation(index + 2))
+            {
+                index++;
+                return 0xFFFD;
+            }
             uint32_t codepoint = (c & 0x0F) << 12;
             codepoint |= (static_cast<unsigned char>(text[index + 1]) & 0x3F) << 6;
             codepoint |= (static_cast<unsigned char>(text[index + 2]) & 0x3F);
             index += 3;
+            // Reject overlong encodings (codepoint must be >= 0x800 for 3-byte)
+            // Also reject UTF-16 surrogate pairs (0xD800-0xDFFF)
+            if (codepoint < 0x800 || (codepoint >= 0xD800 && codepoint <= 0xDFFF))
+            {
+                return 0xFFFD;
+            }
             return codepoint;
         }
 
-        // 4-byte sequence
-        if ((c & 0xF8) == 0xF0 && index + 3 < text.size())
+        // 4-byte sequence (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
+        if ((c & 0xF8) == 0xF0)
         {
+            if (!isValidContinuation(index + 1) || !isValidContinuation(index + 2) ||
+                !isValidContinuation(index + 3))
+            {
+                index++;
+                return 0xFFFD;
+            }
             uint32_t codepoint = (c & 0x07) << 18;
             codepoint |= (static_cast<unsigned char>(text[index + 1]) & 0x3F) << 12;
             codepoint |= (static_cast<unsigned char>(text[index + 2]) & 0x3F) << 6;
             codepoint |= (static_cast<unsigned char>(text[index + 3]) & 0x3F);
             index += 4;
+            // Reject overlong encodings (codepoint must be >= 0x10000 for 4-byte)
+            // Also reject codepoints beyond Unicode max (0x10FFFF)
+            if (codepoint < 0x10000 || codepoint > 0x10FFFF)
+            {
+                return 0xFFFD;
+            }
             return codepoint;
         }
 
-        // Invalid sequence, skip byte
+        // Invalid lead byte (10xxxxxx continuation without lead, or 11111xxx invalid)
         index++;
-        return 0xFFFD; // Replacement character
+        return 0xFFFD;
     }
 }

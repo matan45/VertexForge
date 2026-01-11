@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 #include <algorithm>
+#include <unordered_map>
 #include "../config/Config.hpp"
 
 namespace resource
@@ -352,6 +353,26 @@ namespace resource
 
         FontAtlasData atlas;
 
+    private:
+        // Cached kerning map for O(1) lookup (built lazily from kerningPairs vector)
+        // Key: (leftCodepoint << 32) | rightCodepoint
+        mutable std::unordered_map<uint64_t, float> kerningMap;
+        mutable bool kerningMapBuilt = false;
+
+        void buildKerningMap() const
+        {
+            kerningMap.clear();
+            kerningMap.reserve(kerningPairs.size());
+            for (const auto& pair : kerningPairs)
+            {
+                uint64_t key = (static_cast<uint64_t>(pair.leftCodepoint) << 32) |
+                               static_cast<uint64_t>(pair.rightCodepoint);
+                kerningMap[key] = pair.kerningAmount;
+            }
+            kerningMapBuilt = true;
+        }
+
+    public:
         // Find glyph by codepoint (glyphs should be sorted by codepoint)
         [[nodiscard]] const GlyphData* findGlyph(uint32_t codepoint) const
         {
@@ -363,18 +384,27 @@ namespace resource
             return nullptr;
         }
 
-        // Get kerning adjustment between two glyphs
+        // Get kerning adjustment between two glyphs - O(1) lookup using hash map
         [[nodiscard]] float getKerning(uint32_t left, uint32_t right) const
         {
             if (!hasFlag(formatFlags, FontFormatFlags::KERNING_ENABLED))
                 return 0.0f;
 
-            for (const auto& pair : kerningPairs)
+            // Build kerning map lazily on first access
+            if (!kerningMapBuilt)
             {
-                if (pair.leftCodepoint == left && pair.rightCodepoint == right)
-                    return pair.kerningAmount;
+                buildKerningMap();
             }
-            return 0.0f;
+
+            uint64_t key = (static_cast<uint64_t>(left) << 32) | static_cast<uint64_t>(right);
+            auto it = kerningMap.find(key);
+            return (it != kerningMap.end()) ? it->second : 0.0f;
+        }
+
+        // Call this after modifying kerningPairs to rebuild the lookup map
+        void invalidateKerningCache()
+        {
+            kerningMapBuilt = false;
         }
 
         [[nodiscard]] bool isSDF() const

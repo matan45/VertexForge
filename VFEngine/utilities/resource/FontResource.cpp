@@ -170,28 +170,46 @@ namespace resource
         fontData.atlas.height = readLE<uint32_t>(inFile);
         fontData.atlas.format = static_cast<FontAtlasFormat>(readLE<uint32_t>(inFile));
 
-        // Validate atlas dimensions
+        // Validate atlas dimensions BEFORE any multiplication to prevent overflow
+        // Max 8192x8192 = 67MB for grayscale, 268MB for RGBA - safe limits
+        constexpr uint32_t maxAtlasDimension = 8192;
         if (fontData.atlas.width == 0 || fontData.atlas.height == 0 ||
-            fontData.atlas.width > 8192 || fontData.atlas.height > 8192)
+            fontData.atlas.width > maxAtlasDimension || fontData.atlas.height > maxAtlasDimension)
         {
             vfLogError("Invalid atlas dimensions: {}x{}", fontData.atlas.width, fontData.atlas.height);
             return {};
         }
 
-        uint32_t atlasDataSize = readLE<uint32_t>(inFile);
-
-        // Validate atlas data size (use size_t to prevent overflow)
-        size_t expectedSize = static_cast<size_t>(fontData.atlas.width) * fontData.atlas.height;
+        // Determine bytes per pixel based on format
+        uint32_t bytesPerPixel = 1;
         if (fontData.atlas.format == FontAtlasFormat::RGBA_32)
         {
-            expectedSize *= 4;
+            bytesPerPixel = 4;
         }
-
-        if (expectedSize > std::numeric_limits<uint32_t>::max())
+        else if (fontData.atlas.format != FontAtlasFormat::GRAYSCALE_8 &&
+                 fontData.atlas.format != FontAtlasFormat::SDF_8)
         {
-            vfLogError("Atlas size too large: {}", expectedSize);
+            vfLogError("Unknown atlas format: {}", static_cast<uint32_t>(fontData.atlas.format));
             return {};
         }
+
+        // Calculate expected size with overflow protection
+        // Use uint64_t to ensure no overflow during multiplication
+        uint64_t expectedSize64 = static_cast<uint64_t>(fontData.atlas.width) *
+                                  static_cast<uint64_t>(fontData.atlas.height) *
+                                  static_cast<uint64_t>(bytesPerPixel);
+
+        // Validate result fits in size_t and is reasonable (max 512MB for safety)
+        constexpr uint64_t maxAtlasBytes = 512ULL * 1024 * 1024;
+        if (expectedSize64 > maxAtlasBytes || expectedSize64 > std::numeric_limits<size_t>::max())
+        {
+            vfLogError("Atlas size too large: {} bytes (max {} bytes)",
+                      expectedSize64, maxAtlasBytes);
+            return {};
+        }
+
+        size_t expectedSize = static_cast<size_t>(expectedSize64);
+        uint32_t atlasDataSize = readLE<uint32_t>(inFile);
 
         if (atlasDataSize != expectedSize && atlasDataSize > 0)
         {
