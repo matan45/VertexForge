@@ -189,18 +189,26 @@ public class RecentProjects {
     }
 
     /**
-     * Trims the collection to the maximum size by removing oldest entries.
+     * Trims the collection to the maximum size by removing the oldest entry.
+     * <p>
+     * Only removes one entry at a time since add() is called once per operation.
+     * This is O(n) for finding the oldest entry, compared to the previous
+     * O(n log n) approach of sorting the entire collection.
+     * </p>
      */
     private void trimToSize() {
-        if (projectsByPath.size() <= maxSize) {
-            return;
-        }
+        while (projectsByPath.size() > maxSize) {
+            // Find the entry with the oldest (minimum) lastOpened timestamp
+            Path oldestPath = projectsByPath.entrySet().stream()
+                    .min(Comparator.comparing(e -> e.getValue().lastOpened()))
+                    .map(Map.Entry::getKey)
+                    .orElse(null);
 
-        // Sort by lastOpened descending and keep only maxSize entries
-        List<ProjectInfo> sorted = getAll();
-        projectsByPath.clear();
-        sorted.stream()
-                .limit(maxSize)
-                .forEach(p -> projectsByPath.put(p.path(), p));
+            if (oldestPath != null) {
+                projectsByPath.remove(oldestPath);
+            } else {
+                break;
+            }
+        }
     }
 }

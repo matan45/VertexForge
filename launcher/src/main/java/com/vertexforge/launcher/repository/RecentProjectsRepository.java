@@ -197,6 +197,42 @@ public class RecentProjectsRepository {
     }
 
     /**
+     * Validates that a path is safe to use.
+     * <p>
+     * Security check to prevent path traversal attacks from malicious JSON files.
+     * Ensures the path is absolute and normalized (no .. components).
+     * </p>
+     *
+     * @param path the path to validate
+     * @return true if the path is safe, false otherwise
+     */
+    private boolean isPathSafe(Path path) {
+        // Must be absolute path
+        if (!path.isAbsolute()) {
+            return false;
+        }
+
+        // Normalize to resolve any ".." or "." components
+        Path normalized = path.normalize();
+
+        // After normalization, path should equal original (no traversal sequences)
+        // This catches paths like "/home/user/../../../etc/passwd"
+        if (!normalized.equals(path.toAbsolutePath().normalize())) {
+            return false;
+        }
+
+        // Ensure normalized path doesn't contain suspicious components
+        for (Path component : normalized) {
+            String name = component.toString();
+            if (name.equals("..") || name.equals(".")) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Converts DTO to domain model after deserialization.
      * <p>
      * Filters out invalid project paths and entries with parse errors.
@@ -220,7 +256,13 @@ public class RecentProjectsRepository {
 
                 Path path = Paths.get(pd.path());
 
-                // Skip invalid project paths
+                // Security: Validate path to prevent path traversal attacks
+                if (!isPathSafe(path)) {
+                    System.err.println("Skipping unsafe path: " + pd.path());
+                    continue;
+                }
+
+                // Skip invalid project paths (file doesn't exist, wrong extension, etc.)
                 if (!ProjectValidator.isValid(path)) {
                     continue;
                 }
