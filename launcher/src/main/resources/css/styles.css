@@ -157,3 +157,104 @@
 .alert .dialog-pane .header-panel .label {
     -fx-text-fill: #ffffff;
 }
+
+/* ============================================
+   Projects TableView (VK-154)
+   ============================================ */
+.projects-table {
+    -fx-background-color: #1e1e1e;
+    -fx-border-color: #3c3c3c;
+    -fx-border-width: 1;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+.projects-table .column-header-background {
+    -fx-background-color: #2b2b2b;
+}
+
+.projects-table .column-header {
+    -fx-background-color: #2b2b2b;
+    -fx-border-color: transparent #3c3c3c transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+
+.projects-table .column-header .label {
+    -fx-text-fill: #cccccc;
+    -fx-font-weight: bold;
+    -fx-padding: 8 10;
+}
+
+.projects-table .table-row-cell {
+    -fx-background-color: #1e1e1e;
+    -fx-border-color: transparent transparent #2b2b2b transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.projects-table .table-row-cell:odd {
+    -fx-background-color: #242424;
+}
+
+.projects-table .table-row-cell:selected {
+    -fx-background-color: #264f78;
+}
+
+.projects-table .table-row-cell:selected .table-cell {
+    -fx-text-fill: #ffffff;
+}
+
+.projects-table .table-row-cell:hover {
+    -fx-background-color: #2a2d2e;
+}
+
+.projects-table .table-row-cell:selected:hover {
+    -fx-background-color: #305f8a;
+}
+
+.projects-table .table-cell {
+    -fx-text-fill: #cccccc;
+    -fx-padding: 8 10;
+    -fx-alignment: CENTER-LEFT;
+}
+
+/* Invalid Project Row Styling */
+.projects-table .invalid-project-row {
+    -fx-background-color: #3d2626;
+}
+
+.projects-table .invalid-project-row:odd {
+    -fx-background-color: #3a2424;
+}
+
+.projects-table .invalid-project-row:selected {
+    -fx-background-color: #5c3030;
+}
+
+.projects-table .invalid-project-row .table-cell {
+    -fx-text-fill: #cc6666;
+}
+
+.projects-table .invalid-project-row:selected .table-cell {
+    -fx-text-fill: #ffaaaa;
+}
+
+/* TableView Empty State */
+.projects-table .placeholder {
+    -fx-background-color: transparent;
+}
+
+.projects-table .placeholder .label {
+    -fx-text-fill: #666666;
+    -fx-font-size: 14px;
+}
+
+/* Remove focus ring from table */
+.projects-table:focused {
+    -fx-background-color: #1e1e1e;
+    -fx-faint-focus-color: transparent;
+}
+
+/* Column sort arrow styling */
+.projects-table .arrow {
+    -fx-background-color: #cccccc;
+}
