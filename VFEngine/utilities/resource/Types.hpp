@@ -36,20 +36,18 @@ namespace resource
         UNKNOWN
     };
 
-    // Mip level data - stores pixel data for a single mipmap level
     struct MipLevelData
     {
         uint32_t width = 0;
         uint32_t height = 0;
-        std::vector<unsigned char> data;  // RGBA pixel data for this mip level
+        std::vector<unsigned char> data;
     };
 
-    // HDR mip level data - stores float pixel data for a single mipmap level
     struct MipLevelDataHDR
     {
         uint32_t width = 0;
         uint32_t height = 0;
-        std::vector<float> data;  // RGBA32F pixel data for this mip level
+        std::vector<float> data;
     };
     
     inline uint32_t calculateMipLevels(uint32_t width, uint32_t height)
@@ -71,8 +69,8 @@ namespace resource
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t numbersOfChannels = 0;
-        uint32_t mipLevels = 1;                  // Number of mip levels (1 = no mipmaps)
-        std::vector<MipLevelData> mipData;       // Mip chain (mipData[0] = base level)
+        uint32_t mipLevels = 1;
+        std::vector<MipLevelData> mipData;
         
         const std::vector<unsigned char>& textureData() const {
             static std::vector<unsigned char> empty;
@@ -145,7 +143,7 @@ namespace resource
     struct MeshData
     {
         std::string name;
-        std::vector<LODLevel> lodLevels; // 4 LOD levels (LOD0=100%, LOD1=50%, LOD2=25%, LOD3=12.5%)
+        std::vector<LODLevel> lodLevels;
         
         const std::vector<Vertex>& vertices() const {
             static std::vector<Vertex> empty;
@@ -161,7 +159,7 @@ namespace resource
     struct Bone
     {
         std::string name;
-        glm::mat4 offsetMatrix; // Inverse Bind Pose Matrix (Bone's offset matrix)
+        glm::mat4 offsetMatrix;
         std::vector<std::pair<uint32_t, float>> weights;
     };
 
@@ -211,19 +209,14 @@ namespace resource
         std::vector<MeshData> meshes;
     };
 
-    // ============================================================================
-    // Font Asset Format (.vfFont)
-    // ============================================================================
-
-    // Font format feature flags (bit field)
     enum class FontFormatFlags : uint32_t
     {
         NONE            = 0,
-        SDF_ENABLED     = 1 << 0,   // Atlas uses Signed Distance Field
-        KERNING_ENABLED = 1 << 1,   // Kerning table present
-        MULTI_SIZE      = 1 << 2,   // Reserved: multiple rasterized sizes (v2.0)
-        COLOR_EMOJI     = 1 << 3,   // Reserved: color emoji support (v2.0)
-        MSDF_ENABLED    = 1 << 4,   // Reserved: Multi-channel SDF (v2.0)
+        SDF_ENABLED     = 1 << 0,
+        KERNING_ENABLED = 1 << 1,
+        MULTI_SIZE      = 1 << 2,
+        COLOR_EMOJI     = 1 << 3,
+        MSDF_ENABLED    = 1 << 4,
     };
 
     inline FontFormatFlags operator|(FontFormatFlags a, FontFormatFlags b)
@@ -241,76 +234,66 @@ namespace resource
         return (static_cast<uint32_t>(flags) & static_cast<uint32_t>(flag)) != 0;
     }
 
-    // Atlas pixel format
     enum class FontAtlasFormat : uint32_t
     {
-        GRAYSCALE_8 = 0,   // 1 byte per pixel (standard bitmap)
-        SDF_8       = 1,   // 1 byte per pixel (SDF encoded)
-        RGBA_32     = 2,   // 4 bytes per pixel (color emoji)
+        GRAYSCALE_8 = 0,
+        SDF_8       = 1,
+        RGBA_32     = 2,
     };
 
-    // Unicode character range
     struct CharacterRange
     {
         uint32_t rangeStart = 0;
         uint32_t rangeEnd = 0;
     };
 
-    // Glyph metrics and atlas positioning (48 bytes)
     struct GlyphData
     {
-        uint32_t codepoint = 0;      // Unicode codepoint
+        uint32_t codepoint = 0;
 
-        // Metrics (in pixels at base font size)
-        float advanceX = 0.0f;       // Horizontal advance to next character
-        float advanceY = 0.0f;       // Vertical advance (usually 0 for horizontal text)
-        float bearingX = 0.0f;       // Left side bearing
-        float bearingY = 0.0f;       // Top side bearing (from baseline)
-        float glyphWidth = 0.0f;     // Glyph bounding box width
-        float glyphHeight = 0.0f;    // Glyph bounding box height
+        float advanceX = 0.0f;
+        float advanceY = 0.0f;
+        float bearingX = 0.0f;
+        float bearingY = 0.0f;
+        float glyphWidth = 0.0f;
+        float glyphHeight = 0.0f;
 
-        // Atlas texture coordinates (in pixels)
         uint32_t atlasX = 0;
         uint32_t atlasY = 0;
         uint32_t atlasWidth = 0;
         uint32_t atlasHeight = 0;
 
-        uint32_t reserved = 0;       // Future: kerning table index
+        uint32_t reserved = 0;
     };
 
-    // Kerning pair
     struct KerningPair
     {
         uint32_t leftCodepoint = 0;
         uint32_t rightCodepoint = 0;
-        float kerningAmount = 0.0f;  // Horizontal adjustment
+        float kerningAmount = 0.0f;
     };
 
-    // SDF-specific parameters
     struct SDFParameters
     {
-        float spread = 4.0f;         // SDF spread radius in pixels
-        uint32_t padding = 4;        // Padding around glyphs for SDF
-        float edgeValue = 0.5f;      // Edge threshold (0.5 = glyph edge)
+        float spread = 4.0f;
+        uint32_t padding = 4;
+        float edgeValue = 0.5f;
         uint32_t reserved = 0;
     };
 
-    // Font metadata
     struct FontMetadata
     {
-        std::string fontName;        // Font family name (e.g., "Roboto")
-        std::string fontStyle;       // Style variant (e.g., "Regular", "Bold", "Italic")
-        uint32_t baseFontSize = 32;  // Rasterization size in pixels
+        std::string fontName;
+        std::string fontStyle;
+        uint32_t baseFontSize = 32;
 
-        // Vertical metrics
-        float lineHeight = 0.0f;     // Line height (ascender - descender + line gap)
-        float ascender = 0.0f;       // Maximum ascent above baseline
-        float descender = 0.0f;      // Maximum descent below baseline (negative)
+        float lineHeight = 0.0f;
+        float ascender = 0.0f;
+        float descender = 0.0f;
         float underlinePosition = 0.0f;
         float underlineThickness = 0.0f;
     };
 
-    // Atlas texture data
     struct FontAtlasData
     {
         uint32_t width = 0;
@@ -337,7 +320,6 @@ namespace resource
         }
     };
 
-    // Complete font asset data structure
     struct FontData
     {
         FileType headerFileType = FileType::FONT;
@@ -345,17 +327,15 @@ namespace resource
         FontFormatFlags formatFlags = FontFormatFlags::SDF_ENABLED;
 
         FontMetadata metadata;
-        SDFParameters sdfParams;     // Valid only if SDF_ENABLED flag set
+        SDFParameters sdfParams;
 
         std::vector<CharacterRange> characterRanges;
         std::vector<GlyphData> glyphs;
-        std::vector<KerningPair> kerningPairs;  // Valid only if KERNING_ENABLED flag set
+        std::vector<KerningPair> kerningPairs;
 
         FontAtlasData atlas;
 
     private:
-        // Cached kerning map for O(1) lookup (built lazily from kerningPairs vector)
-        // Key: (leftCodepoint << 32) | rightCodepoint
         mutable std::unordered_map<uint64_t, float> kerningMap;
         mutable bool kerningMapBuilt = false;
 
@@ -373,7 +353,6 @@ namespace resource
         }
 
     public:
-        // Find glyph by codepoint (glyphs should be sorted by codepoint)
         [[nodiscard]] const GlyphData* findGlyph(uint32_t codepoint) const
         {
             auto it = std::lower_bound(glyphs.begin(), glyphs.end(), codepoint,
@@ -384,13 +363,11 @@ namespace resource
             return nullptr;
         }
 
-        // Get kerning adjustment between two glyphs - O(1) lookup using hash map
         [[nodiscard]] float getKerning(uint32_t left, uint32_t right) const
         {
             if (!hasFlag(formatFlags, FontFormatFlags::KERNING_ENABLED))
                 return 0.0f;
 
-            // Build kerning map lazily on first access
             if (!kerningMapBuilt)
             {
                 buildKerningMap();
@@ -401,7 +378,6 @@ namespace resource
             return (it != kerningMap.end()) ? it->second : 0.0f;
         }
 
-        // Call this after modifying kerningPairs to rebuild the lookup map
         void invalidateKerningCache()
         {
             kerningMapBuilt = false;

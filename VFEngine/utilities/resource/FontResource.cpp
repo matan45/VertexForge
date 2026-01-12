@@ -12,14 +12,12 @@ namespace resource
     {
         FontData fontData;
 
-        // Validate input
         if (path.empty())
         {
             vfLogError("Empty path provided for font loading");
             return {};
         }
 
-        // Open the file in binary mode
         std::ifstream inFile(path.data(), std::ios::binary);
         if (!inFile)
         {
@@ -27,33 +25,30 @@ namespace resource
             return {};
         }
 
-        // Check file size for sanity
         inFile.seekg(0, std::ios::end);
         auto fileSize = inFile.tellg();
         inFile.seekg(0, std::ios::beg);
 
-        constexpr std::streamoff maxFontFileSize = 50 * 1024 * 1024;  // 50 MB
+        constexpr std::streamoff maxFontFileSize = 50 * 1024 * 1024; // 50 MB
         if (fileSize > maxFontFileSize)
         {
             vfLogError("Font file too large ({} bytes, max {} bytes): {}",
-                      static_cast<size_t>(fileSize), static_cast<size_t>(maxFontFileSize), path);
+                       static_cast<size_t>(fileSize), static_cast<size_t>(maxFontFileSize), path);
             return {};
         }
 
         using namespace endian;
 
-        // Read header
         uint8_t headerFileType = readLE<uint8_t>(inFile);
         fontData.headerFileType = static_cast<FileType>(headerFileType);
 
         if (fontData.headerFileType != FileType::FONT)
         {
             vfLogError("Invalid font file type: expected FONT ({}), got {}",
-                      static_cast<int>(FileType::FONT), static_cast<int>(fontData.headerFileType));
+                       static_cast<int>(FileType::FONT), static_cast<int>(fontData.headerFileType));
             return {};
         }
 
-        // Read version
         uint32_t majorVersion = readLE<uint32_t>(inFile);
         uint32_t minorVersion = readLE<uint32_t>(inFile);
         uint32_t patchVersion = readLE<uint32_t>(inFile);
@@ -62,34 +57,29 @@ namespace resource
         fontData.version.minor = minorVersion;
         fontData.version.patch = patchVersion;
 
-        // Version compatibility check
         if (majorVersion != Version::major)
         {
             vfLogError("Incompatible font file major version: {}.{}.{}, expected {}.x.x",
-                      majorVersion, minorVersion, patchVersion, Version::major);
+                       majorVersion, minorVersion, patchVersion, Version::major);
             return {};
         }
 
-        // Read format flags
         fontData.formatFlags = static_cast<FontFormatFlags>(readLE<uint32_t>(inFile));
 
-        // Read metadata - font name
         uint32_t nameLength = readLE<uint32_t>(inFile);
-        if (nameLength > 0 && nameLength < 1024)  // Sanity check
+        if (nameLength > 0 && nameLength < 1024)
         {
             fontData.metadata.fontName.resize(nameLength);
             inFile.read(fontData.metadata.fontName.data(), nameLength);
         }
 
-        // Read metadata - font style
         uint32_t styleLength = readLE<uint32_t>(inFile);
-        if (styleLength > 0 && styleLength < 1024)  // Sanity check
+        if (styleLength > 0 && styleLength < 1024)
         {
             fontData.metadata.fontStyle.resize(styleLength);
             inFile.read(fontData.metadata.fontStyle.data(), styleLength);
         }
 
-        // Read metadata - numeric values
         fontData.metadata.baseFontSize = readLE<uint32_t>(inFile);
         fontData.metadata.lineHeight = readLE<float>(inFile);
         fontData.metadata.ascender = readLE<float>(inFile);
@@ -97,15 +87,13 @@ namespace resource
         fontData.metadata.underlinePosition = readLE<float>(inFile);
         fontData.metadata.underlineThickness = readLE<float>(inFile);
 
-        // Read SDF parameters
         fontData.sdfParams.spread = readLE<float>(inFile);
         fontData.sdfParams.padding = readLE<uint32_t>(inFile);
         fontData.sdfParams.edgeValue = readLE<float>(inFile);
         fontData.sdfParams.reserved = readLE<uint32_t>(inFile);
 
-        // Read character ranges
         uint32_t rangeCount = readLE<uint32_t>(inFile);
-        if (rangeCount > 1000)  // Sanity check
+        if (rangeCount > 1000)
         {
             vfLogError("Invalid character range count: {}", rangeCount);
             return {};
@@ -120,9 +108,8 @@ namespace resource
             fontData.characterRanges.push_back(range);
         }
 
-        // Read glyphs
         uint32_t glyphCount = readLE<uint32_t>(inFile);
-        if (glyphCount > 100000)  // Sanity check
+        if (glyphCount > 100000)
         {
             vfLogError("Invalid glyph count: {}", glyphCount);
             return {};
@@ -147,9 +134,8 @@ namespace resource
             fontData.glyphs.push_back(glyph);
         }
 
-        // Read kerning pairs
         uint32_t kerningCount = readLE<uint32_t>(inFile);
-        if (kerningCount > 1000000)  // Sanity check
+        if (kerningCount > 1000000)
         {
             vfLogError("Invalid kerning pair count: {}", kerningCount);
             return {};
@@ -165,13 +151,10 @@ namespace resource
             fontData.kerningPairs.push_back(pair);
         }
 
-        // Read atlas
         fontData.atlas.width = readLE<uint32_t>(inFile);
         fontData.atlas.height = readLE<uint32_t>(inFile);
         fontData.atlas.format = static_cast<FontAtlasFormat>(readLE<uint32_t>(inFile));
 
-        // Validate atlas dimensions BEFORE any multiplication to prevent overflow
-        // Max 8192x8192 = 67MB for grayscale, 268MB for RGBA - safe limits
         constexpr uint32_t maxAtlasDimension = 8192;
         if (fontData.atlas.width == 0 || fontData.atlas.height == 0 ||
             fontData.atlas.width > maxAtlasDimension || fontData.atlas.height > maxAtlasDimension)
@@ -180,31 +163,27 @@ namespace resource
             return {};
         }
 
-        // Determine bytes per pixel based on format
         uint32_t bytesPerPixel = 1;
         if (fontData.atlas.format == FontAtlasFormat::RGBA_32)
         {
             bytesPerPixel = 4;
         }
         else if (fontData.atlas.format != FontAtlasFormat::GRAYSCALE_8 &&
-                 fontData.atlas.format != FontAtlasFormat::SDF_8)
+            fontData.atlas.format != FontAtlasFormat::SDF_8)
         {
             vfLogError("Unknown atlas format: {}", static_cast<uint32_t>(fontData.atlas.format));
             return {};
         }
 
-        // Calculate expected size with overflow protection
-        // Use uint64_t to ensure no overflow during multiplication
         uint64_t expectedSize64 = static_cast<uint64_t>(fontData.atlas.width) *
-                                  static_cast<uint64_t>(fontData.atlas.height) *
-                                  static_cast<uint64_t>(bytesPerPixel);
+            static_cast<uint64_t>(fontData.atlas.height) *
+            static_cast<uint64_t>(bytesPerPixel);
 
-        // Validate result fits in size_t and is reasonable (max 512MB for safety)
         constexpr uint64_t maxAtlasBytes = 512ULL * 1024 * 1024;
         if (expectedSize64 > maxAtlasBytes || expectedSize64 > std::numeric_limits<size_t>::max())
         {
             vfLogError("Atlas size too large: {} bytes (max {} bytes)",
-                      expectedSize64, maxAtlasBytes);
+                       expectedSize64, maxAtlasBytes);
             return {};
         }
 
@@ -222,7 +201,6 @@ namespace resource
             inFile.read(reinterpret_cast<char*>(fontData.atlas.pixels.data()), atlasDataSize);
         }
 
-        // Verify read was successful
         if (inFile.fail() && !inFile.eof())
         {
             vfLogError("Error reading font file: {}", path);
@@ -232,8 +210,8 @@ namespace resource
         inFile.close();
 
         vfLogInfo("Loaded font: {} ({} glyphs, {}x{} atlas)",
-                 fontData.metadata.fontName, fontData.glyphs.size(),
-                 fontData.atlas.width, fontData.atlas.height);
+                  fontData.metadata.fontName, fontData.glyphs.size(),
+                  fontData.atlas.width, fontData.atlas.height);
 
         return fontData;
     }

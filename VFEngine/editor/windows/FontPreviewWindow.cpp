@@ -5,7 +5,6 @@
 #include "math/MathHelper.hpp"
 #include <imgui.h>
 #include <filesystem>
-#include <cstring>
 
 namespace windows
 {
@@ -15,18 +14,16 @@ namespace windows
         std::filesystem::path path(filePath);
         windowTitle = "Font Preview: " + path.filename().string();
 
-        // Initialize preview text
         const char* defaultText = "The quick brown fox jumps over the lazy dog.\n"
-                                  "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n"
-                                  "abcdefghijklmnopqrstuvwxyz\n"
-                                  "0123456789 !@#$%^&*()";
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ\n"
+            "abcdefghijklmnopqrstuvwxyz\n"
+            "0123456789 !@#$%^&*()";
         std::strncpy(textInputBuffer, defaultText, sizeof(textInputBuffer) - 1);
         textInputBuffer[sizeof(textInputBuffer) - 1] = '\0';
     }
 
     FontPreviewWindow::~FontPreviewWindow()
     {
-        // Signal cancellation to background thread
         loadingCancelled.store(true);
 
         // Wait for async operation to complete (required before destroying this object)
@@ -35,7 +32,6 @@ namespace windows
             try
             {
                 loadFuture.wait();
-                // Discard any pending result to ensure future is consumed
                 if (loadFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
                 {
                     (void)loadFuture.get();
@@ -47,7 +43,6 @@ namespace windows
             }
         }
 
-        // Release GPU resources
         if (atlasHandle.isValid())
         {
             try
@@ -239,26 +234,24 @@ namespace windows
 
         if (atlas.format == resource::FontAtlasFormat::SDF_8)
         {
-            // SDF format: convert distance field to alpha using smoothstep
             // Uses shared utility to ensure consistency with shader logic
             for (size_t i = 0; i < pixelCount; ++i)
             {
-                rgbaData[i * 4 + 0] = 255;    // R
-                rgbaData[i * 4 + 1] = 255;    // G
-                rgbaData[i * 4 + 2] = 255;    // B
+                rgbaData[i * 4 + 0] = 255;
+                rgbaData[i * 4 + 1] = 255;
+                rgbaData[i * 4 + 2] = 255;
                 rgbaData[i * 4 + 3] = sdf::sdfToAlphaByte(atlas.pixels[i]);
             }
         }
         else if (atlas.format == resource::FontAtlasFormat::GRAYSCALE_8)
         {
-            // Regular grayscale: use value directly as alpha
             for (size_t i = 0; i < pixelCount; ++i)
             {
                 unsigned char value = atlas.pixels[i];
-                rgbaData[i * 4 + 0] = 255;    // R
-                rgbaData[i * 4 + 1] = 255;    // G
-                rgbaData[i * 4 + 2] = 255;    // B
-                rgbaData[i * 4 + 3] = value;  // A
+                rgbaData[i * 4 + 0] = 255;
+                rgbaData[i * 4 + 1] = 255;
+                rgbaData[i * 4 + 2] = 255;
+                rgbaData[i * 4 + 3] = value;
             }
         }
         else if (atlas.format == resource::FontAtlasFormat::RGBA_32)
@@ -293,7 +286,6 @@ namespace windows
             return;
         }
 
-        // Font metadata
         if (ImGui::CollapsingHeader("Metadata", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Text("Name:");
@@ -306,7 +298,6 @@ namespace windows
 
         ImGui::Spacing();
 
-        // Metrics
         if (ImGui::CollapsingHeader("Metrics", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Text("Line Height: %.2f", fontData.metadata.lineHeight);
@@ -318,7 +309,6 @@ namespace windows
 
         ImGui::Spacing();
 
-        // Atlas info
         if (ImGui::CollapsingHeader("Atlas", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Text("Size: %dx%d", fontData.atlas.width, fontData.atlas.height);
@@ -326,9 +316,12 @@ namespace windows
             const char* formatStr = "Unknown";
             switch (fontData.atlas.format)
             {
-                case resource::FontAtlasFormat::GRAYSCALE_8: formatStr = "Grayscale"; break;
-                case resource::FontAtlasFormat::SDF_8: formatStr = "SDF"; break;
-                case resource::FontAtlasFormat::RGBA_32: formatStr = "RGBA"; break;
+            case resource::FontAtlasFormat::GRAYSCALE_8: formatStr = "Grayscale";
+                break;
+            case resource::FontAtlasFormat::SDF_8: formatStr = "SDF";
+                break;
+            case resource::FontAtlasFormat::RGBA_32: formatStr = "RGBA";
+                break;
             }
             ImGui::Text("Format: %s", formatStr);
             ImGui::Text("Glyphs: %zu", fontData.glyphs.size());
@@ -337,7 +330,6 @@ namespace windows
 
         ImGui::Spacing();
 
-        // SDF params (if SDF)
         if (fontData.isSDF() && ImGui::CollapsingHeader("SDF Parameters"))
         {
             ImGui::Text("Spread: %.2f", fontData.sdfParams.spread);
@@ -347,7 +339,6 @@ namespace windows
 
         ImGui::Spacing();
 
-        // Character ranges
         if (ImGui::CollapsingHeader("Character Ranges"))
         {
             for (const auto& range : fontData.characterRanges)
@@ -365,7 +356,6 @@ namespace windows
             return;
         }
 
-        // Controls
         ImGui::Text("Preview Settings");
         ImGui::Separator();
 
@@ -383,7 +373,6 @@ namespace windows
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Preview text input
         ImGui::Text("Preview Text:");
         ImGui::InputTextMultiline("##PreviewText", textInputBuffer, sizeof(textInputBuffer),
                                   ImVec2(-1, 80.0f));
@@ -392,7 +381,6 @@ namespace windows
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Draw preview
         if (showAtlasPreview)
         {
             drawAtlasPreview();
@@ -420,21 +408,18 @@ namespace windows
         ImVec2 canvasPos = ImGui::GetCursorScreenPos();
         ImVec2 canvasSize = ImGui::GetContentRegionAvail();
 
-        // Background
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(canvasPos,
-            ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
-            IM_COL32(30, 30, 30, 255));
+                                ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
+                                IM_COL32(30, 30, 30, 255));
 
-        // Draw baseline
         float baseline = canvasPos.y + fontData.metadata.ascender *
-                        (previewFontSize / fontData.metadata.baseFontSize) + 10.0f;
+            (previewFontSize / fontData.metadata.baseFontSize) + 10.0f;
         drawList->AddLine(
             ImVec2(canvasPos.x, baseline),
             ImVec2(canvasPos.x + canvasSize.x, baseline),
             IM_COL32(60, 60, 60, 255));
 
-        // Render text
         renderTextWithGlyphs(textInputBuffer, previewFontSize,
                              ImVec2(canvasPos.x + 10.0f, canvasPos.y + 10.0f));
 
@@ -456,8 +441,8 @@ namespace windows
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(startPos,
-            ImVec2(startPos.x + availSize.x, startPos.y + availSize.y),
-            IM_COL32(30, 30, 30, 255));
+                                ImVec2(startPos.x + availSize.x, startPos.y + availSize.y),
+                                IM_COL32(30, 30, 30, 255));
 
         float scale = previewFontSize / static_cast<float>(fontData.metadata.baseFontSize);
         float cellSize = previewFontSize + 8.0f;
@@ -475,7 +460,6 @@ namespace windows
                 break;
             }
 
-            // Calculate UV coordinates
             float u0 = static_cast<float>(glyph.atlasX) / fontData.atlas.width;
             float v0 = static_cast<float>(glyph.atlasY) / fontData.atlas.height;
             float u1 = static_cast<float>(glyph.atlasX + glyph.atlasWidth) / fontData.atlas.width;
@@ -548,14 +532,12 @@ namespace windows
         ImVec2 windowPos = ImGui::GetCursorScreenPos();
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        // Background
         drawList->AddRectFilled(
             windowPos,
             ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y),
             IM_COL32(30, 30, 30, 255)
         );
 
-        // Animated spinner
         float time = static_cast<float>(ImGui::GetTime());
         float spinnerRadius = 20.0f;
         float spinnerThickness = 4.0f;
@@ -586,7 +568,6 @@ namespace windows
             drawList->AddLine(p1, p2, segColor, spinnerThickness);
         }
 
-        // Loading text
         const char* loadingText = "Loading font...";
         ImVec2 textSize = ImGui::CalcTextSize(loadingText);
         ImGui::SetCursorPos(ImVec2(
@@ -641,25 +622,21 @@ namespace windows
                 continue;
             }
 
-            // Apply kerning
             if (prevCodepoint != 0)
             {
                 cursorX += fontData.getKerning(prevCodepoint, codepoint) * scale;
             }
 
-            // Calculate glyph position
             float x = cursorX + glyph->bearingX * scale;
             float y = cursorY + (fontData.metadata.ascender - glyph->bearingY) * scale;
             float w = glyph->atlasWidth * scale;
             float h = glyph->atlasHeight * scale;
 
-            // Calculate UV coordinates
             float u0 = static_cast<float>(glyph->atlasX) / fontData.atlas.width;
             float v0 = static_cast<float>(glyph->atlasY) / fontData.atlas.height;
             float u1 = static_cast<float>(glyph->atlasX + glyph->atlasWidth) / fontData.atlas.width;
             float v1 = static_cast<float>(glyph->atlasY + glyph->atlasHeight) / fontData.atlas.height;
 
-            // Draw textured quad
             drawList->AddImage(
                 atlasHandle.imguiDescriptorSet,
                 ImVec2(x, y),
@@ -684,7 +661,8 @@ namespace windows
         unsigned char c = static_cast<unsigned char>(text[index]);
 
         // Helper lambda to validate continuation byte (must be 10xxxxxx pattern)
-        auto isValidContinuation = [&text](size_t idx) -> bool {
+        auto isValidContinuation = [&text](size_t idx) -> bool
+        {
             if (idx >= text.size()) return false;
             unsigned char b = static_cast<unsigned char>(text[idx]);
             return (b & 0xC0) == 0x80;

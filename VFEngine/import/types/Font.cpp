@@ -26,7 +26,6 @@ namespace types
     {
         if (progressCallback) progressCallback(0.0f);
 
-        // Step 1: Load font file into memory (0% - 10%)
         std::vector<unsigned char> fontBuffer;
         if (!loadFontFile(file.path, fontBuffer))
         {
@@ -36,7 +35,6 @@ namespace types
 
         if (progressCallback) progressCallback(0.1f);
 
-        // Step 2: Initialize stb_truetype font info (10% - 15%)
         stbtt_fontinfo fontInfo;
         int fontOffset = stbtt_GetFontOffsetForIndex(fontBuffer.data(), 0);
         if (fontOffset < 0)
@@ -53,7 +51,6 @@ namespace types
 
         if (progressCallback) progressCallback(0.15f);
 
-        // Step 3: Calculate scale and extract metrics (15% - 20%)
         float scale = stbtt_ScaleForPixelHeight(&fontInfo, static_cast<float>(config.baseFontSize));
 
         resource::FontData fontData;
@@ -62,7 +59,6 @@ namespace types
 
         extractFontMetrics(&fontInfo, scale, fontData.metadata, fileName);
 
-        // Set format flags
         fontData.formatFlags = resource::FontFormatFlags::NONE;
         if (config.generateSDF)
         {
@@ -78,12 +74,10 @@ namespace types
 
         if (progressCallback) progressCallback(0.2f);
 
-        // Step 4: Build character ranges (20% - 25%)
         fontData.characterRanges = buildCharacterRanges(config);
 
         if (progressCallback) progressCallback(0.25f);
 
-        // Step 5: Generate atlas and extract glyph data (25% - 80%)
         bool atlasSuccess = generateSDFAtlas(&fontInfo, scale, fontData.characterRanges, config, fontData);
 
         if (!atlasSuccess)
@@ -94,7 +88,6 @@ namespace types
 
         if (progressCallback) progressCallback(0.8f);
 
-        // Step 6: Extract kerning pairs (80% - 90%)
         if (config.includeKerning)
         {
             extractKerningPairs(&fontInfo, scale, fontData.glyphs, fontData.kerningPairs);
@@ -102,13 +95,11 @@ namespace types
 
         if (progressCallback) progressCallback(0.9f);
 
-        // Step 7: Sort glyphs by codepoint for binary search
         std::sort(fontData.glyphs.begin(), fontData.glyphs.end(),
                   [](const resource::GlyphData& a, const resource::GlyphData& b) {
                       return a.codepoint < b.codepoint;
                   });
 
-        // Step 8: Save to file (90% - 100%)
         saveToFile(location, fileName, fontData);
 
         if (progressCallback) progressCallback(1.0f);
@@ -205,14 +196,10 @@ namespace types
         stbtt_GetFontVMetrics(fontInfo, &ascent, &descent, &lineGap);
 
         metadata.ascender = static_cast<float>(ascent) * scale;
-        metadata.descender = static_cast<float>(descent) * scale;  // Usually negative
+        metadata.descender = static_cast<float>(descent) * scale;
         metadata.lineHeight = (static_cast<float>(ascent - descent + lineGap)) * scale;
-
-        // Estimate underline position (typically around descender / 2)
         metadata.underlinePosition = metadata.descender * 0.5f;
-        metadata.underlineThickness = scale * 1.0f;  // 1 unit thickness at base size
-
-        // Use filename as font name since parsing name table is complex
+        metadata.underlineThickness = scale * 1.0f;
         metadata.fontName = std::string(fileName);
         metadata.fontStyle = "Regular";
     }
@@ -224,32 +211,32 @@ namespace types
 
         if (config.includeBasicLatin)
         {
-            ranges.push_back({0x0020, 0x007E});  // Basic Latin (ASCII printable)
+            ranges.push_back({0x0020, 0x007E});
         }
 
         if (config.includeLatin1Supplement)
         {
-            ranges.push_back({0x00A0, 0x00FF});  // Latin-1 Supplement
+            ranges.push_back({0x00A0, 0x00FF});
         }
 
         if (config.includeLatinExtendedA)
         {
-            ranges.push_back({0x0100, 0x017F});  // Latin Extended-A
+            ranges.push_back({0x0100, 0x017F});
         }
 
         if (config.includeLatinExtendedB)
         {
-            ranges.push_back({0x0180, 0x024F});  // Latin Extended-B
+            ranges.push_back({0x0180, 0x024F});
         }
 
         if (config.includeGreek)
         {
-            ranges.push_back({0x0370, 0x03FF});  // Greek and Coptic
+            ranges.push_back({0x0370, 0x03FF});
         }
 
         if (config.includeCyrillic)
         {
-            ranges.push_back({0x0400, 0x04FF});  // Cyrillic
+            ranges.push_back({0x0400, 0x04FF});
         }
 
         return ranges;
@@ -284,14 +271,11 @@ namespace types
     {
         const stbtt_fontinfo* fontInfo = static_cast<const stbtt_fontinfo*>(fontInfoPtr);
 
-        // Count total glyphs needed
         uint32_t totalGlyphs = countTotalGlyphs(ranges);
 
-        // Prepare rectangle packing structures
         std::vector<stbrp_rect> rects;
         rects.reserve(totalGlyphs);
 
-        // Temporary storage for glyph data (including cached SDF bitmap)
         struct GlyphTemp
         {
             uint32_t codepoint;
@@ -299,7 +283,7 @@ namespace types
             int width, height;
             int xoff, yoff;
             int advanceWidth, leftSideBearing;
-            unsigned char* sdfBitmap = nullptr;  // Cached SDF bitmap to avoid double generation
+            unsigned char* sdfBitmap = nullptr;
         };
         std::vector<GlyphTemp> glyphTemps;
         glyphTemps.reserve(totalGlyphs);
@@ -316,12 +300,10 @@ namespace types
             }
         };
 
-        // Padding for SDF
         int padding = static_cast<int>(config.sdfPadding);
         uint8_t onEdge = config.sdfOnEdgeValue;
         float pixelDistScale = static_cast<float>(onEdge) / config.sdfSpread;
 
-        // Phase 1: Calculate glyph sizes for packing
         int rectId = 0;
         for (const auto& range : ranges)
         {
@@ -329,17 +311,14 @@ namespace types
             {
                 int glyphIndex = stbtt_FindGlyphIndex(fontInfo, static_cast<int>(cp));
 
-                // Skip if glyph doesn't exist in font (but keep space characters)
                 if (glyphIndex == 0 && cp != ' ')
                 {
                     continue;
                 }
 
-                // Get glyph metrics
                 int advanceWidth, leftSideBearing;
                 stbtt_GetGlyphHMetrics(fontInfo, glyphIndex, &advanceWidth, &leftSideBearing);
 
-                // Get SDF bitmap and cache it for later rendering
                 int width = 0, height = 0, xoff = 0, yoff = 0;
                 unsigned char* sdfBitmap = nullptr;
 
@@ -359,10 +338,9 @@ namespace types
                 temp.yoff = yoff;
                 temp.advanceWidth = advanceWidth;
                 temp.leftSideBearing = leftSideBearing;
-                temp.sdfBitmap = sdfBitmap;  // Cache the bitmap
+                temp.sdfBitmap = sdfBitmap;
                 glyphTemps.push_back(temp);
 
-                // Add to rect packer (with atlas padding)
                 stbrp_rect rect;
                 rect.id = rectId++;
                 rect.w = static_cast<stbrp_coord>(width + config.atlasPadding);
@@ -381,7 +359,6 @@ namespace types
             return false;
         }
 
-        // Phase 2: Pack rectangles into atlas
         int atlasWidth = static_cast<int>(config.atlasWidth);
         int atlasHeight = static_cast<int>(config.atlasHeight);
 
@@ -392,7 +369,6 @@ namespace types
 
         stbrp_pack_rects(&packContext, rects.data(), static_cast<int>(rects.size()));
 
-        // Calculate actual atlas size used
         uint32_t actualWidth = 0, actualHeight = 0;
         for (const auto& rect : rects)
         {
@@ -405,29 +381,21 @@ namespace types
             }
         }
 
-        // Round up to power of 2
         actualWidth = nextPowerOf2(actualWidth);
         actualHeight = nextPowerOf2(actualHeight);
-
-        // Clamp to configured max
         actualWidth = std::min(actualWidth, config.atlasWidth);
         actualHeight = std::min(actualHeight, config.atlasHeight);
-
-        // Ensure minimum size
         actualWidth = std::max(actualWidth, 64u);
         actualHeight = std::max(actualHeight, 64u);
 
-        // Phase 3: Allocate atlas and render glyphs
         fontData.atlas.width = actualWidth;
         fontData.atlas.height = actualHeight;
         fontData.atlas.format = config.generateSDF ?
             resource::FontAtlasFormat::SDF_8 : resource::FontAtlasFormat::GRAYSCALE_8;
         fontData.atlas.pixels.resize(static_cast<size_t>(actualWidth) * actualHeight, 0);
 
-        // Phase 4: Render each glyph into atlas
         fontData.glyphs.reserve(glyphTemps.size());
 
-        // Track unpacked glyphs for validation
         std::vector<uint32_t> unpackedGlyphs;
         uint32_t emptyGlyphCount = 0;
         uint32_t packedCount = 0;
@@ -453,7 +421,6 @@ namespace types
                 glyph.atlasWidth = static_cast<uint32_t>(temp.width);
                 glyph.atlasHeight = static_cast<uint32_t>(temp.height);
 
-                // Use cached SDF bitmap (already generated in Phase 1)
                 if (temp.sdfBitmap)
                 {
                     // Bounds validation before copying to atlas
@@ -472,7 +439,6 @@ namespace types
                     }
                     else
                     {
-                        // Copy to atlas - bounds are validated
                         size_t atlasSize = fontData.atlas.pixels.size();
                         for (int y = 0; y < temp.height; ++y)
                         {
@@ -482,7 +448,6 @@ namespace types
                                                 + (static_cast<size_t>(rect.x) + x);
                                 size_t srcIdx = static_cast<size_t>(y) * temp.width + x;
 
-                                // Safety check (should never trigger after bounds validation above)
                                 if (atlasIdx < atlasSize)
                                 {
                                     fontData.atlas.pixels[atlasIdx] = temp.sdfBitmap[srcIdx];
@@ -495,7 +460,6 @@ namespace types
             }
             else
             {
-                // Determine if this is an empty glyph (like space) or failed to pack
                 glyph.atlasX = 0;
                 glyph.atlasY = 0;
                 glyph.atlasWidth = 0;
@@ -503,12 +467,10 @@ namespace types
 
                 if (temp.width > 0 && temp.height > 0)
                 {
-                    // Glyph has dimensions but failed to pack - atlas too small
                     unpackedGlyphs.push_back(temp.codepoint);
                 }
                 else
                 {
-                    // Empty glyph (space, control characters, etc.) - this is normal
                     ++emptyGlyphCount;
                 }
             }
@@ -516,7 +478,6 @@ namespace types
             fontData.glyphs.push_back(glyph);
         }
 
-        // Log validation results
         if (!unpackedGlyphs.empty())
         {
             std::string failedChars;
@@ -550,7 +511,6 @@ namespace types
                  "Atlas size: {}x{}",
                  packedCount, emptyGlyphCount, unpackedGlyphs.size(), actualWidth, actualHeight);
 
-        // Free all cached SDF bitmaps
         cleanupBitmaps();
 
         return true;
@@ -562,18 +522,15 @@ namespace types
     {
         const stbtt_fontinfo* fontInfo = static_cast<const stbtt_fontinfo*>(fontInfoPtr);
 
-        // Get kerning table length
         int tableLength = stbtt_GetKerningTableLength(fontInfo);
         if (tableLength <= 0)
         {
             return;
         }
 
-        // Get all kerning entries
         std::vector<stbtt_kerningentry> entries(tableLength);
         int actualLength = stbtt_GetKerningTable(fontInfo, entries.data(), tableLength);
 
-        // Build a map of glyph indices to codepoints for our glyphs
         std::unordered_map<int, uint32_t> glyphIndexToCodepoint;
         for (const auto& glyph : glyphs)
         {
@@ -584,7 +541,6 @@ namespace types
             }
         }
 
-        // Filter kerning pairs to only include glyphs we have
         for (int i = 0; i < actualLength; ++i)
         {
             const auto& entry = entries[i];
@@ -599,7 +555,7 @@ namespace types
                 pair.rightCodepoint = it2->second;
                 pair.kerningAmount = static_cast<float>(entry.advance) * scale;
 
-                if (std::abs(pair.kerningAmount) > 0.001f)  // Skip negligible kerning
+                if (std::abs(pair.kerningAmount) > 0.001f)
                 {
                     kerningPairs.push_back(pair);
                 }
@@ -613,7 +569,6 @@ namespace types
         std::filesystem::path filePath = std::filesystem::path(location) /
             (std::string(fileName) + "." + FileExtension::font);
 
-        // Write to temporary file first, then rename for atomic operation
         std::filesystem::path tempPath = filePath;
         tempPath += ".tmp";
 
@@ -626,19 +581,16 @@ namespace types
                 return;
             }
 
-            // Enable exceptions for write errors
             outFile.exceptions(std::ios::badbit | std::ios::failbit);
 
             using namespace resource::endian;
 
-            // Write header
             writeLE<uint8_t>(outFile, static_cast<uint8_t>(fontData.headerFileType));
             writeLE<uint32_t>(outFile, Version::major);
             writeLE<uint32_t>(outFile, Version::minor);
             writeLE<uint32_t>(outFile, Version::patch);
             writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.formatFlags));
 
-            // Write metadata
             auto nameBytes = static_cast<uint32_t>(fontData.metadata.fontName.size());
             writeLE<uint32_t>(outFile, nameBytes);
             outFile.write(fontData.metadata.fontName.data(), nameBytes);
@@ -654,13 +606,11 @@ namespace types
             writeLE<float>(outFile, fontData.metadata.underlinePosition);
             writeLE<float>(outFile, fontData.metadata.underlineThickness);
 
-            // Write SDF parameters
             writeLE<float>(outFile, fontData.sdfParams.spread);
             writeLE<uint32_t>(outFile, fontData.sdfParams.padding);
             writeLE<float>(outFile, fontData.sdfParams.edgeValue);
             writeLE<uint32_t>(outFile, fontData.sdfParams.reserved);
 
-            // Write character ranges
             writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.characterRanges.size()));
             for (const auto& range : fontData.characterRanges)
             {
@@ -668,7 +618,6 @@ namespace types
                 writeLE<uint32_t>(outFile, range.rangeEnd);
             }
 
-            // Write glyphs
             writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.glyphs.size()));
             for (const auto& glyph : fontData.glyphs)
             {
@@ -686,7 +635,6 @@ namespace types
                 writeLE<uint32_t>(outFile, glyph.reserved);
             }
 
-            // Write kerning pairs
             writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.kerningPairs.size()));
             for (const auto& pair : fontData.kerningPairs)
             {
@@ -695,7 +643,6 @@ namespace types
                 writeLE<float>(outFile, pair.kerningAmount);
             }
 
-            // Write atlas
             writeLE<uint32_t>(outFile, fontData.atlas.width);
             writeLE<uint32_t>(outFile, fontData.atlas.height);
             writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.atlas.format));
@@ -704,11 +651,9 @@ namespace types
             writeLE<uint32_t>(outFile, dataSize);
             outFile.write(reinterpret_cast<const char*>(fontData.atlas.pixels.data()), dataSize);
 
-            // Flush and close
             outFile.flush();
             outFile.close();
 
-            // Verify the file was written correctly
             if (!outFile)
             {
                 vfLogError("Failed to flush/close font file: {}", tempPath.string());
@@ -716,7 +661,6 @@ namespace types
                 return;
             }
 
-            // Atomic rename: remove existing file and rename temp to final
             std::error_code ec;
             if (std::filesystem::exists(filePath, ec))
             {
