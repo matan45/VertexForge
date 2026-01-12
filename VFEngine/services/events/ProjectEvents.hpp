@@ -24,6 +24,12 @@ namespace events::project {
         std::string_view getName() const override { return "NewProject"; }
     };
 
+    struct UpdateProjectConfigCommand : ICommand<bool> {
+        config::ProjectConfig config;
+
+        std::string_view getName() const override { return "UpdateProjectConfig"; }
+    };
+
     struct GetCurrentProjectQuery : IQuery<std::optional<config::ProjectConfig>> {
         std::string_view getName() const override { return "GetCurrentProject"; }
     };

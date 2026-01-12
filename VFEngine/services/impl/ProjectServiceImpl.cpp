@@ -27,6 +27,12 @@ namespace services
                 return newProject(cmd.config);
             });
 
+        dispatcher.registerCommandHandler<events::project::UpdateProjectConfigCommand>(
+            [this](const events::project::UpdateProjectConfigCommand& cmd)
+            {
+                return updateProjectConfig(cmd.config);
+            });
+
         dispatcher.registerQueryHandler<events::project::GetCurrentProjectQuery>(
             [this](const events::project::GetCurrentProjectQuery&)
             {
@@ -137,5 +143,17 @@ namespace services
     bool ProjectServiceImpl::isProjectLoaded() const
     {
         return currentProject.has_value();
+    }
+
+    bool ProjectServiceImpl::updateProjectConfig(const config::ProjectConfig& config)
+    {
+        if (!config.isValid())
+        {
+            vfLogError("Invalid project configuration");
+            return false;
+        }
+
+        currentProject = config;
+        return true;
     }
 }

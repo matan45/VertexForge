@@ -37,6 +37,10 @@ namespace windows
         {
             currentPath = projectOpt->workingDirectory;
         }
+        else
+        {
+            currentPath = "C:\\";
+        }
 
         if (fs::exists(currentPath) && fs::is_directory(currentPath))
         {
@@ -117,7 +121,7 @@ namespace windows
     {
         gridRenderer->ensureIconsLoaded();
 
-        if (!importLocationSet && !currentPath.empty())
+        if (!importLocationSet)
         {
             controllers::Import::setLocation(currentPath.string());
             importLocationSet = true;
@@ -133,13 +137,6 @@ namespace windows
     {
         if (ImGui::Begin("Content Folder"))
         {
-            if (currentPath.empty())
-            {
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "No project loaded");
-                ImGui::End();
-                return;
-            }
-
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
             {
                 handleKeyboardShortcuts();

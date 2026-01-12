@@ -130,6 +130,7 @@
     <ClInclude Include="windows\MeshPreviewWindow.hpp" />
     <ClInclude Include="windows\PhysicsConfigWindow.hpp" />
     <ClInclude Include="windows\PrefabPreviewWindow.hpp" />
+    <ClInclude Include="windows\ProjectSettingsWindow.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
     <ClInclude Include="windows\ViewPortGizmo.hpp" />
@@ -188,6 +189,7 @@
     <ClCompile Include="windows\MeshPreviewWindow.cpp" />
     <ClCompile Include="windows\PhysicsConfigWindow.cpp" />
     <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
+    <ClCompile Include="windows\ProjectSettingsWindow.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
     <ClCompile Include="windows\ViewPortGizmo.cpp" />

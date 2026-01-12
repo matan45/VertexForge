@@ -19,6 +19,10 @@ namespace windows
         {
             rootPath = projectOpt->workingDirectory;
         }
+        else
+        {
+            rootPath = "C:\\";
+        }
 
         if (fs::exists(rootPath) && fs::is_directory(rootPath))
         {
@@ -57,11 +61,7 @@ namespace windows
     {
         if (ImGui::Begin("Folder Structure", nullptr, ImGuiWindowFlags_NoCollapse))
         {
-            if (rootPath.empty())
-            {
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "No project loaded");
-            }
-            else if (fs::exists(rootPath) && fs::is_directory(rootPath))
+            if (fs::exists(rootPath) && fs::is_directory(rootPath))
             {
                 ImGui::Text(ICON_FA_FOLDER_OPEN " %s", StringUtil::wstringToUtf8(rootPath.filename().wstring()).c_str());
                 ImGui::Separator();

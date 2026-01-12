@@ -16,6 +16,7 @@ namespace windows
 
         // Wire up menu bar to sub-windows
         menuBar.setWindows(&iblWindow, &editorCameraWindow, &cullingStatsWindow, &importDialog, &physicsConfigWindow);
+        menuBar.setProjectSettingsWindow(&projectSettingsWindow);
 
         subscribeToEvents();
     }
@@ -67,6 +68,7 @@ namespace windows
             editorCameraWindow.draw();
             cullingStatsWindow.draw();
             physicsConfigWindow.draw();
+            projectSettingsWindow.draw();
         }
         ImGui::End();
     }

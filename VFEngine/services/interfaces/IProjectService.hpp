@@ -15,6 +15,7 @@ namespace services {
         virtual bool saveProject(const std::string& filePath) = 0;
         virtual bool saveProject() = 0;
         virtual bool newProject(const config::ProjectConfig& config) = 0;
+        virtual bool updateProjectConfig(const config::ProjectConfig& config) = 0;
 
         virtual std::optional<config::ProjectConfig> getCurrentProject() const = 0;
         virtual std::optional<std::string> getProjectPath() const = 0;
