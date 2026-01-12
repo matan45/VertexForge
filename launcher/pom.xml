@@ -25,6 +25,9 @@
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <javafx-maven-plugin.version>0.0.8</javafx-maven-plugin.version>
         <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+
+        <!-- Library Versions -->
+        <gson.version>2.13.0</gson.version>
     </properties>
 
     <dependencies>
@@ -60,6 +63,13 @@
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
             <classifier>mac</classifier>
+        </dependency>
+
+        <!-- JSON Serialization (lightweight, zero transitive dependencies) -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>${gson.version}</version>
         </dependency>
     </dependencies>
 
