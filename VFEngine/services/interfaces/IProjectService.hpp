@@ -1,5 +1,5 @@
 #pragma once
-#include "../../utilities/config/ProjectConfig.hpp"
+#include "config/ProjectConfig.hpp"
 #include <optional>
 #include <string>
 

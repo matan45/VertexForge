@@ -1,6 +1,6 @@
 #pragma once
 #include "EventTypes.hpp"
-#include "../../utilities/config/ProjectConfig.hpp"
+#include "config/ProjectConfig.hpp"
 #include <optional>
 #include <string>
 
