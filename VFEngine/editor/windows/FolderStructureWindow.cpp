@@ -2,6 +2,7 @@
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/FileOperationsEvents.hpp"
+#include "events/ProjectEvents.hpp"
 #include "../dragdrop/DragDropManager.hpp"
 #include "print/EditorLogger.hpp"
 #include <IconsFontAwesome6.h>
@@ -11,17 +12,28 @@ namespace windows
 {
     FolderStructureWindow::FolderStructureWindow()
     {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+        if (projectOpt && !projectOpt->workingDirectory.empty())
+        {
+            rootPath = projectOpt->workingDirectory;
+        }
+
         if (fs::exists(rootPath) && fs::is_directory(rootPath))
         {
             expandedFolders.insert(rootPath.string());
         }
 
-        auto& dispatcher = events::EventDispatcher::instance();
+        projectLoadedToken = dispatcher.subscribe<events::project::ProjectLoadedNotification>(
+            [this](const events::project::ProjectLoadedNotification& notification)
+            {
+                updateRootPath(notification.project.workingDirectory);
+            });
 
         folderCreatedToken = dispatcher.subscribe<events::fileops::FolderCreatedNotification>(
             [this](const events::fileops::FolderCreatedNotification& notification)
             {
-                // Auto-expand parent of new folder
                 fs::path newFolder(notification.path);
                 fs::path parent = newFolder.parent_path();
                 setExpanded(parent, true);
@@ -30,9 +42,14 @@ namespace windows
 
     FolderStructureWindow::~FolderStructureWindow()
     {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (projectLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectLoadedToken);
+        }
         if (folderCreatedToken.isValid())
         {
-            events::EventDispatcher::instance().unsubscribe(folderCreatedToken);
+            dispatcher.unsubscribe(folderCreatedToken);
         }
     }
 
@@ -40,11 +57,14 @@ namespace windows
     {
         if (ImGui::Begin("Folder Structure", nullptr, ImGuiWindowFlags_NoCollapse))
         {
-            ImGui::Text(ICON_FA_FOLDER_OPEN " %s", StringUtil::wstringToUtf8(rootPath.filename().wstring()).c_str());
-            ImGui::Separator();
-
-            if (fs::exists(rootPath) && fs::is_directory(rootPath))
+            if (rootPath.empty())
             {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "No project loaded");
+            }
+            else if (fs::exists(rootPath) && fs::is_directory(rootPath))
+            {
+                ImGui::Text(ICON_FA_FOLDER_OPEN " %s", StringUtil::wstringToUtf8(rootPath.filename().wstring()).c_str());
+                ImGui::Separator();
                 drawFolderTree(rootPath);
             }
             else
@@ -180,6 +200,17 @@ namespace windows
         else
         {
             expandedFolders.erase(path.string());
+        }
+    }
+
+    void FolderStructureWindow::updateRootPath(const std::string& workingDirectory)
+    {
+        if (!workingDirectory.empty() && fs::exists(workingDirectory) && fs::is_directory(workingDirectory))
+        {
+            rootPath = workingDirectory;
+            expandedFolders.clear();
+            expandedFolders.insert(rootPath.string());
+            selectedFolder.clear();
         }
     }
 }

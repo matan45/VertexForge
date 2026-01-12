@@ -20,7 +20,7 @@ namespace windows
     {
     private:
         std::vector<Asset> assets;
-        fs::path currentPath = "C:\\matan";//todo
+        fs::path currentPath;
 
         fs::path selectedFile;
         AssetType selectedType = AssetType::Other;
@@ -41,6 +41,7 @@ namespace windows
         events::SubscriptionToken fileMovedToken;
         events::SubscriptionToken fileDeletedToken;
         events::SubscriptionToken folderSelectedToken;
+        events::SubscriptionToken projectLoadedToken;
 
         std::unique_ptr<AssetGridRenderer> gridRenderer;
         std::unique_ptr<ContentBrowserModals> modals;
