@@ -1,14 +1,20 @@
 package com.vertexforge.launcher.controller;
 
+import com.vertexforge.launcher.dialog.CreateProjectDialog;
+import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectInfo;
 import com.vertexforge.launcher.model.RecentProjects;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
+import com.vertexforge.launcher.service.ProjectCreator;
 import com.vertexforge.launcher.viewmodel.ProjectViewModel;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
@@ -17,6 +23,10 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.VBox;
+import javafx.stage.Window;
+
+import java.nio.file.Path;
+import java.util.Optional;
 
 import java.net.URL;
 import java.util.ResourceBundle;
@@ -78,27 +88,10 @@ public class MainController implements Initializable {
         nameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
         pathColumn.setCellValueFactory(new PropertyValueFactory<>("path"));
         lastOpenedColumn.setCellValueFactory(new PropertyValueFactory<>("lastOpened"));
-
-        // Custom row factory for invalid project styling
-        projectsTable.setRowFactory(tv -> new TableRow<>() {
-            @Override
-            protected void updateItem(ProjectViewModel item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    getStyleClass().remove("invalid-project-row");
-                } else if (!item.isValid()) {
-                    if (!getStyleClass().contains("invalid-project-row")) {
-                        getStyleClass().add("invalid-project-row");
-                    }
-                } else {
-                    getStyleClass().remove("invalid-project-row");
-                }
-            }
-        });
     }
 
     /**
-     * Configures TableView behavior: selection mode, double-click, keyboard.
+     * Configures TableView behavior: selection mode, double-click, keyboard, context menu.
      */
     private void setupTableBehavior() {
         projectsTable.setItems(projectsList);
@@ -117,6 +110,68 @@ public class MainController implements Initializable {
                 openSelectedProject();
             }
         });
+
+        // Context menu for right-click actions
+        setupContextMenu();
+    }
+
+    /**
+     * Sets up the right-click context menu for the projects table.
+     */
+    private void setupContextMenu() {
+        ContextMenu contextMenu = new ContextMenu();
+
+        MenuItem removeItem = new MenuItem("Remove from List");
+        removeItem.setOnAction(e -> removeSelectedProject());
+
+        contextMenu.getItems().add(removeItem);
+
+        // Only show context menu when clicking on a row with data
+        projectsTable.setRowFactory(tv -> {
+            TableRow<ProjectViewModel> row = new TableRow<>() {
+                @Override
+                protected void updateItem(ProjectViewModel item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || item == null) {
+                        getStyleClass().remove("invalid-project-row");
+                    } else if (!item.isValid()) {
+                        if (!getStyleClass().contains("invalid-project-row")) {
+                            getStyleClass().add("invalid-project-row");
+                        }
+                    } else {
+                        getStyleClass().remove("invalid-project-row");
+                    }
+                }
+            };
+
+            // Show context menu only on non-empty rows
+            row.setOnContextMenuRequested(event -> {
+                if (!row.isEmpty()) {
+                    contextMenu.show(row, event.getScreenX(), event.getScreenY());
+                }
+            });
+
+            return row;
+        });
+    }
+
+    /**
+     * Removes the selected project from the recent projects list.
+     * Does not delete files from disk.
+     */
+    private void removeSelectedProject() {
+        ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        // Remove from repository
+        RecentProjects recentProjects = repository.load();
+        recentProjects.remove(selected.getProjectPath());
+        repository.save(recentProjects);
+
+        // Refresh UI
+        loadProjects();
     }
 
     /**
@@ -186,11 +241,78 @@ public class MainController implements Initializable {
 
     /**
      * Handles create new project action.
-     * Will be implemented in VK-155.
+     * Opens a dialog for project creation and creates the project structure.
      */
     @FXML
     private void onCreateProject() {
-        // TODO: Implement in VK-155 (Create New Project Flow)
+        Window owner = projectsTable.getScene().getWindow();
+
+        // Show dialog and get user input
+        Optional<CreateProjectDialog.ProjectCreationParams> params =
+                CreateProjectDialog.show(owner);
+
+        if (params.isEmpty()) {
+            return; // User cancelled
+        }
+
+        // Create project
+        ProjectCreator creator = new ProjectCreator();
+        ProjectCreationResult result = creator.createProject(
+                params.get().name(),
+                params.get().location()
+        );
+
+        if (!result.success()) {
+            showErrorDialog("Project Creation Failed",
+                    "Failed to create project: " + result.errorMessage());
+            return;
+        }
+
+        // Add to recent projects
+        ProjectInfo newProject = ProjectInfo.create(
+                params.get().name(),
+                result.projectPath()
+        );
+
+        RecentProjects recentProjects = repository.load();
+        recentProjects.add(newProject);
+        repository.save(recentProjects);
+
+        // Refresh UI
+        loadProjects();
+
+        // Select the new project
+        selectProjectByPath(result.projectPath());
+    }
+
+    /**
+     * Selects a project in the table by its path.
+     *
+     * @param projectPath the path to the .vfproj file
+     */
+    private void selectProjectByPath(Path projectPath) {
+        for (ProjectViewModel vm : projectsList) {
+            if (vm.getProjectPath().equals(projectPath)) {
+                projectsTable.getSelectionModel().select(vm);
+                projectsTable.scrollTo(vm);
+                break;
+            }
+        }
+    }
+
+    /**
+     * Shows an error dialog with the specified title and message.
+     *
+     * @param title   the dialog title
+     * @param message the error message
+     */
+    private void showErrorDialog(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.initOwner(projectsTable.getScene().getWindow());
+        alert.showAndWait();
     }
 
     /**

@@ -1,0 +1,93 @@
+{
+  "physicsSettings": {
+    "collisionLayers": [
+      {
+        "builtIn": true,
+        "index": 0,
+        "name": "Static"
+      },
+      {
+        "builtIn": true,
+        "index": 1,
+        "name": "Dynamic"
+      },
+      {
+        "builtIn": true,
+        "index": 2,
+        "name": "Kinematic"
+      },
+      {
+        "builtIn": true,
+        "index": 3,
+        "name": "Sensor"
+      }
+    ],
+    "collisionMatrix": [
+      [
+        false,
+        true,
+        true,
+        false
+      ],
+      [
+        true,
+        true,
+        true,
+        true
+      ],
+      [
+        true,
+        true,
+        false,
+        true
+      ],
+      [
+        false,
+        true,
+        true,
+        false
+      ]
+    ],
+    "gravity": [
+      0.0,
+      -9.8100004196167,
+      0.0
+    ],
+    "gravityScale": 1.0,
+    "simulation": {
+      "fixedTimestep": 0.016666666666666666,
+      "maxAccumulator": 0.25,
+      "maxStepsPerFrame": 8
+    },
+    "sleepThresholds": {
+      "angularVelocity": 0.05000000074505806,
+      "linearVelocity": 0.05000000074505806,
+      "timeToSleep": 0.5
+    }
+  },
+  "root": {
+    "children": [],
+    "components": {},
+    "isActive": true,
+    "name": "Root",
+    "transform": {
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "uuid": 3984413846719999048
+  },
+  "version": "1.1"
+}

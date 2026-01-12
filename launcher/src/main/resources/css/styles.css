@@ -258,3 +258,87 @@
 .projects-table .arrow {
     -fx-background-color: #cccccc;
 }
+
+/* ============================================
+   Create Project Dialog (VK-155)
+   ============================================ */
+.create-project-dialog .dialog-pane {
+    -fx-background-color: #2b2b2b;
+    -fx-min-width: 550px;
+}
+
+.create-project-dialog .dialog-pane .header-panel {
+    -fx-background-color: #333333;
+}
+
+.create-project-dialog .dialog-pane .header-panel .label {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 16px;
+}
+
+.create-project-dialog .form-label {
+    -fx-text-fill: #cccccc;
+    -fx-font-size: 13px;
+}
+
+.create-project-dialog .text-field {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #555555;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 8;
+    -fx-prompt-text-fill: #888888;
+}
+
+.create-project-dialog .text-field:focused {
+    -fx-border-color: #4a9eff;
+}
+
+.create-project-dialog .validation-error {
+    -fx-text-fill: #cc6666;
+    -fx-font-size: 12px;
+}
+
+.create-project-dialog .browse-button {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #cccccc;
+    -fx-padding: 8 15;
+    -fx-cursor: hand;
+    -fx-background-radius: 3;
+}
+
+.create-project-dialog .browse-button:hover {
+    -fx-background-color: #4a4a4a;
+}
+
+.create-project-dialog .browse-button:pressed {
+    -fx-background-color: #555555;
+}
+
+/* Dialog buttons */
+.create-project-dialog .dialog-pane .button-bar .button {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #cccccc;
+    -fx-padding: 8 20;
+    -fx-background-radius: 3;
+}
+
+.create-project-dialog .dialog-pane .button-bar .button:hover {
+    -fx-background-color: #4a4a4a;
+}
+
+.create-project-dialog .dialog-pane .button-bar .button:default {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+}
+
+.create-project-dialog .dialog-pane .button-bar .button:default:hover {
+    -fx-background-color: #5aafff;
+}
+
+.create-project-dialog .dialog-pane .button-bar .button:default:disabled {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #666666;
+    -fx-opacity: 0.7;
+}
