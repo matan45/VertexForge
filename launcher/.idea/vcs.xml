@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$/.." vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/IconFontCppHeaders" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/ImGuizmo" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/JoltPhysics" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/assimp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/entt" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/glfw" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/glm" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/imgui" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/json" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/mType" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/meshoptimizer" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/openal-soft" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/spdlog" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/stb" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/tinyexr" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../dependencies/tinyexr/deps/ZFP" vcs="Git" />
+  </component>
+</project>
