@@ -108,6 +108,18 @@
                                 </transformer>
                             </transformers>
                             <filters>
+                                <!--
+                                    Security Note: Signature exclusion is REQUIRED for fat JARs.
+                                    When combining signed JARs, original signatures become invalid
+                                    because the content changes. Without excluding them, you get
+                                    "Invalid signature file digest" errors at runtime.
+
+                                    For production releases, sign the final fat JAR using:
+                                    mvn package -Psign-jar -Dkeystore.path=... -Dkeystore.password=...
+
+                                    Dependency integrity is verified at build time via Maven's
+                                    checksum verification (SHA-1/MD5 in local repository).
+                                -->
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
@@ -123,4 +135,48 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Production JAR Signing Profile
+            Usage: mvn package -Psign-jar -Dkeystore.path=/path/to/keystore.jks
+                   -Dkeystore.password=*** -Dkey.alias=mykey -Dkey.password=***
+
+            To create a keystore:
+            keytool -genkeypair -alias vertexforge -keyalg RSA -keysize 2048
+                    -validity 365 -keystore vertexforge.jks
+        -->
+        <profile>
+            <id>sign-jar</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jarsigner-plugin</artifactId>
+                        <version>3.0.0</version>
+                        <executions>
+                            <execution>
+                                <id>sign</id>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                            <execution>
+                                <id>verify</id>
+                                <goals>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <keystore>${keystore.path}</keystore>
+                            <alias>${key.alias}</alias>
+                            <storepass>${keystore.password}</storepass>
+                            <keypass>${key.password}</keypass>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
