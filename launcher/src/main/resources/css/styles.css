@@ -1,0 +1,159 @@
+/*
+ * VertexForge Launcher - Dark Theme Stylesheet
+ *
+ * Base styling for the launcher application.
+ * Full theming will be implemented in VK-157 (Launcher UI Layout & Styling).
+ */
+
+/* ============================================
+   Color Variables (using -fx-* properties)
+   ============================================ */
+.root {
+    -fx-base: #2b2b2b;
+    -fx-background: #1e1e1e;
+    -fx-control-inner-background: #3c3c3c;
+    -fx-accent: #4a9eff;
+    -fx-focus-color: #4a9eff;
+    -fx-faint-focus-color: transparent;
+}
+
+/* ============================================
+   Root Pane
+   ============================================ */
+.root-pane {
+    -fx-background-color: #1e1e1e;
+}
+
+/* ============================================
+   Sidebar
+   ============================================ */
+.sidebar {
+    -fx-background-color: #252526;
+    -fx-min-width: 200px;
+    -fx-pref-width: 200px;
+}
+
+.app-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+}
+
+.sidebar-button {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #cccccc;
+    -fx-padding: 10 15;
+    -fx-cursor: hand;
+    -fx-background-radius: 4;
+}
+
+.sidebar-button:hover {
+    -fx-background-color: #4a4a4a;
+}
+
+.sidebar-button:pressed {
+    -fx-background-color: #555555;
+}
+
+/* ============================================
+   Content Area
+   ============================================ */
+.content-area {
+    -fx-background-color: #1e1e1e;
+    -fx-padding: 20;
+}
+
+.section-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+}
+
+.placeholder-text {
+    -fx-font-size: 14px;
+    -fx-text-fill: #888888;
+}
+
+.hint-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #666666;
+}
+
+/* ============================================
+   Bottom Bar
+   ============================================ */
+.bottom-bar {
+    -fx-background-color: #252526;
+    -fx-border-color: #3c3c3c transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.primary-button {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+    -fx-padding: 10 25;
+    -fx-cursor: hand;
+    -fx-background-radius: 4;
+}
+
+.primary-button:hover {
+    -fx-background-color: #5aafff;
+}
+
+.primary-button:pressed {
+    -fx-background-color: #3a8eef;
+}
+
+.primary-button:disabled {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #666666;
+    -fx-opacity: 0.7;
+}
+
+/* ============================================
+   Scrollbars (for future lists)
+   ============================================ */
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #555555;
+    -fx-background-radius: 4;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #666666;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-shape: "";
+    -fx-padding: 0;
+}
+
+/* ============================================
+   Alert Dialogs (for error handling)
+   ============================================ */
+.alert .dialog-pane {
+    -fx-background-color: #2b2b2b;
+}
+
+.alert .dialog-pane .content {
+    -fx-text-fill: #cccccc;
+}
+
+.alert .dialog-pane .header-panel {
+    -fx-background-color: #333333;
+}
+
+.alert .dialog-pane .header-panel .label {
+    -fx-text-fill: #ffffff;
+}
