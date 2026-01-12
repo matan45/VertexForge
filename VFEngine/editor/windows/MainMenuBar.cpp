@@ -4,6 +4,7 @@
 #include "CullingStatsWindow.hpp"
 #include "ImportModalDialog.hpp"
 #include "PhysicsConfigWindow.hpp"
+#include "ProjectSettingsWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -83,7 +84,14 @@ namespace windows
     {
         if (ImGui::BeginMenu("Settings"))
         {
-            if (ImGui::MenuItem("Editor Camera"))
+            if (ImGui::MenuItem("Project"))
+            {
+                if (projectSettingsWindow)
+                {
+                    projectSettingsWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Editor Camera"))
             {
                 if (editorCameraWindow)
                 {

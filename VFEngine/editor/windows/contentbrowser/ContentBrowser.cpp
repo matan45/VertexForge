@@ -7,6 +7,7 @@
 #include "events/FileOperationsEvents.hpp"
 #include "events/UndoRedoEvents.hpp"
 #include "events/ApplicationEvents.hpp"
+#include "events/ProjectEvents.hpp"
 #include "../../clipboard/ClipboardManager.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"
@@ -22,7 +23,6 @@ namespace windows
           , modals(std::make_unique<ContentBrowserModals>([this]() { loadDirectory(currentPath); }))
           , previewManager(std::make_unique<PreviewWindowManager>())
     {
-        // Set up clipboard callbacks for context menu
         modals->setClipboardCallbacks(
             [this]() { performCut(); },
             [this]() { performCopy(); },
@@ -30,12 +30,31 @@ namespace windows
             []() { return ClipboardManager::instance().hasItems(); }
         );
 
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+        if (projectOpt && !projectOpt->workingDirectory.empty())
+        {
+            currentPath = projectOpt->workingDirectory;
+        }
+        else
+        {
+            currentPath = "C:\\";
+        }
+
         if (fs::exists(currentPath) && fs::is_directory(currentPath))
         {
             loadDirectory(currentPath);
         }
 
-        auto& dispatcher = events::EventDispatcher::instance();
+        projectLoadedToken = dispatcher.subscribe<events::project::ProjectLoadedNotification>(
+            [this](const events::project::ProjectLoadedNotification& notification)
+            {
+                if (!notification.project.workingDirectory.empty())
+                {
+                    navigateTo(notification.project.workingDirectory);
+                }
+            });
 
         importCompletedToken = dispatcher.subscribe<events::resource::ImportCompletedNotification>(
             [this](const events::resource::ImportCompletedNotification&)
@@ -76,6 +95,10 @@ namespace windows
     ContentBrowser::~ContentBrowser()
     {
         auto& dispatcher = events::EventDispatcher::instance();
+        if (projectLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectLoadedToken);
+        }
         if (importCompletedToken.isValid())
         {
             dispatcher.unsubscribe(importCompletedToken);
@@ -385,7 +408,7 @@ namespace windows
                     {
                         asset.type = Font;
                     }
-                    else if (extension == ".vfProject")
+                    else if (extension == ".vfproj")
                     {
                         asset.type = Project;
                     }

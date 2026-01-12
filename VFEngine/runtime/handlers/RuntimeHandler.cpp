@@ -6,9 +6,14 @@
 #include "impl/WindowStateServiceImpl.hpp"
 #include "impl/AudioServiceImpl.hpp"
 #include "impl/ScriptingServiceImpl.hpp"
+#include "impl/ProjectServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ApplicationEvents.hpp"
+#include "events/ProjectEvents.hpp"
+#include "events/SceneEvents.hpp"
+#include "print/EditorLogger.hpp"
+#include <filesystem>
 #include "time/Timer.hpp"
 
 namespace handlers {
@@ -50,7 +55,8 @@ namespace handlers {
 
     void RuntimeHandler::cleanUp() {
         cleanupEventSubscriptions();
-        
+
+        projectService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -64,9 +70,41 @@ namespace handlers {
     }
 
     bool RuntimeHandler::loadProject(const std::string& projectPath) {
-        // TODO: Implement project file
-        // This will load a serialized scene file and populate the ECS
-        return false;
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::project::LoadProjectCommand loadCmd;
+        loadCmd.filePath = projectPath;
+        if (!dispatcher.execute(loadCmd)) {
+            vfLogError("Failed to load project file: {}", projectPath);
+            dispatcher.execute(events::scene::NewSceneCommand{});
+            return false;
+        }
+
+        auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+        if (!projectOpt) {
+            vfLogError("Failed to get project configuration");
+            dispatcher.execute(events::scene::NewSceneCommand{});
+            return false;
+        }
+
+        std::filesystem::path scenePath =
+            std::filesystem::path(projectOpt->workingDirectory) / projectOpt->startupScene;
+
+        if (!std::filesystem::exists(scenePath)) {
+            vfLogError("Startup scene not found: {}", scenePath.string());
+            dispatcher.execute(events::scene::NewSceneCommand{});
+            return false;
+        }
+
+        events::scene::LoadSceneCommand sceneCmd;
+        sceneCmd.filePath = scenePath.string();
+        if (!dispatcher.execute(sceneCmd)) {
+            vfLogError("Failed to load startup scene: {}", scenePath.string());
+            dispatcher.execute(events::scene::NewSceneCommand{});
+            return false;
+        }
+
+        return true;
     }
 
     void RuntimeHandler::initializeServices() {
@@ -85,8 +123,11 @@ namespace handlers {
             bootstrap->getSceneGraphSystem()
         );
 
+        projectService = std::make_shared<services::ProjectServiceImpl>();
+
         // Register event handlers for command/query pattern
         sceneService->registerEventHandlers();
+        projectService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
         windowStateService->registerEventHandlers();

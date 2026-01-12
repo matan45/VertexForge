@@ -8,18 +8,19 @@ namespace windows
     class CullingStatsWindow;
     class ImportModalDialog;
     class PhysicsConfigWindow;
+    class ProjectSettingsWindow;
 
     class MainMenuBar
     {
     private:
         nfd::FileDialog fileDialog;
 
-        // References to windows this menu controls
         IBLWindow* iblWindow = nullptr;
         EditorCameraWindow* editorCameraWindow = nullptr;
         CullingStatsWindow* cullingStatsWindow = nullptr;
         ImportModalDialog* importDialog = nullptr;
         PhysicsConfigWindow* physicsConfigWindow = nullptr;
+        ProjectSettingsWindow* projectSettingsWindow = nullptr;
 
     public:
         void draw();
@@ -33,6 +34,11 @@ namespace windows
             cullingStatsWindow = culling;
             importDialog = import;
             physicsConfigWindow = physicsConfig;
+        }
+
+        void setProjectSettingsWindow(ProjectSettingsWindow* window)
+        {
+            projectSettingsWindow = window;
         }
 
     private:

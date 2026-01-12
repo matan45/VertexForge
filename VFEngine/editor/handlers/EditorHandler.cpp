@@ -12,6 +12,7 @@
 #include "impl/FileOperationsServiceImpl.hpp"
 #include "impl/PhysicsServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
+#include "impl/ProjectServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "time/Timer.hpp"
@@ -95,6 +96,7 @@ namespace handlers
         renderService.reset();
         sceneService.reset();
 
+        projectService.reset();
         fileOperationsService.reset();
         undoRedoService.reset();
         physicsService.reset();
@@ -141,6 +143,8 @@ namespace handlers
 
         fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
 
+        projectService = std::make_shared<services::ProjectServiceImpl>();
+
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
@@ -152,6 +156,7 @@ namespace handlers
         undoRedoService->registerEventHandlers();
         fileOperationsService->registerEventHandlers();
         physicsService->registerEventHandlers();
+        projectService->registerEventHandlers();
 
 
         events::render::LoadBillboardAtlasCommand atlasCmd;

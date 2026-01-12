@@ -18,11 +18,12 @@ namespace windows
     class FolderStructureWindow : public controllers::imguiHandler::ImguiWindow
     {
     private:
-        fs::path rootPath = "C:\\matan"; //TODO tack it from the project file
+        fs::path rootPath;
         fs::path selectedFolder;
         std::unordered_set<std::string> expandedFolders;
 
         events::SubscriptionToken folderCreatedToken;
+        events::SubscriptionToken projectLoadedToken;
 
     public:
         explicit FolderStructureWindow();
@@ -35,5 +36,6 @@ namespace windows
         void handleDragDrop(const fs::path& folderPath);
         bool isExpanded(const fs::path& path) const;
         void setExpanded(const fs::path& path, bool expanded);
+        void updateRootPath(const std::string& workingDirectory);
     };
 }

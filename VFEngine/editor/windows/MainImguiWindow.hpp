@@ -5,6 +5,7 @@
 #include "IBLWindow.hpp"
 #include "ImportModalDialog.hpp"
 #include "PhysicsConfigWindow.hpp"
+#include "ProjectSettingsWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 
@@ -26,6 +27,7 @@ namespace windows
         IBLWindow iblWindow;
         ImportModalDialog importDialog;
         PhysicsConfigWindow physicsConfigWindow;
+        ProjectSettingsWindow projectSettingsWindow;
         MainMenuBar menuBar;
 
         // Event subscription

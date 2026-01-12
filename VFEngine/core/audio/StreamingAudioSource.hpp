@@ -1,6 +1,6 @@
 #pragma once
 #include "AudioSource.hpp"
-#include "../../utilities/resource/AudioResource.hpp"
+#include "resource/AudioResource.hpp"
 #include <AL/al.h>
 #include <vector>
 #include <memory>

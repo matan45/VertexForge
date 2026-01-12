@@ -16,6 +16,9 @@ namespace math
     // Formula: 3t^2 - 2t^3 where t = (x - edge0) / (edge1 - edge0)
     inline float smoothstep(float edge0, float edge1, float x)
     {
+        constexpr float epsilon = 1e-6f;
+        if (edge1 - edge0 < epsilon)
+            return x >= edge0 ? 1.0f : 0.0f;
         float t = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
         return t * t * (3.0f - 2.0f * t);
     }
@@ -24,6 +27,9 @@ namespace math
     // Formula: 6t^5 - 15t^4 + 10t^3
     inline float smootherstep(float edge0, float edge1, float x)
     {
+        constexpr float epsilon = 1e-6f;
+        if (edge1 - edge0 < epsilon)
+            return x >= edge0 ? 1.0f : 0.0f;
         float t = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
         return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
     }
