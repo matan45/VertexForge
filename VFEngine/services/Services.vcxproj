@@ -110,6 +110,7 @@
     <ClInclude Include="events\PhysicsEvents.hpp" />
     <ClInclude Include="events\PhysicsSettingsEvents.hpp" />
     <ClInclude Include="events\PreviewEvents.hpp" />
+    <ClInclude Include="events\ProjectEvents.hpp" />
     <ClInclude Include="events\RenderEvents.hpp" />
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
@@ -123,6 +124,7 @@
     <ClInclude Include="impl\PhysicsPlayModeHandler.hpp" />
     <ClInclude Include="impl\PhysicsServiceImpl.hpp" />
     <ClInclude Include="impl\PreviewServiceImpl.hpp" />
+    <ClInclude Include="impl\ProjectServiceImpl.hpp" />
     <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
     <ClInclude Include="impl\ScriptingServiceImpl.hpp" />
@@ -147,6 +149,7 @@
     <ClInclude Include="interfaces\IInputService.hpp" />
     <ClInclude Include="interfaces\IPhysicsService.hpp" />
     <ClInclude Include="interfaces\IPreviewService.hpp" />
+    <ClInclude Include="interfaces\IProjectService.hpp" />
     <ClInclude Include="interfaces\IRenderService.hpp" />
     <ClInclude Include="interfaces\ISceneService.hpp" />
     <ClInclude Include="interfaces\IScriptingService.hpp" />
@@ -172,6 +175,7 @@
     <ClCompile Include="impl\PhysicsPlayModeHandler.cpp" />
     <ClCompile Include="impl\PhysicsServiceImpl.cpp" />
     <ClCompile Include="impl\PreviewServiceImpl.cpp" />
+    <ClCompile Include="impl\ProjectServiceImpl.cpp" />
     <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
     <ClCompile Include="impl\ScriptingServiceImpl.cpp" />
