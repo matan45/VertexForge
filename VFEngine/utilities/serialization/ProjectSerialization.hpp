@@ -18,7 +18,6 @@ namespace serialization
     private:
         static bool validateStructure(const json& projectJson);
         static bool parseSchemaVersion(const std::string& versionStr, config::ProjectFileVersion& outVersion);
-        static bool migrateToCurrentVersion(json& projectJson, const config::ProjectFileVersion& fromVersion);
         static std::string getCurrentTimestamp();
         static std::string getEngineVersionString();
     };

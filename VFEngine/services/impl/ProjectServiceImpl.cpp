@@ -115,6 +115,11 @@ namespace services
         currentProject = config;
         currentProjectPath = std::nullopt;
 
+        events::project::ProjectLoadedNotification notification;
+        notification.project = config;
+        notification.filePath = "";
+        events::EventDispatcher::instance().publish(notification);
+
         vfLogInfo("New project created: {}", config.projectName);
         return true;
     }

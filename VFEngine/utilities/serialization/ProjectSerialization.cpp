@@ -53,17 +53,6 @@ namespace serialization
                 return std::nullopt;
             }
 
-            if (fileVersion < config::ProjectFileVersion{config::ProjectSchemaVersion::major, config::ProjectSchemaVersion::minor})
-            {
-                vfLogInfo("Migrating project from schema version {} to {}",
-                          fileVersion.toString(), config::ProjectSchemaVersion::toString());
-                if (!migrateToCurrentVersion(projectJson, fileVersion))
-                {
-                    vfLogError("Failed to migrate project file to current schema version");
-                    return std::nullopt;
-                }
-            }
-
             config::ProjectConfig project;
             project.schemaVersion = fileVersion;
             project.projectName = projectJson["projectName"].get<std::string>();
@@ -102,7 +91,7 @@ namespace serialization
         }
         catch (const std::exception& e)
         {
-            vfLogError("Failed to load project file: {}", e.what());
+            vfLogError("Failed to load project file '{}': {}", filename, e.what());
             return std::nullopt;
         }
     }
@@ -148,7 +137,7 @@ namespace serialization
         }
         catch (const std::exception& e)
         {
-            vfLogError("Failed to save project file: {}", e.what());
+            vfLogError("Failed to save project file '{}': {}", filename, e.what());
             return false;
         }
     }
@@ -258,12 +247,6 @@ namespace serialization
         {
             return false;
         }
-    }
-
-    bool ProjectSerialization::migrateToCurrentVersion(json& projectJson, const config::ProjectFileVersion& fromVersion)
-    {
-        projectJson["schemaVersion"] = config::ProjectSchemaVersion::toString();
-        return true;
     }
 
     std::string ProjectSerialization::getCurrentTimestamp()
