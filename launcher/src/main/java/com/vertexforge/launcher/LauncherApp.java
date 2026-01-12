@@ -10,7 +10,7 @@ import javafx.stage.Stage;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Objects;
+import java.net.URL;
 
 /**
  * Main JavaFX Application class for VertexForge Launcher.
@@ -62,11 +62,11 @@ public class LauncherApp extends Application {
             Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
 
             // Apply dark theme stylesheet
-            String stylesheet = Objects.requireNonNull(
-                    getClass().getResource("/css/styles.css"),
-                    "Stylesheet not found"
-            ).toExternalForm();
-            scene.getStylesheets().add(stylesheet);
+            URL stylesheetUrl = getClass().getResource("/css/styles.css");
+            if (stylesheetUrl == null) {
+                throw new IOException("Stylesheet not found: /css/styles.css");
+            }
+            scene.getStylesheets().add(stylesheetUrl.toExternalForm());
 
             // Configure primary stage
             primaryStage.setTitle(APP_TITLE);
@@ -99,8 +99,9 @@ public class LauncherApp extends Application {
             if (iconStream != null) {
                 stage.getIcons().add(new Image(iconStream));
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             // Icon loading failure is not critical, just log it
+            // Catches IOException, IllegalArgumentException (invalid image), etc.
             System.err.println("Warning: Failed to load application icon: " + e.getMessage());
         }
     }

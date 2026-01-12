@@ -11,6 +11,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
@@ -125,12 +126,18 @@ public final class GlobalExceptionHandler {
 
     /**
      * Gets the path to the error log file.
-     * The log file is created in the user's home directory.
+     * Creates the log directory if it doesn't exist.
      *
      * @return the path to the log file
      */
     private static Path getLogFilePath() {
         String userHome = System.getProperty("user.home");
-        return Paths.get(userHome, ".vertexforge", LOG_FILE_NAME);
+        Path logDir = Paths.get(userHome, ".vertexforge");
+        try {
+            Files.createDirectories(logDir);
+        } catch (IOException e) {
+            System.err.println("Failed to create log directory: " + e.getMessage());
+        }
+        return logDir.resolve(LOG_FILE_NAME);
     }
 }
