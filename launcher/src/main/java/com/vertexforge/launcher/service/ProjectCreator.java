@@ -84,7 +84,10 @@ public class ProjectCreator {
         } catch (IOException e) {
             // Attempt cleanup on failure
             cleanupOnFailure(projectDir);
-            return ProjectCreationResult.failure(e.getMessage());
+            String errorMessage = e.getMessage() != null
+                    ? e.getMessage()
+                    : "Unknown error: " + e.getClass().getSimpleName();
+            return ProjectCreationResult.failure(errorMessage);
         }
     }
 
@@ -186,21 +189,24 @@ public class ProjectCreator {
             try (ZipInputStream zipIn = new ZipInputStream(resourceStream)) {
                 ZipEntry entry;
                 while ((entry = zipIn.getNextEntry()) != null) {
-                    Path targetPath = libDir.resolve(entry.getName());
+                    try {
+                        Path targetPath = libDir.resolve(entry.getName());
 
-                    // Security: Prevent zip slip attack
-                    if (!targetPath.normalize().startsWith(libDir.normalize())) {
-                        throw new IOException("Invalid zip entry: " + entry.getName());
-                    }
+                        // Security: Prevent zip slip attack
+                        if (!targetPath.normalize().startsWith(libDir.normalize())) {
+                            throw new IOException("Invalid zip entry: " + entry.getName());
+                        }
 
-                    if (entry.isDirectory()) {
-                        Files.createDirectories(targetPath);
-                    } else {
-                        // Ensure parent directory exists
-                        Files.createDirectories(targetPath.getParent());
-                        Files.copy(zipIn, targetPath);
+                        if (entry.isDirectory()) {
+                            Files.createDirectories(targetPath);
+                        } else {
+                            // Ensure parent directory exists
+                            Files.createDirectories(targetPath.getParent());
+                            Files.copy(zipIn, targetPath);
+                        }
+                    } finally {
+                        zipIn.closeEntry();
                     }
-                    zipIn.closeEntry();
                 }
             }
         }
