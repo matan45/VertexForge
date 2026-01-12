@@ -118,6 +118,7 @@
     <ClInclude Include="windows\EditorCameraWindow.hpp" />
     <ClInclude Include="windows\EntityDetailsPanel.hpp" />
     <ClInclude Include="windows\FolderStructureWindow.hpp" />
+    <ClInclude Include="windows\FontPreviewWindow.hpp" />
     <ClInclude Include="windows\IBLWindow.hpp" />
     <ClInclude Include="windows\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\ImportModalDialog.hpp" />
@@ -175,6 +176,7 @@
     <ClCompile Include="windows\EditorCameraWindow.cpp" />
     <ClCompile Include="windows\EntityDetailsPanel.cpp" />
     <ClCompile Include="windows\FolderStructureWindow.cpp" />
+    <ClCompile Include="windows\FontPreviewWindow.cpp" />
     <ClCompile Include="windows\IBLWindow.cpp" />
     <ClCompile Include="windows\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\ImportModalDialog.cpp" />

@@ -18,33 +18,7 @@ namespace windows
 {
     class ContentBrowser : public controllers::imguiHandler::ImguiWindow
     {
-    public:
-        explicit ContentBrowser();
-        ~ContentBrowser() override;
-
-        void draw() override;
-
     private:
-        void loadDirectory(const fs::path& path);
-        void navigateTo(const fs::path& path);
-
-        void drawToolbar();
-        void drawContentPanel();
-
-        // Keyboard shortcut handling
-        void handleKeyboardShortcuts();
-
-        // Multi-selection helpers
-        void selectAsset(size_t index, bool ctrlHeld, bool shiftHeld);
-        void clearSelection();
-        std::vector<std::string> getSelectedPaths() const;
-        void updateCutState();
-
-        // Clipboard operations
-        void performCut();
-        void performCopy();
-        bool performPaste();
-
         std::vector<Asset> assets;
         fs::path currentPath = "C:\\matan";//todo
 
@@ -71,5 +45,31 @@ namespace windows
         std::unique_ptr<AssetGridRenderer> gridRenderer;
         std::unique_ptr<ContentBrowserModals> modals;
         std::unique_ptr<PreviewWindowManager> previewManager;
+    public:
+        explicit ContentBrowser();
+        ~ContentBrowser() override;
+
+        void draw() override;
+
+    private:
+        void loadDirectory(const fs::path& path);
+        void navigateTo(const fs::path& path);
+
+        void drawToolbar();
+        void drawContentPanel();
+
+        // Keyboard shortcut handling
+        void handleKeyboardShortcuts();
+
+        // Multi-selection helpers
+        void selectAsset(size_t index, bool ctrlHeld, bool shiftHeld);
+        void clearSelection();
+        std::vector<std::string> getSelectedPaths() const;
+        void updateCutState();
+
+        // Clipboard operations
+        void performCut();
+        void performCopy();
+        bool performPaste();
     };
 }

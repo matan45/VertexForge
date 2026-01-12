@@ -83,14 +83,7 @@ namespace windows
     {
         if (ImGui::BeginMenu("Settings"))
         {
-            if (ImGui::MenuItem("Import"))
-            {
-                if (importDialog)
-                {
-                    importDialog->openImportDialog();
-                }
-            }
-            else if (ImGui::MenuItem("Editor Camera"))
+            if (ImGui::MenuItem("Editor Camera"))
             {
                 if (editorCameraWindow)
                 {

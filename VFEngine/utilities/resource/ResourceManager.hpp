@@ -28,6 +28,7 @@ namespace resource {
 		inline static std::unordered_map<std::string, std::weak_ptr<std::vector<ShaderModel>>> shaderCache;
 		inline static std::unordered_map<std::string, std::weak_ptr<material::MaterialData>> materialCache;
 		inline static std::unordered_map<std::string, std::weak_ptr<material::MaterialInstanceData>> materialInstanceCache;
+		inline static std::unordered_map<std::string, std::weak_ptr<FontData>> fontCache;
 
 		inline static std::mutex cacheMutex;
 		inline static std::jthread cleanupThread;
@@ -41,6 +42,7 @@ namespace resource {
 		static std::future <std::shared_ptr<AudioData>> loadAudioAsync(std::string_view path);
 		static std::future <std::shared_ptr<MeshesData>> loadMeshAsync(std::string_view path);
 		static std::future <std::shared_ptr<std::vector<ShaderModel>>> loadShaderAsync(std::string_view path);
+		static std::future<std::shared_ptr<FontData>> loadFontAsync(std::string_view path);
 
 		static std::shared_ptr<material::MaterialData> loadMaterial(std::string_view path);
 

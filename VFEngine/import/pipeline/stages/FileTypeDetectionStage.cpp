@@ -39,6 +39,10 @@ namespace pipeline::stages
         if (isGLTF(header)) return "GLTF";
         if (isOBJ(header)) return "OBJ";
 
+        // Font formats
+        if (isTTF(header)) return "TTF";
+        if (isOTF(header)) return "OTF";
+
         return "Unknown";
     }
 
@@ -145,9 +149,9 @@ namespace pipeline::stages
     {
         // OBJ files are text-based, look for common OBJ keywords
         const std::vector<std::string> objKeywords = {"# ", "v ", "vn ", "vt ", "f ", "o ", "g "};
-        
+
         std::string headerStr(header.begin(), header.end());
-        
+
         for (const auto& keyword : objKeywords)
         {
             if (headerStr.find(keyword) != std::string::npos)
@@ -155,7 +159,43 @@ namespace pipeline::stages
                 return true;
             }
         }
-        
+
         return false;
+    }
+
+    bool FileTypeDetectionStage::isTTF(const std::vector<unsigned char>& header) const
+    {
+        if (header.size() < 4) return false;
+
+        // Standard TrueType: 00 01 00 00
+        if (header[0] == 0x00 && header[1] == 0x01 &&
+            header[2] == 0x00 && header[3] == 0x00)
+        {
+            return true;
+        }
+
+        // Apple TrueType: 'true' (74 72 75 65)
+        if (header[0] == 0x74 && header[1] == 0x72 &&
+            header[2] == 0x75 && header[3] == 0x65)
+        {
+            return true;
+        }
+
+        // TrueType Collection: 'ttcf' (74 74 63 66)
+        if (header[0] == 0x74 && header[1] == 0x74 &&
+            header[2] == 0x63 && header[3] == 0x66)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool FileTypeDetectionStage::isOTF(const std::vector<unsigned char>& header) const
+    {
+        // OpenType with CFF: 'OTTO' (4F 54 54 4F)
+        return header.size() >= 4 &&
+               header[0] == 0x4F && header[1] == 0x54 &&
+               header[2] == 0x54 && header[3] == 0x4F;
     }
 }

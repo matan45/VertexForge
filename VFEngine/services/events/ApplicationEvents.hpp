@@ -45,4 +45,12 @@ namespace events::application {
         std::string_view getName() const override { return "WindowFocused"; }
     };
 
+    // ============================================
+    // NOTIFICATIONS - UI action requests
+    // ============================================
+
+    struct OpenImportDialogNotification : INotification {
+        std::string_view getName() const override { return "OpenImportDialog"; }
+    };
+
 }

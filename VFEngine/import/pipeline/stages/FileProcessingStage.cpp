@@ -18,10 +18,14 @@ namespace pipeline::stages
             {
                 processAudio(context);
             }
-            else if (context.fileType == "OBJ" || context.fileType == "FBX" || 
-                     context.fileType == "DAE" || context.fileType == "GLTF" || context.fileType == "GLB")
+            else if (context.fileType == "OBJ" || context.fileType == "FBX" ||
+                context.fileType == "DAE" || context.fileType == "GLTF" || context.fileType == "GLB")
             {
                 processMesh(context);
+            }
+            else if (context.fileType == "TTF" || context.fileType == "OTF")
+            {
+                processFont(context);
             }
             else
             {
@@ -46,14 +50,15 @@ namespace pipeline::stages
         types::TextureProgressCallback textureProgress = nullptr;
         if (context.progressCallback)
         {
-            textureProgress = [&context](float progress) {
+            textureProgress = [&context](float progress)
+            {
                 // Report texture progress through the import progress callback
                 context.progressCallback(context.fileName, context.fileIndex + 1,
                                          context.totalFiles, progress);
             };
         }
 
-        textureProcessor.loadTextureFile(context.file, context.fileName, context.location,textureProgress);
+        textureProcessor.loadTextureFile(context.file, context.fileName, context.location, textureProgress);
     }
 
     void FileProcessingStage::processHDR(ImportContext& context)
@@ -62,14 +67,15 @@ namespace pipeline::stages
         types::TextureProgressCallback textureProgress = nullptr;
         if (context.progressCallback)
         {
-            textureProgress = [&context](float progress) {
+            textureProgress = [&context](float progress)
+            {
                 // Report HDR progress through the import progress callback
                 context.progressCallback(context.fileName, context.fileIndex + 1,
                                          context.totalFiles, progress);
             };
         }
 
-        textureProcessor.loadHDRFile(context.file, context.fileName, context.location,textureProgress);
+        textureProcessor.loadHDRFile(context.file, context.fileName, context.location, textureProgress);
     }
 
     void FileProcessingStage::processAudio(ImportContext& context)
@@ -78,7 +84,8 @@ namespace pipeline::stages
         types::AudioProgressCallback audioProgress = nullptr;
         if (context.progressCallback)
         {
-            audioProgress = [&context](float progress) {
+            audioProgress = [&context](float progress)
+            {
                 // Report audio progress through the import progress callback
                 context.progressCallback(context.fileName, context.fileIndex + 1,
                                          context.totalFiles, progress);
@@ -95,7 +102,8 @@ namespace pipeline::stages
         types::MeshProgressCallback meshProgress = nullptr;
         if (context.progressCallback)
         {
-            meshProgress = [&context](float progress) {
+            meshProgress = [&context](float progress)
+            {
                 // Report mesh progress through the import progress callback
                 context.progressCallback(context.fileName, context.fileIndex + 1,
                                          context.totalFiles, progress);
@@ -103,5 +111,21 @@ namespace pipeline::stages
         }
 
         meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
+    }
+
+    void FileProcessingStage::processFont(ImportContext& context)
+    {
+        types::FontProgressCallback fontProgress = nullptr;
+        if (context.progressCallback)
+        {
+            fontProgress = [&context](float progress)
+            {
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, progress);
+            };
+        }
+
+        types::FontImportConfig config;
+        fontProcessor.loadFromFile(context.file, context.fileName, context.location, config, fontProgress);
     }
 }

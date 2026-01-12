@@ -6,6 +6,7 @@
 #include "events/ResourceEvents.hpp"
 #include "events/FileOperationsEvents.hpp"
 #include "events/UndoRedoEvents.hpp"
+#include "events/ApplicationEvents.hpp"
 #include "../../clipboard/ClipboardManager.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"
@@ -312,6 +313,17 @@ namespace windows
 
         ImGui::SameLine();
 
+        if (ImGui::Button(ICON_FA_FILE_IMPORT " Import"))
+        {
+            events::EventDispatcher::instance().publish(events::application::OpenImportDialogNotification{});
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Import assets");
+        }
+
+        ImGui::SameLine();
+
         ImGui::Text("Search:");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(150.0f);
@@ -368,6 +380,14 @@ namespace windows
                     if (extension == ".vfMat")
                     {
                         asset.type = Material;
+                    }
+                    else if (extension == ".vfFont")
+                    {
+                        asset.type = Font;
+                    }
+                    else if (extension == ".vfProject")
+                    {
+                        asset.type = Project;
                     }
                     else if (extension == ".vfMatInstance")
                     {

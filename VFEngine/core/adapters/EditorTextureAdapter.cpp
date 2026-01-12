@@ -42,6 +42,30 @@ namespace core
         return result;
     }
 
+    services::EditorTextureData EditorTextureAdapter::loadTextureFromData(resource::TextureData&& textureData)
+    {
+        auto texture = controllers::EditorTextureController::loadTextureFromData(textureData);
+
+        services::EditorTextureData result;
+        if (!texture)
+        {
+            return result;
+        }
+
+        result.descriptorSet = texture->getDescriptorSet();
+        result.width = texture->getWidth();
+        result.height = texture->getHeight();
+        result.channels = texture->getNumbersOfChannels();
+        result.mipLevels = texture->getMipLevels();
+        result.mipDescriptorSets = texture->getMipDescriptorSets();
+        result.valid = true;
+
+        // Track for cleanup
+        loadedTextures[result.descriptorSet] = std::move(texture);
+
+        return result;
+    }
+
     void EditorTextureAdapter::releaseTexture(void* descriptorSet)
     {
         if (descriptorSet == nullptr)

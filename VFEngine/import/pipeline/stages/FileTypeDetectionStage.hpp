@@ -29,6 +29,10 @@ namespace pipeline::stages
         bool isGLTF(const std::vector<unsigned char>& header) const;
         bool isGLB(const std::vector<unsigned char>& header) const;
 
+        // Font format detection
+        bool isTTF(const std::vector<unsigned char>& header) const;
+        bool isOTF(const std::vector<unsigned char>& header) const;
+
         std::string detectFileType(const std::vector<unsigned char>& header) const;
     };
 }
