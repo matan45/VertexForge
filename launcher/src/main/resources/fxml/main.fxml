@@ -3,6 +3,8 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
@@ -12,11 +14,9 @@
     Main layout for VertexForge Launcher.
 
     Structure:
-    - Center: Projects list (placeholder - to be implemented in VK-154)
+    - Center: Projects list (TableView - VK-154)
     - Right: Sidebar with action buttons (Create Project, Refresh)
     - Bottom: Open Project button
-
-    Full UI implementation will be done in VK-157 (Launcher UI Layout & Styling)
 -->
 <BorderPane xmlns="http://javafx.com/javafx/25"
             xmlns:fx="http://javafx.com/fxml/1"
@@ -51,11 +51,29 @@
 
     <!-- Main Content Area (Center) -->
     <center>
-        <StackPane styleClass="content-area">
-            <VBox alignment="CENTER" spacing="10">
+        <StackPane fx:id="contentArea" styleClass="content-area">
+            <!-- Empty State (shown when no projects) -->
+            <VBox fx:id="emptyStatePane" alignment="CENTER" spacing="10"
+                  visible="true" managed="true">
                 <Label text="Projects" styleClass="section-title"/>
                 <Label text="No projects found" styleClass="placeholder-text"/>
                 <Label text="Click 'Create Project' to get started" styleClass="hint-text"/>
+            </VBox>
+
+            <!-- Projects Table (shown when projects exist) -->
+            <VBox fx:id="projectsTablePane" spacing="15" visible="false" managed="false">
+                <Label text="Projects" styleClass="section-title"/>
+                <TableView fx:id="projectsTable" styleClass="projects-table"
+                           VBox.vgrow="ALWAYS">
+                    <columns>
+                        <TableColumn fx:id="nameColumn" text="Name"
+                                     prefWidth="200" minWidth="100"/>
+                        <TableColumn fx:id="pathColumn" text="Path"
+                                     prefWidth="350" minWidth="150"/>
+                        <TableColumn fx:id="lastOpenedColumn" text="Last Opened"
+                                     prefWidth="150" minWidth="120"/>
+                    </columns>
+                </TableView>
             </VBox>
         </StackPane>
     </center>
@@ -66,7 +84,8 @@
             <padding>
                 <Insets top="15" right="20" bottom="15" left="20"/>
             </padding>
-            <Button text="Open Project"
+            <Button fx:id="openProjectButton"
+                    text="Open Project"
                     onAction="#onOpenProject"
                     styleClass="primary-button"
                     disable="true"/>
