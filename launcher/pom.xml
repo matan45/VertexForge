@@ -25,6 +25,7 @@
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <javafx-maven-plugin.version>0.0.8</javafx-maven-plugin.version>
         <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+        <jpackage-maven-plugin.version>1.6.5</jpackage-maven-plugin.version>
 
         <!-- Library Versions -->
         <gson.version>2.13.0</gson.version>
@@ -142,6 +143,26 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+
+            <!-- jpackage Plugin (for native EXE packaging) -->
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>${jpackage-maven-plugin.version}</version>
+                <configuration>
+                    <name>VertexForge Launcher</name>
+                    <appVersion>1.0.0</appVersion>
+                    <vendor>VertexForge</vendor>
+                    <mainClass>com.vertexforge.launcher.Launcher</mainClass>
+                    <mainJar>VertexForgeLauncher.jar</mainJar>
+                    <input>target</input>
+                    <destination>target/dist</destination>
+                    <type>APP_IMAGE</type>
+                    <icon>${project.basedir}/src/main/resources/icon.ico</icon>
+                    <resourceDir>${project.basedir}/src/main/resources/jpackage</resourceDir>
+                    <winConsole>false</winConsole>
+                </configuration>
             </plugin>
         </plugins>
     </build>
