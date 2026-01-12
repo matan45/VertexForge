@@ -408,7 +408,7 @@ namespace windows
                     {
                         asset.type = Font;
                     }
-                    else if (extension == ".vfProject")
+                    else if (extension == ".vfproj")
                     {
                         asset.type = Project;
                     }
