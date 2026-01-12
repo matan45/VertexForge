@@ -12,6 +12,7 @@
 #include "events/ApplicationEvents.hpp"
 #include "events/ProjectEvents.hpp"
 #include "events/SceneEvents.hpp"
+#include "print/EditorLogger.hpp"
 #include <filesystem>
 #include "time/Timer.hpp"
 
@@ -74,20 +75,36 @@ namespace handlers {
         events::project::LoadProjectCommand loadCmd;
         loadCmd.filePath = projectPath;
         if (!dispatcher.execute(loadCmd)) {
+            vfLogError("Failed to load project file: {}", projectPath);
+            dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
         }
 
         auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
         if (!projectOpt) {
+            vfLogError("Failed to get project configuration");
+            dispatcher.execute(events::scene::NewSceneCommand{});
             return false;
         }
 
         std::filesystem::path scenePath =
             std::filesystem::path(projectOpt->workingDirectory) / projectOpt->startupScene;
 
+        if (!std::filesystem::exists(scenePath)) {
+            vfLogError("Startup scene not found: {}", scenePath.string());
+            dispatcher.execute(events::scene::NewSceneCommand{});
+            return false;
+        }
+
         events::scene::LoadSceneCommand sceneCmd;
         sceneCmd.filePath = scenePath.string();
-        return dispatcher.execute(sceneCmd);
+        if (!dispatcher.execute(sceneCmd)) {
+            vfLogError("Failed to load startup scene: {}", scenePath.string());
+            dispatcher.execute(events::scene::NewSceneCommand{});
+            return false;
+        }
+
+        return true;
     }
 
     void RuntimeHandler::initializeServices() {
