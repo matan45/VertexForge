@@ -71,6 +71,18 @@ namespace services
             project->workingDirectory = (projectDir / workingDir).lexically_normal().string();
         }
 
+        // Validate paths after resolution
+        if (!std::filesystem::exists(project->workingDirectory))
+        {
+            vfLogWarning("Project working directory does not exist: {}", project->workingDirectory);
+        }
+
+        std::filesystem::path scenePath = std::filesystem::path(project->workingDirectory) / project->startupScene;
+        if (!std::filesystem::exists(scenePath))
+        {
+            vfLogWarning("Project startup scene not found: {}", scenePath.string());
+        }
+
         currentProject = *project;
         currentProjectPath = filePath;
 

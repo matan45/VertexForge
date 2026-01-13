@@ -54,6 +54,7 @@ public class ProjectCreator {
      * └── scripts/
      *     ├── scripts.mtproj
      *     ├── game/
+     *     │   └── Main.mt
      *     ├── compiled/
      *     └── lib/
      * </pre>
@@ -75,6 +76,7 @@ public class ProjectCreator {
             createProjectFile(projectName, projectDir, projectFile);
             createStartupScene(projectDir.resolve("scenes"));
             createScriptProject(projectName, projectDir.resolve("scripts"));
+            createMainScript(projectDir.resolve("scripts").resolve("game"));
 
             // Extract mType library
             extractLibrary(projectDir.resolve("scripts").resolve("lib"));
@@ -175,6 +177,40 @@ public class ProjectCreator {
     }
 
     /**
+     * Creates a starter Main.mt script file.
+     *
+     * @param gameDir the game scripts directory
+     * @throws IOException if file creation fails
+     */
+    private void createMainScript(Path gameDir) throws IOException {
+        Path mainScript = gameDir.resolve("Main.mt");
+
+        String content = """
+                import * from "engine/Log.mt";
+                import * from "engine/Entity.mt";
+                
+                @Script
+                public class Main {
+                    private int selfId;
+                    public function onStart(): void {
+                        this.selfId = Entity::self();
+                        Log::info("Hello from Main script!");
+                    }
+
+                    public function onUpdate(float deltaTime): void {
+                        // Called every frame
+                    }
+
+                    public function onDestroy(): void {
+                        // Called when script is destroyed
+                    }
+                }
+                """;
+
+        Files.writeString(mainScript, content);
+    }
+
+    /**
      * Extracts the liz.zip library from JAR resources to the lib directory.
      *
      * @param libDir the target lib directory
@@ -190,7 +226,17 @@ public class ProjectCreator {
                 ZipEntry entry;
                 while ((entry = zipIn.getNextEntry()) != null) {
                     try {
-                        Path targetPath = libDir.resolve(entry.getName());
+                        String entryName = entry.getName();
+
+                        // Strip leading "lib/" if present (zip already contains lib folder)
+                        if (entryName.startsWith("lib/")) {
+                            entryName = entryName.substring(4);
+                            if (entryName.isEmpty()) {
+                                continue; // Skip the lib directory entry itself
+                            }
+                        }
+
+                        Path targetPath = libDir.resolve(entryName);
 
                         // Security: Prevent zip slip attack
                         if (!targetPath.normalize().startsWith(libDir.normalize())) {
