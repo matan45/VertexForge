@@ -14,6 +14,7 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
@@ -259,11 +260,39 @@ public class MainController implements Initializable {
      */
     @FXML
     private void onRefreshProjects() {
-        // Refresh validity of existing items
+        // Load fresh data from repository
+        RecentProjects recentProjects = repository.load();
+
+        // Count invalid projects
+        int invalidCount = recentProjects.countInvalid();
+
+        if (invalidCount > 0) {
+            // Show confirmation dialog
+            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+            alert.initOwner(projectsTable.getScene().getWindow());
+            alert.setTitle("Invalid Projects Found");
+            alert.setHeaderText(invalidCount + " project(s) have invalid paths");
+            alert.setContentText(
+                "The project files no longer exist or cannot be accessed.\n\n" +
+                "Would you like to remove them from the list?"
+            );
+
+            ButtonType removeButton = new ButtonType("Remove Invalid");
+            ButtonType keepButton = new ButtonType("Keep All");
+            alert.getButtonTypes().setAll(removeButton, keepButton, ButtonType.CANCEL);
+
+            Optional<ButtonType> result = alert.showAndWait();
+
+            if (result.isPresent() && result.get() == removeButton) {
+                recentProjects.removeInvalid();
+                repository.save(recentProjects);
+            }
+        }
+
+        // Refresh validity of displayed items and reload
         for (ProjectViewModel vm : projectsList) {
             vm.refreshValidity();
         }
-        // Reload from repository
         loadProjects();
     }
 
