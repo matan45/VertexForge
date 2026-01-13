@@ -49,7 +49,7 @@ public class ProjectCreator {
      * {projectName}/
      * ├── {projectName}.vfproj
      * ├── scenes/
-     * │   └── Main.vfscene
+     * │   └── Main.vfScene
      * ├── assets/
      * └── scripts/
      *     ├── scripts.mtproj
@@ -122,7 +122,7 @@ public class ProjectCreator {
         projectConfig.put("projectName", projectName);
         projectConfig.put("version", "0.1.0");
         projectConfig.put("workingDirectory", ".");
-        projectConfig.put("startupScene", "scenes/Main.vfscene");
+        projectConfig.put("startupScene", "scenes/Main.vfScene");
         projectConfig.put("exeIconPath", "");
         projectConfig.put("engineVersion", ENGINE_VERSION);
         projectConfig.put("lastModified", formatTimestamp(Instant.now()));
@@ -138,7 +138,7 @@ public class ProjectCreator {
      * @throws IOException if file creation fails
      */
     private void createStartupScene(Path scenesDir) throws IOException {
-        Path sceneFile = scenesDir.resolve("Main.vfscene");
+        Path sceneFile = scenesDir.resolve("Main.vfScene");
 
         try (InputStream templateStream = getClass().getResourceAsStream(SCENE_TEMPLATE_RESOURCE)) {
             if (templateStream == null) {

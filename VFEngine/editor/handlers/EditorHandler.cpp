@@ -1,5 +1,6 @@
 #include "EditorHandler.hpp"
 #include "EditorBootstrap.hpp"
+#include "../splash/SplashScreen.hpp"
 #include "impl/SceneServiceImpl.hpp"
 #include "impl/EditorRenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
@@ -35,10 +36,13 @@ namespace handlers
 
     void EditorHandler::init()
     {
+        editor::SplashScreen::instance().setStatus("Initializing graphics...");
         bootstrap->init();
 
+        editor::SplashScreen::instance().setStatus("Initializing import system...");
         controllers::Import::initialize();
 
+        editor::SplashScreen::instance().setStatus("Registering services...");
         initializeServices();
 
         bootstrap->setFrameCallback([this]()
@@ -80,6 +84,7 @@ namespace handlers
 
         setupEventSubscriptions();
 
+        editor::SplashScreen::instance().setStatus("Setting up UI...");
         windowImguiHandler->init();
     }
 
