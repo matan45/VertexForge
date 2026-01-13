@@ -75,16 +75,7 @@ namespace serialization
                 project.lastModified = projectJson["lastModified"].get<std::string>();
             }
 
-            if (!std::filesystem::exists(project.workingDirectory))
-            {
-                vfLogWarning("Project working directory does not exist: {}", project.workingDirectory);
-            }
-
-            std::filesystem::path scenePath = std::filesystem::path(project.workingDirectory) / project.startupScene;
-            if (!std::filesystem::exists(scenePath))
-            {
-                vfLogWarning("Project startup scene not found: {}", scenePath.string());
-            }
+            // Note: Path validation is done in ProjectServiceImpl after resolving relative paths
 
             vfLogInfo("Project loaded successfully: {}", project.projectName);
             return project;

@@ -189,6 +189,17 @@ public class RecentProjects {
     }
 
     /**
+     * Counts projects whose paths no longer exist on the filesystem.
+     *
+     * @return the number of invalid projects
+     */
+    public int countInvalid() {
+        return (int) projectsByPath.keySet().stream()
+                .filter(path -> !Files.exists(path))
+                .count();
+    }
+
+    /**
      * Trims the collection to the maximum size by removing the oldest entry.
      * <p>
      * Only removes one entry at a time since add() is called once per operation.

@@ -1,12 +1,14 @@
 #include "ScriptingServiceImpl.hpp"
 #include "../events/ScriptingEvents.hpp"
 #include "../events/EditorModeEvents.hpp"
+#include "../events/ProjectEvents.hpp"
 #include "../events/EventDispatcher.hpp"
 #include "../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "print/EditorLogger.hpp"
 #include <cassert>
+#include <filesystem>
 
 namespace services
 {
@@ -117,16 +119,40 @@ namespace services
     }
 
     // === Build Methods ===
+    std::string ScriptingServiceImpl::getManifestPath() const
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+
+        if (projectOpt.has_value())
+        {
+            std::filesystem::path workingDir(projectOpt->workingDirectory);
+            return (workingDir / "scripts" / "scripts.mtproj").string();
+        }
+
+        vfLogWarning("[Script] No project loaded, cannot determine manifest path");
+        return "";
+    }
+
     ScriptBuildResult ScriptingServiceImpl::buildScripts()
     {
         vfLogInfo("[Script] Building scripts...");
 
-        auto result = scriptingProvider->buildScripts(DEFAULT_MANIFEST_PATH);
+        std::string manifestPath = getManifestPath();
+        if (manifestPath.empty())
+        {
+            ScriptBuildResult result;
+            result.success = false;
+            result.errors.push_back("No project loaded");
+            return result;
+        }
+
+        auto result = scriptingProvider->buildScripts(manifestPath);
 
         // Load the compiled scripts if build was successful
         if (result.success)
         {
-            scriptingProvider->loadCompiledScripts(DEFAULT_MANIFEST_PATH);
+            scriptingProvider->loadCompiledScripts(manifestPath);
         }
 
         return result;
@@ -135,7 +161,11 @@ namespace services
     void ScriptingServiceImpl::cleanScripts()
     {
         vfLogInfo("[Script] Cleaning scripts...");
-        scriptingProvider->cleanScripts(DEFAULT_MANIFEST_PATH);
+        std::string manifestPath = getManifestPath();
+        if (!manifestPath.empty())
+        {
+            scriptingProvider->cleanScripts(manifestPath);
+        }
     }
 
     bool ScriptingServiceImpl::isCompiled() const
