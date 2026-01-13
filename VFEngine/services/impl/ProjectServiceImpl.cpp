@@ -2,6 +2,7 @@
 #include "../events/ProjectEvents.hpp"
 #include "serialization/ProjectSerialization.hpp"
 #include "print/EditorLogger.hpp"
+#include <filesystem>
 
 namespace services
 {
@@ -58,6 +59,16 @@ namespace services
         if (!project)
         {
             return false;
+        }
+
+        // Resolve workingDirectory relative to the project file's directory
+        std::filesystem::path projectFilePath(filePath);
+        std::filesystem::path projectDir = projectFilePath.parent_path();
+        std::filesystem::path workingDir(project->workingDirectory);
+
+        if (workingDir.is_relative())
+        {
+            project->workingDirectory = (projectDir / workingDir).lexically_normal().string();
         }
 
         currentProject = *project;

@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <string>
 #include "WindowImguiHandler.hpp"
 
 #include "interfaces/ISceneService.hpp"
@@ -62,6 +63,8 @@ namespace handlers {
 		void init();
 		void run() const;
 		void cleanUp();
+
+		bool loadProject(const std::string& projectPath);
 
 	private:
 		void initializeServices();
