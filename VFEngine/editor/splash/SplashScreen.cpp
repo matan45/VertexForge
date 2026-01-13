@@ -80,7 +80,7 @@ namespace editor
         // Load splash image
         loadSplashImage();
 
-        // Register window class
+        // Register window class (may already be registered from previous show() call)
         const wchar_t* className = L"VertexForgeSplash";
         WNDCLASSEXW wc = {};
         wc.cbSize = sizeof(WNDCLASSEXW);
@@ -89,7 +89,19 @@ namespace editor
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.lpszClassName = className;
         wc.hbrBackground = nullptr;  // We'll paint ourselves
-        RegisterClassExW(&wc);
+
+        ATOM classAtom = RegisterClassExW(&wc);
+        if (classAtom == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        {
+            // Registration failed for reason other than already exists
+            if (splashImage)
+            {
+                delete static_cast<Gdiplus::Image*>(splashImage);
+                splashImage = nullptr;
+            }
+            Gdiplus::GdiplusShutdown(gdiplusToken);
+            return;
+        }
 
         // Calculate center position
         int screenWidth = GetSystemMetrics(SM_CXSCREEN);
@@ -111,6 +123,7 @@ namespace editor
 
         if (!hwnd)
         {
+            UnregisterClassW(className, GetModuleHandle(nullptr));
             if (splashImage)
             {
                 delete static_cast<Gdiplus::Image*>(splashImage);
@@ -213,17 +226,21 @@ namespace editor
             int imgWidth = image->GetWidth();
             int imgHeight = image->GetHeight();
 
-            // Scale to fit while maintaining aspect ratio
-            int maxWidth = WINDOW_WIDTH - 40;
-            int maxHeight = 300;
-            float scale = (std::min)(static_cast<float>(maxWidth) / imgWidth,
-                                     static_cast<float>(maxHeight) / imgHeight);
-            int drawWidth = static_cast<int>(imgWidth * scale);
-            int drawHeight = static_cast<int>(imgHeight * scale);
-            int imgX = (WINDOW_WIDTH - drawWidth) / 2;
+            // Validate image dimensions to prevent division by zero
+            if (imgWidth > 0 && imgHeight > 0)
+            {
+                // Scale to fit while maintaining aspect ratio
+                int maxWidth = WINDOW_WIDTH - 40;
+                int maxHeight = 300;
+                float scale = (std::min)(static_cast<float>(maxWidth) / imgWidth,
+                                         static_cast<float>(maxHeight) / imgHeight);
+                int drawWidth = static_cast<int>(imgWidth * scale);
+                int drawHeight = static_cast<int>(imgHeight * scale);
+                int imgX = (WINDOW_WIDTH - drawWidth) / 2;
 
-            graphics.DrawImage(image, imgX, yOffset, drawWidth, drawHeight);
-            yOffset += drawHeight + 15;
+                graphics.DrawImage(image, imgX, yOffset, drawWidth, drawHeight);
+                yOffset += drawHeight + 15;
+            }
         }
         else
         {
@@ -256,7 +273,20 @@ namespace editor
         // Draw status text at bottom
         {
             std::lock_guard<std::mutex> lock(statusMutex);
-            std::wstring wideStatus(currentStatus.begin(), currentStatus.end());
+
+            // Proper UTF-8 to wide string conversion
+            std::wstring wideStatus;
+            if (!currentStatus.empty())
+            {
+                int wideLen = MultiByteToWideChar(CP_UTF8, 0, currentStatus.c_str(),
+                                                   static_cast<int>(currentStatus.size()), nullptr, 0);
+                if (wideLen > 0)
+                {
+                    wideStatus.resize(wideLen);
+                    MultiByteToWideChar(CP_UTF8, 0, currentStatus.c_str(),
+                                        static_cast<int>(currentStatus.size()), &wideStatus[0], wideLen);
+                }
+            }
 
             Gdiplus::Font statusFont(&fontFamily, 14, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
             Gdiplus::SolidBrush statusBrush(Gdiplus::Color(255, 120, 180, 255));
