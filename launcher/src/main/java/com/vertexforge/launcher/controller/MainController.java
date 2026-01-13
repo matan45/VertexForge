@@ -5,6 +5,7 @@ import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectInfo;
 import com.vertexforge.launcher.model.RecentProjects;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
+import com.vertexforge.launcher.service.EditorLauncher;
 import com.vertexforge.launcher.service.ProjectCreator;
 import com.vertexforge.launcher.viewmodel.ProjectViewModel;
 import javafx.collections.FXCollections;
@@ -66,6 +67,7 @@ public class MainController implements Initializable {
     // Data
     private final ObservableList<ProjectViewModel> projectsList = FXCollections.observableArrayList();
     private final RecentProjectsRepository repository = new RecentProjectsRepository();
+    private final EditorLauncher editorLauncher = new EditorLauncher();
 
     /**
      * Initializes the controller after FXML loading is complete.
@@ -216,14 +218,40 @@ public class MainController implements Initializable {
     }
 
     /**
-     * Opens the currently selected project.
+     * Opens the currently selected project by launching the editor.
+     * Implements VK-156 (Engine Editor CLI Integration).
      */
     private void openSelectedProject() {
         ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
-        if (selected != null && selected.isValid()) {
-            // TODO: Implement in VK-156 (Engine Editor CLI Integration)
-            System.out.println("Opening project: " + selected.getProjectPath());
+        if (selected == null || !selected.isValid()) {
+            return;
         }
+
+        // Find editor executable
+        var editorPathOpt = editorLauncher.findEditorExecutable();
+        if (editorPathOpt.isEmpty()) {
+            showErrorDialog("Editor Not Found",
+                    "Could not find the editor executable.\n" +
+                    "Set VERTEXFORGE_EDITOR_PATH environment variable or ensure " +
+                    "the editor is built in the bin/ directory.");
+            return;
+        }
+
+        // Launch editor with project
+        EditorLauncher.LaunchResult result = editorLauncher.launch(editorPathOpt.get(), selected.getProjectPath());
+
+        if (!result.success()) {
+            showErrorDialog("Launch Failed", result.errorMessage());
+            return;
+        }
+
+        // Update last opened timestamp
+        RecentProjects recentProjects = repository.load();
+        recentProjects.touch(selected.getProjectPath());
+        repository.save(recentProjects);
+
+        // Close launcher after successful launch
+        projectsTable.getScene().getWindow().hide();
     }
 
     /**
