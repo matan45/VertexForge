@@ -80,6 +80,10 @@ namespace types
         // Extract skeleton from scene
         auto skeleton = extractSkeleton(scene);
 
+        // Compute global inverse transform from scene root
+        glm::mat4 globalInverseTransform = glm::inverse(convertMatrix(scene->mRootNode->mTransformation));
+        vfLogInfo("Global inverse transform computed from scene root");
+
         if (progressCallback) progressCallback(0.25f);
 
         // Process each animation
@@ -89,7 +93,7 @@ namespace types
             const aiAnimation* anim = scene->mAnimations[i];
 
             // Extract animation data
-            resource::AnimationData animData = extractAnimation(anim, skeleton);
+            resource::AnimationData animData = extractAnimation(anim, skeleton, globalInverseTransform);
 
             // Generate output filename
             std::string animName = sanitizeAnimationName(anim->mName.C_Str());
@@ -198,7 +202,8 @@ namespace types
     }
 
     resource::AnimationData Animation::extractAnimation(const aiAnimation* anim,
-                                                        const std::vector<resource::SkeletonBone>& skeleton) const
+                                                        const std::vector<resource::SkeletonBone>& skeleton,
+                                                        const glm::mat4& globalInverseTransform) const
     {
         resource::AnimationData animData;
         animData.headerFileType = resource::FileType::ANIMATION;
@@ -207,6 +212,7 @@ namespace types
         animData.duration = static_cast<float>(anim->mDuration);
         animData.ticksPerSecond = anim->mTicksPerSecond > 0.0 ? static_cast<float>(anim->mTicksPerSecond) : 24.0f;
         animData.skeleton = skeleton;
+        animData.globalInverseTransform = globalInverseTransform;
 
         // Extract animation channels
         animData.channels.reserve(anim->mNumChannels);
@@ -289,6 +295,15 @@ namespace types
 
         // Write channels
         writeChannels(outFile, animData.channels);
+
+        // Write global inverse transform (16 floats, column-major)
+        for (int col = 0; col < 4; ++col)
+        {
+            for (int row = 0; row < 4; ++row)
+            {
+                resource::endian::writeLE<float>(outFile, animData.globalInverseTransform[col][row]);
+            }
+        }
 
         outFile.close();
     }

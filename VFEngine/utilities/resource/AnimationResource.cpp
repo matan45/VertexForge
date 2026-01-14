@@ -119,6 +119,26 @@ namespace resource
             }
         }
 
+        // Read global inverse transform (16 floats, column-major)
+        // Check if there's more data (for backwards compatibility with older files)
+        if (file.peek() != EOF)
+        {
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    data.globalInverseTransform[col][row] = endian::readLE<float>(file);
+                }
+            }
+            vfLogInfo("Loaded global inverse transform from animation file");
+        }
+        else
+        {
+            // Old file format - use identity
+            data.globalInverseTransform = glm::mat4(1.0f);
+            vfLogInfo("No global inverse transform in file, using identity");
+        }
+
         data.headerFileType = FileType::ANIMATION;
 
         vfLogInfo("Loaded animation '{}' - {} bones, {} channels, duration: {:.2f}s",

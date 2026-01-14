@@ -876,11 +876,94 @@ namespace windows
 
         if (textureHandle.imguiDescriptorSet)
         {
+            ImVec2 viewportPos = ImGui::GetCursorScreenPos();
             ImGui::Image(textureHandle.imguiDescriptorSet, availSize);
+
+            // Draw bone visualization overlay
+            if (showBoneVisualization && !evaluatedBones.empty())
+            {
+                drawBoneVisualization(viewportPos, availSize);
+            }
         }
         else
         {
             ImGui::Dummy(availSize);
+        }
+    }
+
+    ImVec2 AnimationPreviewWindow::worldToScreen(const glm::vec3& worldPos, const ImVec2& viewportPos,
+                                                   const ImVec2& viewportSize) const
+    {
+        // Transform world position to clip space
+        glm::vec4 clipPos = camera->getProjectionMatrix() * camera->getViewMatrix() * glm::vec4(worldPos, 1.0f);
+
+        // Perspective divide
+        if (std::abs(clipPos.w) < 0.0001f)
+        {
+            return ImVec2(-10000, -10000);  // Off-screen
+        }
+
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+
+        // Convert from NDC [-1,1] to screen coordinates
+        float screenX = viewportPos.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x;
+        float screenY = viewportPos.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * viewportSize.y;  // Flip Y
+
+        return ImVec2(screenX, screenY);
+    }
+
+    void AnimationPreviewWindow::drawBoneVisualization(const ImVec2& viewportPos, const ImVec2& viewportSize)
+    {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // Colors
+        ImU32 boneColor = IM_COL32(255, 255, 0, 255);       // Yellow for bones
+        ImU32 jointColor = IM_COL32(255, 100, 100, 255);    // Red for joints
+        ImU32 selectedColor = IM_COL32(0, 255, 255, 255);   // Cyan for selected
+
+        // Draw each bone as a line from parent to child
+        for (size_t i = 0; i < evaluatedBones.size(); ++i)
+        {
+            const auto& bone = evaluatedBones[i];
+
+            // Get bone world position (translation from world transform)
+            glm::vec3 boneWorldPos(bone.worldTransform[3][0], bone.worldTransform[3][1], bone.worldTransform[3][2]);
+
+            // Project to screen
+            ImVec2 screenPos = worldToScreen(boneWorldPos, viewportPos, viewportSize);
+
+            // Check if on screen
+            if (screenPos.x < viewportPos.x - 100 || screenPos.x > viewportPos.x + viewportSize.x + 100 ||
+                screenPos.y < viewportPos.y - 100 || screenPos.y > viewportPos.y + viewportSize.y + 100)
+            {
+                continue;
+            }
+
+            // Draw line to parent
+            if (bone.parentIndex >= 0 && bone.parentIndex < static_cast<int32_t>(evaluatedBones.size()))
+            {
+                const auto& parentBone = evaluatedBones[bone.parentIndex];
+                glm::vec3 parentWorldPos(parentBone.worldTransform[3][0], parentBone.worldTransform[3][1],
+                                         parentBone.worldTransform[3][2]);
+
+                ImVec2 parentScreenPos = worldToScreen(parentWorldPos, viewportPos, viewportSize);
+
+                ImU32 lineColor = (static_cast<int>(i) == selectedChannel) ? selectedColor : boneColor;
+                drawList->AddLine(parentScreenPos, screenPos, lineColor, 2.0f);
+            }
+
+            // Draw joint circle
+            float jointRadius = (static_cast<int>(i) == selectedChannel) ? 6.0f : 4.0f;
+            ImU32 circleColor = (static_cast<int>(i) == selectedChannel) ? selectedColor : jointColor;
+            drawList->AddCircleFilled(screenPos, jointRadius, circleColor);
+
+            // Draw bone index for first 10 bones
+            if (i < 10)
+            {
+                char label[8];
+                snprintf(label, sizeof(label), "%zu", i);
+                drawList->AddText(ImVec2(screenPos.x + 8, screenPos.y - 8), IM_COL32(255, 255, 255, 255), label);
+            }
         }
     }
 
@@ -916,6 +999,10 @@ namespace windows
             ImGui::TextDisabled("No bones evaluated");
             return;
         }
+
+        // Debug visualization toggle
+        ImGui::Checkbox("Show Bones", &showBoneVisualization);
+        ImGui::Separator();
 
         // Camera controls
         if (meshLoadedInPreview && ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))

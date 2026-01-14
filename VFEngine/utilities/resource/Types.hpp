@@ -220,6 +220,7 @@ namespace resource
         float ticksPerSecond = 24.0f;
         std::vector<SkeletonBone> skeleton;
         std::vector<BoneAnimation> channels;
+        glm::mat4 globalInverseTransform{1.0f};  // Inverse of scene root transform
     };
 
     struct AudioData

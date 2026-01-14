@@ -50,8 +50,11 @@ void main() {
         }
     }
 
-    // If no valid bones, use identity matrix
-    if (totalWeight < 0.0001) {
+    // Normalize or use identity if no valid bones
+    if (totalWeight > 0.0001) {
+        // Normalize to handle cases where some bone influences were filtered out
+        skinMatrix /= totalWeight;
+    } else {
         skinMatrix = mat4(1.0);
     }
 

@@ -180,6 +180,7 @@ namespace types
             }
 
             // Normalize bone weights for each vertex
+            size_t verticesWithBones = 0;
             for (auto& vertex : result.vertices)
             {
                 float totalWeight = vertex.boneWeights.x + vertex.boneWeights.y +
@@ -187,8 +188,27 @@ namespace types
                 if (totalWeight > 0.0f)
                 {
                     vertex.boneWeights /= totalWeight;
+                    ++verticesWithBones;
                 }
             }
+
+            vfLogInfo("Mesh has {} vertices with bone weights out of {} total",
+                      verticesWithBones, result.vertices.size());
+
+            // Debug: Check bone index distribution
+            std::unordered_map<int32_t, size_t> boneIndexCounts;
+            for (const auto& vertex : result.vertices)
+            {
+                for (int i = 0; i < 4; ++i)
+                {
+                    if (vertex.boneIndices[i] >= 0)
+                    {
+                        boneIndexCounts[vertex.boneIndices[i]]++;
+                    }
+                }
+            }
+            vfLogInfo("Bone index distribution: {} unique bone indices used",
+                      boneIndexCounts.size());
         }
 
         // Extract indices

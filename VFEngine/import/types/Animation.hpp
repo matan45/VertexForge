@@ -42,7 +42,8 @@ namespace types
 
         // Extract single animation clip data
         resource::AnimationData extractAnimation(const aiAnimation* anim,
-                                                 const std::vector<resource::SkeletonBone>& skeleton) const;
+                                                 const std::vector<resource::SkeletonBone>& skeleton,
+                                                 const glm::mat4& globalInverseTransform) const;
 
         // Save animation clip to .vfAnim file
         void saveToFile(std::string_view location, std::string_view baseName,

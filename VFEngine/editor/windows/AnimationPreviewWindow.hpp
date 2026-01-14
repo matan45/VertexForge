@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <imgui.h>
 
 namespace ImSequencer
 {
@@ -136,6 +137,11 @@ namespace windows
 
         // 3D viewport input
         void handlePreviewInput();
+
+        // Debug visualization
+        void drawBoneVisualization(const ImVec2& viewportPos, const ImVec2& viewportSize);
+        ImVec2 worldToScreen(const glm::vec3& worldPos, const ImVec2& viewportPos, const ImVec2& viewportSize) const;
+        bool showBoneVisualization = true;
 
         // Playback
         void updatePlayback(float deltaTime);

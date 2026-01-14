@@ -60,7 +60,7 @@ namespace controllers
         glm::vec3 interpolateScale(const resource::BoneAnimation& channel, float time) const;
 
         // Compute world transforms from local transforms (parent-child hierarchy)
-        void computeWorldTransforms() const;
+        void computeWorldTransforms(bool shouldLog = false) const;
 
         // Map bone names to animation channel indices for fast lookup
         void buildBoneToChannelMap();
@@ -82,7 +82,14 @@ namespace controllers
         // Animation skeleton bone index to mesh skeleton bone index
         std::vector<int32_t> animBoneToMeshBone;
 
+        // Bind pose alignment: corrects for differences between animation rest pose and mesh bind pose
+        // Stored per mesh bone index
+        std::vector<glm::mat4> bindPoseCorrection;
+
         // Evaluated bone transforms (mutable for const evaluation)
         mutable std::vector<EvaluatedBone> evaluatedBones;
+
+        // Helper: compute world transform for a bone using animation skeleton's offsetMatrix (rest pose)
+        glm::mat4 computeRestPoseWorldTransform(size_t animBoneIdx) const;
     };
 }

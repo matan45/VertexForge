@@ -709,6 +709,33 @@ namespace render::mesh
                 }
             }
 
+            // Debug: Check bone index distribution in vertex data
+            const auto& lod0Verts = meshData.lodLevels[0].vertices;
+            std::unordered_map<int32_t, size_t> boneIndexCounts;
+            size_t verticesWithWeights = 0;
+            for (const auto& v : lod0Verts)
+            {
+                bool hasWeight = false;
+                for (int i = 0; i < 4; ++i)
+                {
+                    if (v.boneIndices[i] >= 0 && v.boneWeights[i] > 0.0f)
+                    {
+                        boneIndexCounts[v.boneIndices[i]]++;
+                        hasWeight = true;
+                    }
+                }
+                if (hasWeight) verticesWithWeights++;
+            }
+            loggerInfo("Loaded mesh vertex bone data: {} verts with weights, {} unique bone indices",
+                       verticesWithWeights, boneIndexCounts.size());
+            if (boneIndexCounts.size() <= 5)
+            {
+                for (const auto& [idx, count] : boneIndexCounts)
+                {
+                    loggerInfo("  Bone index {}: {} vertex influences", idx, count);
+                }
+            }
+
             // Upload LOD levels
             uint32_t lodCount = static_cast<uint32_t>(std::min(meshData.lodLevels.size(),
                                                                static_cast<size_t>(resource::LOD_LEVEL_COUNT)));
