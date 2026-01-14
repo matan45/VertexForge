@@ -18,6 +18,52 @@
 
 namespace types
 {
+    ExtractedSkeleton Mesh::extractSkeleton(const aiScene* scene) const
+    {
+        ExtractedSkeleton skeleton;
+
+        // Collect all bones from all meshes
+        for (unsigned int m = 0; m < scene->mNumMeshes; ++m)
+        {
+            const aiMesh* mesh = scene->mMeshes[m];
+            if (!mesh->HasBones())
+                continue;
+
+            skeleton.hasSkinning = true;
+
+            for (unsigned int b = 0; b < mesh->mNumBones; ++b)
+            {
+                const aiBone* bone = mesh->mBones[b];
+                std::string boneName = bone->mName.C_Str();
+
+                // Skip if we already have this bone
+                if (skeleton.boneNameToIndex.contains(boneName))
+                    continue;
+
+                uint32_t boneIndex = static_cast<uint32_t>(skeleton.boneNames.size());
+                skeleton.boneNameToIndex[boneName] = boneIndex;
+                skeleton.boneNames.push_back(boneName);
+
+                // Convert Assimp matrix (row-major) to GLM matrix (column-major)
+                const auto& aiMat = bone->mOffsetMatrix;
+                glm::mat4 offsetMatrix = glm::transpose(glm::mat4(
+                    aiMat.a1, aiMat.a2, aiMat.a3, aiMat.a4,
+                    aiMat.b1, aiMat.b2, aiMat.b3, aiMat.b4,
+                    aiMat.c1, aiMat.c2, aiMat.c3, aiMat.c4,
+                    aiMat.d1, aiMat.d2, aiMat.d3, aiMat.d4
+                ));
+                skeleton.inverseBindPoses.push_back(offsetMatrix);
+            }
+        }
+
+        if (skeleton.hasSkinning)
+        {
+            vfLogInfo("Extracted skeleton with {} bones", skeleton.boneNames.size());
+        }
+
+        return skeleton;
+    }
+
     void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
                             std::string_view location, MeshProgressCallback progressCallback) const
     {
@@ -43,9 +89,17 @@ namespace types
 
     LODMeshData Mesh::convertAssimpMesh(const aiMesh* assimpMesh) const
     {
+        // Call the new overload with empty skeleton
+        ExtractedSkeleton emptySkeleton;
+        return convertAssimpMesh(assimpMesh, emptySkeleton);
+    }
+
+    LODMeshData Mesh::convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const
+    {
         LODMeshData result;
         result.vertices.reserve(assimpMesh->mNumVertices);
 
+        // Initialize vertices with basic data
         for (unsigned int v = 0; v < assimpMesh->mNumVertices; ++v)
         {
             resource::Vertex vertex;
@@ -80,9 +134,64 @@ namespace types
                 vertex.texCoords = {0.0f, 0.0f};
             }
 
+            // Initialize bone data to defaults (no bone influence)
+            vertex.boneIndices = glm::ivec4(-1, -1, -1, -1);
+            vertex.boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+
             result.vertices.push_back(vertex);
         }
 
+        // Extract bone weights if mesh has bones and skeleton is available
+        if (assimpMesh->HasBones() && skeleton.hasSkinning)
+        {
+            // Track how many bones we've assigned to each vertex
+            std::vector<uint32_t> vertexBoneCount(assimpMesh->mNumVertices, 0);
+
+            for (unsigned int b = 0; b < assimpMesh->mNumBones; ++b)
+            {
+                const aiBone* bone = assimpMesh->mBones[b];
+                std::string boneName = bone->mName.C_Str();
+
+                auto it = skeleton.boneNameToIndex.find(boneName);
+                if (it == skeleton.boneNameToIndex.end())
+                {
+                    vfLogWarning("Bone '{}' not found in skeleton", boneName);
+                    continue;
+                }
+
+                int32_t boneIndex = static_cast<int32_t>(it->second);
+
+                for (unsigned int w = 0; w < bone->mNumWeights; ++w)
+                {
+                    uint32_t vertexId = bone->mWeights[w].mVertexId;
+                    float weight = bone->mWeights[w].mWeight;
+
+                    if (vertexId >= result.vertices.size())
+                        continue;
+
+                    uint32_t& boneSlot = vertexBoneCount[vertexId];
+                    if (boneSlot < MAX_BONES_PER_VERTEX)
+                    {
+                        result.vertices[vertexId].boneIndices[boneSlot] = boneIndex;
+                        result.vertices[vertexId].boneWeights[boneSlot] = weight;
+                        ++boneSlot;
+                    }
+                }
+            }
+
+            // Normalize bone weights for each vertex
+            for (auto& vertex : result.vertices)
+            {
+                float totalWeight = vertex.boneWeights.x + vertex.boneWeights.y +
+                                    vertex.boneWeights.z + vertex.boneWeights.w;
+                if (totalWeight > 0.0f)
+                {
+                    vertex.boneWeights /= totalWeight;
+                }
+            }
+        }
+
+        // Extract indices
         uint32_t totalIndices = 0;
         for (unsigned int f = 0; f < assimpMesh->mNumFaces; ++f)
         {
@@ -376,14 +485,27 @@ namespace types
             for (size_t j = v; j < chunkEnd; ++j)
             {
                 const auto& vertex = lodMesh.vertices[j];
+                // Position
                 resource::endian::writeLE<float>(outFile, vertex.position.x);
                 resource::endian::writeLE<float>(outFile, vertex.position.y);
                 resource::endian::writeLE<float>(outFile, vertex.position.z);
+                // Normal
                 resource::endian::writeLE<float>(outFile, vertex.normal.x);
                 resource::endian::writeLE<float>(outFile, vertex.normal.y);
                 resource::endian::writeLE<float>(outFile, vertex.normal.z);
+                // TexCoords
                 resource::endian::writeLE<float>(outFile, vertex.texCoords.x);
                 resource::endian::writeLE<float>(outFile, vertex.texCoords.y);
+                // Bone indices (4 int32)
+                resource::endian::writeLE<int32_t>(outFile, vertex.boneIndices.x);
+                resource::endian::writeLE<int32_t>(outFile, vertex.boneIndices.y);
+                resource::endian::writeLE<int32_t>(outFile, vertex.boneIndices.z);
+                resource::endian::writeLE<int32_t>(outFile, vertex.boneIndices.w);
+                // Bone weights (4 float)
+                resource::endian::writeLE<float>(outFile, vertex.boneWeights.x);
+                resource::endian::writeLE<float>(outFile, vertex.boneWeights.y);
+                resource::endian::writeLE<float>(outFile, vertex.boneWeights.z);
+                resource::endian::writeLE<float>(outFile, vertex.boneWeights.w);
             }
         }
 
@@ -412,11 +534,14 @@ namespace types
             return;
         }
 
-        // Write header with version 0.0.5 (LOD + Meshlet + Convex Decomposition support)
+        // Extract skeleton from all meshes first
+        ExtractedSkeleton skeleton = extractSkeleton(scene);
+
+        // Write header with version 0.0.6 (LOD + Meshlet + Convex + Skinning support)
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
         resource::endian::writeLE<uint32_t>(outFile, 0); // major
         resource::endian::writeLE<uint32_t>(outFile, 0); // minor
-        resource::endian::writeLE<uint32_t>(outFile, 5); // patch - version 0.0.5 for convex decomposition
+        resource::endian::writeLE<uint32_t>(outFile, 6); // patch - version 0.0.6 for skinning support
         resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
 
         vfLogInfo("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
@@ -440,7 +565,8 @@ namespace types
 
             resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
 
-            LODMeshData lod0 = convertAssimpMesh(assimpMesh);
+            // Convert mesh with bone data extraction
+            LODMeshData lod0 = convertAssimpMesh(assimpMesh, skeleton);
             auto lodLevels = generateLODLevels(lod0);
 
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
@@ -464,13 +590,16 @@ namespace types
 
             if (progressCallback)
             {
-                float progress = 0.2f + (static_cast<float>(i + 1) / scene->mNumMeshes) * 0.8f;
+                float progress = 0.2f + (static_cast<float>(i + 1) / scene->mNumMeshes) * 0.75f;
                 progressCallback(progress);
             }
         }
 
+        // Write skeleton data at the end of the file
+        writeSkeletonData(outFile, skeleton);
+
         outFile.close();
-        vfLogInfo("Mesh with LOD and meshlets saved to: {}", newFileLocation.string());
+        vfLogInfo("Mesh with LOD, meshlets and skinning saved to: {}", newFileLocation.string());
     }
 
     resource::ConvexDecompositionData Mesh::generateConvexDecomposition(
@@ -644,5 +773,45 @@ namespace types
             resource::endian::writeLE<float>(outFile, hull.center.z);
             resource::endian::writeLE<float>(outFile, hull.volume);
         }
+    }
+
+    void Mesh::writeSkeletonData(std::ofstream& outFile, const ExtractedSkeleton& skeleton) const
+    {
+        // Write hasSkinning flag
+        resource::endian::writeLE<uint8_t>(outFile, skeleton.hasSkinning ? 1 : 0);
+
+        if (!skeleton.hasSkinning)
+        {
+            return;
+        }
+
+        // Write bone count
+        uint32_t boneCount = static_cast<uint32_t>(skeleton.boneNames.size());
+        resource::endian::writeLE<uint32_t>(outFile, boneCount);
+
+        // Write bone names
+        for (const auto& name : skeleton.boneNames)
+        {
+            uint32_t nameLength = static_cast<uint32_t>(name.length());
+            resource::endian::writeLE<uint32_t>(outFile, nameLength);
+            if (nameLength > 0)
+            {
+                outFile.write(name.data(), nameLength);
+            }
+        }
+
+        // Write inverse bind pose matrices (16 floats per matrix)
+        for (const auto& matrix : skeleton.inverseBindPoses)
+        {
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    resource::endian::writeLE<float>(outFile, matrix[col][row]);
+                }
+            }
+        }
+
+        vfLogInfo("Written skeleton data: {} bones", boneCount);
     }
 }

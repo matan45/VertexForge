@@ -34,7 +34,6 @@ namespace types
 
         // Build bone hierarchy by traversing node tree
         void buildBoneHierarchy(const aiNode* node,
-                                const std::unordered_map<std::string, glm::mat4>& boneOffsets,
                                 const std::unordered_set<std::string>& boneNames,
                                 std::vector<resource::SkeletonBone>& bones,
                                 std::unordered_map<std::string, int32_t>& boneIndexMap,

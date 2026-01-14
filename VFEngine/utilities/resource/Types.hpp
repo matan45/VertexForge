@@ -129,6 +129,8 @@ namespace resource
         glm::vec3 position;
         glm::vec3 normal;
         glm::vec2 texCoords;
+        glm::ivec4 boneIndices{-1, -1, -1, -1};  // Max 4 bones per vertex, -1 = no bone
+        glm::vec4 boneWeights{0.0f, 0.0f, 0.0f, 0.0f};  // Weights for each bone
     };
     
     struct LODLevel
@@ -230,12 +232,26 @@ namespace resource
         std::vector<short> data;
     };
 
+    // Skeleton information for skinned meshes (stored per mesh file)
+    struct SkeletonInfo
+    {
+        std::vector<std::string> boneNames;           // Bone names for animation mapping
+        std::vector<glm::mat4> inverseBindPoses;      // Inverse bind pose matrices
+
+        bool hasBones() const { return !boneNames.empty(); }
+        size_t boneCount() const { return boneNames.size(); }
+    };
+
     struct MeshesData
     {
         FileType headerFileType = FileType::MESH;
         FileVersion version{};
         uint32_t numberOfMeshes = 0;
         std::vector<MeshData> meshes;
+
+        // Skinning data (shared across all meshes in file)
+        bool hasSkinning = false;
+        SkeletonInfo skeleton;
     };
 
     enum class FontFormatFlags : uint32_t

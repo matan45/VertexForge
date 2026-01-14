@@ -61,12 +61,15 @@ namespace resource
         static constexpr uint32_t maxConvexHullCount = 256;      // Per submesh
         static constexpr uint32_t maxHullVertexCount = 256;      // Jolt Physics limit
         static constexpr uint32_t maxHullIndexCount = 4096;      // Triangle indices per hull
+        static constexpr uint32_t maxBoneCount = 256;            // Max bones per skeleton
 
         std::ifstream file;
         MeshStreamHeader header;
         std::string filePath;
-        bool hasMeshlets = false; // True if file has meshlet data (v0.0.4+)
-        bool hasConvexHulls = false; // True if file has convex hull data (v0.0.5+)
+        bool hasMeshlets = false;     // True if file has meshlet data (v0.0.4+)
+        bool hasConvexHulls = false;  // True if file has convex hull data (v0.0.5+)
+        bool hasSkinningData = false; // True if file has skinning data (v0.0.6+)
+        std::streampos skeletonDataOffset = 0; // File position where skeleton data starts
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:
@@ -95,9 +98,13 @@ namespace resource
 
         bool readConvexDecomposition(uint32_t submeshIdx, ConvexDecompositionData& outData);
 
+        bool readSkeletonData(SkeletonInfo& outSkeleton);
+
         bool hasMeshletData() const { return hasMeshlets; }
 
         bool hasConvexData() const { return hasConvexHulls; }
+
+        bool hasSkinning() const { return hasSkinningData; }
 
         uint32_t getTotalVertexCount(uint32_t lodLevel) const;
 
@@ -109,6 +116,8 @@ namespace resource
         bool parseMeshletHeaders(uint32_t meshIdx);
 
         bool parseConvexHeaders(uint32_t meshIdx);
+
+        bool parseSkeletonHeader();
     };
 
     class MeshStreamResource
@@ -121,6 +130,7 @@ namespace resource
         static bool readLODFromFile(std::string_view path,
                                     const LODFileInfo& lodInfo,
                                     std::vector<Vertex>& outVertices,
-                                    std::vector<uint32_t>& outIndices);
+                                    std::vector<uint32_t>& outIndices,
+                                    bool hasBoneData = false);
     };
 }

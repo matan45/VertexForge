@@ -99,6 +99,8 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="controllers\AnimatedMeshPreviewController.hpp" />
+    <ClInclude Include="controllers\AnimationEvaluator.hpp" />
     <ClInclude Include="controllers\Graphics.hpp" />
     <ClInclude Include="controllers\MaterialPreviewController.hpp" />
     <ClInclude Include="controllers\MeshPreviewController.hpp" />
@@ -162,6 +164,8 @@
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
     <ClInclude Include="render\mesh\MeshStreamManager.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
+    <ClInclude Include="render\mesh\SkinnedMeshPipeline.hpp" />
+    <ClInclude Include="render\mesh\SkinnedMeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
     <ClInclude Include="render\occlusion\CameraOcclusionManager.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
@@ -173,6 +177,8 @@
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="controllers\AnimatedMeshPreviewController.cpp" />
+    <ClCompile Include="controllers\AnimationEvaluator.cpp" />
     <ClCompile Include="controllers\Graphics.cpp" />
     <ClCompile Include="controllers\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\MeshPreviewController.cpp" />
@@ -229,6 +235,7 @@
     <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
     <ClCompile Include="render\mesh\MeshStreamManager.cpp" />
+    <ClCompile Include="render\mesh\SkinnedMeshPipeline.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />

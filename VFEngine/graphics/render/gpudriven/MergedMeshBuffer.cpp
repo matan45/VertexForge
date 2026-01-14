@@ -12,8 +12,8 @@
 #include <cstring>
 #include <cmath>
 
-// Verify vertex stride matches actual Vertex struct
-static_assert(sizeof(resource::Vertex) == 32, "Vertex size must be 32 bytes for MergedMeshBuffer");
+// Verify vertex stride matches actual Vertex struct (64 bytes with bone data)
+static_assert(sizeof(resource::Vertex) == 64, "Vertex size must be 64 bytes for MergedMeshBuffer");
 
 namespace render::gpudriven
 {

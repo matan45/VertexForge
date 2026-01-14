@@ -99,6 +99,7 @@
     <ClInclude Include="data\FileOperationsTypes.hpp" />
     <ClInclude Include="data\ScriptTypes.hpp" />
     <ClInclude Include="data\UndoTypes.hpp" />
+    <ClInclude Include="events\AnimationPreviewEvents.hpp" />
     <ClInclude Include="events\ApplicationEvents.hpp" />
     <ClInclude Include="events\AudioEvents.hpp" />
     <ClInclude Include="events\AudioSettingsEvents.hpp" />
@@ -156,6 +157,7 @@
     <ClInclude Include="interfaces\IScriptingService.hpp" />
     <ClInclude Include="interfaces\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\IWindowStateService.hpp" />
+    <ClInclude Include="providers\IAnimationPreviewProvider.hpp" />
     <ClInclude Include="providers\IAudioProvider.hpp" />
     <ClInclude Include="providers\IEditorTextureProvider.hpp" />
     <ClInclude Include="providers\IMaterialPreviewProvider.hpp" />

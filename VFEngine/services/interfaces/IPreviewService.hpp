@@ -1,5 +1,6 @@
 #pragma once
 #include "../providers/IPreviewProvider.hpp"
+#include "../providers/IAnimationPreviewProvider.hpp"
 #include "../data/DTOs.hpp"
 #include "../data/AsyncLoadingTypes.hpp"
 #include <math/Frustum.hpp>
@@ -52,5 +53,43 @@ namespace services
         virtual void cancelMeshLoading(PreviewInstanceId instanceId) = 0;
         [[nodiscard]] virtual MeshLoadingProgress getMeshLoadingProgress(PreviewInstanceId instanceId) const = 0;
         virtual void processAsyncLoading() = 0;
+
+        // Animation Preview
+        virtual void initAnimationPreview(PreviewInstanceId instanceId) = 0;
+        virtual void cleanUpAnimationPreview(PreviewInstanceId instanceId) = 0;
+        [[nodiscard]] virtual bool isAnimationPreviewInitialized(PreviewInstanceId instanceId) const = 0;
+
+        virtual bool loadAnimationPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath) = 0;
+        virtual bool loadAnimationPreviewAnimation(PreviewInstanceId instanceId, const std::string& animPath) = 0;
+        virtual void unloadAnimationPreview(PreviewInstanceId instanceId) = 0;
+
+        [[nodiscard]] virtual bool isAnimationPreviewMeshLoaded(PreviewInstanceId instanceId) const = 0;
+        [[nodiscard]] virtual bool isAnimationPreviewAnimationLoaded(PreviewInstanceId instanceId) const = 0;
+        [[nodiscard]] virtual math::AABB getAnimationPreviewMeshBounds(PreviewInstanceId instanceId) const = 0;
+
+        virtual void playAnimation(PreviewInstanceId instanceId) = 0;
+        virtual void pauseAnimation(PreviewInstanceId instanceId) = 0;
+        virtual void stopAnimation(PreviewInstanceId instanceId) = 0;
+        [[nodiscard]] virtual bool isAnimationPlaying(PreviewInstanceId instanceId) const = 0;
+
+        virtual void setAnimationPlaybackTime(PreviewInstanceId instanceId, float timeSeconds) = 0;
+        [[nodiscard]] virtual float getAnimationPlaybackTime(PreviewInstanceId instanceId) const = 0;
+        [[nodiscard]] virtual float getAnimationDuration(PreviewInstanceId instanceId) const = 0;
+
+        virtual void setAnimationLooping(PreviewInstanceId instanceId, bool loop) = 0;
+        [[nodiscard]] virtual bool isAnimationLooping(PreviewInstanceId instanceId) const = 0;
+        virtual void setAnimationPlaybackSpeed(PreviewInstanceId instanceId, float speed) = 0;
+        [[nodiscard]] virtual float getAnimationPlaybackSpeed(PreviewInstanceId instanceId) const = 0;
+
+        virtual void updateAnimationPreview(PreviewInstanceId instanceId, float deltaTime) = 0;
+        virtual void setAnimationPreviewParams(PreviewInstanceId instanceId, const AnimationPreviewParams& params) = 0;
+        virtual void updateAnimationCamera(PreviewInstanceId instanceId, const glm::mat4& view,
+                                           const glm::mat4& projection, const glm::vec3& cameraPos) = 0;
+
+        [[nodiscard]] virtual ViewportTextureHandle renderAnimationPreview(PreviewInstanceId instanceId) = 0;
+
+        [[nodiscard]] virtual size_t getAnimationPreviewBoneCount(PreviewInstanceId instanceId) const = 0;
+        [[nodiscard]] virtual std::vector<EvaluatedBoneInfo>
+            getAnimationPreviewEvaluatedBones(PreviewInstanceId instanceId) const = 0;
     };
 }

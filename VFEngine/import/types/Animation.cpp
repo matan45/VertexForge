@@ -120,8 +120,7 @@ namespace types
 
     std::vector<resource::SkeletonBone> Animation::extractSkeleton(const aiScene* scene) const
     {
-        // Collect all bone names and offset matrices from meshes
-        std::unordered_map<std::string, glm::mat4> boneOffsets;
+        // Collect all bone names from meshes
         std::unordered_set<std::string> boneNames;
 
         for (uint32_t m = 0; m < scene->mNumMeshes; ++m)
@@ -130,9 +129,7 @@ namespace types
             for (uint32_t b = 0; b < mesh->mNumBones; ++b)
             {
                 const aiBone* bone = mesh->mBones[b];
-                std::string boneName = bone->mName.C_Str();
-                boneNames.insert(boneName);
-                boneOffsets[boneName] = convertMatrix(bone->mOffsetMatrix);
+                boneNames.insert(bone->mName.C_Str());
             }
         }
 
@@ -146,13 +143,12 @@ namespace types
         std::vector<resource::SkeletonBone> bones;
         std::unordered_map<std::string, int32_t> boneIndexMap;
 
-        buildBoneHierarchy(scene->mRootNode, boneOffsets, boneNames, bones, boneIndexMap, -1);
+        buildBoneHierarchy(scene->mRootNode, boneNames, bones, boneIndexMap, -1);
 
         return bones;
     }
 
     void Animation::buildBoneHierarchy(const aiNode* node,
-                                       const std::unordered_map<std::string, glm::mat4>& boneOffsets,
                                        const std::unordered_set<std::string>& boneNames,
                                        std::vector<resource::SkeletonBone>& bones,
                                        std::unordered_map<std::string, int32_t>& boneIndexMap,
@@ -168,16 +164,9 @@ namespace types
             bone.name = nodeName;
             bone.parentIndex = parentIndex;
 
-            // Get offset matrix if available, otherwise use identity
-            auto it = boneOffsets.find(nodeName);
-            if (it != boneOffsets.end())
-            {
-                bone.offsetMatrix = it->second;
-            }
-            else
-            {
-                bone.offsetMatrix = glm::mat4(1.0f);
-            }
+            // Store the node's local transformation as the default pose
+            // This is used when there's no animation channel for this bone
+            bone.offsetMatrix = convertMatrix(node->mTransformation);
 
             currentIndex = static_cast<int32_t>(bones.size());
             boneIndexMap[nodeName] = currentIndex;
@@ -187,7 +176,7 @@ namespace types
         // Recursively process children
         for (uint32_t i = 0; i < node->mNumChildren; ++i)
         {
-            buildBoneHierarchy(node->mChildren[i], boneOffsets, boneNames, bones, boneIndexMap, currentIndex);
+            buildBoneHierarchy(node->mChildren[i], boneNames, bones, boneIndexMap, currentIndex);
         }
     }
 

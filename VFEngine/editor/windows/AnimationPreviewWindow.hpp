@@ -1,6 +1,8 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "resource/Types.hpp"
+#include "providers/PreviewInstanceId.hpp"
+#include <math/Frustum.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -14,6 +16,11 @@
 namespace ImSequencer
 {
     struct SequenceInterface;
+}
+
+namespace editor
+{
+    class OrbitCamera;
 }
 
 namespace windows
@@ -39,25 +46,34 @@ namespace windows
     class AnimationPreviewWindow : public controllers::imguiHandler::ImguiWindow
     {
     private:
-        // File info
+        // File paths
         std::string animationPath;
+        std::string meshPath;
         std::string windowTitle;
 
-        // Loaded animation data
+        // Loaded animation data (for timeline display and bone hierarchy)
         resource::AnimationData animationData;
         bool loadFailed = false;
         bool animationLoaded = false;
 
-        // Async loading
+        // Async loading for animation data
         std::future<AnimationLoadResult> loadFuture;
         std::atomic<bool> loadingInProgress{false};
         std::atomic<bool> loadingCancelled{false};
         std::string loadingStatus = "Starting...";
 
-        // Playback state
+        // 3D Preview state
+        std::unique_ptr<editor::OrbitCamera> camera;
+        math::AABB meshBounds;
+        bool previewInitialized = false;
+        bool meshLoadedInPreview = false;
+        bool animationLoadedInPreview = false;
+        bool previewCleanedUp = false;
+        bool isDraggingPreview = false;
+
+        // Playback state (synced with service)
         bool isPlaying = false;
         bool isLooping = true;
-        float currentTime = 0.0f;
         float playbackSpeed = 1.0f;
         float lastFrameTime = 0.0f;
 
@@ -67,7 +83,7 @@ namespace windows
         bool sequencerExpanded = true;
         int selectedChannel = -1;
 
-        // Evaluated skeleton
+        // Evaluated skeleton (from service for display)
         std::vector<EvaluatedBoneTransform> evaluatedBones;
         std::unordered_map<std::string_view, size_t> boneNameToChannelIndex;
         std::unordered_map<int32_t, std::vector<size_t>> boneChildrenMap;
@@ -93,9 +109,16 @@ namespace windows
         void startAsyncLoad();
         void updateAsyncLoading();
         AnimationLoadResult loadAnimationBackground(const std::string& path);
+        void initPreviewRenderer();
+        void cleanUpPreviewRenderer();
 
-        // Animation evaluation
-        void evaluateAnimation(float timeInTicks);
+        // Mesh loading for 3D preview
+        void loadMeshForPreview();
+        void loadAnimationForPreview();
+        void updateBoneTransformsFromService();
+
+        // Animation evaluation (for timeline data, local copy)
+        void evaluateAnimationLocal(float timeInTicks);
         glm::vec3 interpolatePosition(const resource::BoneAnimation& channel, float time);
         glm::quat interpolateRotation(const resource::BoneAnimation& channel, float time);
         glm::vec3 interpolateScale(const resource::BoneAnimation& channel, float time);
@@ -103,17 +126,24 @@ namespace windows
 
         // Drawing methods
         void drawInfoPanel();
-        void drawMeshPreviewPlaceholder();
+        void draw3DViewport(float width, float height);
         void drawTimelinePanel();
         void drawSkeletonPanel();
         void drawBoneNode(size_t index);
         void drawPlaybackControls();
         void drawLoadingIndicator();
+        void drawMeshFileInput();
+
+        // 3D viewport input
+        void handlePreviewInput();
 
         // Playback
         void updatePlayback(float deltaTime);
         void seekToTime(float timeInTicks);
         int timeToFrame(float timeInTicks) const;
         float frameToTime(int frame) const;
+
+        // Preview instance ID
+        services::PreviewInstanceId getPreviewInstanceId() const { return services::PreviewInstanceId(const_cast<AnimationPreviewWindow*>(this)); }
     };
 }

@@ -2,6 +2,7 @@
 #include <fstream>
 #include <functional>
 #include <array>
+#include <unordered_map>
 #include "config/Config.hpp"
 #include "resource/Types.hpp"
 #include "resource/MeshletTypes.hpp"
@@ -17,6 +18,15 @@ namespace types
     {
         std::vector<resource::Vertex> vertices;
         std::vector<uint32_t> indices;
+    };
+
+    // Extracted skeleton data from scene
+    struct ExtractedSkeleton
+    {
+        bool hasSkinning = false;
+        std::vector<std::string> boneNames;
+        std::vector<glm::mat4> inverseBindPoses;
+        std::unordered_map<std::string, uint32_t> boneNameToIndex;
     };
 
 
@@ -35,6 +45,7 @@ namespace types
 
     private:
         static constexpr size_t chunkSize = 256 * 1024;
+        static constexpr uint32_t MAX_BONES_PER_VERTEX = 4;
 
         static constexpr std::array<float, resource::LOD_LEVEL_COUNT> lodRatios = {1.0f, 0.5f, 0.25f, 0.125f};
 
@@ -43,6 +54,13 @@ namespace types
                                         const aiScene* scene, const importConfig::ImportConfig& config,
                                         MeshProgressCallback progressCallback) const;
 
+        // Extract skeleton from all meshes in the scene
+        ExtractedSkeleton extractSkeleton(const aiScene* scene) const;
+
+        // Convert mesh with optional bone data extraction
+        LODMeshData convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const;
+
+        // Legacy overload for backward compatibility
         LODMeshData convertAssimpMesh(const aiMesh* assimpMesh) const;
 
         std::array<LODMeshData, resource::LOD_LEVEL_COUNT> generateLODLevels(const LODMeshData& lod0) const;
@@ -64,5 +82,8 @@ namespace types
 
         void writeConvexDecompositionData(std::ofstream& outFile,
                                           const resource::ConvexDecompositionData& decomposition) const;
+
+        // Skeleton/skinning data writing
+        void writeSkeletonData(std::ofstream& outFile, const ExtractedSkeleton& skeleton) const;
     };
 }
