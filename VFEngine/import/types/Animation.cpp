@@ -143,7 +143,7 @@ namespace types
         std::vector<resource::SkeletonBone> bones;
         std::unordered_map<std::string, int32_t> boneIndexMap;
 
-        buildBoneHierarchy(scene->mRootNode, boneNames, bones, boneIndexMap, -1);
+        buildBoneHierarchy(scene->mRootNode, boneNames, bones, boneIndexMap, -1, glm::mat4(1.0f));
 
         return bones;
     }
@@ -152,10 +152,15 @@ namespace types
                                        const std::unordered_set<std::string>& boneNames,
                                        std::vector<resource::SkeletonBone>& bones,
                                        std::unordered_map<std::string, int32_t>& boneIndexMap,
-                                       int32_t parentIndex) const
+                                       int32_t parentIndex,
+                                       const glm::mat4& accumulatedTransform) const
     {
         std::string nodeName = node->mName.C_Str();
         int32_t currentIndex = parentIndex;
+        glm::mat4 currentAccumulated = accumulatedTransform;
+
+        // Get this node's local transform
+        glm::mat4 nodeTransform = convertMatrix(node->mTransformation);
 
         // Check if this node is a bone
         if (boneNames.find(nodeName) != boneNames.end())
@@ -164,19 +169,31 @@ namespace types
             bone.name = nodeName;
             bone.parentIndex = parentIndex;
 
-            // Store the node's local transformation as the default pose
-            // This is used when there's no animation channel for this bone
-            bone.offsetMatrix = convertMatrix(node->mTransformation);
+            // Store the bone's own local transform (used when no animation)
+            bone.offsetMatrix = nodeTransform;
+
+            // Store accumulated transforms from non-bone parent nodes
+            // This is applied before any animation transforms
+            bone.preTransform = accumulatedTransform;
 
             currentIndex = static_cast<int32_t>(bones.size());
             boneIndexMap[nodeName] = currentIndex;
             bones.push_back(bone);
+
+            // Reset accumulated transform since we've stored it
+            currentAccumulated = glm::mat4(1.0f);
+        }
+        else
+        {
+            // This node is not a bone - accumulate its transform for child bones
+            currentAccumulated = accumulatedTransform * nodeTransform;
         }
 
         // Recursively process children
         for (uint32_t i = 0; i < node->mNumChildren; ++i)
         {
-            buildBoneHierarchy(node->mChildren[i], boneNames, bones, boneIndexMap, currentIndex);
+            buildBoneHierarchy(node->mChildren[i], boneNames, bones, boneIndexMap,
+                               currentIndex, currentAccumulated);
         }
     }
 
@@ -303,6 +320,15 @@ namespace types
                 for (int row = 0; row < 4; ++row)
                 {
                     resource::endian::writeLE<float>(file, bone.offsetMatrix[col][row]);
+                }
+            }
+
+            // Write preTransform matrix (16 floats, column-major)
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    resource::endian::writeLE<float>(file, bone.preTransform[col][row]);
                 }
             }
         }

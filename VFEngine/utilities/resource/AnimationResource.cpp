@@ -60,6 +60,15 @@ namespace resource
                     bone.offsetMatrix[col][row] = endian::readLE<float>(file);
                 }
             }
+
+            // Read preTransform matrix (16 floats, column-major)
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    bone.preTransform[col][row] = endian::readLE<float>(file);
+                }
+            }
         }
 
         // Read channels

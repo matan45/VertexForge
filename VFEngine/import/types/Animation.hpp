@@ -37,7 +37,8 @@ namespace types
                                 const std::unordered_set<std::string>& boneNames,
                                 std::vector<resource::SkeletonBone>& bones,
                                 std::unordered_map<std::string, int32_t>& boneIndexMap,
-                                int32_t parentIndex) const;
+                                int32_t parentIndex,
+                                const glm::mat4& accumulatedTransform) const;
 
         // Extract single animation clip data
         resource::AnimationData extractAnimation(const aiAnimation* anim,

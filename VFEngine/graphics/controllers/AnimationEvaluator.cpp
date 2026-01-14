@@ -1,4 +1,5 @@
 #include "AnimationEvaluator.hpp"
+#include "print/Logger.hpp"
 #include <algorithm>
 
 namespace controllers
@@ -14,6 +15,15 @@ namespace controllers
 
         // Initialize evaluated bones for animation skeleton
         evaluatedBones.resize(animation.skeleton.size());
+
+        // Debug: count successful mappings
+        size_t mappedCount = 0;
+        for (int32_t idx : meshBoneToAnimBone)
+        {
+            if (idx >= 0) mappedCount++;
+        }
+        loggerInfo("Bone mapping: {} mesh bones, {} anim bones, {} mapped",
+            skeleton.boneNames.size(), animation.skeleton.size(), mappedCount);
     }
 
     void AnimationEvaluator::clear()
@@ -96,6 +106,8 @@ namespace controllers
 
             // Find animation channel for this bone
             auto it = boneNameToChannelIndex.find(animBone.name);
+            glm::mat4 boneLocalTransform;
+
             if (it != boneNameToChannelIndex.end())
             {
                 const auto& channel = animationData->channels[it->second];
@@ -107,16 +119,19 @@ namespace controllers
                 glm::mat4 T = glm::translate(glm::mat4(1.0f), eval.position);
                 glm::mat4 R = glm::mat4_cast(eval.rotation);
                 glm::mat4 S = glm::scale(glm::mat4(1.0f), eval.scale);
-                eval.localTransform = T * R * S;
+                boneLocalTransform = T * R * S;
             }
             else
             {
-                // No animation channel - use the bone's default offset transform
-                eval.localTransform = animBone.offsetMatrix;
+                // No animation channel - use the bone's default transform
+                boneLocalTransform = animBone.offsetMatrix;
                 eval.position = glm::vec3(0.0f);
                 eval.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
                 eval.scale = glm::vec3(1.0f);
             }
+
+            // Apply preTransform (accumulated non-bone parent transforms)
+            eval.localTransform = animBone.preTransform * boneLocalTransform;
         }
 
         // Compute world transforms

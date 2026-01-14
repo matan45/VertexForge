@@ -171,7 +171,8 @@ namespace resource
     {
         std::string name;
         int32_t parentIndex = -1;  // -1 for root bones
-        glm::mat4 offsetMatrix{1.0f};
+        glm::mat4 offsetMatrix{1.0f};  // Bone's default local transform
+        glm::mat4 preTransform{1.0f};  // Accumulated transform from non-bone parent nodes
     };
 
     // Separate key types since Assimp stores keys with different timestamps

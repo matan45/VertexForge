@@ -180,15 +180,15 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::createRenderPass()
     {
-        // Color attachment - load existing content (preserve skybox)
+        // Color attachment - clear to background color each frame
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
         colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
         colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
         colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
         vk::AttachmentReference colorAttachmentRef{};
@@ -200,10 +200,10 @@ namespace render::mesh
         depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
         depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
         depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
         depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
         depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
         vk::AttachmentReference depthAttachmentRef{};
@@ -909,7 +909,8 @@ namespace render::mesh
         renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
 
         std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].color = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f});
+        // Background color matching the preview viewport (bluish-gray)
+        clearValues[0].color = vk::ClearColorValue(std::array<float, 4>{0.36f, 0.38f, 0.48f, 1.0f});
         clearValues[1].depthStencil = vk::ClearDepthStencilValue(1.0f, 0);
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
