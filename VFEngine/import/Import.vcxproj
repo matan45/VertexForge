@@ -112,6 +112,7 @@
     <ClInclude Include="pipeline\stages\FileTypeDetectionStage.hpp" />
     <ClInclude Include="pipeline\stages\FileValidationStage.hpp" />
     <ClInclude Include="pipeline\stages\HeaderReadingStage.hpp" />
+    <ClInclude Include="types\Animation.hpp" />
     <ClInclude Include="types\Audio.hpp" />
     <ClInclude Include="types\Font.hpp" />
     <ClInclude Include="types\Mesh.hpp" />
@@ -125,6 +126,7 @@
     <ClCompile Include="pipeline\stages\FileTypeDetectionStage.cpp" />
     <ClCompile Include="pipeline\stages\FileValidationStage.cpp" />
     <ClCompile Include="pipeline\stages\HeaderReadingStage.cpp" />
+    <ClCompile Include="types\Animation.cpp" />
     <ClCompile Include="types\Audio.cpp" />
     <ClCompile Include="types\Font.cpp" />
     <ClCompile Include="types\Mesh.cpp" />

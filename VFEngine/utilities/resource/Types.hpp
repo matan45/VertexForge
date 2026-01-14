@@ -156,6 +156,7 @@ namespace resource
     };
     
 
+    // Bone with vertex weights (for skinning in mesh data)
     struct Bone
     {
         std::string name;
@@ -163,6 +164,34 @@ namespace resource
         std::vector<std::pair<uint32_t, float>> weights;
     };
 
+    // Skeleton bone with hierarchy information (for animation data)
+    struct SkeletonBone
+    {
+        std::string name;
+        int32_t parentIndex = -1;  // -1 for root bones
+        glm::mat4 offsetMatrix{1.0f};
+    };
+
+    // Separate key types since Assimp stores keys with different timestamps
+    struct PositionKey
+    {
+        float time = 0.0f;
+        glm::vec3 position{0.0f};
+    };
+
+    struct RotationKey
+    {
+        float time = 0.0f;
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};  // Identity quaternion (w, x, y, z)
+    };
+
+    struct ScaleKey
+    {
+        float time = 0.0f;
+        glm::vec3 scale{1.0f};
+    };
+
+    // Legacy Keyframe struct for compatibility
     struct Keyframe
     {
         float time;
@@ -174,20 +203,20 @@ namespace resource
     struct BoneAnimation
     {
         std::string boneName;
-        std::vector<Keyframe> positionKeys;
-        std::vector<Keyframe> rotationKeys;
-        std::vector<Keyframe> scalingKeys;
+        std::vector<PositionKey> positionKeys;
+        std::vector<RotationKey> rotationKeys;
+        std::vector<ScaleKey> scalingKeys;
     };
 
     struct AnimationData
     {
         FileType headerFileType = FileType::ANIMATION;
         FileVersion version{};
+        std::string name;
         float duration = 0.0f;
-        float ticksPerSecond = 0.0f;
-        uint32_t numBones = 0;
-        std::vector<BoneAnimation> boneAnimations;
-        std::vector<Bone> bones;
+        float ticksPerSecond = 24.0f;
+        std::vector<SkeletonBone> skeleton;
+        std::vector<BoneAnimation> channels;
     };
 
     struct AudioData
