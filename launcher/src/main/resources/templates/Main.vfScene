@@ -1,4 +1,15 @@
 {
+  "audioSettings": {
+    "distanceModel": {
+      "defaultRolloffFactor": 1.0,
+      "model": "inverseDistanceClamped"
+    },
+    "listener": {
+      "dopplerFactor": 1.0,
+      "masterVolume": 1.0,
+      "speedOfSound": 343.29998779296875
+    }
+  },
   "physicsSettings": {
     "collisionLayers": [
       {
@@ -87,7 +98,7 @@
         1.0
       ]
     },
-    "uuid": 3984413846719999048
+    "uuid": 7973332712731998442
   },
   "version": "1.1"
 }

@@ -129,28 +129,40 @@ namespace core::audio {
     }
 
     void AudioSystem::setMasterVolume(float volume) {
-        if (!initialized) return;
+        if (!initialized) {
+            loggerWarning("AudioSystem::setMasterVolume called but system not initialized");
+            return;
+        }
         alListenerf(AL_GAIN, volume);
         checkError("setMasterVolume");
         currentSettings.masterVolume = volume;
     }
 
     void AudioSystem::setDopplerFactor(float factor) {
-        if (!initialized) return;
+        if (!initialized) {
+            loggerWarning("AudioSystem::setDopplerFactor called but system not initialized");
+            return;
+        }
         alDopplerFactor(factor);
         checkError("setDopplerFactor");
         currentSettings.dopplerFactor = factor;
     }
 
     void AudioSystem::setSpeedOfSound(float speed) {
-        if (!initialized) return;
+        if (!initialized) {
+            loggerWarning("AudioSystem::setSpeedOfSound called but system not initialized");
+            return;
+        }
         alSpeedOfSound(speed);
         checkError("setSpeedOfSound");
         currentSettings.speedOfSound = speed;
     }
 
     void AudioSystem::setDistanceModel(types::AudioDistanceModel model) {
-        if (!initialized) return;
+        if (!initialized) {
+            loggerWarning("AudioSystem::setDistanceModel called but system not initialized");
+            return;
+        }
         ALenum alModel;
         switch (model) {
             case types::AudioDistanceModel::None:
@@ -184,7 +196,10 @@ namespace core::audio {
     }
 
     void AudioSystem::applySettings(const types::AudioSettings& settings) {
-        if (!initialized) return;
+        if (!initialized) {
+            loggerWarning("AudioSystem::applySettings called but system not initialized");
+            return;
+        }
 
         setMasterVolume(settings.masterVolume);
         setDopplerFactor(settings.dopplerFactor);

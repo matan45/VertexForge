@@ -798,6 +798,7 @@ namespace serialization
     {
         if (str == "none") return types::AudioDistanceModel::None;
         if (str == "inverseDistance") return types::AudioDistanceModel::InverseDistance;
+        if (str == "inverseDistanceClamped") return types::AudioDistanceModel::InverseDistanceClamped;
         if (str == "linearDistance") return types::AudioDistanceModel::LinearDistance;
         if (str == "linearDistanceClamped") return types::AudioDistanceModel::LinearDistanceClamped;
         if (str == "exponentDistance") return types::AudioDistanceModel::ExponentDistance;
