@@ -47,5 +47,9 @@ namespace core
         float getPlaybackPosition(services::AudioHandleId handle) const override;
         bool setPlaybackPosition(services::AudioHandleId handle, float seconds) override;
         float getDuration(services::AudioHandleId handle) const override;
+
+        // === Audio Settings ===
+        void applySettings(const types::AudioSettings& settings) override;
+        types::AudioSettings getCurrentSettings() const override;
     };
 }

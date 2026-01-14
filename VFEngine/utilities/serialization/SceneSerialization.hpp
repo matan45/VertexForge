@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
+#include "../types/AudioTypes.hpp"
 
 namespace scene
 {
@@ -78,5 +79,23 @@ namespace serialization
 
         static json serializePhysicsSettings(const types::PhysicsSettings& settings);
         static void deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings);
+
+        static json serializeAudioSettings(const types::AudioSettings& settings);
+        static void deserializeAudioSettings(const json& j, types::AudioSettings& settings);
+
+        static std::string audioDistanceModelToString(types::AudioDistanceModel model);
+        static types::AudioDistanceModel stringToAudioDistanceModel(const std::string& str);
+
+        static std::string billboardSizeModeToString(components::BillboardSizeMode mode);
+        static components::BillboardSizeMode stringToBillboardSizeMode(const std::string& str);
+
+        static std::string billboardIconTypeToString(components::BillboardIconType type);
+        static components::BillboardIconType stringToBillboardIconType(const std::string& str);
+
+        static std::string rigidBodyTypeToString(components::RigidBodyType type);
+        static components::RigidBodyType stringToRigidBodyType(const std::string& str);
+
+        static std::string colliderShapeToString(components::ColliderShape shape);
+        static components::ColliderShape stringToColliderShape(const std::string& str);
     };
 }

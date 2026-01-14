@@ -115,6 +115,7 @@
     <ClInclude Include="handlers\EditorHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="splash\SplashScreen.hpp" />
+    <ClInclude Include="windows\AudioConfigWindow.hpp" />
     <ClInclude Include="windows\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
     <ClInclude Include="windows\CullingStatsWindow.hpp" />
@@ -134,6 +135,7 @@
     <ClInclude Include="windows\PhysicsConfigWindow.hpp" />
     <ClInclude Include="windows\PrefabPreviewWindow.hpp" />
     <ClInclude Include="windows\ProjectSettingsWindow.hpp" />
+    <ClInclude Include="windows\RenderConfigWindow.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
     <ClInclude Include="windows\ViewPortGizmo.hpp" />
@@ -175,6 +177,7 @@
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />
     <ClCompile Include="splash\SplashScreen.cpp" />
+    <ClCompile Include="windows\AudioConfigWindow.cpp" />
     <ClCompile Include="windows\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\ConsoleLog.cpp" />
     <ClCompile Include="windows\CullingStatsWindow.cpp" />
@@ -194,6 +197,7 @@
     <ClCompile Include="windows\PhysicsConfigWindow.cpp" />
     <ClCompile Include="windows\PrefabPreviewWindow.cpp" />
     <ClCompile Include="windows\ProjectSettingsWindow.cpp" />
+    <ClCompile Include="windows\RenderConfigWindow.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
     <ClCompile Include="windows\ViewPortGizmo.cpp" />

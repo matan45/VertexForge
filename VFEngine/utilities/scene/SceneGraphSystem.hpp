@@ -1,6 +1,7 @@
 #pragma once
 #include "Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
+#include "../types/AudioTypes.hpp"
 
 namespace scene {
 
@@ -9,6 +10,7 @@ namespace scene {
 	private:
 		Entity root;
 		types::PhysicsSettings physicsSettings = types::PhysicsSettings::createDefault();
+		types::AudioSettings audioSettings = types::AudioSettings::createDefault();
 	public:
 		explicit SceneGraphSystem();
 		~SceneGraphSystem() = default;
@@ -39,7 +41,19 @@ namespace scene {
 		void setPhysicsSettings(const types::PhysicsSettings& settings) {
 			physicsSettings = settings;
 		}
-		
+
+		types::AudioSettings& getAudioSettings() {
+			return audioSettings;
+		}
+
+		const types::AudioSettings& getAudioSettings() const {
+			return audioSettings;
+		}
+
+		void setAudioSettings(const types::AudioSettings& settings) {
+			audioSettings = settings;
+		}
+
 	private:
 		void markTransformDirty(Entity& entity) const;
 

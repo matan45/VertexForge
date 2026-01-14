@@ -1,0 +1,36 @@
+#pragma once
+#include <cstdint>
+
+namespace types
+{
+    enum class AudioDistanceModel : uint8_t
+    {
+        None = 0,
+        InverseDistance = 1,
+        InverseDistanceClamped = 2,
+        LinearDistance = 3,
+        LinearDistanceClamped = 4,
+        ExponentDistance = 5,
+        ExponentDistanceClamped = 6
+    };
+
+    struct AudioSettings
+    {
+        float masterVolume = 1.0f;
+        float dopplerFactor = 1.0f;
+        float speedOfSound = 343.3f;
+        AudioDistanceModel distanceModel = AudioDistanceModel::InverseDistanceClamped;
+        float defaultRolloffFactor = 1.0f;
+
+        static AudioSettings createDefault()
+        {
+            AudioSettings settings;
+            settings.masterVolume = 1.0f;
+            settings.dopplerFactor = 1.0f;
+            settings.speedOfSound = 343.3f;
+            settings.distanceModel = AudioDistanceModel::InverseDistanceClamped;
+            settings.defaultRolloffFactor = 1.0f;
+            return settings;
+        }
+    };
+}

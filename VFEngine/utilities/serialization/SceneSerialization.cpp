@@ -276,7 +276,7 @@ namespace serialization
         }
     }
 
-    static std::string billboardSizeModeToString(components::BillboardSizeMode mode)
+    std::string SceneSerialization::billboardSizeModeToString(components::BillboardSizeMode mode)
     {
         switch (mode)
         {
@@ -285,13 +285,13 @@ namespace serialization
         }
     }
 
-    static components::BillboardSizeMode stringToBillboardSizeMode(const std::string& str)
+    components::BillboardSizeMode SceneSerialization::stringToBillboardSizeMode(const std::string& str)
     {
         if (str == "worldSpace") return components::BillboardSizeMode::WorldSpace;
         return components::BillboardSizeMode::ScreenSpace;
     }
 
-    static std::string billboardIconTypeToString(components::BillboardIconType type)
+    std::string SceneSerialization::billboardIconTypeToString(components::BillboardIconType type)
     {
         switch (type)
         {
@@ -303,7 +303,7 @@ namespace serialization
         }
     }
 
-    static components::BillboardIconType stringToBillboardIconType(const std::string& str)
+    components::BillboardIconType SceneSerialization::stringToBillboardIconType(const std::string& str)
     {
         if (str == "light") return components::BillboardIconType::Light;
         if (str == "camera") return components::BillboardIconType::Camera;
@@ -488,7 +488,7 @@ namespace serialization
         }
     }
 
-    static std::string rigidBodyTypeToString(components::RigidBodyType type)
+    std::string SceneSerialization::rigidBodyTypeToString(components::RigidBodyType type)
     {
         switch (type)
         {
@@ -498,14 +498,14 @@ namespace serialization
         }
     }
 
-    static components::RigidBodyType stringToRigidBodyType(const std::string& str)
+    components::RigidBodyType SceneSerialization::stringToRigidBodyType(const std::string& str)
     {
         if (str == "static") return components::RigidBodyType::Static;
         if (str == "kinematic") return components::RigidBodyType::Kinematic;
         return components::RigidBodyType::Dynamic;
     }
 
-    static std::string colliderShapeToString(components::ColliderShape shape)
+    std::string SceneSerialization::colliderShapeToString(components::ColliderShape shape)
     {
         switch (shape)
         {
@@ -517,7 +517,7 @@ namespace serialization
         }
     }
 
-    static components::ColliderShape stringToColliderShape(const std::string& str)
+    components::ColliderShape SceneSerialization::stringToColliderShape(const std::string& str)
     {
         if (str == "sphere") return components::ColliderShape::Sphere;
         if (str == "capsule") return components::ColliderShape::Capsule;
@@ -778,6 +778,78 @@ namespace serialization
         }
     }
 
+    std::string SceneSerialization::audioDistanceModelToString(types::AudioDistanceModel model)
+    {
+        switch (model)
+        {
+        case types::AudioDistanceModel::None: return "none";
+        case types::AudioDistanceModel::InverseDistance: return "inverseDistance";
+        case types::AudioDistanceModel::InverseDistanceClamped: return "inverseDistanceClamped";
+        case types::AudioDistanceModel::LinearDistance: return "linearDistance";
+        case types::AudioDistanceModel::LinearDistanceClamped: return "linearDistanceClamped";
+        case types::AudioDistanceModel::ExponentDistance: return "exponentDistance";
+        case types::AudioDistanceModel::ExponentDistanceClamped: return "exponentDistanceClamped";
+        default: return "inverseDistanceClamped";
+        }
+    }
+
+    types::AudioDistanceModel SceneSerialization::stringToAudioDistanceModel(const std::string& str)
+    {
+        if (str == "none") return types::AudioDistanceModel::None;
+        if (str == "inverseDistance") return types::AudioDistanceModel::InverseDistance;
+        if (str == "inverseDistanceClamped") return types::AudioDistanceModel::InverseDistanceClamped;
+        if (str == "linearDistance") return types::AudioDistanceModel::LinearDistance;
+        if (str == "linearDistanceClamped") return types::AudioDistanceModel::LinearDistanceClamped;
+        if (str == "exponentDistance") return types::AudioDistanceModel::ExponentDistance;
+        if (str == "exponentDistanceClamped") return types::AudioDistanceModel::ExponentDistanceClamped;
+        return types::AudioDistanceModel::InverseDistanceClamped;
+    }
+
+    json SceneSerialization::serializeAudioSettings(const types::AudioSettings& settings)
+    {
+        json j;
+
+        // Listener settings
+        j["listener"] = {
+            {"masterVolume", settings.masterVolume},
+            {"dopplerFactor", settings.dopplerFactor},
+            {"speedOfSound", settings.speedOfSound}
+        };
+
+        // Distance model settings
+        j["distanceModel"] = {
+            {"model", audioDistanceModelToString(settings.distanceModel)},
+            {"defaultRolloffFactor", settings.defaultRolloffFactor}
+        };
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeAudioSettings(const json& j, types::AudioSettings& settings)
+    {
+        // Listener settings
+        if (j.contains("listener") && j["listener"].is_object())
+        {
+            const auto& listener = j["listener"];
+            if (listener.contains("masterVolume") && listener["masterVolume"].is_number())
+                settings.masterVolume = listener["masterVolume"].get<float>();
+            if (listener.contains("dopplerFactor") && listener["dopplerFactor"].is_number())
+                settings.dopplerFactor = listener["dopplerFactor"].get<float>();
+            if (listener.contains("speedOfSound") && listener["speedOfSound"].is_number())
+                settings.speedOfSound = listener["speedOfSound"].get<float>();
+        }
+
+        // Distance model settings
+        if (j.contains("distanceModel") && j["distanceModel"].is_object())
+        {
+            const auto& dm = j["distanceModel"];
+            if (dm.contains("model") && dm["model"].is_string())
+                settings.distanceModel = stringToAudioDistanceModel(dm["model"].get<std::string>());
+            if (dm.contains("defaultRolloffFactor") && dm["defaultRolloffFactor"].is_number())
+                settings.defaultRolloffFactor = dm["defaultRolloffFactor"].get<float>();
+        }
+    }
+
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
                                                  scene::SceneGraphSystem& sceneGraph,
                                                  SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
@@ -1027,6 +1099,18 @@ namespace serialization
                 sceneGraph.setPhysicsSettings(types::PhysicsSettings::createDefault());
             }
 
+            // Deserialize audio settings if present
+            if (sceneJson.contains("audioSettings") && sceneJson["audioSettings"].is_object())
+            {
+                types::AudioSettings audioSettings = types::AudioSettings::createDefault();
+                deserializeAudioSettings(sceneJson["audioSettings"], audioSettings);
+                sceneGraph.setAudioSettings(audioSettings);
+            }
+            else
+            {
+                sceneGraph.setAudioSettings(types::AudioSettings::createDefault());
+            }
+
             scene::Entity& root = sceneGraph.GetRoot();
             deserializeEntity(sceneJson["root"], root, sceneGraph, true, progressCallback, entitiesLoaded,
                               totalEntities);
@@ -1055,6 +1139,9 @@ namespace serialization
 
             // Serialize physics settings at scene level
             sceneJson["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
+
+            // Serialize audio settings at scene level
+            sceneJson["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
 
             // Write to file with UTF-8 encoding, no BOM, pretty-printed
             std::string filePath{filename};
@@ -1091,6 +1178,9 @@ namespace serialization
             // Include physics settings in snapshot
             snapshot["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
 
+            // Include audio settings in snapshot
+            snapshot["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
+
             return snapshot;
         }
         catch (const std::exception& e)
@@ -1126,6 +1216,14 @@ namespace serialization
                 types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
                 deserializePhysicsSettings(snapshot["physicsSettings"], settings);
                 sceneGraph.setPhysicsSettings(settings);
+            }
+
+            // Restore audio settings if present
+            if (snapshot.contains("audioSettings") && snapshot["audioSettings"].is_object())
+            {
+                types::AudioSettings audioSettings = types::AudioSettings::createDefault();
+                deserializeAudioSettings(snapshot["audioSettings"], audioSettings);
+                sceneGraph.setAudioSettings(audioSettings);
             }
 
             // Deserialize root entity (no progress callback for snapshot restore)

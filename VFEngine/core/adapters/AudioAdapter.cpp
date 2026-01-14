@@ -102,4 +102,12 @@ namespace core {
         return audioController->getDuration(handle);
     }
 
+    void AudioAdapter::applySettings(const types::AudioSettings& settings) {
+        audioController->applySettings(settings);
+    }
+
+    types::AudioSettings AudioAdapter::getCurrentSettings() const {
+        return audioController->getCurrentSettings();
+    }
+
 }

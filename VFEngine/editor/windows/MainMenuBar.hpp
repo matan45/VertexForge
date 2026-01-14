@@ -8,6 +8,8 @@ namespace windows
     class CullingStatsWindow;
     class ImportModalDialog;
     class PhysicsConfigWindow;
+    class AudioConfigWindow;
+    class RenderConfigWindow;
     class ProjectSettingsWindow;
 
     class MainMenuBar
@@ -20,6 +22,8 @@ namespace windows
         CullingStatsWindow* cullingStatsWindow = nullptr;
         ImportModalDialog* importDialog = nullptr;
         PhysicsConfigWindow* physicsConfigWindow = nullptr;
+        AudioConfigWindow* audioConfigWindow = nullptr;
+        RenderConfigWindow* renderConfigWindow = nullptr;
         ProjectSettingsWindow* projectSettingsWindow = nullptr;
 
     public:
@@ -27,13 +31,16 @@ namespace windows
 
         void setWindows(IBLWindow* ibl, EditorCameraWindow* camera,
                         CullingStatsWindow* culling, ImportModalDialog* import,
-                        PhysicsConfigWindow* physicsConfig)
+                        PhysicsConfigWindow* physicsConfig, AudioConfigWindow* audioConfig,
+                        RenderConfigWindow* renderConfig)
         {
             iblWindow = ibl;
             editorCameraWindow = camera;
             cullingStatsWindow = culling;
             importDialog = import;
             physicsConfigWindow = physicsConfig;
+            audioConfigWindow = audioConfig;
+            renderConfigWindow = renderConfig;
         }
 
         void setProjectSettingsWindow(ProjectSettingsWindow* window)

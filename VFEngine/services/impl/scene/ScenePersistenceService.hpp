@@ -1,6 +1,7 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
+#include "types/AudioTypes.hpp"
 #include <memory>
 #include <optional>
 #include <string>
@@ -41,5 +42,9 @@ namespace services
         // Physics settings (stored at scene level)
         types::PhysicsSettings getPhysicsSettings() const;
         bool setPhysicsSettings(const types::PhysicsSettings& settings);
+
+        // Audio settings (stored at scene level)
+        types::AudioSettings getAudioSettings() const;
+        bool setAudioSettings(const types::AudioSettings& settings);
     };
 }

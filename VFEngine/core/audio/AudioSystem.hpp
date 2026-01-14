@@ -1,7 +1,8 @@
 #pragma once
-#include <AL/al.h>
+
 #include <AL/alc.h>
 #include <string>
+#include "types/AudioTypes.hpp"
 
 namespace core::audio
 {
@@ -11,6 +12,7 @@ namespace core::audio
         ALCdevice* device = nullptr;
         ALCcontext* context = nullptr;
         bool initialized = false;
+        types::AudioSettings currentSettings = types::AudioSettings::createDefault();
 
     public:
         explicit AudioSystem() = default;
@@ -29,6 +31,14 @@ namespace core::audio
         std::string getVendor() const;
         std::string getVersion() const;
         std::string getRenderer() const;
+
+        // Global audio settings
+        void setMasterVolume(float volume);
+        void setDopplerFactor(float factor);
+        void setSpeedOfSound(float speed);
+        void setDistanceModel(types::AudioDistanceModel model);
+        void applySettings(const types::AudioSettings& settings);
+        types::AudioSettings getCurrentSettings() const { return currentSettings; }
 
         static bool checkError(const char* operation);
     };

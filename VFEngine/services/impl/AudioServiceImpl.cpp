@@ -1,5 +1,6 @@
 #include "AudioServiceImpl.hpp"
 #include "../events/AudioEvents.hpp"
+#include "../events/AudioSettingsEvents.hpp"
 #include "../events/EventDispatcher.hpp"
 #include <cassert>
 
@@ -77,6 +78,18 @@ namespace services {
         dispatcher.registerQueryHandler<events::audio::GetDurationQuery>(
             [this](const auto& query) {
                 return getDuration(query.handle);
+            });
+
+        // Audio Settings Commands/Queries
+        dispatcher.registerCommandHandler<events::audio::ApplyAudioSettingsCommand>(
+            [this](const auto& cmd) {
+                audioProvider->applySettings(cmd.settings);
+                return true;
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetAudioSettingsQuery>(
+            [this](const auto&) {
+                return audioProvider->getCurrentSettings();
             });
     }
 

@@ -1,4 +1,5 @@
 #include "AudioSystem.hpp"
+#include <AL/al.h>
 #include "print/Logger.hpp"
 
 namespace core::audio {
@@ -126,6 +127,89 @@ namespace core::audio {
             return true;
         }
         return false;
+    }
+
+    void AudioSystem::setMasterVolume(float volume) {
+        if (!initialized) {
+            loggerWarning("AudioSystem::setMasterVolume called but system not initialized");
+            return;
+        }
+        alListenerf(AL_GAIN, volume);
+        checkError("setMasterVolume");
+        currentSettings.masterVolume = volume;
+    }
+
+    void AudioSystem::setDopplerFactor(float factor) {
+        if (!initialized) {
+            loggerWarning("AudioSystem::setDopplerFactor called but system not initialized");
+            return;
+        }
+        alDopplerFactor(factor);
+        checkError("setDopplerFactor");
+        currentSettings.dopplerFactor = factor;
+    }
+
+    void AudioSystem::setSpeedOfSound(float speed) {
+        if (!initialized) {
+            loggerWarning("AudioSystem::setSpeedOfSound called but system not initialized");
+            return;
+        }
+        alSpeedOfSound(speed);
+        checkError("setSpeedOfSound");
+        currentSettings.speedOfSound = speed;
+    }
+
+    void AudioSystem::setDistanceModel(types::AudioDistanceModel model) {
+        if (!initialized) {
+            loggerWarning("AudioSystem::setDistanceModel called but system not initialized");
+            return;
+        }
+        ALenum alModel;
+        switch (model) {
+            case types::AudioDistanceModel::None:
+                alModel = AL_NONE;
+                break;
+            case types::AudioDistanceModel::InverseDistance:
+                alModel = AL_INVERSE_DISTANCE;
+                break;
+            case types::AudioDistanceModel::InverseDistanceClamped:
+                alModel = AL_INVERSE_DISTANCE_CLAMPED;
+                break;
+            case types::AudioDistanceModel::LinearDistance:
+                alModel = AL_LINEAR_DISTANCE;
+                break;
+            case types::AudioDistanceModel::LinearDistanceClamped:
+                alModel = AL_LINEAR_DISTANCE_CLAMPED;
+                break;
+            case types::AudioDistanceModel::ExponentDistance:
+                alModel = AL_EXPONENT_DISTANCE;
+                break;
+            case types::AudioDistanceModel::ExponentDistanceClamped:
+                alModel = AL_EXPONENT_DISTANCE_CLAMPED;
+                break;
+            default:
+                alModel = AL_INVERSE_DISTANCE_CLAMPED;
+                break;
+        }
+        alDistanceModel(alModel);
+        checkError("setDistanceModel");
+        currentSettings.distanceModel = model;
+    }
+
+    void AudioSystem::applySettings(const types::AudioSettings& settings) {
+        if (!initialized) {
+            loggerWarning("AudioSystem::applySettings called but system not initialized");
+            return;
+        }
+
+        setMasterVolume(settings.masterVolume);
+        setDopplerFactor(settings.dopplerFactor);
+        setSpeedOfSound(settings.speedOfSound);
+        setDistanceModel(settings.distanceModel);
+        currentSettings.defaultRolloffFactor = settings.defaultRolloffFactor;
+
+        loggerInfo("Audio settings applied - Master Volume: {}, Doppler: {}, Speed of Sound: {}",
+            settings.masterVolume, settings.dopplerFactor, settings.speedOfSound);
     }
 
 }
