@@ -11,8 +11,7 @@ namespace services
         IScriptingProvider* scriptingProvider;
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
 
-        //TODO when we have the project file ge the path from there
-        static constexpr const char* DEFAULT_MANIFEST_PATH = "C:/matan/VertexForge/assets/scripts/scripts.mtproj";
+        std::string getManifestPath() const;
 
     public:
         explicit ScriptingServiceImpl(IScriptingProvider* scriptingProvider,

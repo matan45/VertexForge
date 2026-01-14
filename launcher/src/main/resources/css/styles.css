@@ -1,0 +1,344 @@
+/*
+ * VertexForge Launcher - Dark Theme Stylesheet
+ *
+ * Base styling for the launcher application.
+ * Full theming will be implemented in VK-157 (Launcher UI Layout & Styling).
+ */
+
+/* ============================================
+   Color Variables (using -fx-* properties)
+   ============================================ */
+.root {
+    -fx-base: #2b2b2b;
+    -fx-background: #1e1e1e;
+    -fx-control-inner-background: #3c3c3c;
+    -fx-accent: #4a9eff;
+    -fx-focus-color: #4a9eff;
+    -fx-faint-focus-color: transparent;
+}
+
+/* ============================================
+   Root Pane
+   ============================================ */
+.root-pane {
+    -fx-background-color: #1e1e1e;
+}
+
+/* ============================================
+   Sidebar
+   ============================================ */
+.sidebar {
+    -fx-background-color: #252526;
+    -fx-min-width: 200px;
+    -fx-pref-width: 200px;
+}
+
+.app-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+}
+
+.sidebar-button {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #cccccc;
+    -fx-padding: 10 15;
+    -fx-cursor: hand;
+    -fx-background-radius: 4;
+}
+
+.sidebar-button:hover {
+    -fx-background-color: #4a4a4a;
+}
+
+.sidebar-button:pressed {
+    -fx-background-color: #555555;
+}
+
+/* ============================================
+   Content Area
+   ============================================ */
+.content-area {
+    -fx-background-color: #1e1e1e;
+    -fx-padding: 20;
+}
+
+.section-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+}
+
+.placeholder-text {
+    -fx-font-size: 14px;
+    -fx-text-fill: #888888;
+}
+
+.hint-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #666666;
+}
+
+/* ============================================
+   Bottom Bar
+   ============================================ */
+.bottom-bar {
+    -fx-background-color: #252526;
+    -fx-border-color: #3c3c3c transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.primary-button {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+    -fx-padding: 10 25;
+    -fx-cursor: hand;
+    -fx-background-radius: 4;
+}
+
+.primary-button:hover {
+    -fx-background-color: #5aafff;
+}
+
+.primary-button:pressed {
+    -fx-background-color: #3a8eef;
+}
+
+.primary-button:disabled {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #666666;
+    -fx-opacity: 0.7;
+}
+
+/* ============================================
+   Scrollbars (for future lists)
+   ============================================ */
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #555555;
+    -fx-background-radius: 4;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #666666;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-shape: "";
+    -fx-padding: 0;
+}
+
+/* ============================================
+   Alert Dialogs (for error handling)
+   ============================================ */
+.alert .dialog-pane {
+    -fx-background-color: #2b2b2b;
+}
+
+.alert .dialog-pane .content {
+    -fx-text-fill: #cccccc;
+}
+
+.alert .dialog-pane .header-panel {
+    -fx-background-color: #333333;
+}
+
+.alert .dialog-pane .header-panel .label {
+    -fx-text-fill: #ffffff;
+}
+
+/* ============================================
+   Projects TableView (VK-154)
+   ============================================ */
+.projects-table {
+    -fx-background-color: #1e1e1e;
+    -fx-border-color: #3c3c3c;
+    -fx-border-width: 1;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+.projects-table .column-header-background {
+    -fx-background-color: #2b2b2b;
+}
+
+.projects-table .column-header {
+    -fx-background-color: #2b2b2b;
+    -fx-border-color: transparent #3c3c3c transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+
+.projects-table .column-header .label {
+    -fx-text-fill: #cccccc;
+    -fx-font-weight: bold;
+    -fx-padding: 8 10;
+}
+
+.projects-table .table-row-cell {
+    -fx-background-color: #1e1e1e;
+    -fx-border-color: transparent transparent #2b2b2b transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.projects-table .table-row-cell:odd {
+    -fx-background-color: #242424;
+}
+
+.projects-table .table-row-cell:selected {
+    -fx-background-color: #264f78;
+}
+
+.projects-table .table-row-cell:selected .table-cell {
+    -fx-text-fill: #ffffff;
+}
+
+.projects-table .table-row-cell:hover {
+    -fx-background-color: #2a2d2e;
+}
+
+.projects-table .table-row-cell:selected:hover {
+    -fx-background-color: #305f8a;
+}
+
+.projects-table .table-cell {
+    -fx-text-fill: #cccccc;
+    -fx-padding: 8 10;
+    -fx-alignment: CENTER-LEFT;
+}
+
+/* Invalid Project Row Styling */
+.projects-table .invalid-project-row {
+    -fx-background-color: #3d2626;
+}
+
+.projects-table .invalid-project-row:odd {
+    -fx-background-color: #3a2424;
+}
+
+.projects-table .invalid-project-row:selected {
+    -fx-background-color: #5c3030;
+}
+
+.projects-table .invalid-project-row .table-cell {
+    -fx-text-fill: #cc6666;
+}
+
+.projects-table .invalid-project-row:selected .table-cell {
+    -fx-text-fill: #ffaaaa;
+}
+
+/* TableView Empty State */
+.projects-table .placeholder {
+    -fx-background-color: transparent;
+}
+
+.projects-table .placeholder .label {
+    -fx-text-fill: #666666;
+    -fx-font-size: 14px;
+}
+
+/* Remove focus ring from table */
+.projects-table:focused {
+    -fx-background-color: #1e1e1e;
+    -fx-faint-focus-color: transparent;
+}
+
+/* Column sort arrow styling */
+.projects-table .arrow {
+    -fx-background-color: #cccccc;
+}
+
+/* ============================================
+   Create Project Dialog (VK-155)
+   ============================================ */
+.create-project-dialog .dialog-pane {
+    -fx-background-color: #2b2b2b;
+    -fx-min-width: 550px;
+}
+
+.create-project-dialog .dialog-pane .header-panel {
+    -fx-background-color: #333333;
+}
+
+.create-project-dialog .dialog-pane .header-panel .label {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 16px;
+}
+
+.create-project-dialog .form-label {
+    -fx-text-fill: #cccccc;
+    -fx-font-size: 13px;
+}
+
+.create-project-dialog .text-field {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #555555;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 8;
+    -fx-prompt-text-fill: #888888;
+}
+
+.create-project-dialog .text-field:focused {
+    -fx-border-color: #4a9eff;
+}
+
+.create-project-dialog .validation-error {
+    -fx-text-fill: #cc6666;
+    -fx-font-size: 12px;
+}
+
+.create-project-dialog .browse-button {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #cccccc;
+    -fx-padding: 8 15;
+    -fx-cursor: hand;
+    -fx-background-radius: 3;
+}
+
+.create-project-dialog .browse-button:hover {
+    -fx-background-color: #4a4a4a;
+}
+
+.create-project-dialog .browse-button:pressed {
+    -fx-background-color: #555555;
+}
+
+/* Dialog buttons */
+.create-project-dialog .dialog-pane .button-bar .button {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #cccccc;
+    -fx-padding: 8 20;
+    -fx-background-radius: 3;
+}
+
+.create-project-dialog .dialog-pane .button-bar .button:hover {
+    -fx-background-color: #4a4a4a;
+}
+
+.create-project-dialog .dialog-pane .button-bar .button:default {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+}
+
+.create-project-dialog .dialog-pane .button-bar .button:default:hover {
+    -fx-background-color: #5aafff;
+}
+
+.create-project-dialog .dialog-pane .button-bar .button:default:disabled {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #666666;
+    -fx-opacity: 0.7;
+}

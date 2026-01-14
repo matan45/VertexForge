@@ -1,5 +1,6 @@
 #include "EditorHandler.hpp"
 #include "EditorBootstrap.hpp"
+#include "../splash/SplashScreen.hpp"
 #include "impl/SceneServiceImpl.hpp"
 #include "impl/EditorRenderServiceImpl.hpp"
 #include "impl/InputServiceImpl.hpp"
@@ -18,6 +19,8 @@
 #include "time/Timer.hpp"
 #include "events/ApplicationEvents.hpp"
 #include "events/RenderEvents.hpp"
+#include "events/ProjectEvents.hpp"
+#include "print/EditorLogger.hpp"
 #include "Import.hpp"
 
 namespace handlers
@@ -33,10 +36,13 @@ namespace handlers
 
     void EditorHandler::init()
     {
+        editor::SplashScreen::instance().setStatus("Initializing graphics...");
         bootstrap->init();
 
+        editor::SplashScreen::instance().setStatus("Initializing import system...");
         controllers::Import::initialize();
 
+        editor::SplashScreen::instance().setStatus("Registering services...");
         initializeServices();
 
         bootstrap->setFrameCallback([this]()
@@ -78,6 +84,7 @@ namespace handlers
 
         setupEventSubscriptions();
 
+        editor::SplashScreen::instance().setStatus("Setting up UI...");
         windowImguiHandler->init();
     }
 
@@ -109,6 +116,22 @@ namespace handlers
         inputService.reset();
 
         bootstrap->cleanUp();
+    }
+
+    bool EditorHandler::loadProject(const std::string& projectPath)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::project::LoadProjectCommand loadCmd;
+        loadCmd.filePath = projectPath;
+        if (!dispatcher.execute(loadCmd))
+        {
+            vfLogError("Failed to load project file: {}", projectPath);
+            return false;
+        }
+
+        vfLogInfo("Project loaded from CLI: {}", projectPath);
+        return true;
     }
 
     void EditorHandler::initializeServices()

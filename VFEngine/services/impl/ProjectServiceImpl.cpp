@@ -2,6 +2,7 @@
 #include "../events/ProjectEvents.hpp"
 #include "serialization/ProjectSerialization.hpp"
 #include "print/EditorLogger.hpp"
+#include <filesystem>
 
 namespace services
 {
@@ -58,6 +59,28 @@ namespace services
         if (!project)
         {
             return false;
+        }
+
+        // Resolve workingDirectory relative to the project file's directory
+        std::filesystem::path projectFilePath(filePath);
+        std::filesystem::path projectDir = projectFilePath.parent_path();
+        std::filesystem::path workingDir(project->workingDirectory);
+
+        if (workingDir.is_relative())
+        {
+            project->workingDirectory = (projectDir / workingDir).lexically_normal().string();
+        }
+
+        // Validate paths after resolution
+        if (!std::filesystem::exists(project->workingDirectory))
+        {
+            vfLogWarning("Project working directory does not exist: {}", project->workingDirectory);
+        }
+
+        std::filesystem::path scenePath = std::filesystem::path(project->workingDirectory) / project->startupScene;
+        if (!std::filesystem::exists(scenePath))
+        {
+            vfLogWarning("Project startup scene not found: {}", scenePath.string());
         }
 
         currentProject = *project;

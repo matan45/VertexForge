@@ -64,6 +64,11 @@ project "Editor"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
+   -- Windows-specific libraries for splash screen
+   filter "system:windows"
+      links { "gdiplus" }
+   filter {}
+
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"

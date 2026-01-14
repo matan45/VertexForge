@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.vertexforge</groupId>
+    <artifactId>launcher</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>VertexForge Launcher</name>
+    <description>Game Engine Launcher for VertexForge</description>
+
+    <properties>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <javafx.version>25.0.1</javafx.version>
+
+        <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+        <javafx-maven-plugin.version>0.0.8</javafx-maven-plugin.version>
+        <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+        <jpackage-maven-plugin.version>1.6.5</jpackage-maven-plugin.version>
+
+        <gson.version>2.13.0</gson.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>win</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>linux</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>mac</classifier>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>${gson.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>VertexForgeLauncher</finalName>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                    <release>25</release>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>${javafx-maven-plugin.version}</version>
+                <configuration>
+                    <mainClass>com.vertexforge.launcher.LauncherApp</mainClass>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>${maven-shade-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <!-- Use Launcher class (non-Application) for fat JAR compatibility -->
+                                    <mainClass>com.vertexforge.launcher.Launcher</mainClass>
+                                </transformer>
+                            </transformers>
+                            <filters>
+                                <!--
+                                    Security Note: Signature exclusion is REQUIRED for fat JARs.
+                                    When combining signed JARs, original signatures become invalid
+                                    because the content changes. Without excluding them, you get
+                                    "Invalid signature file digest" errors at runtime.
+
+                                    For production releases, sign the final fat JAR using:
+                                    mvn package -Psign-jar -Dkeystore.path=... -Dkeystore.password=...
+
+                                    Dependency integrity is verified at build time via Maven's
+                                    checksum verification (SHA-1/MD5 in local repository).
+                                -->
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>${jpackage-maven-plugin.version}</version>
+                <configuration>
+                    <name>VertexForge Launcher</name>
+                    <appVersion>1.0.0</appVersion>
+                    <vendor>VertexForge</vendor>
+                    <mainClass>com.vertexforge.launcher.Launcher</mainClass>
+                    <mainJar>VertexForgeLauncher.jar</mainJar>
+                    <input>target</input>
+                    <destination>target/dist</destination>
+                    <type>APP_IMAGE</type>
+                    <icon>${project.basedir}/src/main/resources/icon.ico</icon>
+                    <resourceDir>${project.basedir}/src/main/resources/jpackage</resourceDir>
+                    <winConsole>false</winConsole>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
