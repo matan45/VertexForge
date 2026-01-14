@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <cstdint>
+#include "types/AudioTypes.hpp"
 
 namespace services {
 
@@ -51,6 +52,10 @@ namespace services {
         virtual float getPlaybackPosition(AudioHandleId handle) const = 0;
         virtual bool setPlaybackPosition(AudioHandleId handle, float seconds) = 0;
         virtual float getDuration(AudioHandleId handle) const = 0;
+
+        // === Audio Settings ===
+        virtual void applySettings(const types::AudioSettings& settings) = 0;
+        virtual types::AudioSettings getCurrentSettings() const = 0;
     };
 
 }

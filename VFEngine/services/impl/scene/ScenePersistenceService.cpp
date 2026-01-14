@@ -11,6 +11,7 @@
 #include "../../events/SceneEvents.hpp"
 #include "../../events/RenderEvents.hpp"
 #include "../../events/PhysicsSettingsEvents.hpp"
+#include "../../events/AudioSettingsEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <functional>
 
@@ -67,6 +68,19 @@ namespace services
             {
                 return setPhysicsSettings(cmd.settings);
             });
+
+        // Audio settings handlers
+        dispatcher.registerQueryHandler<events::scene::GetAudioSettingsQuery>(
+            [this](const events::scene::GetAudioSettingsQuery&)
+            {
+                return getAudioSettings();
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetAudioSettingsCommand>(
+            [this](const events::scene::SetAudioSettingsCommand& cmd)
+            {
+                return setAudioSettings(cmd.settings);
+            });
     }
 
     bool ScenePersistenceService::newScene()
@@ -89,6 +103,12 @@ namespace services
         events::physics::ApplyPhysicsSettingsCommand physicsCmd;
         physicsCmd.settings = sceneGraph->getPhysicsSettings();
         dispatcher.execute(physicsCmd);
+
+        // Reset audio settings to defaults for new scene
+        sceneGraph->setAudioSettings(types::AudioSettings::createDefault());
+        events::audio::ApplyAudioSettingsCommand audioCmd;
+        audioCmd.settings = sceneGraph->getAudioSettings();
+        dispatcher.execute(audioCmd);
 
         if (entityStateService)
         {
@@ -199,6 +219,11 @@ namespace services
             physicsCmd.settings = sceneGraph->getPhysicsSettings();
             dispatcher.execute(physicsCmd);
 
+            // Apply audio settings from the loaded scene
+            events::audio::ApplyAudioSettingsCommand audioCmd;
+            audioCmd.settings = sceneGraph->getAudioSettings();
+            dispatcher.execute(audioCmd);
+
             events::scene::SceneLoadedNotification notification;
             notification.scenePath = filePath;
             dispatcher.publish(notification);
@@ -304,6 +329,25 @@ namespace services
             return false;
         }
         sceneGraph->setPhysicsSettings(settings);
+        return true;
+    }
+
+    types::AudioSettings ScenePersistenceService::getAudioSettings() const
+    {
+        if (!sceneGraph)
+        {
+            return types::AudioSettings::createDefault();
+        }
+        return sceneGraph->getAudioSettings();
+    }
+
+    bool ScenePersistenceService::setAudioSettings(const types::AudioSettings& settings)
+    {
+        if (!sceneGraph)
+        {
+            return false;
+        }
+        sceneGraph->setAudioSettings(settings);
         return true;
     }
 }

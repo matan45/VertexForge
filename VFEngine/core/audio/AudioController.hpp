@@ -4,6 +4,7 @@
 #include "AudioSourceManager.hpp"
 #include "AudioListener.hpp"
 #include "StreamingAudioManager.hpp"
+#include "types/AudioTypes.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
@@ -65,6 +66,10 @@ namespace core::audio {
         float getPlaybackPosition(AudioHandle handle) const;
         bool setPlaybackPosition(AudioHandle handle, float seconds);
         float getDuration(AudioHandle handle) const;
+
+        // === Audio Settings ===
+        void applySettings(const types::AudioSettings& settings);
+        types::AudioSettings getCurrentSettings() const;
 
     private:
         AudioHandle playSound(const std::string& path, const PlaySoundParams& params);

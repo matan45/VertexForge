@@ -101,6 +101,7 @@
     <ClInclude Include="data\UndoTypes.hpp" />
     <ClInclude Include="events\ApplicationEvents.hpp" />
     <ClInclude Include="events\AudioEvents.hpp" />
+    <ClInclude Include="events\AudioSettingsEvents.hpp" />
     <ClInclude Include="events\EditorModeEvents.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />

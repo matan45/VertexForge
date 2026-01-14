@@ -4,6 +4,8 @@
 #include "CullingStatsWindow.hpp"
 #include "ImportModalDialog.hpp"
 #include "PhysicsConfigWindow.hpp"
+#include "AudioConfigWindow.hpp"
+#include "RenderConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
@@ -105,8 +107,19 @@ namespace windows
                     physicsConfigWindow->show();
                 }
             }
-            else if (ImGui::MenuItem("Layout Style"))
+            else if (ImGui::MenuItem("Audio Config"))
             {
+                if (audioConfigWindow)
+                {
+                    audioConfigWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Render Config"))
+            {
+                if (renderConfigWindow)
+                {
+                    renderConfigWindow->show();
+                }
             }
             ImGui::EndMenu();
         }

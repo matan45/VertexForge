@@ -306,4 +306,16 @@ namespace core::audio
         }
         return 0.0f;
     }
+
+    void AudioController::applySettings(const types::AudioSettings& settings)
+    {
+        if (!initialized) return;
+        audioSystem->applySettings(settings);
+    }
+
+    types::AudioSettings AudioController::getCurrentSettings() const
+    {
+        if (!initialized) return types::AudioSettings::createDefault();
+        return audioSystem->getCurrentSettings();
+    }
 }
