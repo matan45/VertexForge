@@ -502,7 +502,7 @@ namespace types
         params.m_minimumVolumePercentErrorAllowed = static_cast<double>(config.minVolumePercentError);
         params.m_maxRecursionDepth = 10;
         params.m_shrinkWrap = true;
-        params.m_asyncACD = false;  // Synchronous for import pipeline
+        params.m_asyncACD = false; // Synchronous for import pipeline
 
         VHACD::IVHACD* vhacd = VHACD::CreateVHACD();
 
