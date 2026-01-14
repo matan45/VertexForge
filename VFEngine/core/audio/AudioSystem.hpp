@@ -1,8 +1,8 @@
 #pragma once
-#include <AL/al.h>
+
 #include <AL/alc.h>
 #include <string>
-#include "../../utilities/types/AudioTypes.hpp"
+#include "types/AudioTypes.hpp"
 
 namespace core::audio
 {

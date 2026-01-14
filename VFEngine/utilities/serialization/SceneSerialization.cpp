@@ -276,7 +276,7 @@ namespace serialization
         }
     }
 
-    static std::string billboardSizeModeToString(components::BillboardSizeMode mode)
+    std::string SceneSerialization::billboardSizeModeToString(components::BillboardSizeMode mode)
     {
         switch (mode)
         {
@@ -285,13 +285,13 @@ namespace serialization
         }
     }
 
-    static components::BillboardSizeMode stringToBillboardSizeMode(const std::string& str)
+    components::BillboardSizeMode SceneSerialization::stringToBillboardSizeMode(const std::string& str)
     {
         if (str == "worldSpace") return components::BillboardSizeMode::WorldSpace;
         return components::BillboardSizeMode::ScreenSpace;
     }
 
-    static std::string billboardIconTypeToString(components::BillboardIconType type)
+    std::string SceneSerialization::billboardIconTypeToString(components::BillboardIconType type)
     {
         switch (type)
         {
@@ -303,7 +303,7 @@ namespace serialization
         }
     }
 
-    static components::BillboardIconType stringToBillboardIconType(const std::string& str)
+    components::BillboardIconType SceneSerialization::stringToBillboardIconType(const std::string& str)
     {
         if (str == "light") return components::BillboardIconType::Light;
         if (str == "camera") return components::BillboardIconType::Camera;
@@ -488,7 +488,7 @@ namespace serialization
         }
     }
 
-    static std::string rigidBodyTypeToString(components::RigidBodyType type)
+    std::string SceneSerialization::rigidBodyTypeToString(components::RigidBodyType type)
     {
         switch (type)
         {
@@ -498,14 +498,14 @@ namespace serialization
         }
     }
 
-    static components::RigidBodyType stringToRigidBodyType(const std::string& str)
+    components::RigidBodyType SceneSerialization::stringToRigidBodyType(const std::string& str)
     {
         if (str == "static") return components::RigidBodyType::Static;
         if (str == "kinematic") return components::RigidBodyType::Kinematic;
         return components::RigidBodyType::Dynamic;
     }
 
-    static std::string colliderShapeToString(components::ColliderShape shape)
+    std::string SceneSerialization::colliderShapeToString(components::ColliderShape shape)
     {
         switch (shape)
         {
@@ -517,7 +517,7 @@ namespace serialization
         }
     }
 
-    static components::ColliderShape stringToColliderShape(const std::string& str)
+    components::ColliderShape SceneSerialization::stringToColliderShape(const std::string& str)
     {
         if (str == "sphere") return components::ColliderShape::Sphere;
         if (str == "capsule") return components::ColliderShape::Capsule;
@@ -778,8 +778,7 @@ namespace serialization
         }
     }
 
-    // Audio distance model string conversion helpers
-    static std::string audioDistanceModelToString(types::AudioDistanceModel model)
+    std::string SceneSerialization::audioDistanceModelToString(types::AudioDistanceModel model)
     {
         switch (model)
         {
@@ -794,7 +793,7 @@ namespace serialization
         }
     }
 
-    static types::AudioDistanceModel stringToAudioDistanceModel(const std::string& str)
+    types::AudioDistanceModel SceneSerialization::stringToAudioDistanceModel(const std::string& str)
     {
         if (str == "none") return types::AudioDistanceModel::None;
         if (str == "inverseDistance") return types::AudioDistanceModel::InverseDistance;
@@ -803,7 +802,7 @@ namespace serialization
         if (str == "linearDistanceClamped") return types::AudioDistanceModel::LinearDistanceClamped;
         if (str == "exponentDistance") return types::AudioDistanceModel::ExponentDistance;
         if (str == "exponentDistanceClamped") return types::AudioDistanceModel::ExponentDistanceClamped;
-        return types::AudioDistanceModel::InverseDistanceClamped; // default
+        return types::AudioDistanceModel::InverseDistanceClamped;
     }
 
     json SceneSerialization::serializeAudioSettings(const types::AudioSettings& settings)

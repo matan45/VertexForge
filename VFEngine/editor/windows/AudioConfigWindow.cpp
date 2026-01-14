@@ -1,7 +1,7 @@
 #include "AudioConfigWindow.hpp"
-#include "../../services/events/EventDispatcher.hpp"
-#include "../../services/events/AudioSettingsEvents.hpp"
-#include "../../services/events/SceneEvents.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/AudioSettingsEvents.hpp"
+#include "events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
 #include <imgui.h>
 

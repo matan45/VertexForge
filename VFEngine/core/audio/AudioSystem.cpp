@@ -1,4 +1,5 @@
 #include "AudioSystem.hpp"
+#include <AL/al.h>
 #include "print/Logger.hpp"
 
 namespace core::audio {

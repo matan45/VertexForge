@@ -2,9 +2,8 @@
 #include "EventTypes.hpp"
 #include "../data/EntityHandle.hpp"
 #include "../data/DTOs.hpp"
-#include "../interfaces/IAudioService.hpp"
-#include "../../utilities/types/PhysicsTypes.hpp"
-#include "../../utilities/types/AudioTypes.hpp"
+#include "types/PhysicsTypes.hpp"
+#include "types/AudioTypes.hpp"
 #include <optional>
 #include <vector>
 #include <string>
