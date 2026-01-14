@@ -13,40 +13,33 @@
     <description>Game Engine Launcher for VertexForge</description>
 
     <properties>
-        <!-- Java Version -->
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <!-- JavaFX Version (LTS) -->
         <javafx.version>25.0.1</javafx.version>
 
-        <!-- Plugin Versions -->
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <javafx-maven-plugin.version>0.0.8</javafx-maven-plugin.version>
         <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
         <jpackage-maven-plugin.version>1.6.5</jpackage-maven-plugin.version>
 
-        <!-- Library Versions -->
         <gson.version>2.13.0</gson.version>
     </properties>
 
     <dependencies>
-        <!-- JavaFX Controls (includes javafx-graphics transitively) -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
         </dependency>
 
-        <!-- JavaFX FXML for declarative UI -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
             <version>${javafx.version}</version>
         </dependency>
 
-        <!-- Platform-specific graphics (for cross-platform fat JAR) -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
@@ -66,7 +59,6 @@
             <classifier>mac</classifier>
         </dependency>
 
-        <!-- JSON Serialization (lightweight, zero transitive dependencies) -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
@@ -78,7 +70,6 @@
         <finalName>VertexForgeLauncher</finalName>
 
         <plugins>
-            <!-- Maven Compiler Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -90,7 +81,6 @@
                 </configuration>
             </plugin>
 
-            <!-- JavaFX Maven Plugin (for development/running) -->
             <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>
@@ -100,7 +90,6 @@
                 </configuration>
             </plugin>
 
-            <!-- Maven Shade Plugin (for fat JAR packaging) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -145,7 +134,6 @@
                 </executions>
             </plugin>
 
-            <!-- jpackage Plugin (for native EXE packaging) -->
             <plugin>
                 <groupId>org.panteleyev</groupId>
                 <artifactId>jpackage-maven-plugin</artifactId>
@@ -166,48 +154,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <!--
-            Production JAR Signing Profile
-            Usage: mvn package -Psign-jar -Dkeystore.path=/path/to/keystore.jks
-                   -Dkeystore.password=*** -Dkey.alias=mykey -Dkey.password=***
-
-            To create a keystore:
-            keytool -genkeypair -alias vertexforge -keyalg RSA -keysize 2048
-                    -validity 365 -keystore vertexforge.jks
-        -->
-        <profile>
-            <id>sign-jar</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-jarsigner-plugin</artifactId>
-                        <version>3.0.0</version>
-                        <executions>
-                            <execution>
-                                <id>sign</id>
-                                <goals>
-                                    <goal>sign</goal>
-                                </goals>
-                            </execution>
-                            <execution>
-                                <id>verify</id>
-                                <goals>
-                                    <goal>verify</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                        <configuration>
-                            <keystore>${keystore.path}</keystore>
-                            <alias>${key.alias}</alias>
-                            <storepass>${keystore.password}</storepass>
-                            <keypass>${key.password}</keypass>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

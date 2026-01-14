@@ -1,12 +1,9 @@
 #include "SplashScreen.hpp"
 
-#ifdef _WIN32
 // Windows headers must be included in correct order for GDI+
 #include <objidl.h>
 #include <gdiplus.h>
 #include <filesystem>
-#pragma comment(lib, "gdiplus.lib")
-#endif
 
 namespace editor
 {
@@ -26,15 +23,11 @@ namespace editor
         std::lock_guard<std::mutex> lock(statusMutex);
         currentStatus = status;
 
-#ifdef _WIN32
         if (hwnd && running)
         {
             InvalidateRect(hwnd, nullptr, FALSE);
         }
-#endif
     }
-
-#ifdef _WIN32
 
     void SplashScreen::show()
     {
@@ -73,11 +66,9 @@ namespace editor
 
     void SplashScreen::windowThread()
     {
-        // Initialize GDI+
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
         Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
-
-        // Load splash image
+        
         loadSplashImage();
 
         // Register window class (may already be registered from previous show() call)
@@ -88,7 +79,7 @@ namespace editor
         wc.hInstance = GetModuleHandle(nullptr);
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.lpszClassName = className;
-        wc.hbrBackground = nullptr;  // We'll paint ourselves
+        wc.hbrBackground = nullptr; // We'll paint ourselves
 
         ATOM classAtom = RegisterClassExW(&wc);
         if (classAtom == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
@@ -108,8 +99,7 @@ namespace editor
         int screenHeight = GetSystemMetrics(SM_CYSCREEN);
         int x = (screenWidth - WINDOW_WIDTH) / 2;
         int y = (screenHeight - WINDOW_HEIGHT) / 2;
-
-        // Create borderless window
+        
         hwnd = CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
             className,
@@ -135,16 +125,14 @@ namespace editor
 
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
-
-        // Message loop
+        
         MSG msg;
         while (!shouldClose && GetMessage(&msg, nullptr, 0, 0))
         {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
-
-        // Cleanup
+        
         if (hwnd)
         {
             DestroyWindow(hwnd);
@@ -179,7 +167,7 @@ namespace editor
 
         switch (msg)
         {
-            case WM_PAINT:
+        case WM_PAINT:
             {
                 PAINTSTRUCT ps;
                 HDC hdc = BeginPaint(hwnd, &ps);
@@ -191,15 +179,15 @@ namespace editor
                 return 0;
             }
 
-            case WM_ERASEBKGND:
-                return 1;  // Prevent flicker
+        case WM_ERASEBKGND:
+            return 1; // Prevent flicker
 
-            case WM_CLOSE:
-                PostQuitMessage(0);
-                return 0;
+        case WM_CLOSE:
+            PostQuitMessage(0);
+            return 0;
 
-            default:
-                return DefWindowProc(hwnd, msg, wParam, lParam);
+        default:
+            return DefWindowProc(hwnd, msg, wParam, lParam);
         }
     }
 
@@ -208,43 +196,18 @@ namespace editor
         Gdiplus::Graphics graphics(hdc);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
-
-        // Dark background
-        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, 30, 30, 35));
-        graphics.FillRectangle(&bgBrush, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-
-        // Border
-        Gdiplus::Pen borderPen(Gdiplus::Color(255, 80, 80, 90), 1);
-        graphics.DrawRectangle(&borderPen, 0, 0, WINDOW_WIDTH - 1, WINDOW_HEIGHT - 1);
-
-        int yOffset = 30;
-
-        // Draw splash image if loaded
+        
         if (splashImage)
         {
             auto* image = static_cast<Gdiplus::Image*>(splashImage);
-            int imgWidth = image->GetWidth();
-            int imgHeight = image->GetHeight();
-
-            // Validate image dimensions to prevent division by zero
-            if (imgWidth > 0 && imgHeight > 0)
-            {
-                // Scale to fit while maintaining aspect ratio
-                int maxWidth = WINDOW_WIDTH - 40;
-                int maxHeight = 300;
-                float scale = (std::min)(static_cast<float>(maxWidth) / imgWidth,
-                                         static_cast<float>(maxHeight) / imgHeight);
-                int drawWidth = static_cast<int>(imgWidth * scale);
-                int drawHeight = static_cast<int>(imgHeight * scale);
-                int imgX = (WINDOW_WIDTH - drawWidth) / 2;
-
-                graphics.DrawImage(image, imgX, yOffset, drawWidth, drawHeight);
-                yOffset += drawHeight + 15;
-            }
+            graphics.DrawImage(image, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
         }
         else
         {
-            // Draw title text if no image
+            // Fallback: dark background with title text
+            Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, 30, 30, 35));
+            graphics.FillRectangle(&bgBrush, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+
             Gdiplus::FontFamily fontFamily(L"Segoe UI");
             Gdiplus::Font titleFont(&fontFamily, 28, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
             Gdiplus::SolidBrush titleBrush(Gdiplus::Color(255, 255, 255, 255));
@@ -252,34 +215,25 @@ namespace editor
             Gdiplus::StringFormat format;
             format.SetAlignment(Gdiplus::StringAlignmentCenter);
 
-            Gdiplus::RectF titleRect(0, static_cast<float>(yOffset),
-                                     static_cast<float>(WINDOW_WIDTH), 50);
+            Gdiplus::RectF titleRect(0, 180.0f, static_cast<float>(WINDOW_WIDTH), 50);
             graphics.DrawString(L"VertexForge", -1, &titleFont, titleRect, &format, &titleBrush);
-            yOffset += 80;
         }
+        
+        Gdiplus::Pen borderPen(Gdiplus::Color(255, 80, 80, 90), 1);
+        graphics.DrawRectangle(&borderPen, 0, 0, WINDOW_WIDTH - 1, WINDOW_HEIGHT - 1);
 
-        // Draw "Engine Editor" subtitle
         Gdiplus::FontFamily fontFamily(L"Segoe UI");
-        Gdiplus::Font subtitleFont(&fontFamily, 14, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
-        Gdiplus::SolidBrush subtitleBrush(Gdiplus::Color(255, 150, 150, 160));
-
         Gdiplus::StringFormat format;
         format.SetAlignment(Gdiplus::StringAlignmentCenter);
-
-        Gdiplus::RectF subtitleRect(0, static_cast<float>(yOffset),
-                                    static_cast<float>(WINDOW_WIDTH), 25);
-        graphics.DrawString(L"Engine Editor", -1, &subtitleFont, subtitleRect, &format, &subtitleBrush);
-
-        // Draw status text at bottom
+        
         {
             std::lock_guard<std::mutex> lock(statusMutex);
 
-            // Proper UTF-8 to wide string conversion
             std::wstring wideStatus;
             if (!currentStatus.empty())
             {
                 int wideLen = MultiByteToWideChar(CP_UTF8, 0, currentStatus.c_str(),
-                                                   static_cast<int>(currentStatus.size()), nullptr, 0);
+                                                  static_cast<int>(currentStatus.size()), nullptr, 0);
                 if (wideLen > 0)
                 {
                     wideStatus.resize(wideLen);
@@ -324,7 +278,6 @@ namespace editor
 
     void SplashScreen::loadSplashImage()
     {
-        // Try to find splash image relative to executable
         wchar_t exePath[MAX_PATH];
         GetModuleFileNameW(nullptr, exePath, MAX_PATH);
         std::filesystem::path exeDir = std::filesystem::path(exePath).parent_path();
@@ -353,14 +306,5 @@ namespace editor
                 splashImage = nullptr;
             }
         }
-
-        // No splash image found - will show text title instead
     }
-
-#else
-    // Non-Windows platforms: stub implementation
-    void SplashScreen::show() {}
-    void SplashScreen::close() {}
-#endif
-
-} // namespace editor
+}

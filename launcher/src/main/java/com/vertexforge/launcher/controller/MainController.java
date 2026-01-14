@@ -33,16 +33,9 @@ import java.util.Optional;
 import java.net.URL;
 import java.util.ResourceBundle;
 
-/**
- * Controller for the main launcher window (main.fxml).
- * <p>
- * Handles UI interactions and coordinates between the view and services.
- * Implements VK-154 (Projects List View).
- * </p>
- */
+
 public class MainController implements Initializable {
 
-    // FXML Injected Fields - TableView
     @FXML
     private TableView<ProjectViewModel> projectsTable;
 
@@ -55,7 +48,6 @@ public class MainController implements Initializable {
     @FXML
     private TableColumn<ProjectViewModel, String> lastOpenedColumn;
 
-    // FXML Injected Fields - Layout
     @FXML
     private VBox emptyStatePane;
 
@@ -65,17 +57,10 @@ public class MainController implements Initializable {
     @FXML
     private Button openProjectButton;
 
-    // Data
     private final ObservableList<ProjectViewModel> projectsList = FXCollections.observableArrayList();
     private final RecentProjectsRepository repository = new RecentProjectsRepository();
     private final EditorLauncher editorLauncher = new EditorLauncher();
 
-    /**
-     * Initializes the controller after FXML loading is complete.
-     *
-     * @param location  the location used to resolve relative paths
-     * @param resources the resources used to localize the root object
-     */
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         setupTableColumns();
@@ -84,18 +69,12 @@ public class MainController implements Initializable {
         loadProjects();
     }
 
-    /**
-     * Configures the TableView columns with cell value factories.
-     */
     private void setupTableColumns() {
         nameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
         pathColumn.setCellValueFactory(new PropertyValueFactory<>("path"));
         lastOpenedColumn.setCellValueFactory(new PropertyValueFactory<>("lastOpened"));
     }
 
-    /**
-     * Configures TableView behavior: selection mode, double-click, keyboard, context menu.
-     */
     private void setupTableBehavior() {
         projectsTable.setItems(projectsList);
         projectsTable.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
@@ -118,9 +97,6 @@ public class MainController implements Initializable {
         setupContextMenu();
     }
 
-    /**
-     * Sets up the right-click context menu for the projects table.
-     */
     private void setupContextMenu() {
         ContextMenu contextMenu = new ContextMenu();
 
@@ -158,10 +134,6 @@ public class MainController implements Initializable {
         });
     }
 
-    /**
-     * Removes the selected project from the recent projects list.
-     * Does not delete files from disk.
-     */
     private void removeSelectedProject() {
         ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
@@ -177,9 +149,6 @@ public class MainController implements Initializable {
         loadProjects();
     }
 
-    /**
-     * Sets up selection listener to enable/disable Open Project button.
-     */
     private void setupSelectionListener() {
         projectsTable.getSelectionModel().selectedItemProperty().addListener(
                 (obs, oldSelection, newSelection) -> {
@@ -189,9 +158,6 @@ public class MainController implements Initializable {
         );
     }
 
-    /**
-     * Loads projects from repository and populates the TableView.
-     */
     private void loadProjects() {
         RecentProjects recentProjects = repository.load();
         projectsList.clear();
@@ -206,11 +172,6 @@ public class MainController implements Initializable {
         }
     }
 
-    /**
-     * Toggles between empty state and projects table visibility.
-     *
-     * @param show true to show empty state, false to show table
-     */
     private void showEmptyState(boolean show) {
         emptyStatePane.setVisible(show);
         emptyStatePane.setManaged(show);
@@ -218,10 +179,6 @@ public class MainController implements Initializable {
         projectsTablePane.setManaged(!show);
     }
 
-    /**
-     * Opens the currently selected project by launching the editor.
-     * Implements VK-156 (Engine Editor CLI Integration).
-     */
     private void openSelectedProject() {
         ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
         if (selected == null || !selected.isValid()) {
@@ -255,9 +212,6 @@ public class MainController implements Initializable {
         projectsTable.getScene().getWindow().hide();
     }
 
-    /**
-     * Refreshes the projects list by reloading from repository.
-     */
     @FXML
     private void onRefreshProjects() {
         // Load fresh data from repository
@@ -296,10 +250,6 @@ public class MainController implements Initializable {
         loadProjects();
     }
 
-    /**
-     * Handles create new project action.
-     * Opens a dialog for project creation and creates the project structure.
-     */
     @FXML
     private void onCreateProject() {
         Window owner = projectsTable.getScene().getWindow();
@@ -342,11 +292,6 @@ public class MainController implements Initializable {
         selectProjectByPath(result.projectPath());
     }
 
-    /**
-     * Selects a project in the table by its path.
-     *
-     * @param projectPath the path to the .vfproj file
-     */
     private void selectProjectByPath(Path projectPath) {
         for (ProjectViewModel vm : projectsList) {
             if (vm.getProjectPath().equals(projectPath)) {
@@ -357,12 +302,6 @@ public class MainController implements Initializable {
         }
     }
 
-    /**
-     * Shows an error dialog with the specified title and message.
-     *
-     * @param title   the dialog title
-     * @param message the error message
-     */
     private void showErrorDialog(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle(title);
@@ -372,9 +311,6 @@ public class MainController implements Initializable {
         alert.showAndWait();
     }
 
-    /**
-     * Handles open selected project button click.
-     */
     @FXML
     private void onOpenProject() {
         openSelectedProject();

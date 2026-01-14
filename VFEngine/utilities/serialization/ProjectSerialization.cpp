@@ -75,8 +75,6 @@ namespace serialization
                 project.lastModified = projectJson["lastModified"].get<std::string>();
             }
 
-            // Note: Path validation is done in ProjectServiceImpl after resolving relative paths
-
             vfLogInfo("Project loaded successfully: {}", project.projectName);
             return project;
         }
@@ -257,5 +255,4 @@ namespace serialization
         oss << "VertexForge " << Version::major << "." << Version::minor << "." << Version::patch;
         return oss.str();
     }
-
 }

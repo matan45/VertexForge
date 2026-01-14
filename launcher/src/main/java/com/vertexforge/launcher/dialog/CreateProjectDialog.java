@@ -16,18 +16,8 @@ import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
-/**
- * Dialog for creating a new VertexForge project.
- * <p>
- * Prompts the user for a project name and location,
- * with real-time validation of inputs.
- * </p>
- */
 public class CreateProjectDialog {
 
-    /**
-     * Invalid characters for project names (Windows filesystem restrictions).
-     */
     private static final Pattern INVALID_NAME_CHARS = Pattern.compile("[\\\\/:*?\"<>|]");
 
     private final Dialog<ProjectCreationParams> dialog;
@@ -37,20 +27,9 @@ public class CreateProjectDialog {
     private final Button createButton;
     private final Window owner;
 
-    /**
-     * Parameters for project creation.
-     *
-     * @param name     the project name
-     * @param location the parent directory where the project will be created
-     */
     public record ProjectCreationParams(String name, Path location) {
     }
 
-    /**
-     * Creates a new CreateProjectDialog.
-     *
-     * @param owner the owner window for the dialog
-     */
     public CreateProjectDialog(Window owner) {
         this.owner = owner;
         this.dialog = new Dialog<>();
@@ -74,29 +53,15 @@ public class CreateProjectDialog {
         Platform.runLater(() -> projectNameField.requestFocus());
     }
 
-    /**
-     * Shows the dialog and returns the result.
-     *
-     * @param owner the owner window
-     * @return the project creation parameters if the user clicked Create
-     */
     public static Optional<ProjectCreationParams> show(Window owner) {
         CreateProjectDialog dialog = new CreateProjectDialog(owner);
         return dialog.showAndWait();
     }
 
-    /**
-     * Shows the dialog and waits for the result.
-     *
-     * @return the result
-     */
     public Optional<ProjectCreationParams> showAndWait() {
         return dialog.showAndWait();
     }
 
-    /**
-     * Configures the dialog properties.
-     */
     private void configureDialog() {
         dialog.setTitle("Create New Project");
         dialog.setHeaderText("Create a new VertexForge project");
@@ -104,11 +69,6 @@ public class CreateProjectDialog {
         dialog.setResizable(false);
     }
 
-    /**
-     * Creates the dialog pane with form content.
-     *
-     * @return the configured dialog pane
-     */
     private DialogPane createDialogPane() {
         DialogPane dialogPane = new DialogPane();
         dialogPane.getStyleClass().add("create-project-dialog");
@@ -117,11 +77,6 @@ public class CreateProjectDialog {
         return dialogPane;
     }
 
-    /**
-     * Creates the form grid with input fields.
-     *
-     * @return the form grid
-     */
     private GridPane createFormGrid() {
         GridPane grid = new GridPane();
         grid.setHgap(10);
@@ -161,17 +116,11 @@ public class CreateProjectDialog {
         return grid;
     }
 
-    /**
-     * Sets up real-time validation on input fields.
-     */
     private void setupValidation() {
         projectNameField.textProperty().addListener((obs, old, newVal) -> validateInputs());
         projectLocationField.textProperty().addListener((obs, old, newVal) -> validateInputs());
     }
 
-    /**
-     * Sets up the result converter for the dialog.
-     */
     private void setupResultConverter() {
         dialog.setResultConverter(buttonType -> {
             if (buttonType == ButtonType.OK) {
@@ -183,9 +132,6 @@ public class CreateProjectDialog {
         });
     }
 
-    /**
-     * Handles the Browse button click to open a directory chooser.
-     */
     private void onBrowse() {
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Select Project Location");
@@ -205,9 +151,6 @@ public class CreateProjectDialog {
         }
     }
 
-    /**
-     * Validates the current inputs and updates the UI accordingly.
-     */
     private void validateInputs() {
         ValidationResult result = validate();
 
@@ -220,11 +163,6 @@ public class CreateProjectDialog {
         }
     }
 
-    /**
-     * Performs validation on the current input values.
-     *
-     * @return the validation result
-     */
     private ValidationResult validate() {
         String name = projectNameField.getText().trim();
         String location = projectLocationField.getText().trim();
@@ -271,9 +209,6 @@ public class CreateProjectDialog {
         return ValidationResult.success();
     }
 
-    /**
-     * Result of input validation.
-     */
     private record ValidationResult(boolean valid, String message) {
         static ValidationResult success() {
             return new ValidationResult(true, null);

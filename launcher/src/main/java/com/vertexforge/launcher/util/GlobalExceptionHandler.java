@@ -17,17 +17,7 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/**
- * Global exception handler for the VertexForge Launcher.
- * <p>
- * Provides centralized error handling including:
- * <ul>
- *   <li>Logging exceptions to a file</li>
- *   <li>Displaying user-friendly error dialogs</li>
- *   <li>Preventing application crashes from going unnoticed</li>
- * </ul>
- * </p>
- */
+
 public final class GlobalExceptionHandler {
 
     private static final String LOG_FILE_NAME = "launcher-error.log";
@@ -37,10 +27,7 @@ public final class GlobalExceptionHandler {
         // Utility class - prevent instantiation
     }
 
-    /**
-     * Installs the global exception handler.
-     * Should be called during application initialization.
-     */
+
     public static void install() {
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logException(throwable);
@@ -56,11 +43,7 @@ public final class GlobalExceptionHandler {
         });
     }
 
-    /**
-     * Logs an exception to the error log file.
-     *
-     * @param throwable the exception to log
-     */
+
     public static void logException(Throwable throwable) {
         Path logPath = getLogFilePath();
 
@@ -77,13 +60,6 @@ public final class GlobalExceptionHandler {
         }
     }
 
-    /**
-     * Shows an error dialog to the user.
-     *
-     * @param title   the dialog title
-     * @param header  the header text describing the error
-     * @param throwable the exception that occurred
-     */
     public static void showErrorDialog(String title, String header, Throwable throwable) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle(title);
@@ -124,12 +100,6 @@ public final class GlobalExceptionHandler {
         });
     }
 
-    /**
-     * Gets the path to the error log file.
-     * Creates the log directory if it doesn't exist.
-     *
-     * @return the path to the log file
-     */
     private static Path getLogFilePath() {
         String userHome = System.getProperty("user.home");
         Path logDir = Paths.get(userHome, ".vertexforge");

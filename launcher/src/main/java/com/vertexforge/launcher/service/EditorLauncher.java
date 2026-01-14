@@ -5,23 +5,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 
-/**
- * Service for launching the VertexForge editor with a project.
- * Handles editor executable discovery and process execution.
- * <p>
- * Implements VK-156 (Engine Editor CLI Integration).
- * </p>
- */
 public class EditorLauncher {
     private static final String EDITOR_ENV_VAR = "VERTEXFORGE_EDITOR_PATH";
     private static final String EDITOR_EXE_NAME = "Editor.exe";
 
-    /**
-     * Result of an editor launch attempt.
-     *
-     * @param success      true if the editor was launched successfully
-     * @param errorMessage error message if launch failed, null on success
-     */
+
     public record LaunchResult(boolean success, String errorMessage) {
         public static LaunchResult ok() {
             return new LaunchResult(true, null);
@@ -32,16 +20,7 @@ public class EditorLauncher {
         }
     }
 
-    /**
-     * Attempts to find the editor executable.
-     * <p>
-     * Search order:
-     * 1. VERTEXFORGE_EDITOR_PATH environment variable
-     * 2. Relative paths from launcher working directory (bin/Editor/Debug|Release/x64/)
-     * </p>
-     *
-     * @return Optional containing the editor path if found, empty otherwise
-     */
+
     public Optional<Path> findEditorExecutable() {
         // 1. Check environment variable
         String envPath = System.getenv(EDITOR_ENV_VAR);
@@ -71,13 +50,6 @@ public class EditorLauncher {
         return Optional.empty();
     }
 
-    /**
-     * Launches the editor with the specified project.
-     *
-     * @param editorPath  path to the editor executable
-     * @param projectPath path to the .vfproj file
-     * @return LaunchResult indicating success or failure with error message
-     */
     public LaunchResult launch(Path editorPath, Path projectPath) {
         if (!Files.isExecutable(editorPath)) {
             return LaunchResult.fail("Editor not found: " + editorPath);

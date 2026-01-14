@@ -17,13 +17,7 @@ import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-/**
- * Service for creating new VertexForge projects.
- * <p>
- * Handles all file system operations: creating directories,
- * generating configuration files, and extracting resources.
- * </p>
- */
+
 public class ProjectCreator {
 
     private static final String LIZ_ZIP_RESOURCE = "/templates/liz.zip";
@@ -32,9 +26,6 @@ public class ProjectCreator {
 
     private final Gson gson;
 
-    /**
-     * Creates a new ProjectCreator instance.
-     */
     public ProjectCreator() {
         this.gson = new GsonBuilder()
                 .setPrettyPrinting()
@@ -73,7 +64,7 @@ public class ProjectCreator {
             createDirectoryStructure(projectDir);
 
             // Generate configuration files
-            createProjectFile(projectName, projectDir, projectFile);
+            createProjectFile(projectName, projectFile);
             createStartupScene(projectDir.resolve("scenes"));
             createScriptProject(projectName, projectDir.resolve("scripts"));
             createMainScript(projectDir.resolve("scripts").resolve("game"));
@@ -93,12 +84,6 @@ public class ProjectCreator {
         }
     }
 
-    /**
-     * Creates the project directory structure.
-     *
-     * @param projectDir the root project directory
-     * @throws IOException if directory creation fails
-     */
     private void createDirectoryStructure(Path projectDir) throws IOException {
         Files.createDirectories(projectDir);
         Files.createDirectories(projectDir.resolve("scenes"));
@@ -109,15 +94,8 @@ public class ProjectCreator {
         Files.createDirectories(projectDir.resolve("scripts").resolve("lib"));
     }
 
-    /**
-     * Generates the .vfproj project file.
-     *
-     * @param projectName the project name
-     * @param projectDir  the project directory
-     * @param projectFile the path to the .vfproj file
-     * @throws IOException if file writing fails
-     */
-    private void createProjectFile(String projectName, Path projectDir, Path projectFile) throws IOException {
+
+    private void createProjectFile(String projectName, Path projectFile) throws IOException {
         // Use LinkedHashMap to preserve field order in JSON
         Map<String, Object> projectConfig = new LinkedHashMap<>();
         projectConfig.put("schemaVersion", "1.0");
@@ -133,12 +111,7 @@ public class ProjectCreator {
         Files.writeString(projectFile, json);
     }
 
-    /**
-     * Creates an empty startup scene file by copying the template.
-     *
-     * @param scenesDir the scenes directory
-     * @throws IOException if file creation fails
-     */
+
     private void createStartupScene(Path scenesDir) throws IOException {
         Path sceneFile = scenesDir.resolve("Main.vfScene");
 
@@ -150,13 +123,6 @@ public class ProjectCreator {
         }
     }
 
-    /**
-     * Creates the scripts.mtproj configuration file.
-     *
-     * @param projectName the project name
-     * @param scriptsDir  the scripts directory
-     * @throws IOException if file writing fails
-     */
     private void createScriptProject(String projectName, Path scriptsDir) throws IOException {
         Path mtprojFile = scriptsDir.resolve("scripts.mtproj");
 
@@ -176,12 +142,7 @@ public class ProjectCreator {
         Files.writeString(mtprojFile, xml);
     }
 
-    /**
-     * Creates a starter Main.mt script file.
-     *
-     * @param gameDir the game scripts directory
-     * @throws IOException if file creation fails
-     */
+
     private void createMainScript(Path gameDir) throws IOException {
         Path mainScript = gameDir.resolve("Main.mt");
 
@@ -196,11 +157,11 @@ public class ProjectCreator {
                         this.selfId = Entity::self();
                         Log::info("Hello from Main script!");
                     }
-
+                
                     public function onUpdate(float deltaTime): void {
                         // Called every frame
                     }
-
+                
                     public function onDestroy(): void {
                         // Called when script is destroyed
                     }
@@ -210,12 +171,7 @@ public class ProjectCreator {
         Files.writeString(mainScript, content);
     }
 
-    /**
-     * Extracts the liz.zip library from JAR resources to the lib directory.
-     *
-     * @param libDir the target lib directory
-     * @throws IOException if extraction fails
-     */
+
     private void extractLibrary(Path libDir) throws IOException {
         try (InputStream resourceStream = getClass().getResourceAsStream(LIZ_ZIP_RESOURCE)) {
             if (resourceStream == null) {
@@ -258,35 +214,26 @@ public class ProjectCreator {
         }
     }
 
-    /**
-     * Attempts to clean up a partially created project on failure.
-     *
-     * @param projectDir the project directory to delete
-     */
+
     private void cleanupOnFailure(Path projectDir) {
         try {
             if (Files.exists(projectDir)) {
-                Files.walk(projectDir)
-                        .sorted(Comparator.reverseOrder())
-                        .forEach(path -> {
-                            try {
-                                Files.delete(path);
-                            } catch (IOException ignored) {
-                                // Best effort cleanup
-                            }
-                        });
+                try (var paths = Files.walk(projectDir)) {
+                    paths.sorted(Comparator.reverseOrder())
+                            .forEach(path -> {
+                                try {
+                                    Files.delete(path);
+                                } catch (IOException e) {
+                                    System.err.println("Warning: Could not delete " + path + ": " + e.getMessage());
+                                }
+                            });
+                }
             }
         } catch (IOException e) {
             System.err.println("Warning: Failed to cleanup partial project: " + e.getMessage());
         }
     }
 
-    /**
-     * Formats an Instant as an ISO-8601 timestamp string.
-     *
-     * @param instant the instant to format
-     * @return the formatted timestamp
-     */
     private String formatTimestamp(Instant instant) {
         return DateTimeFormatter.ISO_INSTANT.format(instant.atOffset(ZoneOffset.UTC));
     }
