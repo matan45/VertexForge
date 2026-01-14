@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "resource/Types.hpp"
 #include <string>
+#include <string_view>
 #include <vector>
 #include <future>
 #include <atomic>
@@ -68,6 +69,8 @@ namespace windows
 
         // Evaluated skeleton
         std::vector<EvaluatedBoneTransform> evaluatedBones;
+        std::unordered_map<std::string_view, size_t> boneNameToChannelIndex;
+        std::unordered_map<int32_t, std::vector<size_t>> boneChildrenMap;
 
         // Window state
         bool isOpen = true;

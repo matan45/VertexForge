@@ -205,9 +205,36 @@ namespace windows
                 if (result.success)
                 {
                     animationData = std::move(result.animationData);
-                    sequenceAdapter->setAnimationData(&animationData);
-                    animationLoaded = true;
-                    evaluateAnimation(0.0f);
+
+                    // Validate animation data has meaningful content
+                    bool isValid = animationData.duration > 0.0f &&
+                                   !animationData.channels.empty();
+
+                    if (isValid)
+                    {
+                        // Build bone name to channel index map once
+                        boneNameToChannelIndex.clear();
+                        for (size_t i = 0; i < animationData.channels.size(); ++i)
+                        {
+                            boneNameToChannelIndex[animationData.channels[i].boneName] = i;
+                        }
+
+                        // Build bone children map once for O(1) hierarchy lookup
+                        boneChildrenMap.clear();
+                        for (size_t i = 0; i < animationData.skeleton.size(); ++i)
+                        {
+                            int32_t parentIdx = animationData.skeleton[i].parentIndex;
+                            boneChildrenMap[parentIdx].push_back(i);
+                        }
+
+                        sequenceAdapter->setAnimationData(&animationData);
+                        animationLoaded = true;
+                        evaluateAnimation(0.0f);
+                    }
+                    else
+                    {
+                        loadFailed = true;
+                    }
                 }
                 else
                 {
@@ -262,14 +289,7 @@ namespace windows
         evaluatedBones.clear();
         evaluatedBones.reserve(animationData.skeleton.size());
 
-        // Build bone name to channel index map
-        std::unordered_map<std::string, size_t> channelMap;
-        for (size_t i = 0; i < animationData.channels.size(); ++i)
-        {
-            channelMap[animationData.channels[i].boneName] = i;
-        }
-
-        // Evaluate each bone
+        // Evaluate each bone using cached channel map
         for (size_t i = 0; i < animationData.skeleton.size(); ++i)
         {
             const auto& bone = animationData.skeleton[i];
@@ -277,8 +297,8 @@ namespace windows
             eval.boneName = bone.name;
             eval.parentIndex = bone.parentIndex;
 
-            auto it = channelMap.find(bone.name);
-            if (it != channelMap.end())
+            auto it = boneNameToChannelIndex.find(bone.name);
+            if (it != boneNameToChannelIndex.end())
             {
                 const auto& channel = animationData.channels[it->second];
                 eval.position = interpolatePosition(channel, timeInTicks);
@@ -418,7 +438,8 @@ namespace windows
 
         ImGui::Spacing();
 
-        float durationSeconds = animationData.duration / animationData.ticksPerSecond;
+        float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;
+        float durationSeconds = animationData.duration / ticksPerSec;
         ImGui::Text("Duration:");
         ImGui::Text("  %.2f s", durationSeconds);
         ImGui::Text("  %.0f ticks", animationData.duration);
@@ -461,8 +482,9 @@ namespace windows
         ImGui::Spacing();
 
         // Timeline scrub
-        float durationSeconds = animationData.duration / animationData.ticksPerSecond;
-        float currentSeconds = currentTime / animationData.ticksPerSecond;
+        float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;
+        float durationSeconds = animationData.duration / ticksPerSec;
+        float currentSeconds = currentTime / ticksPerSec;
 
         ImGui::Text("Time:");
         if (ImGui::SliderFloat("##Time", &currentSeconds, 0.0f, durationSeconds, "%.2f s"))
@@ -590,12 +612,13 @@ namespace windows
             return;
         }
 
-        // Draw root bones (parentIndex == -1)
-        for (size_t i = 0; i < evaluatedBones.size(); ++i)
+        // Draw root bones (parentIndex == -1) using precomputed map
+        auto rootIt = boneChildrenMap.find(-1);
+        if (rootIt != boneChildrenMap.end())
         {
-            if (evaluatedBones[i].parentIndex == -1)
+            for (size_t idx : rootIt->second)
             {
-                drawBoneNode(i);
+                drawBoneNode(idx);
             }
         }
     }
@@ -608,16 +631,9 @@ namespace windows
         if (selectedChannel == static_cast<int>(index))
             flags |= ImGuiTreeNodeFlags_Selected;
 
-        // Check if bone has children
-        bool hasChildren = false;
-        for (const auto& other : evaluatedBones)
-        {
-            if (other.parentIndex == static_cast<int32_t>(index))
-            {
-                hasChildren = true;
-                break;
-            }
-        }
+        // Check if bone has children using precomputed map (O(1) lookup)
+        auto childIt = boneChildrenMap.find(static_cast<int32_t>(index));
+        bool hasChildren = (childIt != boneChildrenMap.end() && !childIt->second.empty());
         if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
 
         bool nodeOpen = ImGui::TreeNodeEx(bone.boneName.c_str(), flags);
@@ -640,12 +656,12 @@ namespace windows
 
         if (nodeOpen)
         {
-            // Draw children
-            for (size_t i = 0; i < evaluatedBones.size(); ++i)
+            // Draw children using precomputed map (O(1) lookup)
+            if (hasChildren)
             {
-                if (evaluatedBones[i].parentIndex == static_cast<int32_t>(index))
+                for (size_t childIdx : childIt->second)
                 {
-                    drawBoneNode(i);
+                    drawBoneNode(childIdx);
                 }
             }
             ImGui::TreePop();
