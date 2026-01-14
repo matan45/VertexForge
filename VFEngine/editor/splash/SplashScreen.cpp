@@ -242,7 +242,7 @@ namespace editor
                 }
             }
 
-            Gdiplus::Font statusFont(&fontFamily, 14, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+            Gdiplus::Font statusFont(&fontFamily, 20, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
             Gdiplus::SolidBrush statusBrush(Gdiplus::Color(255, 120, 180, 255));
 
             Gdiplus::RectF statusRect(0, WINDOW_HEIGHT - 50.0f,
