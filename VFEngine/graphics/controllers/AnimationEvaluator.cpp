@@ -123,19 +123,24 @@ namespace controllers
             {
                 const auto& ch = animationData->channels[it->second];
 
-                // Get animation values (or bind pose as fallback)
-                glm::vec3 pos = ch.positionKeys.empty() ? glm::vec3(computedLocalBindPoses[i][3]) : interpolatePosition(ch, timeInTicks);
-                glm::quat rot = ch.rotationKeys.empty() ? glm::quat_cast(glm::mat3(computedLocalBindPoses[i])) : interpolateRotation(ch, timeInTicks);
+                // Always use bind pose position (Mixamo animations only animate rotation)
+                glm::vec3 pos = glm::vec3(computedLocalBindPoses[i][3]);
+
+                // Get animation rotation
+                glm::quat animRot = ch.rotationKeys.empty()
+                    ? glm::quat(1.0f, 0.0f, 0.0f, 0.0f)  // Identity
+                    : interpolateRotation(ch, timeInTicks);
+
+                // Get bind pose rotation
+                glm::quat bindRot = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
+
+                // Animation rotation is relative to bind pose - multiply them
+                glm::quat finalRot = animRot * bindRot;
+
+                // Scale from animation or default
                 glm::vec3 scl = ch.scalingKeys.empty() ? glm::vec3(1.0f) : interpolateScale(ch, timeInTicks);
 
-                // If animation position is (0,0,0), use bind pose position instead
-                // Mixamo animations typically only animate rotation, not position
-                if (glm::length(pos) < 0.001f)
-                {
-                    pos = glm::vec3(computedLocalBindPoses[i][3]);
-                }
-
-                evaluatedBones[i].localTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(glm::mat4(1.0f), scl);
+                evaluatedBones[i].localTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(finalRot) * glm::scale(glm::mat4(1.0f), scl);
             }
             else
             {
