@@ -80,6 +80,10 @@ namespace controllers
         std::string loadedAnimationPath;
         math::AABB meshBounds;
 
+        // Bone remapping: maps mesh bone index to animation bone index
+        // Value of -1 means the mesh bone has no corresponding animation bone
+        std::vector<int32_t> meshToAnimBoneMapping;
+
     public:
         AnimatedMeshPreviewController();
         ~AnimatedMeshPreviewController();
@@ -145,5 +149,11 @@ namespace controllers
         void cleanupOffscreenResources();
         void createSampler();
         void updateDescriptorSet(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
+
+        // Build bone mapping from mesh skeleton to animation skeleton (by bone name)
+        void buildBoneMapping();
+
+        // Remap bone matrices from animation order to mesh order
+        std::vector<glm::mat4> remapBoneMatrices(const std::vector<glm::mat4>& animBoneMatrices) const;
     };
 }

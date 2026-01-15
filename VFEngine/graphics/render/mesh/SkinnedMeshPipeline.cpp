@@ -649,6 +649,31 @@ namespace render::mesh
         loadedMesh = std::make_unique<SkinnedMeshGPUData>();
         loadedMesh->meshPath = std::string(meshPath);
         loadedMesh->hasSkinning = meshesData.hasSkinning;
+        loadedMesh->skeleton = meshesData.skeleton;
+
+        // Log mesh bone names for debugging
+        if (loadedMesh->skeleton.hasBones())
+        {
+            loggerInfo("Mesh skeleton has {} bones:", loadedMesh->skeleton.boneCount());
+            for (size_t i = 0; i < std::min(size_t(5), loadedMesh->skeleton.boneCount()); ++i)
+            {
+                loggerInfo("  MeshBone[{}]: '{}'", i, loadedMesh->skeleton.boneNames[i]);
+            }
+            // Also log bones 35 and 36 (used by vertex[0])
+            if (loadedMesh->skeleton.boneCount() > 36)
+            {
+                loggerInfo("  MeshBone[35]: '{}', invBind[3]=({:.2f},{:.2f},{:.2f})",
+                    loadedMesh->skeleton.boneNames[35],
+                    loadedMesh->skeleton.inverseBindPoses[35][3][0],
+                    loadedMesh->skeleton.inverseBindPoses[35][3][1],
+                    loadedMesh->skeleton.inverseBindPoses[35][3][2]);
+                loggerInfo("  MeshBone[36]: '{}', invBind[3]=({:.2f},{:.2f},{:.2f})",
+                    loadedMesh->skeleton.boneNames[36],
+                    loadedMesh->skeleton.inverseBindPoses[36][3][0],
+                    loadedMesh->skeleton.inverseBindPoses[36][3][1],
+                    loadedMesh->skeleton.inverseBindPoses[36][3][2]);
+            }
+        }
 
         createMeshGPUBuffers(meshesData);
 
@@ -727,11 +752,19 @@ namespace render::mesh
             }
             loggerInfo("Loaded mesh vertex bone data: {} verts with weights, {} unique bone indices",
                        verticesWithWeights, boneIndexCounts.size());
-            if (boneIndexCounts.size() <= 5)
+
+            // Debug: Print first 3 vertices with bone data
+            int debugPrinted = 0;
+            for (size_t vi = 0; vi < lod0Verts.size() && debugPrinted < 3; ++vi)
             {
-                for (const auto& [idx, count] : boneIndexCounts)
+                const auto& v = lod0Verts[vi];
+                if (v.boneWeights[0] > 0.0f)
                 {
-                    loggerInfo("  Bone index {}: {} vertex influences", idx, count);
+                    loggerInfo("Vertex[{}] pos=({:.2f},{:.2f},{:.2f}) bones=[{},{},{},{}] weights=[{:.3f},{:.3f},{:.3f},{:.3f}]",
+                        vi, v.position.x, v.position.y, v.position.z,
+                        v.boneIndices[0], v.boneIndices[1], v.boneIndices[2], v.boneIndices[3],
+                        v.boneWeights[0], v.boneWeights[1], v.boneWeights[2], v.boneWeights[3]);
+                    debugPrinted++;
                 }
             }
 
@@ -906,7 +939,11 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::updateBoneMatrices(const std::vector<glm::mat4>& boneMatrices)
     {
-        if (!boneSSBOMapped) return;
+        if (!boneSSBOMapped)
+        {
+            loggerError("updateBoneMatrices: boneSSBOMapped is null!");
+            return;
+        }
 
         BoneMatricesSSBO* ssboData = static_cast<BoneMatricesSSBO*>(boneSSBOMapped);
 
@@ -916,6 +953,35 @@ namespace render::mesh
             ssboData->boneMatrices[i] = boneMatrices[i];
         }
         ssboData->activeBoneCount = static_cast<uint32_t>(boneCount);
+
+        // Debug: log every ~2 seconds (based on frame count)
+        static uint32_t frameCount = 0;
+        frameCount++;
+        if (frameCount == 1 || frameCount % 120 == 0)
+        {
+            loggerInfo("updateBoneMatrices frame {}: {} bones uploaded, activeBoneCount={}",
+                frameCount, boneCount, ssboData->activeBoneCount);
+            if (boneCount > 0)
+            {
+                // Print first bone's matrix (Hips)
+                const auto& m0 = boneMatrices[0];
+                loggerInfo("  Bone[0] translation=({:.2f},{:.2f},{:.2f})",
+                    m0[3][0], m0[3][1], m0[3][2]);
+
+                // Print bones 35 and 36 (used by vertex[0])
+                if (boneCount > 36)
+                {
+                    const auto& m35 = boneMatrices[35];
+                    const auto& m36 = boneMatrices[36];
+                    loggerInfo("  Bone[35] translation=({:.2f},{:.2f},{:.2f}), diag=({:.3f},{:.3f},{:.3f})",
+                        m35[3][0], m35[3][1], m35[3][2],
+                        m35[0][0], m35[1][1], m35[2][2]);
+                    loggerInfo("  Bone[36] translation=({:.2f},{:.2f},{:.2f}), diag=({:.3f},{:.3f},{:.3f})",
+                        m36[3][0], m36[3][1], m36[3][2],
+                        m36[0][0], m36[1][1], m36[2][2]);
+                }
+            }
+        }
     }
 
     void SkinnedMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,

@@ -48,6 +48,10 @@ namespace controllers
         float getDurationSeconds() const;
         size_t getBoneCount() const { return animationData ? animationData->skeleton.size() : 0; }
         bool isLoaded() const { return animationData != nullptr && animationData->hasInverseBindPoses(); }
+        const glm::mat4& getGlobalInverseTransform() const {
+            static glm::mat4 identity(1.0f);
+            return animationData ? animationData->globalInverseTransform : identity;
+        }
 
         // Convert between time formats
         float secondsToTicks(float seconds) const;
@@ -73,5 +77,10 @@ namespace controllers
 
         // Evaluated bone transforms (mutable for const evaluation)
         mutable std::vector<EvaluatedBone> evaluatedBones;
+
+        // Precomputed bind poses (from inverse bind poses)
+        // Used for bones without animation channels
+        std::vector<glm::mat4> computedBindPoses;       // World-space bind pose
+        std::vector<glm::mat4> computedLocalBindPoses;  // Local bind pose (relative to parent)
     };
 }

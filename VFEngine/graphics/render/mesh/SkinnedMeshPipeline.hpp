@@ -34,6 +34,7 @@ namespace render::mesh
         std::string meshPath;
         MeshGPUData meshData;          // Reuse static mesh GPU data
         bool hasSkinning = false;
+        resource::SkeletonInfo skeleton; // Mesh skeleton info for bone name verification
     };
 
     class SkinnedMeshPipeline

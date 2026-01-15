@@ -10,6 +10,8 @@ layout(location = 4) in vec4 inBoneWeights;
 layout(location = 0) out vec3 fragWorldPos;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec2 fragTexCoord;
+layout(location = 3) out float fragSkinDebug; // 0 = no skinning, 1 = skinned
+layout(location = 4) out vec3 fragSkinOffset; // DEBUG: how much skinning moved the vertex
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -40,6 +42,9 @@ void main() {
     mat4 skinMatrix = mat4(0.0);
     float totalWeight = 0.0;
 
+    // Debug: count how many valid bone influences
+    int validBoneCount = 0;
+
     for (int i = 0; i < 4; ++i) {
         int boneIdx = inBoneIndices[i];
         float weight = inBoneWeights[i];
@@ -47,6 +52,7 @@ void main() {
         if (boneIdx >= 0 && boneIdx < int(bones.activeBoneCount) && weight > 0.0) {
             skinMatrix += bones.boneMatrices[boneIdx] * weight;
             totalWeight += weight;
+            validBoneCount++;
         }
     }
 
@@ -72,6 +78,12 @@ void main() {
 
     fragTexCoord = inTexCoord;
 
+    // Debug output: 1.0 if skinning applied, 0.0 if identity fallback
+    fragSkinDebug = (totalWeight > 0.0001) ? 1.0 : 0.0;
+
+    // DEBUG: How much did skinning move this vertex?
+    fragSkinOffset = skinnedPos.xyz - inPosition;
+
     gl_Position = camera.projection * camera.view * worldPos;
 }
 
@@ -81,6 +93,8 @@ void main() {
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
+layout(location = 3) in float fragSkinDebug;
+layout(location = 4) in vec3 fragSkinOffset;
 
 layout(location = 0) out vec4 outColor;
 
@@ -197,6 +211,14 @@ void main() {
 
     // Gamma correction
     color = pow(color, vec3(1.0/2.2));
+
+    // DEBUG visualization disabled - animation working
+    // Uncomment to debug skinning:
+    // float offsetMagnitude = length(fragSkinOffset);
+    // if (fragSkinDebug < 0.5) color = vec3(1.0, 0.0, 0.0);      // RED = no weights
+    // else if (offsetMagnitude < 0.01) color = vec3(1.0, 0.0, 1.0); // MAGENTA = no movement
+    // else if (offsetMagnitude < 1.0) color = vec3(1.0, 1.0, 0.0);  // YELLOW = small
+    // else color = vec3(0.0, 1.0, 0.0);                             // GREEN = working
 
     outColor = vec4(color, alpha);
 }

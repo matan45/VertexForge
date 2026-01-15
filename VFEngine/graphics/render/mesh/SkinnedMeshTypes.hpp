@@ -60,9 +60,13 @@ namespace render::mesh
     {
         static vk::VertexInputBindingDescription getBindingDescription()
         {
+            // Static assert to catch any alignment issues at compile time
+            static_assert(sizeof(resource::Vertex) == 64,
+                "Vertex struct size mismatch! Expected 64 bytes for GPU compatibility.");
+
             vk::VertexInputBindingDescription bindingDescription{};
             bindingDescription.binding = 0;
-            bindingDescription.stride = 64; // sizeof(Vertex): vec3 + vec3 + vec2 + ivec4 + vec4
+            bindingDescription.stride = sizeof(resource::Vertex); // Should be 64 bytes
             bindingDescription.inputRate = vk::VertexInputRate::eVertex;
             return bindingDescription;
         }

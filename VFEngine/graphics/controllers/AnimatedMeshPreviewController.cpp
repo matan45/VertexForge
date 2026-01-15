@@ -11,6 +11,7 @@
 #include "resource/AnimationResource.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
+#include <unordered_map>
 
 namespace controllers
 {
@@ -297,6 +298,59 @@ namespace controllers
             animEvaluator.loadAnimation(animationData);
             loggerInfo("Animation loaded (self-contained): {} ({:.2f}s, {} bones)",
                 animationData.name, playbackState.duration, animEvaluator.getBoneCount());
+
+            // Compare bone names with mesh skeleton to detect mismatches
+            if (skinnedPipeline && skinnedPipeline->getLoadedMesh())
+            {
+                const auto& meshSkeleton = skinnedPipeline->getLoadedMesh()->skeleton;
+                if (meshSkeleton.hasBones())
+                {
+                    loggerInfo("Comparing mesh and animation skeletons...");
+                    bool mismatchFound = false;
+                    size_t compareCount = std::min(meshSkeleton.boneCount(), animationData.skeleton.size());
+
+                    for (size_t i = 0; i < compareCount; ++i)
+                    {
+                        if (meshSkeleton.boneNames[i] != animationData.skeleton[i].name)
+                        {
+                            mismatchFound = true;
+                            break;  // Just detect mismatch, don't log every bone
+                        }
+                    }
+
+                    if (meshSkeleton.boneCount() != animationData.skeleton.size())
+                    {
+                        loggerInfo("Bone count differs: mesh={} vs anim={} (will use name-based remapping)",
+                            meshSkeleton.boneCount(), animationData.skeleton.size());
+                    }
+
+                    if (mismatchFound || meshSkeleton.boneCount() != animationData.skeleton.size())
+                    {
+                        loggerInfo("Bone order differs between mesh and animation - using name-based remapping");
+                        // Build bone mapping only if there's a mismatch
+                        buildBoneMapping();
+                    }
+                    else
+                    {
+                        loggerInfo("Bone names and order match between mesh and animation - direct mapping");
+                        // Clear any old mapping - direct indexing will be used
+                        meshToAnimBoneMapping.clear();
+                    }
+                }
+            }
+
+            // Evaluate initial pose at time 0 to upload bone matrices to GPU
+            // This ensures the mesh is rendered with a valid pose even before playing
+            float initialTimeInTicks = 0.0f;
+            auto initialBoneMatrices = animEvaluator.evaluatePose(initialTimeInTicks);
+            if (!initialBoneMatrices.empty() && skinnedPipeline)
+            {
+                // Remap bone matrices to match mesh skeleton order
+                auto remappedMatrices = remapBoneMatrices(initialBoneMatrices);
+                skinnedPipeline->updateBoneMatrices(remappedMatrices);
+                loggerInfo("Initial pose evaluated and uploaded: {} animation bones -> {} mesh bones",
+                    initialBoneMatrices.size(), remappedMatrices.size());
+            }
         }
         else
         {
@@ -321,11 +375,27 @@ namespace controllers
         animationData = resource::AnimationData{};
         playbackState = render::mesh::AnimationPlaybackState{};
         meshBounds = math::AABB{};
+        meshToAnimBoneMapping.clear();
     }
 
     void AnimatedMeshPreviewController::setPlaybackTime(float timeSeconds)
     {
         playbackState.setTime(timeSeconds);
+
+        // Evaluate pose immediately and upload to GPU
+        // This ensures scrubbing works even when paused
+        if (animationLoaded && animEvaluator.isLoaded())
+        {
+            float timeInTicks = animEvaluator.secondsToTicks(playbackState.currentTime);
+            auto boneMatrices = animEvaluator.evaluatePose(timeInTicks);
+
+            if (!boneMatrices.empty() && skinnedPipeline)
+            {
+                // Remap bone matrices to match mesh skeleton order
+                auto remappedMatrices = remapBoneMatrices(boneMatrices);
+                skinnedPipeline->updateBoneMatrices(remappedMatrices);
+            }
+        }
     }
 
     void AnimatedMeshPreviewController::update(float deltaTime)
@@ -341,7 +411,9 @@ namespace controllers
 
             if (!boneMatrices.empty() && skinnedPipeline)
             {
-                skinnedPipeline->updateBoneMatrices(boneMatrices);
+                // Remap bone matrices to match mesh skeleton order
+                auto remappedMatrices = remapBoneMatrices(boneMatrices);
+                skinnedPipeline->updateBoneMatrices(remappedMatrices);
             }
         }
     }
@@ -393,5 +465,106 @@ namespace controllers
         device.getGraphicsQueue().waitIdle();
 
         return static_cast<void*>(offscreenResources->colorImages[imageIndex].descriptorSet);
+    }
+
+    void AnimatedMeshPreviewController::buildBoneMapping()
+    {
+        meshToAnimBoneMapping.clear();
+
+        if (!skinnedPipeline || !skinnedPipeline->getLoadedMesh())
+        {
+            return;
+        }
+
+        const auto& meshSkeleton = skinnedPipeline->getLoadedMesh()->skeleton;
+        if (!meshSkeleton.hasBones())
+        {
+            return;
+        }
+
+        // Build animation bone name to index map
+        std::unordered_map<std::string, size_t> animBoneNameToIndex;
+        for (size_t i = 0; i < animationData.skeleton.size(); ++i)
+        {
+            animBoneNameToIndex[animationData.skeleton[i].name] = i;
+        }
+
+        // For each mesh bone, find the corresponding animation bone by name
+        meshToAnimBoneMapping.resize(meshSkeleton.boneCount(), -1);
+        size_t matchedCount = 0;
+
+        for (size_t meshBoneIdx = 0; meshBoneIdx < meshSkeleton.boneCount(); ++meshBoneIdx)
+        {
+            const std::string& meshBoneName = meshSkeleton.boneNames[meshBoneIdx];
+            auto it = animBoneNameToIndex.find(meshBoneName);
+
+            if (it != animBoneNameToIndex.end())
+            {
+                meshToAnimBoneMapping[meshBoneIdx] = static_cast<int32_t>(it->second);
+                matchedCount++;
+            }
+            else
+            {
+                loggerWarning("Mesh bone '{}' (index {}) not found in animation", meshBoneName, meshBoneIdx);
+            }
+        }
+
+        loggerInfo("Bone mapping built: {}/{} mesh bones matched to animation bones",
+            matchedCount, meshSkeleton.boneCount());
+    }
+
+    std::vector<glm::mat4> AnimatedMeshPreviewController::remapBoneMatrices(
+        const std::vector<glm::mat4>& animBoneMatrices) const
+    {
+        // If skeletons match (same bone count and order), use animation matrices directly
+        // The animation's evaluatePose() already computed: globalInverse * worldTransform * inverseBindPose
+        if (!skinnedPipeline || !skinnedPipeline->getLoadedMesh())
+        {
+            return animBoneMatrices;
+        }
+
+        const auto& meshSkeleton = skinnedPipeline->getLoadedMesh()->skeleton;
+        size_t meshBoneCount = meshSkeleton.boneCount();
+
+        // If bone counts match and no remapping needed, use animation matrices directly
+        if (meshBoneCount == animBoneMatrices.size() && meshToAnimBoneMapping.empty())
+        {
+            return animBoneMatrices;
+        }
+
+        // If we have a mapping, remap the matrices
+        if (!meshToAnimBoneMapping.empty())
+        {
+            std::vector<glm::mat4> remappedMatrices(meshBoneCount, glm::mat4(1.0f));
+
+            // Debug log once
+            static bool loggedOnce = false;
+
+            for (size_t meshBoneIdx = 0; meshBoneIdx < meshBoneCount; ++meshBoneIdx)
+            {
+                int32_t animBoneIdx = meshToAnimBoneMapping[meshBoneIdx];
+                if (animBoneIdx >= 0 && animBoneIdx < static_cast<int32_t>(animBoneMatrices.size()))
+                {
+                    // Use animation's pre-computed bone matrix directly
+                    // Since both skeletons have same inverse bind poses, this should work
+                    remappedMatrices[meshBoneIdx] = animBoneMatrices[animBoneIdx];
+
+                    if (!loggedOnce && meshBoneIdx < 3)
+                    {
+                        loggerInfo("Remap bone[{}] '{}': animBone={}, matrix[3]=({:.2f},{:.2f},{:.2f})",
+                            meshBoneIdx, meshSkeleton.boneNames[meshBoneIdx], animBoneIdx,
+                            animBoneMatrices[animBoneIdx][3][0],
+                            animBoneMatrices[animBoneIdx][3][1],
+                            animBoneMatrices[animBoneIdx][3][2]);
+                    }
+                }
+            }
+
+            if (!loggedOnce) loggedOnce = true;
+            return remappedMatrices;
+        }
+
+        // Fallback: return animation matrices as-is
+        return animBoneMatrices;
     }
 }
