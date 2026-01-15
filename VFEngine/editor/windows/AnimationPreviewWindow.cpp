@@ -419,10 +419,8 @@ namespace windows
             const auto& bone = evaluatedBones[i];
             boneNameToIndex[bone.name] = i;
 
-            if (bone.parentIndex >= 0)
-            {
-                boneChildrenMap[bone.parentIndex].push_back(i);
-            }
+            // Add to parent's children list (including root bones with parentIndex == -1)
+            boneChildrenMap[bone.parentIndex].push_back(i);
         }
     }
 

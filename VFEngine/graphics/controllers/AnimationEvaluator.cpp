@@ -136,10 +136,18 @@ namespace controllers
                 // Scale from animation or default
                 glm::vec3 scl = ch.scalingKeys.empty() ? glm::vec3(1.0f) : interpolateScale(ch, timeInTicks);
 
+                // Store individual components for UI display
+                evaluatedBones[i].position = pos;
+                evaluatedBones[i].rotation = rot;
+                evaluatedBones[i].scale = scl;
                 evaluatedBones[i].localTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(glm::mat4(1.0f), scl);
             }
             else
             {
+                // Extract components from bind pose for bones without animation
+                evaluatedBones[i].position = glm::vec3(computedLocalBindPoses[i][3]);
+                evaluatedBones[i].rotation = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
+                evaluatedBones[i].scale = glm::vec3(1.0f);
                 evaluatedBones[i].localTransform = computedLocalBindPoses[i];
             }
         }
