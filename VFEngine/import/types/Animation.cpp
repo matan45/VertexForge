@@ -282,16 +282,6 @@ namespace types
                 // aiBone.mOffsetMatrix IS the inverse bind pose
                 glm::mat4 invBindPose = convertMatrix(bone->mOffsetMatrix);
                 inverseBindPoses[boneName] = invBindPose;
-
-                // DEBUG: Print first 5 bones
-                if (inverseBindPoses.size() <= 5)
-                {
-                    glm::mat4 bindPose = glm::inverse(invBindPose);
-                    vfLogInfo("IMPORT Bone[{}] '{}': invBind[3]=({:.2f},{:.2f},{:.2f}) bindPos=({:.2f},{:.2f},{:.2f})",
-                        inverseBindPoses.size() - 1, boneName,
-                        invBindPose[3][0], invBindPose[3][1], invBindPose[3][2],
-                        bindPose[3][0], bindPose[3][1], bindPose[3][2]);
-                }
             }
         }
 

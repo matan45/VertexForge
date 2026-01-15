@@ -676,51 +676,20 @@ namespace render::mesh
         for (const auto& bone : animData.skeleton)
             loadedMesh->skeleton.boneNames.push_back(bone.name);
 
-        // Create single submesh
-        SubMeshGPUData subMesh;
-        subMesh.name = "mesh";
+        // Convert animation mesh data to MeshesData format for standard loading
+        resource::MeshesData meshesData;
+        meshesData.hasSkinning = true;
+        meshesData.skeleton = loadedMesh->skeleton;
 
-        // Compute bounding box
-        for (const auto& v : animData.vertices)
-            subMesh.boundingBox.expand(v.position);
-        loadedMesh->meshData.boundingBox = subMesh.boundingBox;
+        resource::MeshData meshData;
+        meshData.name = "mesh";
+        meshData.lodLevels.resize(1);
+        meshData.lodLevels[0].vertices = animData.vertices;
+        meshData.lodLevels[0].indices = animData.indices;
+        meshesData.meshes.push_back(std::move(meshData));
 
-        auto logicalDevice = device.getLogicalDevice();
-        auto physicalDevice = device.getPhysicalDevice();
-
-        // Create vertex buffer
-        vk::DeviceSize vertexSize = sizeof(resource::Vertex) * animData.vertices.size();
-
-        core::BufferInfoRequest vertexBufferInfo(logicalDevice, physicalDevice, vertexSize,
-            vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-            vk::MemoryPropertyFlagBits::eDeviceLocal);
-        core::BufferUtilities::createBuffer(vertexBufferInfo,
-            subMesh.lodLevels[0].vertexBuffer, subMesh.lodLevels[0].vertexBufferMemory);
-
-        core::BufferUtilities::copyToBuffer(logicalDevice, physicalDevice,
-            device.getGraphicsQueue(), device.getStagingCommandPool(),
-            subMesh.lodLevels[0].vertexBuffer,
-            animData.vertices.data(), vertexSize);
-
-        // Create index buffer
-        vk::DeviceSize indexSize = sizeof(uint32_t) * animData.indices.size();
-
-        core::BufferInfoRequest indexBufferInfo(logicalDevice, physicalDevice, indexSize,
-            vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-            vk::MemoryPropertyFlagBits::eDeviceLocal);
-        core::BufferUtilities::createBuffer(indexBufferInfo,
-            subMesh.lodLevels[0].indexBuffer, subMesh.lodLevels[0].indexBufferMemory);
-
-        core::BufferUtilities::copyToBuffer(logicalDevice, physicalDevice,
-            device.getGraphicsQueue(), device.getStagingCommandPool(),
-            subMesh.lodLevels[0].indexBuffer,
-            animData.indices.data(), indexSize);
-
-        // Set counts
-        subMesh.lodLevels[0].vertexCount = static_cast<uint32_t>(animData.vertices.size());
-        subMesh.lodLevels[0].indexCount = static_cast<uint32_t>(animData.indices.size());
-
-        loadedMesh->meshData.subMeshes.push_back(std::move(subMesh));
+        // Use standard mesh loading path
+        createMeshGPUBuffers(meshesData);
 
         loggerInfo("Loaded mesh from animation: {} vertices, {} indices",
             animData.vertices.size(), animData.indices.size());

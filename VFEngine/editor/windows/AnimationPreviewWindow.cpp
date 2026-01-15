@@ -220,31 +220,6 @@ namespace windows
         previewCleanedUp = true;
     }
 
-    void AnimationPreviewWindow::loadMeshForPreview()
-    {
-        if (meshPath.empty() || !previewInitialized) return;
-
-        services::events::animpreview::LoadAnimationPreviewMeshCommand loadCmd;
-        loadCmd.instanceId = getPreviewInstanceId();
-        loadCmd.meshPath = meshPath;
-        bool success = events::EventDispatcher::instance().execute(loadCmd);
-
-        if (success)
-        {
-            meshLoadedInPreview = true;
-
-            // Get mesh bounds and fit camera
-            services::events::animpreview::GetAnimationPreviewMeshBoundsQuery boundsQuery;
-            boundsQuery.instanceId = getPreviewInstanceId();
-            meshBounds = events::EventDispatcher::instance().query(boundsQuery);
-            camera->fitToBounds(meshBounds);
-        }
-        else
-        {
-            vfLogError("Failed to load mesh for animation preview: {}", meshPath);
-        }
-    }
-
     void AnimationPreviewWindow::loadAnimationForPreview()
     {
         if (!meshLoadedInPreview || !previewInitialized) return;
@@ -281,14 +256,8 @@ namespace windows
         if (!animationLoaded || !animationData.hasInverseBindPoses()) return;
 
         // Animation must have embedded mesh (v0.0.7+)
-        if (!animationData.hasMesh())
-        {
-            vfLogWarning("Animation has no embedded mesh - re-import required");
-            return;
-        }
+        if (!animationData.hasMesh()) return;
 
-        vfLogInfo("Using embedded mesh: {} vertices, {} indices",
-            animationData.vertices.size(), animationData.indices.size());
         meshLoadedInPreview = true;
         loadAnimationForPreview();
     }
@@ -535,36 +504,6 @@ namespace windows
 
             updateBoneTransformsFromService();
         }
-
-        ImGui::Spacing();
-
-        // Timeline scrub
-        float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;
-        float durationSeconds = animationData.duration / ticksPerSec;
-
-        // Get current time from service if animation is loaded
-        float currentTimeInTicks = 0.0f;
-        if (animationLoadedInPreview)
-        {
-            services::events::animpreview::GetAnimationPlaybackTimeQuery timeQuery;
-            timeQuery.instanceId = getPreviewInstanceId();
-            currentTimeInTicks = events::EventDispatcher::instance().query(timeQuery) * ticksPerSec;
-        }
-        else
-        {
-            currentTimeInTicks = static_cast<float>(currentFrame);
-        }
-
-        float currentSeconds = currentTimeInTicks / ticksPerSec;
-
-        ImGui::Text("Time:");
-        if (ImGui::SliderFloat("##Time", &currentSeconds, 0.0f, durationSeconds, "%.2f s"))
-        {
-            seekToTime(currentSeconds * ticksPerSec);
-        }
-
-        // Frame display
-        ImGui::Text("Frame: %d / %d", currentFrame, static_cast<int>(animationData.duration));
 
         ImGui::Spacing();
 

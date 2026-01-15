@@ -683,26 +683,6 @@ namespace resource
         return total;
     }
 
-    std::shared_ptr<SkeletonData> MeshStreamHandle::loadUnifiedSkeleton()
-    {
-        if (!hasSkeletonRef || header.skeletonReference.empty())
-        {
-            return nullptr;
-        }
-
-        // Build skeleton path relative to mesh file
-        std::filesystem::path meshPath(filePath);
-        std::filesystem::path skelPath = meshPath.parent_path() / header.skeletonReference;
-
-        if (!std::filesystem::exists(skelPath))
-        {
-            vfLogWarning("MeshStreamHandle: Skeleton file not found: {}", skelPath.string());
-            return nullptr;
-        }
-
-        return SkeletonResource::loadSkeletonCached(skelPath.string());
-    }
-
     bool MeshStreamHandle::parseSkeletonHeader()
     {
         skeletonDataOffset = file.tellg();

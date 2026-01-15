@@ -39,7 +39,6 @@ namespace windows
     private:
         // File paths
         std::string animationPath;
-        std::string meshPath;
         std::string windowTitle;
 
         // Loaded animation data (for timeline display and bone hierarchy)
@@ -105,7 +104,6 @@ namespace windows
 
         // Mesh loading for 3D preview
         void tryAutoLoadMesh();
-        void loadMeshForPreview();
         void loadAnimationForPreview();
 
         // Get bone transforms from the service (same data used for GPU skinning)

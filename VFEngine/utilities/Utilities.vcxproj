@@ -118,7 +118,6 @@
     <ClInclude Include="resource\MeshletTypes.hpp" />
     <ClInclude Include="resource\ResourceManager.hpp" />
     <ClInclude Include="resource\ShaderResource.hpp" />
-    <ClInclude Include="resource\SkeletonResource.hpp" />
     <ClInclude Include="resource\TextureResource.hpp" />
     <ClInclude Include="resource\Types.hpp" />
     <ClInclude Include="scene\Entity.hpp" />
@@ -156,7 +155,6 @@
     <ClCompile Include="resource\MeshStreamHandle.cpp" />
     <ClCompile Include="resource\ResourceManager.cpp" />
     <ClCompile Include="resource\ShaderResource.cpp" />
-    <ClCompile Include="resource\SkeletonResource.cpp" />
     <ClCompile Include="resource\TextureResource.cpp" />
     <ClCompile Include="scene\Level.cpp" />
     <ClCompile Include="scene\LevelHandler.cpp" />

@@ -9,7 +9,6 @@
 #include "Types.hpp"
 #include "MeshletTypes.hpp"
 #include "ConvexHullTypes.hpp"
-#include "SkeletonResource.hpp"
 
 namespace resource
 {
@@ -103,20 +102,11 @@ namespace resource
 
         bool readSkeletonData(SkeletonInfo& outSkeleton);
 
-        // Load unified skeleton from .vfSkeleton file (v0.0.7+)
-        // Returns nullptr if no skeleton reference or file not found
-        std::shared_ptr<SkeletonData> loadUnifiedSkeleton();
-
-        // Get skeleton reference string (v0.0.7+)
-        const std::string& getSkeletonReference() const { return header.skeletonReference; }
-
         bool hasMeshletData() const { return hasMeshlets; }
 
         bool hasConvexData() const { return hasConvexHulls; }
 
         bool hasSkinning() const { return hasSkinningData; }
-
-        bool hasSkeletonReference() const { return hasSkeletonRef; }
 
         uint32_t getTotalVertexCount(uint32_t lodLevel) const;
 

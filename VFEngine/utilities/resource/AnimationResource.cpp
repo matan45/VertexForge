@@ -1,5 +1,4 @@
 #include "AnimationResource.hpp"
-#include "SkeletonResource.hpp"
 #include "../print/EditorLogger.hpp"
 #include "EndianUtils.hpp"
 
@@ -89,34 +88,6 @@ namespace resource
                 bone.preTransform = readMatrix(file);
             }
             vfLogInfo("Loaded inline skeleton with {} bones", numBones);
-        }
-        else if (hasSkeletonReference && !data.skeletonReference.empty())
-        {
-            // v0.0.4 format: load skeleton from referenced file
-            std::filesystem::path animPath(path);
-            std::filesystem::path skelPath = animPath.parent_path() / data.skeletonReference;
-
-            if (std::filesystem::exists(skelPath))
-            {
-                skeletonOut = SkeletonResource::loadSkeletonCached(skelPath.string());
-                if (skeletonOut && skeletonOut->hasBones())
-                {
-                    // Populate skeleton field from loaded skeleton
-                    data.skeleton = skeletonOut->bones;
-                    data.globalInverseTransform = skeletonOut->globalInverseTransform;
-                    // Also copy inverse bind poses from skeleton if available
-                    data.inverseBindPoses = skeletonOut->inverseBindPoses;
-                    vfLogInfo("Loaded skeleton from reference: {}", data.skeletonReference);
-                }
-                else
-                {
-                    vfLogWarning("Failed to load skeleton from reference: {}", skelPath.string());
-                }
-            }
-            else
-            {
-                vfLogWarning("Skeleton file not found: {}", skelPath.string());
-            }
         }
 
         // Read inverse bind poses (v0.0.6+)
