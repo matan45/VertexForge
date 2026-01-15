@@ -1,6 +1,7 @@
 #include "MeshStreamHandle.hpp"
 #include "../print/EditorLogger.hpp"
 #include "EndianUtils.hpp"
+#include <filesystem>
 
 namespace resource
 {
@@ -88,8 +89,21 @@ namespace resource
         hasMeshlets = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 4);
         hasConvexHulls = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 5);
         hasSkinningData = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 6);
+        hasSkeletonRef = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 7);
 
         header.numSubmeshes = endian::readLE<uint32_t>(file);
+
+        // Read skeleton reference for v0.0.7+
+        if (hasSkeletonRef)
+        {
+            uint32_t skelRefLen = endian::readLE<uint32_t>(file);
+            if (skelRefLen > 0 && skelRefLen < 1024)
+            {
+                header.skeletonReference.resize(skelRefLen);
+                file.read(header.skeletonReference.data(), skelRefLen);
+                vfLogInfo("MeshStreamHandle: Found skeleton reference: {}", header.skeletonReference);
+            }
+        }
 
         if (file.fail())
         {
@@ -667,6 +681,26 @@ namespace resource
             total += submesh.lods[lodLevel].indexCount;
         }
         return total;
+    }
+
+    std::shared_ptr<SkeletonData> MeshStreamHandle::loadUnifiedSkeleton()
+    {
+        if (!hasSkeletonRef || header.skeletonReference.empty())
+        {
+            return nullptr;
+        }
+
+        // Build skeleton path relative to mesh file
+        std::filesystem::path meshPath(filePath);
+        std::filesystem::path skelPath = meshPath.parent_path() / header.skeletonReference;
+
+        if (!std::filesystem::exists(skelPath))
+        {
+            vfLogWarning("MeshStreamHandle: Skeleton file not found: {}", skelPath.string());
+            return nullptr;
+        }
+
+        return SkeletonResource::loadSkeletonCached(skelPath.string());
     }
 
     bool MeshStreamHandle::parseSkeletonHeader()

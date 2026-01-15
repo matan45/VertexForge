@@ -18,19 +18,19 @@ namespace controllers
         glm::vec3 scale{1.0f};
         glm::mat4 localTransform{1.0f};
         glm::mat4 worldTransform{1.0f};
+        glm::vec3 skinnedPosition{0.0f};  // Final position after skinning transform
     };
 
     // Evaluates animation poses and computes final bone matrices for GPU skinning
+    // Self-contained: uses animation's own skeleton and inverse bind poses
     class AnimationEvaluator
     {
     public:
         AnimationEvaluator() = default;
         ~AnimationEvaluator() = default;
 
-        // Load animation and mesh skeleton data
-        // The mesh skeleton provides inverse bind poses, animation provides keyframes
-        void loadAnimation(const resource::AnimationData& animation,
-                          const resource::SkeletonInfo& meshSkeleton);
+        // Load animation data (v0.0.6+ format with inverse bind poses)
+        void loadAnimation(const resource::AnimationData& animation);
 
         // Clear loaded data
         void clear();
@@ -46,8 +46,8 @@ namespace controllers
         float getDuration() const { return animationData ? animationData->duration : 0.0f; }
         float getTicksPerSecond() const { return animationData ? animationData->ticksPerSecond : 24.0f; }
         float getDurationSeconds() const;
-        size_t getBoneCount() const { return meshSkeleton ? meshSkeleton->boneCount() : 0; }
-        bool isLoaded() const { return animationData != nullptr && meshSkeleton != nullptr; }
+        size_t getBoneCount() const { return animationData ? animationData->skeleton.size() : 0; }
+        bool isLoaded() const { return animationData != nullptr && animationData->hasInverseBindPoses(); }
 
         // Convert between time formats
         float secondsToTicks(float seconds) const;
@@ -65,31 +65,13 @@ namespace controllers
         // Map bone names to animation channel indices for fast lookup
         void buildBoneToChannelMap();
 
-        // Map mesh skeleton bone names to animation skeleton indices
-        void buildSkeletonMapping();
-
-        // Pointers to loaded data (not owned)
+        // Pointer to loaded data (not owned)
         const resource::AnimationData* animationData = nullptr;
-        const resource::SkeletonInfo* meshSkeleton = nullptr;
 
         // Bone name to animation channel index
         std::unordered_map<std::string, size_t> boneNameToChannelIndex;
 
-        // Mesh skeleton bone index to animation skeleton bone index
-        // Used to map from mesh bone order to animation bone order
-        std::vector<int32_t> meshBoneToAnimBone;
-
-        // Animation skeleton bone index to mesh skeleton bone index
-        std::vector<int32_t> animBoneToMeshBone;
-
-        // Bind pose alignment: corrects for differences between animation rest pose and mesh bind pose
-        // Stored per mesh bone index
-        std::vector<glm::mat4> bindPoseCorrection;
-
         // Evaluated bone transforms (mutable for const evaluation)
         mutable std::vector<EvaluatedBone> evaluatedBones;
-
-        // Helper: compute world transform for a bone using animation skeleton's offsetMatrix (rest pose)
-        glm::mat4 computeRestPoseWorldTransform(size_t animBoneIdx) const;
     };
 }

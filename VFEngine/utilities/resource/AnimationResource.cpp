@@ -1,14 +1,24 @@
 #include "AnimationResource.hpp"
+#include "SkeletonResource.hpp"
 #include "../print/EditorLogger.hpp"
 #include "EndianUtils.hpp"
 
 #include <fstream>
+#include <filesystem>
 
 namespace resource
 {
     AnimationData AnimationResource::loadAnimation(std::string_view path)
     {
+        std::shared_ptr<SkeletonData> skeleton;
+        return loadAnimationWithSkeleton(path, skeleton);
+    }
+
+    AnimationData AnimationResource::loadAnimationWithSkeleton(std::string_view path,
+                                                               std::shared_ptr<SkeletonData>& skeletonOut)
+    {
         AnimationData data;
+        skeletonOut = nullptr;
 
         std::ifstream file(path.data(), std::ios::binary);
         if (!file)
@@ -38,37 +48,92 @@ namespace resource
         data.duration = endian::readLE<float>(file);
         data.ticksPerSecond = endian::readLE<float>(file);
 
-        // Read skeleton
-        uint32_t numBones = endian::readLE<uint32_t>(file);
-        if (numBones > 1000)  // Sanity check
+        // Check version for format type
+        // v0.0.6+: self-contained with skeleton + inverse bind poses
+        // v0.0.5: has skeleton reference AND inline skeleton
+        // v0.0.4: has skeleton reference only (loads from .vfSkeleton)
+        // v0.0.3 and earlier: inline skeleton only (no reference)
+        bool hasSkeletonReference = (data.version.major == 0 && data.version.minor == 0 && data.version.patch >= 4);
+        bool hasInlineSkeleton = (data.version.major == 0 && data.version.minor == 0 && data.version.patch >= 5) ||
+                                  (data.version.major == 0 && data.version.minor == 0 && data.version.patch < 4);
+        bool hasInverseBindPoses = (data.version.major == 0 && data.version.minor == 0 && data.version.patch >= 6);
+
+        if (hasSkeletonReference)
         {
-            vfLogError("Invalid bone count in animation file: {}", numBones);
-            return data;
+            // Read skeleton reference (present in v0.0.4+)
+            data.skeletonReference = readString(file);
+            vfLogInfo("Animation has skeleton reference: {}", data.skeletonReference);
         }
 
-        data.skeleton.resize(numBones);
-        for (auto& bone : data.skeleton)
+        if (hasInlineSkeleton)
         {
-            bone.name = readString(file);
-            bone.parentIndex = endian::readLE<int32_t>(file);
-
-            // Read offset matrix (16 floats, column-major)
-            for (int col = 0; col < 4; ++col)
+            // Read inline skeleton (v0.0.5+ or legacy v0.0.3 and earlier)
+            uint32_t numBones = endian::readLE<uint32_t>(file);
+            if (numBones > 1000)  // Sanity check
             {
-                for (int row = 0; row < 4; ++row)
-                {
-                    bone.offsetMatrix[col][row] = endian::readLE<float>(file);
-                }
+                vfLogError("Invalid bone count in animation file: {}", numBones);
+                return data;
             }
 
-            // Read preTransform matrix (16 floats, column-major)
-            for (int col = 0; col < 4; ++col)
+            data.skeleton.resize(numBones);
+            for (auto& bone : data.skeleton)
             {
-                for (int row = 0; row < 4; ++row)
+                bone.name = readString(file);
+                bone.parentIndex = endian::readLE<int32_t>(file);
+
+                // Read offset matrix (16 floats, column-major)
+                bone.offsetMatrix = readMatrix(file);
+
+                // Read preTransform matrix (16 floats, column-major)
+                bone.preTransform = readMatrix(file);
+            }
+            vfLogInfo("Loaded inline skeleton with {} bones", numBones);
+        }
+        else if (hasSkeletonReference && !data.skeletonReference.empty())
+        {
+            // v0.0.4 format: load skeleton from referenced file
+            std::filesystem::path animPath(path);
+            std::filesystem::path skelPath = animPath.parent_path() / data.skeletonReference;
+
+            if (std::filesystem::exists(skelPath))
+            {
+                skeletonOut = SkeletonResource::loadSkeletonCached(skelPath.string());
+                if (skeletonOut && skeletonOut->hasBones())
                 {
-                    bone.preTransform[col][row] = endian::readLE<float>(file);
+                    // Populate skeleton field from loaded skeleton
+                    data.skeleton = skeletonOut->bones;
+                    data.globalInverseTransform = skeletonOut->globalInverseTransform;
+                    // Also copy inverse bind poses from skeleton if available
+                    data.inverseBindPoses = skeletonOut->inverseBindPoses;
+                    vfLogInfo("Loaded skeleton from reference: {}", data.skeletonReference);
+                }
+                else
+                {
+                    vfLogWarning("Failed to load skeleton from reference: {}", skelPath.string());
                 }
             }
+            else
+            {
+                vfLogWarning("Skeleton file not found: {}", skelPath.string());
+            }
+        }
+
+        // Read inverse bind poses (v0.0.6+)
+        if (hasInverseBindPoses)
+        {
+            uint32_t numPoses = endian::readLE<uint32_t>(file);
+            if (numPoses > 1000)  // Sanity check
+            {
+                vfLogError("Invalid inverse bind pose count in animation file: {}", numPoses);
+                return data;
+            }
+
+            data.inverseBindPoses.resize(numPoses);
+            for (auto& matrix : data.inverseBindPoses)
+            {
+                matrix = readMatrix(file);
+            }
+            vfLogInfo("Loaded {} inverse bind poses", numPoses);
         }
 
         // Read channels
@@ -119,31 +184,28 @@ namespace resource
             }
         }
 
-        // Read global inverse transform (16 floats, column-major)
-        // Check if there's more data (for backwards compatibility with older files)
+        // Read global inverse transform
+        // v0.0.5+: always present after channels
+        // v0.0.4: present after channels
+        // v0.0.3 and earlier: may or may not be present
         if (file.peek() != EOF)
         {
-            for (int col = 0; col < 4; ++col)
-            {
-                for (int row = 0; row < 4; ++row)
-                {
-                    data.globalInverseTransform[col][row] = endian::readLE<float>(file);
-                }
-            }
+            data.globalInverseTransform = readMatrix(file);
             vfLogInfo("Loaded global inverse transform from animation file");
         }
         else
         {
-            // Old file format - use identity
+            // Old file format without global inverse - use identity
             data.globalInverseTransform = glm::mat4(1.0f);
             vfLogInfo("No global inverse transform in file, using identity");
         }
 
         data.headerFileType = FileType::ANIMATION;
 
-        vfLogInfo("Loaded animation '{}' - {} bones, {} channels, duration: {:.2f}s",
+        vfLogInfo("Loaded animation '{}' - {} bones, {} channels, duration: {:.2f}s, format: v{}.{}.{}",
                   data.name, data.skeleton.size(), data.channels.size(),
-                  data.duration / data.ticksPerSecond);
+                  data.duration / data.ticksPerSecond,
+                  data.version.major, data.version.minor, data.version.patch);
 
         return data;
     }
@@ -176,5 +238,18 @@ namespace resource
         std::string str(length, '\0');
         file.read(str.data(), length);
         return str;
+    }
+
+    glm::mat4 AnimationResource::readMatrix(std::ifstream& file)
+    {
+        glm::mat4 matrix(1.0f);
+        for (int col = 0; col < 4; ++col)
+        {
+            for (int row = 0; row < 4; ++row)
+            {
+                matrix[col][row] = endian::readLE<float>(file);
+            }
+        }
+        return matrix;
     }
 }

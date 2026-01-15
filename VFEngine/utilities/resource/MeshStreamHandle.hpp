@@ -9,6 +9,7 @@
 #include "Types.hpp"
 #include "MeshletTypes.hpp"
 #include "ConvexHullTypes.hpp"
+#include "SkeletonResource.hpp"
 
 namespace resource
 {
@@ -46,6 +47,7 @@ namespace resource
         FileType headerFileType = FileType::MESH;
         FileVersion version{};
         uint32_t numSubmeshes = 0;
+        std::string skeletonReference;                   // v0.0.7+: Reference to .vfSkeleton file
         std::vector<SubmeshStreamInfo> submeshes;
     };
 
@@ -69,6 +71,7 @@ namespace resource
         bool hasMeshlets = false;     // True if file has meshlet data (v0.0.4+)
         bool hasConvexHulls = false;  // True if file has convex hull data (v0.0.5+)
         bool hasSkinningData = false; // True if file has skinning data (v0.0.6+)
+        bool hasSkeletonRef = false;  // True if file has skeleton reference (v0.0.7+)
         std::streampos skeletonDataOffset = 0; // File position where skeleton data starts
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
@@ -100,11 +103,20 @@ namespace resource
 
         bool readSkeletonData(SkeletonInfo& outSkeleton);
 
+        // Load unified skeleton from .vfSkeleton file (v0.0.7+)
+        // Returns nullptr if no skeleton reference or file not found
+        std::shared_ptr<SkeletonData> loadUnifiedSkeleton();
+
+        // Get skeleton reference string (v0.0.7+)
+        const std::string& getSkeletonReference() const { return header.skeletonReference; }
+
         bool hasMeshletData() const { return hasMeshlets; }
 
         bool hasConvexData() const { return hasConvexHulls; }
 
         bool hasSkinning() const { return hasSkinningData; }
+
+        bool hasSkeletonReference() const { return hasSkeletonRef; }
 
         uint32_t getTotalVertexCount(uint32_t lodLevel) const;
 

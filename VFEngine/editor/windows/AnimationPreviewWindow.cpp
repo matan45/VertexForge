@@ -276,6 +276,48 @@ namespace windows
         }
     }
 
+    void AnimationPreviewWindow::tryAutoLoadMesh()
+    {
+        if (!animationLoaded || !animationData.hasInverseBindPoses()) return;
+
+        // Try to find a mesh file in the same directory as the animation
+        std::filesystem::path animPath(animationPath);
+        std::filesystem::path animDir = animPath.parent_path();
+        std::string animBaseName = animPath.stem().string();
+
+        // First, try to find a mesh with the same base name
+        std::filesystem::path matchingMesh = animDir / (animBaseName + ".vfMesh");
+        if (std::filesystem::exists(matchingMesh))
+        {
+            meshPath = matchingMesh.string();
+            vfLogInfo("Auto-detected mesh for animation preview: {}", meshPath);
+            loadMeshForPreview();
+            if (meshLoadedInPreview)
+            {
+                loadAnimationForPreview();
+            }
+            return;
+        }
+
+        // If no matching name, look for any .vfMesh file in the directory
+        for (const auto& entry : std::filesystem::directory_iterator(animDir))
+        {
+            if (entry.path().extension() == ".vfMesh")
+            {
+                meshPath = entry.path().string();
+                vfLogInfo("Auto-detected mesh for animation preview: {}", meshPath);
+                loadMeshForPreview();
+                if (meshLoadedInPreview)
+                {
+                    loadAnimationForPreview();
+                }
+                return;
+            }
+        }
+
+        vfLogInfo("No mesh found for animation preview in directory: {}", animDir.string());
+    }
+
     void AnimationPreviewWindow::startAsyncLoad()
     {
         loadingInProgress.store(true);
@@ -310,14 +352,7 @@ namespace windows
 
                     if (isValid)
                     {
-                        // Build bone name to channel index map once
-                        boneNameToChannelIndex.clear();
-                        for (size_t i = 0; i < animationData.channels.size(); ++i)
-                        {
-                            boneNameToChannelIndex[animationData.channels[i].boneName] = i;
-                        }
-
-                        // Build bone children map once for O(1) hierarchy lookup
+                        // Build bone children map from animation skeleton for initial UI display
                         boneChildrenMap.clear();
                         for (size_t i = 0; i < animationData.skeleton.size(); ++i)
                         {
@@ -327,7 +362,10 @@ namespace windows
 
                         sequenceAdapter->setAnimationData(&animationData);
                         animationLoaded = true;
-                        evaluateAnimationLocal(0.0f);
+                        updateBoneTransformsFromService();
+
+                        // Auto-detect and load mesh for 3D preview
+                        tryAutoLoadMesh();
                     }
                     else
                     {
@@ -382,134 +420,33 @@ namespace windows
         return result;
     }
 
-    void AnimationPreviewWindow::evaluateAnimationLocal(float timeInTicks)
+    void AnimationPreviewWindow::updateBoneTransformsFromService()
     {
-        evaluatedBones.clear();
-        evaluatedBones.reserve(animationData.skeleton.size());
+        // Query evaluated bones from the service - this is the same data used for GPU skinning
+        services::events::animpreview::GetAnimationPreviewEvaluatedBonesQuery query;
+        query.instanceId = getPreviewInstanceId();
+        evaluatedBones = events::EventDispatcher::instance().query(query);
 
-        // Evaluate each bone using cached channel map
-        for (size_t i = 0; i < animationData.skeleton.size(); ++i)
+        // Rebuild hierarchy maps if bone count changed
+        if (!evaluatedBones.empty())
         {
-            const auto& bone = animationData.skeleton[i];
-            EvaluatedBoneTransform eval;
-            eval.boneName = bone.name;
-            eval.parentIndex = bone.parentIndex;
-
-            auto it = boneNameToChannelIndex.find(bone.name);
-            if (it != boneNameToChannelIndex.end())
-            {
-                const auto& channel = animationData.channels[it->second];
-                eval.position = interpolatePosition(channel, timeInTicks);
-                eval.rotation = interpolateRotation(channel, timeInTicks);
-                eval.scale = interpolateScale(channel, timeInTicks);
-            }
-
-            // Compute local transform
-            glm::mat4 T = glm::translate(glm::mat4(1.0f), eval.position);
-            glm::mat4 R = glm::mat4_cast(eval.rotation);
-            glm::mat4 S = glm::scale(glm::mat4(1.0f), eval.scale);
-            eval.localTransform = T * R * S;
-
-            evaluatedBones.push_back(eval);
+            buildBoneHierarchyMaps();
         }
-
-        computeWorldTransforms();
     }
 
-    glm::vec3 AnimationPreviewWindow::interpolatePosition(const resource::BoneAnimation& channel, float time)
+    void AnimationPreviewWindow::buildBoneHierarchyMaps()
     {
-        if (channel.positionKeys.empty()) return glm::vec3(0.0f);
-        if (channel.positionKeys.size() == 1) return channel.positionKeys[0].position;
+        boneNameToIndex.clear();
+        boneChildrenMap.clear();
 
-        size_t i = 0;
-        for (; i < channel.positionKeys.size() - 1; ++i)
-        {
-            if (time < channel.positionKeys[i + 1].time) break;
-        }
-
-        if (i >= channel.positionKeys.size() - 1)
-        {
-            return channel.positionKeys.back().position;
-        }
-
-        const auto& k0 = channel.positionKeys[i];
-        const auto& k1 = channel.positionKeys[i + 1];
-
-        float dt = k1.time - k0.time;
-        float t = (dt > 0.0f) ? (time - k0.time) / dt : 0.0f;
-        t = glm::clamp(t, 0.0f, 1.0f);
-
-        return glm::mix(k0.position, k1.position, t);
-    }
-
-    glm::quat AnimationPreviewWindow::interpolateRotation(const resource::BoneAnimation& channel, float time)
-    {
-        if (channel.rotationKeys.empty())
-            return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-        if (channel.rotationKeys.size() == 1)
-            return channel.rotationKeys[0].rotation;
-
-        size_t i = 0;
-        for (; i < channel.rotationKeys.size() - 1; ++i)
-        {
-            if (time < channel.rotationKeys[i + 1].time) break;
-        }
-
-        if (i >= channel.rotationKeys.size() - 1)
-        {
-            return channel.rotationKeys.back().rotation;
-        }
-
-        const auto& k0 = channel.rotationKeys[i];
-        const auto& k1 = channel.rotationKeys[i + 1];
-
-        float dt = k1.time - k0.time;
-        float t = (dt > 0.0f) ? (time - k0.time) / dt : 0.0f;
-        t = glm::clamp(t, 0.0f, 1.0f);
-
-        return glm::slerp(k0.rotation, k1.rotation, t);
-    }
-
-    glm::vec3 AnimationPreviewWindow::interpolateScale(const resource::BoneAnimation& channel, float time)
-    {
-        if (channel.scalingKeys.empty()) return glm::vec3(1.0f);
-        if (channel.scalingKeys.size() == 1) return channel.scalingKeys[0].scale;
-
-        size_t i = 0;
-        for (; i < channel.scalingKeys.size() - 1; ++i)
-        {
-            if (time < channel.scalingKeys[i + 1].time) break;
-        }
-
-        if (i >= channel.scalingKeys.size() - 1)
-        {
-            return channel.scalingKeys.back().scale;
-        }
-
-        const auto& k0 = channel.scalingKeys[i];
-        const auto& k1 = channel.scalingKeys[i + 1];
-
-        float dt = k1.time - k0.time;
-        float t = (dt > 0.0f) ? (time - k0.time) / dt : 0.0f;
-        t = glm::clamp(t, 0.0f, 1.0f);
-
-        return glm::mix(k0.scale, k1.scale, t);
-    }
-
-    void AnimationPreviewWindow::computeWorldTransforms()
-    {
         for (size_t i = 0; i < evaluatedBones.size(); ++i)
         {
-            auto& bone = evaluatedBones[i];
-            if (bone.parentIndex >= 0 &&
-                bone.parentIndex < static_cast<int32_t>(evaluatedBones.size()))
+            const auto& bone = evaluatedBones[i];
+            boneNameToIndex[bone.name] = i;
+
+            if (bone.parentIndex >= 0)
             {
-                bone.worldTransform =
-                    evaluatedBones[bone.parentIndex].worldTransform * bone.localTransform;
-            }
-            else
-            {
-                bone.worldTransform = bone.localTransform;
+                boneChildrenMap[bone.parentIndex].push_back(i);
             }
         }
     }
@@ -565,68 +502,23 @@ namespace windows
 
     void AnimationPreviewWindow::drawMeshFileInput()
     {
-        ImGui::Text("3D Preview");
+        ImGui::Text("3D Preview Status");
         ImGui::Spacing();
 
-        // Display current mesh path
-        ImGui::Text("Mesh File:");
-        if (!meshPath.empty())
+        // Show animation status
+        if (animationLoaded && animationData.hasInverseBindPoses())
         {
-            std::filesystem::path p(meshPath);
-            ImGui::TextWrapped("%s", p.filename().string().c_str());
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Animation: Ready");
+            ImGui::Text("Bones: %zu", animationData.skeleton.size());
+        }
+        else if (animationLoaded)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Animation: Needs re-import");
+            ImGui::TextWrapped("This animation uses an older format. Re-import the source file to enable 3D preview.");
         }
         else
         {
-            ImGui::TextDisabled("No mesh selected");
-        }
-
-        ImGui::Spacing();
-
-        if (ImGui::Button("Select Mesh...", ImVec2(-1, 0)))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Mesh Files (*.vfmesh)", L"*.vfmesh"}});
-
-            if (!path.empty())
-            {
-                std::ifstream file(path);
-                if (file.good())
-                {
-                    file.close();
-                    meshPath = path;
-                    loadMeshForPreview();
-                    if (meshLoadedInPreview && animationLoaded)
-                    {
-                        loadAnimationForPreview();
-                    }
-                }
-                else
-                {
-                    vfLogError("Selected mesh file does not exist or cannot be read: {}", path);
-                }
-            }
-        }
-
-        ImGui::Spacing();
-
-        // Status indicators
-        if (meshLoadedInPreview)
-        {
-            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Mesh: Loaded");
-        }
-        else
-        {
-            ImGui::TextDisabled("Mesh: Not loaded");
-        }
-
-        if (animationLoadedInPreview)
-        {
-            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Anim: Loaded");
-        }
-        else if (meshLoadedInPreview)
-        {
-            ImGui::TextDisabled("Anim: Not loaded");
+            ImGui::TextDisabled("Animation: Loading...");
         }
     }
 
@@ -668,7 +560,7 @@ namespace windows
                 events::EventDispatcher::instance().execute(stopCmd);
             }
 
-            evaluateAnimationLocal(0.0f);
+            updateBoneTransformsFromService();
         }
 
         ImGui::Spacing();
@@ -813,8 +705,8 @@ namespace windows
             }
 
             // Draw placeholder text in center
-            const char* placeholderText = "Load a mesh file to preview";
-            const char* subText = "Enter path in 'Mesh File' field";
+            const char* placeholderText = "3D Preview Unavailable";
+            const char* subText = "Mesh required for 3D visualization";
 
             ImVec2 textSize = ImGui::CalcTextSize(placeholderText);
             ImVec2 subTextSize = ImGui::CalcTextSize(subText);
@@ -874,6 +766,10 @@ namespace windows
         renderQuery.instanceId = getPreviewInstanceId();
         auto textureHandle = events::EventDispatcher::instance().query(renderQuery);
 
+        // Update bone transforms AFTER animation update and render
+        // This ensures we get the latest evaluated bones for visualization
+        updateBoneTransformsFromService();
+
         if (textureHandle.imguiDescriptorSet)
         {
             ImVec2 viewportPos = ImGui::GetCursorScreenPos();
@@ -926,8 +822,9 @@ namespace windows
         {
             const auto& bone = evaluatedBones[i];
 
-            // Get bone world position (translation from world transform)
-            glm::vec3 boneWorldPos(bone.worldTransform[3][0], bone.worldTransform[3][1], bone.worldTransform[3][2]);
+            // Use skinnedPosition - this is where the bone actually ends up after applying
+            // the same transform as GPU skinning (globalInverse * worldTransform)
+            glm::vec3 boneWorldPos = bone.skinnedPosition;
 
             // Project to screen
             ImVec2 screenPos = worldToScreen(boneWorldPos, viewportPos, viewportSize);
@@ -943,8 +840,7 @@ namespace windows
             if (bone.parentIndex >= 0 && bone.parentIndex < static_cast<int32_t>(evaluatedBones.size()))
             {
                 const auto& parentBone = evaluatedBones[bone.parentIndex];
-                glm::vec3 parentWorldPos(parentBone.worldTransform[3][0], parentBone.worldTransform[3][1],
-                                         parentBone.worldTransform[3][2]);
+                glm::vec3 parentWorldPos = parentBone.skinnedPosition;
 
                 ImVec2 parentScreenPos = worldToScreen(parentWorldPos, viewportPos, viewportSize);
 
@@ -1056,7 +952,7 @@ namespace windows
         bool hasChildren = (childIt != boneChildrenMap.end() && !childIt->second.empty());
         if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
 
-        bool nodeOpen = ImGui::TreeNodeEx(bone.boneName.c_str(), flags);
+        bool nodeOpen = ImGui::TreeNodeEx(bone.name.c_str(), flags);
 
         if (ImGui::IsItemClicked())
             selectedChannel = static_cast<int>(index);
@@ -1153,7 +1049,7 @@ namespace windows
             float currentTimeInTicks = currentTimeSeconds * ticksPerSec;
 
             currentFrame = timeToFrame(currentTimeInTicks);
-            evaluateAnimationLocal(currentTimeInTicks);
+            updateBoneTransformsFromService();
 
             // Check if animation finished (for non-looping)
             services::events::animpreview::IsAnimationPlayingQuery playingQuery;
@@ -1182,7 +1078,7 @@ namespace windows
             }
 
             currentFrame = timeToFrame(currentTimeInTicks);
-            evaluateAnimationLocal(currentTimeInTicks);
+            updateBoneTransformsFromService();
         }
     }
 
@@ -1190,7 +1086,7 @@ namespace windows
     {
         float clampedTime = glm::clamp(timeInTicks, 0.0f, animationData.duration);
         currentFrame = timeToFrame(clampedTime);
-        evaluateAnimationLocal(clampedTime);
+        updateBoneTransformsFromService();
 
         // Sync to service if preview is active
         if (animationLoadedInPreview)

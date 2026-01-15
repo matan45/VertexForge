@@ -38,6 +38,7 @@ namespace services
         glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
         glm::vec3 scale{1.0f};
         glm::mat4 worldTransform{1.0f};
+        glm::vec3 skinnedPosition{0.0f};  // Final position after skinning (for visualization)
         int32_t parentIndex = -1;
     };
 

@@ -8,7 +8,6 @@
 #include "../core/Utilities.hpp"
 #include "../core/RenderManager.hpp"
 #include "../render/mesh/SkinnedMeshPipeline.hpp"
-#include "resource/MeshStreamHandle.hpp"
 #include "resource/AnimationResource.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
@@ -248,7 +247,6 @@ namespace controllers
         {
             skinnedPipeline->unloadMesh();
             loadedMeshPath.clear();
-            meshSkeleton = resource::SkeletonInfo{};
         }
 
         // Load new mesh
@@ -258,30 +256,12 @@ namespace controllers
             return false;
         }
 
-        // Load skeleton data from mesh file
-        auto meshData = resource::MeshStreamResource::loadAll(meshPath);
-        if (meshData.hasSkinning)
-        {
-            meshSkeleton = meshData.skeleton;
-            loggerInfo("Loaded mesh with {} bones for animation preview", meshSkeleton.boneCount());
-        }
-        else
-        {
-            loggerWarning("Mesh {} does not have skinning data", meshPath);
-        }
-
         loadedMeshPath = meshPath;
 
         const math::AABB* bounds = skinnedPipeline->getMeshBoundingBox();
         if (bounds)
         {
             meshBounds = *bounds;
-        }
-
-        // If animation is already loaded, reconnect evaluator
-        if (animationLoaded && meshSkeleton.hasBones())
-        {
-            animEvaluator.loadAnimation(animationData, meshSkeleton);
         }
 
         return true;
@@ -311,17 +291,17 @@ namespace controllers
         playbackState.duration = animationData.duration / ticksPerSec;
         playbackState.currentTime = 0.0f;
 
-        // If mesh with skeleton is loaded, set up evaluator
-        if (!loadedMeshPath.empty() && meshSkeleton.hasBones())
+        // Load animation into evaluator (v0.0.6+ is self-contained)
+        if (animationData.hasInverseBindPoses())
         {
-            animEvaluator.loadAnimation(animationData, meshSkeleton);
-            loggerInfo("Animation loaded: {} ({:.2f}s, {} bones)",
+            animEvaluator.loadAnimation(animationData);
+            loggerInfo("Animation loaded (self-contained): {} ({:.2f}s, {} bones)",
                 animationData.name, playbackState.duration, animEvaluator.getBoneCount());
         }
         else
         {
-            loggerInfo("Animation loaded: {} ({:.2f}s) - waiting for mesh",
-                animationData.name, playbackState.duration);
+            loggerWarning("Animation '{}' missing inverse bind poses - requires re-import",
+                animationData.name);
         }
 
         return true;
@@ -338,7 +318,6 @@ namespace controllers
         loadedAnimationPath.clear();
         animationLoaded = false;
         animEvaluator.clear();
-        meshSkeleton = resource::SkeletonInfo{};
         animationData = resource::AnimationData{};
         playbackState = render::mesh::AnimationPlaybackState{};
         meshBounds = math::AABB{};

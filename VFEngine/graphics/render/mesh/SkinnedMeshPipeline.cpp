@@ -649,7 +649,6 @@ namespace render::mesh
         loadedMesh = std::make_unique<SkinnedMeshGPUData>();
         loadedMesh->meshPath = std::string(meshPath);
         loadedMesh->hasSkinning = meshesData.hasSkinning;
-        loadedMesh->skeleton = meshesData.skeleton;
 
         createMeshGPUBuffers(meshesData);
 

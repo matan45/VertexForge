@@ -262,6 +262,7 @@
     <None Include="..\..\resources\shaders\material\material_fragment_header.glsl" />
     <None Include="..\..\resources\shaders\material\material_vertex.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
+    <None Include="..\..\resources\shaders\mesh\skinned_mesh.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />
     <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />

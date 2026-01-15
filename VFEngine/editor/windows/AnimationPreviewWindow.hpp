@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "resource/Types.hpp"
 #include "providers/PreviewInstanceId.hpp"
+#include "providers/IAnimationPreviewProvider.hpp"
 #include <math/Frustum.hpp>
 #include <string>
 #include <string_view>
@@ -31,17 +32,6 @@ namespace windows
         bool success = false;
         std::string errorMessage;
         resource::AnimationData animationData;
-    };
-
-    struct EvaluatedBoneTransform
-    {
-        std::string boneName;
-        glm::vec3 position{0.0f};
-        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
-        glm::vec3 scale{1.0f};
-        glm::mat4 localTransform{1.0f};
-        glm::mat4 worldTransform{1.0f};
-        int32_t parentIndex = -1;
     };
 
     class AnimationPreviewWindow : public controllers::imguiHandler::ImguiWindow
@@ -85,8 +75,8 @@ namespace windows
         int selectedChannel = -1;
 
         // Evaluated skeleton (from service for display)
-        std::vector<EvaluatedBoneTransform> evaluatedBones;
-        std::unordered_map<std::string_view, size_t> boneNameToChannelIndex;
+        std::vector<services::EvaluatedBoneInfo> evaluatedBones;
+        std::unordered_map<std::string, size_t> boneNameToIndex;
         std::unordered_map<int32_t, std::vector<size_t>> boneChildrenMap;
 
         // Window state
@@ -114,16 +104,13 @@ namespace windows
         void cleanUpPreviewRenderer();
 
         // Mesh loading for 3D preview
+        void tryAutoLoadMesh();
         void loadMeshForPreview();
         void loadAnimationForPreview();
-        void updateBoneTransformsFromService();
 
-        // Animation evaluation (for timeline data, local copy)
-        void evaluateAnimationLocal(float timeInTicks);
-        glm::vec3 interpolatePosition(const resource::BoneAnimation& channel, float time);
-        glm::quat interpolateRotation(const resource::BoneAnimation& channel, float time);
-        glm::vec3 interpolateScale(const resource::BoneAnimation& channel, float time);
-        void computeWorldTransforms();
+        // Get bone transforms from the service (same data used for GPU skinning)
+        void updateBoneTransformsFromService();
+        void buildBoneHierarchyMaps();
 
         // Drawing methods
         void drawInfoPanel();

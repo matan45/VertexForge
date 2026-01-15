@@ -116,6 +116,7 @@
     <ClInclude Include="types\Audio.hpp" />
     <ClInclude Include="types\Font.hpp" />
     <ClInclude Include="types\Mesh.hpp" />
+    <ClInclude Include="types\Skeleton.hpp" />
     <ClInclude Include="types\Texture.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -130,6 +131,7 @@
     <ClCompile Include="types\Audio.cpp" />
     <ClCompile Include="types\Font.cpp" />
     <ClCompile Include="types\Mesh.cpp" />
+    <ClCompile Include="types\Skeleton.cpp" />
     <ClCompile Include="types\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>

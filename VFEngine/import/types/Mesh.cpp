@@ -554,15 +554,18 @@ namespace types
             return;
         }
 
-        // Extract skeleton from all meshes first
+        // Extract skeleton from all meshes first (for vertex bone indices)
         ExtractedSkeleton skeleton = extractSkeleton(scene);
 
-        // Write header with version 0.0.6 (LOD + Meshlet + Convex + Skinning support)
+        // Write header with version 0.0.7 (LOD + Meshlet + Convex + Skeleton reference)
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
         resource::endian::writeLE<uint32_t>(outFile, 0); // major
         resource::endian::writeLE<uint32_t>(outFile, 0); // minor
-        resource::endian::writeLE<uint32_t>(outFile, 6); // patch - version 0.0.6 for skinning support
+        resource::endian::writeLE<uint32_t>(outFile, 7); // patch - version 0.0.7 for skeleton reference
         resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
+
+        // Write empty skeleton reference (self-contained animation format - no external skeleton)
+        resource::endian::writeLE<uint32_t>(outFile, 0);
 
         vfLogInfo("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
 
@@ -619,7 +622,7 @@ namespace types
         writeSkeletonData(outFile, skeleton);
 
         outFile.close();
-        vfLogInfo("Mesh with LOD, meshlets and skinning saved to: {}", newFileLocation.string());
+        vfLogInfo("Mesh with LOD, meshlets and skeleton reference saved to: {}", newFileLocation.string());
     }
 
     resource::ConvexDecompositionData Mesh::generateConvexDecomposition(

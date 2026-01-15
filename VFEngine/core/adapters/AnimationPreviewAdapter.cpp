@@ -244,15 +244,22 @@ namespace core
         if (auto* controller = getController(instanceId))
         {
             const auto& bones = controller->getEvaluatedBones();
+            const auto& skeleton = controller->getAnimationSkeleton();
             result.reserve(bones.size());
 
-            for (const auto& bone : bones)
+            for (size_t i = 0; i < bones.size() && i < skeleton.size(); ++i)
             {
+                const auto& bone = bones[i];
+                const auto& skelBone = skeleton[i];
+
                 services::EvaluatedBoneInfo info;
+                info.name = skelBone.name;
                 info.position = bone.position;
                 info.rotation = bone.rotation;
                 info.scale = bone.scale;
                 info.worldTransform = bone.worldTransform;
+                info.skinnedPosition = bone.skinnedPosition;
+                info.parentIndex = skelBone.parentIndex;
                 result.push_back(info);
             }
         }

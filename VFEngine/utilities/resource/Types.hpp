@@ -33,6 +33,7 @@ namespace resource
         AUDIO,
         SCENE,
         FONT,
+        SKELETON,
         UNKNOWN
     };
 
@@ -218,9 +219,14 @@ namespace resource
         std::string name;
         float duration = 0.0f;
         float ticksPerSecond = 24.0f;
-        std::vector<SkeletonBone> skeleton;
+        std::string skeletonReference;                     // Reference to .vfSkeleton file (optional)
+        std::vector<SkeletonBone> skeleton;                // Bone hierarchy (name, parent, offsetMatrix, preTransform)
+        std::vector<glm::mat4> inverseBindPoses;           // Inverse bind pose per bone (v0.0.6+)
         std::vector<BoneAnimation> channels;
-        glm::mat4 globalInverseTransform{1.0f};  // Inverse of scene root transform
+        glm::mat4 globalInverseTransform{1.0f};            // Inverse of scene root transform
+
+        // Check if animation has complete data for standalone playback
+        bool hasInverseBindPoses() const { return !inverseBindPoses.empty() && inverseBindPoses.size() == skeleton.size(); }
     };
 
     struct AudioData
@@ -234,7 +240,7 @@ namespace resource
         std::vector<short> data;
     };
 
-    // Skeleton information for skinned meshes (stored per mesh file)
+    // Skeleton information for skinned meshes (stored per mesh file - legacy format)
     struct SkeletonInfo
     {
         std::vector<std::string> boneNames;           // Bone names for animation mapping
@@ -242,6 +248,33 @@ namespace resource
 
         bool hasBones() const { return !boneNames.empty(); }
         size_t boneCount() const { return boneNames.size(); }
+    };
+
+    // Unified skeleton data - single source of truth for mesh and animation
+    // Stored in .vfSkeleton files, referenced by both .vfMesh and .vfAnim
+    struct SkeletonData
+    {
+        FileType headerFileType = FileType::SKELETON;
+        FileVersion version{};
+        std::string name;                                  // Skeleton name (usually mesh filename)
+        std::vector<SkeletonBone> bones;                   // Full hierarchy with parent indices
+        std::vector<glm::mat4> bindPoses;                  // World-space bind pose per bone
+        std::vector<glm::mat4> inverseBindPoses;           // Inverse bind pose matrices (for GPU skinning)
+        glm::mat4 globalInverseTransform{1.0f};            // Inverse of scene root transform
+
+        bool hasBones() const { return !bones.empty(); }
+        size_t boneCount() const { return bones.size(); }
+
+        // Get bone index by name, returns -1 if not found
+        int32_t getBoneIndex(const std::string& boneName) const
+        {
+            for (size_t i = 0; i < bones.size(); ++i)
+            {
+                if (bones[i].name == boneName)
+                    return static_cast<int32_t>(i);
+            }
+            return -1;
+        }
     };
 
     struct MeshesData

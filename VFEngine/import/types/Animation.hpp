@@ -32,17 +32,16 @@ namespace types
         // Extract skeleton hierarchy from scene
         std::vector<resource::SkeletonBone> extractSkeleton(const aiScene* scene) const;
 
-        // Build bone hierarchy by traversing node tree
-        void buildBoneHierarchy(const aiNode* node,
-                                const std::unordered_set<std::string>& boneNames,
-                                std::vector<resource::SkeletonBone>& bones,
-                                std::unordered_map<std::string, int32_t>& boneIndexMap,
-                                int32_t parentIndex,
-                                const glm::mat4& accumulatedTransform) const;
+        // Extract inverse bind poses from mesh bones
+        std::unordered_map<std::string, glm::mat4> extractInverseBindPoses(const aiScene* scene) const;
+
+        // Build node name to aiNode pointer map for hierarchy lookup
+        void buildNodeMap(const aiNode* node, std::unordered_map<std::string, const aiNode*>& nodeMap) const;
 
         // Extract single animation clip data
         resource::AnimationData extractAnimation(const aiAnimation* anim,
                                                  const std::vector<resource::SkeletonBone>& skeleton,
+                                                 const std::unordered_map<std::string, glm::mat4>& inverseBindPoseMap,
                                                  const glm::mat4& globalInverseTransform) const;
 
         // Save animation clip to .vfAnim file
@@ -52,6 +51,7 @@ namespace types
         // Write helpers
         void writeString(std::ofstream& file, const std::string& str) const;
         void writeSkeleton(std::ofstream& file, const std::vector<resource::SkeletonBone>& skeleton) const;
+        void writeInverseBindPoses(std::ofstream& file, const std::vector<glm::mat4>& inverseBindPoses) const;
         void writeChannels(std::ofstream& file, const std::vector<resource::BoneAnimation>& channels) const;
 
         // Sanitize animation name for filename

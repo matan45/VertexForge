@@ -63,7 +63,6 @@ namespace controllers
         // Animation evaluation
         AnimationEvaluator animEvaluator;
         resource::AnimationData animationData;
-        resource::SkeletonInfo meshSkeleton;
         bool animationLoaded = false;
 
         // Render data
@@ -139,6 +138,7 @@ namespace controllers
         // Animation info
         size_t getBoneCount() const { return animEvaluator.getBoneCount(); }
         const std::vector<EvaluatedBone>& getEvaluatedBones() const { return animEvaluator.getEvaluatedBones(); }
+        const std::vector<resource::SkeletonBone>& getAnimationSkeleton() const { return animationData.skeleton; }
 
     private:
         void createOffscreenResources();
