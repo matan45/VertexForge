@@ -212,13 +212,12 @@ void main() {
     // Gamma correction
     color = pow(color, vec3(1.0/2.2));
 
-    // DEBUG visualization disabled - animation working
-    // Uncomment to debug skinning:
-    // float offsetMagnitude = length(fragSkinOffset);
-    // if (fragSkinDebug < 0.5) color = vec3(1.0, 0.0, 0.0);      // RED = no weights
-    // else if (offsetMagnitude < 0.01) color = vec3(1.0, 0.0, 1.0); // MAGENTA = no movement
-    // else if (offsetMagnitude < 1.0) color = vec3(1.0, 1.0, 0.0);  // YELLOW = small
-    // else color = vec3(0.0, 1.0, 0.0);                             // GREEN = working
+    // DEBUG visualization - check skinning
+    float offsetMagnitude = length(fragSkinOffset);
+    if (fragSkinDebug < 0.5) color = vec3(1.0, 0.0, 0.0);           // RED = no weights
+    else if (offsetMagnitude < 0.01) color = vec3(1.0, 0.0, 1.0);   // MAGENTA = no movement
+    else if (offsetMagnitude < 5.0) color = vec3(1.0, 1.0, 0.0);    // YELLOW = small (<5 units)
+    else color = vec3(0.0, 1.0, 0.0);                               // GREEN = moving (>5 units)
 
     outColor = vec4(color, alpha);
 }

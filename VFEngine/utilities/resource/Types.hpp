@@ -225,8 +225,12 @@ namespace resource
         std::vector<BoneAnimation> channels;
         glm::mat4 globalInverseTransform{1.0f};            // Inverse of scene root transform
 
-        // Check if animation has complete data for standalone playback
+        // Embedded mesh data (v0.0.7+) - fully self-contained
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+
         bool hasInverseBindPoses() const { return !inverseBindPoses.empty() && inverseBindPoses.size() == skeleton.size(); }
+        bool hasMesh() const { return !vertices.empty() && !indices.empty(); }
     };
 
     struct AudioData

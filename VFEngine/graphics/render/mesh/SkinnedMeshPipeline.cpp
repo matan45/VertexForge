@@ -656,6 +656,88 @@ namespace render::mesh
         return true;
     }
 
+    bool SkinnedMeshPipeline::loadMeshFromAnimation(const resource::AnimationData& animData)
+    {
+        if (animData.vertices.empty() || animData.indices.empty())
+        {
+            loggerError("Animation has no mesh data");
+            return false;
+        }
+
+        unloadMesh();
+
+        loadedMesh = std::make_unique<SkinnedMeshGPUData>();
+        loadedMesh->meshPath = "embedded";
+        loadedMesh->hasSkinning = true;
+
+        // Build skeleton info from animation data
+        loadedMesh->skeleton.boneNames.reserve(animData.skeleton.size());
+        loadedMesh->skeleton.inverseBindPoses = animData.inverseBindPoses;
+        for (const auto& bone : animData.skeleton)
+            loadedMesh->skeleton.boneNames.push_back(bone.name);
+
+        // Create single submesh
+        SubMeshGPUData subMesh;
+        subMesh.name = "mesh";
+
+        // Compute bounding box
+        for (const auto& v : animData.vertices)
+            subMesh.boundingBox.expand(v.position);
+        loadedMesh->meshData.boundingBox = subMesh.boundingBox;
+
+        auto logicalDevice = device.getLogicalDevice();
+        auto physicalDevice = device.getPhysicalDevice();
+
+        // Create vertex buffer
+        vk::DeviceSize vertexSize = sizeof(resource::Vertex) * animData.vertices.size();
+
+        core::BufferInfoRequest vertexBufferInfo(logicalDevice, physicalDevice, vertexSize,
+            vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::BufferUtilities::createBuffer(vertexBufferInfo,
+            subMesh.lodLevels[0].vertexBuffer, subMesh.lodLevels[0].vertexBufferMemory);
+
+        core::BufferUtilities::copyToBuffer(logicalDevice, physicalDevice,
+            device.getGraphicsQueue(), device.getStagingCommandPool(),
+            subMesh.lodLevels[0].vertexBuffer,
+            animData.vertices.data(), vertexSize);
+
+        // Create index buffer
+        vk::DeviceSize indexSize = sizeof(uint32_t) * animData.indices.size();
+
+        core::BufferInfoRequest indexBufferInfo(logicalDevice, physicalDevice, indexSize,
+            vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::BufferUtilities::createBuffer(indexBufferInfo,
+            subMesh.lodLevels[0].indexBuffer, subMesh.lodLevels[0].indexBufferMemory);
+
+        core::BufferUtilities::copyToBuffer(logicalDevice, physicalDevice,
+            device.getGraphicsQueue(), device.getStagingCommandPool(),
+            subMesh.lodLevels[0].indexBuffer,
+            animData.indices.data(), indexSize);
+
+        // Set counts
+        subMesh.lodLevels[0].vertexCount = static_cast<uint32_t>(animData.vertices.size());
+        subMesh.lodLevels[0].indexCount = static_cast<uint32_t>(animData.indices.size());
+
+        loadedMesh->meshData.subMeshes.push_back(std::move(subMesh));
+
+        loggerInfo("Loaded mesh from animation: {} vertices, {} indices",
+            animData.vertices.size(), animData.indices.size());
+
+        // DEBUG: Print some vertex data
+        for (size_t i = 0; i < std::min(size_t(5), animData.vertices.size()); ++i)
+        {
+            const auto& v = animData.vertices[i];
+            loggerInfo("Vert[{}] pos=({:.1f},{:.1f},{:.1f}) bones=({},{},{},{}) weights=({:.2f},{:.2f},{:.2f},{:.2f})",
+                i, v.position.x, v.position.y, v.position.z,
+                v.boneIndices.x, v.boneIndices.y, v.boneIndices.z, v.boneIndices.w,
+                v.boneWeights.x, v.boneWeights.y, v.boneWeights.z, v.boneWeights.w);
+        }
+
+        return true;
+    }
+
     void SkinnedMeshPipeline::unloadMesh()
     {
         if (!loadedMesh) return;

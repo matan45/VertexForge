@@ -195,6 +195,15 @@ namespace types
             vfLogInfo("Mesh has {} vertices with bone weights out of {} total",
                       verticesWithBones, result.vertices.size());
 
+            // DEBUG: Print first vertex to check scale
+            if (!result.vertices.empty())
+            {
+                const auto& v0 = result.vertices[0];
+                vfLogInfo("MESH Vertex[0]: pos=({:.2f},{:.2f},{:.2f}) bones=[{},{},{},{}]",
+                    v0.position.x, v0.position.y, v0.position.z,
+                    v0.boneIndices[0], v0.boneIndices[1], v0.boneIndices[2], v0.boneIndices[3]);
+            }
+
             // Debug: Check bone index distribution
             std::unordered_map<int32_t, size_t> boneIndexCounts;
             for (const auto& vertex : result.vertices)

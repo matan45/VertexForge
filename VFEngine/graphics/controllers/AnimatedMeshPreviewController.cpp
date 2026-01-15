@@ -292,30 +292,35 @@ namespace controllers
         playbackState.duration = animationData.duration / ticksPerSec;
         playbackState.currentTime = 0.0f;
 
+        // v0.0.7+: Load mesh directly from animation if embedded
+        if (animationData.hasMesh())
+        {
+            loggerInfo("Loading embedded mesh from animation: {} vertices, {} indices",
+                animationData.vertices.size(), animationData.indices.size());
+
+            if (!skinnedPipeline->loadMeshFromAnimation(animationData))
+            {
+                loggerError("Failed to load embedded mesh from animation");
+                return false;
+            }
+
+            // Mark mesh as loaded (embedded)
+            loadedMeshPath = "embedded:" + animationPath;
+        }
+
         // Load animation into evaluator (v0.0.6+ is self-contained)
         if (animationData.hasInverseBindPoses())
         {
             animEvaluator.loadAnimation(animationData);
 
-            // Check if bone mapping is needed
-            if (skinnedPipeline && skinnedPipeline->getLoadedMesh())
-            {
-                const auto& meshSkeleton = skinnedPipeline->getLoadedMesh()->skeleton;
-                if (meshSkeleton.hasBones() && meshSkeleton.boneCount() != animationData.skeleton.size())
-                {
-                    buildBoneMapping();
-                }
-                else
-                {
-                    meshToAnimBoneMapping.clear();
-                }
-            }
+            // No bone mapping needed when using embedded mesh - same skeleton
+            meshToAnimBoneMapping.clear();
 
             // Evaluate initial pose
             auto initialBoneMatrices = animEvaluator.evaluatePose(0.0f);
             if (!initialBoneMatrices.empty() && skinnedPipeline)
             {
-                skinnedPipeline->updateBoneMatrices(remapBoneMatrices(initialBoneMatrices));
+                skinnedPipeline->updateBoneMatrices(initialBoneMatrices);
             }
         }
         else

@@ -102,6 +102,7 @@ namespace render::mesh
 
         // Mesh management
         bool loadMesh(std::string_view meshPath);
+        bool loadMeshFromAnimation(const resource::AnimationData& animData);
         void unloadMesh();
         bool isMeshLoaded() const { return loadedMesh != nullptr; }
         const SkinnedMeshGPUData* getLoadedMesh() const { return loadedMesh.get(); }

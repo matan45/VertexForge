@@ -57,6 +57,7 @@ namespace resource
         bool hasInlineSkeleton = (data.version.major == 0 && data.version.minor == 0 && data.version.patch >= 5) ||
                                   (data.version.major == 0 && data.version.minor == 0 && data.version.patch < 4);
         bool hasInverseBindPoses = (data.version.major == 0 && data.version.minor == 0 && data.version.patch >= 6);
+        bool hasMeshData = (data.version.major == 0 && data.version.minor == 0 && data.version.patch >= 7);
 
         if (hasSkeletonReference)
         {
@@ -185,27 +186,58 @@ namespace resource
         }
 
         // Read global inverse transform
-        // v0.0.5+: always present after channels
-        // v0.0.4: present after channels
-        // v0.0.3 and earlier: may or may not be present
         if (file.peek() != EOF)
         {
             data.globalInverseTransform = readMatrix(file);
-            vfLogInfo("Loaded global inverse transform from animation file");
         }
         else
         {
-            // Old file format without global inverse - use identity
             data.globalInverseTransform = glm::mat4(1.0f);
-            vfLogInfo("No global inverse transform in file, using identity");
+        }
+
+        // Read mesh data (v0.0.7+)
+        if (hasMeshData && file.peek() != EOF)
+        {
+            uint32_t numVertices = endian::readLE<uint32_t>(file);
+            if (numVertices > 0 && numVertices < 10000000)
+            {
+                data.vertices.resize(numVertices);
+                for (auto& v : data.vertices)
+                {
+                    v.position.x = endian::readLE<float>(file);
+                    v.position.y = endian::readLE<float>(file);
+                    v.position.z = endian::readLE<float>(file);
+                    v.normal.x = endian::readLE<float>(file);
+                    v.normal.y = endian::readLE<float>(file);
+                    v.normal.z = endian::readLE<float>(file);
+                    v.texCoords.x = endian::readLE<float>(file);
+                    v.texCoords.y = endian::readLE<float>(file);
+                    v.boneIndices.x = endian::readLE<int32_t>(file);
+                    v.boneIndices.y = endian::readLE<int32_t>(file);
+                    v.boneIndices.z = endian::readLE<int32_t>(file);
+                    v.boneIndices.w = endian::readLE<int32_t>(file);
+                    v.boneWeights.x = endian::readLE<float>(file);
+                    v.boneWeights.y = endian::readLE<float>(file);
+                    v.boneWeights.z = endian::readLE<float>(file);
+                    v.boneWeights.w = endian::readLE<float>(file);
+                }
+
+                uint32_t numIndices = endian::readLE<uint32_t>(file);
+                if (numIndices > 0 && numIndices < 100000000)
+                {
+                    data.indices.resize(numIndices);
+                    for (auto& idx : data.indices)
+                        idx = endian::readLE<uint32_t>(file);
+                }
+                vfLogInfo("Loaded mesh: {} vertices, {} indices", data.vertices.size(), data.indices.size());
+            }
         }
 
         data.headerFileType = FileType::ANIMATION;
 
-        vfLogInfo("Loaded animation '{}' - {} bones, {} channels, duration: {:.2f}s, format: v{}.{}.{}",
-                  data.name, data.skeleton.size(), data.channels.size(),
-                  data.duration / data.ticksPerSecond,
-                  data.version.major, data.version.minor, data.version.patch);
+        vfLogInfo("Loaded animation '{}' - {} bones, {} channels, {} vertices, duration: {:.2f}s",
+                  data.name, data.skeleton.size(), data.channels.size(), data.vertices.size(),
+                  data.duration / data.ticksPerSecond);
 
         return data;
     }

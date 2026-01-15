@@ -48,11 +48,19 @@ namespace types
         void saveToFile(std::string_view location, std::string_view baseName,
                         const resource::AnimationData& animData) const;
 
+        // Extract mesh vertices with bone weights
+        void extractMeshData(const aiScene* scene,
+                            const std::unordered_map<std::string, int32_t>& boneIndexMap,
+                            std::vector<resource::Vertex>& outVertices,
+                            std::vector<uint32_t>& outIndices) const;
+
         // Write helpers
         void writeString(std::ofstream& file, const std::string& str) const;
         void writeSkeleton(std::ofstream& file, const std::vector<resource::SkeletonBone>& skeleton) const;
         void writeInverseBindPoses(std::ofstream& file, const std::vector<glm::mat4>& inverseBindPoses) const;
         void writeChannels(std::ofstream& file, const std::vector<resource::BoneAnimation>& channels) const;
+        void writeMeshData(std::ofstream& file, const std::vector<resource::Vertex>& vertices,
+                          const std::vector<uint32_t>& indices) const;
 
         // Sanitize animation name for filename
         static std::string sanitizeAnimationName(const std::string& name);

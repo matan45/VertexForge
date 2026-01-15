@@ -280,42 +280,17 @@ namespace windows
     {
         if (!animationLoaded || !animationData.hasInverseBindPoses()) return;
 
-        // Try to find a mesh file in the same directory as the animation
-        std::filesystem::path animPath(animationPath);
-        std::filesystem::path animDir = animPath.parent_path();
-        std::string animBaseName = animPath.stem().string();
-
-        // First, try to find a mesh with the same base name
-        std::filesystem::path matchingMesh = animDir / (animBaseName + ".vfMesh");
-        if (std::filesystem::exists(matchingMesh))
+        // Animation must have embedded mesh (v0.0.7+)
+        if (!animationData.hasMesh())
         {
-            meshPath = matchingMesh.string();
-            vfLogInfo("Auto-detected mesh for animation preview: {}", meshPath);
-            loadMeshForPreview();
-            if (meshLoadedInPreview)
-            {
-                loadAnimationForPreview();
-            }
+            vfLogWarning("Animation has no embedded mesh - re-import required");
             return;
         }
 
-        // If no matching name, look for any .vfMesh file in the directory
-        for (const auto& entry : std::filesystem::directory_iterator(animDir))
-        {
-            if (entry.path().extension() == ".vfMesh")
-            {
-                meshPath = entry.path().string();
-                vfLogInfo("Auto-detected mesh for animation preview: {}", meshPath);
-                loadMeshForPreview();
-                if (meshLoadedInPreview)
-                {
-                    loadAnimationForPreview();
-                }
-                return;
-            }
-        }
-
-        vfLogInfo("No mesh found for animation preview in directory: {}", animDir.string());
+        vfLogInfo("Using embedded mesh: {} vertices, {} indices",
+            animationData.vertices.size(), animationData.indices.size());
+        meshLoadedInPreview = true;
+        loadAnimationForPreview();
     }
 
     void AnimationPreviewWindow::startAsyncLoad()
