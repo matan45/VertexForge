@@ -725,16 +725,6 @@ namespace render::mesh
         loggerInfo("Loaded mesh from animation: {} vertices, {} indices",
             animData.vertices.size(), animData.indices.size());
 
-        // DEBUG: Print some vertex data
-        for (size_t i = 0; i < std::min(size_t(5), animData.vertices.size()); ++i)
-        {
-            const auto& v = animData.vertices[i];
-            loggerInfo("Vert[{}] pos=({:.1f},{:.1f},{:.1f}) bones=({},{},{},{}) weights=({:.2f},{:.2f},{:.2f},{:.2f})",
-                i, v.position.x, v.position.y, v.position.z,
-                v.boneIndices.x, v.boneIndices.y, v.boneIndices.z, v.boneIndices.w,
-                v.boneWeights.x, v.boneWeights.y, v.boneWeights.z, v.boneWeights.w);
-        }
-
         return true;
     }
 

@@ -51,15 +51,6 @@ namespace controllers
 
         loggerInfo("Loaded animation '{}': {} bones, {} channels",
                   animationData->name, boneCount, animationData->channels.size());
-
-        // DEBUG: Print what we loaded to compare with import
-        for (size_t i = 0; i < std::min(size_t(5), boneCount); ++i)
-        {
-            const auto& bone = animationData->skeleton[i];
-            loggerInfo("EVAL Bone[{}] '{}' parent={} bindPos=({:.2f},{:.2f},{:.2f})",
-                i, bone.name, bone.parentIndex,
-                computedBindPoses[i][3][0], computedBindPoses[i][3][1], computedBindPoses[i][3][2]);
-        }
     }
 
     void AnimationEvaluator::clear()
@@ -123,8 +114,20 @@ namespace controllers
             {
                 const auto& ch = animationData->channels[it->second];
 
-                // Always use bind pose position (Mixamo animations only animate rotation)
-                glm::vec3 pos = glm::vec3(computedLocalBindPoses[i][3]);
+                // For root bone (parent=-1), use animation position if available
+                // For other bones, use bind pose position (Mixamo only animates rotation on non-root)
+                glm::vec3 pos;
+                int32_t parentIdx = animationData->skeleton[i].parentIndex;
+                if (parentIdx < 0 && !ch.positionKeys.empty())
+                {
+                    // Root bone - use animation position
+                    pos = interpolatePosition(ch, timeInTicks);
+                }
+                else
+                {
+                    // Non-root - use bind pose position
+                    pos = glm::vec3(computedLocalBindPoses[i][3]);
+                }
 
                 // Get animation rotation
                 glm::quat animRot = ch.rotationKeys.empty()
@@ -167,25 +170,6 @@ namespace controllers
         {
             result[i] = globalInv * evaluatedBones[i].worldTransform * animationData->inverseBindPoses[i];
             evaluatedBones[i].skinnedPosition = glm::vec3(globalInv * glm::vec4(evaluatedBones[i].skinnedPosition, 1.0f));
-        }
-
-        // DEBUG: Check globalInverse rotation
-        static bool logged = false;
-        if (!logged && boneCount > 0)
-        {
-            logged = true;
-            // Print globalInverse matrix to see if it has rotation
-            loggerInfo("globalInverse matrix:");
-            for (int r = 0; r < 4; ++r)
-            {
-                loggerInfo("  [{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
-                    globalInv[0][r], globalInv[1][r], globalInv[2][r], globalInv[3][r]);
-            }
-            // Print Hips and a leg bone
-            loggerInfo("Bone[0] Hips world[3]=({:.1f},{:.1f},{:.1f})",
-                evaluatedBones[0].worldTransform[3][0],
-                evaluatedBones[0].worldTransform[3][1],
-                evaluatedBones[0].worldTransform[3][2]);
         }
 
         return result;
