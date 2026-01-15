@@ -113,37 +113,30 @@ namespace controllers
             if (it != boneNameToChannelIndex.end())
             {
                 const auto& ch = animationData->channels[it->second];
-
-                // For root bone (parent=-1), use animation position if available
-                // For other bones, use bind pose position (Mixamo only animates rotation on non-root)
-                glm::vec3 pos;
                 int32_t parentIdx = animationData->skeleton[i].parentIndex;
+
+                // Position: root uses animation, others use bind pose (bone length)
+                glm::vec3 pos;
                 if (parentIdx < 0 && !ch.positionKeys.empty())
                 {
-                    // Root bone - use animation position
                     pos = interpolatePosition(ch, timeInTicks);
                 }
                 else
                 {
-                    // Non-root - use bind pose position
                     pos = glm::vec3(computedLocalBindPoses[i][3]);
                 }
 
-                // Get animation rotation
-                glm::quat animRot = ch.rotationKeys.empty()
-                    ? glm::quat(1.0f, 0.0f, 0.0f, 0.0f)  // Identity
-                    : interpolateRotation(ch, timeInTicks);
-
-                // Get bind pose rotation
+                // Rotation: bind pose rotation * animation rotation
                 glm::quat bindRot = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
-
-                // Animation rotation is relative to bind pose - multiply them
-                glm::quat finalRot = animRot * bindRot;
+                glm::quat animRot = ch.rotationKeys.empty()
+                    ? glm::quat(1.0f, 0.0f, 0.0f, 0.0f)
+                    : interpolateRotation(ch, timeInTicks);
+                glm::quat rot = bindRot * animRot;
 
                 // Scale from animation or default
                 glm::vec3 scl = ch.scalingKeys.empty() ? glm::vec3(1.0f) : interpolateScale(ch, timeInTicks);
 
-                evaluatedBones[i].localTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(finalRot) * glm::scale(glm::mat4(1.0f), scl);
+                evaluatedBones[i].localTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(glm::mat4(1.0f), scl);
             }
             else
             {
