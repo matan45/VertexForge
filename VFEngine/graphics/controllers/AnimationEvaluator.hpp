@@ -63,9 +63,6 @@ namespace controllers
         glm::quat interpolateRotation(const resource::BoneAnimation& channel, float time) const;
         glm::vec3 interpolateScale(const resource::BoneAnimation& channel, float time) const;
 
-        // Compute world transforms from local transforms (parent-child hierarchy)
-        void computeWorldTransforms(bool shouldLog = false) const;
-
         // Map bone names to animation channel indices for fast lookup
         void buildBoneToChannelMap();
 

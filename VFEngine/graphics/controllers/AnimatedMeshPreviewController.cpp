@@ -296,66 +296,31 @@ namespace controllers
         if (animationData.hasInverseBindPoses())
         {
             animEvaluator.loadAnimation(animationData);
-            loggerInfo("Animation loaded (self-contained): {} ({:.2f}s, {} bones)",
-                animationData.name, playbackState.duration, animEvaluator.getBoneCount());
 
-            // Compare bone names with mesh skeleton to detect mismatches
+            // Check if bone mapping is needed
             if (skinnedPipeline && skinnedPipeline->getLoadedMesh())
             {
                 const auto& meshSkeleton = skinnedPipeline->getLoadedMesh()->skeleton;
-                if (meshSkeleton.hasBones())
+                if (meshSkeleton.hasBones() && meshSkeleton.boneCount() != animationData.skeleton.size())
                 {
-                    loggerInfo("Comparing mesh and animation skeletons...");
-                    bool mismatchFound = false;
-                    size_t compareCount = std::min(meshSkeleton.boneCount(), animationData.skeleton.size());
-
-                    for (size_t i = 0; i < compareCount; ++i)
-                    {
-                        if (meshSkeleton.boneNames[i] != animationData.skeleton[i].name)
-                        {
-                            mismatchFound = true;
-                            break;  // Just detect mismatch, don't log every bone
-                        }
-                    }
-
-                    if (meshSkeleton.boneCount() != animationData.skeleton.size())
-                    {
-                        loggerInfo("Bone count differs: mesh={} vs anim={} (will use name-based remapping)",
-                            meshSkeleton.boneCount(), animationData.skeleton.size());
-                    }
-
-                    if (mismatchFound || meshSkeleton.boneCount() != animationData.skeleton.size())
-                    {
-                        loggerInfo("Bone order differs between mesh and animation - using name-based remapping");
-                        // Build bone mapping only if there's a mismatch
-                        buildBoneMapping();
-                    }
-                    else
-                    {
-                        loggerInfo("Bone names and order match between mesh and animation - direct mapping");
-                        // Clear any old mapping - direct indexing will be used
-                        meshToAnimBoneMapping.clear();
-                    }
+                    buildBoneMapping();
+                }
+                else
+                {
+                    meshToAnimBoneMapping.clear();
                 }
             }
 
-            // Evaluate initial pose at time 0 to upload bone matrices to GPU
-            // This ensures the mesh is rendered with a valid pose even before playing
-            float initialTimeInTicks = 0.0f;
-            auto initialBoneMatrices = animEvaluator.evaluatePose(initialTimeInTicks);
+            // Evaluate initial pose
+            auto initialBoneMatrices = animEvaluator.evaluatePose(0.0f);
             if (!initialBoneMatrices.empty() && skinnedPipeline)
             {
-                // Remap bone matrices to match mesh skeleton order
-                auto remappedMatrices = remapBoneMatrices(initialBoneMatrices);
-                skinnedPipeline->updateBoneMatrices(remappedMatrices);
-                loggerInfo("Initial pose evaluated and uploaded: {} animation bones -> {} mesh bones",
-                    initialBoneMatrices.size(), remappedMatrices.size());
+                skinnedPipeline->updateBoneMatrices(remapBoneMatrices(initialBoneMatrices));
             }
         }
         else
         {
-            loggerWarning("Animation '{}' missing inverse bind poses - requires re-import",
-                animationData.name);
+            loggerWarning("Animation missing inverse bind poses - requires re-import");
         }
 
         return true;
