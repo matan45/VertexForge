@@ -253,13 +253,11 @@ namespace windows
         ImVec2 canvasPos = ImGui::GetCursorScreenPos();
         ImVec2 canvasSize = ImGui::GetContentRegionAvail();
 
-        // DEBUG: This fixes canvas sizing issue
-        ImGui::Text("CanvasSize: %.0fx%.0f CursorPos: %.0f,%.0f",
-                    canvasSize.x, canvasSize.y, canvasPos.x, canvasPos.y);
-        canvasSize = ImGui::GetContentRegionAvail();
+        // Fix: Prime ImGui layout state before node editor
+        ImGui::Separator();
 
         // Pass explicit size to ensure canvas fills available space
-        ed::Begin("AnimatorGraph", canvasSize);
+        ed::Begin("AnimatorGraph");
 
         // Get current zoom level
         float currentZoom = ed::GetCurrentZoom();
