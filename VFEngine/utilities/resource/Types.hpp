@@ -33,6 +33,7 @@ namespace resource
         AUDIO,
         SCENE,
         FONT,
+        SKELETON,
         UNKNOWN
     };
 
@@ -129,6 +130,8 @@ namespace resource
         glm::vec3 position;
         glm::vec3 normal;
         glm::vec2 texCoords;
+        glm::ivec4 boneIndices{-1, -1, -1, -1};
+        glm::vec4 boneWeights{0.0f, 0.0f, 0.0f, 0.0f};
     };
     
     struct LODLevel
@@ -156,23 +159,14 @@ namespace resource
     };
     
 
-    // Bone with vertex weights (for skinning in mesh data)
-    struct Bone
-    {
-        std::string name;
-        glm::mat4 offsetMatrix;
-        std::vector<std::pair<uint32_t, float>> weights;
-    };
-
-    // Skeleton bone with hierarchy information (for animation data)
     struct SkeletonBone
     {
         std::string name;
-        int32_t parentIndex = -1;  // -1 for root bones
+        int32_t parentIndex = -1;
         glm::mat4 offsetMatrix{1.0f};
+        glm::mat4 preTransform{1.0f};
     };
 
-    // Separate key types since Assimp stores keys with different timestamps
     struct PositionKey
     {
         float time = 0.0f;
@@ -182,22 +176,13 @@ namespace resource
     struct RotationKey
     {
         float time = 0.0f;
-        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};  // Identity quaternion (w, x, y, z)
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     };
 
     struct ScaleKey
     {
         float time = 0.0f;
         glm::vec3 scale{1.0f};
-    };
-
-    // Legacy Keyframe struct for compatibility
-    struct Keyframe
-    {
-        float time;
-        glm::vec3 position;
-        glm::quat rotation;
-        glm::vec3 scale;
     };
 
     struct BoneAnimation
@@ -215,8 +200,17 @@ namespace resource
         std::string name;
         float duration = 0.0f;
         float ticksPerSecond = 24.0f;
+        std::string skeletonReference;
         std::vector<SkeletonBone> skeleton;
+        std::vector<glm::mat4> inverseBindPoses;
         std::vector<BoneAnimation> channels;
+        glm::mat4 globalInverseTransform{1.0f};
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+
+        bool hasInverseBindPoses() const { return !inverseBindPoses.empty() && inverseBindPoses.size() == skeleton.size(); }
+        bool hasMesh() const { return !vertices.empty() && !indices.empty(); }
     };
 
     struct AudioData
@@ -230,12 +224,48 @@ namespace resource
         std::vector<short> data;
     };
 
+    struct SkeletonInfo
+    {
+        std::vector<std::string> boneNames;
+        std::vector<glm::mat4> inverseBindPoses;
+
+        bool hasBones() const { return !boneNames.empty(); }
+        size_t boneCount() const { return boneNames.size(); }
+    };
+
+    struct SkeletonData
+    {
+        FileType headerFileType = FileType::SKELETON;
+        FileVersion version{};
+        std::string name;
+        std::vector<SkeletonBone> bones;
+        std::vector<glm::mat4> bindPoses;
+        std::vector<glm::mat4> inverseBindPoses;
+        glm::mat4 globalInverseTransform{1.0f};
+
+        bool hasBones() const { return !bones.empty(); }
+        size_t boneCount() const { return bones.size(); }
+
+        int32_t getBoneIndex(const std::string& boneName) const
+        {
+            for (size_t i = 0; i < bones.size(); ++i)
+            {
+                if (bones[i].name == boneName)
+                    return static_cast<int32_t>(i);
+            }
+            return -1;
+        }
+    };
+
     struct MeshesData
     {
         FileType headerFileType = FileType::MESH;
         FileVersion version{};
         uint32_t numberOfMeshes = 0;
         std::vector<MeshData> meshes;
+
+        bool hasSkinning = false;
+        SkeletonInfo skeleton;
     };
 
     enum class FontFormatFlags : uint32_t

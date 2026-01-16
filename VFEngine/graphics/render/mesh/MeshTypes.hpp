@@ -276,14 +276,14 @@ namespace render::mesh
         {
             vk::VertexInputBindingDescription bindingDescription{};
             bindingDescription.binding = 0;
-            bindingDescription.stride = 32; // sizeof(Vertex): vec3 + vec3 + vec2
+            bindingDescription.stride = 64; // sizeof(Vertex): vec3 + vec3 + vec2 + ivec4 + vec4
             bindingDescription.inputRate = vk::VertexInputRate::eVertex;
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 5> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 3> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 5> attributes{};
 
             // location 0: position (vec3)
             attributes[0].binding = 0;
@@ -302,6 +302,18 @@ namespace render::mesh
             attributes[2].location = 2;
             attributes[2].format = vk::Format::eR32G32Sfloat;
             attributes[2].offset = 24;
+
+            // location 3: boneIndices (ivec4)
+            attributes[3].binding = 0;
+            attributes[3].location = 3;
+            attributes[3].format = vk::Format::eR32G32B32A32Sint;
+            attributes[3].offset = 32;
+
+            // location 4: boneWeights (vec4)
+            attributes[4].binding = 0;
+            attributes[4].location = 4;
+            attributes[4].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[4].offset = 48;
 
             return attributes;
         }

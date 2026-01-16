@@ -8,6 +8,7 @@ namespace services
     class IEditorTextureProvider;
     class IMaterialPreviewProvider;
     class IMeshPreviewProvider;
+    class IAnimationPreviewProvider;
     class IAudioProvider;
     class IScriptingProvider;
     class IPhysicsProvider;
@@ -35,6 +36,7 @@ namespace core
     class EditorTextureAdapter;
     class MaterialPreviewAdapter;
     class MeshPreviewAdapter;
+    class AnimationPreviewAdapter;
     class AudioAdapter;
     class ScriptingAdapter;
     class PhysicsAdapter;
@@ -49,6 +51,7 @@ namespace core
         std::unique_ptr<EditorTextureAdapter> textureAdapter;
         std::unique_ptr<MaterialPreviewAdapter> materialPreviewAdapter;
         std::unique_ptr<MeshPreviewAdapter> meshPreviewAdapter;
+        std::unique_ptr<AnimationPreviewAdapter> animationPreviewAdapter;
         std::unique_ptr<AudioAdapter> audioAdapter;
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
@@ -75,6 +78,8 @@ namespace core
         services::IMaterialPreviewProvider* getMaterialPreviewProvider();
 
         services::IMeshPreviewProvider* getMeshPreviewProvider();
+
+        services::IAnimationPreviewProvider* getAnimationPreviewProvider();
 
         services::IAudioProvider* getAudioProvider();
 

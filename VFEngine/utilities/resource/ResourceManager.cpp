@@ -2,6 +2,7 @@
 #include "TextureResource.hpp"
 #include "AudioResource.hpp"
 #include "FontResource.hpp"
+#include "AnimationResource.hpp"
 #include "MeshStreamHandle.hpp"
 #include "../material/MaterialAsset.hpp"
 #include "../material/MaterialInstanceAsset.hpp"
@@ -45,6 +46,7 @@ namespace resource
         std::erase_if(materialCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(materialInstanceCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(fontCache, [](const auto& pair) { return pair.second.expired(); });
+        std::erase_if(animationCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
     // Helper to get expected FileType from extension
@@ -196,6 +198,14 @@ namespace resource
             [](std::string_view p) { return FontResource::loadFont(p); });
     }
 
+    std::future<std::shared_ptr<AnimationData>> ResourceManager::loadAnimationAsync(std::string_view path)
+    {
+        return loadResourceAsync<AnimationData>(
+            path,
+            animationCache,
+            [](std::string_view p) { return AnimationResource::loadAnimation(p); });
+    }
+
     void ResourceManager::init()
     {
         running = true;
@@ -229,6 +239,7 @@ namespace resource
         materialCache.clear();
         materialInstanceCache.clear();
         fontCache.clear();
+        animationCache.clear();
 
         vfLogInfo("All resource caches cleared");
     }

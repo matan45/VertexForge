@@ -65,8 +65,8 @@ namespace resource
         std::ifstream file;
         MeshStreamHeader header;
         std::string filePath;
-        bool hasMeshlets = false; // True if file has meshlet data (v0.0.4+)
-        bool hasConvexHulls = false; // True if file has convex hull data (v0.0.5+)
+        bool hasMeshlets = false;     // True if file has meshlet data (v0.0.4+)
+        bool hasConvexHulls = false;  // True if file has convex hull data (v0.0.5+)
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:
@@ -121,6 +121,7 @@ namespace resource
         static bool readLODFromFile(std::string_view path,
                                     const LODFileInfo& lodInfo,
                                     std::vector<Vertex>& outVertices,
-                                    std::vector<uint32_t>& outIndices);
+                                    std::vector<uint32_t>& outIndices,
+                                    bool hasBoneData = false);
     };
 }

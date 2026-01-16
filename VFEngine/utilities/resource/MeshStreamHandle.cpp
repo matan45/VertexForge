@@ -1,6 +1,7 @@
 #include "MeshStreamHandle.hpp"
 #include "../print/EditorLogger.hpp"
 #include "EndianUtils.hpp"
+#include <filesystem>
 
 namespace resource
 {
@@ -150,7 +151,9 @@ namespace resource
                         return false;
                     }
 
-                    file.seekg(lodInfo.vertexCount * sizeof(Vertex), std::ios::cur);
+                    // Vertex size depends on file version: 64 bytes for v0.0.6+ (with bone data), 32 bytes for older
+                    size_t vertexSize = 32;
+                    file.seekg(lodInfo.vertexCount * vertexSize, std::ios::cur);
 
                     lodInfo.indexCount = endian::readLE<uint32_t>(file);
                     if (lodInfo.indexCount > maxIndexCount)
@@ -351,14 +354,22 @@ namespace resource
         outVertices.resize(vertexCount);
         for (uint32_t v = 0; v < vertexCount; ++v)
         {
+            // Position
             outVertices[v].position.x = endian::readLE<float>(file);
             outVertices[v].position.y = endian::readLE<float>(file);
             outVertices[v].position.z = endian::readLE<float>(file);
+            // Normal
             outVertices[v].normal.x = endian::readLE<float>(file);
             outVertices[v].normal.y = endian::readLE<float>(file);
             outVertices[v].normal.z = endian::readLE<float>(file);
+            // TexCoords
             outVertices[v].texCoords.x = endian::readLE<float>(file);
             outVertices[v].texCoords.y = endian::readLE<float>(file);
+            
+            // Initialize with defaults for older file versions
+            outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
+            outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+
 
             if (file.fail())
             {
@@ -635,6 +646,7 @@ namespace resource
         return total;
     }
 
+
     std::unique_ptr<MeshStreamHandle> MeshStreamResource::openStream(std::string_view path)
     {
         auto handle = std::make_unique<MeshStreamHandle>();
@@ -681,14 +693,16 @@ namespace resource
         }
 
         vfLogInfo("MeshStreamResource: Loaded mesh with {} submeshes from {}",
-                  result.numberOfMeshes, path);
+                  result.numberOfMeshes,
+                  path);
         return result;
     }
 
     bool MeshStreamResource::readLODFromFile(std::string_view path,
                                              const LODFileInfo& lodInfo,
                                              std::vector<Vertex>& outVertices,
-                                             std::vector<uint32_t>& outIndices)
+                                             std::vector<uint32_t>& outIndices,
+                                             bool hasBoneData)
     {
         std::ifstream file(std::string(path), std::ios::binary);
         if (!file)
@@ -715,14 +729,36 @@ namespace resource
         outVertices.resize(vertexCount);
         for (uint32_t v = 0; v < vertexCount; ++v)
         {
+            // Position
             outVertices[v].position.x = endian::readLE<float>(file);
             outVertices[v].position.y = endian::readLE<float>(file);
             outVertices[v].position.z = endian::readLE<float>(file);
+            // Normal
             outVertices[v].normal.x = endian::readLE<float>(file);
             outVertices[v].normal.y = endian::readLE<float>(file);
             outVertices[v].normal.z = endian::readLE<float>(file);
+            // TexCoords
             outVertices[v].texCoords.x = endian::readLE<float>(file);
             outVertices[v].texCoords.y = endian::readLE<float>(file);
+
+            // Bone data (v0.0.6+)
+            if (hasBoneData)
+            {
+                outVertices[v].boneIndices.x = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.y = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.z = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.w = endian::readLE<int32_t>(file);
+                outVertices[v].boneWeights.x = endian::readLE<float>(file);
+                outVertices[v].boneWeights.y = endian::readLE<float>(file);
+                outVertices[v].boneWeights.z = endian::readLE<float>(file);
+                outVertices[v].boneWeights.w = endian::readLE<float>(file);
+            }
+            else
+            {
+                // Initialize with defaults for older file versions
+                outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
+                outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+            }
 
             if (file.fail())
             {
