@@ -3,6 +3,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "animator/AnimatorTypes.hpp"
 #include "providers/PreviewInstanceId.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui_node_editor.h>
 #include <glm/glm.hpp>
 #include <string>

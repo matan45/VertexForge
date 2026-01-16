@@ -849,13 +849,34 @@ namespace windows
         }
 
         // Animation path
-        char pathBuffer[512];
-        std::strncpy(pathBuffer, state->animationPath.c_str(), sizeof(pathBuffer) - 1);
-        pathBuffer[sizeof(pathBuffer) - 1] = '\0';
-        if (ImGui::InputText("Animation", pathBuffer, sizeof(pathBuffer)))
+        ImGui::Text("Animation:");
+        if (!state->animationPath.empty())
         {
-            state->animationPath = pathBuffer;
-            isDirty = true;
+            fs::path animPath(state->animationPath);
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.7f, 0.9f, 0.7f, 1.0f), "%s", animPath.filename().string().c_str());
+        }
+
+        if (ImGui::Button("Select Animation"))
+        {
+            nfd::FileDialog fileDialog;
+            std::string path = fileDialog.openFileDialog(
+                {{L"VF Animation Files (*.vfAnim)", L"*.vfAnim"}});
+            if (!path.empty())
+            {
+                state->animationPath = path;
+                isDirty = true;
+            }
+        }
+
+        if (!state->animationPath.empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("Clear##Animation"))
+            {
+                state->animationPath.clear();
+                isDirty = true;
+            }
         }
 
         // Playback speed
