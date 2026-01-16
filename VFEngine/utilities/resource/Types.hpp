@@ -34,6 +34,7 @@ namespace resource
         SCENE,
         FONT,
         SKELETON,
+        ANIMATOR,
         UNKNOWN
     };
 

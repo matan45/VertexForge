@@ -91,6 +91,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="animator\AnimatorAsset.hpp" />
+    <ClInclude Include="animator\AnimatorTypes.hpp" />
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="config\Config.hpp" />
@@ -141,6 +143,8 @@
     <ClInclude Include="uuid\UUID.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="animator\AnimatorAsset.cpp" />
+    <ClCompile Include="animator\AnimatorTypes.cpp" />
     <ClCompile Include="asset\AssetReferenceScanner.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />

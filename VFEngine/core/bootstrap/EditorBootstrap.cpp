@@ -6,6 +6,7 @@
 #include "../adapters/MaterialPreviewAdapter.hpp"
 #include "../adapters/MeshPreviewAdapter.hpp"
 #include "../adapters/AnimationPreviewAdapter.hpp"
+#include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
@@ -33,6 +34,7 @@ namespace core
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         animationPreviewAdapter = std::make_unique<AnimationPreviewAdapter>();
+        animatorAdapter = std::make_unique<AnimatorAdapter>();
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
@@ -79,6 +81,7 @@ namespace core
             physicsAdapter->cleanUp();
         }
 
+        animatorAdapter.reset();
         animationPreviewAdapter.reset();
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
@@ -117,6 +120,11 @@ namespace core
     services::IAnimationPreviewProvider* EditorBootstrap::getAnimationPreviewProvider()
     {
         return animationPreviewAdapter.get();
+    }
+
+    services::IAnimatorProvider* EditorBootstrap::getAnimatorProvider()
+    {
+        return animatorAdapter.get();
     }
 
     services::IAudioProvider* EditorBootstrap::getAudioProvider()

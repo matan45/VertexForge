@@ -184,6 +184,7 @@ namespace components
     struct MeshComponent
     {
         std::string meshPath;
+        std::string animatorPath;  // Path to .vfAnimator file (optional)
         bool showBoundingBox = false;
     };
 

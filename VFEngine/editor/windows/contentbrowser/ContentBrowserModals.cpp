@@ -6,6 +6,7 @@
 #include "events/SceneEvents.hpp"
 #include "events/FileOperationsEvents.hpp"
 #include <material/MaterialAsset.hpp>
+#include <animator/AnimatorAsset.hpp>
 
 namespace windows
 {
@@ -57,6 +58,12 @@ namespace windows
         }
         drawCreateMaterialModal(currentPath);
 
+        if (showCreateAnimatorModal)
+        {
+            ImGui::OpenPopup("Create New Animator");
+        }
+        drawCreateAnimatorModal(currentPath);
+
         if (showSavePrefabModal)
         {
             ImGui::OpenPopup("Save Prefab");
@@ -97,6 +104,11 @@ namespace windows
                 {
                     showCreateMaterialModal = true;
                     newMaterialName.clear();
+                }
+                if (ImGui::MenuItem("Animator"))
+                {
+                    showCreateAnimatorModal = true;
+                    newAnimatorName.clear();
                 }
                 ImGui::EndMenu();
             }
@@ -227,6 +239,53 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showCreateMaterialModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawCreateAnimatorModal(const fs::path& currentPath)
+    {
+        if (showCreateAnimatorModal &&
+            ImGui::BeginPopupModal("Create New Animator", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            char buffer[256];
+            std::strncpy(buffer, newAnimatorName.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText("Animator Name", buffer, IM_ARRAYSIZE(buffer)))
+            {
+                newAnimatorName = std::string(buffer);
+            }
+
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                if (!newAnimatorName.empty())
+                {
+                    std::string extension = ".vfAnimator";
+                    fs::path newAnimatorPath = currentPath / (newAnimatorName + extension);
+
+                    int counter = 1;
+                    while (fs::exists(newAnimatorPath))
+                    {
+                        newAnimatorPath = currentPath / (newAnimatorName + "_" + std::to_string(counter) + extension);
+                        counter++;
+                    }
+
+                    std::string pathStr = StringUtil::wstringToUtf8(newAnimatorPath.wstring());
+                    auto defaultAnimator = animator::AnimatorAsset::createDefault(newAnimatorName);
+                    if (animator::AnimatorAsset::save(pathStr, defaultAnimator))
+                    {
+                        if (refreshCallback) refreshCallback();
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+                showCreateAnimatorModal = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showCreateAnimatorModal = false;
             }
             ImGui::EndPopup();
         }

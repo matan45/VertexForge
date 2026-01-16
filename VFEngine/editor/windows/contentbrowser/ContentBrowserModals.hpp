@@ -18,6 +18,9 @@ namespace windows
         std::string newMaterialName;
         bool showCreateMaterialModal = false;
 
+        std::string newAnimatorName;
+        bool showCreateAnimatorModal = false;
+
         std::string newPrefabName;
         bool showSavePrefabModal = false;
         services::EntityHandle pendingSavePrefabEntity;
@@ -54,6 +57,7 @@ namespace windows
     private:
         void drawCreateFolderModal(const fs::path& currentPath);
         void drawCreateMaterialModal(const fs::path& currentPath);
+        void drawCreateAnimatorModal(const fs::path& currentPath);
         void drawSavePrefabModal(const fs::path& currentPath);
         void drawRenameModal(const fs::path& selectedFile);
         void drawDeleteModal(const fs::path& selectedFile);

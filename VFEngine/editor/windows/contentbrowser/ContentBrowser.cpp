@@ -416,6 +416,10 @@ namespace windows
                     {
                         asset.type = MaterialInstance;
                     }
+                    else if (extension == ".vfAnimator")
+                    {
+                        asset.type = Animator;
+                    }
                     else if (extension == ".vfPrefab")
                     {
                         asset.type = Prefab;

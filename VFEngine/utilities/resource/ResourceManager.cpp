@@ -6,6 +6,7 @@
 #include "MeshStreamHandle.hpp"
 #include "../material/MaterialAsset.hpp"
 #include "../material/MaterialInstanceAsset.hpp"
+#include "../animator/AnimatorAsset.hpp"
 #include <bit>
 #include <algorithm>
 #include <cctype>
@@ -47,6 +48,7 @@ namespace resource
         std::erase_if(materialInstanceCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(fontCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(animationCache, [](const auto& pair) { return pair.second.expired(); });
+        std::erase_if(animatorCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
     // Helper to get expected FileType from extension
@@ -72,6 +74,7 @@ namespace resource
             case FileType::ANIMATION: return "ANIMATION";
             case FileType::SCENE: return "SCENE";
             case FileType::FONT: return "FONT";
+            case FileType::ANIMATOR: return "ANIMATOR";
             default: return "UNKNOWN";
         }
     }
@@ -240,6 +243,7 @@ namespace resource
         materialInstanceCache.clear();
         fontCache.clear();
         animationCache.clear();
+        animatorCache.clear();
 
         vfLogInfo("All resource caches cleared");
     }
@@ -314,5 +318,41 @@ namespace resource
     {
         std::scoped_lock lock(cacheMutex);
         materialInstanceCache.erase(std::string(path));
+    }
+
+    std::shared_ptr<animator::AnimatorData> ResourceManager::loadAnimator(std::string_view path)
+    {
+        // Check cache first
+        {
+            std::scoped_lock lock(cacheMutex);
+            auto it = animatorCache.find(std::string(path));
+            if (it != animatorCache.end()) {
+                if (auto existing = it->second.lock()) {
+                    return existing;
+                }
+            }
+        }
+
+        auto result = animator::AnimatorAsset::load(path);
+        if (!result) {
+            vfLogError("Failed to load animator: {}", path);
+            return nullptr;
+        }
+
+        auto animatorData = std::make_shared<animator::AnimatorData>(std::move(*result));
+
+        // Cache it
+        {
+            std::scoped_lock lock(cacheMutex);
+            animatorCache[std::string(path)] = animatorData;
+        }
+
+        return animatorData;
+    }
+
+    void ResourceManager::invalidateAnimatorCache(std::string_view path)
+    {
+        std::scoped_lock lock(cacheMutex);
+        animatorCache.erase(std::string(path));
     }
 }

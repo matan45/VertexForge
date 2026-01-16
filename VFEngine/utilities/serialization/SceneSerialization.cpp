@@ -55,6 +55,17 @@ namespace serialization
         }
         j["meshPath"] = cleanPath;
         j["showBoundingBox"] = mesh.showBoundingBox;
+
+        // Serialize animator path if set
+        if (!mesh.animatorPath.empty())
+        {
+            std::string cleanAnimatorPath = mesh.animatorPath;
+            if (auto pos = cleanAnimatorPath.find('\0'); pos != std::string::npos)
+            {
+                cleanAnimatorPath.resize(pos);
+            }
+            j["animatorPath"] = cleanAnimatorPath;
+        }
         return j;
     }
 
@@ -205,6 +216,10 @@ namespace serialization
         if (auto it = j.find("showBoundingBox"); it != j.end() && it->is_boolean())
         {
             mesh.showBoundingBox = it->get<bool>();
+        }
+        if (auto it = j.find("animatorPath"); it != j.end() && it->is_string())
+        {
+            mesh.animatorPath = it->get<std::string>();
         }
     }
 
