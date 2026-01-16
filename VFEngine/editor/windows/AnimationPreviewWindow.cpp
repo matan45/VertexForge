@@ -2,20 +2,16 @@
 #include "../camera/OrbitCamera.hpp"
 #include "imgui.h"
 #include "ImSequencer.h"
-#include "resource/AnimationResource.hpp"
+#include "resource/ResourceManager.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
 #include "print/EditorLogger.hpp"
-#include "nfd/FileDialog.hpp"
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
-#include <cstring>
-#include <fstream>
 
 namespace windows
 {
-    // ImSequencer adapter implementation
     class AnimationPreviewWindow::AnimationSequence : public ImSequencer::SequenceInterface
     {
     private:
@@ -88,8 +84,8 @@ namespace windows
 
     AnimationPreviewWindow::AnimationPreviewWindow(const std::string& filePath)
         : animationPath(filePath)
-        , camera(std::make_unique<editor::OrbitCamera>())
-        , sequenceAdapter(std::make_unique<AnimationSequence>())
+          , camera(std::make_unique<editor::OrbitCamera>())
+          , sequenceAdapter(std::make_unique<AnimationSequence>())
     {
         std::filesystem::path path(filePath);
         windowTitle = "Animation Preview: " + path.filename().string();
@@ -97,7 +93,6 @@ namespace windows
 
     AnimationPreviewWindow::~AnimationPreviewWindow()
     {
-        loadingCancelled.store(true);
         if (loadFuture.valid())
         {
             loadFuture.wait();
@@ -107,7 +102,6 @@ namespace windows
 
     void AnimationPreviewWindow::draw()
     {
-        // Handle cleanup when window is closing
         if (!isOpen)
         {
             if (!previewCleanedUp)
@@ -126,7 +120,6 @@ namespace windows
 
         updateAsyncLoading();
 
-        // Update playback
         float currentImGuiTime = static_cast<float>(ImGui::GetTime());
         float deltaTime = currentImGuiTime - lastFrameTime;
         lastFrameTime = currentImGuiTime;
@@ -147,14 +140,12 @@ namespace windows
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
                 float spacing = ImGui::GetStyle().ItemSpacing.x;
 
-                // Left panel: Info + Playback controls
                 ImGui::BeginChild("InfoPanel", ImVec2(leftPanelWidth, contentSize.y), true);
                 drawInfoPanel();
                 ImGui::EndChild();
 
                 ImGui::SameLine();
 
-                // Middle area: 3D Preview + Timeline
                 float middleWidth = contentSize.x - leftPanelWidth - rightPanelWidth - spacing * 2;
                 ImGui::BeginChild("MiddlePanel", ImVec2(middleWidth, contentSize.y), false);
 
@@ -164,7 +155,6 @@ namespace windows
                 }
                 else if (animationLoaded)
                 {
-                    // 3D viewport takes 60% height
                     float previewHeight = contentSize.y * 0.6f;
                     ImGui::BeginChild("3DViewportPanel", ImVec2(middleWidth - 5, previewHeight), true,
                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -172,7 +162,6 @@ namespace windows
                     draw3DViewport(viewportSize.x, viewportSize.y);
                     ImGui::EndChild();
 
-                    // Timeline takes remaining height
                     ImGui::BeginChild("TimelinePanel", ImVec2(middleWidth - 5, 0), true);
                     drawTimelinePanel();
                     ImGui::EndChild();
@@ -182,7 +171,6 @@ namespace windows
 
                 ImGui::SameLine();
 
-                // Right panel: Skeleton hierarchy
                 ImGui::BeginChild("SkeletonPanel", ImVec2(rightPanelWidth, contentSize.y), true);
                 if (animationLoaded)
                 {
@@ -233,13 +221,11 @@ namespace windows
         {
             animationLoadedInPreview = true;
 
-            // Sync looping state
             services::events::animpreview::SetAnimationLoopingCommand loopCmd;
             loopCmd.instanceId = getPreviewInstanceId();
             loopCmd.looping = isLooping;
             events::EventDispatcher::instance().execute(loopCmd);
 
-            // Sync playback speed
             services::events::animpreview::SetAnimationPlaybackSpeedCommand speedCmd;
             speedCmd.instanceId = getPreviewInstanceId();
             speedCmd.speed = playbackSpeed;
@@ -255,7 +241,6 @@ namespace windows
     {
         if (!animationLoaded || !animationData.hasInverseBindPoses()) return;
 
-        // Animation must have embedded mesh (v0.0.7+)
         if (!animationData.hasMesh()) return;
 
         meshLoadedInPreview = true;
@@ -265,12 +250,9 @@ namespace windows
     void AnimationPreviewWindow::startAsyncLoad()
     {
         loadingInProgress.store(true);
-        loadingCancelled.store(false);
         loadingStatus = "Loading animation file...";
 
-        loadFuture = std::async(std::launch::async, [this]() {
-            return loadAnimationBackground(animationPath);
-        });
+        loadFuture = resource::ResourceManager::loadAnimationAsync(animationPath);
     }
 
     void AnimationPreviewWindow::updateAsyncLoading()
@@ -284,19 +266,17 @@ namespace windows
         {
             try
             {
-                AnimationLoadResult result = loadFuture.get();
+                auto loadedData = loadFuture.get();
 
-                if (result.success)
+                if (loadedData)
                 {
-                    animationData = std::move(result.animationData);
+                    animationData = *loadedData;
 
-                    // Validate animation data has meaningful content
                     bool isValid = animationData.duration > 0.0f &&
-                                   !animationData.channels.empty();
+                        !animationData.channels.empty();
 
                     if (isValid)
                     {
-                        // Build bone children map from animation skeleton for initial UI display
                         boneChildrenMap.clear();
                         for (size_t i = 0; i < animationData.skeleton.size(); ++i)
                         {
@@ -307,8 +287,6 @@ namespace windows
                         sequenceAdapter->setAnimationData(&animationData);
                         animationLoaded = true;
                         updateBoneTransformsFromService();
-
-                        // Auto-detect and load mesh for 3D preview
                         tryAutoLoadMesh();
                     }
                     else
@@ -330,48 +308,12 @@ namespace windows
         }
     }
 
-    AnimationLoadResult AnimationPreviewWindow::loadAnimationBackground(const std::string& path)
-    {
-        AnimationLoadResult result;
-
-        try
-        {
-            if (loadingCancelled.load())
-            {
-                result.errorMessage = "Cancelled";
-                return result;
-            }
-
-            result.animationData = resource::AnimationResource::loadAnimation(path);
-
-            if (loadingCancelled.load())
-            {
-                result.errorMessage = "Cancelled";
-                return result;
-            }
-
-            result.success = true;
-        }
-        catch (const std::exception& e)
-        {
-            result.errorMessage = e.what();
-        }
-        catch (...)
-        {
-            result.errorMessage = "Unknown error";
-        }
-
-        return result;
-    }
-
     void AnimationPreviewWindow::updateBoneTransformsFromService()
     {
-        // Query evaluated bones from the service - this is the same data used for GPU skinning
         services::events::animpreview::GetAnimationPreviewEvaluatedBonesQuery query;
         query.instanceId = getPreviewInstanceId();
         evaluatedBones = events::EventDispatcher::instance().query(query);
 
-        // Rebuild hierarchy maps if bone count changed
         if (!evaluatedBones.empty())
         {
             buildBoneHierarchyMaps();
@@ -387,8 +329,6 @@ namespace windows
         {
             const auto& bone = evaluatedBones[i];
             boneNameToIndex[bone.name] = i;
-
-            // Add to parent's children list (including root bones with parentIndex == -1)
             boneChildrenMap[bone.parentIndex].push_back(i);
         }
     }
@@ -447,7 +387,6 @@ namespace windows
         ImGui::Text("3D Preview Status");
         ImGui::Spacing();
 
-        // Show animation status
         if (animationLoaded && animationData.hasInverseBindPoses())
         {
             ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Animation: Ready");
@@ -469,7 +408,6 @@ namespace windows
         ImGui::Text("Playback");
         ImGui::Separator();
 
-        // Play/Pause/Stop buttons
         if (ImGui::Button(isPlaying ? "Pause" : "Play", ImVec2(60, 0)))
         {
             isPlaying = !isPlaying;
@@ -507,7 +445,6 @@ namespace windows
 
         ImGui::Spacing();
 
-        // Speed control
         ImGui::Text("Speed:");
         if (ImGui::SliderFloat("##Speed", &playbackSpeed, 0.1f, 3.0f, "%.1fx"))
         {
@@ -522,7 +459,6 @@ namespace windows
 
         ImGui::Spacing();
 
-        // Loop toggle
         if (ImGui::Checkbox("Loop", &isLooping))
         {
             if (animationLoadedInPreview)
@@ -552,7 +488,6 @@ namespace windows
 
         ImGuiIO& io = ImGui::GetIO();
 
-        // Scroll to zoom
         if (io.MouseWheel != 0.0f)
         {
             float zoomFactor = 1.0f - io.MouseWheel * camera->zoomSensitivity * 0.1f;
@@ -560,7 +495,6 @@ namespace windows
             camera->updateMatrices();
         }
 
-        // Left mouse drag to orbit
         if (isDraggingPreview && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             ImVec2 delta = io.MouseDelta;
@@ -582,20 +516,17 @@ namespace windows
 
         ImVec2 availSize = ImGui::GetContentRegionAvail();
 
-        // If mesh not loaded, show placeholder
         if (!meshLoadedInPreview || !animationLoadedInPreview)
         {
             ImVec2 windowPos = ImGui::GetCursorScreenPos();
             ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-            // Draw dark background
             drawList->AddRectFilled(
                 windowPos,
                 ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y),
                 IM_COL32(25, 25, 30, 255)
             );
 
-            // Draw grid pattern
             float gridSpacing = 30.0f;
             ImU32 gridColor = IM_COL32(50, 50, 55, 255);
 
@@ -616,7 +547,6 @@ namespace windows
                 );
             }
 
-            // Draw placeholder text in center
             const char* placeholderText = "3D Preview Unavailable";
             const char* subText = "Mesh required for 3D visualization";
 
@@ -636,13 +566,11 @@ namespace windows
             return;
         }
 
-        // Render actual 3D preview
         if (availSize.x <= 0 || availSize.y <= 0) return;
 
         camera->setAspectRatio(availSize.x / availSize.y);
         handlePreviewInput();
 
-        // Update animation if playing
         if (isPlaying)
         {
             float deltaTime = static_cast<float>(ImGui::GetIO().DeltaTime);
@@ -652,7 +580,6 @@ namespace windows
             events::EventDispatcher::instance().execute(updateCmd);
         }
 
-        // Set preview params
         glm::mat4 model = glm::mat4(1.0f);
         services::AnimationPreviewParams params;
         params.modelMatrix = model;
@@ -665,7 +592,6 @@ namespace windows
         paramsCmd.params = params;
         events::EventDispatcher::instance().execute(paramsCmd);
 
-        // Update camera
         services::events::animpreview::UpdateAnimationCameraCommand cameraCmd;
         cameraCmd.instanceId = getPreviewInstanceId();
         cameraCmd.view = camera->getViewMatrix();
@@ -673,13 +599,9 @@ namespace windows
         cameraCmd.cameraPos = camera->getPosition();
         events::EventDispatcher::instance().execute(cameraCmd);
 
-        // Render
         services::events::animpreview::RenderAnimationPreviewQuery renderQuery;
         renderQuery.instanceId = getPreviewInstanceId();
         auto textureHandle = events::EventDispatcher::instance().query(renderQuery);
-
-        // Update bone transforms AFTER animation update and render
-        // This ensures we get the latest evaluated bones for visualization
         updateBoneTransformsFromService();
 
         if (textureHandle.imguiDescriptorSet)
@@ -700,22 +622,19 @@ namespace windows
     }
 
     ImVec2 AnimationPreviewWindow::worldToScreen(const glm::vec3& worldPos, const ImVec2& viewportPos,
-                                                   const ImVec2& viewportSize) const
+                                                 const ImVec2& viewportSize) const
     {
-        // Transform world position to clip space
         glm::vec4 clipPos = camera->getProjectionMatrix() * camera->getViewMatrix() * glm::vec4(worldPos, 1.0f);
 
-        // Perspective divide
         if (std::abs(clipPos.w) < 0.0001f)
         {
-            return ImVec2(-10000, -10000);  // Off-screen
+            return ImVec2(-10000, -10000); // Off-screen
         }
 
         glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
 
-        // Convert from NDC [-1,1] to screen coordinates
         float screenX = viewportPos.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x;
-        float screenY = viewportPos.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * viewportSize.y;  // Flip Y
+        float screenY = viewportPos.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * viewportSize.y; // Flip Y
 
         return ImVec2(screenX, screenY);
     }
@@ -724,31 +643,22 @@ namespace windows
     {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        // Colors
-        ImU32 boneColor = IM_COL32(255, 255, 0, 255);       // Yellow for bones
-        ImU32 jointColor = IM_COL32(255, 100, 100, 255);    // Red for joints
-        ImU32 selectedColor = IM_COL32(0, 255, 255, 255);   // Cyan for selected
+        ImU32 boneColor = IM_COL32(255, 255, 0, 255);
+        ImU32 jointColor = IM_COL32(255, 100, 100, 255);
+        ImU32 selectedColor = IM_COL32(0, 255, 255, 255);
 
-        // Draw each bone as a line from parent to child
         for (size_t i = 0; i < evaluatedBones.size(); ++i)
         {
             const auto& bone = evaluatedBones[i];
-
-            // Use skinnedPosition - this is where the bone actually ends up after applying
-            // the same transform as GPU skinning (globalInverse * worldTransform)
             glm::vec3 boneWorldPos = bone.skinnedPosition;
-
-            // Project to screen
             ImVec2 screenPos = worldToScreen(boneWorldPos, viewportPos, viewportSize);
 
-            // Check if on screen
             if (screenPos.x < viewportPos.x - 100 || screenPos.x > viewportPos.x + viewportSize.x + 100 ||
                 screenPos.y < viewportPos.y - 100 || screenPos.y > viewportPos.y + viewportSize.y + 100)
             {
                 continue;
             }
 
-            // Draw line to parent
             if (bone.parentIndex >= 0 && bone.parentIndex < static_cast<int32_t>(evaluatedBones.size()))
             {
                 const auto& parentBone = evaluatedBones[bone.parentIndex];
@@ -760,12 +670,10 @@ namespace windows
                 drawList->AddLine(parentScreenPos, screenPos, lineColor, 2.0f);
             }
 
-            // Draw joint circle
             float jointRadius = (static_cast<int>(i) == selectedChannel) ? 6.0f : 4.0f;
             ImU32 circleColor = (static_cast<int>(i) == selectedChannel) ? selectedColor : jointColor;
             drawList->AddCircleFilled(screenPos, jointRadius, circleColor);
 
-            // Draw bone index for first 10 bones
             if (i < 10)
             {
                 char label[8];
@@ -786,13 +694,11 @@ namespace windows
             return;
         }
 
-        // ImSequencer
         int sequenceOptions = ImSequencer::SEQUENCER_CHANGE_FRAME;
 
         if (ImSequencer::Sequencer(sequenceAdapter.get(), &currentFrame, &sequencerExpanded,
                                    &selectedChannel, &firstFrame, sequenceOptions))
         {
-            // Frame changed via sequencer click
             seekToTime(frameToTime(currentFrame));
         }
     }
@@ -808,11 +714,9 @@ namespace windows
             return;
         }
 
-        // Debug visualization toggle
         ImGui::Checkbox("Show Bones", &showBoneVisualization);
         ImGui::Separator();
 
-        // Camera controls
         if (meshLoadedInPreview && ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float itemWidth = ImGui::GetContentRegionAvail().x - 50.0f;
@@ -829,18 +733,12 @@ namespace windows
                 camera->setDistance(dist);
             }
 
-            if (ImGui::Button("Fit to Mesh", ImVec2(-1, 0)))
-            {
-                camera->fitToBounds(meshBounds);
-            }
-
             ImGui::Separator();
         }
 
         ImGui::Text("Bones");
         ImGui::Separator();
 
-        // Draw root bones (parentIndex == -1) using precomputed map
         auto rootIt = boneChildrenMap.find(-1);
         if (rootIt != boneChildrenMap.end())
         {
@@ -859,7 +757,6 @@ namespace windows
         if (selectedChannel == static_cast<int>(index))
             flags |= ImGuiTreeNodeFlags_Selected;
 
-        // Check if bone has children using precomputed map (O(1) lookup)
         auto childIt = boneChildrenMap.find(static_cast<int32_t>(index));
         bool hasChildren = (childIt != boneChildrenMap.end() && !childIt->second.empty());
         if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf;
@@ -869,7 +766,6 @@ namespace windows
         if (ImGui::IsItemClicked())
             selectedChannel = static_cast<int>(index);
 
-        // Tooltip with transform info
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -884,7 +780,6 @@ namespace windows
 
         if (nodeOpen)
         {
-            // Draw children using precomputed map (O(1) lookup)
             if (hasChildren)
             {
                 for (size_t childIdx : childIt->second)
@@ -950,7 +845,6 @@ namespace windows
 
     void AnimationPreviewWindow::updatePlayback(float deltaTime)
     {
-        // Get current time from service if animation is loaded in preview
         if (animationLoadedInPreview)
         {
             services::events::animpreview::GetAnimationPlaybackTimeQuery timeQuery;
@@ -963,14 +857,12 @@ namespace windows
             currentFrame = timeToFrame(currentTimeInTicks);
             updateBoneTransformsFromService();
 
-            // Check if animation finished (for non-looping)
             services::events::animpreview::IsAnimationPlayingQuery playingQuery;
             playingQuery.instanceId = getPreviewInstanceId();
             isPlaying = events::EventDispatcher::instance().query(playingQuery);
         }
         else
         {
-            // Local playback for timeline only
             float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;
             float currentTimeInTicks = static_cast<float>(currentFrame);
 
@@ -1000,7 +892,6 @@ namespace windows
         currentFrame = timeToFrame(clampedTime);
         updateBoneTransformsFromService();
 
-        // Sync to service if preview is active
         if (animationLoadedInPreview)
         {
             float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;

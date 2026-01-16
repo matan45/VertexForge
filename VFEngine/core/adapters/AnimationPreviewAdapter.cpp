@@ -1,5 +1,5 @@
 #include "AnimationPreviewAdapter.hpp"
-#include "../../graphics/controllers/AnimatedMeshPreviewController.hpp"
+#include "AnimatedMeshPreviewController.hpp"
 
 namespace core
 {
@@ -35,64 +35,14 @@ namespace core
         }
     }
 
-    bool AnimationPreviewAdapter::isAnimationPreviewInitialized(services::PreviewInstanceId instanceId) const
-    {
-        return controllers.find(instanceId) != controllers.end();
-    }
-
-    bool AnimationPreviewAdapter::loadAnimationPreviewMesh(services::PreviewInstanceId instanceId,
-                                                           const std::string& meshPath)
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            return controller->loadMesh(meshPath);
-        }
-        return false;
-    }
-
     bool AnimationPreviewAdapter::loadAnimationPreviewAnimation(services::PreviewInstanceId instanceId,
-                                                                 const std::string& animPath)
+                                                                const std::string& animPath)
     {
         if (auto* controller = getController(instanceId))
         {
             return controller->loadAnimation(animPath);
         }
         return false;
-    }
-
-    void AnimationPreviewAdapter::unloadAnimationPreview(services::PreviewInstanceId instanceId)
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            controller->unload();
-        }
-    }
-
-    bool AnimationPreviewAdapter::isAnimationPreviewMeshLoaded(services::PreviewInstanceId instanceId) const
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            return controller->isMeshLoaded();
-        }
-        return false;
-    }
-
-    bool AnimationPreviewAdapter::isAnimationPreviewAnimationLoaded(services::PreviewInstanceId instanceId) const
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            return controller->isAnimationLoaded();
-        }
-        return false;
-    }
-
-    math::AABB AnimationPreviewAdapter::getAnimationPreviewMeshBounds(services::PreviewInstanceId instanceId) const
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            return controller->getMeshBounds();
-        }
-        return math::AABB{};
     }
 
     void AnimationPreviewAdapter::playAnimation(services::PreviewInstanceId instanceId)
@@ -145,15 +95,6 @@ namespace core
         return 0.0f;
     }
 
-    float AnimationPreviewAdapter::getAnimationDuration(services::PreviewInstanceId instanceId) const
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            return controller->getDuration();
-        }
-        return 0.0f;
-    }
-
     void AnimationPreviewAdapter::setAnimationLooping(services::PreviewInstanceId instanceId, bool loop)
     {
         if (auto* controller = getController(instanceId))
@@ -162,30 +103,12 @@ namespace core
         }
     }
 
-    bool AnimationPreviewAdapter::isAnimationLooping(services::PreviewInstanceId instanceId) const
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            return controller->isLooping();
-        }
-        return true;
-    }
-
     void AnimationPreviewAdapter::setAnimationPlaybackSpeed(services::PreviewInstanceId instanceId, float speed)
     {
         if (auto* controller = getController(instanceId))
         {
             controller->setPlaybackSpeed(speed);
         }
-    }
-
-    float AnimationPreviewAdapter::getAnimationPlaybackSpeed(services::PreviewInstanceId instanceId) const
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            return controller->getPlaybackSpeed();
-        }
-        return 1.0f;
     }
 
     void AnimationPreviewAdapter::updateAnimationPreview(services::PreviewInstanceId instanceId, float deltaTime)
@@ -225,15 +148,6 @@ namespace core
             return controller->render();
         }
         return nullptr;
-    }
-
-    size_t AnimationPreviewAdapter::getAnimationPreviewBoneCount(services::PreviewInstanceId instanceId) const
-    {
-        if (auto* controller = getController(instanceId))
-        {
-            return controller->getBoneCount();
-        }
-        return 0;
     }
 
     std::vector<services::EvaluatedBoneInfo> AnimationPreviewAdapter::getAnimationPreviewEvaluatedBones(

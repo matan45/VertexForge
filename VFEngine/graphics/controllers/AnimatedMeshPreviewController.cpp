@@ -17,10 +17,9 @@ namespace controllers
 {
     AnimatedMeshPreviewController::AnimatedMeshPreviewController()
         : device{*core::VulkanContext::getDevice()}
-        , swapChain{*core::VulkanContext::getSwapChain()}
-        , commandPool{std::make_unique<core::CommandPool>(device, swapChain)}
+          , swapChain{*core::VulkanContext::getSwapChain()}
+          , commandPool{std::make_unique<core::CommandPool>(device, swapChain)}
     {
-        // Initialize default render data
         renderData.albedo = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
         renderData.metallic = 0.0f;
         renderData.roughness = 0.5f;
@@ -44,7 +43,6 @@ namespace controllers
             createSampler();
             createOffscreenResources();
 
-            // Create per-frame fences
             vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
             inFlightFences.resize(swapChain.getImageCount());
             for (auto& fence : inFlightFences)
@@ -52,7 +50,6 @@ namespace controllers
                 fence = device.getLogicalDevice().createFence(fenceInfo);
             }
 
-            // Create skinned mesh pipeline
             skinnedPipeline = std::make_unique<render::mesh::SkinnedMeshPipeline>(
                 device, swapChain, *offscreenResources);
             skinnedPipeline->init();
@@ -62,7 +59,6 @@ namespace controllers
         catch (const std::exception& e)
         {
             loggerError("Failed to initialize AnimatedMeshPreviewController: {}", e.what());
-            // Clean up partially initialized resources
             cleanUp();
         }
     }
@@ -88,7 +84,6 @@ namespace controllers
         }
         inFlightFences.clear();
 
-        // Remove ImGui textures
         if (offscreenResources)
         {
             for (auto const& resources : offscreenResources->colorImages)
@@ -162,7 +157,6 @@ namespace controllers
         imageDepthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
         imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        // Create depth image
         core::DepthImage depth;
         core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageMemory);
 
@@ -174,13 +168,14 @@ namespace controllers
         vk::UniqueCommandBuffer transitionDepthImage = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool->getCommandPool());
         core::ImageUtilities::transitionImageLayout(transitionDepthImage.get(), depth.depthImage,
-            vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+                                                    vk::ImageLayout::eUndefined,
+                                                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                                                    vk::ImageAspectFlagBits::eDepth |
+                                                    vk::ImageAspectFlagBits::eStencil);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), transitionDepthImage);
 
         offscreenResources->depthImage = std::move(depth);
 
-        // Create color images
         offscreenResources->colorImages.reserve(swapChain.getImageCount());
 
         for (size_t i = 0; i < swapChain.getImageCount(); i++)
@@ -195,8 +190,9 @@ namespace controllers
             vk::UniqueCommandBuffer transitionColorImage = core::Utilities::beginSingleTimeCommands(
                 device.getLogicalDevice(), commandPool->getCommandPool());
             core::ImageUtilities::transitionImageLayout(transitionColorImage.get(), color.colorImage,
-                vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::ImageAspectFlagBits::eColor);
+                                                        vk::ImageLayout::eUndefined,
+                                                        vk::ImageLayout::eShaderReadOnlyOptimal,
+                                                        vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), transitionColorImage);
 
             updateDescriptorSet(color.descriptorSet, color.colorImageView);
@@ -239,44 +235,13 @@ namespace controllers
         descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    bool AnimatedMeshPreviewController::loadMesh(const std::string& meshPath)
-    {
-        if (!initialized) init();
-
-        // Unload current mesh
-        if (!loadedMeshPath.empty())
-        {
-            skinnedPipeline->unloadMesh();
-            loadedMeshPath.clear();
-        }
-
-        // Load new mesh
-        if (!skinnedPipeline->loadMesh(meshPath))
-        {
-            loggerError("Failed to load mesh for animation preview: {}", meshPath);
-            return false;
-        }
-
-        loadedMeshPath = meshPath;
-
-        const math::AABB* bounds = skinnedPipeline->getMeshBoundingBox();
-        if (bounds)
-        {
-            meshBounds = *bounds;
-        }
-
-        return true;
-    }
-
     bool AnimatedMeshPreviewController::loadAnimation(const std::string& animationPath)
     {
         if (!initialized) init();
 
-        // Clear old animation
         animationLoaded = false;
         animEvaluator.clear();
 
-        // Load animation data
         animationData = resource::AnimationResource::loadAnimation(animationPath);
         if (animationData.channels.empty())
         {
@@ -287,16 +252,14 @@ namespace controllers
         loadedAnimationPath = animationPath;
         animationLoaded = true;
 
-        // Set up playback state
         float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;
         playbackState.duration = animationData.duration / ticksPerSec;
         playbackState.currentTime = 0.0f;
 
-        // v0.0.7+: Load mesh directly from animation if embedded
         if (animationData.hasMesh())
         {
             loggerInfo("Loading embedded mesh from animation: {} vertices, {} indices",
-                animationData.vertices.size(), animationData.indices.size());
+                       animationData.vertices.size(), animationData.indices.size());
 
             if (!skinnedPipeline->loadMeshFromAnimation(animationData))
             {
@@ -304,19 +267,14 @@ namespace controllers
                 return false;
             }
 
-            // Mark mesh as loaded (embedded)
             loadedMeshPath = "embedded:" + animationPath;
         }
 
-        // Load animation into evaluator (v0.0.6+ is self-contained)
         if (animationData.hasInverseBindPoses())
         {
             animEvaluator.loadAnimation(animationData);
-
-            // No bone mapping needed when using embedded mesh - same skeleton
             meshToAnimBoneMapping.clear();
 
-            // Evaluate initial pose
             auto initialBoneMatrices = animEvaluator.evaluatePose(0.0f);
             if (!initialBoneMatrices.empty() && skinnedPipeline)
             {
@@ -352,8 +310,6 @@ namespace controllers
     {
         playbackState.setTime(timeSeconds);
 
-        // Evaluate pose immediately and upload to GPU
-        // This ensures scrubbing works even when paused
         if (animationLoaded && animEvaluator.isLoaded())
         {
             float timeInTicks = animEvaluator.secondsToTicks(playbackState.currentTime);
@@ -361,7 +317,6 @@ namespace controllers
 
             if (!boneMatrices.empty() && skinnedPipeline)
             {
-                // Remap bone matrices to match mesh skeleton order
                 auto remappedMatrices = remapBoneMatrices(boneMatrices);
                 skinnedPipeline->updateBoneMatrices(remappedMatrices);
             }
@@ -370,10 +325,8 @@ namespace controllers
 
     void AnimatedMeshPreviewController::update(float deltaTime)
     {
-        // Update playback state
         playbackState.update(deltaTime);
 
-        // Evaluate animation and update bone matrices
         if (animationLoaded && animEvaluator.isLoaded())
         {
             float timeInTicks = animEvaluator.secondsToTicks(playbackState.currentTime);
@@ -381,7 +334,6 @@ namespace controllers
 
             if (!boneMatrices.empty() && skinnedPipeline)
             {
-                // Remap bone matrices to match mesh skeleton order
                 auto remappedMatrices = remapBoneMatrices(boneMatrices);
                 skinnedPipeline->updateBoneMatrices(remappedMatrices);
             }
@@ -389,7 +341,7 @@ namespace controllers
     }
 
     void AnimatedMeshPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
-                                                      const glm::vec3& cameraPos)
+                                                     const glm::vec3& cameraPos)
     {
         currentView = view;
         currentProjection = projection;
@@ -410,7 +362,6 @@ namespace controllers
 
         uint32_t imageIndex = core::RenderManager::getImageIndex();
 
-        // Wait for previous frame
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
@@ -420,7 +371,6 @@ namespace controllers
         commandBuffer.reset();
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
-        // Record skinned mesh rendering
         skinnedPipeline->recordCommandBuffer(commandBuffer, imageIndex, renderData);
 
         commandBuffer.end();
@@ -452,14 +402,12 @@ namespace controllers
             return;
         }
 
-        // Build animation bone name to index map
         std::unordered_map<std::string, size_t> animBoneNameToIndex;
         for (size_t i = 0; i < animationData.skeleton.size(); ++i)
         {
             animBoneNameToIndex[animationData.skeleton[i].name] = i;
         }
 
-        // For each mesh bone, find the corresponding animation bone by name
         meshToAnimBoneMapping.resize(meshSkeleton.boneCount(), -1);
         size_t matchedCount = 0;
 
@@ -480,14 +428,12 @@ namespace controllers
         }
 
         loggerInfo("Bone mapping built: {}/{} mesh bones matched to animation bones",
-            matchedCount, meshSkeleton.boneCount());
+                   matchedCount, meshSkeleton.boneCount());
     }
 
     std::vector<glm::mat4> AnimatedMeshPreviewController::remapBoneMatrices(
         const std::vector<glm::mat4>& animBoneMatrices) const
     {
-        // If skeletons match (same bone count and order), use animation matrices directly
-        // The animation's evaluatePose() already computed: globalInverse * worldTransform * inverseBindPose
         if (!skinnedPipeline || !skinnedPipeline->getLoadedMesh())
         {
             return animBoneMatrices;
@@ -496,18 +442,14 @@ namespace controllers
         const auto& meshSkeleton = skinnedPipeline->getLoadedMesh()->skeleton;
         size_t meshBoneCount = meshSkeleton.boneCount();
 
-        // If bone counts match and no remapping needed, use animation matrices directly
         if (meshBoneCount == animBoneMatrices.size() && meshToAnimBoneMapping.empty())
         {
             return animBoneMatrices;
         }
 
-        // If we have a mapping, remap the matrices
         if (!meshToAnimBoneMapping.empty())
         {
             std::vector<glm::mat4> remappedMatrices(meshBoneCount, glm::mat4(1.0f));
-
-            // Debug log once
             static bool loggedOnce = false;
 
             for (size_t meshBoneIdx = 0; meshBoneIdx < meshBoneCount; ++meshBoneIdx)
@@ -515,17 +457,15 @@ namespace controllers
                 int32_t animBoneIdx = meshToAnimBoneMapping[meshBoneIdx];
                 if (animBoneIdx >= 0 && animBoneIdx < static_cast<int32_t>(animBoneMatrices.size()))
                 {
-                    // Use animation's pre-computed bone matrix directly
-                    // Since both skeletons have same inverse bind poses, this should work
                     remappedMatrices[meshBoneIdx] = animBoneMatrices[animBoneIdx];
 
                     if (!loggedOnce && meshBoneIdx < 3)
                     {
                         loggerInfo("Remap bone[{}] '{}': animBone={}, matrix[3]=({:.2f},{:.2f},{:.2f})",
-                            meshBoneIdx, meshSkeleton.boneNames[meshBoneIdx], animBoneIdx,
-                            animBoneMatrices[animBoneIdx][3][0],
-                            animBoneMatrices[animBoneIdx][3][1],
-                            animBoneMatrices[animBoneIdx][3][2]);
+                                   meshBoneIdx, meshSkeleton.boneNames[meshBoneIdx], animBoneIdx,
+                                   animBoneMatrices[animBoneIdx][3][0],
+                                   animBoneMatrices[animBoneIdx][3][1],
+                                   animBoneMatrices[animBoneIdx][3][2]);
                     }
                 }
             }
@@ -534,7 +474,6 @@ namespace controllers
             return remappedMatrices;
         }
 
-        // Fallback: return animation matrices as-is
         return animBoneMatrices;
     }
 }

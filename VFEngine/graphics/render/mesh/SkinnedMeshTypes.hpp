@@ -4,15 +4,11 @@
 #include <glm/glm.hpp>
 #include "resource/Types.hpp"
 #include <array>
-#include <string>
-#include <vector>
 
 namespace render::mesh
 {
-    // Maximum number of bones supported per skeleton
     constexpr uint32_t MAX_BONES = 128;
 
-    // Bone matrices uniform buffer - passed as SSBO for larger bone counts
     struct BoneMatricesSSBO
     {
         alignas(16) glm::mat4 boneMatrices[MAX_BONES];
@@ -20,53 +16,36 @@ namespace render::mesh
         alignas(4) uint32_t padding[3] = {0, 0, 0}; // Pad to 16-byte alignment
     };
 
-    // Per-instance skinning data for animation preview
     struct SkinnedMeshRenderData
     {
-        std::string meshPath;           // Path to .vfMesh file
-        std::string animationPath;      // Path to .vfAnim file
-        glm::mat4 modelMatrix{1.0f};    // World transform
-
-        // PBR material properties (same as MeshRenderData)
+        glm::mat4 modelMatrix{1.0f};
         glm::vec4 albedo{1.0f, 1.0f, 1.0f, 1.0f};
         float metallic = 0.0f;
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
-
-        // Current animation state
-        float animationTime = 0.0f;     // Current playback time
-        bool isPlaying = false;
-        bool looping = true;
-
-        // Computed bone matrices (updated each frame by AnimationEvaluator)
-        std::vector<glm::mat4> boneMatrices;
     };
 
-    // Push constants for skinned mesh rendering
     struct SkinnedMeshPushConstants
     {
-        glm::mat4 model;    // 64 bytes
-        glm::vec4 albedo;   // 16 bytes (RGB + alpha)
-        float metallic;     // 4 bytes
-        float roughness;    // 4 bytes
-        float ao;           // 4 bytes
-        float emission;     // 4 bytes
-        // Total: 96 bytes (within 128-byte push constant limit)
+        glm::mat4 model;
+        glm::vec4 albedo;
+        float metallic;
+        float roughness;
+        float ao;
+        float emission;
     };
 
-    // Vertex input for skinned meshes (same layout as regular mesh but with bone data active)
     struct SkinnedMeshVertexInput
     {
         static vk::VertexInputBindingDescription getBindingDescription()
         {
-            // Static assert to catch any alignment issues at compile time
             static_assert(sizeof(resource::Vertex) == 64,
-                "Vertex struct size mismatch! Expected 64 bytes for GPU compatibility.");
+                          "Vertex struct size mismatch! Expected 64 bytes for GPU compatibility.");
 
             vk::VertexInputBindingDescription bindingDescription{};
             bindingDescription.binding = 0;
-            bindingDescription.stride = sizeof(resource::Vertex); // Should be 64 bytes
+            bindingDescription.stride = sizeof(resource::Vertex);
             bindingDescription.inputRate = vk::VertexInputRate::eVertex;
             return bindingDescription;
         }
@@ -75,31 +54,26 @@ namespace render::mesh
         {
             std::array<vk::VertexInputAttributeDescription, 5> attributes{};
 
-            // location 0: position (vec3)
             attributes[0].binding = 0;
             attributes[0].location = 0;
             attributes[0].format = vk::Format::eR32G32B32Sfloat;
             attributes[0].offset = 0;
 
-            // location 1: normal (vec3)
             attributes[1].binding = 0;
             attributes[1].location = 1;
             attributes[1].format = vk::Format::eR32G32B32Sfloat;
             attributes[1].offset = 12;
 
-            // location 2: texCoords (vec2)
             attributes[2].binding = 0;
             attributes[2].location = 2;
             attributes[2].format = vk::Format::eR32G32Sfloat;
             attributes[2].offset = 24;
 
-            // location 3: boneIndices (ivec4)
             attributes[3].binding = 0;
             attributes[3].location = 3;
             attributes[3].format = vk::Format::eR32G32B32A32Sint;
             attributes[3].offset = 32;
 
-            // location 4: boneWeights (vec4)
             attributes[4].binding = 0;
             attributes[4].location = 4;
             attributes[4].format = vk::Format::eR32G32B32A32Sfloat;
@@ -109,7 +83,6 @@ namespace render::mesh
         }
     };
 
-    // Animation playback state
     struct AnimationPlaybackState
     {
         float currentTime = 0.0f;
@@ -155,7 +128,11 @@ namespace render::mesh
 
         void play() { isPlaying = true; }
         void pause() { isPlaying = false; }
-        void stop() { isPlaying = false; currentTime = 0.0f; }
-        void togglePlayPause() { isPlaying = !isPlaying; }
+
+        void stop()
+        {
+            isPlaying = false;
+            currentTime = 0.0f;
+        }
     };
 }

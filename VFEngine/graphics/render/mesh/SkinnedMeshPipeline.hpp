@@ -32,7 +32,7 @@ namespace render::mesh
     struct SkinnedMeshGPUData
     {
         std::string meshPath;
-        MeshGPUData meshData;          // Reuse static mesh GPU data
+        MeshGPUData meshData; // Reuse static mesh GPU data
         bool hasSkinning = false;
         resource::SkeletonInfo skeleton; // Mesh skeleton info for bone name verification
     };
@@ -44,7 +44,6 @@ namespace render::mesh
         core::SwapChain& swapChain;
         core::OffscreenResources& offscreenResources;
 
-        // Shaders
         std::shared_ptr<core::Shader> skinnedMeshShader;
 
         vk::RenderPass renderPass;
@@ -68,23 +67,18 @@ namespace render::mesh
 
         std::vector<vk::Framebuffer> framebuffers;
 
-        // Camera UBO
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
 
-        // Bone matrices SSBO
         vk::Buffer boneSSBO;
         vk::DeviceMemory boneSSBOMemory;
         void* boneSSBOMapped = nullptr;
 
-        // Current mesh data
         std::unique_ptr<SkinnedMeshGPUData> loadedMesh;
 
-        // Default IBL textures
         bool usingDefaultTextures = false;
         std::unique_ptr<ibl::DefaultIBLTextureFactory> defaultIBLFactory;
 
-        // Current camera state
         mutable glm::mat4 currentView{1.0f};
         mutable glm::mat4 currentProjection{1.0f};
         mutable glm::vec3 currentCameraPos{0.0f};
@@ -95,30 +89,20 @@ namespace render::mesh
         ~SkinnedMeshPipeline();
 
         void init();
-        void recreate();
         void cleanUp();
 
-        vk::RenderPass getRenderPass() const { return renderPass; }
-
-        // Mesh management
-        bool loadMesh(std::string_view meshPath);
         bool loadMeshFromAnimation(const resource::AnimationData& animData);
         void unloadMesh();
-        bool isMeshLoaded() const { return loadedMesh != nullptr; }
         const SkinnedMeshGPUData* getLoadedMesh() const { return loadedMesh.get(); }
-        const math::AABB* getMeshBoundingBox() const;
 
-        // Update camera UBO
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                            const glm::vec3& cameraPos, float time = 0.0f) const;
+                             const glm::vec3& cameraPos, float time = 0.0f) const;
 
-        // Update bone matrices for skinning
         void updateBoneMatrices(const std::vector<glm::mat4>& boneMatrices);
 
-        // Record rendering commands
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
-                                uint32_t imageIndex,
-                                const SkinnedMeshRenderData& renderData) const;
+                                 uint32_t imageIndex,
+                                 const SkinnedMeshRenderData& renderData) const;
 
     private:
         void loadShaders();

@@ -3,21 +3,12 @@
 #include "EndianUtils.hpp"
 
 #include <fstream>
-#include <filesystem>
 
 namespace resource
 {
     AnimationData AnimationResource::loadAnimation(std::string_view path)
     {
-        std::shared_ptr<SkeletonData> skeleton;
-        return loadAnimationWithSkeleton(path, skeleton);
-    }
-
-    AnimationData AnimationResource::loadAnimationWithSkeleton(std::string_view path,
-                                                               std::shared_ptr<SkeletonData>& skeletonOut)
-    {
         AnimationData data;
-        skeletonOut = nullptr;
 
         std::ifstream file(path.data(), std::ios::binary);
         if (!file)
@@ -26,7 +17,6 @@ namespace resource
             return data;
         }
 
-        // Read and validate header
         uint8_t fileType = endian::readLE<uint8_t>(file);
         if (static_cast<FileType>(fileType) != FileType::ANIMATION)
         {
@@ -35,23 +25,20 @@ namespace resource
             return data;
         }
 
-        // Read version
         data.version.major = endian::readLE<uint32_t>(file);
         data.version.minor = endian::readLE<uint32_t>(file);
         data.version.patch = endian::readLE<uint32_t>(file);
 
-        // Read animation name
         data.name = readString(file);
-
-        // Read metadata
         data.duration = endian::readLE<float>(file);
         data.ticksPerSecond = endian::readLE<float>(file);
 
-        // Check version for format type
-        // v0.0.6+: self-contained with skeleton + inverse bind poses
-        // v0.0.5: has skeleton reference AND inline skeleton
-        // v0.0.4: has skeleton reference only (loads from .vfSkeleton)
-        // v0.0.3 and earlier: inline skeleton only (no reference)
+        // Version format:
+        // v0.0.7+: mesh data + inverse bind poses + inline skeleton
+        // v0.0.6+: inverse bind poses + inline skeleton
+        // v0.0.5: skeleton reference + inline skeleton
+        // v0.0.4: skeleton reference only
+        // v0.0.3-: inline skeleton only
         bool hasSkeletonReference = (data.version.major == 0 && data.version.minor == 0 && data.version.patch >= 4);
         bool hasInlineSkeleton = (data.version.major == 0 && data.version.minor == 0 && data.version.patch >= 5) ||
                                   (data.version.major == 0 && data.version.minor == 0 && data.version.patch < 4);
@@ -60,16 +47,14 @@ namespace resource
 
         if (hasSkeletonReference)
         {
-            // Read skeleton reference (present in v0.0.4+)
             data.skeletonReference = readString(file);
             vfLogInfo("Animation has skeleton reference: {}", data.skeletonReference);
         }
 
         if (hasInlineSkeleton)
         {
-            // Read inline skeleton (v0.0.5+ or legacy v0.0.3 and earlier)
             uint32_t numBones = endian::readLE<uint32_t>(file);
-            if (numBones > 1000)  // Sanity check
+            if (numBones > 1000)
             {
                 vfLogError("Invalid bone count in animation file: {}", numBones);
                 return data;
@@ -80,21 +65,16 @@ namespace resource
             {
                 bone.name = readString(file);
                 bone.parentIndex = endian::readLE<int32_t>(file);
-
-                // Read offset matrix (16 floats, column-major)
                 bone.offsetMatrix = readMatrix(file);
-
-                // Read preTransform matrix (16 floats, column-major)
                 bone.preTransform = readMatrix(file);
             }
             vfLogInfo("Loaded inline skeleton with {} bones", numBones);
         }
 
-        // Read inverse bind poses (v0.0.6+)
         if (hasInverseBindPoses)
         {
             uint32_t numPoses = endian::readLE<uint32_t>(file);
-            if (numPoses > 1000)  // Sanity check
+            if (numPoses > 1000)
             {
                 vfLogError("Invalid inverse bind pose count in animation file: {}", numPoses);
                 return data;
@@ -108,9 +88,8 @@ namespace resource
             vfLogInfo("Loaded {} inverse bind poses", numPoses);
         }
 
-        // Read channels
         uint32_t numChannels = endian::readLE<uint32_t>(file);
-        if (numChannels > 1000)  // Sanity check
+        if (numChannels > 1000)
         {
             vfLogError("Invalid channel count in animation file: {}", numChannels);
             return data;
@@ -121,7 +100,6 @@ namespace resource
         {
             channel.boneName = readString(file);
 
-            // Read position keys
             uint32_t numPosKeys = endian::readLE<uint32_t>(file);
             channel.positionKeys.resize(numPosKeys);
             for (auto& key : channel.positionKeys)
@@ -132,7 +110,6 @@ namespace resource
                 key.position.z = endian::readLE<float>(file);
             }
 
-            // Read rotation keys
             uint32_t numRotKeys = endian::readLE<uint32_t>(file);
             channel.rotationKeys.resize(numRotKeys);
             for (auto& key : channel.rotationKeys)
@@ -144,7 +121,6 @@ namespace resource
                 key.rotation.w = endian::readLE<float>(file);
             }
 
-            // Read scaling keys
             uint32_t numScaleKeys = endian::readLE<uint32_t>(file);
             channel.scalingKeys.resize(numScaleKeys);
             for (auto& key : channel.scalingKeys)
@@ -156,7 +132,6 @@ namespace resource
             }
         }
 
-        // Read global inverse transform
         if (file.peek() != EOF)
         {
             data.globalInverseTransform = readMatrix(file);
@@ -166,7 +141,6 @@ namespace resource
             data.globalInverseTransform = glm::mat4(1.0f);
         }
 
-        // Read mesh data (v0.0.7+)
         if (hasMeshData && file.peek() != EOF)
         {
             uint32_t numVertices = endian::readLE<uint32_t>(file);
@@ -211,18 +185,6 @@ namespace resource
                   data.duration / data.ticksPerSecond);
 
         return data;
-    }
-
-    bool AnimationResource::validateFile(std::string_view path)
-    {
-        std::ifstream file(path.data(), std::ios::binary);
-        if (!file)
-        {
-            return false;
-        }
-
-        uint8_t fileType = endian::readLE<uint8_t>(file);
-        return static_cast<FileType>(fileType) == FileType::ANIMATION;
     }
 
     std::string AnimationResource::readString(std::ifstream& file)

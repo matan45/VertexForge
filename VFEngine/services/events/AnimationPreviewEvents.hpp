@@ -4,7 +4,6 @@
 #include "../providers/IAnimationPreviewProvider.hpp"
 #include "../providers/PreviewInstanceId.hpp"
 #include "../data/DTOs.hpp"
-#include <math/Frustum.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -31,24 +30,11 @@ namespace services::events::animpreview
     // ANIMATION PREVIEW LOADING COMMANDS
     // ============================================================
 
-    struct LoadAnimationPreviewMeshCommand : ::events::ICommand<bool>
-    {
-        PreviewInstanceId instanceId;
-        std::string meshPath;
-        std::string_view getName() const override { return "LoadAnimationPreviewMesh"; }
-    };
-
     struct LoadAnimationPreviewAnimationCommand : ::events::ICommand<bool>
     {
         PreviewInstanceId instanceId;
         std::string animationPath;
         std::string_view getName() const override { return "LoadAnimationPreviewAnimation"; }
-    };
-
-    struct UnloadAnimationPreviewCommand : ::events::ICommand<void>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "UnloadAnimationPreview"; }
     };
 
     // ============================================================
@@ -125,30 +111,6 @@ namespace services::events::animpreview
     // ANIMATION PREVIEW QUERIES
     // ============================================================
 
-    struct IsAnimationPreviewInitializedQuery : ::events::IQuery<bool>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsAnimationPreviewInitialized"; }
-    };
-
-    struct IsAnimationPreviewMeshLoadedQuery : ::events::IQuery<bool>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsAnimationPreviewMeshLoaded"; }
-    };
-
-    struct IsAnimationPreviewAnimationLoadedQuery : ::events::IQuery<bool>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsAnimationPreviewAnimationLoaded"; }
-    };
-
-    struct GetAnimationPreviewMeshBoundsQuery : ::events::IQuery<math::AABB>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "GetAnimationPreviewMeshBounds"; }
-    };
-
     struct IsAnimationPlayingQuery : ::events::IQuery<bool>
     {
         PreviewInstanceId instanceId;
@@ -161,34 +123,10 @@ namespace services::events::animpreview
         std::string_view getName() const override { return "GetAnimationPlaybackTime"; }
     };
 
-    struct GetAnimationDurationQuery : ::events::IQuery<float>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "GetAnimationDuration"; }
-    };
-
-    struct IsAnimationLoopingQuery : ::events::IQuery<bool>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsAnimationLooping"; }
-    };
-
-    struct GetAnimationPlaybackSpeedQuery : ::events::IQuery<float>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "GetAnimationPlaybackSpeed"; }
-    };
-
     struct RenderAnimationPreviewQuery : ::events::IQuery<ViewportTextureHandle>
     {
         PreviewInstanceId instanceId;
         std::string_view getName() const override { return "RenderAnimationPreview"; }
-    };
-
-    struct GetAnimationPreviewBoneCountQuery : ::events::IQuery<size_t>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "GetAnimationPreviewBoneCount"; }
     };
 
     struct GetAnimationPreviewEvaluatedBonesQuery : ::events::IQuery<std::vector<EvaluatedBoneInfo>>

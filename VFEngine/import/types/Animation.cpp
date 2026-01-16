@@ -77,43 +77,35 @@ namespace types
 
         if (progressCallback) progressCallback(0.15f);
 
-        // Extract skeleton in mesh-compatible bone order (self-contained animation)
         auto skeleton = extractSkeleton(scene);
 
-        // Build bone name to index map
         std::unordered_map<std::string, int32_t> boneIndexMap;
         for (size_t i = 0; i < skeleton.size(); ++i)
             boneIndexMap[skeleton[i].name] = static_cast<int32_t>(i);
 
-        // Extract inverse bind poses from mesh bones (for self-contained animation)
         auto inverseBindPoseMap = extractInverseBindPoses(scene);
 
-        // Extract mesh data (vertices with bone weights)
         std::vector<resource::Vertex> meshVertices;
         std::vector<uint32_t> meshIndices;
         extractMeshData(scene, boneIndexMap, meshVertices, meshIndices);
         vfLogInfo("Extracted mesh: {} vertices, {} indices", meshVertices.size(), meshIndices.size());
 
-        // Compute global inverse transform from scene root
         glm::mat4 rootTransform = convertMatrix(scene->mRootNode->mTransformation);
         glm::mat4 globalInverseTransform = glm::inverse(rootTransform);
 
         if (progressCallback) progressCallback(0.25f);
 
-        // Process each animation
         const uint32_t numAnimations = scene->mNumAnimations;
         for (uint32_t i = 0; i < numAnimations; ++i)
         {
             const aiAnimation* anim = scene->mAnimations[i];
 
-            // Extract animation data with inverse bind poses (self-contained)
             resource::AnimationData animData = extractAnimation(anim, skeleton, inverseBindPoseMap, globalInverseTransform);
 
-            // Add mesh data to animation (v0.0.7 - fully self-contained)
+            // v0.0.7: embed mesh data for fully self-contained animation
             animData.vertices = meshVertices;
             animData.indices = meshIndices;
 
-            // Generate output filename
             std::string animName = sanitizeAnimationName(anim->mName.C_Str());
             if (animName.empty())
             {
@@ -122,10 +114,8 @@ namespace types
 
             std::string outputName = std::string(fileName) + "_" + animName;
 
-            // Save animation to file
             saveToFile(location, outputName, animData);
 
-            // Report progress
             if (progressCallback)
             {
                 float progress = 0.25f + (static_cast<float>(i + 1) / numAnimations) * 0.7f;
@@ -155,7 +145,6 @@ namespace types
                 const aiBone* bone = mesh->mBones[b];
                 std::string boneName = bone->mName.C_Str();
 
-                // Skip if already added (same logic as mesh import)
                 if (boneNamesSet.contains(boneName))
                     continue;
 
@@ -170,18 +159,15 @@ namespace types
             return {};
         }
 
-        // Build bone name to index map (matching mesh import order)
         std::unordered_map<std::string, int32_t> boneIndexMap;
         for (size_t i = 0; i < boneNamesInOrder.size(); ++i)
         {
             boneIndexMap[boneNamesInOrder[i]] = static_cast<int32_t>(i);
         }
 
-        // Build node name to node map for hierarchy lookup
         std::unordered_map<std::string, const aiNode*> nodeMap;
         buildNodeMap(scene->mRootNode, nodeMap);
 
-        // Create bones in the same order as mesh import
         std::vector<resource::SkeletonBone> bones;
         bones.reserve(boneNamesInOrder.size());
 
@@ -190,16 +176,13 @@ namespace types
             resource::SkeletonBone bone;
             bone.name = boneName;
 
-            // Find this bone's node in the scene hierarchy
             auto nodeIt = nodeMap.find(boneName);
             if (nodeIt != nodeMap.end())
             {
                 const aiNode* boneNode = nodeIt->second;
 
-                // Get the bone's local transform
                 bone.offsetMatrix = convertMatrix(boneNode->mTransformation);
 
-                // Find parent bone index by walking up the hierarchy
                 bone.parentIndex = -1;
                 const aiNode* parentNode = boneNode->mParent;
 
@@ -275,7 +258,6 @@ namespace types
                 const aiBone* bone = mesh->mBones[b];
                 std::string boneName = bone->mName.C_Str();
 
-                // Skip if already extracted
                 if (inverseBindPoses.contains(boneName))
                     continue;
 
@@ -302,7 +284,6 @@ namespace types
         animData.skeleton = skeleton;
         animData.globalInverseTransform = globalInverseTransform;
 
-        // Build inverse bind poses vector in skeleton bone order
         animData.inverseBindPoses.resize(skeleton.size(), glm::mat4(1.0f));
         for (size_t i = 0; i < skeleton.size(); ++i)
         {
@@ -331,12 +312,10 @@ namespace types
             if (assimpSuffix != std::string::npos)
                 channelName = channelName.substr(0, assimpSuffix);
 
-            // Get or create channel for this bone
             auto& boneAnim = channelMap[channelName];
             if (boneAnim.boneName.empty())
                 boneAnim.boneName = channelName;
 
-            // Merge keyframes (only add if this channel has them)
             if (channel->mNumPositionKeys > 0 && boneAnim.positionKeys.empty())
             {
                 for (uint32_t k = 0; k < channel->mNumPositionKeys; ++k)
@@ -365,7 +344,6 @@ namespace types
             }
         }
 
-        // Convert map to vector
         animData.channels.reserve(channelMap.size());
         for (auto& [name, channel] : channelMap)
             animData.channels.push_back(std::move(channel));
@@ -378,7 +356,6 @@ namespace types
     void Animation::saveToFile(std::string_view location, std::string_view baseName,
                                const resource::AnimationData& animData) const
     {
-        // Create output path
         std::filesystem::path outputPath = std::filesystem::path(location) /
                                            (std::string(baseName) + "." + FileExtension::animation);
 
@@ -389,37 +366,24 @@ namespace types
             return;
         }
 
-        // Write header - version 0.0.7: includes mesh data
+        // Header v0.0.7: includes embedded mesh data
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(animData.headerFileType));
-        resource::endian::writeLE<uint32_t>(outFile, 0);  // major
-        resource::endian::writeLE<uint32_t>(outFile, 0);  // minor
-        resource::endian::writeLE<uint32_t>(outFile, 7);  // patch - version 0.0.7: adds mesh data
+        resource::endian::writeLE<uint32_t>(outFile, 0);
+        resource::endian::writeLE<uint32_t>(outFile, 0);
+        resource::endian::writeLE<uint32_t>(outFile, 7);
 
-        // Write animation name
         writeString(outFile, animData.name);
-
-        // Write metadata
         resource::endian::writeLE<float>(outFile, animData.duration);
         resource::endian::writeLE<float>(outFile, animData.ticksPerSecond);
-
-        // Write empty skeleton reference (self-contained format)
-        writeString(outFile, "");
-
-        // Write inline skeleton (bone hierarchy)
+        writeString(outFile, ""); // empty skeleton reference (self-contained)
         writeSkeleton(outFile, animData.skeleton);
-
-        // Write inverse bind poses
         writeInverseBindPoses(outFile, animData.inverseBindPoses);
-
-        // Write channels
         writeChannels(outFile, animData.channels);
 
-        // Write global inverse transform (16 floats)
         for (int col = 0; col < 4; ++col)
             for (int row = 0; row < 4; ++row)
                 resource::endian::writeLE<float>(outFile, animData.globalInverseTransform[col][row]);
 
-        // Write mesh data (v0.0.7)
         writeMeshData(outFile, animData.vertices, animData.indices);
 
         outFile.close();
@@ -442,29 +406,16 @@ namespace types
 
         for (const auto& bone : skeleton)
         {
-            // Write bone name
             writeString(file, bone.name);
-
-            // Write parent index
             resource::endian::writeLE<int32_t>(file, bone.parentIndex);
 
-            // Write offset matrix (16 floats, column-major)
             for (int col = 0; col < 4; ++col)
-            {
                 for (int row = 0; row < 4; ++row)
-                {
                     resource::endian::writeLE<float>(file, bone.offsetMatrix[col][row]);
-                }
-            }
 
-            // Write preTransform matrix (16 floats, column-major)
             for (int col = 0; col < 4; ++col)
-            {
                 for (int row = 0; row < 4; ++row)
-                {
                     resource::endian::writeLE<float>(file, bone.preTransform[col][row]);
-                }
-            }
         }
     }
 
@@ -474,14 +425,9 @@ namespace types
 
         for (const auto& matrix : inverseBindPoses)
         {
-            // Write matrix (16 floats, column-major)
             for (int col = 0; col < 4; ++col)
-            {
                 for (int row = 0; row < 4; ++row)
-                {
                     resource::endian::writeLE<float>(file, matrix[col][row]);
-                }
-            }
         }
     }
 
@@ -491,10 +437,8 @@ namespace types
 
         for (const auto& channel : channels)
         {
-            // Write bone name
             writeString(file, channel.boneName);
 
-            // Write position keys
             resource::endian::writeLE<uint32_t>(file, static_cast<uint32_t>(channel.positionKeys.size()));
             for (const auto& key : channel.positionKeys)
             {
@@ -504,7 +448,6 @@ namespace types
                 resource::endian::writeLE<float>(file, key.position.z);
             }
 
-            // Write rotation keys
             resource::endian::writeLE<uint32_t>(file, static_cast<uint32_t>(channel.rotationKeys.size()));
             for (const auto& key : channel.rotationKeys)
             {
@@ -515,7 +458,6 @@ namespace types
                 resource::endian::writeLE<float>(file, key.rotation.w);
             }
 
-            // Write scaling keys
             resource::endian::writeLE<uint32_t>(file, static_cast<uint32_t>(channel.scalingKeys.size()));
             for (const auto& key : channel.scalingKeys)
             {
@@ -566,7 +508,6 @@ namespace types
         {
             const aiMesh* mesh = scene->mMeshes[m];
 
-            // Extract vertices
             for (uint32_t v = 0; v < mesh->mNumVertices; ++v)
             {
                 resource::Vertex vertex;
@@ -580,7 +521,6 @@ namespace types
                 outVertices.push_back(vertex);
             }
 
-            // Extract bone weights
             for (uint32_t b = 0; b < mesh->mNumBones; ++b)
             {
                 const aiBone* bone = mesh->mBones[b];
@@ -607,7 +547,6 @@ namespace types
                 }
             }
 
-            // Extract indices
             for (uint32_t f = 0; f < mesh->mNumFaces; ++f)
             {
                 const aiFace& face = mesh->mFaces[f];
@@ -630,7 +569,6 @@ namespace types
     void Animation::writeMeshData(std::ofstream& file, const std::vector<resource::Vertex>& vertices,
                                   const std::vector<uint32_t>& indices) const
     {
-        // Write vertex count and data
         resource::endian::writeLE<uint32_t>(file, static_cast<uint32_t>(vertices.size()));
         for (const auto& v : vertices)
         {
@@ -652,7 +590,6 @@ namespace types
             resource::endian::writeLE<float>(file, v.boneWeights.w);
         }
 
-        // Write index count and data
         resource::endian::writeLE<uint32_t>(file, static_cast<uint32_t>(indices.size()));
         for (uint32_t idx : indices)
             resource::endian::writeLE<uint32_t>(file, idx);

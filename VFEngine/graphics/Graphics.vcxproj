@@ -99,8 +99,8 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="animation\AnimationEvaluator.hpp" />
     <ClInclude Include="controllers\AnimatedMeshPreviewController.hpp" />
-    <ClInclude Include="controllers\AnimationEvaluator.hpp" />
     <ClInclude Include="controllers\Graphics.hpp" />
     <ClInclude Include="controllers\MaterialPreviewController.hpp" />
     <ClInclude Include="controllers\MeshPreviewController.hpp" />
@@ -177,8 +177,8 @@
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="animation\AnimationEvaluator.cpp" />
     <ClCompile Include="controllers\AnimatedMeshPreviewController.cpp" />
-    <ClCompile Include="controllers\AnimationEvaluator.cpp" />
     <ClCompile Include="controllers\Graphics.cpp" />
     <ClCompile Include="controllers\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\MeshPreviewController.cpp" />

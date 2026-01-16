@@ -88,22 +88,8 @@ namespace resource
 
         hasMeshlets = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 4);
         hasConvexHulls = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 5);
-        hasSkinningData = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 6);
-        hasSkeletonRef = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 7);
 
         header.numSubmeshes = endian::readLE<uint32_t>(file);
-
-        // Read skeleton reference for v0.0.7+
-        if (hasSkeletonRef)
-        {
-            uint32_t skelRefLen = endian::readLE<uint32_t>(file);
-            if (skelRefLen > 0 && skelRefLen < 1024)
-            {
-                header.skeletonReference.resize(skelRefLen);
-                file.read(header.skeletonReference.data(), skelRefLen);
-                vfLogInfo("MeshStreamHandle: Found skeleton reference: {}", header.skeletonReference);
-            }
-        }
 
         if (file.fail())
         {
@@ -166,7 +152,7 @@ namespace resource
                     }
 
                     // Vertex size depends on file version: 64 bytes for v0.0.6+ (with bone data), 32 bytes for older
-                    size_t vertexSize = hasSkinningData ? 64 : 32;
+                    size_t vertexSize = 32;
                     file.seekg(lodInfo.vertexCount * vertexSize, std::ios::cur);
 
                     lodInfo.indexCount = endian::readLE<uint32_t>(file);
@@ -212,15 +198,6 @@ namespace resource
                 {
                     return false;
                 }
-            }
-        }
-
-        // Parse skeleton data at the end of file (v0.0.6+)
-        if (hasSkinningData)
-        {
-            if (!parseSkeletonHeader())
-            {
-                return false;
             }
         }
 
@@ -388,25 +365,11 @@ namespace resource
             // TexCoords
             outVertices[v].texCoords.x = endian::readLE<float>(file);
             outVertices[v].texCoords.y = endian::readLE<float>(file);
+            
+            // Initialize with defaults for older file versions
+            outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
+            outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-            // Bone data (v0.0.6+)
-            if (hasSkinningData)
-            {
-                outVertices[v].boneIndices.x = endian::readLE<int32_t>(file);
-                outVertices[v].boneIndices.y = endian::readLE<int32_t>(file);
-                outVertices[v].boneIndices.z = endian::readLE<int32_t>(file);
-                outVertices[v].boneIndices.w = endian::readLE<int32_t>(file);
-                outVertices[v].boneWeights.x = endian::readLE<float>(file);
-                outVertices[v].boneWeights.y = endian::readLE<float>(file);
-                outVertices[v].boneWeights.z = endian::readLE<float>(file);
-                outVertices[v].boneWeights.w = endian::readLE<float>(file);
-            }
-            else
-            {
-                // Initialize with defaults for older file versions
-                outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
-                outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
-            }
 
             if (file.fail())
             {
@@ -683,124 +646,6 @@ namespace resource
         return total;
     }
 
-    bool MeshStreamHandle::parseSkeletonHeader()
-    {
-        skeletonDataOffset = file.tellg();
-
-        uint8_t hasSkinning = endian::readLE<uint8_t>(file);
-        if (hasSkinning == 0)
-        {
-            hasSkinningData = false;
-            return !file.fail();
-        }
-
-        uint32_t boneCount = endian::readLE<uint32_t>(file);
-        if (boneCount > maxBoneCount)
-        {
-            vfLogError("MeshStreamHandle: Bone count {} exceeds limit {}", boneCount, maxBoneCount);
-            return false;
-        }
-
-        // Skip bone names
-        for (uint32_t b = 0; b < boneCount; ++b)
-        {
-            uint32_t nameLength = endian::readLE<uint32_t>(file);
-            if (nameLength > 1024)
-            {
-                vfLogError("MeshStreamHandle: Invalid bone name length {}", nameLength);
-                return false;
-            }
-            file.seekg(nameLength, std::ios::cur);
-        }
-
-        // Skip inverse bind poses (16 floats per bone)
-        file.seekg(boneCount * 16 * sizeof(float), std::ios::cur);
-
-        if (file.fail())
-        {
-            vfLogError("MeshStreamHandle: Failed to parse skeleton header");
-            return false;
-        }
-
-        vfLogInfo("MeshStreamHandle: File has skeleton with {} bones", boneCount);
-        return true;
-    }
-
-    bool MeshStreamHandle::readSkeletonData(SkeletonInfo& outSkeleton)
-    {
-        std::lock_guard<std::mutex> lock(fileMutex);
-
-        outSkeleton = SkeletonInfo{};
-
-        if (!file.is_open())
-        {
-            vfLogError("MeshStreamHandle: File not open");
-            return false;
-        }
-
-        if (!hasSkinningData)
-        {
-            return true;  // No skeleton data, but not an error
-        }
-
-        file.seekg(skeletonDataOffset);
-        if (file.fail())
-        {
-            vfLogError("MeshStreamHandle: Failed to seek to skeleton data");
-            return false;
-        }
-
-        uint8_t hasSkinning = endian::readLE<uint8_t>(file);
-        if (hasSkinning == 0)
-        {
-            return true;  // No skeleton data
-        }
-
-        uint32_t boneCount = endian::readLE<uint32_t>(file);
-        if (boneCount > maxBoneCount)
-        {
-            vfLogError("MeshStreamHandle: Bone count {} exceeds limit {}", boneCount, maxBoneCount);
-            return false;
-        }
-
-        // Read bone names
-        outSkeleton.boneNames.resize(boneCount);
-        for (uint32_t b = 0; b < boneCount; ++b)
-        {
-            uint32_t nameLength = endian::readLE<uint32_t>(file);
-            if (nameLength > 1024)
-            {
-                vfLogError("MeshStreamHandle: Invalid bone name length {}", nameLength);
-                return false;
-            }
-            if (nameLength > 0)
-            {
-                outSkeleton.boneNames[b].resize(nameLength);
-                file.read(outSkeleton.boneNames[b].data(), nameLength);
-            }
-        }
-
-        // Read inverse bind pose matrices
-        outSkeleton.inverseBindPoses.resize(boneCount);
-        for (uint32_t b = 0; b < boneCount; ++b)
-        {
-            for (int col = 0; col < 4; ++col)
-            {
-                for (int row = 0; row < 4; ++row)
-                {
-                    outSkeleton.inverseBindPoses[b][col][row] = endian::readLE<float>(file);
-                }
-            }
-        }
-
-        if (file.fail())
-        {
-            vfLogError("MeshStreamHandle: Failed to read skeleton data");
-            return false;
-        }
-
-        return true;
-    }
 
     std::unique_ptr<MeshStreamHandle> MeshStreamResource::openStream(std::string_view path)
     {
@@ -847,21 +692,8 @@ namespace resource
             }
         }
 
-        // Read skeleton data if available
-        result.hasSkinning = stream->hasSkinning();
-        if (result.hasSkinning)
-        {
-            if (!stream->readSkeletonData(result.skeleton))
-            {
-                vfLogError("MeshStreamResource: Failed to read skeleton data from {}", path);
-                // Non-fatal, just mark as no skinning
-                result.hasSkinning = false;
-            }
-        }
-
-        vfLogInfo("MeshStreamResource: Loaded mesh with {} submeshes{} from {}",
+        vfLogInfo("MeshStreamResource: Loaded mesh with {} submeshes from {}",
                   result.numberOfMeshes,
-                  result.hasSkinning ? " (with skinning)" : "",
                   path);
         return result;
     }

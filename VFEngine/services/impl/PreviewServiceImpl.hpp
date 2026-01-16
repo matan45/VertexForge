@@ -3,42 +3,25 @@
 #include "../events/PreviewEvents.hpp"
 #include "../events/AnimationPreviewEvents.hpp"
 
-namespace services {
-
+namespace services
+{
     class IMaterialPreviewProvider;
     class IMeshPreviewProvider;
     class IAnimationPreviewProvider;
 
-    /**
-     * @brief Implementation of IPreviewService using provider abstraction.
-     *
-     * This class delegates preview operations to separate providers:
-     * - IMaterialPreviewProvider for material previews
-     * - IMeshPreviewProvider for mesh previews
-     * - IAnimationPreviewProvider for animation previews
-     *
-     * Supports multiple instances via instanceId parameter - each instance
-     * gets its own independent preview (e.g., for multiple editor windows).
-     *
-     * @note Providers must not be null - this is enforced via assertion.
-     *       A null provider indicates a programming error during bootstrap.
-     */
-    class PreviewServiceImpl : public IPreviewService {
+
+    class PreviewServiceImpl : public IPreviewService
+    {
+    private:
+        IMaterialPreviewProvider* materialProvider;
+        IMeshPreviewProvider* meshProvider;
+        IAnimationPreviewProvider* animationProvider;
+
     public:
-        /**
-         * @brief Construct with separate preview providers.
-         * @param materialProvider Provider for material preview operations (must not be null)
-         * @param meshProvider Provider for mesh preview operations (must not be null)
-         * @param animationProvider Provider for animation preview operations (can be null initially)
-         * @pre materialProvider != nullptr && meshProvider != nullptr
-         */
         explicit PreviewServiceImpl(IMaterialPreviewProvider* materialProvider, IMeshPreviewProvider* meshProvider,
                                     IAnimationPreviewProvider* animationProvider = nullptr);
         ~PreviewServiceImpl() override;
 
-        /**
-         * @brief Register event handlers for CQRS pattern.
-         */
         void registerEventHandlers() override;
 
         // === Material Preview (IPreviewService) ===
@@ -58,7 +41,7 @@ namespace services {
         [[nodiscard]] math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const override;
         void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) override;
         void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
-                               const glm::vec3& cameraPos) override;
+                              const glm::vec3& cameraPos) override;
         [[nodiscard]] ViewportTextureHandle renderMeshPreview(PreviewInstanceId instanceId) override;
 
         // Async mesh loading
@@ -70,15 +53,7 @@ namespace services {
         // === Animation Preview (IPreviewService) ===
         void initAnimationPreview(PreviewInstanceId instanceId) override;
         void cleanUpAnimationPreview(PreviewInstanceId instanceId) override;
-        [[nodiscard]] bool isAnimationPreviewInitialized(PreviewInstanceId instanceId) const override;
-
-        bool loadAnimationPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath) override;
         bool loadAnimationPreviewAnimation(PreviewInstanceId instanceId, const std::string& animPath) override;
-        void unloadAnimationPreview(PreviewInstanceId instanceId) override;
-
-        [[nodiscard]] bool isAnimationPreviewMeshLoaded(PreviewInstanceId instanceId) const override;
-        [[nodiscard]] bool isAnimationPreviewAnimationLoaded(PreviewInstanceId instanceId) const override;
-        [[nodiscard]] math::AABB getAnimationPreviewMeshBounds(PreviewInstanceId instanceId) const override;
 
         void playAnimation(PreviewInstanceId instanceId) override;
         void pauseAnimation(PreviewInstanceId instanceId) override;
@@ -87,12 +62,9 @@ namespace services {
 
         void setAnimationPlaybackTime(PreviewInstanceId instanceId, float timeSeconds) override;
         [[nodiscard]] float getAnimationPlaybackTime(PreviewInstanceId instanceId) const override;
-        [[nodiscard]] float getAnimationDuration(PreviewInstanceId instanceId) const override;
 
         void setAnimationLooping(PreviewInstanceId instanceId, bool loop) override;
-        [[nodiscard]] bool isAnimationLooping(PreviewInstanceId instanceId) const override;
         void setAnimationPlaybackSpeed(PreviewInstanceId instanceId, float speed) override;
-        [[nodiscard]] float getAnimationPlaybackSpeed(PreviewInstanceId instanceId) const override;
 
         void updateAnimationPreview(PreviewInstanceId instanceId, float deltaTime) override;
         void setAnimationPreviewParams(PreviewInstanceId instanceId, const AnimationPreviewParams& params) override;
@@ -100,15 +72,7 @@ namespace services {
                                    const glm::mat4& projection, const glm::vec3& cameraPos) override;
 
         [[nodiscard]] ViewportTextureHandle renderAnimationPreview(PreviewInstanceId instanceId) override;
-
-        [[nodiscard]] size_t getAnimationPreviewBoneCount(PreviewInstanceId instanceId) const override;
         [[nodiscard]] std::vector<EvaluatedBoneInfo>
-            getAnimationPreviewEvaluatedBones(PreviewInstanceId instanceId) const override;
-
-    private:
-        IMaterialPreviewProvider* materialProvider;
-        IMeshPreviewProvider* meshProvider;
-        IAnimationPreviewProvider* animationProvider;
+        getAnimationPreviewEvaluatedBones(PreviewInstanceId instanceId) const override;
     };
-
 }

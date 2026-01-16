@@ -5,7 +5,6 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "resource/MeshStreamHandle.hpp"
 #include "print/Logger.hpp"
 #include <stdexcept>
 
@@ -31,7 +30,6 @@ namespace render::mesh
         createCameraUBO();
         createBoneSSBO();
 
-        // Create default IBL textures
         defaultIBLFactory = std::make_unique<ibl::DefaultIBLTextureFactory>(device);
         defaultIBLFactory->createDefaultTextures(device.getStagingCommandPool());
 
@@ -51,20 +49,6 @@ namespace render::mesh
         {
             throw std::runtime_error("Failed to load skinned_mesh.glsl shader");
         }
-    }
-
-    void SkinnedMeshPipeline::recreate()
-    {
-        for (auto& framebuffer : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        }
-        device.getLogicalDevice().destroyRenderPass(renderPass);
-        device.getLogicalDevice().destroyPipeline(graphicsPipeline);
-
-        createRenderPass();
-        createGraphicsPipeline();
-        createFramebuffers();
     }
 
     void SkinnedMeshPipeline::cleanUp()
@@ -101,7 +85,6 @@ namespace render::mesh
             renderPass = nullptr;
         }
 
-        // Cleanup camera UBO
         if (cameraUBO)
         {
             logicalDevice.destroyBuffer(cameraUBO);
@@ -113,8 +96,7 @@ namespace render::mesh
             cameraUBOMemory = nullptr;
         }
 
-        // Cleanup bone SSBO
-        if (boneSSBOMapped)
+        if (boneSSBOMapped && boneSSBOMemory)
         {
             logicalDevice.unmapMemory(boneSSBOMemory);
             boneSSBOMapped = nullptr;
@@ -130,7 +112,6 @@ namespace render::mesh
             boneSSBOMemory = nullptr;
         }
 
-        // Cleanup descriptor pools
         if (cameraIBLDescriptorPool)
         {
             logicalDevice.destroyDescriptorPool(cameraIBLDescriptorPool);
@@ -147,7 +128,6 @@ namespace render::mesh
             boneDescriptorPool = nullptr;
         }
 
-        // Cleanup descriptor set layouts
         if (cameraIBLDescriptorSetLayout)
         {
             logicalDevice.destroyDescriptorSetLayout(cameraIBLDescriptorSetLayout);
@@ -164,7 +144,6 @@ namespace render::mesh
             boneDescriptorSetLayout = nullptr;
         }
 
-        // Reset descriptor sets (they're freed when pool is destroyed)
         cameraIBLDescriptorSet = nullptr;
         textureDescriptorSet = nullptr;
         boneDescriptorSet = nullptr;
@@ -385,7 +364,6 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::createDescriptorSets()
     {
-        // Allocate camera + IBL descriptor set
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = cameraIBLDescriptorPool;
@@ -394,7 +372,6 @@ namespace render::mesh
 
             cameraIBLDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
 
-            // Write camera UBO
             vk::DescriptorBufferInfo uboBufferInfo{};
             uboBufferInfo.buffer = cameraUBO;
             uboBufferInfo.offset = 0;
@@ -407,7 +384,6 @@ namespace render::mesh
             uboWrite.descriptorCount = 1;
             uboWrite.pBufferInfo = &uboBufferInfo;
 
-            // Write IBL textures
             const auto& irradiance = defaultIBLFactory->getIrradiance();
             const auto& prefilter = defaultIBLFactory->getPrefilter();
             const auto& brdfLUT = defaultIBLFactory->getBrdfLUT();
@@ -454,7 +430,6 @@ namespace render::mesh
             device.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
         }
 
-        // Allocate bone SSBO descriptor set
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = boneDescriptorPool;
@@ -478,7 +453,6 @@ namespace render::mesh
             device.getLogicalDevice().updateDescriptorSets(boneWrite, nullptr);
         }
 
-        // Allocate texture descriptor set (empty/default for now)
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = textureDescriptorPool;
@@ -635,27 +609,6 @@ namespace render::mesh
         }
     }
 
-    bool SkinnedMeshPipeline::loadMesh(std::string_view meshPath)
-    {
-        unloadMesh();
-
-        auto meshesData = resource::MeshStreamResource::loadAll(meshPath);
-        if (meshesData.meshes.empty())
-        {
-            loggerError("Failed to load mesh: {}", meshPath);
-            return false;
-        }
-
-        loadedMesh = std::make_unique<SkinnedMeshGPUData>();
-        loadedMesh->meshPath = std::string(meshPath);
-        loadedMesh->hasSkinning = meshesData.hasSkinning;
-        loadedMesh->skeleton = meshesData.skeleton;
-
-        createMeshGPUBuffers(meshesData);
-
-        return true;
-    }
-
     bool SkinnedMeshPipeline::loadMeshFromAnimation(const resource::AnimationData& animData)
     {
         if (animData.vertices.empty() || animData.indices.empty())
@@ -670,7 +623,6 @@ namespace render::mesh
         loadedMesh->meshPath = "embedded";
         loadedMesh->hasSkinning = true;
 
-        // Build skeleton info from animation data
         loadedMesh->skeleton.boneNames.reserve(animData.skeleton.size());
         loadedMesh->skeleton.inverseBindPoses = animData.inverseBindPoses;
         for (const auto& bone : animData.skeleton)
@@ -688,7 +640,6 @@ namespace render::mesh
         meshData.lodLevels[0].indices = animData.indices;
         meshesData.meshes.push_back(std::move(meshData));
 
-        // Use standard mesh loading path
         createMeshGPUBuffers(meshesData);
 
         loggerInfo("Loaded mesh from animation: {} vertices, {} indices",
@@ -722,7 +673,6 @@ namespace render::mesh
             SubMeshGPUData subMesh{};
             subMesh.name = meshData.name;
 
-            // Compute bounding boxes from LOD0 vertices
             const auto& lod0 = meshData.lodLevels[0];
             bool subMeshBBInitialized = false;
             for (const auto& vertex : lod0.vertices)
@@ -750,7 +700,6 @@ namespace render::mesh
                 }
             }
 
-            // Upload LOD levels
             uint32_t lodCount = static_cast<uint32_t>(std::min(meshData.lodLevels.size(),
                                                                static_cast<size_t>(resource::LOD_LEVEL_COUNT)));
 
@@ -764,7 +713,6 @@ namespace render::mesh
                     continue;
                 }
 
-                // Create vertex buffer
                 vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * srcLOD.vertices.size();
                 core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
                 vertexBufferRequest.size = vertexBufferSize;
@@ -782,7 +730,6 @@ namespace render::mesh
                     vertexBufferSize
                 );
 
-                // Create index buffer
                 if (!srcLOD.indices.empty())
                 {
                     vk::DeviceSize indexBufferSize = sizeof(uint32_t) * srcLOD.indices.size();
@@ -818,7 +765,6 @@ namespace render::mesh
                     continue;
                 }
 
-                // Create vertex buffer
                 vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * srcLOD.vertices.size();
                 core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
                 vertexBufferRequest.size = vertexBufferSize;
@@ -836,7 +782,6 @@ namespace render::mesh
                     vertexBufferSize
                 );
 
-                // Create index buffer
                 if (!srcLOD.indices.empty())
                 {
                     vk::DeviceSize indexBufferSize = sizeof(uint32_t) * srcLOD.indices.size();
@@ -891,12 +836,6 @@ namespace render::mesh
         }
     }
 
-    const math::AABB* SkinnedMeshPipeline::getMeshBoundingBox() const
-    {
-        if (!loadedMesh) return nullptr;
-        return &loadedMesh->meshData.boundingBox;
-    }
-
     void SkinnedMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                               const glm::vec3& cameraPos, float time) const
     {
@@ -927,6 +866,18 @@ namespace render::mesh
             return;
         }
 
+        if (boneMatrices.size() > MAX_BONES)
+        {
+            static bool warnedOnce = false;
+            if (!warnedOnce)
+            {
+                loggerWarning("Bone count ({}) exceeds MAX_BONES ({}). Excess bones will be ignored. "
+                             "Consider increasing MAX_BONES or simplifying the skeleton.",
+                             boneMatrices.size(), MAX_BONES);
+                warnedOnce = true;
+            }
+        }
+
         BoneMatricesSSBO* ssboData = static_cast<BoneMatricesSSBO*>(boneSSBOMapped);
 
         size_t boneCount = std::min(boneMatrices.size(), static_cast<size_t>(MAX_BONES));
@@ -935,7 +886,6 @@ namespace render::mesh
             ssboData->boneMatrices[i] = boneMatrices[i];
         }
         ssboData->activeBoneCount = static_cast<uint32_t>(boneCount);
-
     }
 
     void SkinnedMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
@@ -947,7 +897,6 @@ namespace render::mesh
             return;
         }
 
-        // Begin render pass
         vk::RenderPassBeginInfo renderPassInfo{};
         renderPassInfo.renderPass = renderPass;
         renderPassInfo.framebuffer = framebuffers[imageIndex];
@@ -955,7 +904,6 @@ namespace render::mesh
         renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
 
         std::array<vk::ClearValue, 2> clearValues{};
-        // Background color matching the preview viewport (bluish-gray)
         clearValues[0].color = vk::ClearColorValue(std::array<float, 4>{0.36f, 0.38f, 0.48f, 1.0f});
         clearValues[1].depthStencil = vk::ClearDepthStencilValue(1.0f, 0);
 
@@ -964,10 +912,8 @@ namespace render::mesh
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        // Bind pipeline
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Bind descriptor sets
         std::array<vk::DescriptorSet, 3> descriptorSets = {
             cameraIBLDescriptorSet,
             textureDescriptorSet,
@@ -976,7 +922,6 @@ namespace render::mesh
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
             0, descriptorSets, nullptr);
 
-        // Set push constants
         SkinnedMeshPushConstants pc{};
         pc.model = renderData.modelMatrix;
         pc.albedo = renderData.albedo;
@@ -989,10 +934,9 @@ namespace render::mesh
             vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             0, sizeof(SkinnedMeshPushConstants), &pc);
 
-        // Draw all submeshes at LOD 0
         for (const auto& subMesh : loadedMesh->meshData.subMeshes)
         {
-            const auto& lod = subMesh.lodLevels[0]; // Always use LOD 0 for animation preview
+            const auto& lod = subMesh.lodLevels[0];
 
             if (!lod.isValid()) continue;
 

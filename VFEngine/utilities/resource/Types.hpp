@@ -130,8 +130,8 @@ namespace resource
         glm::vec3 position;
         glm::vec3 normal;
         glm::vec2 texCoords;
-        glm::ivec4 boneIndices{-1, -1, -1, -1};  // Max 4 bones per vertex, -1 = no bone
-        glm::vec4 boneWeights{0.0f, 0.0f, 0.0f, 0.0f};  // Weights for each bone
+        glm::ivec4 boneIndices{-1, -1, -1, -1};
+        glm::vec4 boneWeights{0.0f, 0.0f, 0.0f, 0.0f};
     };
     
     struct LODLevel
@@ -159,24 +159,14 @@ namespace resource
     };
     
 
-    // Bone with vertex weights (for skinning in mesh data)
-    struct Bone
-    {
-        std::string name;
-        glm::mat4 offsetMatrix;
-        std::vector<std::pair<uint32_t, float>> weights;
-    };
-
-    // Skeleton bone with hierarchy information (for animation data)
     struct SkeletonBone
     {
         std::string name;
-        int32_t parentIndex = -1;  // -1 for root bones
-        glm::mat4 offsetMatrix{1.0f};  // Bone's default local transform
-        glm::mat4 preTransform{1.0f};  // Accumulated transform from non-bone parent nodes
+        int32_t parentIndex = -1;
+        glm::mat4 offsetMatrix{1.0f};
+        glm::mat4 preTransform{1.0f};
     };
 
-    // Separate key types since Assimp stores keys with different timestamps
     struct PositionKey
     {
         float time = 0.0f;
@@ -186,22 +176,13 @@ namespace resource
     struct RotationKey
     {
         float time = 0.0f;
-        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};  // Identity quaternion (w, x, y, z)
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     };
 
     struct ScaleKey
     {
         float time = 0.0f;
         glm::vec3 scale{1.0f};
-    };
-
-    // Legacy Keyframe struct for compatibility
-    struct Keyframe
-    {
-        float time;
-        glm::vec3 position;
-        glm::quat rotation;
-        glm::vec3 scale;
     };
 
     struct BoneAnimation
@@ -219,13 +200,12 @@ namespace resource
         std::string name;
         float duration = 0.0f;
         float ticksPerSecond = 24.0f;
-        std::string skeletonReference;                     // Reference to .vfSkeleton file (optional)
-        std::vector<SkeletonBone> skeleton;                // Bone hierarchy (name, parent, offsetMatrix, preTransform)
-        std::vector<glm::mat4> inverseBindPoses;           // Inverse bind pose per bone (v0.0.6+)
+        std::string skeletonReference;
+        std::vector<SkeletonBone> skeleton;
+        std::vector<glm::mat4> inverseBindPoses;
         std::vector<BoneAnimation> channels;
-        glm::mat4 globalInverseTransform{1.0f};            // Inverse of scene root transform
+        glm::mat4 globalInverseTransform{1.0f};
 
-        // Embedded mesh data (v0.0.7+) - fully self-contained
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
 
@@ -244,32 +224,28 @@ namespace resource
         std::vector<short> data;
     };
 
-    // Skeleton information for skinned meshes (stored per mesh file - legacy format)
     struct SkeletonInfo
     {
-        std::vector<std::string> boneNames;           // Bone names for animation mapping
-        std::vector<glm::mat4> inverseBindPoses;      // Inverse bind pose matrices
+        std::vector<std::string> boneNames;
+        std::vector<glm::mat4> inverseBindPoses;
 
         bool hasBones() const { return !boneNames.empty(); }
         size_t boneCount() const { return boneNames.size(); }
     };
 
-    // Unified skeleton data - single source of truth for mesh and animation
-    // Stored in .vfSkeleton files, referenced by both .vfMesh and .vfAnim
     struct SkeletonData
     {
         FileType headerFileType = FileType::SKELETON;
         FileVersion version{};
-        std::string name;                                  // Skeleton name (usually mesh filename)
-        std::vector<SkeletonBone> bones;                   // Full hierarchy with parent indices
-        std::vector<glm::mat4> bindPoses;                  // World-space bind pose per bone
-        std::vector<glm::mat4> inverseBindPoses;           // Inverse bind pose matrices (for GPU skinning)
-        glm::mat4 globalInverseTransform{1.0f};            // Inverse of scene root transform
+        std::string name;
+        std::vector<SkeletonBone> bones;
+        std::vector<glm::mat4> bindPoses;
+        std::vector<glm::mat4> inverseBindPoses;
+        glm::mat4 globalInverseTransform{1.0f};
 
         bool hasBones() const { return !bones.empty(); }
         size_t boneCount() const { return bones.size(); }
 
-        // Get bone index by name, returns -1 if not found
         int32_t getBoneIndex(const std::string& boneName) const
         {
             for (size_t i = 0; i < bones.size(); ++i)
@@ -288,7 +264,6 @@ namespace resource
         uint32_t numberOfMeshes = 0;
         std::vector<MeshData> meshes;
 
-        // Skinning data (shared across all meshes in file)
         bool hasSkinning = false;
         SkeletonInfo skeleton;
     };

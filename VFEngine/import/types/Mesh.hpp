@@ -54,36 +54,22 @@ namespace types
                                         const aiScene* scene, const importConfig::ImportConfig& config,
                                         MeshProgressCallback progressCallback) const;
 
-        // Extract skeleton from all meshes in the scene
         ExtractedSkeleton extractSkeleton(const aiScene* scene) const;
-
-        // Convert mesh with optional bone data extraction
         LODMeshData convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const;
-
-        // Legacy overload for backward compatibility
-        LODMeshData convertAssimpMesh(const aiMesh* assimpMesh) const;
-
         std::array<LODMeshData, resource::LOD_LEVEL_COUNT> generateLODLevels(const LODMeshData& lod0) const;
-
         LODMeshData simplifyMesh(const LODMeshData& source, float targetRatio) const;
-
         void writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const;
 
-        // Meshlet generation
         MeshletBuildResult buildMeshletsForLOD(const LODMeshData& lodMesh) const;
-
         void writeMeshletData(std::ofstream& outFile,
                               const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const;
 
-        // V-HACD convex decomposition
         resource::ConvexDecompositionData generateConvexDecomposition(
             const LODMeshData& meshData,
             const importConfig::MeshImportConfig& config) const;
-
         void writeConvexDecompositionData(std::ofstream& outFile,
                                           const resource::ConvexDecompositionData& decomposition) const;
 
-        // Skeleton/skinning data writing
         void writeSkeletonData(std::ofstream& outFile, const ExtractedSkeleton& skeleton) const;
     };
 }
