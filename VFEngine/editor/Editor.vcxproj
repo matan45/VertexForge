@@ -116,6 +116,7 @@
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="splash\SplashScreen.hpp" />
     <ClInclude Include="windows\AnimationPreviewWindow.hpp" />
+    <ClInclude Include="windows\AnimatorEditorWindow.hpp" />
     <ClInclude Include="windows\AudioConfigWindow.hpp" />
     <ClInclude Include="windows\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
@@ -179,6 +180,7 @@
     <ClCompile Include="run\Main.cpp" />
     <ClCompile Include="splash\SplashScreen.cpp" />
     <ClCompile Include="windows\AnimationPreviewWindow.cpp" />
+    <ClCompile Include="windows\AnimatorEditorWindow.cpp" />
     <ClCompile Include="windows\AudioConfigWindow.cpp" />
     <ClCompile Include="windows\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\ConsoleLog.cpp" />

@@ -17,6 +17,7 @@ namespace windows
     class PrefabPreviewWindow;
     class FontPreviewWindow;
     class AnimationPreviewWindow;
+    class AnimatorEditorWindow;
 
     class PreviewWindowManager
     {
@@ -29,6 +30,7 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<PrefabPreviewWindow>> openPrefabPreviews;
         std::unordered_map<std::string, std::weak_ptr<FontPreviewWindow>> openFontPreviews;
         std::unordered_map<std::string, std::weak_ptr<AnimationPreviewWindow>> openAnimationPreviews;
+        std::unordered_map<std::string, std::weak_ptr<AnimatorEditorWindow>> openAnimatorEditors;
     public:
         explicit PreviewWindowManager() = default;
         ~PreviewWindowManager() = default;
@@ -45,5 +47,6 @@ namespace windows
         void openPrefabPreview(const std::string& path);
         void openFontPreview(const std::string& path);
         void openAnimationPreview(const std::string& path);
+        void openAnimatorEditor(const std::string& path);
     };
 }

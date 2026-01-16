@@ -427,11 +427,16 @@ namespace animator
         animator.name = name;
         animator.version = ANIMATOR_FORMAT_VERSION;
 
+        // Set default node positions for better initial layout
+        animator.graph.entryPosition = glm::vec2(50.0f, 100.0f);
+        animator.graph.anyStatePosition = glm::vec2(50.0f, 250.0f);
+
         // Create a default idle state
         AnimatorState idleState;
         idleState.id = animator.graph.nextStateId++;
         idleState.name = "Idle";
         idleState.loop = true;
+        idleState.position = glm::vec2(250.0f, 100.0f);  // Position to the right of Entry node
         animator.graph.states.push_back(std::move(idleState));
 
         animator.graph.defaultStateId = 1;

@@ -97,10 +97,10 @@ namespace animator
         uint32_t nextTransitionId = 1;
 
         // "Any State" node position in the node graph editor (special node that can transition to any state)
-        glm::vec2 anyStatePosition{-200.0f, 0.0f};
+        glm::vec2 anyStatePosition{50.0f, 200.0f};
 
         // "Entry" node position in the node graph editor
-        glm::vec2 entryPosition{-400.0f, 0.0f};
+        glm::vec2 entryPosition{50.0f, 50.0f};
 
         const AnimatorState* findStateById(uint32_t id) const;
         const AnimatorState* findStateByName(const std::string& name) const;
