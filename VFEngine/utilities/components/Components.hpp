@@ -20,10 +20,11 @@ namespace components
     struct ScriptComponent;
     struct ColliderComponent;
     struct RigidBodyComponent;
+    struct AnimatorComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
-                                               ScriptComponent, ColliderComponent, RigidBodyComponent>;
+                                               ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent>;
 
     struct WorldTransformComponent
     {
@@ -373,6 +374,25 @@ namespace components
             }
             return false;
         }
+    };
+
+
+    // ============================================================
+    // Animator Component
+    // ============================================================
+
+    struct AnimatorComponent
+    {
+        // Runtime state machine instance (managed by RuntimeAnimatorSystem)
+        // This is a non-owning pointer - the system owns the actual instance
+        // Using void* to avoid forward declaration issues across namespaces
+        void* stateMachine = nullptr;
+
+        // Cached path from MeshComponent::animatorPath for validation
+        std::string animatorPath;
+
+        // Playback state
+        bool isInitialized = false;
     };
 
 

@@ -26,6 +26,7 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::MeshComponent>();
         MeshData data;
         data.meshPath = comp.meshPath;
+        data.animatorPath = comp.animatorPath;
         data.showBoundingBox = comp.showBoundingBox;
 
         return data;
@@ -41,11 +42,13 @@ namespace services {
         if (sceneEntity.hasComponent<components::MeshComponent>()) {
             auto& comp = sceneEntity.getComponent<components::MeshComponent>();
             comp.meshPath = mesh.meshPath;
+            comp.animatorPath = mesh.animatorPath;
             comp.showBoundingBox = mesh.showBoundingBox;
         }
         else {
             auto& comp = sceneEntity.addComponent<components::MeshComponent>();
             comp.meshPath = mesh.meshPath;
+            comp.animatorPath = mesh.animatorPath;
             comp.showBoundingBox = mesh.showBoundingBox;
         }
 

@@ -12,6 +12,7 @@
 #include "offscreen/CullingStatsCollector.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/MaterialEvents.hpp"
+#include "time/Timer.hpp"
 
 namespace controllers
 {
@@ -128,6 +129,7 @@ namespace controllers
         ctx.showDebugRendering = showDebugRendering;
         ctx.showBillboardIcons = showBillboardIcons;
         ctx.showGrid = showGrid;
+        ctx.deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
 
         framePreparation->prepareMeshes(ctx);
     }

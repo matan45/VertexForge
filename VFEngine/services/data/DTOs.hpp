@@ -43,6 +43,7 @@ namespace services
     struct MeshData
     {
         std::string meshPath;
+        std::string animatorPath;  // Path to .vfAnimator file (optional)
         bool showBoundingBox = false;
     };
 
