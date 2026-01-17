@@ -44,8 +44,6 @@ namespace render::mesh
         state.referenceCount = 1;
         state.headerParsed = false;
         meshStates[meshPath] = std::move(state);
-
-        loggerInfo("MeshStreamManager: NEW mesh requested: {}", meshPath);
     }
 
     void MeshStreamManager::openMeshStream(const std::string& meshPath)
@@ -82,8 +80,6 @@ namespace render::mesh
             auto* meshletAlloc = meshletBuffer->reserveMeshlets(meshPath, header);
             if (meshletAlloc)
             {
-                loggerInfo("MeshStreamManager: Reserved meshlet space for {}", meshPath);
-                
                 for (uint32_t subIdx = 0; subIdx < header.numSubmeshes; ++subIdx)
                 {
                     const auto& submeshInfo = header.submeshes[subIdx];
@@ -109,7 +105,6 @@ namespace render::mesh
             }
         }
 
-        loggerInfo("MeshStreamManager: Opened stream for {}, scheduling initial LODs", meshPath);
         scheduleInitialLODs(meshPath);
     }
 
@@ -118,7 +113,6 @@ namespace render::mesh
         auto it = meshStates.find(meshPath);
         if (it == meshStates.end() || !it->second.handle)
         {
-            loggerWarning("MeshStreamManager: scheduleInitialLODs - mesh not found or no handle: {}", meshPath);
             return;
         }
 
@@ -233,8 +227,6 @@ namespace render::mesh
                         const auto& lodInfo = loc->lods[result.lodLevel];
                         if (lodInfo.vertexCount > 0 && loc->meshletLods[result.lodLevel].meshletCount > 0)
                         {
-                            loggerInfo("MeshStreamManager: Uploading meshlet data for {}:{} LOD{} with vertexOffset={}",
-                                       result.meshPath, result.submeshName, result.lodLevel, lodInfo.vertexOffset);
                             meshletBuffer->uploadMeshletData(
                                 result.meshPath,
                                 result.submeshName,
@@ -243,15 +235,8 @@ namespace render::mesh
                                 meshletData,
                                 lodInfo.vertexOffset
                             );
-                            loggerInfo("MeshStreamManager: Uploaded meshlet data for {}:{} LOD{}",
-                                       result.meshPath, result.submeshName, result.lodLevel);
                         }
                     }
-                }
-                else
-                {
-                    loggerWarning("MeshStreamManager: Failed to read meshlet data for {}:{}",
-                                  result.meshPath, result.submeshName);
                 }
             }
         }
@@ -333,8 +318,6 @@ namespace render::mesh
     {
         for (const auto& pending : pendingUploads)
         {
-            loggerInfo("MeshStreamManager: Marking LOD{} as Ready for {} submesh {}",
-                       pending.lodLevel, pending.meshPath, pending.submeshIndex);
             mergedBuffer.markLODReady(pending.meshPath, pending.submeshName, pending.submeshIndex, pending.lodLevel);
         }
         pendingUploads.clear();
@@ -413,8 +396,6 @@ namespace render::mesh
             // Use the passed submeshIndex directly (no name lookup needed)
             lodInfo = header.submeshes[submeshIndex].lods[lodLevel];
             hasBoneData = it->second.handle->hasBoneData();
-            loggerInfo("MeshStreamManager: asyncReadLOD for {} submesh {} LOD{}: hasBoneData={}",
-                       meshPath, submeshIndex, lodLevel, hasBoneData);
         }
 
         return std::async(std::launch::async, [meshPath, submeshName, submeshIndex, lodLevel, lodInfo, hasBoneData]()

@@ -49,10 +49,6 @@ namespace resource
             return false;
         }
 
-        vfLogInfo("MeshStreamHandle: Opened stream for {} with {} submeshes, version={}.{}.{}, hasBoneData={}",
-                  path, header.numSubmeshes,
-                  header.version.major, header.version.minor, header.version.patch,
-                  has64ByteVertices);
         return true;
     }
 
@@ -722,9 +718,6 @@ namespace resource
             }
         }
 
-        vfLogInfo("MeshStreamResource: Loaded mesh with {} submeshes from {}",
-                  result.numberOfMeshes,
-                  path);
         return result;
     }
 
@@ -795,16 +788,6 @@ namespace resource
                 vfLogError("MeshStreamResource: Failed to read vertex {} in {}", v, path);
                 return false;
             }
-        }
-
-        // Debug: log first vertex bone data after reading
-        if (vertexCount > 0)
-        {
-            const auto& v0 = outVertices[0];
-            vfLogInfo("MeshStreamResource: Read {} vertices from {}, hasBoneData={}, v0 boneIndices=[{},{},{},{}] weights=[{:.3f},{:.3f},{:.3f},{:.3f}]",
-                      vertexCount, path, hasBoneData,
-                      v0.boneIndices.x, v0.boneIndices.y, v0.boneIndices.z, v0.boneIndices.w,
-                      v0.boneWeights.x, v0.boneWeights.y, v0.boneWeights.z, v0.boneWeights.w);
         }
 
         uint32_t indexCount = endian::readLE<uint32_t>(file);

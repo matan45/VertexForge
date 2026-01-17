@@ -697,13 +697,6 @@ namespace render::gpudriven
             obj.flags |= ObjectFlags::AlphaMask;
         }
 
-        // Disable culling for animated meshes - bounding sphere is in bind pose, not animated pose
-        if (boneOffset != INVALID_BONE_OFFSET)
-        {
-            obj.flags |= ObjectFlags::NoCull;
-            obj.flags |= ObjectFlags::NoOcclude;
-        }
-
         float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
         float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
         float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));

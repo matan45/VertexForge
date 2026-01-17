@@ -97,8 +97,6 @@ namespace render::gpudriven
     namespace ObjectFlags
     {
         constexpr uint32_t AlphaMask = 1 << 4; // Object uses alpha masking
-        constexpr uint32_t NoCull = 1 << 6; // Disable frustum culling (for animated meshes)
-        constexpr uint32_t NoOcclude = 1 << 7; // Disable occlusion culling
         constexpr uint32_t UniformScale = 1 << 9; // Object has uniform scale (fast normal matrix path)
     }
 
