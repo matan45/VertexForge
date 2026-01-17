@@ -370,6 +370,7 @@ namespace render::mesh
         uint32_t lodLevel)
     {
         resource::LODFileInfo lodInfo;
+        bool hasBoneData = false;
         {
             std::lock_guard<std::mutex> lock(meshStatesMutex);
             auto it = meshStates.find(meshPath);
@@ -403,9 +404,10 @@ namespace render::mesh
 
             // Use the passed submeshIndex directly (no name lookup needed)
             lodInfo = header.submeshes[submeshIndex].lods[lodLevel];
+            hasBoneData = it->second.handle->hasBoneData();
         }
 
-        return std::async(std::launch::async, [meshPath, submeshName, submeshIndex, lodLevel, lodInfo]()
+        return std::async(std::launch::async, [meshPath, submeshName, submeshIndex, lodLevel, lodInfo, hasBoneData]()
         {
             StreamingResult result;
             result.meshPath = meshPath;
@@ -415,7 +417,7 @@ namespace render::mesh
 
             // Use static method that opens its own file handle (thread-safe)
             result.success = resource::MeshStreamResource::readLODFromFile(
-                meshPath, lodInfo, result.vertices, result.indices);
+                meshPath, lodInfo, result.vertices, result.indices, hasBoneData);
 
             return result;
         });

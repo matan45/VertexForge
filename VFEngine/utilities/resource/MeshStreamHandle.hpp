@@ -100,6 +100,8 @@ namespace resource
 
         bool hasConvexData() const { return hasConvexHulls; }
 
+        bool hasBoneData() const { return has64ByteVertices; }
+
         uint32_t getTotalVertexCount(uint32_t lodLevel) const;
 
         uint32_t getTotalIndexCount(uint32_t lodLevel) const;
