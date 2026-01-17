@@ -41,9 +41,6 @@ namespace animation
                 computedLocalBindPoses[i] = computedBindPoses[i];
             }
         }
-
-        loggerInfo("Loaded animation '{}': {} bones, {} channels",
-                   animationData->name, boneCount, animationData->channels.size());
     }
 
     void AnimationEvaluator::clear()
