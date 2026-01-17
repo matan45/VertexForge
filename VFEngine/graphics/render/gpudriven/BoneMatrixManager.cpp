@@ -358,26 +358,8 @@ namespace render::gpudriven {
 
     void BoneMatrixManager::uploadToGPU(vk::CommandBuffer cmd)
     {
-        static int callCounter = 0;
-        callCounter++;
-
-        // Log occasionally to verify uploadToGPU is being called
-        if (callCounter % 300 == 1)
-        {
-            loggerInfo("BoneMatrixManager: uploadToGPU called (call #{}), initialized={}, dirtyEntities={}",
-                callCounter, initialized, dirtyEntities.size());
-        }
-
         if (!initialized || dirtyEntities.empty()) {
             return;
-        }
-
-        static int uploadCounter = 0;
-        bool shouldLog = (uploadCounter++ % 300 == 0);
-
-        if (shouldLog)
-        {
-            loggerInfo("BoneMatrixManager: Uploading {} dirty entities to GPU", dirtyEntities.size());
         }
 
         // Copy all dirty regions to staging buffer
@@ -388,12 +370,6 @@ namespace render::gpudriven {
             AnimatedObjectBoneData& data = it->second;
             uint32_t offset = data.boneMatrixOffset;
             uint32_t count = data.boneCount;
-
-            if (shouldLog)
-            {
-                loggerInfo("BoneMatrixManager: Uploading entity {} bones: offset={}, count={}",
-                    static_cast<uint32_t>(entity), offset, count);
-            }
 
             // Copy to staging buffer
             size_t copyOffset = offset * sizeof(glm::mat4);

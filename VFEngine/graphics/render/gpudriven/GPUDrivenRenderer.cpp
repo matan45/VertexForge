@@ -369,14 +369,10 @@ namespace render::gpudriven
         {
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
 
-            static int frameCounter = 0;
-            bool shouldLog = (frameCounter++ % 300 == 0); // Log every 300 frames (~5 seconds)
-
             for (const auto& meshRender : opaqueObjects)
             {
                 if (meshRender.entity == entt::null)
                 {
-                    if (shouldLog) loggerInfo("[GPUDrivenRenderer] Entity is null for mesh: {}", meshRender.meshPath);
                     continue;
                 }
 
@@ -384,8 +380,6 @@ namespace render::gpudriven
                 animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(meshRender.entity);
                 if (!animator)
                 {
-                    if (shouldLog) loggerInfo("[GPUDrivenRenderer] No animator for entity {} mesh: {}",
-                        static_cast<uint32_t>(meshRender.entity), meshRender.meshPath);
                     continue;
                 }
 
@@ -393,8 +387,6 @@ namespace render::gpudriven
                 const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
                 if (boneMatrices.empty())
                 {
-                    if (shouldLog) loggerWarning("[GPUDrivenRenderer] Animator has empty bone matrices for entity {} mesh: {}",
-                        static_cast<uint32_t>(meshRender.entity), meshRender.meshPath);
                     continue;
                 }
 
@@ -406,24 +398,6 @@ namespace render::gpudriven
                 {
                     // Update bone matrices for this entity
                     boneMatrixManager->updateBoneMatrices(meshRender.entity, boneMatrices);
-                    if (shouldLog)
-                    {
-                        loggerInfo("[GPUDrivenRenderer] Updated {} bones at offset {} for entity {} mesh: {}",
-                            boneCount, boneOffset, static_cast<uint32_t>(meshRender.entity), meshRender.meshPath);
-                        // Debug: print first bone matrix to verify it's valid
-                        if (!boneMatrices.empty())
-                        {
-                            const auto& m = boneMatrices[0];
-                            loggerInfo("[GPUDrivenRenderer] Bone[0] matrix: [{:.3f},{:.3f},{:.3f},{:.3f}] [{:.3f},{:.3f},{:.3f},{:.3f}]...",
-                                m[0][0], m[0][1], m[0][2], m[0][3],
-                                m[1][0], m[1][1], m[1][2], m[1][3]);
-                        }
-                    }
-                }
-                else
-                {
-                    if (shouldLog) loggerError("[GPUDrivenRenderer] Failed to allocate bone space for entity {}",
-                        static_cast<uint32_t>(meshRender.entity));
                 }
             }
 

@@ -44,17 +44,7 @@ namespace animation
         const animator::AnimatorState* currentState = getCurrentAnimatorState();
         if (currentState)
         {
-            float oldTime = state.stateTime;
             state.stateTime += deltaTime * currentState->playbackSpeed;
-
-            // Log occasionally to verify animation time is advancing
-            static int logCounter = 0;
-            if (logCounter++ % 300 == 0)
-            {
-                float duration = getAnimationDuration(state.currentStateId);
-                loggerInfo("[AnimatorStateMachine] stateTime: {:.3f} -> {:.3f} (duration={:.3f}, speed={:.1f}, deltaTime={:.4f})",
-                    oldTime, state.stateTime, duration, currentState->playbackSpeed, deltaTime);
-            }
 
             // Handle looping
             float duration = getAnimationDuration(state.currentStateId);
@@ -253,15 +243,6 @@ namespace animation
                 currentEvaluator.loadAnimation(*it->second);
                 float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
                 currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
-
-                // Log occasionally to verify bone matrices are changing
-                static int evalLogCounter = 0;
-                if (evalLogCounter++ % 300 == 0 && !currentBoneMatrices.empty())
-                {
-                    const auto& m = currentBoneMatrices[0];
-                    loggerInfo("[AnimatorStateMachine] evaluatePose at time={:.3f} ticks, bone[0]=[{:.3f},{:.3f},{:.3f},{:.3f}]",
-                        timeInTicks, m[3][0], m[3][1], m[3][2], m[3][3]);
-                }
             }
         }
     }

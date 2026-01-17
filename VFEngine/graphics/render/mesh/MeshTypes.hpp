@@ -283,9 +283,9 @@ namespace render::mesh
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 5> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 5> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 3> attributes{};
 
             // location 0: position (vec3)
             attributes[0].binding = 0;
@@ -305,17 +305,9 @@ namespace render::mesh
             attributes[2].format = vk::Format::eR32G32Sfloat;
             attributes[2].offset = 24;
 
-            // location 3: boneIndices (ivec4)
-            attributes[3].binding = 0;
-            attributes[3].location = 3;
-            attributes[3].format = vk::Format::eR32G32B32A32Sint;
-            attributes[3].offset = 32;
-
-            // location 4: boneWeights (vec4)
-            attributes[4].binding = 0;
-            attributes[4].location = 4;
-            attributes[4].format = vk::Format::eR32G32B32A32Sfloat;
-            attributes[4].offset = 48;
+            // Note: boneIndices (offset 32) and boneWeights (offset 48) are in the vertex data
+            // but not declared here since static mesh shader doesn't use them.
+            // The 64-byte stride ensures correct data layout.
 
             return attributes;
         }

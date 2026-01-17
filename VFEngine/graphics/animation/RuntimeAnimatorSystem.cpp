@@ -31,33 +31,11 @@ namespace animation
 
     void RuntimeAnimatorSystem::updateAll(float deltaTime)
     {
-        static int updateCounter = 0;
-        bool shouldLog = (updateCounter++ % 300 == 0);
-
-        if (shouldLog && !animators.empty())
-        {
-            vfLogInfo("[RuntimeAnimatorSystem] updateAll: {} animators, deltaTime={:.4f}",
-                animators.size(), deltaTime);
-        }
-
         for (auto& [entity, animator] : animators)
         {
             if (animator && animator->isInitialized() && animator->isPlaying())
             {
                 animator->update(deltaTime);
-                if (shouldLog)
-                {
-                    const auto& bones = animator->getBoneMatrices();
-                    vfLogInfo("[RuntimeAnimatorSystem] Entity {} updated: {} bones",
-                        static_cast<uint32_t>(entity), bones.size());
-                }
-            }
-            else if (shouldLog && animator)
-            {
-                vfLogInfo("[RuntimeAnimatorSystem] Entity {} skipped: initialized={}, playing={}",
-                    static_cast<uint32_t>(entity),
-                    animator->isInitialized() ? "yes" : "no",
-                    animator->isPlaying() ? "yes" : "no");
             }
         }
     }
@@ -185,9 +163,6 @@ namespace animation
     {
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        static int syncCounter = 0;
-        bool shouldLog = (syncCounter++ % 300 == 0);
-
         // Find all entities with MeshComponent that have animatorPath set
         auto view = registry.view<components::MeshComponent>();
         for (auto entity : view)
@@ -199,17 +174,7 @@ namespace animation
                 // Initialize animator if not already done
                 if (!hasAnimator(entity))
                 {
-                    if (shouldLog) vfLogInfo("[RuntimeAnimatorSystem] Found entity {} with animatorPath: {}",
-                        static_cast<uint32_t>(entity), meshComp.animatorPath);
                     initializeEntityAnimator(entity, meshComp.animatorPath);
-                }
-                else if (shouldLog)
-                {
-                    auto* anim = getAnimator(entity);
-                    vfLogInfo("[RuntimeAnimatorSystem] Entity {} already has animator, bones: {}, playing: {}",
-                        static_cast<uint32_t>(entity),
-                        anim ? anim->getBoneMatrices().size() : 0,
-                        anim ? (anim->isPlaying() ? "yes" : "no") : "N/A");
                 }
             }
             else
