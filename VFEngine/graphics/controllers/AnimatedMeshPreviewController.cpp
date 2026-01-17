@@ -283,7 +283,6 @@ namespace controllers
         if (animationLoaded && !animationData.channels.empty())
         {
             animEvaluator.loadAnimation(animationData, skeletonData);
-            buildBoneMapping();
 
             auto initialBoneMatrices = animEvaluator.evaluatePose(0.0f);
             if (!initialBoneMatrices.empty())
@@ -320,7 +319,6 @@ namespace controllers
         if (meshLoaded && !skeletonData.bones.empty())
         {
             animEvaluator.loadAnimation(animationData, skeletonData);
-            buildBoneMapping();
 
             auto initialBoneMatrices = animEvaluator.evaluatePose(0.0f);
             if (!initialBoneMatrices.empty() && skinnedPipeline)
@@ -366,8 +364,8 @@ namespace controllers
 
             if (!boneMatrices.empty() && skinnedPipeline)
             {
-                auto remappedMatrices = remapBoneMatrices(boneMatrices);
-                skinnedPipeline->updateBoneMatrices(remappedMatrices);
+                // Bone matrices are already in skeleton bone order (matching vertex bone indices)
+                skinnedPipeline->updateBoneMatrices(boneMatrices);
             }
         }
     }
@@ -383,8 +381,8 @@ namespace controllers
 
             if (!boneMatrices.empty() && skinnedPipeline)
             {
-                auto remappedMatrices = remapBoneMatrices(boneMatrices);
-                skinnedPipeline->updateBoneMatrices(remappedMatrices);
+                // Bone matrices are already in skeleton bone order (matching vertex bone indices)
+                skinnedPipeline->updateBoneMatrices(boneMatrices);
             }
         }
     }

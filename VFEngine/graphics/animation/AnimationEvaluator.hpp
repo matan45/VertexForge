@@ -27,8 +27,7 @@ namespace animation
         const resource::SkeletonData* skeletonData = nullptr;
         std::unordered_map<std::string, size_t> boneNameToChannelIndex;
         mutable std::vector<EvaluatedBone> evaluatedBones;
-        std::vector<glm::mat4> computedBindPoses;
-        std::vector<glm::mat4> computedLocalBindPoses;
+        std::vector<glm::mat4> computedLocalBindPoses;  // Local node transforms for bind pose fallback
 
     public:
         AnimationEvaluator() = default;

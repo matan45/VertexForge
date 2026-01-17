@@ -21,26 +21,12 @@ namespace animation
 
         buildBoneToChannelMap();
         evaluatedBones.resize(boneCount);
-
-        computedBindPoses.resize(boneCount);
         computedLocalBindPoses.resize(boneCount);
 
+        // Use the node's local transform (offsetMatrix) as the local bind pose
         for (size_t i = 0; i < boneCount; ++i)
         {
-            computedBindPoses[i] = glm::inverse(skeletonData->inverseBindPoses[i]);
-        }
-
-        for (size_t i = 0; i < boneCount; ++i)
-        {
-            const auto& bone = skeletonData->bones[i];
-            if (bone.parentIndex >= 0 && bone.parentIndex < static_cast<int32_t>(boneCount))
-            {
-                computedLocalBindPoses[i] = glm::inverse(computedBindPoses[bone.parentIndex]) * computedBindPoses[i];
-            }
-            else
-            {
-                computedLocalBindPoses[i] = computedBindPoses[i];
-            }
+            computedLocalBindPoses[i] = skeletonData->bones[i].offsetMatrix;
         }
     }
 
@@ -50,7 +36,6 @@ namespace animation
         skeletonData = nullptr;
         boneNameToChannelIndex.clear();
         evaluatedBones.clear();
-        computedBindPoses.clear();
         computedLocalBindPoses.clear();
     }
 
@@ -86,7 +71,11 @@ namespace animation
         // Evaluate local transforms from animation keyframes
         for (size_t i = 0; i < boneCount; ++i)
         {
-            auto it = boneNameToChannelIndex.find(skeletonData->bones[i].name);
+            const auto& bone = skeletonData->bones[i];
+            auto it = boneNameToChannelIndex.find(bone.name);
+
+            glm::mat4 animatedTransform;
+
             if (it != boneNameToChannelIndex.end())
             {
                 // This bone has animation data - use keyframes directly
@@ -108,8 +97,7 @@ namespace animation
                 evaluatedBones[i].position = pos;
                 evaluatedBones[i].rotation = rot;
                 evaluatedBones[i].scale = scl;
-                evaluatedBones[i].localTransform =
-                    glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(glm::mat4(1.0f), scl);
+                animatedTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(glm::mat4(1.0f), scl);
             }
             else
             {
@@ -117,8 +105,11 @@ namespace animation
                 evaluatedBones[i].position = glm::vec3(computedLocalBindPoses[i][3]);
                 evaluatedBones[i].rotation = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
                 evaluatedBones[i].scale = glm::vec3(1.0f);
-                evaluatedBones[i].localTransform = computedLocalBindPoses[i];
+                animatedTransform = computedLocalBindPoses[i];
             }
+
+            // Include preTransform (non-bone ancestor transforms) if present
+            evaluatedBones[i].localTransform = bone.preTransform * animatedTransform;
         }
 
         // Compute world transforms by walking the hierarchy
