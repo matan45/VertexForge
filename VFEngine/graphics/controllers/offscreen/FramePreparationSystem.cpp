@@ -132,6 +132,7 @@ namespace controllers::offscreen
             render::mesh::MeshRenderData
         {
             render::mesh::MeshRenderData renderData;
+            renderData.entity = entity;  // Track source entity for animation lookup
             renderData.meshPath = meshComp.meshPath;
             renderData.modelMatrix = worldTransform.worldMatrix;
 

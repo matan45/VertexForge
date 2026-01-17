@@ -3,8 +3,11 @@
 #include "../mesh/MeshStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
+#include "../../animation/RuntimeAnimatorSystem.hpp"
+#include "../../animation/AnimatorStateMachine.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
+#include "components/Components.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "print/Logger.hpp"
@@ -98,8 +101,13 @@ namespace render::gpudriven
             meshletBuffer = std::make_unique<MeshletBuffer>(device);
             meshletBuffer->init();
 
+            // Create bone matrix manager for GPU skinning
+            boneMatrixManager = std::make_unique<BoneMatrixManager>(device);
+            boneMatrixManager->init();
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
-            meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(), renderPass);
+            meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(),
+                                     boneMatrixManager->getDescriptorSetLayout(), renderPass);
 
             if (meshStreamManager)
             {
@@ -131,6 +139,7 @@ namespace render::gpudriven
 
         // Cleanup sub-components
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (boneMatrixManager) boneMatrixManager->cleanup();
         if (meshletBuffer) meshletBuffer->cleanup();
         if (cameraBuffer) cameraBuffer->cleanup();
         if (cullPipeline) cullPipeline->cleanup();
@@ -140,6 +149,7 @@ namespace render::gpudriven
 
         meshStreamManager.reset();
         meshShaderPipeline.reset();
+        boneMatrixManager.reset();
         meshletBuffer.reset();
         cameraBuffer.reset();
         cullPipeline.reset();
@@ -353,8 +363,53 @@ namespace render::gpudriven
             return 1;
         };
 
+        // Process animated entities and update bone matrices
+        BoneOffsetResolver boneOffsetResolver = nullptr;
+        if (boneMatrixManager)
+        {
+            auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
+
+            for (const auto& meshRender : opaqueObjects)
+            {
+                if (meshRender.entity == entt::null)
+                {
+                    continue;
+                }
+
+                // Get animator for this entity (if any)
+                animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(meshRender.entity);
+                if (!animator)
+                {
+                    continue;
+                }
+
+                // Get bone matrices from animator
+                const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
+                if (boneMatrices.empty())
+                {
+                    continue;
+                }
+
+                // Allocate bone space if needed (returns existing allocation if already allocated)
+                uint32_t boneCount = static_cast<uint32_t>(boneMatrices.size());
+                uint32_t boneOffset = boneMatrixManager->allocate(meshRender.entity, boneCount);
+
+                if (boneOffset != INVALID_BONE_OFFSET)
+                {
+                    // Update bone matrices for this entity
+                    boneMatrixManager->updateBoneMatrices(meshRender.entity, boneMatrices);
+                }
+            }
+
+            // Create resolver that looks up bone offset for each entity
+            boneOffsetResolver = [this](entt::entity entity) -> uint32_t
+            {
+                return boneMatrixManager->getBoneOffset(entity);
+            };
+        }
+
         // Update object buffer with current frame's render data (pass time for Time node evaluation)
-        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, time);
+        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
 
         // Update camera data for compute shader
         CameraUpdateParams cameraParams{
@@ -424,6 +479,12 @@ namespace render::gpudriven
         }
         mergedBuffer->uploadObjects(cmd);
 
+        // Upload bone matrices for animated entities
+        if (boneMatrixManager)
+        {
+            boneMatrixManager->uploadToGPU(cmd);
+        }
+
         vk::MemoryBarrier memBarrier{
             vk::AccessFlagBits::eTransferWrite,
             vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
@@ -456,18 +517,20 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        // Bind all 5 descriptor sets:
+        // Bind all 6 descriptor sets:
         // Set 0: IBL (camera UBO + IBL textures)
         // Set 1: Per-draw data
         // Set 2: Bindless textures
         // Set 3: Meshlet data (meshlet buffer, vertex indices, primitive indices)
         // Set 4: Vertex data (merged vertex buffer)
-        std::array<vk::DescriptorSet, 5> descriptorSets = {
+        // Set 5: Bone matrices (for GPU skinning)
+        std::array<vk::DescriptorSet, 6> descriptorSets = {
             iblDescriptorSet,
             meshShaderPipeline->getPerDrawDataDescriptorSet(),
             bindlessTextures->getDescriptorSet(),
             meshShaderPipeline->getMeshletDataDescriptorSet(),
-            meshShaderPipeline->getVertexDataDescriptorSet()
+            meshShaderPipeline->getVertexDataDescriptorSet(),
+            boneMatrixManager->getDescriptorSet()
         };
 
         cmd.bindDescriptorSets(
@@ -724,9 +787,10 @@ namespace render::gpudriven
             cachedIBLLayout = newIBLLayout;
         }
 
-        if (meshShaderPipeline)
+        if (meshShaderPipeline && boneMatrixManager)
         {
-            meshShaderPipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(), cachedRenderPass);
+            meshShaderPipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(),
+                                         boneMatrixManager->getDescriptorSetLayout(), cachedRenderPass);
         }
     }
 }

@@ -531,6 +531,7 @@ namespace render::gpudriven
                                               const SubmeshLocation& submeshLoc,
                                               const TextureIndexResolver& textureResolver,
                                               const ShaderGroupResolver& shaderGroupResolver,
+                                              const BoneOffsetResolver& boneOffsetResolver,
                                               float time)
     {
         obj.modelMatrix = meshRender.modelMatrix;
@@ -574,11 +575,18 @@ namespace render::gpudriven
             submeshLoc.meshletLods[2].baseVertexOffset,
             0
         );
+        // Determine bone offset: use resolver if provided and entity is valid
+        uint32_t boneOffset = INVALID_BONE_OFFSET;
+        if (boneOffsetResolver && meshRender.entity != entt::null)
+        {
+            boneOffset = boneOffsetResolver(meshRender.entity);
+        }
+
         obj.meshletLod3 = glm::uvec4(
             submeshLoc.meshletLods[3].meshletOffset,
             submeshLoc.meshletLods[3].meshletCount,
             submeshLoc.meshletLods[3].baseVertexOffset,
-            0
+            boneOffset  // Bone matrix offset (INVALID_BONE_OFFSET for static meshes)
         );
 
         float bias = meshRender.lodBias;
@@ -696,6 +704,7 @@ namespace render::gpudriven
     void MergedMeshBuffer::updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
                                          const TextureIndexResolver& textureResolver,
                                          const ShaderGroupResolver& shaderGroupResolver,
+                                         const BoneOffsetResolver& boneOffsetResolver,
                                          float time)
     {
         currentObjectCount = 0;
@@ -726,7 +735,7 @@ namespace render::gpudriven
                 }
 
                 GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, time);
+                populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
                 obj.entityId = currentObjectCount;
 
                 currentObjectCount++;

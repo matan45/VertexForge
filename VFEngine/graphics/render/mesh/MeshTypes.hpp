@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <entt/entt.hpp>
 #include "math/Frustum.hpp"
 #include "resource/Types.hpp"
 #include "material/MaterialTypes.hpp"
@@ -169,6 +170,7 @@ namespace render::mesh
 
     struct MeshRenderData
     {
+        entt::entity entity = entt::null; // Source entity for animation/bone lookup
         std::string meshPath; // Path to identify loaded mesh
         glm::mat4 modelMatrix{1.0f}; // World transform
 

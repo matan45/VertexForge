@@ -8,6 +8,7 @@
 #include "GPUDrivenCameraBuffer.hpp"
 #include "MeshShaderPipeline.hpp"
 #include "MeshletBuffer.hpp"
+#include "BoneMatrixManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -47,6 +48,7 @@ namespace render::gpudriven
         std::unique_ptr<GPUDrivenCameraBuffer> cameraBuffer;
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
         std::unique_ptr<MeshletBuffer> meshletBuffer;
+        std::unique_ptr<BoneMatrixManager> boneMatrixManager;
 
         bool initialized = false;
         bool enabled = false;

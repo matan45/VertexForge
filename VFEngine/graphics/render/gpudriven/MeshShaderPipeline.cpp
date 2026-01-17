@@ -24,13 +24,14 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::init(vk::DescriptorSetLayout iblLayout,
                                   vk::DescriptorSetLayout bindlessTextureLayout,
+                                  vk::DescriptorSetLayout boneMatrixLayout,
                                   vk::RenderPass renderPass)
     {
         createStatsBuffer();
         createPerDrawDataDescriptor();
         createMeshletDataDescriptor();
         createVertexDataDescriptor();
-        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, renderPass);
+        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout, renderPass);
     }
 
     void MeshShaderPipeline::createStatsBuffer()
@@ -113,6 +114,7 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::recreate(vk::DescriptorSetLayout iblLayout,
                                       vk::DescriptorSetLayout bindlessTextureLayout,
+                                      vk::DescriptorSetLayout boneMatrixLayout,
                                       vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -135,7 +137,7 @@ namespace render::gpudriven
             meshShader->cleanUp();
         }
 
-        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, renderPass);
+        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout, renderPass);
     }
 
     void MeshShaderPipeline::updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer)
@@ -368,6 +370,7 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
                                                               vk::DescriptorSetLayout bindlessTextureLayout,
+                                                              vk::DescriptorSetLayout boneMatrixLayout,
                                                               vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -399,12 +402,13 @@ namespace render::gpudriven
             return;
         }
 
-        std::array<vk::DescriptorSetLayout, 5> setLayouts = {
-            iblLayout, // Set 0
-            perDrawDataLayout, // Set 1
-            bindlessTextureLayout, // Set 2
-            meshletDataLayout, // Set 3
-            vertexDataLayout // Set 4
+        std::array<vk::DescriptorSetLayout, 6> setLayouts = {
+            iblLayout, // Set 0: Camera/IBL
+            perDrawDataLayout, // Set 1: Per-draw data
+            bindlessTextureLayout, // Set 2: Bindless textures
+            meshletDataLayout, // Set 3: Meshlet data
+            vertexDataLayout, // Set 4: Vertex data
+            boneMatrixLayout // Set 5: Bone matrices for skeletal animation
         };
 
         vk::PushConstantRange pushConstantRange{};

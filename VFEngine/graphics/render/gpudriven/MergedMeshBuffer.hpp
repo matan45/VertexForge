@@ -3,6 +3,7 @@
 #include "GPUDrivenTypes.hpp"
 #include "FreeListAllocator.hpp"
 #include <vulkan/vulkan.hpp>
+#include <entt/entt.hpp>
 #include <functional>
 #include <memory>
 #include <string>
@@ -43,8 +44,11 @@ namespace render::gpudriven
     };
 
     using TextureIndexResolver = std::function<uint32_t(const std::string& materialPath, TextureSlotType slot)>;
-    
+
     using ShaderGroupResolver = std::function<uint32_t(const std::string& materialPath)>;
+
+    // Returns bone matrix offset for an entity (INVALID_BONE_OFFSET if static/no animation)
+    using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
     class MergedMeshBuffer
     {
@@ -74,7 +78,7 @@ namespace render::gpudriven
         uint32_t totalIndexCount = 0;
         uint32_t currentObjectCount = 0;
 
-        static constexpr uint32_t vertexStride = 32; // vec3 + vec3 + vec2
+        static constexpr uint32_t vertexStride = 64; // Full Vertex with bone data (pos + normal + uv + boneIndices + boneWeights)
 
         std::vector<MergedMeshInfo> registeredMeshes;
         std::unordered_map<std::string, size_t> meshPathToIndex;
@@ -101,6 +105,7 @@ namespace render::gpudriven
         void updateObjects(const std::vector<mesh::MeshRenderData>& renderData,
                            const TextureIndexResolver& textureResolver = nullptr,
                            const ShaderGroupResolver& shaderGroupResolver = nullptr,
+                           const BoneOffsetResolver& boneOffsetResolver = nullptr,
                            float time = 0.0f);
 
         MergedMeshInfo* registerMeshFromMetadata(const std::string& meshPath,
@@ -164,6 +169,7 @@ namespace render::gpudriven
                                 const SubmeshLocation& submeshLoc,
                                 const TextureIndexResolver& textureResolver,
                                 const ShaderGroupResolver& shaderGroupResolver,
+                                const BoneOffsetResolver& boneOffsetResolver,
                                 float time);
 
         static std::string makeSubmeshKey(const std::string& meshPath, const std::string& submeshName,

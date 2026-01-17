@@ -144,6 +144,7 @@
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
     <ClInclude Include="render\gpudriven\BindlessTextureManager.hpp" />
+    <ClInclude Include="render\gpudriven\BoneMatrixManager.hpp" />
     <ClInclude Include="render\gpudriven\FreeListAllocator.hpp" />
     <ClInclude Include="render\gpudriven\GPUCullLODPipeline.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenCameraBuffer.hpp" />
@@ -224,6 +225,7 @@
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
     <ClCompile Include="render\gpudriven\BindlessTextureManager.cpp" />
+    <ClCompile Include="render\gpudriven\BoneMatrixManager.cpp" />
     <ClCompile Include="render\gpudriven\GPUCullLODPipeline.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenCameraBuffer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />

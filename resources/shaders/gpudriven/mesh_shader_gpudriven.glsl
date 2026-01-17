@@ -36,8 +36,8 @@ struct PerDrawData {
     uint meshletCount;
 
     uint baseVertexOffset;
-    uint padding1;
-    uint padding2;
+    uint boneMatrixOffset; // Offset into bone SSBO, 0xFFFFFFFF if static
+    uint boneCount;        // Number of bones for this object
     uint padding3;
 };
 
@@ -80,9 +80,14 @@ layout(std430, set = 3, binding = 2) readonly buffer MeshletPrimitiveBuffer {
     uint meshletPrimitives[];
 };
 
-// Raw float array: 8 floats per vertex (position.xyz, normal.xyz, texCoord.xy)
+// Raw float array: 16 floats per vertex (position.xyz, normal.xyz, texCoord.xy, boneIndices.xyzw, boneWeights.xyzw)
 layout(std430, set = 4, binding = 0) readonly buffer VertexBuffer {
     float vertexData[];
+};
+
+// Global bone matrix SSBO for skinning
+layout(std430, set = 5, binding = 0) readonly buffer BoneMatrices {
+    mat4 boneMatrices[];
 };
 
 const uint MAX_MESHLETS_PER_PAYLOAD = 32;
@@ -145,17 +150,55 @@ void main() {
         if (localVertexIndex < vertexCount) {
             uint meshletLocalVertexIdx = meshletVertices[meshlet.vertexOffset + localVertexIndex];
             uint globalVertexIndex = meshlet.globalVertexOffset + meshletLocalVertexIdx;
-            uint baseIdx = globalVertexIndex * 8;
-            sharedPositions[localVertexIndex] = vec3(
+            uint baseIdx = globalVertexIndex * 16; // 16 floats per vertex (with bone data)
+
+            // Read vertex position and normal
+            vec3 position = vec3(
                 vertexData[baseIdx + 0],
                 vertexData[baseIdx + 1],
                 vertexData[baseIdx + 2]
             );
-            sharedNormals[localVertexIndex] = vec3(
+            vec3 normal = vec3(
                 vertexData[baseIdx + 3],
                 vertexData[baseIdx + 4],
                 vertexData[baseIdx + 5]
             );
+
+            // Apply GPU skinning if this is an animated mesh
+            if (drawData.boneMatrixOffset != 0xFFFFFFFFu) {
+                // Read bone indices (stored as floats, need to reinterpret as ints)
+                ivec4 boneIndices = ivec4(
+                    floatBitsToInt(vertexData[baseIdx + 8]),
+                    floatBitsToInt(vertexData[baseIdx + 9]),
+                    floatBitsToInt(vertexData[baseIdx + 10]),
+                    floatBitsToInt(vertexData[baseIdx + 11])
+                );
+                // Read bone weights
+                vec4 boneWeights = vec4(
+                    vertexData[baseIdx + 12],
+                    vertexData[baseIdx + 13],
+                    vertexData[baseIdx + 14],
+                    vertexData[baseIdx + 15]
+                );
+
+                // Compute skin matrix from weighted bone transforms
+                mat4 skinMatrix = mat4(0.0);
+                for (int i = 0; i < 4; ++i) {
+                    int boneIdx = boneIndices[i];
+                    float weight = boneWeights[i];
+                    if (boneIdx >= 0 && weight > 0.0) {
+                        uint globalBoneIdx = drawData.boneMatrixOffset + uint(boneIdx);
+                        skinMatrix += boneMatrices[globalBoneIdx] * weight;
+                    }
+                }
+
+                // Apply skinning to position and normal
+                position = (skinMatrix * vec4(position, 1.0)).xyz;
+                normal = normalize(mat3(skinMatrix) * normal);
+            }
+
+            sharedPositions[localVertexIndex] = position;
+            sharedNormals[localVertexIndex] = normal;
             sharedTexCoords[localVertexIndex] = vec2(
                 vertexData[baseIdx + 6],
                 vertexData[baseIdx + 7]
@@ -240,8 +283,8 @@ struct PerDrawData {
     uint meshletCount;
 
     uint baseVertexOffset;
-    uint padding1;
-    uint padding2;
+    uint boneMatrixOffset; // Offset into bone SSBO, 0xFFFFFFFF if static
+    uint boneCount;        // Number of bones for this object
     uint padding3;
 };
 

@@ -35,6 +35,11 @@ namespace render::gpudriven
 
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
+    // Animation constants for GPU skinning
+    constexpr uint32_t MAX_BONES_PER_OBJECT = 128;
+    constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
+    constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF; // Indicates static (non-animated) mesh
+
     constexpr float LOD_THRESHOLD_0 = 400.0f; // LOD0 for >= 400 pixels
     constexpr float LOD_THRESHOLD_1 = 200.0f; // LOD1 for >= 200 pixels
     constexpr float LOD_THRESHOLD_2 = 100.0f; // LOD2 for >= 100 pixels
@@ -77,11 +82,12 @@ namespace render::gpudriven
         // 256 bytes up to here
 
         // Meshlet LOD data - meshlet locations in meshlet buffer
-        // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
+        // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, boneMatrixOffset/padding)
+        // Note: meshletLod3.w stores boneMatrixOffset (INVALID_BONE_OFFSET = 0xFFFFFFFF for static meshes)
         glm::uvec4 meshletLod0;
         glm::uvec4 meshletLod1;
         glm::uvec4 meshletLod2;
-        glm::uvec4 meshletLod3;
+        glm::uvec4 meshletLod3; // .w = boneMatrixOffset for animation support
         // Total: 320 bytes
     };
 
@@ -118,8 +124,8 @@ namespace render::gpudriven
         uint32_t meshletCount; // Number of meshlets for selected LOD
 
         uint32_t baseVertexOffset; // Base vertex offset in merged vertex buffer
-        uint32_t padding1;
-        uint32_t padding2;
+        uint32_t boneMatrixOffset; // Offset into global bone SSBO, INVALID_BONE_OFFSET if static
+        uint32_t boneCount; // Number of bones for this object
         uint32_t padding3;
         // Total: 240 bytes
     };
