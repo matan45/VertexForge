@@ -57,8 +57,8 @@ namespace animation
         // Storage: entity -> animator instance
         std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>> animators;
 
-        // Cache: animator path -> loaded animator data
-        std::unordered_map<std::string, std::unique_ptr<animator::AnimatorData>> animatorDataCache;
+        // Cache: animator path -> loaded animator data (keeps shared_ptr alive)
+        std::unordered_map<std::string, std::shared_ptr<animator::AnimatorData>> animatorDataCache;
 
         // Cache: animation path -> loaded animation data (keeps shared_ptr alive)
         std::unordered_map<std::string, std::shared_ptr<resource::AnimationData>> animationDataCache;

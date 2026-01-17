@@ -87,12 +87,25 @@ namespace animation
             destroyEntityAnimator(entity);
         }
 
-        // Load animator data
-        auto animatorData = resource::ResourceManager::loadAnimator(animatorPath);
-        if (!animatorData)
+        // Check if animator data is already cached
+        auto cacheIt = animatorDataCache.find(animatorPath);
+        std::shared_ptr<animator::AnimatorData> animatorData;
+
+        if (cacheIt != animatorDataCache.end())
         {
-            vfLogError("[RuntimeAnimatorSystem] Failed to load animator: {}", animatorPath);
-            return;
+            animatorData = cacheIt->second;
+        }
+        else
+        {
+            // Load animator data
+            animatorData = resource::ResourceManager::loadAnimator(animatorPath);
+            if (!animatorData)
+            {
+                vfLogError("[RuntimeAnimatorSystem] Failed to load animator: {}", animatorPath);
+                return;
+            }
+            // Store in cache to keep it alive
+            animatorDataCache[animatorPath] = animatorData;
         }
 
         // Create state machine

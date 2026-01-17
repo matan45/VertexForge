@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
+#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 
@@ -342,15 +343,31 @@ namespace render::gpudriven {
             cpuBoneMatrices[offset + i] = matrices[i];
         }
 
-        // Mark as dirty for upload
+        // Mark as dirty for upload - always add to dirtyEntities if not already present
+        // Using dirty flag to avoid duplicate entries within the same frame
         if (!data.dirty) {
             data.dirty = true;
+            dirtyEntities.push_back(entity);
+        }
+        // If already dirty but dirtyEntities was cleared (e.g., init or error),
+        // we need to re-add the entity
+        else if (std::find(dirtyEntities.begin(), dirtyEntities.end(), entity) == dirtyEntities.end()) {
             dirtyEntities.push_back(entity);
         }
     }
 
     void BoneMatrixManager::uploadToGPU(vk::CommandBuffer cmd)
     {
+        static int callCounter = 0;
+        callCounter++;
+
+        // Log occasionally to verify uploadToGPU is being called
+        if (callCounter % 300 == 1)
+        {
+            loggerInfo("BoneMatrixManager: uploadToGPU called (call #{}), initialized={}, dirtyEntities={}",
+                callCounter, initialized, dirtyEntities.size());
+        }
+
         if (!initialized || dirtyEntities.empty()) {
             return;
         }
@@ -360,7 +377,7 @@ namespace render::gpudriven {
 
         if (shouldLog)
         {
-            loggerInfo("BoneMatrixManager: uploadToGPU called with {} dirty entities", dirtyEntities.size());
+            loggerInfo("BoneMatrixManager: Uploading {} dirty entities to GPU", dirtyEntities.size());
         }
 
         // Copy all dirty regions to staging buffer
