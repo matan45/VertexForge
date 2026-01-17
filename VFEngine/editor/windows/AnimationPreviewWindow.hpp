@@ -28,6 +28,7 @@ namespace windows
     {
     private:
         std::string animationPath;
+        std::string meshPath;  // Path to the loaded mesh for skeleton
         std::string windowTitle;
 
         resource::AnimationData animationData;

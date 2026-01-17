@@ -52,13 +52,12 @@ namespace services {
             comp.showBoundingBox = mesh.showBoundingBox;
         }
 
-        // Publish notification to allow preloading of mesh assets
-        if (!mesh.meshPath.empty()) {
-            events::scene::MeshDataChangedNotification notification;
-            notification.entity = entity;
-            notification.meshPath = mesh.meshPath;
-            events::EventDispatcher::instance().publish(notification);
-        }
+        // Publish notification to allow preloading of mesh assets and animator cleanup
+        events::scene::MeshDataChangedNotification notification;
+        notification.entity = entity;
+        notification.meshPath = mesh.meshPath;
+        notification.animatorPath = mesh.animatorPath;
+        events::EventDispatcher::instance().publish(notification);
 
         return true;
     }
@@ -91,6 +90,7 @@ namespace services {
             events::scene::MeshDataChangedNotification notification;
             notification.entity = entity;
             notification.meshPath = "";
+            notification.animatorPath = "";
             events::EventDispatcher::instance().publish(notification);
 
             return true;

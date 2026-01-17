@@ -5,6 +5,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "print/Logger.hpp"
 #include <stdexcept>
 
@@ -609,41 +610,97 @@ namespace render::mesh
         }
     }
 
-    bool SkinnedMeshPipeline::loadMeshFromAnimation(const resource::AnimationData& animData)
+    bool SkinnedMeshPipeline::loadMeshFromData(const resource::MeshesData& meshData)
     {
-        if (animData.vertices.empty() || animData.indices.empty())
+        if (meshData.meshes.empty())
         {
-            loggerError("Animation has no mesh data");
+            loggerError("MeshesData has no meshes");
             return false;
         }
 
         unloadMesh();
 
         loadedMesh = std::make_unique<SkinnedMeshGPUData>();
-        loadedMesh->meshPath = "embedded";
-        loadedMesh->hasSkinning = true;
+        loadedMesh->meshPath = "data";
+        loadedMesh->hasSkinning = !meshData.skeleton.bones.empty();
 
-        loadedMesh->skeleton.boneNames.reserve(animData.skeleton.size());
-        loadedMesh->skeleton.inverseBindPoses = animData.inverseBindPoses;
-        for (const auto& bone : animData.skeleton)
-            loadedMesh->skeleton.boneNames.push_back(bone.name);
+        // Populate skeleton info from SkeletonData
+        if (loadedMesh->hasSkinning)
+        {
+            loadedMesh->skeleton.boneNames.reserve(meshData.skeleton.bones.size());
+            loadedMesh->skeleton.inverseBindPoses = meshData.skeleton.inverseBindPoses;
+            for (const auto& bone : meshData.skeleton.bones)
+            {
+                loadedMesh->skeleton.boneNames.push_back(bone.name);
+            }
+        }
 
-        // Convert animation mesh data to MeshesData format for standard loading
-        resource::MeshesData meshesData;
-        meshesData.hasSkinning = true;
-        meshesData.skeleton = loadedMesh->skeleton;
+        createMeshGPUBuffers(meshData);
 
-        resource::MeshData meshData;
-        meshData.name = "mesh";
-        meshData.lodLevels.resize(1);
-        meshData.lodLevels[0].vertices = animData.vertices;
-        meshData.lodLevels[0].indices = animData.indices;
-        meshesData.meshes.push_back(std::move(meshData));
+        uint32_t totalVertices = 0;
+        uint32_t totalIndices = 0;
+        for (const auto& mesh : meshData.meshes)
+        {
+            if (!mesh.lodLevels.empty())
+            {
+                totalVertices += static_cast<uint32_t>(mesh.lodLevels[0].vertices.size());
+                totalIndices += static_cast<uint32_t>(mesh.lodLevels[0].indices.size());
+            }
+        }
 
-        createMeshGPUBuffers(meshesData);
+        loggerInfo("Loaded mesh from data: {} vertices, {} indices, {} bones",
+                   totalVertices, totalIndices, meshData.skeleton.bones.size());
 
-        loggerInfo("Loaded mesh from animation: {} vertices, {} indices",
-            animData.vertices.size(), animData.indices.size());
+        return true;
+    }
+
+    bool SkinnedMeshPipeline::loadMeshFromFile(const std::string& meshPath)
+    {
+        if (meshPath.empty())
+        {
+            loggerError("Empty mesh path");
+            return false;
+        }
+
+        auto meshData = resource::MeshStreamResource::loadAll(meshPath);
+        if (meshData.meshes.empty())
+        {
+            loggerError("Failed to load mesh from: {}", meshPath);
+            return false;
+        }
+
+        unloadMesh();
+
+        loadedMesh = std::make_unique<SkinnedMeshGPUData>();
+        loadedMesh->meshPath = meshPath;
+        loadedMesh->hasSkinning = !meshData.skeleton.bones.empty();
+
+        // Populate skeleton info from SkeletonData
+        if (loadedMesh->hasSkinning)
+        {
+            loadedMesh->skeleton.boneNames.reserve(meshData.skeleton.bones.size());
+            loadedMesh->skeleton.inverseBindPoses = meshData.skeleton.inverseBindPoses;
+            for (const auto& bone : meshData.skeleton.bones)
+            {
+                loadedMesh->skeleton.boneNames.push_back(bone.name);
+            }
+        }
+
+        createMeshGPUBuffers(meshData);
+
+        uint32_t totalVertices = 0;
+        uint32_t totalIndices = 0;
+        for (const auto& mesh : meshData.meshes)
+        {
+            if (!mesh.lodLevels.empty())
+            {
+                totalVertices += static_cast<uint32_t>(mesh.lodLevels[0].vertices.size());
+                totalIndices += static_cast<uint32_t>(mesh.lodLevels[0].indices.size());
+            }
+        }
+
+        loggerInfo("Loaded mesh from file '{}': {} vertices, {} indices, {} bones",
+                   meshPath, totalVertices, totalIndices, meshData.skeleton.bones.size());
 
         return true;
     }

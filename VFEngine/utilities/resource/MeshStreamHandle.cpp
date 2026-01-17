@@ -213,6 +213,15 @@ namespace resource
             }
         }
 
+        // Parse skeleton data header (v0.0.7+)
+        if (has64ByteVertices)
+        {
+            if (!parseSkeletonHeader())
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -317,6 +326,169 @@ namespace resource
             return false;
         }
 
+        return true;
+    }
+
+    bool MeshStreamHandle::parseSkeletonHeader()
+    {
+        header.skeletonDataOffset = file.tellg();
+
+        uint8_t hasSkinning = endian::readLE<uint8_t>(file);
+        hasSkeleton = (hasSkinning != 0);
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to read skeleton header");
+            return false;
+        }
+
+        if (!hasSkeleton)
+        {
+            return true;
+        }
+
+        // Skip over skeleton data for header parsing
+        uint32_t boneCount = endian::readLE<uint32_t>(file);
+        if (boneCount > 1000) // Sanity check
+        {
+            vfLogError("MeshStreamHandle: Invalid bone count {}", boneCount);
+            return false;
+        }
+
+        // Skip bone data
+        for (uint32_t b = 0; b < boneCount; ++b)
+        {
+            uint32_t nameLength = endian::readLE<uint32_t>(file);
+            if (nameLength > 1024)
+            {
+                vfLogError("MeshStreamHandle: Invalid bone name length {}", nameLength);
+                return false;
+            }
+            file.seekg(nameLength, std::ios::cur); // Skip name
+            file.seekg(4, std::ios::cur);          // parentIndex
+            file.seekg(16 * 4, std::ios::cur);     // offsetMatrix
+            file.seekg(16 * 4, std::ios::cur);     // preTransform
+        }
+
+        // Skip inverse bind poses (boneCount matrices)
+        file.seekg(boneCount * 16 * sizeof(float), std::ios::cur);
+
+        // Skip global inverse transform
+        file.seekg(16 * sizeof(float), std::ios::cur);
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to skip skeleton data");
+            return false;
+        }
+
+        return true;
+    }
+
+    bool MeshStreamHandle::readSkeleton(SkeletonData& outSkeleton)
+    {
+        std::lock_guard<std::mutex> lock(fileMutex);
+
+        outSkeleton = SkeletonData{}; // Reset output
+
+        if (!file.is_open())
+        {
+            vfLogError("MeshStreamHandle: File not open");
+            return false;
+        }
+
+        if (!hasSkeleton)
+        {
+            return true; // No skeleton data is valid
+        }
+
+        file.seekg(header.skeletonDataOffset);
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to seek to skeleton data");
+            return false;
+        }
+
+        uint8_t hasSkinning = endian::readLE<uint8_t>(file);
+        if (hasSkinning == 0)
+        {
+            return true;
+        }
+
+        uint32_t boneCount = endian::readLE<uint32_t>(file);
+        outSkeleton.bones.resize(boneCount);
+        outSkeleton.inverseBindPoses.resize(boneCount);
+
+        // Read bone data
+        for (uint32_t b = 0; b < boneCount; ++b)
+        {
+            auto& bone = outSkeleton.bones[b];
+
+            // Read name
+            uint32_t nameLength = endian::readLE<uint32_t>(file);
+            if (nameLength > 0 && nameLength < 1024)
+            {
+                bone.name.resize(nameLength);
+                file.read(bone.name.data(), nameLength);
+            }
+
+            // Read parent index
+            bone.parentIndex = endian::readLE<int32_t>(file);
+
+            // Read offset matrix
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    bone.offsetMatrix[col][row] = endian::readLE<float>(file);
+                }
+            }
+
+            // Read pre-transform
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    bone.preTransform[col][row] = endian::readLE<float>(file);
+                }
+            }
+
+            if (file.fail())
+            {
+                vfLogError("MeshStreamHandle: Failed to read bone {}", b);
+                return false;
+            }
+        }
+
+        // Read inverse bind poses
+        for (uint32_t b = 0; b < boneCount; ++b)
+        {
+            auto& matrix = outSkeleton.inverseBindPoses[b];
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    matrix[col][row] = endian::readLE<float>(file);
+                }
+            }
+        }
+
+        // Read global inverse transform
+        for (int col = 0; col < 4; ++col)
+        {
+            for (int row = 0; row < 4; ++row)
+            {
+                outSkeleton.globalInverseTransform[col][row] = endian::readLE<float>(file);
+            }
+        }
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to read skeleton data");
+            return false;
+        }
+
+        vfLogInfo("MeshStreamHandle: Loaded skeleton with {} bones", boneCount);
         return true;
     }
 
@@ -715,6 +887,16 @@ namespace resource
                                lod, i, path);
                     return MeshesData{};
                 }
+            }
+        }
+
+        // Read skeleton data (v0.0.7+)
+        if (stream->hasSkeletonData())
+        {
+            if (!stream->readSkeleton(result.skeleton))
+            {
+                vfLogError("MeshStreamResource: Failed to read skeleton from {}", path);
+                return MeshesData{};
             }
         }
 

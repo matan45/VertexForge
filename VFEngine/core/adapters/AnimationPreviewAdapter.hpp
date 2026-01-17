@@ -19,6 +19,8 @@ namespace core
 
         void initAnimationPreview(services::PreviewInstanceId instanceId) override;
         void cleanUpAnimationPreview(services::PreviewInstanceId instanceId) override;
+        bool loadAnimationPreviewMesh(services::PreviewInstanceId instanceId,
+                                      const std::string& meshPath) override;
         bool loadAnimationPreviewAnimation(services::PreviewInstanceId instanceId,
                                            const std::string& animPath) override;
 

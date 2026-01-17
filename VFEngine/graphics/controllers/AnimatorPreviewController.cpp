@@ -2,6 +2,7 @@
 #include "animator/AnimatorAsset.hpp"
 #include "print/Logger.hpp"
 #include "resource/AnimationResource.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include <algorithm>
 
 namespace controllers
@@ -31,10 +32,54 @@ namespace controllers
 
         stateMachine.reset();
         animatorData.reset();
+        skeletonData.reset();
         animationCache.clear();
+        currentMeshPath.clear();
         initialized = false;
 
         loggerInfo("AnimatorPreviewController cleaned up");
+    }
+
+    bool AnimatorPreviewController::loadMeshForSkeleton(const std::string& meshPath)
+    {
+        if (meshPath.empty())
+        {
+            skeletonData.reset();
+            currentMeshPath.clear();
+            return false;
+        }
+
+        auto stream = resource::MeshStreamResource::openStream(meshPath);
+        if (!stream)
+        {
+            loggerError("Failed to open mesh for skeleton: {}", meshPath);
+            return false;
+        }
+
+        if (!stream->hasSkeletonData())
+        {
+            loggerWarning("Mesh has no skeleton data: {}", meshPath);
+            return false;
+        }
+
+        skeletonData = std::make_unique<resource::SkeletonData>();
+        if (!stream->readSkeleton(*skeletonData))
+        {
+            loggerError("Failed to read skeleton from: {}", meshPath);
+            skeletonData.reset();
+            return false;
+        }
+
+        currentMeshPath = meshPath;
+        loggerInfo("Loaded skeleton from '{}': {} bones", meshPath, skeletonData->bones.size());
+
+        // Re-initialize state machine with new skeleton
+        if (animatorData && stateMachine)
+        {
+            stateMachine->setSkeleton(skeletonData.get());
+        }
+
+        return true;
     }
 
     bool AnimatorPreviewController::loadAnimatorData(const std::string& path)
@@ -103,7 +148,8 @@ namespace controllers
             return loadAnimation(path);
         };
 
-        stateMachine->initialize(*animatorData, loadCallback);
+        // Pass skeleton if available, otherwise nullptr
+        stateMachine->initialize(*animatorData, skeletonData.get(), loadCallback);
     }
 
     const resource::AnimationData* AnimatorPreviewController::loadAnimation(const std::string& path)
@@ -124,13 +170,12 @@ namespace controllers
             auto animData = std::make_unique<resource::AnimationData>(
                 resource::AnimationResource::loadAnimation(path));
 
-            if (!animData->hasInverseBindPoses())
-            {
-                loggerWarning("Animation '{}' has no inverse bind poses", path);
-            }
-
             const resource::AnimationData* ptr = animData.get();
             animationCache[path] = std::move(animData);
+
+            loggerInfo("Loaded animation '{}': {} channels, duration {}",
+                       path, ptr->channels.size(), ptr->duration);
+
             return ptr;
         }
         catch (const std::exception& e)
@@ -626,8 +671,11 @@ namespace controllers
 
     const std::vector<resource::SkeletonBone>& AnimatorPreviewController::getAnimationSkeleton() const
     {
-        // Return skeleton from the loaded animation
-        // For now, return empty vector
+        // Return skeleton from the loaded mesh
+        if (skeletonData && !skeletonData->bones.empty())
+        {
+            return skeletonData->bones;
+        }
         return emptySkeleton;
     }
 }

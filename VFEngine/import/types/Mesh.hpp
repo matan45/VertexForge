@@ -20,12 +20,13 @@ namespace types
         std::vector<uint32_t> indices;
     };
 
-    // Extracted skeleton data from scene
+    // Extracted skeleton data from scene (full skeleton for animation)
     struct ExtractedSkeleton
     {
         bool hasSkinning = false;
-        std::vector<std::string> boneNames;
+        std::vector<resource::SkeletonBone> bones;  // Full bone data with hierarchy
         std::vector<glm::mat4> inverseBindPoses;
+        glm::mat4 globalInverseTransform{1.0f};
         std::unordered_map<std::string, uint32_t> boneNameToIndex;
     };
 

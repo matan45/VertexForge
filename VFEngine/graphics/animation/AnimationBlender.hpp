@@ -22,9 +22,9 @@ namespace animation
         AnimationBlender() = default;
         ~AnimationBlender() = default;
 
-        // Load animations for blending
-        void loadSourceAnimation(const resource::AnimationData& animation);
-        void loadTargetAnimation(const resource::AnimationData& animation);
+        // Load animations for blending (skeleton required for pose evaluation)
+        void loadSourceAnimation(const resource::AnimationData& animation, const resource::SkeletonData& skeleton);
+        void loadTargetAnimation(const resource::AnimationData& animation, const resource::SkeletonData& skeleton);
 
         // Clear loaded animations
         void clearSource();

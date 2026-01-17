@@ -2,7 +2,10 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
+#include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
+#include "../../services/events/SceneEvents.hpp"
+#include "../../services/data/EntityConversion.hpp"
 
 namespace animation
 {
@@ -19,11 +22,42 @@ namespace animation
             return;
         }
         initialized = true;
+
+        // Subscribe to mesh data changes to handle animator cleanup when animatorPath is cleared
+        auto& dispatcher = events::EventDispatcher::instance();
+        meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
+            [this](const events::scene::MeshDataChangedNotification& notification)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity entity = services::internal::fromHandle(notification.entity);
+
+                if (!registry.valid(entity))
+                {
+                    return;
+                }
+
+                // If animator path is cleared, destroy the animator
+                if (notification.animatorPath.empty())
+                {
+                    if (hasAnimator(entity))
+                    {
+                        destroyEntityAnimator(entity);
+                    }
+                }
+            });
+
         vfLogInfo("[RuntimeAnimatorSystem] Initialized");
     }
 
     void RuntimeAnimatorSystem::shutdown()
     {
+        // Unsubscribe from mesh data changed notifications
+        if (meshDataChangedToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(meshDataChangedToken);
+            meshDataChangedToken = {};
+        }
+
         clearAll();
         initialized = false;
         vfLogInfo("[RuntimeAnimatorSystem] Shutdown");
@@ -86,11 +120,30 @@ namespace animation
             animatorDataCache[animatorPath] = animatorData;
         }
 
+        // Get mesh path from MeshComponent to load skeleton
+        auto& registry = scene::EntityRegistry::getRegistry();
+        const resource::SkeletonData* skeleton = nullptr;
+
+        if (registry.all_of<components::MeshComponent>(entity))
+        {
+            const auto& meshComp = registry.get<components::MeshComponent>(entity);
+            if (!meshComp.meshPath.empty())
+            {
+                skeleton = loadSkeleton(meshComp.meshPath);
+            }
+        }
+
+        if (!skeleton)
+        {
+            vfLogWarning("[RuntimeAnimatorSystem] No skeleton available for entity {} - animation may not work",
+                         static_cast<uint32_t>(entity));
+        }
+
         // Create state machine
         auto stateMachine = std::make_unique<AnimatorStateMachine>();
 
         // Initialize with animation load callback
-        stateMachine->initialize(*animatorData, [this](const std::string& path) -> const resource::AnimationData*
+        stateMachine->initialize(*animatorData, skeleton, [this](const std::string& path) -> const resource::AnimationData*
         {
             return loadAnimation(path);
         });
@@ -100,7 +153,6 @@ namespace animation
         animators[entity] = std::move(stateMachine);
 
         // Update AnimatorComponent on entity
-        auto& registry = scene::EntityRegistry::getRegistry();
         if (!registry.all_of<components::AnimatorComponent>(entity))
         {
             registry.emplace<components::AnimatorComponent>(entity);
@@ -222,6 +274,7 @@ namespace animation
         animators.clear();
         animatorDataCache.clear();
         animationDataCache.clear();
+        skeletonDataCache.clear();
         vfLogInfo("[RuntimeAnimatorSystem] Cleared all animators");
     }
 
@@ -256,5 +309,49 @@ namespace animation
         animationDataCache[path] = animData;
 
         return animData.get();
+    }
+
+    const resource::SkeletonData* RuntimeAnimatorSystem::loadSkeleton(const std::string& meshPath)
+    {
+        if (meshPath.empty())
+        {
+            return nullptr;
+        }
+
+        // Check if already cached
+        auto it = skeletonDataCache.find(meshPath);
+        if (it != skeletonDataCache.end())
+        {
+            return it->second.get();
+        }
+
+        // Open mesh stream and read skeleton
+        auto stream = resource::MeshStreamResource::openStream(meshPath);
+        if (!stream)
+        {
+            vfLogError("[RuntimeAnimatorSystem] Failed to open mesh for skeleton: {}", meshPath);
+            return nullptr;
+        }
+
+        if (!stream->hasSkeletonData())
+        {
+            vfLogWarning("[RuntimeAnimatorSystem] Mesh has no skeleton data: {}", meshPath);
+            return nullptr;
+        }
+
+        auto skeletonData = std::make_shared<resource::SkeletonData>();
+        if (!stream->readSkeleton(*skeletonData))
+        {
+            vfLogError("[RuntimeAnimatorSystem] Failed to read skeleton from: {}", meshPath);
+            return nullptr;
+        }
+
+        vfLogInfo("[RuntimeAnimatorSystem] Loaded skeleton from '{}': {} bones",
+                  meshPath, skeletonData->bones.size());
+
+        // Store in cache
+        skeletonDataCache[meshPath] = skeletonData;
+
+        return skeletonData.get();
     }
 }

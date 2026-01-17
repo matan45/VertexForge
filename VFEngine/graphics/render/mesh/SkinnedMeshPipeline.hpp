@@ -91,7 +91,8 @@ namespace render::mesh
         void init();
         void cleanUp();
 
-        bool loadMeshFromAnimation(const resource::AnimationData& animData);
+        bool loadMeshFromData(const resource::MeshesData& meshData);
+        bool loadMeshFromFile(const std::string& meshPath);
         void unloadMesh();
         const SkinnedMeshGPUData* getLoadedMesh() const { return loadedMesh.get(); }
 

@@ -6,14 +6,14 @@
 
 namespace animation
 {
-    void AnimationBlender::loadSourceAnimation(const resource::AnimationData& animation)
+    void AnimationBlender::loadSourceAnimation(const resource::AnimationData& animation, const resource::SkeletonData& skeleton)
     {
-        sourceEvaluator.loadAnimation(animation);
+        sourceEvaluator.loadAnimation(animation, skeleton);
     }
 
-    void AnimationBlender::loadTargetAnimation(const resource::AnimationData& animation)
+    void AnimationBlender::loadTargetAnimation(const resource::AnimationData& animation, const resource::SkeletonData& skeleton)
     {
-        targetEvaluator.loadAnimation(animation);
+        targetEvaluator.loadAnimation(animation, skeleton);
     }
 
     void AnimationBlender::clearSource()

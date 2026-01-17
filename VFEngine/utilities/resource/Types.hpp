@@ -201,17 +201,7 @@ namespace resource
         std::string name;
         float duration = 0.0f;
         float ticksPerSecond = 24.0f;
-        std::string skeletonReference;
-        std::vector<SkeletonBone> skeleton;
-        std::vector<glm::mat4> inverseBindPoses;
         std::vector<BoneAnimation> channels;
-        glm::mat4 globalInverseTransform{1.0f};
-
-        std::vector<Vertex> vertices;
-        std::vector<uint32_t> indices;
-
-        bool hasInverseBindPoses() const { return !inverseBindPoses.empty() && inverseBindPoses.size() == skeleton.size(); }
-        bool hasMesh() const { return !vertices.empty() && !indices.empty(); }
     };
 
     struct AudioData
@@ -266,7 +256,7 @@ namespace resource
         std::vector<MeshData> meshes;
 
         bool hasSkinning = false;
-        SkeletonInfo skeleton;
+        SkeletonData skeleton;
     };
 
     enum class FontFormatFlags : uint32_t

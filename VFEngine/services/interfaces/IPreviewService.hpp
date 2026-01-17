@@ -57,6 +57,7 @@ namespace services
         // Animation Preview
         virtual void initAnimationPreview(PreviewInstanceId instanceId) = 0;
         virtual void cleanUpAnimationPreview(PreviewInstanceId instanceId) = 0;
+        virtual bool loadAnimationPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath) = 0;
         virtual bool loadAnimationPreviewAnimation(PreviewInstanceId instanceId, const std::string& animPath) = 0;
 
         virtual void playAnimation(PreviewInstanceId instanceId) = 0;

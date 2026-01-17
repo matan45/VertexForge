@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <cfloat>
+#include <unordered_set>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -16,51 +17,143 @@
 #define ENABLE_VHACD_IMPLEMENTATION 1
 #include <VHACD.h>
 
+namespace
+{
+    glm::mat4 convertMatrix(const aiMatrix4x4& m)
+    {
+        return glm::transpose(glm::mat4(
+            m.a1, m.a2, m.a3, m.a4,
+            m.b1, m.b2, m.b3, m.b4,
+            m.c1, m.c2, m.c3, m.c4,
+            m.d1, m.d2, m.d3, m.d4
+        ));
+    }
+
+    void buildNodeMap(const aiNode* node, std::unordered_map<std::string, const aiNode*>& nodeMap)
+    {
+        nodeMap[node->mName.C_Str()] = node;
+        for (uint32_t i = 0; i < node->mNumChildren; ++i)
+        {
+            buildNodeMap(node->mChildren[i], nodeMap);
+        }
+    }
+}
+
 namespace types
 {
     ExtractedSkeleton Mesh::extractSkeleton(const aiScene* scene) const
     {
-        ExtractedSkeleton skeleton;
+        ExtractedSkeleton result;
 
-        // Collect all bones from all meshes
-        for (unsigned int m = 0; m < scene->mNumMeshes; ++m)
+        // First pass: collect bone names in order from mesh bones
+        std::vector<std::string> boneNamesInOrder;
+        std::unordered_set<std::string> boneNamesSet;
+
+        for (uint32_t m = 0; m < scene->mNumMeshes; ++m)
         {
             const aiMesh* mesh = scene->mMeshes[m];
             if (!mesh->HasBones())
                 continue;
 
-            skeleton.hasSkinning = true;
+            result.hasSkinning = true;
 
-            for (unsigned int b = 0; b < mesh->mNumBones; ++b)
+            for (uint32_t b = 0; b < mesh->mNumBones; ++b)
             {
                 const aiBone* bone = mesh->mBones[b];
                 std::string boneName = bone->mName.C_Str();
 
-                if (skeleton.boneNameToIndex.contains(boneName))
+                if (boneNamesSet.contains(boneName))
                     continue;
 
-                uint32_t boneIndex = static_cast<uint32_t>(skeleton.boneNames.size());
-                skeleton.boneNameToIndex[boneName] = boneIndex;
-                skeleton.boneNames.push_back(boneName);
+                boneNamesSet.insert(boneName);
+                boneNamesInOrder.push_back(boneName);
 
-                // Convert Assimp matrix (row-major) to GLM matrix (column-major)
-                const auto& aiMat = bone->mOffsetMatrix;
-                glm::mat4 offsetMatrix = glm::transpose(glm::mat4(
-                    aiMat.a1, aiMat.a2, aiMat.a3, aiMat.a4,
-                    aiMat.b1, aiMat.b2, aiMat.b3, aiMat.b4,
-                    aiMat.c1, aiMat.c2, aiMat.c3, aiMat.c4,
-                    aiMat.d1, aiMat.d2, aiMat.d3, aiMat.d4
-                ));
-                skeleton.inverseBindPoses.push_back(offsetMatrix);
+                // Store inverse bind pose
+                glm::mat4 invBindPose = convertMatrix(bone->mOffsetMatrix);
+                result.inverseBindPoses.push_back(invBindPose);
             }
         }
 
-        if (skeleton.hasSkinning)
+        if (!result.hasSkinning)
+            return result;
+
+        // Build bone index map
+        for (size_t i = 0; i < boneNamesInOrder.size(); ++i)
         {
-            vfLogInfo("Extracted skeleton with {} bones", skeleton.boneNames.size());
+            result.boneNameToIndex[boneNamesInOrder[i]] = static_cast<uint32_t>(i);
         }
 
-        return skeleton;
+        // Build node map for hierarchy lookup
+        std::unordered_map<std::string, const aiNode*> nodeMap;
+        buildNodeMap(scene->mRootNode, nodeMap);
+
+        // Compute global inverse transform
+        glm::mat4 rootTransform = convertMatrix(scene->mRootNode->mTransformation);
+        result.globalInverseTransform = glm::inverse(rootTransform);
+
+        // Second pass: build full bone data with hierarchy
+        result.bones.reserve(boneNamesInOrder.size());
+
+        for (const auto& boneName : boneNamesInOrder)
+        {
+            resource::SkeletonBone bone;
+            bone.name = boneName;
+
+            auto nodeIt = nodeMap.find(boneName);
+            if (nodeIt != nodeMap.end())
+            {
+                const aiNode* boneNode = nodeIt->second;
+                bone.offsetMatrix = convertMatrix(boneNode->mTransformation);
+
+                // Find parent bone
+                bone.parentIndex = -1;
+                const aiNode* parentNode = boneNode->mParent;
+
+                while (parentNode != nullptr)
+                {
+                    std::string parentName = parentNode->mName.C_Str();
+                    auto parentIt = result.boneNameToIndex.find(parentName);
+                    if (parentIt != result.boneNameToIndex.end())
+                    {
+                        bone.parentIndex = static_cast<int32_t>(parentIt->second);
+                        break;
+                    }
+                    parentNode = parentNode->mParent;
+                }
+
+                // Compute preTransform (accumulated transforms from non-bone ancestors)
+                bone.preTransform = glm::mat4(1.0f);
+                parentNode = boneNode->mParent;
+                std::vector<glm::mat4> nonBoneTransforms;
+
+                while (parentNode != nullptr)
+                {
+                    std::string parentName = parentNode->mName.C_Str();
+                    if (result.boneNameToIndex.find(parentName) != result.boneNameToIndex.end())
+                        break;
+
+                    nonBoneTransforms.push_back(convertMatrix(parentNode->mTransformation));
+                    parentNode = parentNode->mParent;
+                }
+
+                for (auto it = nonBoneTransforms.rbegin(); it != nonBoneTransforms.rend(); ++it)
+                {
+                    bone.preTransform = bone.preTransform * (*it);
+                }
+            }
+            else
+            {
+                vfLogWarning("Bone '{}' not found in node hierarchy", boneName);
+                bone.parentIndex = -1;
+                bone.offsetMatrix = glm::mat4(1.0f);
+                bone.preTransform = glm::mat4(1.0f);
+            }
+
+            result.bones.push_back(bone);
+        }
+
+        vfLogInfo("Extracted skeleton with {} bones (full hierarchy)", result.bones.size());
+        return result;
     }
 
     void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
@@ -794,19 +887,43 @@ namespace types
             return;
         }
 
-        uint32_t boneCount = static_cast<uint32_t>(skeleton.boneNames.size());
+        uint32_t boneCount = static_cast<uint32_t>(skeleton.bones.size());
         resource::endian::writeLE<uint32_t>(outFile, boneCount);
 
-        for (const auto& name : skeleton.boneNames)
+        // Write bone data (name, parentIndex, offsetMatrix, preTransform)
+        for (const auto& bone : skeleton.bones)
         {
-            uint32_t nameLength = static_cast<uint32_t>(name.length());
+            // Write bone name
+            uint32_t nameLength = static_cast<uint32_t>(bone.name.length());
             resource::endian::writeLE<uint32_t>(outFile, nameLength);
             if (nameLength > 0)
             {
-                outFile.write(name.data(), nameLength);
+                outFile.write(bone.name.data(), nameLength);
+            }
+
+            // Write parent index
+            resource::endian::writeLE<int32_t>(outFile, bone.parentIndex);
+
+            // Write offset matrix
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    resource::endian::writeLE<float>(outFile, bone.offsetMatrix[col][row]);
+                }
+            }
+
+            // Write pre-transform
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    resource::endian::writeLE<float>(outFile, bone.preTransform[col][row]);
+                }
             }
         }
 
+        // Write inverse bind poses
         for (const auto& matrix : skeleton.inverseBindPoses)
         {
             for (int col = 0; col < 4; ++col)
@@ -818,6 +935,15 @@ namespace types
             }
         }
 
-        vfLogInfo("Written skeleton data: {} bones", boneCount);
+        // Write global inverse transform
+        for (int col = 0; col < 4; ++col)
+        {
+            for (int row = 0; row < 4; ++row)
+            {
+                resource::endian::writeLE<float>(outFile, skeleton.globalInverseTransform[col][row]);
+            }
+        }
+
+        vfLogInfo("Written full skeleton data: {} bones with hierarchy", boneCount);
     }
 }

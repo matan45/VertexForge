@@ -30,6 +30,13 @@ namespace services::events::animpreview
     // ANIMATION PREVIEW LOADING COMMANDS
     // ============================================================
 
+    struct LoadAnimationPreviewMeshCommand : ::events::ICommand<bool>
+    {
+        PreviewInstanceId instanceId;
+        std::string meshPath;
+        std::string_view getName() const override { return "LoadAnimationPreviewMesh"; }
+    };
+
     struct LoadAnimationPreviewAnimationCommand : ::events::ICommand<bool>
     {
         PreviewInstanceId instanceId;

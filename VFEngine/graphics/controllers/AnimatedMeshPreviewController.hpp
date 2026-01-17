@@ -38,7 +38,9 @@ namespace controllers
 
         animation::AnimationEvaluator animEvaluator;
         resource::AnimationData animationData;
+        resource::SkeletonData skeletonData;
         bool animationLoaded = false;
+        bool meshLoaded = false;
 
         render::mesh::SkinnedMeshRenderData renderData;
         render::mesh::AnimationPlaybackState playbackState;
@@ -64,8 +66,11 @@ namespace controllers
         void init();
         void cleanUp();
 
+        bool loadMesh(const std::string& meshPath);
         bool loadAnimation(const std::string& animationPath);
         void unload();
+        const std::string& getLoadedMeshPath() const { return loadedMeshPath; }
+        bool isMeshLoaded() const { return meshLoaded; }
 
         void play() { playbackState.play(); }
         void pause() { playbackState.pause(); }
@@ -91,7 +96,7 @@ namespace controllers
         void* render();
 
         const std::vector<animation::EvaluatedBone>& getEvaluatedBones() const { return animEvaluator.getEvaluatedBones(); }
-        const std::vector<resource::SkeletonBone>& getAnimationSkeleton() const { return animationData.skeleton; }
+        const std::vector<resource::SkeletonBone>& getSkeleton() const { return skeletonData.bones; }
 
     private:
         void createOffscreenResources();

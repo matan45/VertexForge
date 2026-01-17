@@ -53,6 +53,7 @@ namespace services
         // === Animation Preview (IPreviewService) ===
         void initAnimationPreview(PreviewInstanceId instanceId) override;
         void cleanUpAnimationPreview(PreviewInstanceId instanceId) override;
+        bool loadAnimationPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath) override;
         bool loadAnimationPreviewAnimation(PreviewInstanceId instanceId, const std::string& animPath) override;
 
         void playAnimation(PreviewInstanceId instanceId) override;

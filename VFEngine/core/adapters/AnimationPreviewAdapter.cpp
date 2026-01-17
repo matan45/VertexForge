@@ -35,6 +35,16 @@ namespace core
         }
     }
 
+    bool AnimationPreviewAdapter::loadAnimationPreviewMesh(services::PreviewInstanceId instanceId,
+                                                           const std::string& meshPath)
+    {
+        if (auto* controller = getController(instanceId))
+        {
+            return controller->loadMesh(meshPath);
+        }
+        return false;
+    }
+
     bool AnimationPreviewAdapter::loadAnimationPreviewAnimation(services::PreviewInstanceId instanceId,
                                                                 const std::string& animPath)
     {
@@ -158,7 +168,7 @@ namespace core
         if (auto* controller = getController(instanceId))
         {
             const auto& bones = controller->getEvaluatedBones();
-            const auto& skeleton = controller->getAnimationSkeleton();
+            const auto& skeleton = controller->getSkeleton();
             result.reserve(bones.size());
 
             for (size_t i = 0; i < bones.size() && i < skeleton.size(); ++i)

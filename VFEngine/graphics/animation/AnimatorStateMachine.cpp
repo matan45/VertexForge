@@ -7,9 +7,10 @@ namespace animation
     {
     }
 
-    void AnimatorStateMachine::initialize(const animator::AnimatorData& data, AnimationLoadCallback loadCallback)
+    void AnimatorStateMachine::initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback)
     {
         animatorData = &data;
+        skeletonData = skeleton;
         animationLoadCallback = std::move(loadCallback);
 
         // Initialize parameters with defaults from the graph
@@ -27,6 +28,11 @@ namespace animation
         loadAnimationForState(state.currentStateId);
 
         initialized = true;
+    }
+
+    void AnimatorStateMachine::setSkeleton(const resource::SkeletonData* skeleton)
+    {
+        skeletonData = skeleton;
     }
 
     void AnimatorStateMachine::update(float deltaTime)
@@ -193,7 +199,7 @@ namespace animation
 
     void AnimatorStateMachine::evaluateCurrentPose()
     {
-        if (!animatorData)
+        if (!animatorData || !skeletonData)
         {
             currentBoneMatrices.clear();
             return;
@@ -208,8 +214,8 @@ namespace animation
             if (itPrev != loadedAnimations.end() && itPrev->second &&
                 itCurr != loadedAnimations.end() && itCurr->second)
             {
-                previousEvaluator.loadAnimation(*itPrev->second);
-                currentEvaluator.loadAnimation(*itCurr->second);
+                previousEvaluator.loadAnimation(*itPrev->second, *skeletonData);
+                currentEvaluator.loadAnimation(*itCurr->second, *skeletonData);
 
                 float prevTimeInTicks = previousEvaluator.secondsToTicks(state.previousStateTime);
                 float currTimeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
@@ -222,7 +228,7 @@ namespace animation
             else if (itCurr != loadedAnimations.end() && itCurr->second)
             {
                 // Only current pose available
-                currentEvaluator.loadAnimation(*itCurr->second);
+                currentEvaluator.loadAnimation(*itCurr->second, *skeletonData);
                 float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
                 currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
             }
@@ -233,7 +239,7 @@ namespace animation
             auto it = loadedAnimations.find(state.currentStateId);
             if (it != loadedAnimations.end() && it->second)
             {
-                currentEvaluator.loadAnimation(*it->second);
+                currentEvaluator.loadAnimation(*it->second, *skeletonData);
                 float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
                 currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
             }

@@ -32,8 +32,11 @@ namespace animation
         AnimatorStateMachine();
         ~AnimatorStateMachine() = default;
 
-        // Initialize with animator data and animation loader callback
-        void initialize(const animator::AnimatorData& data, AnimationLoadCallback loadCallback);
+        // Initialize with animator data, skeleton data, and animation loader callback
+        void initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback);
+
+        // Set skeleton data (can be used to update skeleton after initialization)
+        void setSkeleton(const resource::SkeletonData* skeleton);
 
         // Update state machine (deltaTime in seconds)
         void update(float deltaTime);
@@ -93,6 +96,7 @@ namespace animation
         float getAnimationDuration(uint32_t stateId) const;
 
         const animator::AnimatorData* animatorData = nullptr;
+        const resource::SkeletonData* skeletonData = nullptr;
         AnimationLoadCallback animationLoadCallback;
         animator::AnimatorRuntimeParameters parameters;
         AnimatorStateMachineState state;

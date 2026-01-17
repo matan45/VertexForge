@@ -145,6 +145,12 @@ namespace services
                     cleanUpAnimationPreview(cmd.instanceId);
                 });
 
+            dispatcher.registerCommandHandler<events::animpreview::LoadAnimationPreviewMeshCommand>(
+                [this](const events::animpreview::LoadAnimationPreviewMeshCommand& cmd) -> bool
+                {
+                    return loadAnimationPreviewMesh(cmd.instanceId, cmd.meshPath);
+                });
+
             dispatcher.registerCommandHandler<events::animpreview::LoadAnimationPreviewAnimationCommand>(
                 [this](const events::animpreview::LoadAnimationPreviewAnimationCommand& cmd) -> bool
                 {
@@ -351,6 +357,15 @@ namespace services
         {
             animationProvider->cleanUpAnimationPreview(instanceId);
         }
+    }
+
+    bool PreviewServiceImpl::loadAnimationPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath)
+    {
+        if (animationProvider)
+        {
+            return animationProvider->loadAnimationPreviewMesh(instanceId, meshPath);
+        }
+        return false;
     }
 
     bool PreviewServiceImpl::loadAnimationPreviewAnimation(PreviewInstanceId instanceId, const std::string& animPath)

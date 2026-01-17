@@ -47,6 +47,9 @@ namespace resource
         FileVersion version{};
         uint32_t numSubmeshes = 0;
         std::vector<SubmeshStreamInfo> submeshes;
+
+        // Skeleton data offset (v0.0.7+)
+        std::streampos skeletonDataOffset = 0;
     };
 
 
@@ -68,6 +71,7 @@ namespace resource
         bool hasMeshlets = false;       // True if file has meshlet data (v0.0.4+)
         bool hasConvexHulls = false;    // True if file has convex hull data (v0.0.5+)
         bool has64ByteVertices = false; // True if file has 64-byte vertices with bone data (v0.0.7+)
+        bool hasSkeleton = false;       // True if file has full skeleton data (v0.0.7+)
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:
@@ -102,6 +106,10 @@ namespace resource
 
         bool hasBoneData() const { return has64ByteVertices; }
 
+        bool hasSkeletonData() const { return hasSkeleton; }
+
+        bool readSkeleton(SkeletonData& outSkeleton);
+
         uint32_t getTotalVertexCount(uint32_t lodLevel) const;
 
         uint32_t getTotalIndexCount(uint32_t lodLevel) const;
@@ -112,6 +120,8 @@ namespace resource
         bool parseMeshletHeaders(uint32_t meshIdx);
 
         bool parseConvexHeaders(uint32_t meshIdx);
+
+        bool parseSkeletonHeader();
     };
 
     class MeshStreamResource

@@ -2,6 +2,7 @@
 
 #include "AnimatorStateMachine.hpp"
 #include "animator/AnimatorTypes.hpp"
+#include "../../services/events/EventDispatcher.hpp"
 #include <entt/entt.hpp>
 #include <unordered_map>
 #include <memory>
@@ -62,6 +63,15 @@ namespace animation
 
         // Cache: animation path -> loaded animation data (keeps shared_ptr alive)
         std::unordered_map<std::string, std::shared_ptr<resource::AnimationData>> animationDataCache;
+
+        // Cache: mesh path -> skeleton data (for animation playback)
+        std::unordered_map<std::string, std::shared_ptr<resource::SkeletonData>> skeletonDataCache;
+
+        // Load skeleton from mesh file
+        const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
+
+        // Event subscription token for mesh data changes
+        events::SubscriptionToken meshDataChangedToken;
 
         bool initialized = false;
     };

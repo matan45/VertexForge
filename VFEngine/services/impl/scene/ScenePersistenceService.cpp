@@ -210,6 +210,7 @@ namespace services
                     events::scene::MeshDataChangedNotification meshNotif;
                     meshNotif.entity = internal::toHandle(entity);
                     meshNotif.meshPath = meshComp.meshPath;
+                    meshNotif.animatorPath = meshComp.animatorPath;
                     dispatcher.publish(meshNotif);
                 }
             }
@@ -291,6 +292,7 @@ namespace services
                         events::scene::MeshDataChangedNotification meshNotif;
                         meshNotif.entity = internal::toHandle(entity.getHandle());
                         meshNotif.meshPath = meshComp.meshPath;
+                        meshNotif.animatorPath = meshComp.animatorPath;
                         dispatcher.publish(meshNotif);
                     }
                 }

@@ -99,6 +99,11 @@ namespace controllers
         const std::vector<animation::EvaluatedBone>& getEvaluatedBones() const;
         const std::vector<resource::SkeletonBone>& getAnimationSkeleton() const;
 
+        // Skeleton/Mesh management
+        bool loadMeshForSkeleton(const std::string& meshPath);
+        const std::string& getCurrentMeshPath() const { return currentMeshPath; }
+        bool hasSkeletonLoaded() const { return skeletonData != nullptr; }
+
         // Mark as modified (for editor)
         void markModified() { isModified = true; }
         bool isDataModified() const { return isModified; }
@@ -110,6 +115,7 @@ namespace controllers
 
         std::unique_ptr<animator::AnimatorData> animatorData;
         std::unique_ptr<animation::AnimatorStateMachine> stateMachine;
+        std::unique_ptr<resource::SkeletonData> skeletonData;
 
         // Animation cache
         std::unordered_map<std::string, std::unique_ptr<resource::AnimationData>> animationCache;
@@ -131,5 +137,6 @@ namespace controllers
         bool isModified = false;
 
         std::string currentAnimatorPath;
+        std::string currentMeshPath;
     };
 }

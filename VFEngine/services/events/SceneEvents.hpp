@@ -446,6 +446,7 @@ namespace events::scene {
     struct MeshDataChangedNotification : INotification {
         services::EntityHandle entity;
         std::string meshPath;
+        std::string animatorPath;
 
         std::string_view getName() const override { return "MeshDataChanged"; }
     };

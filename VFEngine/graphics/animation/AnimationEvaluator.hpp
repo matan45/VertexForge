@@ -24,6 +24,7 @@ namespace animation
     {
     private:
         const resource::AnimationData* animationData = nullptr;
+        const resource::SkeletonData* skeletonData = nullptr;
         std::unordered_map<std::string, size_t> boneNameToChannelIndex;
         mutable std::vector<EvaluatedBone> evaluatedBones;
         std::vector<glm::mat4> computedBindPoses;
@@ -33,14 +34,14 @@ namespace animation
         AnimationEvaluator() = default;
         ~AnimationEvaluator() = default;
 
-        void loadAnimation(const resource::AnimationData& animation);
+        void loadAnimation(const resource::AnimationData& animation, const resource::SkeletonData& skeleton);
         void clear();
 
         std::vector<glm::mat4> evaluatePose(float timeInTicks) const;
 
         const std::vector<EvaluatedBone>& getEvaluatedBones() const { return evaluatedBones; }
 
-        bool isLoaded() const { return animationData != nullptr && animationData->hasInverseBindPoses(); }
+        bool isLoaded() const { return animationData != nullptr && skeletonData != nullptr && !skeletonData->bones.empty(); }
 
         float secondsToTicks(float seconds) const;
 

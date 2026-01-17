@@ -6,6 +6,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/AnimationPreviewEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include "nfd/FileDialog.hpp"
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
@@ -210,7 +211,7 @@ namespace windows
 
     void AnimationPreviewWindow::loadAnimationForPreview()
     {
-        if (!meshLoadedInPreview || !previewInitialized) return;
+        if (!previewInitialized) return;
 
         services::events::animpreview::LoadAnimationPreviewAnimationCommand loadCmd;
         loadCmd.instanceId = getPreviewInstanceId();
@@ -230,6 +231,10 @@ namespace windows
             speedCmd.instanceId = getPreviewInstanceId();
             speedCmd.speed = playbackSpeed;
             events::EventDispatcher::instance().execute(speedCmd);
+
+            // Update bone hierarchy from loaded skeleton
+            updateBoneTransformsFromService();
+            buildBoneHierarchyMaps();
         }
         else
         {
@@ -239,12 +244,8 @@ namespace windows
 
     void AnimationPreviewWindow::tryAutoLoadMesh()
     {
-        if (!animationLoaded || !animationData.hasInverseBindPoses()) return;
-
-        if (!animationData.hasMesh()) return;
-
-        meshLoadedInPreview = true;
-        loadAnimationForPreview();
+        // No auto-load - user must select a mesh file manually
+        // This method is now a no-op since animations no longer contain embedded meshes
     }
 
     void AnimationPreviewWindow::startAsyncLoad()
@@ -277,17 +278,9 @@ namespace windows
 
                     if (isValid)
                     {
-                        boneChildrenMap.clear();
-                        for (size_t i = 0; i < animationData.skeleton.size(); ++i)
-                        {
-                            int32_t parentIdx = animationData.skeleton[i].parentIndex;
-                            boneChildrenMap[parentIdx].push_back(i);
-                        }
-
                         sequenceAdapter->setAnimationData(&animationData);
                         animationLoaded = true;
                         updateBoneTransformsFromService();
-                        tryAutoLoadMesh();
                     }
                     else
                     {
@@ -368,7 +361,6 @@ namespace windows
 
         ImGui::Spacing();
 
-        ImGui::Text("Bones: %zu", animationData.skeleton.size());
         ImGui::Text("Channels: %zu", animationData.channels.size());
 
         ImGui::Separator();
@@ -384,22 +376,70 @@ namespace windows
 
     void AnimationPreviewWindow::drawMeshFileInput()
     {
-        ImGui::Text("3D Preview Status");
+        ImGui::Text("3D Preview");
         ImGui::Spacing();
 
-        if (animationLoaded && animationData.hasInverseBindPoses())
+        // Mesh selection
+        ImGui::Text("Mesh:");
+        if (meshPath.empty())
         {
-            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Animation: Ready");
-            ImGui::Text("Bones: %zu", animationData.skeleton.size());
-        }
-        else if (animationLoaded)
-        {
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Animation: Needs re-import");
-            ImGui::TextWrapped("This animation uses an older format. Re-import the source file to enable 3D preview.");
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No mesh loaded");
         }
         else
         {
-            ImGui::TextDisabled("Animation: Loading...");
+            std::filesystem::path path(meshPath);
+            ImGui::TextWrapped("  %s", path.filename().string().c_str());
+        }
+
+        if (ImGui::Button("Select Mesh..."))
+        {
+            nfd::FileDialog fileDialog;
+            std::string selectedPath = fileDialog.openFileDialog(
+                {{L"VF Mesh Files (*.vfMesh)", L"*.vfMesh"}});
+
+            if (!selectedPath.empty())
+            {
+                meshPath = selectedPath;
+
+                // Load mesh into preview
+                services::events::animpreview::LoadAnimationPreviewMeshCommand meshCmd;
+                meshCmd.instanceId = getPreviewInstanceId();
+                meshCmd.meshPath = meshPath;
+                bool success = events::EventDispatcher::instance().execute(meshCmd);
+
+                if (success)
+                {
+                    meshLoadedInPreview = true;
+                    vfLogInfo("Loaded mesh for animation preview: {}", meshPath);
+
+                    // Load animation if already available
+                    if (animationLoaded && !animationLoadedInPreview)
+                    {
+                        loadAnimationForPreview();
+                    }
+                }
+                else
+                {
+                    meshLoadedInPreview = false;
+                    vfLogError("Failed to load mesh for animation preview: {}", meshPath);
+                }
+            }
+        }
+
+        ImGui::Spacing();
+
+        // Status display
+        if (meshLoadedInPreview && animationLoadedInPreview)
+        {
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Preview: Ready");
+        }
+        else if (meshLoadedInPreview)
+        {
+            ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Preview: Mesh loaded");
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Preview: Select a mesh");
         }
     }
 

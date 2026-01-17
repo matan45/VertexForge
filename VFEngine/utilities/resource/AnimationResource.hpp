@@ -11,6 +11,5 @@ namespace resource
 
     private:
         static std::string readString(std::ifstream& file);
-        static glm::mat4 readMatrix(std::ifstream& file);
     };
 }
