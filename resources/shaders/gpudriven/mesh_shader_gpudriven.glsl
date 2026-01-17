@@ -13,6 +13,7 @@ layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragDrawIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
+layout(location = 5) out vec4 fragDebugBoneData[]; // DEBUG: xyz=first bone weight, w=isAnimated
 
 // Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
 struct PerDrawData {
@@ -110,6 +111,7 @@ layout(push_constant) uniform PushConstants {
 shared vec3 sharedPositions[MESHLET_MAX_VERTICES];
 shared vec3 sharedNormals[MESHLET_MAX_VERTICES];
 shared vec2 sharedTexCoords[MESHLET_MAX_VERTICES];
+shared vec4 sharedDebugBoneData[MESHLET_MAX_VERTICES]; // DEBUG
 
 uvec3 unpackPrimitive(uint packed) {
     return uvec3(
@@ -164,6 +166,9 @@ void main() {
                 vertexData[baseIdx + 5]
             );
 
+            // DEBUG: Store bone debug data
+            vec4 debugBoneData = vec4(0.0, 0.0, 0.0, 0.0); // w=0 means static mesh
+
             // Apply GPU skinning if this is an animated mesh
             if (drawData.boneMatrixOffset != 0xFFFFFFFFu) {
                 // Read bone indices (stored as floats, need to reinterpret as ints)
@@ -181,23 +186,32 @@ void main() {
                     vertexData[baseIdx + 15]
                 );
 
+                // DEBUG: Store bone info for visualization
+                debugBoneData = vec4(boneWeights.xyz, 1.0); // w=1 means animated mesh
+
                 // Compute skin matrix from weighted bone transforms
                 mat4 skinMatrix = mat4(0.0);
+                float totalWeight = 0.0;
                 for (int i = 0; i < 4; ++i) {
                     int boneIdx = boneIndices[i];
                     float weight = boneWeights[i];
                     if (boneIdx >= 0 && weight > 0.0) {
                         uint globalBoneIdx = drawData.boneMatrixOffset + uint(boneIdx);
                         skinMatrix += boneMatrices[globalBoneIdx] * weight;
+                        totalWeight += weight;
                     }
                 }
 
-                // Apply skinning to position and normal
-                position = (skinMatrix * vec4(position, 1.0)).xyz;
-                normal = normalize(mat3(skinMatrix) * normal);
+                // Only apply skinning if we have valid bone influences
+                // If no bones contributed, leave position/normal unchanged
+                if (totalWeight > 0.0) {
+                    position = (skinMatrix * vec4(position, 1.0)).xyz;
+                    normal = normalize(mat3(skinMatrix) * normal);
+                }
             }
 
             sharedPositions[localVertexIndex] = position;
+            sharedDebugBoneData[localVertexIndex] = debugBoneData;
             sharedNormals[localVertexIndex] = normal;
             sharedTexCoords[localVertexIndex] = vec2(
                 vertexData[baseIdx + 6],
@@ -217,6 +231,7 @@ void main() {
             fragTexCoord[localVertexIndex] = sharedTexCoords[localVertexIndex];
             fragDrawIndex[localVertexIndex] = drawIndex;
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
+            fragDebugBoneData[localVertexIndex] = sharedDebugBoneData[localVertexIndex]; // DEBUG
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * worldPos;
         }
     }
@@ -241,8 +256,12 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) in flat uint fragDrawIndex;
 layout(location = 4) in flat uint fragMeshletIndex;
+layout(location = 5) in vec4 fragDebugBoneData; // DEBUG: xyz=bone weights, w=isAnimated
 
 layout(location = 0) out vec4 outColor;
+
+// DEBUG: Set to true to see debug visualization
+const bool DEBUG_SHOW_ANIMATED = true;
 
 // Must match CameraUBO in MeshTypes.hpp
 struct CameraData {
@@ -320,6 +339,20 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
 
 void main() {
     PerDrawData drawData = perDrawData[fragDrawIndex];
+
+    // DEBUG: Visualize animated vs static meshes
+    if (DEBUG_SHOW_ANIMATED) {
+        if (fragDebugBoneData.w > 0.5) {
+            // Animated mesh - show bone weights as color (red=weight0, green=weight1, blue=weight2)
+            // If mesh is red/orange, bone weights are being read correctly
+            outColor = vec4(fragDebugBoneData.xyz, 1.0);
+            return;
+        } else {
+            // Static mesh - show green
+            outColor = vec4(0.0, 1.0, 0.0, 1.0);
+            return;
+        }
+    }
 
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);

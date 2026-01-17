@@ -21,11 +21,11 @@ namespace animation
         state.currentStateId = data.graph.defaultStateId;
         state.isPlaying = true;
 
+        // Clear any previously cached animations before loading new ones
+        loadedAnimations.clear();
+
         // Load animation for the default state
         loadAnimationForState(state.currentStateId);
-
-        // Clear cached animations (they'll be loaded on demand)
-        loadedAnimations.clear();
 
         initialized = true;
 
@@ -249,8 +249,11 @@ namespace animation
 
     bool AnimatorStateMachine::loadAnimationForState(uint32_t stateId)
     {
+        loggerInfo("[AnimatorStateMachine] loadAnimationForState called for stateId: {}", stateId);
+
         if (!animatorData || !animationLoadCallback)
         {
+            loggerWarning("[AnimatorStateMachine] No animatorData or callback!");
             return false;
         }
 
@@ -258,16 +261,30 @@ namespace animation
         auto it = loadedAnimations.find(stateId);
         if (it != loadedAnimations.end())
         {
+            loggerInfo("[AnimatorStateMachine] Animation already loaded for state {}, has data: {}",
+                stateId, it->second != nullptr);
             return it->second != nullptr;
         }
 
         // Find the state
         const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
-        if (!animState || animState->animationPath.empty())
+        if (!animState)
         {
+            loggerWarning("[AnimatorStateMachine] State {} not found in graph!", stateId);
             loadedAnimations[stateId] = nullptr;
             return false;
         }
+
+        if (animState->animationPath.empty())
+        {
+            loggerWarning("[AnimatorStateMachine] State '{}' (id={}) has empty animation path!",
+                animState->name, stateId);
+            loadedAnimations[stateId] = nullptr;
+            return false;
+        }
+
+        loggerInfo("[AnimatorStateMachine] Loading animation '{}' for state '{}'",
+            animState->animationPath, animState->name);
 
         // Load animation via callback
         const resource::AnimationData* animData = animationLoadCallback(animState->animationPath);
@@ -275,12 +292,12 @@ namespace animation
 
         if (animData)
         {
-            loggerInfo("Loaded animation '{}' for state '{}'",
-                       animState->animationPath, animState->name);
+            loggerInfo("[AnimatorStateMachine] Successfully loaded animation '{}' for state '{}', bones: {}",
+                       animState->animationPath, animState->name, animData->channels.size());
         }
         else
         {
-            loggerWarning("Failed to load animation '{}' for state '{}'",
+            loggerWarning("[AnimatorStateMachine] Failed to load animation '{}' for state '{}'",
                           animState->animationPath, animState->name);
         }
 

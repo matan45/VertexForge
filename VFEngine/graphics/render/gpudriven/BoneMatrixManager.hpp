@@ -95,6 +95,7 @@ namespace render::gpudriven {
     private:
         void createBuffers();
         void destroyBuffers();
+        void initializeGPUBuffer();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void allocateDescriptorSet();

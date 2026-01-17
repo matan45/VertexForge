@@ -11,6 +11,7 @@
 #include <material/MaterialInstanceTypes.hpp>
 #include <cstring>
 #include <cmath>
+#include <unordered_set>
 
 // Verify vertex stride matches actual Vertex struct (64 bytes with bone data)
 static_assert(sizeof(resource::Vertex) == 64, "Vertex size must be 64 bytes for MergedMeshBuffer");
@@ -361,6 +362,17 @@ namespace render::gpudriven
         // Upload vertex data
         if (vertexData && vertexCount > 0)
         {
+            // Debug: log first vertex bone data per mesh to verify it's being read correctly
+            static std::unordered_set<std::string> loggedMeshes;
+            if (loggedMeshes.find(meshPath) == loggedMeshes.end())
+            {
+                const auto& v = vertexData[0];
+                loggerInfo("MergedMeshBuffer: First vertex bone data for {}: indices=[{},{},{},{}] weights=[{:.3f},{:.3f},{:.3f},{:.3f}]",
+                    meshPath,
+                    v.boneIndices.x, v.boneIndices.y, v.boneIndices.z, v.boneIndices.w,
+                    v.boneWeights.x, v.boneWeights.y, v.boneWeights.z, v.boneWeights.w);
+                loggedMeshes.insert(meshPath);
+            }
             uploadVertexDataAt(lodInfo.vertexOffset, vertexData, vertexCount);
         }
 
@@ -580,6 +592,14 @@ namespace render::gpudriven
         if (boneOffsetResolver && meshRender.entity != entt::null)
         {
             boneOffset = boneOffsetResolver(meshRender.entity);
+            static int logCounter = 0;
+            if (logCounter++ % 300 == 0 || boneOffset != INVALID_BONE_OFFSET)
+            {
+                loggerInfo("MergedMeshBuffer: Entity {} mesh {} boneOffset={}",
+                           static_cast<uint32_t>(meshRender.entity),
+                           meshRender.meshPath,
+                           boneOffset == INVALID_BONE_OFFSET ? -1 : static_cast<int>(boneOffset));
+            }
         }
 
         obj.meshletLod3 = glm::uvec4(
@@ -685,6 +705,13 @@ namespace render::gpudriven
             obj.flags |= ObjectFlags::AlphaMask;
         }
 
+        // Disable culling for animated meshes - bounding sphere is in bind pose, not animated pose
+        if (boneOffset != INVALID_BONE_OFFSET)
+        {
+            obj.flags |= ObjectFlags::NoCull;
+            obj.flags |= ObjectFlags::NoOcclude;
+        }
+
         float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
         float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
         float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));
@@ -696,6 +723,16 @@ namespace render::gpudriven
         }
 
         obj.availableLODMask = submeshLoc.getAvailableLODMask();
+
+        // DEBUG: Log LOD mask for each object
+        static int lodLogCounter = 0;
+        if (lodLogCounter++ % 300 == 0 || obj.availableLODMask == 0)
+        {
+            loggerInfo("MergedMeshBuffer: Object {} mesh {} LODMask={} (binary: {:04b}) boneOffset={}",
+                       currentObjectCount, meshRender.meshPath, obj.availableLODMask, obj.availableLODMask,
+                       boneOffset == INVALID_BONE_OFFSET ? -1 : static_cast<int>(boneOffset));
+        }
+
         obj.shaderGroupIndex = (shaderGroupResolver && !materialPath.empty())
                                    ? shaderGroupResolver(materialPath)
                                    : 0;
@@ -725,6 +762,18 @@ namespace render::gpudriven
 
                 if (!submeshLoc.hasRenderableLOD())
                 {
+                    // DEBUG: Log when a mesh is skipped due to no renderable LOD
+                    static int skipLogCounter = 0;
+                    if (skipLogCounter++ % 60 == 0)  // More frequent logging
+                    {
+                        // Log detailed LOD state info
+                        loggerInfo("MergedMeshBuffer: SKIPPING mesh {} submesh {} - no renderable LOD. States: LOD0={} LOD1={} LOD2={} LOD3={}",
+                                   meshRender.meshPath, subIdx,
+                                   static_cast<int>(submeshLoc.lodStates[0]),
+                                   static_cast<int>(submeshLoc.lodStates[1]),
+                                   static_cast<int>(submeshLoc.lodStates[2]),
+                                   static_cast<int>(submeshLoc.lodStates[3]));
+                    }
                     continue;
                 }
 
@@ -738,8 +787,31 @@ namespace render::gpudriven
                 populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
                 obj.entityId = currentObjectCount;
 
+                // DEBUG: Log ALL objects once every ~300 frames
+                static int logCycle = 0;
+                if (currentObjectCount == 0) logCycle++;
+                if (logCycle % 300 == 1)  // Log on cycle 1, 301, 601, etc.
+                {
+                    loggerInfo("MergedMeshBuffer: Object {} -> mesh={} LODMask={:04b} flags={}",
+                               currentObjectCount, meshRender.meshPath,
+                               obj.availableLODMask, obj.flags);
+                    loggerInfo("  LOD0=({},{},{}) LOD1=({},{},{}) LOD2=({},{},{}) LOD3=({},{},{},{})",
+                               obj.meshletLod0.x, obj.meshletLod0.y, obj.meshletLod0.z,
+                               obj.meshletLod1.x, obj.meshletLod1.y, obj.meshletLod1.z,
+                               obj.meshletLod2.x, obj.meshletLod2.y, obj.meshletLod2.z,
+                               obj.meshletLod3.x, obj.meshletLod3.y, obj.meshletLod3.z, obj.meshletLod3.w);
+                }
+
                 currentObjectCount++;
             }
+        }
+
+        // DEBUG: Log summary once per frame
+        static int summaryLogCounter = 0;
+        if (summaryLogCounter++ % 300 == 0)
+        {
+            loggerInfo("MergedMeshBuffer: updateObjects complete - {} objects queued for GPU from {} meshes",
+                       currentObjectCount, renderData.size());
         }
     }
 }

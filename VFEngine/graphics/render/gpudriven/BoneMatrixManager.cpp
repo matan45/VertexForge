@@ -36,8 +36,13 @@ namespace render::gpudriven {
         allocateDescriptorSet();
         updateDescriptor();
 
+        // Initialize GPU buffer with identity matrices
+        // This is critical - without this, the GPU buffer contains garbage
+        // which causes animated meshes to render with corrupt vertex positions
+        initializeGPUBuffer();
+
         initialized = true;
-        loggerInfo("BoneMatrixManager: Initialized successfully");
+        loggerInfo("BoneMatrixManager: Initialized successfully, allocator starts at usedCount=0");
     }
 
     void BoneMatrixManager::cleanup()
@@ -117,6 +122,48 @@ namespace render::gpudriven {
 
         core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, boneBuffer, boneBufferMemory);
+    }
+
+    void BoneMatrixManager::initializeGPUBuffer()
+    {
+        // Copy identity matrices from CPU to staging buffer
+        size_t bufferSize = maxBoneMatrices * sizeof(glm::mat4);
+        std::memcpy(stagingMapped, cpuBoneMatrices.data(), bufferSize);
+
+        // Use a one-time command buffer to copy from staging to device buffer
+        vk::Device vkDevice = device.getLogicalDevice();
+        vk::CommandPool cmdPool = device.getStagingCommandPool();
+
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.level = vk::CommandBufferLevel::ePrimary;
+        allocInfo.commandPool = cmdPool;
+        allocInfo.commandBufferCount = 1;
+
+        vk::CommandBuffer commandBuffer = vkDevice.allocateCommandBuffers(allocInfo)[0];
+
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        commandBuffer.begin(beginInfo);
+
+        vk::BufferCopy copyRegion{};
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = 0;
+        copyRegion.size = bufferSize;
+        commandBuffer.copyBuffer(stagingBuffer, boneBuffer, copyRegion);
+
+        commandBuffer.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        vk::Queue graphicsQueue = device.getGraphicsQueue();
+        graphicsQueue.submit(submitInfo, nullptr);
+        graphicsQueue.waitIdle();
+
+        vkDevice.freeCommandBuffers(cmdPool, 1, &commandBuffer);
+
+        loggerInfo("BoneMatrixManager: Initialized GPU buffer with identity matrices");
     }
 
     void BoneMatrixManager::createDescriptorSetLayout()
@@ -308,6 +355,14 @@ namespace render::gpudriven {
             return;
         }
 
+        static int uploadCounter = 0;
+        bool shouldLog = (uploadCounter++ % 300 == 0);
+
+        if (shouldLog)
+        {
+            loggerInfo("BoneMatrixManager: uploadToGPU called with {} dirty entities", dirtyEntities.size());
+        }
+
         // Copy all dirty regions to staging buffer
         for (entt::entity entity : dirtyEntities) {
             auto it = allocations.find(entity);
@@ -316,6 +371,12 @@ namespace render::gpudriven {
             AnimatedObjectBoneData& data = it->second;
             uint32_t offset = data.boneMatrixOffset;
             uint32_t count = data.boneCount;
+
+            if (shouldLog)
+            {
+                loggerInfo("BoneMatrixManager: Uploading entity {} bones: offset={}, count={}",
+                    static_cast<uint32_t>(entity), offset, count);
+            }
 
             // Copy to staging buffer
             size_t copyOffset = offset * sizeof(glm::mat4);

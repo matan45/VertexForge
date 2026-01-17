@@ -8,6 +8,7 @@
 #include "scene/SceneGraphSystem.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "print/Logger.hpp"
 
 namespace services
 {
@@ -24,31 +25,51 @@ namespace services
         }
 
         EditorMode previousMode = currentMode;
+        const char* prevModeName = (previousMode == EditorMode::Edit) ? "Edit" : "Play";
+        const char* newModeName = (mode == EditorMode::Edit) ? "Edit" : "Play";
+        loggerInfo("[PlayMode] Mode change: {} -> {}", prevModeName, newModeName);
 
         if (mode == EditorMode::Play && previousMode == EditorMode::Edit)
         {
+            loggerInfo("[PlayMode] Capturing snapshot before entering play mode");
             captureSnapshot();
+
+            // Log entity info before entering play mode
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto meshView = registry.view<components::MeshComponent>();
+            for (auto entity : meshView)
+            {
+                const auto& meshComp = meshView.get<components::MeshComponent>(entity);
+                loggerInfo("[PlayMode] Entity {} has mesh: {}, animator: {}",
+                    static_cast<uint32_t>(entity), meshComp.meshPath, meshComp.animatorPath);
+            }
         }
 
         // Publish notification BEFORE restoring snapshot so scripts can call onDestroy
         if (mode == EditorMode::Edit && previousMode == EditorMode::Play)
         {
+            loggerInfo("[PlayMode] Exiting play mode, publishing notification before restore");
             events::editor::EditorModeChangedNotification notification;
             notification.previousMode = previousMode;
             notification.currentMode = mode;
             events::EventDispatcher::instance().publish(notification);
 
+            loggerInfo("[PlayMode] Restoring snapshot");
             restoreSnapshot();
             currentMode = mode;
+            loggerInfo("[PlayMode] Snapshot restored, back in Edit mode");
             return;
         }
 
         currentMode = mode;
+        loggerInfo("[PlayMode] Publishing EditorModeChangedNotification");
 
         events::editor::EditorModeChangedNotification notification;
         notification.previousMode = previousMode;
         notification.currentMode = currentMode;
         events::EventDispatcher::instance().publish(notification);
+
+        loggerInfo("[PlayMode] Mode change complete: now in {} mode", newModeName);
     }
 
     void EditorModeServiceImpl::captureSnapshot()
