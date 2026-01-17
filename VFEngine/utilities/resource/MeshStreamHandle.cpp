@@ -88,8 +88,21 @@ namespace resource
 
         hasMeshlets = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 4);
         hasConvexHulls = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 5);
+        // Version 0.0.7+ uses 64-byte vertices (with bone data), older versions use 32-byte
+        has64ByteVertices = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 7);
 
         header.numSubmeshes = endian::readLE<uint32_t>(file);
+
+        // Version 0.0.7+ has a skeleton reference field after numSubmeshes
+        if (has64ByteVertices)
+        {
+            uint32_t skeletonRefLength = endian::readLE<uint32_t>(file);
+            if (skeletonRefLength > 0)
+            {
+                // Skip skeleton reference path string if present
+                file.seekg(skeletonRefLength, std::ios::cur);
+            }
+        }
 
         if (file.fail())
         {
@@ -151,8 +164,8 @@ namespace resource
                         return false;
                     }
 
-                    // Vertex size depends on file version: 64 bytes for v0.0.6+ (with bone data), 32 bytes for older
-                    size_t vertexSize = 32;
+                    // Vertex size depends on file version: 64 bytes for v0.0.7+ (with bone data), 32 bytes for older
+                    size_t vertexSize = has64ByteVertices ? 64 : 32;
                     file.seekg(lodInfo.vertexCount * vertexSize, std::ios::cur);
 
                     lodInfo.indexCount = endian::readLE<uint32_t>(file);
@@ -365,11 +378,25 @@ namespace resource
             // TexCoords
             outVertices[v].texCoords.x = endian::readLE<float>(file);
             outVertices[v].texCoords.y = endian::readLE<float>(file);
-            
-            // Initialize with defaults for older file versions
-            outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
-            outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
 
+            // Bone data for v0.0.7+ files
+            if (has64ByteVertices)
+            {
+                outVertices[v].boneIndices.x = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.y = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.z = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.w = endian::readLE<int32_t>(file);
+                outVertices[v].boneWeights.x = endian::readLE<float>(file);
+                outVertices[v].boneWeights.y = endian::readLE<float>(file);
+                outVertices[v].boneWeights.z = endian::readLE<float>(file);
+                outVertices[v].boneWeights.w = endian::readLE<float>(file);
+            }
+            else
+            {
+                // Default bone data for older file versions
+                outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
+                outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+            }
 
             if (file.fail())
             {

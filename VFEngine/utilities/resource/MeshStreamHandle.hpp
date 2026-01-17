@@ -65,8 +65,9 @@ namespace resource
         std::ifstream file;
         MeshStreamHeader header;
         std::string filePath;
-        bool hasMeshlets = false;     // True if file has meshlet data (v0.0.4+)
-        bool hasConvexHulls = false;  // True if file has convex hull data (v0.0.5+)
+        bool hasMeshlets = false;       // True if file has meshlet data (v0.0.4+)
+        bool hasConvexHulls = false;    // True if file has convex hull data (v0.0.5+)
+        bool has64ByteVertices = false; // True if file has 64-byte vertices with bone data (v0.0.7+)
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:
