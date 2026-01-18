@@ -3,12 +3,13 @@
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec2 inTexCoord;
+layout(location = 2) in vec2 inTexCoord;  // Required by vertex layout, reserved for future texture support
 layout(location = 3) in ivec4 inBoneIndices;
 layout(location = 4) in vec4 inBoneWeights;
 
 layout(location = 0) out vec3 fragWorldPos;
 layout(location = 1) out vec3 fragNormal;
+layout(location = 2) out vec2 fragTexCoord;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -60,6 +61,7 @@ void main() {
     vec3 skinnedNormal = normalize(mat3(skinMatrix) * inNormal);
     mat3 normalMatrix = transpose(inverse(mat3(pc.model)));
     fragNormal = normalize(normalMatrix * skinnedNormal);
+    fragTexCoord = inTexCoord;
 
     gl_Position = camera.projection * camera.view * worldPos;
 }
@@ -69,6 +71,7 @@ void main() {
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
+layout(location = 2) in vec2 fragTexCoord;  // Reserved for future texture support
 
 layout(location = 0) out vec4 outColor;
 
