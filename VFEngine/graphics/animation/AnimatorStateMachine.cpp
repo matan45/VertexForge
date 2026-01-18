@@ -27,7 +27,7 @@ namespace animation
         // Load animation for the default state
         loadAnimationForState(state.currentStateId);
 
-        initialized.store(true, std::memory_order_release);
+        initialized = true;
 
         // Evaluate initial pose so bone matrices are ready immediately
         evaluateCurrentPose();
@@ -40,7 +40,7 @@ namespace animation
 
     void AnimatorStateMachine::update(float deltaTime)
     {
-        if (!initialized.load(std::memory_order_acquire) || !animatorData || !state.isPlaying)
+        if (!initialized || !animatorData || !state.isPlaying)
         {
             return;
         }
@@ -49,10 +49,16 @@ namespace animation
         const animator::AnimatorState* currentState = getCurrentAnimatorState();
         if (currentState)
         {
+            // Store previous normalized time for exit-time threshold detection
+            float duration = getAnimationDuration(state.currentStateId);
+            if (duration > 0.0f)
+            {
+                state.previousNormalizedTime = std::fmod(state.stateTime / duration, 1.0f);
+            }
+
             state.stateTime += deltaTime * currentState->playbackSpeed;
 
             // Handle looping
-            float duration = getAnimationDuration(state.currentStateId);
             if (duration > 0.0f && !state.isBlending)
             {
                 if (currentState->loop)
@@ -60,6 +66,7 @@ namespace animation
                     while (state.stateTime >= duration)
                     {
                         state.stateTime -= duration;
+                        state.currentLoopCount++;
                     }
                 }
             }
@@ -123,9 +130,44 @@ namespace animation
                     float normalizedTime = state.stateTime / duration;
                     // Use fmod for looping animations
                     normalizedTime = std::fmod(normalizedTime, 1.0f);
-                    if (normalizedTime < transition->exitTime)
+
+                    // For looping animations, prevent multiple exit-time evaluations per loop
+                    // This handles both:
+                    // 1. Low FPS overshooting the exit window (detect via threshold crossing)
+                    // 2. Multiple frames in the exit window re-evaluating the same transition
+                    const animator::AnimatorState* animState = getCurrentAnimatorState();
+                    bool isLooping = animState && animState->loop;
+
+                    if (isLooping)
                     {
-                        continue;
+                        // Check if we already evaluated exit-time transitions this loop
+                        if (state.exitTimeEvaluatedAtLoop == state.currentLoopCount &&
+                            state.previousNormalizedTime >= transition->exitTime)
+                        {
+                            // Already past exit time this loop and evaluated, skip
+                            continue;
+                        }
+
+                        // Detect threshold crossing (handles low FPS overshoot)
+                        // Either: we're past exitTime now, OR we crossed over it this frame
+                        bool crossedThreshold = (state.previousNormalizedTime < transition->exitTime &&
+                                                 normalizedTime >= transition->exitTime);
+                        bool passedThresholdWithLoop = (normalizedTime < state.previousNormalizedTime &&
+                                                        state.previousNormalizedTime < transition->exitTime);
+                        // passedThresholdWithLoop: we looped (time went backwards) but started below exitTime
+
+                        if (!crossedThreshold && normalizedTime < transition->exitTime && !passedThresholdWithLoop)
+                        {
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        // Non-looping: simple threshold check
+                        if (normalizedTime < transition->exitTime)
+                        {
+                            continue;
+                        }
                     }
                 }
             }
@@ -133,6 +175,12 @@ namespace animation
             // Evaluate conditions
             if (animator::evaluateAllConditions(transition->conditions, parameters))
             {
+                // Mark that we've evaluated exit-time for this loop (before transitioning)
+                if (transition->hasExitTime)
+                {
+                    state.exitTimeEvaluatedAtLoop = state.currentLoopCount;
+                }
+
                 startTransition(*transition);
 
                 // Reset triggers that were consumed
@@ -145,6 +193,13 @@ namespace animation
                     }
                 }
                 break;
+            }
+            else if (transition->hasExitTime)
+            {
+                // Conditions not met, but we evaluated this exit-time transition
+                // Mark the loop so we don't keep re-evaluating exit-time transitions
+                // (Non-exit-time transitions can still be evaluated multiple times)
+                state.exitTimeEvaluatedAtLoop = state.currentLoopCount;
             }
         }
     }
@@ -161,6 +216,11 @@ namespace animation
         // Set new current state
         state.currentStateId = transition.targetStateId;
         state.stateTime = 0.0f;
+
+        // Reset loop tracking for the new state
+        state.currentLoopCount = 0;
+        state.exitTimeEvaluatedAtLoop = 0;
+        state.previousNormalizedTime = 0.0f;
 
         // Load animation for new state
         loadAnimationForState(state.currentStateId);

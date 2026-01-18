@@ -362,7 +362,10 @@ namespace render::gpudriven {
             return;
         }
 
-        // Copy all dirty regions to staging buffer
+        // Collect copy regions for dirty entities
+        std::vector<vk::BufferCopy> copyRegions;
+        copyRegions.reserve(dirtyEntities.size());
+
         for (entt::entity entity : dirtyEntities) {
             auto it = allocations.find(entity);
             if (it == allocations.end()) continue;
@@ -378,16 +381,20 @@ namespace render::gpudriven {
                        &cpuBoneMatrices[offset],
                        copySize);
 
+            // Record copy region for GPU transfer
+            vk::BufferCopy region{};
+            region.srcOffset = copyOffset;
+            region.dstOffset = copyOffset;
+            region.size = copySize;
+            copyRegions.push_back(region);
+
             data.dirty = false;
         }
 
-        // Copy entire staging buffer to device buffer
-        // (Could optimize to copy only dirty regions, but this is simpler)
-        vk::BufferCopy copyRegion{};
-        copyRegion.srcOffset = 0;
-        copyRegion.dstOffset = 0;
-        copyRegion.size = maxBoneMatrices * sizeof(glm::mat4);
-        cmd.copyBuffer(stagingBuffer, boneBuffer, copyRegion);
+        // Copy only dirty regions from staging to device buffer
+        if (!copyRegions.empty()) {
+            cmd.copyBuffer(stagingBuffer, boneBuffer, copyRegions);
+        }
 
         // Barrier to ensure copy completes before shader reads
         vk::BufferMemoryBarrier barrier{};

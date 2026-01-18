@@ -381,17 +381,36 @@ namespace components
     // Animator Component
     // ============================================================
 
+    /**
+     * AnimatorComponent provides ECS access to an entity's animation state machine.
+     *
+     * OWNERSHIP MODEL:
+     * - The stateMachine pointer is NON-OWNING (observer pattern)
+     * - Actual ownership: RuntimeAnimatorSystem singleton owns all AnimatorStateMachine instances
+     * - Lifetime guarantee: RuntimeAnimatorSystem clears this pointer before destroying the state machine
+     *
+     * USAGE:
+     * - Do NOT delete or store this pointer long-term
+     * - Do NOT access after RuntimeAnimatorSystem::shutdown()
+     * - Prefer using AnimatorComponentService or EventDispatcher commands for safe access
+     * - Direct pointer access is only safe during the frame it was retrieved
+     *
+     * WHY void*:
+     * - Avoids circular header dependencies (Components.hpp cannot include AnimatorStateMachine.hpp)
+     * - Cast to animation::AnimatorStateMachine* when needed in code that includes the header
+     */
     struct AnimatorComponent
     {
-        // Runtime state machine instance (managed by RuntimeAnimatorSystem)
-        // This is a non-owning pointer - the system owns the actual instance
-        // Using void* to avoid forward declaration issues across namespaces
+        // Non-owning pointer to AnimatorStateMachine (owned by RuntimeAnimatorSystem)
+        // Valid only while RuntimeAnimatorSystem is active and entity has animator initialized
         void* stateMachine = nullptr;
 
-        // Cached path from MeshComponent::animatorPath for validation
+        // Cached animator asset path (mirrors MeshComponent::animatorPath)
+        // Used by RuntimeAnimatorSystem to detect when animator needs reinitialization
         std::string animatorPath;
 
-        // Playback state
+        // True when stateMachine is valid and ready for use
+        // Set to false when RuntimeAnimatorSystem destroys or reinitializes the animator
         bool isInitialized = false;
     };
 

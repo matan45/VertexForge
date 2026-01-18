@@ -7,6 +7,7 @@
 #include "../../services/events/SceneEvents.hpp"
 #include "../../services/events/EditorModeEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
+#include <unordered_set>
 
 namespace animation
 {
@@ -59,6 +60,8 @@ namespace animation
                 // Clear animator instances when switching between Edit and Play modes
                 // Entity IDs are different in each mode, so animators must be recreated
                 clearAnimatorInstances();
+                // Schedule cache cleanup after next sync to remove unused entries
+                pendingCacheCleanup = true;
                 vfLogInfo("[RuntimeAnimatorSystem] Cleared animators for mode change to {} - will reinitialize",
                           notification.currentMode == services::EditorMode::Play ? "Play" : "Edit");
             });
@@ -296,6 +299,13 @@ namespace animation
             vfLogInfo("[RuntimeAnimatorSystem] Cleaned up animator for removed entity {}",
                       static_cast<uint32_t>(entity));
         }
+
+        // Perform deferred cache cleanup if requested (e.g., after mode change)
+        if (pendingCacheCleanup)
+        {
+            pendingCacheCleanup = false;
+            cleanupUnusedCaches();
+        }
     }
 
     void RuntimeAnimatorSystem::clearAll()
@@ -335,6 +345,106 @@ namespace animation
 
         animators.clear();
         vfLogInfo("[RuntimeAnimatorSystem] Cleared animator instances (caches preserved)");
+    }
+
+    void RuntimeAnimatorSystem::cleanupUnusedCaches()
+    {
+        // Collect paths actually in use by active animators
+        std::unordered_set<std::string> usedAnimatorPaths;
+        std::unordered_set<std::string> usedMeshPaths;
+        std::unordered_set<std::string> usedAnimationPaths;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (const auto& [entity, animator] : animators)
+        {
+            if (!animator)
+            {
+                continue;
+            }
+
+            // Get animator path from component
+            if (registry.valid(entity) && registry.all_of<components::AnimatorComponent>(entity))
+            {
+                const auto& animComp = registry.get<components::AnimatorComponent>(entity);
+                if (!animComp.animatorPath.empty())
+                {
+                    usedAnimatorPaths.insert(animComp.animatorPath);
+                }
+            }
+
+            // Get mesh path for skeleton
+            if (registry.valid(entity) && registry.all_of<components::MeshComponent>(entity))
+            {
+                const auto& meshComp = registry.get<components::MeshComponent>(entity);
+                if (!meshComp.meshPath.empty())
+                {
+                    usedMeshPaths.insert(meshComp.meshPath);
+                }
+            }
+
+            // Get animation paths from animator data
+            const animator::AnimatorData* animData = animator->getAnimatorData();
+            if (animData)
+            {
+                for (const auto& state : animData->graph.states)
+                {
+                    if (!state.animationPath.empty())
+                    {
+                        usedAnimationPaths.insert(state.animationPath);
+                    }
+                }
+            }
+        }
+
+        // Remove unused entries from caches
+        size_t removedAnimators = 0;
+        size_t removedAnimations = 0;
+        size_t removedSkeletons = 0;
+
+        for (auto it = animatorDataCache.begin(); it != animatorDataCache.end();)
+        {
+            if (usedAnimatorPaths.find(it->first) == usedAnimatorPaths.end())
+            {
+                it = animatorDataCache.erase(it);
+                ++removedAnimators;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        for (auto it = animationDataCache.begin(); it != animationDataCache.end();)
+        {
+            if (usedAnimationPaths.find(it->first) == usedAnimationPaths.end())
+            {
+                it = animationDataCache.erase(it);
+                ++removedAnimations;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        for (auto it = skeletonDataCache.begin(); it != skeletonDataCache.end();)
+        {
+            if (usedMeshPaths.find(it->first) == usedMeshPaths.end())
+            {
+                it = skeletonDataCache.erase(it);
+                ++removedSkeletons;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        if (removedAnimators > 0 || removedAnimations > 0 || removedSkeletons > 0)
+        {
+            vfLogInfo("[RuntimeAnimatorSystem] Cache cleanup: removed {} animators, {} animations, {} skeletons",
+                      removedAnimators, removedAnimations, removedSkeletons);
+        }
     }
 
     const resource::AnimationData* RuntimeAnimatorSystem::loadAnimation(const std::string& path)

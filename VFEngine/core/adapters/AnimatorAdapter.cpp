@@ -1,5 +1,6 @@
 #include "AnimatorAdapter.hpp"
 #include "AnimatorPreviewController.hpp"
+#include "print/EditorLogger.hpp"
 
 namespace core
 {
@@ -409,9 +410,20 @@ namespace core
         {
             const auto& bones = controller->getEvaluatedBones();
             const auto& skeleton = controller->getAnimationSkeleton();
-            result.reserve(bones.size());
 
-            for (size_t i = 0; i < bones.size() && i < skeleton.size(); ++i)
+            // Bones and skeleton should always have matching sizes since bones are evaluated from the skeleton.
+            // A mismatch indicates a bug in animation evaluation or skeleton loading.
+            if (bones.size() != skeleton.size())
+            {
+                vfLogWarning("[AnimatorAdapter] Bone/skeleton size mismatch: {} evaluated bones vs {} skeleton bones. "
+                             "Results may be incomplete.",
+                             bones.size(), skeleton.size());
+            }
+
+            const size_t count = std::min(bones.size(), skeleton.size());
+            result.reserve(count);
+
+            for (size_t i = 0; i < count; ++i)
             {
                 const auto& bone = bones[i];
                 const auto& skelBone = skeleton[i];

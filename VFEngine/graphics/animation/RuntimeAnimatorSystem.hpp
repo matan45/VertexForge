@@ -18,6 +18,9 @@ namespace animation
      * - Updates all active animators each frame
      * - Provides access to animators by entity for CQRS event handlers
      * - Loads animator data and animations via ResourceManager
+     *
+     * Thread Safety: This class is NOT thread-safe. All methods must be called from the main thread.
+     * The system is updated during the render phase via FramePreparationSystem which runs on the main thread.
      */
     class RuntimeAnimatorSystem
     {
@@ -49,6 +52,10 @@ namespace animation
         // Clear animator instances only, keep caches (e.g., when entering play mode)
         void clearAnimatorInstances();
 
+        // Remove cache entries not used by any active animator
+        // Call periodically or on scene load to prevent unbounded memory growth
+        void cleanupUnusedCaches();
+
     private:
         RuntimeAnimatorSystem() = default;
         ~RuntimeAnimatorSystem() = default;
@@ -58,8 +65,12 @@ namespace animation
         // Animation loading callback for AnimatorStateMachine
         const resource::AnimationData* loadAnimation(const std::string& path);
 
-        // Storage: entity -> animator instance
-        std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>> animators;
+        // Load skeleton from mesh file
+        const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
+
+        // IMPORTANT: Member destruction order is reverse of declaration order.
+        // Caches must be declared BEFORE animators so they are destroyed AFTER.
+        // AnimatorStateMachine holds raw pointers to cached data, so caches must outlive animators.
 
         // Cache: animator path -> loaded animator data (keeps shared_ptr alive)
         std::unordered_map<std::string, std::shared_ptr<animator::AnimatorData>> animatorDataCache;
@@ -70,13 +81,14 @@ namespace animation
         // Cache: mesh path -> skeleton data (for animation playback)
         std::unordered_map<std::string, std::shared_ptr<resource::SkeletonData>> skeletonDataCache;
 
-        // Load skeleton from mesh file
-        const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
+        // Storage: entity -> animator instance (must be declared AFTER caches for correct destruction order)
+        std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>> animators;
 
         // Event subscription tokens
         events::SubscriptionToken meshDataChangedToken;
         events::SubscriptionToken editorModeChangedToken;
 
         bool initialized = false;
+        bool pendingCacheCleanup = false;  // Set after mode change to trigger cleanup on next sync
     };
 }

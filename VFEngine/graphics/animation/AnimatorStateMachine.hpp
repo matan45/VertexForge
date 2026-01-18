@@ -7,8 +7,6 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <functional>
-#include <atomic>
-
 namespace animation
 {
     // Callback for loading animations by path
@@ -25,8 +23,16 @@ namespace animation
         float blendElapsed = 0.0f;         // Elapsed blend time
         bool isBlending = false;
         bool isPlaying = true;
+
+        // Loop tracking for exit-time transitions
+        uint32_t currentLoopCount = 0;         // How many times animation has looped
+        uint32_t exitTimeEvaluatedAtLoop = 0;  // Loop count when exit-time was last evaluated
+        float previousNormalizedTime = 0.0f;   // For detecting threshold crossings
     };
 
+    // AnimatorStateMachine manages animation state, transitions, and pose evaluation.
+    // Thread Safety: This class is NOT thread-safe. All methods must be called from the main thread.
+    // The RuntimeAnimatorSystem ensures this by only calling update/initialize during the render phase.
     class AnimatorStateMachine
     {
     public:
@@ -68,7 +74,8 @@ namespace animation
         const animator::AnimatorState* getPreviousAnimatorState() const;
 
         // Check if initialized
-        bool isInitialized() const { return initialized.load(std::memory_order_acquire); }
+        // Note: AnimatorStateMachine is NOT thread-safe. All access must be from the main thread.
+        bool isInitialized() const { return initialized; }
         bool isPlaying() const { return state.isPlaying; }
         bool isBlending() const { return state.isBlending; }
 
@@ -96,6 +103,8 @@ namespace animation
         bool loadAnimationForState(uint32_t stateId);
         float getAnimationDuration(uint32_t stateId) const;
 
+        // Non-owning pointers to data managed by RuntimeAnimatorSystem's caches.
+        // Lifetime guarantee: RuntimeAnimatorSystem ensures caches outlive AnimatorStateMachine instances.
         const animator::AnimatorData* animatorData = nullptr;
         const resource::SkeletonData* skeletonData = nullptr;
         AnimationLoadCallback animationLoadCallback;
@@ -106,12 +115,13 @@ namespace animation
         AnimationEvaluator currentEvaluator;
         AnimationEvaluator previousEvaluator;
 
-        // Cached animation data pointers (loaded via callback)
+        // Cached animation data pointers (loaded via callback, owned by RuntimeAnimatorSystem)
+        // These are non-owning pointers; the callback returns pointers to cached shared_ptr data.
         std::unordered_map<uint32_t, const resource::AnimationData*> loadedAnimations;
 
         // Output bone matrices
         std::vector<glm::mat4> currentBoneMatrices;
 
-        std::atomic<bool> initialized{false};
+        bool initialized = false;
     };
 }

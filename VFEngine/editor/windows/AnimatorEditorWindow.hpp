@@ -107,17 +107,26 @@ namespace windows
         // Preview instance
         services::PreviewInstanceId instanceId;
 
-        // ID offsets to avoid conflicts
-        static constexpr uintptr_t STATE_NODE_OFFSET = 1000;
+        // ID offsets for imgui-node-editor element identification.
+        // Each element type (nodes, pins, links) needs unique IDs.
+        // Offsets create non-overlapping ranges so we can identify element type from ID:
+        //   - Special nodes (Entry, Any State):  100-999    (SPECIAL_NODE_OFFSET + type)
+        //   - State nodes:                       1000-9999  (STATE_NODE_OFFSET + stateId)
+        //   - Special pins:                      500-9999   (SPECIAL_PIN_OFFSET + pinId)
+        //   - Input pins:                        10000-19999 (INPUT_PIN_OFFSET + stateId)
+        //   - Output pins:                       20000-29999 (OUTPUT_PIN_OFFSET + stateId)
+        //   - Transition links:                  30000+     (LINK_OFFSET + transitionId)
+        // These ranges support up to ~9000 states and ~10000 transitions.
         static constexpr uintptr_t SPECIAL_NODE_OFFSET = 100;
+        static constexpr uintptr_t STATE_NODE_OFFSET = 1000;
+        static constexpr uintptr_t SPECIAL_PIN_OFFSET = 500;
         static constexpr uintptr_t INPUT_PIN_OFFSET = 10000;
         static constexpr uintptr_t OUTPUT_PIN_OFFSET = 20000;
-        static constexpr uintptr_t SPECIAL_PIN_OFFSET = 500;
         static constexpr uintptr_t LINK_OFFSET = 30000;
 
-        // Special node types
-        static constexpr int ENTRY_NODE = 0;
-        static constexpr int ANY_STATE_NODE = 1;
+        // Special node type identifiers (used with SPECIAL_NODE_OFFSET)
+        static constexpr int ENTRY_NODE = 0;      // ID = 100
+        static constexpr int ANY_STATE_NODE = 1;  // ID = 101
 
         // Node colors (as ImVec4 for node editor API)
         static inline const ImVec4 STATE_NODE_COLOR = ImVec4(60/255.0f, 120/255.0f, 180/255.0f, 1.0f);
