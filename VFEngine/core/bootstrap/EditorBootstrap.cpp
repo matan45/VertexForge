@@ -14,6 +14,7 @@
 #include "scene/LevelHandler.hpp"
 #include "print/Logger.hpp"
 #include "../../utilities/types/PhysicsTypes.hpp"
+#include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 
 namespace core
 {
@@ -44,6 +45,9 @@ namespace core
         scriptingAdapter->init();
         physicsAdapter->init();
 
+        // Initialize runtime animator system to subscribe to mesh data change events
+        animation::RuntimeAnimatorSystem::instance().initialize();
+
         // Apply default physics settings on startup
         // Scene-specific settings will be loaded when a scene is loaded
         physicsAdapter->applySettings(types::PhysicsSettings::createDefault());
@@ -61,6 +65,9 @@ namespace core
 
     void EditorBootstrap::cleanUp()
     {
+        // Shutdown runtime animator system first to unsubscribe from events
+        animation::RuntimeAnimatorSystem::instance().shutdown();
+
         if (offScreen)
         {
             offScreen->cleanUp();

@@ -5,6 +5,7 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
 #include "../../services/events/SceneEvents.hpp"
+#include "../../services/events/EditorModeEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 
 namespace animation
@@ -24,10 +25,18 @@ namespace animation
         initialized = true;
 
         // Subscribe to mesh data changes to handle animator cleanup when animatorPath is cleared
+        // Note: We only handle destruction here. Creation is handled by syncWithRegistry during play mode
+        // to avoid entity ID mismatches between edit and play mode
         auto& dispatcher = events::EventDispatcher::instance();
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {
+                // Only handle animator destruction when path is cleared
+                if (!notification.animatorPath.empty())
+                {
+                    return;
+                }
+
                 auto& registry = scene::EntityRegistry::getRegistry();
                 entt::entity entity = services::internal::fromHandle(notification.entity);
 
@@ -36,13 +45,23 @@ namespace animation
                     return;
                 }
 
-                // If animator path is cleared, destroy the animator
-                if (notification.animatorPath.empty())
+                if (hasAnimator(entity))
                 {
-                    if (hasAnimator(entity))
-                    {
-                        destroyEntityAnimator(entity);
-                    }
+                    destroyEntityAnimator(entity);
+                }
+            });
+
+        // Subscribe to editor mode changes to clear animator instances when entering play mode
+        // This ensures fresh initialization with correct entity IDs (entity IDs change between edit/play mode)
+        editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
+            [this](const events::editor::EditorModeChangedNotification& notification)
+            {
+                if (notification.currentMode == services::EditorMode::Play)
+                {
+                    // Clear animator instances when entering play mode
+                    // syncWithRegistry() will recreate them with correct entity IDs
+                    clearAnimatorInstances();
+                    vfLogInfo("[RuntimeAnimatorSystem] Cleared animators for play mode - will reinitialize");
                 }
             });
 
@@ -51,11 +70,20 @@ namespace animation
 
     void RuntimeAnimatorSystem::shutdown()
     {
+        auto& dispatcher = events::EventDispatcher::instance();
+
         // Unsubscribe from mesh data changed notifications
         if (meshDataChangedToken.isValid())
         {
-            events::EventDispatcher::instance().unsubscribe(meshDataChangedToken);
+            dispatcher.unsubscribe(meshDataChangedToken);
             meshDataChangedToken = {};
+        }
+
+        // Unsubscribe from editor mode changed notifications
+        if (editorModeChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(editorModeChangedToken);
+            editorModeChangedToken = {};
         }
 
         clearAll();
@@ -123,20 +151,40 @@ namespace animation
         // Get mesh path from MeshComponent to load skeleton
         auto& registry = scene::EntityRegistry::getRegistry();
         const resource::SkeletonData* skeleton = nullptr;
+        std::string meshPath;
 
         if (registry.all_of<components::MeshComponent>(entity))
         {
             const auto& meshComp = registry.get<components::MeshComponent>(entity);
-            if (!meshComp.meshPath.empty())
+            meshPath = meshComp.meshPath;
+            if (!meshPath.empty())
             {
-                skeleton = loadSkeleton(meshComp.meshPath);
+                skeleton = loadSkeleton(meshPath);
             }
         }
 
         if (!skeleton)
         {
-            vfLogWarning("[RuntimeAnimatorSystem] No skeleton available for entity {} - animation may not work",
-                         static_cast<uint32_t>(entity));
+            if (meshPath.empty())
+            {
+                // No mesh path - can't have skeleton, don't create animator
+                vfLogWarning("[RuntimeAnimatorSystem] Entity {} has no mesh path - cannot create animator",
+                             static_cast<uint32_t>(entity));
+                return;
+            }
+
+            // Check if skeleton loading failed definitively (cached null) vs just not ready yet
+            auto cacheIt = skeletonDataCache.find(meshPath);
+            if (cacheIt != skeletonDataCache.end() && !cacheIt->second)
+            {
+                // Mesh definitively has no skeleton data - don't create animator
+                // (warning already logged in loadSkeleton)
+                return;
+            }
+            // Mesh not ready yet - will retry next frame
+            vfLogInfo("[RuntimeAnimatorSystem] Skeleton not ready for entity {} (mesh: {}) - will retry",
+                      static_cast<uint32_t>(entity), meshPath);
+            return;
         }
 
         // Create state machine
@@ -148,8 +196,15 @@ namespace animation
             return loadAnimation(path);
         });
 
+        // Log immediately after initialize() returns
+        vfLogInfo("[RuntimeAnimatorSystem] After initialize(): ptr={}, initialized={}",
+                  static_cast<const void*>(stateMachine.get()), stateMachine->isInitialized());
+
         // Store in map
         AnimatorStateMachine* rawPtr = stateMachine.get();
+        vfLogInfo("[RuntimeAnimatorSystem] Storing animator ptr={} for entity {}, initialized={}",
+                  static_cast<const void*>(rawPtr), static_cast<uint32_t>(entity),
+                  rawPtr->isInitialized());
         animators[entity] = std::move(stateMachine);
 
         // Update AnimatorComponent on entity
@@ -193,11 +248,26 @@ namespace animation
 
     AnimatorStateMachine* RuntimeAnimatorSystem::getAnimator(entt::entity entity)
     {
+        // Log all animators in the map
+        vfLogInfo("[RuntimeAnimatorSystem] getAnimator({}) - map has {} animators:",
+                  static_cast<uint32_t>(entity), animators.size());
+        for (const auto& [e, anim] : animators)
+        {
+            vfLogInfo("  - entity {}: ptr={}, initialized={}",
+                      static_cast<uint32_t>(e), static_cast<const void*>(anim.get()),
+                      anim ? anim->isInitialized() : false);
+        }
+
         auto it = animators.find(entity);
         if (it != animators.end())
         {
-            return it->second.get();
+            AnimatorStateMachine* ptr = it->second.get();
+            vfLogInfo("[RuntimeAnimatorSystem] getAnimator({}) FOUND: ptr={}, initialized={}",
+                      static_cast<uint32_t>(entity), static_cast<const void*>(ptr),
+                      ptr ? ptr->isInitialized() : false);
+            return ptr;
         }
+        vfLogInfo("[RuntimeAnimatorSystem] getAnimator({}) NOT FOUND in map", static_cast<uint32_t>(entity));
         return nullptr;
     }
 
@@ -226,6 +296,8 @@ namespace animation
                 // Initialize animator if not already done
                 if (!hasAnimator(entity))
                 {
+                    vfLogInfo("[RuntimeAnimatorSystem] syncWithRegistry: Entity {} needs animator (path: {})",
+                              static_cast<uint32_t>(entity), meshComp.animatorPath);
                     initializeEntityAnimator(entity, meshComp.animatorPath);
                 }
             }
@@ -278,6 +350,24 @@ namespace animation
         vfLogInfo("[RuntimeAnimatorSystem] Cleared all animators");
     }
 
+    void RuntimeAnimatorSystem::clearAnimatorInstances()
+    {
+        // Clear AnimatorComponent pointers but keep caches for fast reinitialization
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (const auto& [entity, animator] : animators)
+        {
+            if (registry.valid(entity) && registry.all_of<components::AnimatorComponent>(entity))
+            {
+                auto& animComp = registry.get<components::AnimatorComponent>(entity);
+                animComp.stateMachine = nullptr;
+                animComp.isInitialized = false;
+            }
+        }
+
+        animators.clear();
+        vfLogInfo("[RuntimeAnimatorSystem] Cleared animator instances (caches preserved)");
+    }
+
     const resource::AnimationData* RuntimeAnimatorSystem::loadAnimation(const std::string& path)
     {
         if (path.empty())
@@ -322,6 +412,10 @@ namespace animation
         auto it = skeletonDataCache.find(meshPath);
         if (it != skeletonDataCache.end())
         {
+            if (it->second)
+            {
+                vfLogInfo("[RuntimeAnimatorSystem] loadSkeleton: Using cached skeleton for {}", meshPath);
+            }
             return it->second.get();
         }
 
@@ -335,6 +429,8 @@ namespace animation
 
         if (!stream->hasSkeletonData())
         {
+            // Cache nullptr so we don't keep retrying for meshes without skeleton
+            skeletonDataCache[meshPath] = nullptr;
             vfLogWarning("[RuntimeAnimatorSystem] Mesh has no skeleton data: {}", meshPath);
             return nullptr;
         }
@@ -342,6 +438,8 @@ namespace animation
         auto skeletonData = std::make_shared<resource::SkeletonData>();
         if (!stream->readSkeleton(*skeletonData))
         {
+            // Cache nullptr so we don't keep retrying for broken skeleton data
+            skeletonDataCache[meshPath] = nullptr;
             vfLogError("[RuntimeAnimatorSystem] Failed to read skeleton from: {}", meshPath);
             return nullptr;
         }

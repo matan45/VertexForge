@@ -8,6 +8,7 @@
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "components/Components.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "print/Logger.hpp"
@@ -363,41 +364,76 @@ namespace render::gpudriven
             return 1;
         };
 
-        // Process animated entities and update bone matrices
+        // Process ALL animated entities and update bone matrices
+        // Important: We must update bone matrices for all animated entities, not just visible ones,
+        // because GPU meshlet culling may render meshlets that CPU frustum culling missed
         BoneOffsetResolver boneOffsetResolver = nullptr;
         if (boneMatrixManager)
         {
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
+            auto& registry = scene::EntityRegistry::getRegistry();
 
-            for (const auto& meshRender : opaqueObjects)
+            // Iterate through ALL entities with MeshComponent that have an animatorPath
+            // Don't require AnimatorComponent as it might not be added yet on first frame
+            auto view = registry.view<components::MeshComponent>();
+            for (auto entity : view)
             {
-                if (meshRender.entity == entt::null)
+                const auto& meshComp = view.get<components::MeshComponent>(entity);
+
+                // Skip entities without animator path
+                if (meshComp.animatorPath.empty())
                 {
                     continue;
                 }
 
-                // Get animator for this entity (if any)
-                animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(meshRender.entity);
+                // Get animator for this entity, create if needed
+                animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(entity);
                 if (!animator)
                 {
-                    continue;
+                    // Animator doesn't exist yet - create it now
+                    // This handles the case where syncWithRegistry hasn't run yet
+                    animatorSystem.initializeEntityAnimator(entity, meshComp.animatorPath);
+                    animator = animatorSystem.getAnimator(entity);
+                    if (!animator)
+                    {
+                        continue;
+                    }
+                }
+
+                // Ensure animator is updated (in case it wasn't updated earlier this frame)
+                if (animator->isInitialized() && animator->isPlaying())
+                {
+                    // Force an update if bone matrices are empty (first frame issue)
+                    if (animator->getBoneMatrices().empty())
+                    {
+                        loggerInfo("GPUDrivenRenderer: Forcing animator update for entity {} (bone matrices empty)",
+                                   static_cast<uint32_t>(entity));
+                        animator->update(0.016f); // ~60fps delta
+                    }
+                }
+                else
+                {
+                    loggerWarning("GPUDrivenRenderer: Animator for entity {} not ready (initialized={}, playing={})",
+                                  static_cast<uint32_t>(entity), animator->isInitialized(), animator->isPlaying());
                 }
 
                 // Get bone matrices from animator
                 const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
                 if (boneMatrices.empty())
                 {
+                    loggerWarning("GPUDrivenRenderer: Bone matrices still empty for entity {} after update",
+                                  static_cast<uint32_t>(entity));
                     continue;
                 }
 
                 // Allocate bone space if needed (returns existing allocation if already allocated)
                 uint32_t boneCount = static_cast<uint32_t>(boneMatrices.size());
-                uint32_t boneOffset = boneMatrixManager->allocate(meshRender.entity, boneCount);
+                uint32_t boneOffset = boneMatrixManager->allocate(entity, boneCount);
 
                 if (boneOffset != INVALID_BONE_OFFSET)
                 {
                     // Update bone matrices for this entity
-                    boneMatrixManager->updateBoneMatrices(meshRender.entity, boneMatrices);
+                    boneMatrixManager->updateBoneMatrices(entity, boneMatrices);
                 }
             }
 

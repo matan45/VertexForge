@@ -1,10 +1,18 @@
 #include "AnimatorStateMachine.hpp"
+#include "print/EditorLogger.hpp"
 #include <algorithm>
 
 namespace animation
 {
     AnimatorStateMachine::AnimatorStateMachine()
     {
+        vfLogInfo("[AnimatorStateMachine] Constructor: this={}", static_cast<const void*>(this));
+    }
+
+    AnimatorStateMachine::~AnimatorStateMachine()
+    {
+        vfLogInfo("[AnimatorStateMachine] Destructor: this={}, initialized={}",
+                  static_cast<const void*>(this), initialized.load());
     }
 
     void AnimatorStateMachine::initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback)
@@ -27,7 +35,11 @@ namespace animation
         // Load animation for the default state
         loadAnimationForState(state.currentStateId);
 
-        initialized = true;
+        vfLogInfo("[AnimatorStateMachine] Before setting initialized: this={}, initialized={}",
+                  static_cast<const void*>(this), initialized.load());
+        initialized.store(true, std::memory_order_release);
+        vfLogInfo("[AnimatorStateMachine] After setting initialized: this={}, initialized={}",
+                  static_cast<const void*>(this), initialized.load());
     }
 
     void AnimatorStateMachine::setSkeleton(const resource::SkeletonData* skeleton)
@@ -37,7 +49,7 @@ namespace animation
 
     void AnimatorStateMachine::update(float deltaTime)
     {
-        if (!initialized || !animatorData || !state.isPlaying)
+        if (!initialized.load(std::memory_order_acquire) || !animatorData || !state.isPlaying)
         {
             return;
         }
@@ -201,6 +213,8 @@ namespace animation
     {
         if (!animatorData || !skeletonData)
         {
+            vfLogWarning("[AnimatorStateMachine] Cannot evaluate pose: animatorData={}, skeletonData={}",
+                         animatorData != nullptr, skeletonData != nullptr);
             currentBoneMatrices.clear();
             return;
         }
@@ -242,6 +256,11 @@ namespace animation
                 currentEvaluator.loadAnimation(*it->second, *skeletonData);
                 float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
                 currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
+            }
+            else
+            {
+                vfLogWarning("[AnimatorStateMachine] Animation not found for state {} (loaded={})",
+                             state.currentStateId, it != loadedAnimations.end());
             }
         }
     }

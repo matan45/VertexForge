@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <functional>
+#include <atomic>
 
 namespace animation
 {
@@ -30,7 +31,7 @@ namespace animation
     {
     public:
         AnimatorStateMachine();
-        ~AnimatorStateMachine() = default;
+        ~AnimatorStateMachine();
 
         // Initialize with animator data, skeleton data, and animation loader callback
         void initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback);
@@ -67,7 +68,7 @@ namespace animation
         const animator::AnimatorState* getPreviousAnimatorState() const;
 
         // Check if initialized
-        bool isInitialized() const { return initialized; }
+        bool isInitialized() const { return initialized.load(std::memory_order_acquire); }
         bool isPlaying() const { return state.isPlaying; }
         bool isBlending() const { return state.isBlending; }
 
@@ -111,6 +112,6 @@ namespace animation
         // Output bone matrices
         std::vector<glm::mat4> currentBoneMatrices;
 
-        bool initialized = false;
+        std::atomic<bool> initialized{false};
     };
 }

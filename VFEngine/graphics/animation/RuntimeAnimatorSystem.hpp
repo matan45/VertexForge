@@ -46,6 +46,9 @@ namespace animation
         // Clear all animators (e.g., when scene is unloaded)
         void clearAll();
 
+        // Clear animator instances only, keep caches (e.g., when entering play mode)
+        void clearAnimatorInstances();
+
     private:
         RuntimeAnimatorSystem() = default;
         ~RuntimeAnimatorSystem() = default;
@@ -70,8 +73,9 @@ namespace animation
         // Load skeleton from mesh file
         const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
 
-        // Event subscription token for mesh data changes
+        // Event subscription tokens
         events::SubscriptionToken meshDataChangedToken;
+        events::SubscriptionToken editorModeChangedToken;
 
         bool initialized = false;
     };
