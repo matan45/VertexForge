@@ -51,18 +51,16 @@ namespace animation
                 }
             });
 
-        // Subscribe to editor mode changes to clear animator instances when entering play mode
+        // Subscribe to editor mode changes to clear animator instances when switching modes
         // This ensures fresh initialization with correct entity IDs (entity IDs change between edit/play mode)
         editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& notification)
             {
-                if (notification.currentMode == services::EditorMode::Play)
-                {
-                    // Clear animator instances when entering play mode
-                    // syncWithRegistry() will recreate them with correct entity IDs
-                    clearAnimatorInstances();
-                    vfLogInfo("[RuntimeAnimatorSystem] Cleared animators for play mode - will reinitialize");
-                }
+                // Clear animator instances when switching between Edit and Play modes
+                // Entity IDs are different in each mode, so animators must be recreated
+                clearAnimatorInstances();
+                vfLogInfo("[RuntimeAnimatorSystem] Cleared animators for mode change to {} - will reinitialize",
+                          notification.currentMode == services::EditorMode::Play ? "Play" : "Edit");
             });
 
         vfLogInfo("[RuntimeAnimatorSystem] Initialized");
