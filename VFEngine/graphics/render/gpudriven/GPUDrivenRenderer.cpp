@@ -400,29 +400,10 @@ namespace render::gpudriven
                     }
                 }
 
-                // Ensure animator is updated (in case it wasn't updated earlier this frame)
-                if (animator->isInitialized() && animator->isPlaying())
-                {
-                    // Force an update if bone matrices are empty (first frame issue)
-                    if (animator->getBoneMatrices().empty())
-                    {
-                        loggerInfo("GPUDrivenRenderer: Forcing animator update for entity {} (bone matrices empty)",
-                                   static_cast<uint32_t>(entity));
-                        animator->update(0.016f); // ~60fps delta
-                    }
-                }
-                else
-                {
-                    loggerWarning("GPUDrivenRenderer: Animator for entity {} not ready (initialized={}, playing={})",
-                                  static_cast<uint32_t>(entity), animator->isInitialized(), animator->isPlaying());
-                }
-
                 // Get bone matrices from animator
                 const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
                 if (boneMatrices.empty())
                 {
-                    loggerWarning("GPUDrivenRenderer: Bone matrices still empty for entity {} after update",
-                                  static_cast<uint32_t>(entity));
                     continue;
                 }
 

@@ -180,8 +180,6 @@ namespace animation
                 return;
             }
             // Mesh not ready yet - will retry next frame
-            vfLogInfo("[RuntimeAnimatorSystem] Skeleton not ready for entity {} (mesh: {}) - will retry",
-                      static_cast<uint32_t>(entity), meshPath);
             return;
         }
 
@@ -194,15 +192,8 @@ namespace animation
             return loadAnimation(path);
         });
 
-        // Log immediately after initialize() returns
-        vfLogInfo("[RuntimeAnimatorSystem] After initialize(): ptr={}, initialized={}",
-                  static_cast<const void*>(stateMachine.get()), stateMachine->isInitialized());
-
         // Store in map
         AnimatorStateMachine* rawPtr = stateMachine.get();
-        vfLogInfo("[RuntimeAnimatorSystem] Storing animator ptr={} for entity {}, initialized={}",
-                  static_cast<const void*>(rawPtr), static_cast<uint32_t>(entity),
-                  rawPtr->isInitialized());
         animators[entity] = std::move(stateMachine);
 
         // Update AnimatorComponent on entity
@@ -215,9 +206,6 @@ namespace animation
         animComp.stateMachine = rawPtr;
         animComp.animatorPath = animatorPath;
         animComp.isInitialized = true;
-
-        vfLogInfo("[RuntimeAnimatorSystem] Initialized animator for entity {}: {}",
-                  static_cast<uint32_t>(entity), animatorPath);
     }
 
     void RuntimeAnimatorSystem::destroyEntityAnimator(entt::entity entity)
@@ -246,26 +234,11 @@ namespace animation
 
     AnimatorStateMachine* RuntimeAnimatorSystem::getAnimator(entt::entity entity)
     {
-        // Log all animators in the map
-        vfLogInfo("[RuntimeAnimatorSystem] getAnimator({}) - map has {} animators:",
-                  static_cast<uint32_t>(entity), animators.size());
-        for (const auto& [e, anim] : animators)
-        {
-            vfLogInfo("  - entity {}: ptr={}, initialized={}",
-                      static_cast<uint32_t>(e), static_cast<const void*>(anim.get()),
-                      anim ? anim->isInitialized() : false);
-        }
-
         auto it = animators.find(entity);
         if (it != animators.end())
         {
-            AnimatorStateMachine* ptr = it->second.get();
-            vfLogInfo("[RuntimeAnimatorSystem] getAnimator({}) FOUND: ptr={}, initialized={}",
-                      static_cast<uint32_t>(entity), static_cast<const void*>(ptr),
-                      ptr ? ptr->isInitialized() : false);
-            return ptr;
+            return it->second.get();
         }
-        vfLogInfo("[RuntimeAnimatorSystem] getAnimator({}) NOT FOUND in map", static_cast<uint32_t>(entity));
         return nullptr;
     }
 
@@ -294,8 +267,6 @@ namespace animation
                 // Initialize animator if not already done
                 if (!hasAnimator(entity))
                 {
-                    vfLogInfo("[RuntimeAnimatorSystem] syncWithRegistry: Entity {} needs animator (path: {})",
-                              static_cast<uint32_t>(entity), meshComp.animatorPath);
                     initializeEntityAnimator(entity, meshComp.animatorPath);
                 }
             }
@@ -390,9 +361,6 @@ namespace animation
             return nullptr;
         }
 
-        vfLogInfo("[RuntimeAnimatorSystem] Loaded animation '{}': channels={}, duration={}",
-            path, animData->channels.size(), animData->duration);
-
         // Store in cache to keep the shared_ptr alive
         animationDataCache[path] = animData;
 
@@ -410,10 +378,6 @@ namespace animation
         auto it = skeletonDataCache.find(meshPath);
         if (it != skeletonDataCache.end())
         {
-            if (it->second)
-            {
-                vfLogInfo("[RuntimeAnimatorSystem] loadSkeleton: Using cached skeleton for {}", meshPath);
-            }
             return it->second.get();
         }
 
@@ -441,9 +405,6 @@ namespace animation
             vfLogError("[RuntimeAnimatorSystem] Failed to read skeleton from: {}", meshPath);
             return nullptr;
         }
-
-        vfLogInfo("[RuntimeAnimatorSystem] Loaded skeleton from '{}': {} bones",
-                  meshPath, skeletonData->bones.size());
 
         // Store in cache
         skeletonDataCache[meshPath] = skeletonData;

@@ -4,16 +4,8 @@
 
 namespace animation
 {
-    AnimatorStateMachine::AnimatorStateMachine()
-    {
-        vfLogInfo("[AnimatorStateMachine] Constructor: this={}", static_cast<const void*>(this));
-    }
-
-    AnimatorStateMachine::~AnimatorStateMachine()
-    {
-        vfLogInfo("[AnimatorStateMachine] Destructor: this={}, initialized={}",
-                  static_cast<const void*>(this), initialized.load());
-    }
+    AnimatorStateMachine::AnimatorStateMachine() = default;
+    AnimatorStateMachine::~AnimatorStateMachine() = default;
 
     void AnimatorStateMachine::initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback)
     {
@@ -35,11 +27,10 @@ namespace animation
         // Load animation for the default state
         loadAnimationForState(state.currentStateId);
 
-        vfLogInfo("[AnimatorStateMachine] Before setting initialized: this={}, initialized={}",
-                  static_cast<const void*>(this), initialized.load());
         initialized.store(true, std::memory_order_release);
-        vfLogInfo("[AnimatorStateMachine] After setting initialized: this={}, initialized={}",
-                  static_cast<const void*>(this), initialized.load());
+
+        // Evaluate initial pose so bone matrices are ready immediately
+        evaluateCurrentPose();
     }
 
     void AnimatorStateMachine::setSkeleton(const resource::SkeletonData* skeleton)
