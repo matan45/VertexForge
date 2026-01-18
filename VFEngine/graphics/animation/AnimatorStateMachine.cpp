@@ -105,77 +105,90 @@ namespace animation
         evaluateCurrentPose();
     }
 
+    bool AnimatorStateMachine::shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
+                                                        float normalizedTime, bool isLooping) const
+    {
+        const float exitTime = transition.exitTime;
+        const float prevTime = state.previousNormalizedTime;
+
+        if (!isLooping)
+        {
+            // Non-looping: evaluate once we've reached the exit time
+            return normalizedTime >= exitTime;
+        }
+
+        // Looping animation: need to handle several cases carefully
+
+        // Case 1: Already evaluated exit-time this loop iteration
+        bool alreadyEvaluatedThisLoop = (state.exitTimeEvaluatedAtLoop == state.currentLoopCount) &&
+                                        (prevTime >= exitTime);
+        if (alreadyEvaluatedThisLoop)
+        {
+            return false;
+        }
+
+        // Case 2: Normal threshold crossing (previous frame was before, current is at/after)
+        bool crossedThisFrame = (prevTime < exitTime) && (normalizedTime >= exitTime);
+        if (crossedThisFrame)
+        {
+            return true;
+        }
+
+        // Case 3: Currently at or past exit time (handles multiple transitions with same exit time)
+        if (normalizedTime >= exitTime)
+        {
+            return true;
+        }
+
+        // Case 4: Loop wrap-around - time went "backwards" because animation looped.
+        // If we were below exitTime before looping, we must have crossed it.
+        bool loopOccurred = normalizedTime < prevTime;
+        bool wasBeforeExitTime = prevTime < exitTime;
+        if (loopOccurred && wasBeforeExitTime)
+        {
+            return true;
+        }
+
+        // Haven't reached exit time yet
+        return false;
+    }
+
     void AnimatorStateMachine::evaluateTransitions()
     {
         if (!animatorData)
             return;
 
-        // Get all valid transitions from current state
         auto transitions = animatorData->graph.getTransitionsFromState(state.currentStateId);
 
         for (const animator::AnimatorTransition* transition : transitions)
         {
-            // Skip transitions to the same state (unless it's an "Any State" transition)
+            // Skip self-transitions (except from "Any State" which has sourceStateId == 0)
             if (transition->sourceStateId != 0 && transition->targetStateId == state.currentStateId)
             {
                 continue;
             }
 
-            // Check exit time if enabled
+            // Check exit-time condition if enabled
             if (transition->hasExitTime)
             {
                 float duration = getAnimationDuration(state.currentStateId);
                 if (duration > 0.0f)
                 {
-                    float normalizedTime = state.stateTime / duration;
-                    // Use fmod for looping animations
-                    normalizedTime = std::fmod(normalizedTime, 1.0f);
-
-                    // For looping animations, prevent multiple exit-time evaluations per loop
-                    // This handles both:
-                    // 1. Low FPS overshooting the exit window (detect via threshold crossing)
-                    // 2. Multiple frames in the exit window re-evaluating the same transition
+                    float normalizedTime = std::fmod(state.stateTime / duration, 1.0f);
                     const animator::AnimatorState* animState = getCurrentAnimatorState();
                     bool isLooping = animState && animState->loop;
 
-                    if (isLooping)
+                    if (!shouldEvaluateExitTime(*transition, normalizedTime, isLooping))
                     {
-                        // Check if we already evaluated exit-time transitions this loop
-                        if (state.exitTimeEvaluatedAtLoop == state.currentLoopCount &&
-                            state.previousNormalizedTime >= transition->exitTime)
-                        {
-                            // Already past exit time this loop and evaluated, skip
-                            continue;
-                        }
-
-                        // Detect threshold crossing (handles low FPS overshoot)
-                        // Either: we're past exitTime now, OR we crossed over it this frame
-                        bool crossedThreshold = (state.previousNormalizedTime < transition->exitTime &&
-                                                 normalizedTime >= transition->exitTime);
-                        bool passedThresholdWithLoop = (normalizedTime < state.previousNormalizedTime &&
-                                                        state.previousNormalizedTime < transition->exitTime);
-                        // passedThresholdWithLoop: we looped (time went backwards) but started below exitTime
-
-                        if (!crossedThreshold && normalizedTime < transition->exitTime && !passedThresholdWithLoop)
-                        {
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        // Non-looping: simple threshold check
-                        if (normalizedTime < transition->exitTime)
-                        {
-                            continue;
-                        }
+                        continue;
                     }
                 }
             }
 
-            // Evaluate conditions
+            // Evaluate parameter conditions
             if (animator::evaluateAllConditions(transition->conditions, parameters))
             {
-                // Mark that we've evaluated exit-time for this loop (before transitioning)
+                // Mark exit-time as evaluated before transitioning
                 if (transition->hasExitTime)
                 {
                     state.exitTimeEvaluatedAtLoop = state.currentLoopCount;
@@ -183,7 +196,7 @@ namespace animation
 
                 startTransition(*transition);
 
-                // Reset triggers that were consumed
+                // Reset consumed triggers
                 for (const auto& condition : transition->conditions)
                 {
                     const auto* param = animatorData->graph.findParameter(condition.parameterName);
@@ -196,9 +209,7 @@ namespace animation
             }
             else if (transition->hasExitTime)
             {
-                // Conditions not met, but we evaluated this exit-time transition
-                // Mark the loop so we don't keep re-evaluating exit-time transitions
-                // (Non-exit-time transitions can still be evaluated multiple times)
+                // Conditions failed but exit-time was reached - mark to prevent re-evaluation
                 state.exitTimeEvaluatedAtLoop = state.currentLoopCount;
             }
         }

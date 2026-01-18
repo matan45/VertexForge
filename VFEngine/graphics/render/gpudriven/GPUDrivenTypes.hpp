@@ -36,8 +36,10 @@ namespace render::gpudriven
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
     // Animation constants for GPU skinning
-    constexpr uint32_t MAX_BONES_PER_OBJECT = 128;
-    constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
+    // Memory usage: MAX_BONES_PER_OBJECT * MAX_ANIMATED_OBJECTS * sizeof(mat4)
+    //             = 128 * 1024 * 64 bytes = 8 MB (CPU + GPU buffers)
+    constexpr uint32_t MAX_BONES_PER_OBJECT = 128;  // Max bones per skeleton
+    constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024; // Max concurrent animated entities
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF; // Indicates static (non-animated) mesh
 
     constexpr float LOD_THRESHOLD_0 = 400.0f; // LOD0 for >= 400 pixels

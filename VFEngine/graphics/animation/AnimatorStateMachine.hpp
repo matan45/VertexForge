@@ -103,6 +103,10 @@ namespace animation
         bool loadAnimationForState(uint32_t stateId);
         float getAnimationDuration(uint32_t stateId) const;
 
+        // Returns true if the exit-time condition is satisfied for a transition
+        bool shouldEvaluateExitTime(const animator::AnimatorTransition& transition,
+                                    float normalizedTime, bool isLooping) const;
+
         // Non-owning pointers to data managed by RuntimeAnimatorSystem's caches.
         // Lifetime guarantee: RuntimeAnimatorSystem ensures caches outlive AnimatorStateMachine instances.
         const animator::AnimatorData* animatorData = nullptr;

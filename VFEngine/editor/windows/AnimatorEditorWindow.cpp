@@ -148,13 +148,6 @@ namespace windows
                     }
                 }
 
-                ImGui::Separator();
-
-                if (ImGui::CollapsingHeader("Playback", ImGuiTreeNodeFlags_DefaultOpen))
-                {
-                    drawPlaybackControls();
-                }
-
                 ImGui::EndChild(); // PropertiesPanel
 
                 ImGui::SameLine();
@@ -1084,24 +1077,7 @@ namespace windows
 
     void AnimatorEditorWindow::drawPlaybackControls()
     {
-        ImGui::Text("Preview playback controls");
-        ImGui::Text("(Not yet implemented)");
-
-        // Placeholder for future preview integration
-        if (ImGui::Button("Play"))
-        {
-            // TODO: Start playback
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Pause"))
-        {
-            // TODO: Pause playback
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Stop"))
-        {
-            // TODO: Stop playback
-        }
+        // Reserved for future preview playback integration
     }
 
     void AnimatorEditorWindow::drawZoomControls(ImVec2 canvasPos, ImVec2 canvasSize, float currentZoom)
