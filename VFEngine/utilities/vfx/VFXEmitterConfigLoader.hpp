@@ -27,6 +27,7 @@ namespace vfx
         static glm::vec3 getVec3(const VFXNode& node, const std::string& propName, const glm::vec3& defaultValue);
         static glm::vec4 getVec4(const VFXNode& node, const std::string& propName, const glm::vec4& defaultValue);
         static bool getBool(const VFXNode& node, const std::string& propName, bool defaultValue);
+        static std::string getString(const VFXNode& node, const std::string& propName, const std::string& defaultValue);
     };
 
     // Template implementation
@@ -68,6 +69,11 @@ namespace vfx
         return getPropertyValue<bool>(node, propName, defaultValue);
     }
 
+    inline std::string VFXEmitterConfigLoader::getString(const VFXNode& node, const std::string& propName, const std::string& defaultValue)
+    {
+        return getPropertyValue<std::string>(node, propName, defaultValue);
+    }
+
     inline std::optional<render::vfx::VFXEmitterConfig> VFXEmitterConfigLoader::loadFromFile(std::string_view path)
     {
         auto vfxData = VFXAsset::load(path);
@@ -106,13 +112,8 @@ namespace vfx
         // Looping property
         config.looping = getBool(*emitterNode, "looping", EmitterDefaults::LOOPING);
 
-        // Texture path (future extension)
-        auto texIt = emitterNode->properties.find("texturePath");
-        if (texIt != emitterNode->properties.end())
-        {
-            // texturePath would be stored as a string in a future property type
-            // For now, leave empty (use default white texture)
-        }
+        // Texture path
+        config.texturePath = getString(*emitterNode, "texture", "");
 
         return config;
     }

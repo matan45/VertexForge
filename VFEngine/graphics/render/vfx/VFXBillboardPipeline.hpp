@@ -10,6 +10,7 @@ namespace core
     class Device;
     class SwapChain;
     class Shader;
+    class Texture;
     struct OffscreenResources;
 }
 
@@ -54,6 +55,10 @@ namespace render::vfx
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
+        // Custom particle texture
+        std::unique_ptr<core::Texture> customTexture;
+        std::string currentTexturePath;
+
     public:
         explicit VFXBillboardPipeline(core::Device& device, core::SwapChain& swapChain,
                                       core::OffscreenResources& offscreenResources);
@@ -67,6 +72,8 @@ namespace render::vfx
                              const glm::vec3& cameraPos, float time) const;
 
         void setParticleInstances(const std::vector<VFXInstanceData>& instances);
+
+        void setTexture(const std::string& texturePath);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

@@ -46,26 +46,28 @@ namespace vfx
     {
         switch (type)
         {
-        case VFXPropertyType::Float: return "Float";
-        case VFXPropertyType::Vec2:  return "Vec2";
-        case VFXPropertyType::Vec3:  return "Vec3";
-        case VFXPropertyType::Vec4:  return "Vec4";
-        case VFXPropertyType::Color: return "Color";
-        case VFXPropertyType::Int:   return "Int";
-        case VFXPropertyType::Bool:  return "Bool";
+        case VFXPropertyType::Float:  return "Float";
+        case VFXPropertyType::Vec2:   return "Vec2";
+        case VFXPropertyType::Vec3:   return "Vec3";
+        case VFXPropertyType::Vec4:   return "Vec4";
+        case VFXPropertyType::Color:  return "Color";
+        case VFXPropertyType::Int:    return "Int";
+        case VFXPropertyType::Bool:   return "Bool";
+        case VFXPropertyType::String: return "String";
         default: return "Float";
         }
     }
 
     VFXPropertyType stringToPropertyType(const std::string& str)
     {
-        if (str == "Float") return VFXPropertyType::Float;
-        if (str == "Vec2")  return VFXPropertyType::Vec2;
-        if (str == "Vec3")  return VFXPropertyType::Vec3;
-        if (str == "Vec4")  return VFXPropertyType::Vec4;
-        if (str == "Color") return VFXPropertyType::Color;
-        if (str == "Int")   return VFXPropertyType::Int;
-        if (str == "Bool")  return VFXPropertyType::Bool;
+        if (str == "Float")  return VFXPropertyType::Float;
+        if (str == "Vec2")   return VFXPropertyType::Vec2;
+        if (str == "Vec3")   return VFXPropertyType::Vec3;
+        if (str == "Vec4")   return VFXPropertyType::Vec4;
+        if (str == "Color")  return VFXPropertyType::Color;
+        if (str == "Int")    return VFXPropertyType::Int;
+        if (str == "Bool")   return VFXPropertyType::Bool;
+        if (str == "String") return VFXPropertyType::String;
         return VFXPropertyType::Float;
     }
 

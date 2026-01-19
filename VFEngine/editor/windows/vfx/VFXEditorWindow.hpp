@@ -27,6 +27,7 @@ namespace windows
 
         bool isOpen = true;
         bool needsInit = true;
+        bool needsPreviewUpdate = false;  // Set after init, applied after preview panel init
         bool isDirty = false;
         float previewPanelWidth = 280.0f;
 

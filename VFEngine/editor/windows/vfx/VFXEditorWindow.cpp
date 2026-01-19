@@ -37,9 +37,7 @@ namespace windows
             graphEditor->setGraph(&vfxData->graph);
             graphEditor->setOnGraphChanged([this]() { onGraphChanged(); });
             graphEditor->navigateToContent();
-
-            updatePreviewFromGraph();
-            previewPanel->play();  // Auto-play on load (loops by default)
+            needsPreviewUpdate = true;  // Deferred until preview panel is initialized
         }
     }
 
@@ -130,6 +128,16 @@ namespace windows
             return defaultValue;
         };
 
+        auto getString = [](const vfx::VFXNode& node, const std::string& propName, const std::string& defaultValue) -> std::string {
+            auto it = node.properties.find(propName);
+            if (it != node.properties.end()) {
+                if (auto* val = std::get_if<std::string>(&it->second.value)) {
+                    return *val;
+                }
+            }
+            return defaultValue;
+        };
+
         // Extract properties from emitter node
         services::VFXPreviewParams params;
         params.spawnRate = getFloat(*emitterNode, "spawnRate", vfx::EmitterDefaults::SPAWN_RATE);
@@ -139,6 +147,7 @@ namespace windows
         params.emitDirection = getVec3(*emitterNode, "startVelocity", glm::vec3(0.0f, 1.0f, 0.0f));
         params.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
+        params.texturePath = getString(*emitterNode, "texture", "");
 
         previewPanel->setParams(params);
     }
@@ -174,6 +183,14 @@ namespace windows
                 ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, contentSize.y), true);
                 previewPanel->draw();
                 ImGui::EndChild();
+
+                // Apply deferred preview update after preview panel is initialized
+                if (needsPreviewUpdate)
+                {
+                    updatePreviewFromGraph();
+                    previewPanel->play();  // Auto-play on load
+                    needsPreviewUpdate = false;
+                }
 
                 ImGui::SameLine();
 

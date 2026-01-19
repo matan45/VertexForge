@@ -18,11 +18,12 @@ namespace vfx
         Vec4,
         Color,  // Same as Vec4 but with color picker UI
         Int,
-        Bool
+        Bool,
+        String  // For file paths (textures)
     };
 
     // Property value variant - holds any supported property type
-    using VFXPropertyValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4, int32_t, bool>;
+    using VFXPropertyValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4, int32_t, bool, std::string>;
 
     // VFX Node types - Part 1 only has Emitter and OutSystem
     enum class VFXNodeType : uint8_t

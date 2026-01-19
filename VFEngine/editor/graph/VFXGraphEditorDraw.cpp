@@ -1,5 +1,7 @@
 #include "VFXGraphEditor.hpp"
 #include "imgui.h"
+#include <nfd/FileDialog.hpp>
+#include <filesystem>
 
 namespace ed = ax::NodeEditor;
 
@@ -148,6 +150,36 @@ namespace editor::graph {
                             ImGui::SameLine(70);
                             if (ImGui::Checkbox(widgetId.c_str(), val)) {
                                 if (onGraphChanged) onGraphChanged();
+                            }
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::String: {
+                        std::string* val = std::get_if<std::string>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            // Show filename or "(none)"
+                            std::string displayName = val->empty() ? "(none)" :
+                                std::filesystem::path(*val).filename().string();
+                            ImGui::SameLine(70);
+                            ImGui::TextDisabled("%s", displayName.c_str());
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton(("..." + widgetId).c_str())) {
+                                nfd::FileDialog dialog;
+                                std::string path = dialog.openFileDialog({
+                                    {L"VF Image", L"*.vfImage"}
+                                });
+                                if (!path.empty()) {
+                                    *val = path;
+                                    if (onGraphChanged) onGraphChanged();
+                                }
+                            }
+                            if (!val->empty()) {
+                                ImGui::SameLine();
+                                if (ImGui::SmallButton(("X" + widgetId).c_str())) {
+                                    val->clear();
+                                    if (onGraphChanged) onGraphChanged();
+                                }
                             }
                         }
                         break;

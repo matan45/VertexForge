@@ -43,6 +43,8 @@ namespace vfx
             return std::holds_alternative<int32_t>(val) ? std::get<int32_t>(val) : 0;
         case VFXPropertyType::Bool:
             return std::holds_alternative<bool>(val) ? std::get<bool>(val) : false;
+        case VFXPropertyType::String:
+            return std::holds_alternative<std::string>(val) ? std::get<std::string>(val) : "";
         default:
             return 0.0f;
         }
@@ -73,6 +75,8 @@ namespace vfx
                 return j.is_number_integer() ? j.get<int32_t>() : 0;
             case VFXPropertyType::Bool:
                 return j.is_boolean() ? j.get<bool>() : false;
+            case VFXPropertyType::String:
+                return j.is_string() ? j.get<std::string>() : std::string("");
             default:
                 return 0.0f;
             }
@@ -292,7 +296,7 @@ namespace vfx
                     }
                 }
             }
-
+            
             if (warningCount > 0)
             {
                 vfLogWarning("Loaded VFX '{}' with {} warning(s)", vfxData.name, warningCount);
@@ -404,6 +408,10 @@ namespace vfx
         emitterNode.properties["looping"] = VFXProperty{
             "looping", VFXPropertyType::Bool,
             EmitterDefaults::LOOPING, 0.0f, 1.0f
+        };
+        emitterNode.properties["texture"] = VFXProperty{
+            "texture", VFXPropertyType::String,
+            std::string(""), 0.0f, 0.0f
         };
 
         vfxData.graph.nodes.push_back(std::move(emitterNode));

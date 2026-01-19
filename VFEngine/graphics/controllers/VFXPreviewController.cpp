@@ -55,7 +55,14 @@ namespace controllers
         config.startSpeed = currentParams.startSpeed;
         config.startColor = currentParams.startColor;
         config.emitDirection = currentParams.emitDirection;
+        config.texturePath = currentParams.texturePath;
         particleSystem->setEmitterConfig(config);
+
+        // Set initial texture if one was specified in params
+        if (!currentParams.texturePath.empty())
+        {
+            pipeline->setTexture(currentParams.texturePath);
+        }
 
         initialized = true;
         loggerInfo("VFX Preview Controller initialized");
@@ -122,6 +129,12 @@ namespace controllers
             config.emitDirection = params.emitDirection;
             config.texturePath = params.texturePath;
             particleSystem->setEmitterConfig(config);
+        }
+
+        // Update pipeline texture
+        if (pipeline && pipeline->isInitialized())
+        {
+            pipeline->setTexture(params.texturePath);
         }
     }
 

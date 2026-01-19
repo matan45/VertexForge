@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
@@ -9,6 +10,7 @@
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
 #include <cstring>
+#include <filesystem>
 
 namespace render::vfx
 {
@@ -118,7 +120,11 @@ namespace render::vfx
             instanceBuffer = nullptr;
         }
 
-        // Clean up texture
+        // Clean up custom texture
+        customTexture.reset();
+        currentTexturePath.clear();
+
+        // Clean up default texture
         if (textureSampler) dev.destroySampler(textureSampler);
         if (defaultTextureImageView) dev.destroyImageView(defaultTextureImageView);
         if (defaultTextureImage)
@@ -269,10 +275,19 @@ namespace render::vfx
         uboWrite.descriptorCount = 1;
         uboWrite.pBufferInfo = &uboBufferInfo;
 
+        // Use custom texture if available, otherwise use default white texture
         vk::DescriptorImageInfo textureImageInfo{};
         textureImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        textureImageInfo.imageView = defaultTextureImageView;
-        textureImageInfo.sampler = textureSampler;
+        if (customTexture)
+        {
+            textureImageInfo.imageView = customTexture->getImageView();
+            textureImageInfo.sampler = customTexture->getSampler();
+        }
+        else
+        {
+            textureImageInfo.imageView = defaultTextureImageView;
+            textureImageInfo.sampler = textureSampler;
+        }
 
         vk::WriteDescriptorSet textureWrite{};
         textureWrite.dstSet = descriptorSet;
@@ -539,6 +554,51 @@ namespace render::vfx
             std::memcpy(data, instances.data(), bufferSize);
             device.getLogicalDevice().unmapMemory(instanceBufferMemory);
         }
+    }
+
+    void VFXBillboardPipeline::setTexture(const std::string& texturePath)
+    {
+        // Skip if same texture is already loaded
+        if (texturePath == currentTexturePath)
+        {
+            return;
+        }
+
+        // Wait for device to be idle before changing texture
+        device.getLogicalDevice().waitIdle();
+
+        // Clear existing custom texture
+        customTexture.reset();
+        currentTexturePath.clear();
+
+        // If path is empty or file doesn't exist, use default texture
+        if (texturePath.empty() || !std::filesystem::exists(texturePath))
+        {
+            if (!texturePath.empty())
+            {
+                loggerWarning("VFX texture not found: {}", texturePath);
+            }
+            updateDescriptorSet();
+            return;
+        }
+
+        // Load the new texture
+        try
+        {
+            customTexture = std::make_unique<core::Texture>(device);
+            customTexture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
+            currentTexturePath = texturePath;
+            loggerInfo("VFX texture loaded: {}", texturePath);
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("Failed to load VFX texture '{}': {}", texturePath, e.what());
+            customTexture.reset();
+            currentTexturePath.clear();
+        }
+
+        // Update descriptor set to use new texture (or default if load failed)
+        updateDescriptorSet();
     }
 
     void VFXBillboardPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
