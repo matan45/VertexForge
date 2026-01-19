@@ -100,7 +100,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="adapters\AnimationPreviewAdapter.hpp" />
-    <ClInclude Include="adapters\AnimatorAdapter.hpp" />
     <ClInclude Include="adapters\AudioAdapter.hpp" />
     <ClInclude Include="adapters\EditorTextureAdapter.hpp" />
     <ClInclude Include="adapters\MaterialPreviewAdapter.hpp" />
@@ -144,7 +143,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="adapters\AnimationPreviewAdapter.cpp" />
-    <ClCompile Include="adapters\AnimatorAdapter.cpp" />
     <ClCompile Include="adapters\AudioAdapter.cpp" />
     <ClCompile Include="adapters\EditorTextureAdapter.cpp" />
     <ClCompile Include="adapters\MaterialPreviewAdapter.cpp" />

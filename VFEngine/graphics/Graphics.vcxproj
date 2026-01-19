@@ -104,7 +104,7 @@
     <ClInclude Include="animation\AnimatorStateMachine.hpp" />
     <ClInclude Include="animation\RuntimeAnimatorSystem.hpp" />
     <ClInclude Include="controllers\AnimatedMeshPreviewController.hpp" />
-    <ClInclude Include="controllers\AnimatorPreviewController.hpp" />
+    <ClInclude Include="controllers\AnimatorSystemController.hpp" />
     <ClInclude Include="controllers\Graphics.hpp" />
     <ClInclude Include="controllers\MaterialPreviewController.hpp" />
     <ClInclude Include="controllers\MeshPreviewController.hpp" />
@@ -187,7 +187,7 @@
     <ClCompile Include="animation\AnimatorStateMachine.cpp" />
     <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
     <ClCompile Include="controllers\AnimatedMeshPreviewController.cpp" />
-    <ClCompile Include="controllers\AnimatorPreviewController.cpp" />
+    <ClCompile Include="controllers\AnimatorSystemController.cpp" />
     <ClCompile Include="controllers\Graphics.cpp" />
     <ClCompile Include="controllers\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\MeshPreviewController.cpp" />

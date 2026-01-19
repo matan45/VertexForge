@@ -115,8 +115,6 @@
     <ClInclude Include="handlers\EditorHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="splash\SplashScreen.hpp" />
-    <ClInclude Include="windows\AnimationPreviewWindow.hpp" />
-    <ClInclude Include="windows\AnimatorEditorWindow.hpp" />
     <ClInclude Include="windows\AudioConfigWindow.hpp" />
     <ClInclude Include="windows\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\ConsoleLog.hpp" />
@@ -143,6 +141,14 @@
     <ClInclude Include="windows\ViewPortGizmo.hpp" />
     <ClInclude Include="windows\ViewPortOverlay.hpp" />
     <ClInclude Include="windows\ViewPortPicker.hpp" />
+    <ClInclude Include="windows\animation\AnimationInfoPanel.hpp" />
+    <ClInclude Include="windows\animation\AnimationPreviewWindow.hpp" />
+    <ClInclude Include="windows\animation\AnimationSkeletonPanel.hpp" />
+    <ClInclude Include="windows\animation\AnimationTimelinePanel.hpp" />
+    <ClInclude Include="windows\animation\AnimationViewport.hpp" />
+    <ClInclude Include="windows\animation\AnimatorEditorWindow.hpp" />
+    <ClInclude Include="windows\animation\AnimatorNodeGraph.hpp" />
+    <ClInclude Include="windows\animation\AnimatorPropertiesPanel.hpp" />
     <ClInclude Include="windows\contentbrowser\AssetGridRenderer.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowser.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowserModals.hpp" />
@@ -179,8 +185,6 @@
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />
     <ClCompile Include="splash\SplashScreen.cpp" />
-    <ClCompile Include="windows\AnimationPreviewWindow.cpp" />
-    <ClCompile Include="windows\AnimatorEditorWindow.cpp" />
     <ClCompile Include="windows\AudioConfigWindow.cpp" />
     <ClCompile Include="windows\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\ConsoleLog.cpp" />
@@ -207,6 +211,14 @@
     <ClCompile Include="windows\ViewPortGizmo.cpp" />
     <ClCompile Include="windows\ViewPortOverlay.cpp" />
     <ClCompile Include="windows\ViewPortPicker.cpp" />
+    <ClCompile Include="windows\animation\AnimationInfoPanel.cpp" />
+    <ClCompile Include="windows\animation\AnimationPreviewWindow.cpp" />
+    <ClCompile Include="windows\animation\AnimationSkeletonPanel.cpp" />
+    <ClCompile Include="windows\animation\AnimationTimelinePanel.cpp" />
+    <ClCompile Include="windows\animation\AnimationViewport.cpp" />
+    <ClCompile Include="windows\animation\AnimatorEditorWindow.cpp" />
+    <ClCompile Include="windows\animation\AnimatorNodeGraph.cpp" />
+    <ClCompile Include="windows\animation\AnimatorPropertiesPanel.cpp" />
     <ClCompile Include="windows\contentbrowser\AssetGridRenderer.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowser.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowserModals.cpp" />

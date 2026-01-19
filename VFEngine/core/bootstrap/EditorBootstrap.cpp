@@ -6,15 +6,12 @@
 #include "../adapters/MaterialPreviewAdapter.hpp"
 #include "../adapters/MeshPreviewAdapter.hpp"
 #include "../adapters/AnimationPreviewAdapter.hpp"
-#include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
-#include "print/Logger.hpp"
-#include "../../utilities/types/PhysicsTypes.hpp"
-#include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
+#include "types/PhysicsTypes.hpp"
 
 namespace core
 {
@@ -35,7 +32,6 @@ namespace core
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         animationPreviewAdapter = std::make_unique<AnimationPreviewAdapter>();
-        animatorAdapter = std::make_unique<AnimatorAdapter>();
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
@@ -44,9 +40,6 @@ namespace core
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();
-
-        // Initialize runtime animator system to subscribe to mesh data change events
-        animation::RuntimeAnimatorSystem::instance().initialize();
 
         // Apply default physics settings on startup
         // Scene-specific settings will be loaded when a scene is loaded
@@ -65,9 +58,6 @@ namespace core
 
     void EditorBootstrap::cleanUp()
     {
-        // Shutdown runtime animator system first to unsubscribe from events
-        animation::RuntimeAnimatorSystem::instance().shutdown();
-
         if (offScreen)
         {
             offScreen->cleanUp();
@@ -88,7 +78,6 @@ namespace core
             physicsAdapter->cleanUp();
         }
 
-        animatorAdapter.reset();
         animationPreviewAdapter.reset();
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
@@ -127,11 +116,6 @@ namespace core
     services::IAnimationPreviewProvider* EditorBootstrap::getAnimationPreviewProvider()
     {
         return animationPreviewAdapter.get();
-    }
-
-    services::IAnimatorProvider* EditorBootstrap::getAnimatorProvider()
-    {
-        return animatorAdapter.get();
     }
 
     services::IAudioProvider* EditorBootstrap::getAudioProvider()

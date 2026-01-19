@@ -7,7 +7,6 @@
 #include "../adapters/PhysicsAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
-#include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 
 namespace core
 {
@@ -33,9 +32,6 @@ namespace core
         scriptingAdapter->init();
         physicsAdapter->init();
 
-        // Initialize runtime animator system to subscribe to mesh data change events
-        animation::RuntimeAnimatorSystem::instance().initialize();
-
         // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
         coreInterface->setResizeCallback([this]()
         {
@@ -50,9 +46,6 @@ namespace core
 
     void RuntimeBootstrap::cleanUp()
     {
-        // Shutdown runtime animator system first to unsubscribe from events
-        animation::RuntimeAnimatorSystem::instance().shutdown();
-
         if (offScreen)
         {
             offScreen->cleanUp();

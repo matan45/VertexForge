@@ -6,8 +6,8 @@
 #include "../MaterialInstanceEditorWindow.hpp"
 #include "../PrefabPreviewWindow.hpp"
 #include "../FontPreviewWindow.hpp"
-#include "../AnimationPreviewWindow.hpp"
-#include "../AnimatorEditorWindow.hpp"
+#include "../animation/AnimationPreviewWindow.hpp"
+#include "../animation/AnimatorEditorWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
 
