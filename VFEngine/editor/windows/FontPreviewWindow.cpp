@@ -1,5 +1,5 @@
 #include "FontPreviewWindow.hpp"
-#include "resource/FontResource.hpp"
+#include "resource/ResourceManager.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "math/MathHelper.hpp"
@@ -181,7 +181,14 @@ namespace windows
                 return result;
             }
 
-            result.fontData = resource::FontResource::loadFont(path);
+            auto fontFuture = resource::ResourceManager::loadFontAsync(path);
+            auto fontPtr = fontFuture.get();
+            if (!fontPtr)
+            {
+                result.errorMessage = "Failed to load font data";
+                return result;
+            }
+            result.fontData = *fontPtr;
 
             if (result.fontData.glyphs.empty())
             {

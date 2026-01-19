@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <entt/entt.hpp>
 #include "math/Frustum.hpp"
 #include "resource/Types.hpp"
 #include "material/MaterialTypes.hpp"
@@ -169,6 +170,7 @@ namespace render::mesh
 
     struct MeshRenderData
     {
+        entt::entity entity = entt::null; // Source entity for animation/bone lookup
         std::string meshPath; // Path to identify loaded mesh
         glm::mat4 modelMatrix{1.0f}; // World transform
 
@@ -276,7 +278,7 @@ namespace render::mesh
         {
             vk::VertexInputBindingDescription bindingDescription{};
             bindingDescription.binding = 0;
-            bindingDescription.stride = 32; // sizeof(Vertex): vec3 + vec3 + vec2
+            bindingDescription.stride = 64; // sizeof(Vertex): vec3 + vec3 + vec2 + ivec4 + vec4
             bindingDescription.inputRate = vk::VertexInputRate::eVertex;
             return bindingDescription;
         }
@@ -302,6 +304,10 @@ namespace render::mesh
             attributes[2].location = 2;
             attributes[2].format = vk::Format::eR32G32Sfloat;
             attributes[2].offset = 24;
+
+            // Note: boneIndices (offset 32) and boneWeights (offset 48) are in the vertex data
+            // but not declared here since static mesh shader doesn't use them.
+            // The 64-byte stride ensures correct data layout.
 
             return attributes;
         }

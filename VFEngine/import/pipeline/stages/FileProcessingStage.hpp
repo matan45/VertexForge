@@ -4,6 +4,7 @@
 #include "../../types/Texture.hpp"
 #include "../../types/Mesh.hpp"
 #include "../../types/Font.hpp"
+#include "../../types/Animation.hpp"
 
 namespace pipeline::stages
 {
@@ -18,6 +19,7 @@ namespace pipeline::stages
         types::Texture textureProcessor;
         types::Mesh meshProcessor;
         types::Font fontProcessor;
+        types::Animation animationProcessor;
 
         void processTexture(ImportContext& context);
         void processHDR(ImportContext& context);

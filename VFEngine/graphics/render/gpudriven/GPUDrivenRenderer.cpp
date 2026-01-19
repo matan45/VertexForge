@@ -3,8 +3,12 @@
 #include "../mesh/MeshStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
+#include "../../animation/RuntimeAnimatorSystem.hpp"
+#include "../../animation/AnimatorStateMachine.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
+#include "components/Components.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "print/Logger.hpp"
@@ -47,7 +51,6 @@ namespace render::gpudriven
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
 
-        // Create mesh stream manager (streaming enabled by default)
         if (meshStreamingEnabled)
         {
             meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
@@ -58,7 +61,6 @@ namespace render::gpudriven
         if (!batchManager->initWithAutoConfig())
         {
             loggerError("GPUDrivenRenderer: Failed to initialize batch manager - GPU memory allocation failed");
-            // Fall back to minimal configuration
             if (!batchManager->init(2, 50000, 8))
             {
                 loggerError(
@@ -73,7 +75,6 @@ namespace render::gpudriven
         cullPipeline = std::make_unique<GPUCullLODPipeline>(device);
         cullPipeline->init();
 
-        // Create camera UBO for compute shader
         cameraBuffer = std::make_unique<GPUDrivenCameraBuffer>(device, swapChain);
         cameraBuffer->init();
 
@@ -98,8 +99,12 @@ namespace render::gpudriven
             meshletBuffer = std::make_unique<MeshletBuffer>(device);
             meshletBuffer->init();
 
+            boneMatrixManager = std::make_unique<BoneMatrixManager>(device);
+            boneMatrixManager->init();
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
-            meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(), renderPass);
+            meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(),
+                                     boneMatrixManager->getDescriptorSetLayout(), renderPass);
 
             if (meshStreamManager)
             {
@@ -129,8 +134,8 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        // Cleanup sub-components
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (boneMatrixManager) boneMatrixManager->cleanup();
         if (meshletBuffer) meshletBuffer->cleanup();
         if (cameraBuffer) cameraBuffer->cleanup();
         if (cullPipeline) cullPipeline->cleanup();
@@ -140,6 +145,7 @@ namespace render::gpudriven
 
         meshStreamManager.reset();
         meshShaderPipeline.reset();
+        boneMatrixManager.reset();
         meshletBuffer.reset();
         cameraBuffer.reset();
         cullPipeline.reset();
@@ -256,10 +262,6 @@ namespace render::gpudriven
             };
         }
 
-        // Shader group indices:
-        // 0 = default (no Time node)
-        // 1 = UV animation (Time connected to texture UV)
-        // 2 = Emission animation (Time connected to EmissionStrength)
         ShaderGroupResolver shaderGroupResolver = [](const std::string& materialPath) -> uint32_t
         {
             if (materialPath.empty())
@@ -288,7 +290,6 @@ namespace render::gpudriven
                 return 0;
             }
 
-            // Find Time node ID
             uint32_t timeNodeId = 0;
             bool hasTimeNode = false;
             for (const auto& node : matData->graph.nodes)
@@ -306,8 +307,6 @@ namespace render::gpudriven
                 return 0;
             }
 
-            // Trace connections from Time node to determine animation type
-            // Use BFS to find what the Time node ultimately connects to
             std::unordered_set<uint32_t> visitedNodes;
             std::queue<uint32_t> nodesToVisit;
             nodesToVisit.push(timeNodeId);
@@ -340,7 +339,7 @@ namespace render::gpudriven
                                 if (node.type == material::NodeType::TextureSample &&
                                     link.targetPin == "UV")
                                 {
-                                    return 1; // UV animation
+                                    return 1;
                                 }
                                 nodesToVisit.push(link.targetNodeId);
                                 break;
@@ -353,10 +352,56 @@ namespace render::gpudriven
             return 1;
         };
 
-        // Update object buffer with current frame's render data (pass time for Time node evaluation)
-        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, time);
+        BoneOffsetResolver boneOffsetResolver = nullptr;
+        if (boneMatrixManager)
+        {
+            auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
+            auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Update camera data for compute shader
+            auto view = registry.view<components::MeshComponent>();
+            for (auto entity : view)
+            {
+                const auto& meshComp = view.get<components::MeshComponent>(entity);
+
+                if (meshComp.animatorPath.empty())
+                {
+                    continue;
+                }
+
+                animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(entity);
+                if (!animator)
+                {
+                    animatorSystem.initializeEntityAnimator(entity, meshComp.animatorPath);
+                    animator = animatorSystem.getAnimator(entity);
+                    if (!animator)
+                    {
+                        continue;
+                    }
+                }
+
+                const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
+                if (boneMatrices.empty())
+                {
+                    continue;
+                }
+
+                uint32_t boneCount = static_cast<uint32_t>(boneMatrices.size());
+                uint32_t boneOffset = boneMatrixManager->allocate(entity, boneCount);
+
+                if (boneOffset != INVALID_BONE_OFFSET)
+                {
+                    boneMatrixManager->updateBoneMatrices(entity, boneMatrices);
+                }
+            }
+
+            boneOffsetResolver = [this](entt::entity entity) -> uint32_t
+            {
+                return boneMatrixManager->getBoneOffset(entity);
+            };
+        }
+
+        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
+
         CameraUpdateParams cameraParams{
             .view = view,
             .projection = projection,
@@ -373,7 +418,6 @@ namespace render::gpudriven
         };
         cameraBuffer->update(cameraParams);
 
-        // Update cull pipeline descriptors with combined batch buffers
         cullPipeline->updateDescriptors(
             mergedBuffer->getObjectBuffer(),
             cameraBuffer->getBuffer(),
@@ -382,8 +426,6 @@ namespace render::gpudriven
             batchManager->getCombinedDrawCountBuffer()
         );
 
-        // Update per-draw data descriptor for mesh shader pipeline (uses combined buffer)
-        // Only update when there's actual data to render
         if (meshShaderPipeline && mergedBuffer->getObjectCount() > 0)
         {
             meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
@@ -391,7 +433,6 @@ namespace render::gpudriven
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
         }
 
-        // Update stats
         stats.totalObjects = mergedBuffer->getObjectCount();
     }
 
@@ -423,6 +464,11 @@ namespace render::gpudriven
             return;
         }
         mergedBuffer->uploadObjects(cmd);
+
+        if (boneMatrixManager)
+        {
+            boneMatrixManager->uploadToGPU(cmd);
+        }
 
         vk::MemoryBarrier memBarrier{
             vk::AccessFlagBits::eTransferWrite,
@@ -456,18 +502,13 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        // Bind all 5 descriptor sets:
-        // Set 0: IBL (camera UBO + IBL textures)
-        // Set 1: Per-draw data
-        // Set 2: Bindless textures
-        // Set 3: Meshlet data (meshlet buffer, vertex indices, primitive indices)
-        // Set 4: Vertex data (merged vertex buffer)
-        std::array<vk::DescriptorSet, 5> descriptorSets = {
+        std::array<vk::DescriptorSet, 6> descriptorSets = {
             iblDescriptorSet,
             meshShaderPipeline->getPerDrawDataDescriptorSet(),
             bindlessTextures->getDescriptorSet(),
             meshShaderPipeline->getMeshletDataDescriptorSet(),
-            meshShaderPipeline->getVertexDataDescriptorSet()
+            meshShaderPipeline->getVertexDataDescriptorSet(),
+            boneMatrixManager->getDescriptorSet()
         };
 
         cmd.bindDescriptorSets(
@@ -480,7 +521,6 @@ namespace render::gpudriven
 
         auto extent = swapChain.getSwapchainExtent();
 
-        // Render shader groups: 0 (default), 1 (UV animation), 2 (emission animation)
         for (uint32_t shaderGroup = 0; shaderGroup <= 2; ++shaderGroup)
         {
             for (uint32_t batch = 0; batch < batchCount; ++batch)
@@ -681,19 +721,16 @@ namespace render::gpudriven
             return;
         }
 
-        // Read back and aggregate stats from all batches (expensive - causes sync)
         GPUDrivenStats aggregated = batchManager->readBackAggregatedStats();
 
         stats.visibleObjects = aggregated.visibleObjects;
-        stats.drawCalls = aggregated.drawCalls; // One draw call per batch
+        stats.drawCalls = aggregated.drawCalls;
 
-        // LOD distribution from GPU (aggregated across all batches)
         stats.objectsLOD0 = aggregated.objectsLOD0;
         stats.objectsLOD1 = aggregated.objectsLOD1;
         stats.objectsLOD2 = aggregated.objectsLOD2;
         stats.objectsLOD3 = aggregated.objectsLOD3;
 
-        // Culling stats directly from GPU counters (aggregated)
         stats.culledByFrustum = aggregated.culledByFrustum;
         stats.culledByOcclusion = aggregated.culledByOcclusion;
     }
@@ -724,9 +761,10 @@ namespace render::gpudriven
             cachedIBLLayout = newIBLLayout;
         }
 
-        if (meshShaderPipeline)
+        if (meshShaderPipeline && boneMatrixManager)
         {
-            meshShaderPipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(), cachedRenderPass);
+            meshShaderPipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(),
+                                         boneMatrixManager->getDescriptorSetLayout(), cachedRenderPass);
         }
     }
 }

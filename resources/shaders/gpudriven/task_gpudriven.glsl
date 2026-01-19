@@ -29,8 +29,8 @@ struct PerDrawData {
     uint meshletCount;
 
     uint baseVertexOffset;
-    uint padding1;
-    uint padding2;
+    uint boneMatrixOffset; // Offset into bone SSBO, 0xFFFFFFFF if static
+    uint boneCount;        // Number of bones for this object
     uint padding3;
 };
 

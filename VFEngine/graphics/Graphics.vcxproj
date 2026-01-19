@@ -99,6 +99,12 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="animation\AnimationBlender.hpp" />
+    <ClInclude Include="animation\AnimationEvaluator.hpp" />
+    <ClInclude Include="animation\AnimatorStateMachine.hpp" />
+    <ClInclude Include="animation\RuntimeAnimatorSystem.hpp" />
+    <ClInclude Include="controllers\AnimatedMeshPreviewController.hpp" />
+    <ClInclude Include="controllers\AnimatorSystemController.hpp" />
     <ClInclude Include="controllers\Graphics.hpp" />
     <ClInclude Include="controllers\MaterialPreviewController.hpp" />
     <ClInclude Include="controllers\MeshPreviewController.hpp" />
@@ -138,6 +144,7 @@
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
     <ClInclude Include="render\gpudriven\BindlessTextureManager.hpp" />
+    <ClInclude Include="render\gpudriven\BoneMatrixManager.hpp" />
     <ClInclude Include="render\gpudriven\FreeListAllocator.hpp" />
     <ClInclude Include="render\gpudriven\GPUCullLODPipeline.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenCameraBuffer.hpp" />
@@ -162,6 +169,8 @@
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
     <ClInclude Include="render\mesh\MeshStreamManager.hpp" />
     <ClInclude Include="render\mesh\MeshTypes.hpp" />
+    <ClInclude Include="render\mesh\SkinnedMeshPipeline.hpp" />
+    <ClInclude Include="render\mesh\SkinnedMeshTypes.hpp" />
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
     <ClInclude Include="render\occlusion\CameraOcclusionManager.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
@@ -173,6 +182,12 @@
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="animation\AnimationBlender.cpp" />
+    <ClCompile Include="animation\AnimationEvaluator.cpp" />
+    <ClCompile Include="animation\AnimatorStateMachine.cpp" />
+    <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
+    <ClCompile Include="controllers\AnimatedMeshPreviewController.cpp" />
+    <ClCompile Include="controllers\AnimatorSystemController.cpp" />
     <ClCompile Include="controllers\Graphics.cpp" />
     <ClCompile Include="controllers\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\MeshPreviewController.cpp" />
@@ -210,6 +225,7 @@
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
     <ClCompile Include="render\gpudriven\BindlessTextureManager.cpp" />
+    <ClCompile Include="render\gpudriven\BoneMatrixManager.cpp" />
     <ClCompile Include="render\gpudriven\GPUCullLODPipeline.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenCameraBuffer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
@@ -229,6 +245,7 @@
     <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
     <ClCompile Include="render\mesh\MeshStreamManager.cpp" />
+    <ClCompile Include="render\mesh\SkinnedMeshPipeline.cpp" />
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
@@ -255,6 +272,7 @@
     <None Include="..\..\resources\shaders\material\material_fragment_header.glsl" />
     <None Include="..\..\resources\shaders\material\material_vertex.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
+    <None Include="..\..\resources\shaders\mesh\skinned_mesh.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />
     <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />

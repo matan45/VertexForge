@@ -42,6 +42,16 @@ namespace windows::details
 
             drawMeshPath(meshOpt->meshPath);
             drawSelectMeshButton(handle, *meshOpt);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            drawAnimatorPath(meshOpt->animatorPath);
+            drawAnimatorButtons(handle, *meshOpt);
+
+            ImGui::Spacing();
+
             drawBoundingBoxCheckbox(handle, *meshOpt);
 
             ImGui::Unindent(10.0f);
@@ -121,12 +131,76 @@ namespace windows::details
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
             cmd.meshData.meshPath = path;
+            cmd.meshData.animatorPath = currentData.animatorPath;
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             dispatcher.execute(cmd);
         }
         else
         {
             vfLogError("Selected mesh file does not exist or cannot be read: {}", path);
+        }
+    }
+
+    void MeshDrawer::drawAnimatorPath(const std::string& animatorPath)
+    {
+        if (!animatorPath.empty())
+        {
+            std::string filename = animatorPath;
+            auto lastSlash = filename.find_last_of("/\\");
+            if (lastSlash != std::string::npos)
+            {
+                filename = filename.substr(lastSlash + 1);
+            }
+            ImGui::Text("Animator: %s", filename.c_str());
+        }
+        else
+        {
+            ImGui::TextDisabled("No animator selected");
+        }
+    }
+
+    void MeshDrawer::drawAnimatorButtons(services::EntityHandle handle, const services::MeshData& currentData)
+    {
+        if (ImGui::Button("Select Animator"))
+        {
+            nfd::FileDialog fileDialog;
+            std::string path = fileDialog.openFileDialog(
+                {{L"VF Animator Files (*.vfAnimator)", L"*.vfAnimator"}});
+
+            if (!path.empty())
+            {
+                std::ifstream file(path);
+                if (file.good())
+                {
+                    file.close();
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::scene::SetMeshDataCommand cmd;
+                    cmd.entity = handle;
+                    cmd.meshData.meshPath = currentData.meshPath;
+                    cmd.meshData.animatorPath = path;
+                    cmd.meshData.showBoundingBox = currentData.showBoundingBox;
+                    dispatcher.execute(cmd);
+                }
+                else
+                {
+                    vfLogError("Selected animator file does not exist or cannot be read: {}", path);
+                }
+            }
+        }
+
+        if (!currentData.animatorPath.empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("Clear##Animator"))
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::scene::SetMeshDataCommand cmd;
+                cmd.entity = handle;
+                cmd.meshData.meshPath = currentData.meshPath;
+                cmd.meshData.animatorPath = "";  // Clear animator
+                cmd.meshData.showBoundingBox = currentData.showBoundingBox;
+                dispatcher.execute(cmd);
+            }
         }
     }
 
@@ -139,6 +213,7 @@ namespace windows::details
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
             cmd.meshData.meshPath = currentData.meshPath;
+            cmd.meshData.animatorPath = currentData.animatorPath;
             cmd.meshData.showBoundingBox = showBoundingBox;
             dispatcher.execute(cmd);
         }

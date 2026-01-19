@@ -1,0 +1,306 @@
+#include "AnimationPreviewWindow.hpp"
+#include "../../camera/OrbitCamera.hpp"
+#include "imgui.h"
+#include "resource/ResourceManager.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/AnimationPreviewEvents.hpp"
+#include "print/EditorLogger.hpp"
+#include <filesystem>
+#include <cmath>
+
+namespace windows
+{
+    AnimationPreviewWindow::AnimationPreviewWindow(const std::string& filePath)
+        : animationPath(filePath)
+        , camera(std::make_unique<editor::OrbitCamera>())
+    {
+        std::filesystem::path path(filePath);
+        windowTitle = "Animation Preview: " + path.filename().string();
+
+        panelState.animationPath = animationPath;
+    }
+
+    AnimationPreviewWindow::~AnimationPreviewWindow()
+    {
+        if (loadFuture.valid())
+        {
+            loadFuture.wait();
+        }
+        cleanUpPreviewRenderer();
+    }
+
+    void AnimationPreviewWindow::draw()
+    {
+        if (!isOpen)
+        {
+            if (!previewCleanedUp)
+            {
+                cleanUpPreviewRenderer();
+            }
+            return;
+        }
+
+        if (needsInit)
+        {
+            startAsyncLoad();
+            initPreviewRenderer();
+            needsInit = false;
+        }
+
+        updateAsyncLoading();
+
+        float currentImGuiTime = static_cast<float>(ImGui::GetTime());
+        float deltaTime = currentImGuiTime - lastFrameTime;
+        lastFrameTime = currentImGuiTime;
+
+        if (panelState.animationLoaded && panelState.isPlaying)
+        {
+            updatePlayback(deltaTime);
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(1000, 700), ImGuiCond_FirstUseEver);
+
+        if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
+        {
+            if (isOpen)
+            {
+                float leftPanelWidth = 220.0f;
+                float rightPanelWidth = 220.0f;
+                ImVec2 contentSize = ImGui::GetContentRegionAvail();
+                float spacing = ImGui::GetStyle().ItemSpacing.x;
+
+                ImGui::BeginChild("InfoPanel", ImVec2(leftPanelWidth, contentSize.y), true);
+                infoPanel.draw(panelState, getPreviewInstanceId());
+                ImGui::EndChild();
+
+                ImGui::SameLine();
+
+                float middleWidth = contentSize.x - leftPanelWidth - rightPanelWidth - spacing * 2;
+                ImGui::BeginChild("MiddlePanel", ImVec2(middleWidth, contentSize.y), false);
+
+                if (loadingInProgress.load())
+                {
+                    infoPanel.drawLoadingIndicator(loadingStatus);
+                }
+                else if (panelState.animationLoaded)
+                {
+                    float previewHeight = contentSize.y * 0.6f;
+                    ImGui::BeginChild("3DViewportPanel", ImVec2(middleWidth - 5, previewHeight), true,
+                                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                    ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+                    viewport.draw(viewportSize.x, viewportSize.y,
+                                  panelState.meshLoadedInPreview,
+                                  panelState.animationLoadedInPreview,
+                                  panelState.isPlaying,
+                                  camera.get(),
+                                  evaluatedBones,
+                                  selectedChannel,
+                                  showBoneVisualization,
+                                  getPreviewInstanceId(),
+                                  isDraggingPreview);
+                    updateBoneTransformsFromService();
+                    ImGui::EndChild();
+
+                    ImGui::BeginChild("TimelinePanel", ImVec2(middleWidth - 5, 0), true);
+                    timelinePanel.draw(currentFrame, selectedChannel, sequencerExpanded, firstFrame,
+                                       &animationData, getPreviewInstanceId());
+                    ImGui::EndChild();
+                }
+
+                ImGui::EndChild();
+
+                ImGui::SameLine();
+
+                ImGui::BeginChild("SkeletonPanel", ImVec2(rightPanelWidth, contentSize.y), true);
+                if (panelState.animationLoaded)
+                {
+                    skeletonPanel.draw(evaluatedBones, boneChildrenMap, selectedChannel,
+                                       showBoneVisualization, panelState.meshLoadedInPreview, camera.get());
+                }
+                else
+                {
+                    ImGui::TextDisabled("Loading...");
+                }
+                ImGui::EndChild();
+            }
+        }
+        ImGui::End();
+    }
+
+    void AnimationPreviewWindow::initPreviewRenderer()
+    {
+        services::events::animpreview::InitAnimationPreviewCommand initCmd;
+        initCmd.instanceId = getPreviewInstanceId();
+        events::EventDispatcher::instance().execute(initCmd);
+        previewInitialized = true;
+        panelState.previewInitialized = true;
+    }
+
+    void AnimationPreviewWindow::cleanUpPreviewRenderer()
+    {
+        if (previewCleanedUp) return;
+
+        if (previewInitialized)
+        {
+            services::events::animpreview::CleanUpAnimationPreviewCommand cleanupCmd;
+            cleanupCmd.instanceId = getPreviewInstanceId();
+            events::EventDispatcher::instance().execute(cleanupCmd);
+        }
+
+        previewCleanedUp = true;
+    }
+
+    void AnimationPreviewWindow::loadAnimationForPreview()
+    {
+        if (!previewInitialized) return;
+
+        services::events::animpreview::LoadAnimationPreviewAnimationCommand loadCmd;
+        loadCmd.instanceId = getPreviewInstanceId();
+        loadCmd.animationPath = animationPath;
+        bool success = events::EventDispatcher::instance().execute(loadCmd);
+
+        if (success)
+        {
+            panelState.animationLoadedInPreview = true;
+
+            services::events::animpreview::SetAnimationLoopingCommand loopCmd;
+            loopCmd.instanceId = getPreviewInstanceId();
+            loopCmd.looping = panelState.isLooping;
+            events::EventDispatcher::instance().execute(loopCmd);
+
+            services::events::animpreview::SetAnimationPlaybackSpeedCommand speedCmd;
+            speedCmd.instanceId = getPreviewInstanceId();
+            speedCmd.speed = panelState.playbackSpeed;
+            events::EventDispatcher::instance().execute(speedCmd);
+
+            updateBoneTransformsFromService();
+            buildBoneHierarchyMaps();
+        }
+        else
+        {
+            vfLogError("Failed to load animation for preview: {}", animationPath);
+        }
+    }
+
+    void AnimationPreviewWindow::startAsyncLoad()
+    {
+        loadingInProgress.store(true);
+        loadingStatus = "Loading animation file...";
+
+        loadFuture = resource::ResourceManager::loadAnimationAsync(animationPath);
+    }
+
+    void AnimationPreviewWindow::updateAsyncLoading()
+    {
+        if (!loadingInProgress.load() || !loadFuture.valid())
+        {
+            return;
+        }
+
+        if (loadFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+        {
+            try
+            {
+                auto loadedData = loadFuture.get();
+
+                if (loadedData)
+                {
+                    animationData = *loadedData;
+
+                    bool isValid = animationData.duration > 0.0f &&
+                        !animationData.channels.empty();
+
+                    if (isValid)
+                    {
+                        timelinePanel.setAnimationData(&animationData);
+                        panelState.animationLoaded = true;
+                        panelState.animationData = &animationData;
+                        loadAnimationForPreview();
+                    }
+                    else
+                    {
+                        panelState.loadFailed = true;
+                    }
+                }
+                else
+                {
+                    panelState.loadFailed = true;
+                }
+            }
+            catch (const std::exception&)
+            {
+                panelState.loadFailed = true;
+            }
+
+            loadingInProgress.store(false);
+        }
+    }
+
+    void AnimationPreviewWindow::updateBoneTransformsFromService()
+    {
+        services::events::animpreview::GetAnimationPreviewEvaluatedBonesQuery query;
+        query.instanceId = getPreviewInstanceId();
+        evaluatedBones = events::EventDispatcher::instance().query(query);
+
+        if (!evaluatedBones.empty())
+        {
+            buildBoneHierarchyMaps();
+        }
+    }
+
+    void AnimationPreviewWindow::buildBoneHierarchyMaps()
+    {
+        boneNameToIndex.clear();
+        boneChildrenMap.clear();
+
+        for (size_t i = 0; i < evaluatedBones.size(); ++i)
+        {
+            const auto& bone = evaluatedBones[i];
+            boneNameToIndex[bone.name] = i;
+            boneChildrenMap[bone.parentIndex].push_back(i);
+        }
+    }
+
+    void AnimationPreviewWindow::updatePlayback(float deltaTime)
+    {
+        if (panelState.animationLoadedInPreview)
+        {
+            services::events::animpreview::GetAnimationPlaybackTimeQuery timeQuery;
+            timeQuery.instanceId = getPreviewInstanceId();
+            float currentTimeSeconds = events::EventDispatcher::instance().query(timeQuery);
+
+            float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;
+            float currentTimeInTicks = currentTimeSeconds * ticksPerSec;
+
+            currentFrame = static_cast<int>(currentTimeInTicks);
+            updateBoneTransformsFromService();
+
+            services::events::animpreview::IsAnimationPlayingQuery playingQuery;
+            playingQuery.instanceId = getPreviewInstanceId();
+            panelState.isPlaying = events::EventDispatcher::instance().query(playingQuery);
+        }
+        else
+        {
+            float ticksPerSec = animationData.ticksPerSecond > 0.0f ? animationData.ticksPerSecond : 24.0f;
+            float currentTimeInTicks = static_cast<float>(currentFrame);
+
+            currentTimeInTicks += deltaTime * ticksPerSec * panelState.playbackSpeed;
+
+            if (currentTimeInTicks >= animationData.duration)
+            {
+                if (panelState.isLooping)
+                {
+                    currentTimeInTicks = fmod(currentTimeInTicks, animationData.duration);
+                }
+                else
+                {
+                    currentTimeInTicks = animationData.duration;
+                    panelState.isPlaying = false;
+                }
+            }
+
+            currentFrame = static_cast<int>(currentTimeInTicks);
+            updateBoneTransformsFromService();
+        }
+    }
+}

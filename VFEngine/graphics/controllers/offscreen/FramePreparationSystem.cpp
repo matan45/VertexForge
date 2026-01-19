@@ -12,6 +12,7 @@
 #include "../../render/tools/PhysicsDebugRenderer.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
+#include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
@@ -74,6 +75,14 @@ namespace controllers::offscreen
             return;
         }
 
+        // Update runtime animators during play mode
+        if (ctx.playModeActive)
+        {
+            auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
+            animatorSystem.syncWithRegistry();
+            animatorSystem.updateAll(ctx.deltaTime);
+        }
+
         auto* cameraManager = renderHandler->getCameraOcclusionManager();
         auto* activeCamera = cameraManager->getCamera(cameraManager->getActiveCameraId());
         const math::Frustum* activeFrustum = activeCamera ? &activeCamera->frustum : nullptr;
@@ -123,6 +132,7 @@ namespace controllers::offscreen
             render::mesh::MeshRenderData
         {
             render::mesh::MeshRenderData renderData;
+            renderData.entity = entity;  // Track source entity for animation lookup
             renderData.meshPath = meshComp.meshPath;
             renderData.modelMatrix = worldTransform.worldMatrix;
 

@@ -5,6 +5,7 @@
 #include "components/AudioComponentService.hpp"
 #include "components/IBLComponentService.hpp"
 #include "components/PhysicsComponentService.hpp"
+#include "components/AnimatorComponentService.hpp"
 #include "scene/HierarchyService.hpp"
 #include "scene/EntityQueryService.hpp"
 #include "scene/TransformComponentService.hpp"
@@ -15,7 +16,8 @@
 
 namespace services
 {
-    SceneServiceImpl::SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
+    SceneServiceImpl::SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
+                                         IAnimatorProvider* animatorProvider)
         : sceneGraph(sceneGraph)
         // Existing component services
         , cameraService(std::make_unique<CameraComponentService>(sceneGraph))
@@ -24,6 +26,7 @@ namespace services
         , audioService(std::make_unique<AudioComponentService>(sceneGraph))
         , iblService(std::make_unique<IBLComponentService>(sceneGraph))
         , physicsService(std::make_unique<PhysicsComponentService>(sceneGraph))
+        , animatorService(std::make_unique<AnimatorComponentService>(animatorProvider))
         // New extracted services
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))
@@ -46,6 +49,7 @@ namespace services
         audioService->registerEventHandlers(dispatcher);
         iblService->registerEventHandlers(dispatcher);
         physicsService->registerEventHandlers(dispatcher);
+        animatorService->registerEventHandlers(dispatcher);
 
         // New extracted services
         hierarchyService->registerEventHandlers(dispatcher);

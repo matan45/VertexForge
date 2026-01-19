@@ -5,13 +5,14 @@
 #include "../adapters/EditorTextureAdapter.hpp"
 #include "../adapters/MaterialPreviewAdapter.hpp"
 #include "../adapters/MeshPreviewAdapter.hpp"
+#include "../adapters/AnimationPreviewAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
+#include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
-#include "print/Logger.hpp"
-#include "../../utilities/types/PhysicsTypes.hpp"
+#include "types/PhysicsTypes.hpp"
 
 namespace core
 {
@@ -31,9 +32,11 @@ namespace core
         textureAdapter = std::make_unique<EditorTextureAdapter>();
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
+        animationPreviewAdapter = std::make_unique<AnimationPreviewAdapter>();
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
+        animatorAdapter = std::make_unique<AnimatorAdapter>();
 
         offScreen->init();
         audioAdapter->init();
@@ -77,6 +80,7 @@ namespace core
             physicsAdapter->cleanUp();
         }
 
+        animationPreviewAdapter.reset();
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
         textureAdapter.reset();
@@ -84,6 +88,7 @@ namespace core
         audioAdapter.reset();
         scriptingAdapter.reset();
         physicsAdapter.reset();
+        animatorAdapter.reset();
 
         if (coreInterface)
         {
@@ -111,6 +116,11 @@ namespace core
         return meshPreviewAdapter.get();
     }
 
+    services::IAnimationPreviewProvider* EditorBootstrap::getAnimationPreviewProvider()
+    {
+        return animationPreviewAdapter.get();
+    }
+
     services::IAudioProvider* EditorBootstrap::getAudioProvider()
     {
         return audioAdapter.get();
@@ -124,6 +134,11 @@ namespace core
     services::IPhysicsProvider* EditorBootstrap::getPhysicsProvider()
     {
         return physicsAdapter.get();
+    }
+
+    services::IAnimatorProvider* EditorBootstrap::getAnimatorProvider()
+    {
+        return animatorAdapter.get();
     }
 
     window::Window* EditorBootstrap::getWindow()

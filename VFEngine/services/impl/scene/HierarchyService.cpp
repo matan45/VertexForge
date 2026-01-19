@@ -182,6 +182,7 @@ namespace services
                 auto& origMesh = orig.getComponent<components::MeshComponent>();
                 auto& newMesh = newEntity.addComponent<components::MeshComponent>();
                 newMesh.meshPath = origMesh.meshPath;
+                newMesh.animatorPath = origMesh.animatorPath;
                 newMesh.showBoundingBox = origMesh.showBoundingBox;
 
                 if (!newMesh.meshPath.empty())
@@ -189,6 +190,7 @@ namespace services
                     events::scene::MeshDataChangedNotification meshNotif;
                     meshNotif.entity = newHandle;
                     meshNotif.meshPath = newMesh.meshPath;
+                    meshNotif.animatorPath = newMesh.animatorPath;
                     dispatcher.publish(meshNotif);
                 }
             }

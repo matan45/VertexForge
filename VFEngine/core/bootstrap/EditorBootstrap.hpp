@@ -8,9 +8,11 @@ namespace services
     class IEditorTextureProvider;
     class IMaterialPreviewProvider;
     class IMeshPreviewProvider;
+    class IAnimationPreviewProvider;
     class IAudioProvider;
     class IScriptingProvider;
     class IPhysicsProvider;
+    class IAnimatorProvider;
 }
 
 namespace window
@@ -35,9 +37,11 @@ namespace core
     class EditorTextureAdapter;
     class MaterialPreviewAdapter;
     class MeshPreviewAdapter;
+    class AnimationPreviewAdapter;
     class AudioAdapter;
     class ScriptingAdapter;
     class PhysicsAdapter;
+    class AnimatorAdapter;
 
     class EditorBootstrap
     {
@@ -49,9 +53,11 @@ namespace core
         std::unique_ptr<EditorTextureAdapter> textureAdapter;
         std::unique_ptr<MaterialPreviewAdapter> materialPreviewAdapter;
         std::unique_ptr<MeshPreviewAdapter> meshPreviewAdapter;
+        std::unique_ptr<AnimationPreviewAdapter> animationPreviewAdapter;
         std::unique_ptr<AudioAdapter> audioAdapter;
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
+        std::unique_ptr<AnimatorAdapter> animatorAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -76,11 +82,15 @@ namespace core
 
         services::IMeshPreviewProvider* getMeshPreviewProvider();
 
+        services::IAnimationPreviewProvider* getAnimationPreviewProvider();
+
         services::IAudioProvider* getAudioProvider();
 
         services::IScriptingProvider* getScriptingProvider();
 
         services::IPhysicsProvider* getPhysicsProvider();
+
+        services::IAnimatorProvider* getAnimatorProvider();
 
         // === Other Accessors ===
 

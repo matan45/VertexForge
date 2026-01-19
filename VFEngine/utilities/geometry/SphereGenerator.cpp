@@ -51,8 +51,8 @@ namespace geometry
             }
         }
 
-        // Generate indices with correct CCW winding for outward-facing normals
-        // Vulkan uses CCW as front face (configured in pipeline)
+        // Generate indices with CW winding (appears CCW after Vulkan Y-flip in projection)
+        // The OrbitCamera flips Y: projectionMatrix[1][1] *= -1, which reverses apparent winding
         for (uint32_t lat = 0; lat < latSegs; ++lat)
         {
             for (uint32_t lon = 0; lon < lonSegs; ++lon)
@@ -61,21 +61,21 @@ namespace geometry
                 uint32_t topRight = topLeft + 1;
                 uint32_t bottomLeft = topLeft + lonSegs + 1;
                 uint32_t bottomRight = bottomLeft + 1;
-                
+
                 if (lat != 0)
                 {
-                    // Upper-left triangle of quad: CCW from outside
+                    // Upper-left triangle of quad: CW (becomes CCW after Y-flip)
                     lod0.indices.push_back(topLeft);
-                    lod0.indices.push_back(bottomLeft);
                     lod0.indices.push_back(topRight);
+                    lod0.indices.push_back(bottomLeft);
                 }
 
                 if (lat != latSegs - 1)
                 {
-                    // Lower-right triangle of quad: CCW from outside
+                    // Lower-right triangle of quad: CW (becomes CCW after Y-flip)
                     lod0.indices.push_back(topRight);
-                    lod0.indices.push_back(bottomLeft);
                     lod0.indices.push_back(bottomRight);
+                    lod0.indices.push_back(bottomLeft);
                 }
             }
         }

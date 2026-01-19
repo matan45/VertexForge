@@ -99,18 +99,33 @@ namespace pipeline::stages
     void FileProcessingStage::processMesh(ImportContext& context)
     {
         // Create a mesh progress callback that wraps the import progress callback
+        // Mesh processing gets 0-70%, animation extraction gets 70-100%
         types::MeshProgressCallback meshProgress = nullptr;
         if (context.progressCallback)
         {
             meshProgress = [&context](float progress)
             {
-                // Report mesh progress through the import progress callback
+                // Report mesh progress through the import progress callback (0-70%)
                 context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, progress);
+                                         context.totalFiles, progress * 0.7f);
             };
         }
 
         meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress);
+
+        // Extract animations from the same file (if any)
+        types::AnimationProgressCallback animProgress = nullptr;
+        if (context.progressCallback)
+        {
+            animProgress = [&context](float progress)
+            {
+                // Report animation progress through the import progress callback (70-100%)
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, 0.7f + progress * 0.3f);
+            };
+        }
+
+        animationProcessor.loadFromFile(context.file, context.fileName, context.location, animProgress);
     }
 
     void FileProcessingStage::processFont(ImportContext& context)

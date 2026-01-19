@@ -13,6 +13,8 @@ namespace scene
 
 namespace services
 {
+    class IAnimatorProvider;
+
     // Existing component services
     class CameraComponentService;
     class MeshComponentService;
@@ -20,6 +22,7 @@ namespace services
     class AudioComponentService;
     class IBLComponentService;
     class PhysicsComponentService;
+    class AnimatorComponentService;
 
     // New extracted services
     class HierarchyService;
@@ -40,6 +43,7 @@ namespace services
         std::unique_ptr<AudioComponentService> audioService;
         std::unique_ptr<IBLComponentService> iblService;
         std::unique_ptr<PhysicsComponentService> physicsService;
+        std::unique_ptr<AnimatorComponentService> animatorService;
 
         // New extracted services
         std::unique_ptr<HierarchyService> hierarchyService;
@@ -49,7 +53,8 @@ namespace services
         std::unique_ptr<ScenePersistenceService> persistenceService;
 
     public:
-        explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
+        explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
+                                  IAnimatorProvider* animatorProvider);
         ~SceneServiceImpl() override;
 
         void registerEventHandlers() override;

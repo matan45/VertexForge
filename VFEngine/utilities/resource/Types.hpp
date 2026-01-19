@@ -33,6 +33,8 @@ namespace resource
         AUDIO,
         SCENE,
         FONT,
+        SKELETON,
+        ANIMATOR,
         UNKNOWN
     };
 
@@ -42,25 +44,6 @@ namespace resource
         uint32_t height = 0;
         std::vector<unsigned char> data;
     };
-
-    struct MipLevelDataHDR
-    {
-        uint32_t width = 0;
-        uint32_t height = 0;
-        std::vector<float> data;
-    };
-    
-    inline uint32_t calculateMipLevels(uint32_t width, uint32_t height)
-    {
-        uint32_t levels = 1;
-        while (width > 1 || height > 1)
-        {
-            width = (std::max)(1u, width / 2);
-            height = (std::max)(1u, height / 2);
-            levels++;
-        }
-        return levels;
-    }
 
     struct TextureData
     {
@@ -76,30 +59,12 @@ namespace resource
             static std::vector<unsigned char> empty;
             return mipData.empty() ? empty : mipData[0].data;
         }
-        
-        void setTextureData(std::vector<unsigned char>&& data) {
-            mipData.clear();
-            mipData.push_back({width, height, std::move(data)});
-            mipLevels = 1;
-        }
-        
+
         void releaseCPUData() {
             for (auto& mip : mipData) {
                 mip.data.clear();
                 mip.data.shrink_to_fit();
             }
-        }
-        
-        bool hasCPUData() const {
-            return !mipData.empty() && !mipData[0].data.empty();
-        }
-        
-        size_t getCPUMemoryUsage() const {
-            size_t total = 0;
-            for (const auto& mip : mipData) {
-                total += mip.data.capacity();
-            }
-            return total;
         }
     };
 
@@ -129,6 +94,8 @@ namespace resource
         glm::vec3 position;
         glm::vec3 normal;
         glm::vec2 texCoords;
+        glm::ivec4 boneIndices{-1, -1, -1, -1};
+        glm::vec4 boneWeights{0.0f, 0.0f, 0.0f, 0.0f};
     };
     
     struct LODLevel
@@ -144,50 +111,51 @@ namespace resource
     {
         std::string name;
         std::vector<LODLevel> lodLevels;
-        
-        const std::vector<Vertex>& vertices() const {
-            static std::vector<Vertex> empty;
-            return lodLevels.empty() ? empty : lodLevels[0].vertices;
-        }
-        const std::vector<uint32_t>& indices() const {
-            static std::vector<uint32_t> empty;
-            return lodLevels.empty() ? empty : lodLevels[0].indices;
-        }
     };
     
 
-    struct Bone
+    struct SkeletonBone
     {
         std::string name;
-        glm::mat4 offsetMatrix;
-        std::vector<std::pair<uint32_t, float>> weights;
+        int32_t parentIndex = -1;
+        glm::mat4 offsetMatrix{1.0f};
+        glm::mat4 preTransform{1.0f};
     };
 
-    struct Keyframe
+    struct PositionKey
     {
-        float time;
-        glm::vec3 position;
-        glm::quat rotation;
-        glm::vec3 scale;
+        float time = 0.0f;
+        glm::vec3 position{0.0f};
+    };
+
+    struct RotationKey
+    {
+        float time = 0.0f;
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    };
+
+    struct ScaleKey
+    {
+        float time = 0.0f;
+        glm::vec3 scale{1.0f};
     };
 
     struct BoneAnimation
     {
         std::string boneName;
-        std::vector<Keyframe> positionKeys;
-        std::vector<Keyframe> rotationKeys;
-        std::vector<Keyframe> scalingKeys;
+        std::vector<PositionKey> positionKeys;
+        std::vector<RotationKey> rotationKeys;
+        std::vector<ScaleKey> scalingKeys;
     };
 
     struct AnimationData
     {
         FileType headerFileType = FileType::ANIMATION;
         FileVersion version{};
+        std::string name;
         float duration = 0.0f;
-        float ticksPerSecond = 0.0f;
-        uint32_t numBones = 0;
-        std::vector<BoneAnimation> boneAnimations;
-        std::vector<Bone> bones;
+        float ticksPerSecond = 24.0f;
+        std::vector<BoneAnimation> channels;
     };
 
     struct AudioData
@@ -201,12 +169,48 @@ namespace resource
         std::vector<short> data;
     };
 
+    struct SkeletonInfo
+    {
+        std::vector<std::string> boneNames;
+        std::vector<glm::mat4> inverseBindPoses;
+
+        bool hasBones() const { return !boneNames.empty(); }
+        size_t boneCount() const { return boneNames.size(); }
+    };
+
+    struct SkeletonData
+    {
+        FileType headerFileType = FileType::SKELETON;
+        FileVersion version{};
+        std::string name;
+        std::vector<SkeletonBone> bones;
+        std::vector<glm::mat4> bindPoses;
+        std::vector<glm::mat4> inverseBindPoses;
+        glm::mat4 globalInverseTransform{1.0f};
+
+        bool hasBones() const { return !bones.empty(); }
+        size_t boneCount() const { return bones.size(); }
+
+        int32_t getBoneIndex(const std::string& boneName) const
+        {
+            for (size_t i = 0; i < bones.size(); ++i)
+            {
+                if (bones[i].name == boneName)
+                    return static_cast<int32_t>(i);
+            }
+            return -1;
+        }
+    };
+
     struct MeshesData
     {
         FileType headerFileType = FileType::MESH;
         FileVersion version{};
         uint32_t numberOfMeshes = 0;
         std::vector<MeshData> meshes;
+
+        bool hasSkinning = false;
+        SkeletonData skeleton;
     };
 
     enum class FontFormatFlags : uint32_t
@@ -300,24 +304,6 @@ namespace resource
         uint32_t height = 0;
         FontAtlasFormat format = FontAtlasFormat::GRAYSCALE_8;
         std::vector<unsigned char> pixels;
-
-        [[nodiscard]] size_t getDataSize() const
-        {
-            size_t bytesPerPixel = 1;
-            if (format == FontAtlasFormat::RGBA_32) bytesPerPixel = 4;
-            return static_cast<size_t>(width) * height * bytesPerPixel;
-        }
-
-        void releaseCPUData()
-        {
-            pixels.clear();
-            pixels.shrink_to_fit();
-        }
-
-        [[nodiscard]] bool hasCPUData() const
-        {
-            return !pixels.empty();
-        }
     };
 
     struct FontData
@@ -378,19 +364,9 @@ namespace resource
             return (it != kerningMap.end()) ? it->second : 0.0f;
         }
 
-        void invalidateKerningCache()
-        {
-            kerningMapBuilt = false;
-        }
-
         [[nodiscard]] bool isSDF() const
         {
             return hasFlag(formatFlags, FontFormatFlags::SDF_ENABLED);
-        }
-
-        void releaseCPUData()
-        {
-            atlas.releaseCPUData();
         }
     };
 

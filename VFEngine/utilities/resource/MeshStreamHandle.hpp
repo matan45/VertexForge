@@ -47,6 +47,9 @@ namespace resource
         FileVersion version{};
         uint32_t numSubmeshes = 0;
         std::vector<SubmeshStreamInfo> submeshes;
+
+        // Skeleton data offset (v0.0.7+)
+        std::streampos skeletonDataOffset = 0;
     };
 
 
@@ -65,19 +68,19 @@ namespace resource
         std::ifstream file;
         MeshStreamHeader header;
         std::string filePath;
-        bool hasMeshlets = false; // True if file has meshlet data (v0.0.4+)
-        bool hasConvexHulls = false; // True if file has convex hull data (v0.0.5+)
+        bool hasMeshlets = false;       // True if file has meshlet data (v0.0.4+)
+        bool hasConvexHulls = false;    // True if file has convex hull data (v0.0.5+)
+        bool has64ByteVertices = false; // True if file has 64-byte vertices with bone data (v0.0.7+)
+        bool hasSkeleton = false;       // True if file has full skeleton data (v0.0.7+)
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:
         MeshStreamHandle() = default;
         ~MeshStreamHandle();
 
-        // Non-copyable
         MeshStreamHandle(const MeshStreamHandle&) = delete;
         MeshStreamHandle& operator=(const MeshStreamHandle&) = delete;
 
-        // Movable
         MeshStreamHandle(MeshStreamHandle&& other) noexcept;
         MeshStreamHandle& operator=(MeshStreamHandle&& other) noexcept;
 
@@ -99,9 +102,11 @@ namespace resource
 
         bool hasConvexData() const { return hasConvexHulls; }
 
-        uint32_t getTotalVertexCount(uint32_t lodLevel) const;
+        bool hasBoneData() const { return has64ByteVertices; }
 
-        uint32_t getTotalIndexCount(uint32_t lodLevel) const;
+        bool hasSkeletonData() const { return hasSkeleton; }
+
+        bool readSkeleton(SkeletonData& outSkeleton);
 
     private:
         bool parseHeader();
@@ -109,6 +114,8 @@ namespace resource
         bool parseMeshletHeaders(uint32_t meshIdx);
 
         bool parseConvexHeaders(uint32_t meshIdx);
+
+        bool parseSkeletonHeader();
     };
 
     class MeshStreamResource
@@ -121,6 +128,7 @@ namespace resource
         static bool readLODFromFile(std::string_view path,
                                     const LODFileInfo& lodInfo,
                                     std::vector<Vertex>& outVertices,
-                                    std::vector<uint32_t>& outIndices);
+                                    std::vector<uint32_t>& outIndices,
+                                    bool hasBoneData = false);
     };
 }

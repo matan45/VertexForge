@@ -136,7 +136,10 @@ namespace handlers
 
     void EditorHandler::initializeServices()
     {
-        sceneService = std::make_shared<services::SceneServiceImpl>(bootstrap->getSceneGraphSystem());
+        sceneService = std::make_shared<services::SceneServiceImpl>(
+            bootstrap->getSceneGraphSystem(),
+            bootstrap->getAnimatorProvider()
+        );
         renderService = std::make_shared<services::EditorRenderServiceImpl>(
             bootstrap->getOffScreenProvider(),
             bootstrap->getEditorTextureProvider()
@@ -145,7 +148,8 @@ namespace handlers
         windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());
         previewService = std::make_shared<services::PreviewServiceImpl>(
             bootstrap->getMaterialPreviewProvider(),
-            bootstrap->getMeshPreviewProvider()
+            bootstrap->getMeshPreviewProvider(),
+            bootstrap->getAnimationPreviewProvider()
         );
         editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());

@@ -80,12 +80,14 @@ namespace render::gpudriven
 
         void init(vk::DescriptorSetLayout iblLayout,
                   vk::DescriptorSetLayout bindlessTextureLayout,
+                  vk::DescriptorSetLayout boneMatrixLayout,
                   vk::RenderPass renderPass);
 
         void cleanup();
 
         void recreate(vk::DescriptorSetLayout iblLayout,
                       vk::DescriptorSetLayout bindlessTextureLayout,
+                      vk::DescriptorSetLayout boneMatrixLayout,
                       vk::RenderPass renderPass);
 
 
@@ -110,6 +112,7 @@ namespace render::gpudriven
         void createVertexDataDescriptor();
         void createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
                                               vk::DescriptorSetLayout bindlessTextureLayout,
+                                              vk::DescriptorSetLayout boneMatrixLayout,
                                               vk::RenderPass renderPass);
     };
 }

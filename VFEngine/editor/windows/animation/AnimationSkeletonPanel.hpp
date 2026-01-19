@@ -1,0 +1,27 @@
+#pragma once
+
+#include "providers/IAnimationPreviewProvider.hpp"
+#include <vector>
+#include <unordered_map>
+
+namespace editor { class OrbitCamera; }
+
+namespace windows::animation
+{
+    class AnimationSkeletonPanel
+    {
+    public:
+        void draw(const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
+                  const std::unordered_map<int32_t, std::vector<size_t>>& boneChildrenMap,
+                  int& selectedChannel,
+                  bool& showBoneVisualization,
+                  bool meshLoadedInPreview,
+                  editor::OrbitCamera* camera);
+
+    private:
+        void drawBoneNode(size_t index,
+                          const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
+                          const std::unordered_map<int32_t, std::vector<size_t>>& boneChildrenMap,
+                          int& selectedChannel);
+    };
+}

@@ -80,8 +80,6 @@ namespace render::mesh
             auto* meshletAlloc = meshletBuffer->reserveMeshlets(meshPath, header);
             if (meshletAlloc)
             {
-                loggerInfo("MeshStreamManager: Reserved meshlet space for {}", meshPath);
-                
                 for (uint32_t subIdx = 0; subIdx < header.numSubmeshes; ++subIdx)
                 {
                     const auto& submeshInfo = header.submeshes[subIdx];
@@ -235,17 +233,10 @@ namespace render::mesh
                                 result.submeshIndex,
                                 result.lodLevel,
                                 meshletData,
-                                lodInfo.vertexOffset 
+                                lodInfo.vertexOffset
                             );
-                            loggerInfo("MeshStreamManager: Uploaded meshlet data for {}:{} LOD{}",
-                                       result.meshPath, result.submeshName, result.lodLevel);
                         }
                     }
-                }
-                else
-                {
-                    loggerWarning("MeshStreamManager: Failed to read meshlet data for {}:{}",
-                                  result.meshPath, result.submeshName);
                 }
             }
         }
@@ -351,7 +342,6 @@ namespace render::mesh
     float MeshStreamManager::calculatePriority(const StreamingRequest& request,
                                                const glm::vec3& cameraPos) const
     {
-        // Base priority: lower LOD = higher urgency (LOD3 loads first)
         float lodUrgency = (4.0f - static_cast<float>(request.lodLevel)) * 25.0f;
 
         float distance = glm::length(request.worldCenter - cameraPos);
@@ -370,12 +360,12 @@ namespace render::mesh
         uint32_t lodLevel)
     {
         resource::LODFileInfo lodInfo;
+        bool hasBoneData = false;
         {
             std::lock_guard<std::mutex> lock(meshStatesMutex);
             auto it = meshStates.find(meshPath);
             if (it == meshStates.end() || !it->second.handle)
             {
-                // Return failed future immediately
                 std::promise<StreamingResult> promise;
                 StreamingResult result;
                 result.meshPath = meshPath;
@@ -401,11 +391,11 @@ namespace render::mesh
                 return promise.get_future();
             }
 
-            // Use the passed submeshIndex directly (no name lookup needed)
             lodInfo = header.submeshes[submeshIndex].lods[lodLevel];
+            hasBoneData = it->second.handle->hasBoneData();
         }
 
-        return std::async(std::launch::async, [meshPath, submeshName, submeshIndex, lodLevel, lodInfo]()
+        return std::async(std::launch::async, [meshPath, submeshName, submeshIndex, lodLevel, lodInfo, hasBoneData]()
         {
             StreamingResult result;
             result.meshPath = meshPath;
@@ -413,9 +403,8 @@ namespace render::mesh
             result.submeshIndex = submeshIndex;
             result.lodLevel = lodLevel;
 
-            // Use static method that opens its own file handle (thread-safe)
             result.success = resource::MeshStreamResource::readLODFromFile(
-                meshPath, lodInfo, result.vertices, result.indices);
+                meshPath, lodInfo, result.vertices, result.indices, hasBoneData);
 
             return result;
         });

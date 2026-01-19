@@ -1,17 +1,19 @@
 #include "CoreInterface.hpp"
 #include "../core/MainLoop.hpp"
-#include "../../Window/controllers/InputController.hpp"
+#include "AnimatorSystemController.hpp"
 
 namespace controllers {
 
 	CoreInterface::CoreInterface()
 		: mainLoop{ std::make_unique<core::MainLoop>() }
+		, animatorSystem{ std::make_unique<AnimatorSystemController>() }
 	{
 	}
 
 	void CoreInterface::init()
 	{
 		mainLoop->init();
+		animatorSystem->init();
 	}
 
 	void CoreInterface::run() const
@@ -21,6 +23,7 @@ namespace controllers {
 
 	void CoreInterface::cleanUp() const
 	{
+		animatorSystem->cleanUp();
 		mainLoop->cleanUp();
 	}
 

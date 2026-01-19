@@ -24,6 +24,7 @@ namespace controllers::offscreen
         bool showBillboardIcons = true;
         bool showGrid = true;
         bool showPhysicsDebug = false;
+        float deltaTime = 0.0f;  // Time since last frame in seconds
     };
 
     class FramePreparationSystem

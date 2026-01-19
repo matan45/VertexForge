@@ -2,6 +2,7 @@
 #include <fstream>
 #include <functional>
 #include <array>
+#include <unordered_map>
 #include "config/Config.hpp"
 #include "resource/Types.hpp"
 #include "resource/MeshletTypes.hpp"
@@ -17,6 +18,15 @@ namespace types
     {
         std::vector<resource::Vertex> vertices;
         std::vector<uint32_t> indices;
+    };
+
+    struct ExtractedSkeleton
+    {
+        bool hasSkinning = false;
+        std::vector<resource::SkeletonBone> bones;
+        std::vector<glm::mat4> inverseBindPoses;
+        glm::mat4 globalInverseTransform{1.0f};
+        std::unordered_map<std::string, uint32_t> boneNameToIndex;
     };
 
 
@@ -35,6 +45,7 @@ namespace types
 
     private:
         static constexpr size_t chunkSize = 256 * 1024;
+        static constexpr uint32_t MAX_BONES_PER_VERTEX = 4;
 
         static constexpr std::array<float, resource::LOD_LEVEL_COUNT> lodRatios = {1.0f, 0.5f, 0.25f, 0.125f};
 
@@ -43,26 +54,22 @@ namespace types
                                         const aiScene* scene, const importConfig::ImportConfig& config,
                                         MeshProgressCallback progressCallback) const;
 
-        LODMeshData convertAssimpMesh(const aiMesh* assimpMesh) const;
-
+        ExtractedSkeleton extractSkeleton(const aiScene* scene) const;
+        LODMeshData convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const;
         std::array<LODMeshData, resource::LOD_LEVEL_COUNT> generateLODLevels(const LODMeshData& lod0) const;
-
         LODMeshData simplifyMesh(const LODMeshData& source, float targetRatio) const;
-
         void writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const;
 
-        // Meshlet generation
         MeshletBuildResult buildMeshletsForLOD(const LODMeshData& lodMesh) const;
-
         void writeMeshletData(std::ofstream& outFile,
                               const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const;
 
-        // V-HACD convex decomposition
         resource::ConvexDecompositionData generateConvexDecomposition(
             const LODMeshData& meshData,
             const importConfig::MeshImportConfig& config) const;
-
         void writeConvexDecompositionData(std::ofstream& outFile,
                                           const resource::ConvexDecompositionData& decomposition) const;
+
+        void writeSkeletonData(std::ofstream& outFile, const ExtractedSkeleton& skeleton) const;
     };
 }

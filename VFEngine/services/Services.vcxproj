@@ -99,6 +99,8 @@
     <ClInclude Include="data\FileOperationsTypes.hpp" />
     <ClInclude Include="data\ScriptTypes.hpp" />
     <ClInclude Include="data\UndoTypes.hpp" />
+    <ClInclude Include="events\AnimationPreviewEvents.hpp" />
+    <ClInclude Include="events\AnimatorEvents.hpp" />
     <ClInclude Include="events\ApplicationEvents.hpp" />
     <ClInclude Include="events\AudioEvents.hpp" />
     <ClInclude Include="events\AudioSettingsEvents.hpp" />
@@ -131,6 +133,7 @@
     <ClInclude Include="impl\ScriptingServiceImpl.hpp" />
     <ClInclude Include="impl\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\WindowStateServiceImpl.hpp" />
+    <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
     <ClInclude Include="impl\components\CameraComponentService.hpp" />
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
@@ -156,6 +159,8 @@
     <ClInclude Include="interfaces\IScriptingService.hpp" />
     <ClInclude Include="interfaces\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\IWindowStateService.hpp" />
+    <ClInclude Include="providers\IAnimationPreviewProvider.hpp" />
+    <ClInclude Include="providers\IAnimatorProvider.hpp" />
     <ClInclude Include="providers\IAudioProvider.hpp" />
     <ClInclude Include="providers\IEditorTextureProvider.hpp" />
     <ClInclude Include="providers\IMaterialPreviewProvider.hpp" />
@@ -182,6 +187,7 @@
     <ClCompile Include="impl\ScriptingServiceImpl.cpp" />
     <ClCompile Include="impl\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\WindowStateServiceImpl.cpp" />
+    <ClCompile Include="impl\components\AnimatorComponentService.cpp" />
     <ClCompile Include="impl\components\AudioComponentService.cpp" />
     <ClCompile Include="impl\components\CameraComponentService.cpp" />
     <ClCompile Include="impl\components\IBLComponentService.cpp" />

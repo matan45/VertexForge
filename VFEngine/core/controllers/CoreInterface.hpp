@@ -13,10 +13,13 @@ namespace window {
 
 namespace controllers {
 
+	class AnimatorSystemController;
+
 	class CoreInterface
 	{
 	private:
 		std::unique_ptr<core::MainLoop> mainLoop;
+		std::unique_ptr<AnimatorSystemController> animatorSystem;
 
 	public:
 		explicit CoreInterface();

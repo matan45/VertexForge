@@ -1,6 +1,7 @@
 #include "MeshStreamHandle.hpp"
 #include "../print/EditorLogger.hpp"
 #include "EndianUtils.hpp"
+#include <filesystem>
 
 namespace resource
 {
@@ -48,7 +49,6 @@ namespace resource
             return false;
         }
 
-        vfLogInfo("MeshStreamHandle: Opened stream for {} with {} submeshes", path, header.numSubmeshes);
         return true;
     }
 
@@ -87,8 +87,21 @@ namespace resource
 
         hasMeshlets = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 4);
         hasConvexHulls = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 5);
+        // Version 0.0.7+ uses 64-byte vertices (with bone data), older versions use 32-byte
+        has64ByteVertices = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 7);
 
         header.numSubmeshes = endian::readLE<uint32_t>(file);
+
+        // Version 0.0.7+ has a skeleton reference field after numSubmeshes
+        if (has64ByteVertices)
+        {
+            uint32_t skeletonRefLength = endian::readLE<uint32_t>(file);
+            if (skeletonRefLength > 0)
+            {
+                // Skip skeleton reference path string if present
+                file.seekg(skeletonRefLength, std::ios::cur);
+            }
+        }
 
         if (file.fail())
         {
@@ -150,7 +163,9 @@ namespace resource
                         return false;
                     }
 
-                    file.seekg(lodInfo.vertexCount * sizeof(Vertex), std::ios::cur);
+                    // Vertex size depends on file version: 64 bytes for v0.0.7+ (with bone data), 32 bytes for older
+                    size_t vertexSize = has64ByteVertices ? 64 : 32;
+                    file.seekg(lodInfo.vertexCount * vertexSize, std::ios::cur);
 
                     lodInfo.indexCount = endian::readLE<uint32_t>(file);
                     if (lodInfo.indexCount > maxIndexCount)
@@ -195,6 +210,15 @@ namespace resource
                 {
                     return false;
                 }
+            }
+        }
+
+        // Parse skeleton data header (v0.0.7+)
+        if (has64ByteVertices)
+        {
+            if (!parseSkeletonHeader())
+            {
+                return false;
             }
         }
 
@@ -305,6 +329,169 @@ namespace resource
         return true;
     }
 
+    bool MeshStreamHandle::parseSkeletonHeader()
+    {
+        header.skeletonDataOffset = file.tellg();
+
+        uint8_t hasSkinning = endian::readLE<uint8_t>(file);
+        hasSkeleton = (hasSkinning != 0);
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to read skeleton header");
+            return false;
+        }
+
+        if (!hasSkeleton)
+        {
+            return true;
+        }
+
+        // Skip over skeleton data for header parsing
+        uint32_t boneCount = endian::readLE<uint32_t>(file);
+        if (boneCount > 1000)
+        {
+            vfLogError("MeshStreamHandle: Invalid bone count {}", boneCount);
+            return false;
+        }
+
+        // Skip bone data
+        for (uint32_t b = 0; b < boneCount; ++b)
+        {
+            uint32_t nameLength = endian::readLE<uint32_t>(file);
+            if (nameLength > 1024)
+            {
+                vfLogError("MeshStreamHandle: Invalid bone name length {}", nameLength);
+                return false;
+            }
+            file.seekg(nameLength, std::ios::cur); // Skip name
+            file.seekg(4, std::ios::cur); // parentIndex
+            file.seekg(16 * 4, std::ios::cur); // offsetMatrix
+            file.seekg(16 * 4, std::ios::cur); // preTransform
+        }
+
+        // Skip inverse bind poses (boneCount matrices)
+        file.seekg(boneCount * 16 * sizeof(float), std::ios::cur);
+
+        // Skip global inverse transform
+        file.seekg(16 * sizeof(float), std::ios::cur);
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to skip skeleton data");
+            return false;
+        }
+
+        return true;
+    }
+
+    bool MeshStreamHandle::readSkeleton(SkeletonData& outSkeleton)
+    {
+        std::lock_guard<std::mutex> lock(fileMutex);
+
+        outSkeleton = SkeletonData{}; // Reset output
+
+        if (!file.is_open())
+        {
+            vfLogError("MeshStreamHandle: File not open");
+            return false;
+        }
+
+        if (!hasSkeleton)
+        {
+            return true; // No skeleton data is valid
+        }
+
+        file.seekg(header.skeletonDataOffset);
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to seek to skeleton data");
+            return false;
+        }
+
+        uint8_t hasSkinning = endian::readLE<uint8_t>(file);
+        if (hasSkinning == 0)
+        {
+            return true;
+        }
+
+        uint32_t boneCount = endian::readLE<uint32_t>(file);
+        outSkeleton.bones.resize(boneCount);
+        outSkeleton.inverseBindPoses.resize(boneCount);
+
+        // Read bone data
+        for (uint32_t b = 0; b < boneCount; ++b)
+        {
+            auto& bone = outSkeleton.bones[b];
+
+            // Read name
+            uint32_t nameLength = endian::readLE<uint32_t>(file);
+            if (nameLength > 0 && nameLength < 1024)
+            {
+                bone.name.resize(nameLength);
+                file.read(bone.name.data(), nameLength);
+            }
+
+            // Read parent index
+            bone.parentIndex = endian::readLE<int32_t>(file);
+
+            // Read offset matrix
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    bone.offsetMatrix[col][row] = endian::readLE<float>(file);
+                }
+            }
+
+            // Read pre-transform
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    bone.preTransform[col][row] = endian::readLE<float>(file);
+                }
+            }
+
+            if (file.fail())
+            {
+                vfLogError("MeshStreamHandle: Failed to read bone {}", b);
+                return false;
+            }
+        }
+
+        // Read inverse bind poses
+        for (uint32_t b = 0; b < boneCount; ++b)
+        {
+            auto& matrix = outSkeleton.inverseBindPoses[b];
+            for (int col = 0; col < 4; ++col)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    matrix[col][row] = endian::readLE<float>(file);
+                }
+            }
+        }
+
+        // Read global inverse transform
+        for (int col = 0; col < 4; ++col)
+        {
+            for (int row = 0; row < 4; ++row)
+            {
+                outSkeleton.globalInverseTransform[col][row] = endian::readLE<float>(file);
+            }
+        }
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to read skeleton data");
+            return false;
+        }
+
+        vfLogInfo("MeshStreamHandle: Loaded skeleton with {} bones", boneCount);
+        return true;
+    }
+
     bool MeshStreamHandle::readLODLevel(uint32_t submeshIdx, uint32_t lodLevel,
                                         std::vector<Vertex>& outVertices,
                                         std::vector<uint32_t>& outIndices)
@@ -351,14 +538,36 @@ namespace resource
         outVertices.resize(vertexCount);
         for (uint32_t v = 0; v < vertexCount; ++v)
         {
+            // Position
             outVertices[v].position.x = endian::readLE<float>(file);
             outVertices[v].position.y = endian::readLE<float>(file);
             outVertices[v].position.z = endian::readLE<float>(file);
+            // Normal
             outVertices[v].normal.x = endian::readLE<float>(file);
             outVertices[v].normal.y = endian::readLE<float>(file);
             outVertices[v].normal.z = endian::readLE<float>(file);
+            // TexCoords
             outVertices[v].texCoords.x = endian::readLE<float>(file);
             outVertices[v].texCoords.y = endian::readLE<float>(file);
+
+            // Bone data for v0.0.7+ files
+            if (has64ByteVertices)
+            {
+                outVertices[v].boneIndices.x = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.y = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.z = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.w = endian::readLE<int32_t>(file);
+                outVertices[v].boneWeights.x = endian::readLE<float>(file);
+                outVertices[v].boneWeights.y = endian::readLE<float>(file);
+                outVertices[v].boneWeights.z = endian::readLE<float>(file);
+                outVertices[v].boneWeights.w = endian::readLE<float>(file);
+            }
+            else
+            {
+                // Default bone data for older file versions
+                outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
+                outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+            }
 
             if (file.fail())
             {
@@ -613,28 +822,6 @@ namespace resource
         return true;
     }
 
-    uint32_t MeshStreamHandle::getTotalVertexCount(uint32_t lodLevel) const
-    {
-        if (lodLevel >= LOD_LEVEL_COUNT) return 0;
-        uint32_t total = 0;
-        for (const auto& submesh : header.submeshes)
-        {
-            total += submesh.lods[lodLevel].vertexCount;
-        }
-        return total;
-    }
-
-    uint32_t MeshStreamHandle::getTotalIndexCount(uint32_t lodLevel) const
-    {
-        if (lodLevel >= LOD_LEVEL_COUNT) return 0;
-        uint32_t total = 0;
-        for (const auto& submesh : header.submeshes)
-        {
-            total += submesh.lods[lodLevel].indexCount;
-        }
-        return total;
-    }
-
     std::unique_ptr<MeshStreamHandle> MeshStreamResource::openStream(std::string_view path)
     {
         auto handle = std::make_unique<MeshStreamHandle>();
@@ -680,15 +867,24 @@ namespace resource
             }
         }
 
-        vfLogInfo("MeshStreamResource: Loaded mesh with {} submeshes from {}",
-                  result.numberOfMeshes, path);
+        // Read skeleton data (v0.0.7+)
+        if (stream->hasSkeletonData())
+        {
+            if (!stream->readSkeleton(result.skeleton))
+            {
+                vfLogError("MeshStreamResource: Failed to read skeleton from {}", path);
+                return MeshesData{};
+            }
+        }
+
         return result;
     }
 
     bool MeshStreamResource::readLODFromFile(std::string_view path,
                                              const LODFileInfo& lodInfo,
                                              std::vector<Vertex>& outVertices,
-                                             std::vector<uint32_t>& outIndices)
+                                             std::vector<uint32_t>& outIndices,
+                                             bool hasBoneData)
     {
         std::ifstream file(std::string(path), std::ios::binary);
         if (!file)
@@ -715,14 +911,36 @@ namespace resource
         outVertices.resize(vertexCount);
         for (uint32_t v = 0; v < vertexCount; ++v)
         {
+            // Position
             outVertices[v].position.x = endian::readLE<float>(file);
             outVertices[v].position.y = endian::readLE<float>(file);
             outVertices[v].position.z = endian::readLE<float>(file);
+            // Normal
             outVertices[v].normal.x = endian::readLE<float>(file);
             outVertices[v].normal.y = endian::readLE<float>(file);
             outVertices[v].normal.z = endian::readLE<float>(file);
+            // TexCoords
             outVertices[v].texCoords.x = endian::readLE<float>(file);
             outVertices[v].texCoords.y = endian::readLE<float>(file);
+
+            // Bone data (v0.0.6+)
+            if (hasBoneData)
+            {
+                outVertices[v].boneIndices.x = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.y = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.z = endian::readLE<int32_t>(file);
+                outVertices[v].boneIndices.w = endian::readLE<int32_t>(file);
+                outVertices[v].boneWeights.x = endian::readLE<float>(file);
+                outVertices[v].boneWeights.y = endian::readLE<float>(file);
+                outVertices[v].boneWeights.z = endian::readLE<float>(file);
+                outVertices[v].boneWeights.w = endian::readLE<float>(file);
+            }
+            else
+            {
+                // Initialize with defaults for older file versions
+                outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
+                outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+            }
 
             if (file.fail())
             {

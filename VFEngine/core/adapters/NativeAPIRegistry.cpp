@@ -4,6 +4,7 @@
 #include "api/AudioAPI.hpp"
 #include "api/InputAPI.hpp"
 #include "api/PhysicsAPI.hpp"
+#include "api/AnimatorAPI.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace core
@@ -30,6 +31,7 @@ namespace core
         api::AudioAPI::registerAPI(interpreter);
         api::InputAPI::registerAPI(interpreter);
         api::PhysicsAPI::registerAPI(interpreter);
+        api::AnimatorAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

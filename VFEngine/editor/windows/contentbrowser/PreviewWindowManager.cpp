@@ -6,6 +6,8 @@
 #include "../MaterialInstanceEditorWindow.hpp"
 #include "../PrefabPreviewWindow.hpp"
 #include "../FontPreviewWindow.hpp"
+#include "../animation/AnimationPreviewWindow.hpp"
+#include "../animation/AnimatorEditorWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
 
@@ -41,6 +43,12 @@ namespace windows
         case AssetType::Font:
             openFontPreview(path);
             return true;
+        case AssetType::Animation:
+            openAnimationPreview(path);
+            return true;
+        case AssetType::Animator:
+            openAnimatorEditor(path);
+            return true;
         default:
             return false;
         }
@@ -74,6 +82,14 @@ namespace windows
 
         auto fontIt = openFontPreviews.find(path);
         if (fontIt != openFontPreviews.end() && !fontIt->second.expired())
+            return true;
+
+        auto animIt = openAnimationPreviews.find(path);
+        if (animIt != openAnimationPreviews.end() && !animIt->second.expired())
+            return true;
+
+        auto animatorIt = openAnimatorEditors.find(path);
+        if (animatorIt != openAnimatorEditors.end() && !animatorIt->second.expired())
             return true;
 
         return false;
@@ -153,6 +169,28 @@ namespace windows
             auto previewWindow = std::make_shared<FontPreviewWindow>(path);
             controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
             openFontPreviews[path] = previewWindow;
+        }
+    }
+
+    void PreviewWindowManager::openAnimationPreview(const std::string& path)
+    {
+        auto it = openAnimationPreviews.find(path);
+        if (it == openAnimationPreviews.end() || it->second.expired())
+        {
+            auto previewWindow = std::make_shared<AnimationPreviewWindow>(path);
+            controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+            openAnimationPreviews[path] = previewWindow;
+        }
+    }
+
+    void PreviewWindowManager::openAnimatorEditor(const std::string& path)
+    {
+        auto it = openAnimatorEditors.find(path);
+        if (it == openAnimatorEditors.end() || it->second.expired())
+        {
+            auto editorWindow = std::make_shared<AnimatorEditorWindow>(path);
+            controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
+            openAnimatorEditors[path] = editorWindow;
         }
     }
 }

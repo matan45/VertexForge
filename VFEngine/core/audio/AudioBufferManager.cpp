@@ -1,6 +1,6 @@
 #include "AudioBufferManager.hpp"
 #include "AudioSystem.hpp"
-#include "resource/AudioResource.hpp"
+#include "resource/ResourceManager.hpp"
 #include "print/Logger.hpp"
 
 namespace core::audio
@@ -19,19 +19,20 @@ namespace core::audio
             return existingBuffer.value();
         }
 
-        resource::AudioData audioData = resource::AudioResource::loadAudio(path);
+        auto audioFuture = resource::ResourceManager::loadAudioAsync(path);
+        auto audioData = audioFuture.get();
 
-        if (audioData.data.empty())
+        if (!audioData || audioData->data.empty())
         {
             loggerError("Failed to load audio data from: {}", path);
             return 0;
         }
 
         ALuint bufferId = createBufferFromData(
-            audioData.data.data(),
-            audioData.data.size() * sizeof(short),
-            audioData.channels,
-            audioData.sampleRate
+            audioData->data.data(),
+            audioData->data.size() * sizeof(short),
+            audioData->channels,
+            audioData->sampleRate
         );
 
         if (bufferId == 0)
@@ -42,10 +43,10 @@ namespace core::audio
 
         AudioBufferInfo info;
         info.bufferId = bufferId;
-        info.channels = audioData.channels;
-        info.sampleRate = audioData.sampleRate;
-        info.frames = audioData.frames;
-        info.durationSeconds = static_cast<float>(audioData.totalDurationInSeconds);
+        info.channels = audioData->channels;
+        info.sampleRate = audioData->sampleRate;
+        info.frames = audioData->frames;
+        info.durationSeconds = static_cast<float>(audioData->totalDurationInSeconds);
 
         pathToBuffer[path] = info;
         bufferToPath[bufferId] = path;

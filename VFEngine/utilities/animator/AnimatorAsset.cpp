@@ -1,0 +1,433 @@
+#include "AnimatorAsset.hpp"
+#include "../print/EditorLogger.hpp"
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <filesystem>
+#include <format>
+
+namespace animator
+{
+    using json = nlohmann::json;
+    namespace fs = std::filesystem;
+
+    json AnimatorAsset::serializeParameterValue(const AnimatorParameterValue& val, AnimatorParameterType type)
+    {
+        switch (type)
+        {
+        case AnimatorParameterType::Float:
+            return std::holds_alternative<float>(val) ? std::get<float>(val) : 0.0f;
+        case AnimatorParameterType::Int:
+            return std::holds_alternative<int32_t>(val) ? std::get<int32_t>(val) : 0;
+        case AnimatorParameterType::Bool:
+        case AnimatorParameterType::Trigger:
+            return std::holds_alternative<bool>(val) ? std::get<bool>(val) : false;
+        default:
+            return 0.0f;
+        }
+    }
+
+    AnimatorParameterValue AnimatorAsset::deserializeParameterValue(const json& j, AnimatorParameterType type)
+    {
+        try
+        {
+            switch (type)
+            {
+            case AnimatorParameterType::Float:
+                return j.is_number() ? j.get<float>() : 0.0f;
+            case AnimatorParameterType::Int:
+                return j.is_number_integer() ? j.get<int32_t>() : 0;
+            case AnimatorParameterType::Bool:
+            case AnimatorParameterType::Trigger:
+                return j.is_boolean() ? j.get<bool>() : false;
+            default:
+                return 0.0f;
+            }
+        }
+        catch (const json::exception&)
+        {
+            return 0.0f;
+        }
+    }
+
+    json AnimatorAsset::serializeParameter(const AnimatorParameter& param)
+    {
+        json j;
+        j["name"] = param.name;
+        j["type"] = parameterTypeToString(param.type);
+        j["default"] = serializeParameterValue(param.defaultValue, param.type);
+        return j;
+    }
+
+    AnimatorParameter AnimatorAsset::deserializeParameter(const json& j)
+    {
+        AnimatorParameter param;
+        param.name = j.value("name", "");
+        param.type = stringToParameterType(j.value("type", "Float"));
+        if (j.contains("default"))
+        {
+            param.defaultValue = deserializeParameterValue(j["default"], param.type);
+        }
+        return param;
+    }
+
+    json AnimatorAsset::serializeState(const AnimatorState& state)
+    {
+        json j;
+        j["id"] = state.id;
+        j["name"] = state.name;
+        j["animationPath"] = state.animationPath;
+        j["playbackSpeed"] = state.playbackSpeed;
+        j["loop"] = state.loop;
+        j["position"] = json::array({state.position.x, state.position.y});
+        return j;
+    }
+
+    AnimatorState AnimatorAsset::deserializeState(const json& j)
+    {
+        AnimatorState state;
+        state.id = j.value("id", 0u);
+        state.name = j.value("name", "");
+        state.animationPath = j.value("animationPath", "");
+        state.playbackSpeed = j.value("playbackSpeed", 1.0f);
+        state.loop = j.value("loop", true);
+
+        if (j.contains("position") && j["position"].is_array() && j["position"].size() >= 2)
+        {
+            state.position.x = j["position"][0].get<float>();
+            state.position.y = j["position"][1].get<float>();
+        }
+
+        return state;
+    }
+
+    json AnimatorAsset::serializeCondition(const TransitionCondition& condition)
+    {
+        json j;
+        j["parameter"] = condition.parameterName;
+        j["operator"] = comparisonOperatorToString(condition.op);
+
+        std::visit([&j](auto&& arg)
+        {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, float>)
+                j["value"] = arg;
+            else if constexpr (std::is_same_v<T, int32_t>)
+                j["value"] = arg;
+            else if constexpr (std::is_same_v<T, bool>)
+                j["value"] = arg;
+        }, condition.value);
+
+        return j;
+    }
+
+    TransitionCondition AnimatorAsset::deserializeCondition(const json& j)
+    {
+        TransitionCondition condition;
+        condition.parameterName = j.value("parameter", "");
+        condition.op = stringToComparisonOperator(j.value("operator", ">"));
+
+        if (j.contains("value"))
+        {
+            const auto& val = j["value"];
+            if (val.is_boolean())
+                condition.value = val.get<bool>();
+            else if (val.is_number_integer())
+                condition.value = val.get<int32_t>();
+            else if (val.is_number())
+                condition.value = val.get<float>();
+        }
+
+        return condition;
+    }
+
+    json AnimatorAsset::serializeTransition(const AnimatorTransition& transition)
+    {
+        json j;
+        j["id"] = transition.id;
+        j["sourceState"] = transition.sourceStateId;
+        j["targetState"] = transition.targetStateId;
+        j["blendDuration"] = transition.blendDuration;
+        j["hasExitTime"] = transition.hasExitTime;
+        j["exitTime"] = transition.exitTime;
+        j["priority"] = transition.priority;
+
+        json conditionsJson = json::array();
+        for (const auto& condition : transition.conditions)
+        {
+            conditionsJson.push_back(serializeCondition(condition));
+        }
+        j["conditions"] = conditionsJson;
+
+        return j;
+    }
+
+    AnimatorTransition AnimatorAsset::deserializeTransition(const json& j)
+    {
+        AnimatorTransition transition;
+        transition.id = j.value("id", 0u);
+        transition.sourceStateId = j.value("sourceState", 0u);
+        transition.targetStateId = j.value("targetState", 0u);
+        transition.blendDuration = j.value("blendDuration", 0.25f);
+        transition.hasExitTime = j.value("hasExitTime", false);
+        transition.exitTime = j.value("exitTime", 1.0f);
+        transition.priority = j.value("priority", 0);
+
+        if (j.contains("conditions") && j["conditions"].is_array())
+        {
+            for (const auto& condJson : j["conditions"])
+            {
+                transition.conditions.push_back(deserializeCondition(condJson));
+            }
+        }
+
+        return transition;
+    }
+
+    std::optional<AnimatorData> AnimatorAsset::load(std::string_view path)
+    {
+        fs::path filePath(path);
+
+        if (!fs::exists(filePath))
+        {
+            vfLogError("Animator file not found: {}", path);
+            return std::nullopt;
+        }
+
+        std::error_code ec;
+        auto fileSize = fs::file_size(filePath, ec);
+        if (ec)
+        {
+            vfLogError("Cannot read animator file size '{}': {}", path, ec.message());
+            return std::nullopt;
+        }
+
+        constexpr size_t MAX_ANIMATOR_FILE_SIZE = 10 * 1024 * 1024; // 10 MB limit
+        if (fileSize > MAX_ANIMATOR_FILE_SIZE)
+        {
+            vfLogError("Animator file '{}' is too large ({} bytes, max {} bytes)",
+                       path, fileSize, MAX_ANIMATOR_FILE_SIZE);
+            return std::nullopt;
+        }
+
+        std::ifstream file(filePath);
+        if (!file.is_open())
+        {
+            vfLogError("Failed to open animator file: {}", path);
+            return std::nullopt;
+        }
+
+        json j;
+        try
+        {
+            file >> j;
+        }
+        catch (const json::parse_error& e)
+        {
+            vfLogError("Animator file '{}' contains invalid JSON at byte {}: {}",
+                       path, e.byte, e.what());
+            return std::nullopt;
+        }
+
+        if (!j.is_object())
+        {
+            vfLogError("Animator file '{}' must contain a JSON object at root level", path);
+            return std::nullopt;
+        }
+
+        AnimatorData animator;
+        int warningCount = 0;
+        constexpr int MAX_WARNINGS = 20;
+
+        auto logWarningLimited = [&](const std::string& msg)
+        {
+            if (warningCount < MAX_WARNINGS)
+            {
+                vfLogWarning("{}", msg);
+                warningCount++;
+                if (warningCount == MAX_WARNINGS)
+                {
+                    vfLogWarning("(suppressing further warnings for this file)");
+                }
+            }
+        };
+
+        try
+        {
+            animator.version = j.value("version", ANIMATOR_FORMAT_VERSION);
+            animator.name = j.value("name", "Unnamed Animator");
+
+            if (animator.name.empty())
+            {
+                animator.name = "Unnamed Animator";
+                logWarningLimited("Animator has empty name, using default");
+            }
+
+            if (j.contains("parameters") && j["parameters"].is_array())
+            {
+                for (size_t i = 0; i < j["parameters"].size(); ++i)
+                {
+                    const auto& paramJson = j["parameters"][i];
+                    if (!paramJson.is_object())
+                    {
+                        logWarningLimited(std::format("Parameter at index {} is not an object, skipping", i));
+                        continue;
+                    }
+                    animator.graph.parameters.push_back(deserializeParameter(paramJson));
+                }
+            }
+
+            if (j.contains("states") && j["states"].is_array())
+            {
+                for (size_t i = 0; i < j["states"].size(); ++i)
+                {
+                    const auto& stateJson = j["states"][i];
+                    if (!stateJson.is_object())
+                    {
+                        logWarningLimited(std::format("State at index {} is not an object, skipping", i));
+                        continue;
+                    }
+                    AnimatorState state = deserializeState(stateJson);
+                    animator.graph.nextStateId = std::max(animator.graph.nextStateId, state.id + 1);
+                    animator.graph.states.push_back(std::move(state));
+                }
+            }
+
+            if (j.contains("transitions") && j["transitions"].is_array())
+            {
+                for (size_t i = 0; i < j["transitions"].size(); ++i)
+                {
+                    const auto& transJson = j["transitions"][i];
+                    if (!transJson.is_object())
+                    {
+                        logWarningLimited(std::format("Transition at index {} is not an object, skipping", i));
+                        continue;
+                    }
+                    AnimatorTransition transition = deserializeTransition(transJson);
+                    animator.graph.nextTransitionId = std::max(animator.graph.nextTransitionId, transition.id + 1);
+                    animator.graph.transitions.push_back(std::move(transition));
+                }
+            }
+
+            animator.graph.defaultStateId = j.value("defaultState", 1u);
+
+            if (j.contains("anyStatePosition") && j["anyStatePosition"].is_array() && j["anyStatePosition"].size() >= 2)
+            {
+                animator.graph.anyStatePosition.x = j["anyStatePosition"][0].get<float>();
+                animator.graph.anyStatePosition.y = j["anyStatePosition"][1].get<float>();
+            }
+
+            if (j.contains("entryPosition") && j["entryPosition"].is_array() && j["entryPosition"].size() >= 2)
+            {
+                animator.graph.entryPosition.x = j["entryPosition"][0].get<float>();
+                animator.graph.entryPosition.y = j["entryPosition"][1].get<float>();
+            }
+
+            if (!animator.graph.states.empty())
+            {
+                bool defaultExists = animator.graph.findStateById(animator.graph.defaultStateId) != nullptr;
+                if (!defaultExists)
+                {
+                    logWarningLimited(std::format("Default state {} not found, using first state",
+                                                  animator.graph.defaultStateId));
+                    animator.graph.defaultStateId = animator.graph.states[0].id;
+                }
+            }
+
+            if (warningCount > 0)
+            {
+                vfLogWarning("Loaded animator '{}' with {} warning(s)", animator.name, warningCount);
+            }
+
+            vfLogInfo("Loaded animator '{}': {} states, {} transitions, {} parameters",
+                      animator.name, animator.graph.states.size(),
+                      animator.graph.transitions.size(), animator.graph.parameters.size());
+
+            return animator;
+        }
+        catch (const json::exception& e)
+        {
+            vfLogError("Failed to parse animator file '{}': {}", path, e.what());
+            return std::nullopt;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Unexpected error loading animator '{}': {}", path, e.what());
+            return std::nullopt;
+        }
+    }
+
+    bool AnimatorAsset::save(std::string_view path, const AnimatorData& animator)
+    {
+        json j;
+
+        j["version"] = ANIMATOR_FORMAT_VERSION;
+        j["name"] = animator.name;
+        j["defaultState"] = animator.graph.defaultStateId;
+        j["anyStatePosition"] = json::array({animator.graph.anyStatePosition.x, animator.graph.anyStatePosition.y});
+        j["entryPosition"] = json::array({animator.graph.entryPosition.x, animator.graph.entryPosition.y});
+
+        json parametersJson = json::array();
+        for (const auto& param : animator.graph.parameters)
+        {
+            parametersJson.push_back(serializeParameter(param));
+        }
+        j["parameters"] = parametersJson;
+
+        json statesJson = json::array();
+        for (const auto& state : animator.graph.states)
+        {
+            statesJson.push_back(serializeState(state));
+        }
+        j["states"] = statesJson;
+
+        json transitionsJson = json::array();
+        for (const auto& transition : animator.graph.transitions)
+        {
+            transitionsJson.push_back(serializeTransition(transition));
+        }
+        j["transitions"] = transitionsJson;
+
+        try
+        {
+            fs::path filePath(path);
+            fs::create_directories(filePath.parent_path());
+
+            std::ofstream file(filePath);
+            if (!file.is_open())
+            {
+                vfLogError("Failed to create animator file: {}", path);
+                return false;
+            }
+
+            file << j.dump(4); // Pretty print with 4-space indent
+            vfLogInfo("Saved animator: {} to {}", animator.name, path);
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to save animator file {}: {}", path, e.what());
+            return false;
+        }
+    }
+
+    AnimatorData AnimatorAsset::createDefault(const std::string& name)
+    {
+        AnimatorData animator;
+        animator.name = name;
+        animator.version = ANIMATOR_FORMAT_VERSION;
+
+        animator.graph.entryPosition = glm::vec2(50.0f, 100.0f);
+        animator.graph.anyStatePosition = glm::vec2(50.0f, 250.0f);
+
+        AnimatorState idleState;
+        idleState.id = animator.graph.nextStateId++;
+        idleState.name = "Idle";
+        idleState.loop = true;
+        idleState.position = glm::vec2(250.0f, 100.0f);
+        animator.graph.states.push_back(std::move(idleState));
+
+        animator.graph.defaultStateId = 1;
+
+        return animator;
+    }
+}

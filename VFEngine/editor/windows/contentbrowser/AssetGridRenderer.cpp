@@ -191,6 +191,9 @@ namespace windows
         case Prefab:
             icon = AtlasIcon::Prefab;
             break;
+        case Animator:
+            icon = AtlasIcon::Animator;
+            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

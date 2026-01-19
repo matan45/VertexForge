@@ -1,6 +1,6 @@
 #include "AudioPreviewWindow.hpp"
 #include "imgui.h"
-#include "resource/AudioResource.hpp"
+#include "resource/ResourceManager.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/AudioEvents.hpp"
 #include <filesystem>
@@ -142,21 +142,27 @@ namespace windows
                 return result;
             }
 
-            resource::AudioData data = resource::AudioResource::loadAudio(path);
+            auto audioFuture = resource::ResourceManager::loadAudioAsync(path);
+            auto audioPtr = audioFuture.get();
+            if (!audioPtr)
+            {
+                result.errorMessage = "Failed to load audio data";
+                return result;
+            }
 
             if (loadingCancelled.load())
             {
                 result.errorMessage = "Cancelled";
                 return result;
             }
-            
-            result.totalDurationInSeconds = data.totalDurationInSeconds;
-            result.channels = data.channels;
-            result.sampleRate = data.sampleRate;
-            result.frames = data.frames;
-            result.dataSizeBytes = data.data.size() * sizeof(short);
-            
-            result.waveformCache = generateWaveformCache(data, data.channels);
+
+            result.totalDurationInSeconds = audioPtr->totalDurationInSeconds;
+            result.channels = audioPtr->channels;
+            result.sampleRate = audioPtr->sampleRate;
+            result.frames = audioPtr->frames;
+            result.dataSizeBytes = audioPtr->data.size() * sizeof(short);
+
+            result.waveformCache = generateWaveformCache(*audioPtr, audioPtr->channels);
 
             result.success = true;
         }

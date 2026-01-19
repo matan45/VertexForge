@@ -35,11 +35,12 @@ struct GPUObjectData {
     uint shaderGroupIndex;      
 
     // Meshlet LOD data - meshlet locations in meshlet buffer
-    // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
-    uvec4 meshletLod0;        
-    uvec4 meshletLod1;         
-    uvec4 meshletLod2;          
-    uvec4 meshletLod3;         
+    // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding/boneMatrixOffset)
+    // Note: meshletLod3.w stores boneMatrixOffset (0xFFFFFFFF = static mesh)
+    uvec4 meshletLod0;
+    uvec4 meshletLod1;
+    uvec4 meshletLod2;
+    uvec4 meshletLod3;
 };
 
 // Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
@@ -64,9 +65,9 @@ struct PerDrawData {
     uint meshletOffset;        
     uint meshletCount;          
 
-    uint baseVertexOffset;      
-    uint padding1;              
-    uint padding2;              
+    uint baseVertexOffset;
+    uint boneMatrixOffset;      // Offset into global bone SSBO, 0xFFFFFFFF if static
+    uint boneCount;             // Number of bones for this object
     uint padding3;              
 };
 
@@ -281,7 +282,6 @@ void main() {
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
     uint commandsPerSection = getCommandsPerSection();
 
-    // Frustum Culling
     if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
             atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
@@ -289,7 +289,6 @@ void main() {
         }
     }
 
-    // Hi-Z Occlusion Culling
     if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u) {
         if (camera.hiZMipLevels > 0u) {
             if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
@@ -299,7 +298,6 @@ void main() {
         }
     }
 
-    // LOD Selection
     uint targetLOD = 0;
     if (camera.enableLODSelection != 0u) {
         vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
@@ -333,7 +331,6 @@ void main() {
         return;
     }
 
-    // Emit Mesh Shader Dispatch Command
     uint localDrawIndex = atomicAdd(batchStats[sectionIndex].drawCount, 1);
     if (localDrawIndex >= commandsPerSection) {
         atomicAdd(batchStats[sectionIndex].drawCount, uint(-1));
@@ -379,7 +376,7 @@ void main() {
     perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
     perDrawData[globalDrawIndex].meshletCount = meshletCount;
     perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
-    perDrawData[globalDrawIndex].padding1 = 0u;
-    perDrawData[globalDrawIndex].padding2 = 0u;
+    perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;  // 0xFFFFFFFF for static meshes
+    perDrawData[globalDrawIndex].boneCount = 0u;  // Not used currently, bone count determined per-vertex
     perDrawData[globalDrawIndex].padding3 = 0u;
 }

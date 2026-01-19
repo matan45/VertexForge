@@ -72,6 +72,8 @@ namespace editor {
         glm::vec3 position = getPosition();
         viewMatrix = glm::lookAt(position, target, glm::vec3(0.0f, 1.0f, 0.0f));
         projectionMatrix = glm::perspective(glm::radians(fieldOfView), aspectRatio, nearPlane, farPlane);
+        // Flip Y for Vulkan coordinate system (GLM is designed for OpenGL)
+        projectionMatrix[1][1] *= -1;
     }
 
 }

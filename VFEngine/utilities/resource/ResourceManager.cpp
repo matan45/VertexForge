@@ -2,9 +2,11 @@
 #include "TextureResource.hpp"
 #include "AudioResource.hpp"
 #include "FontResource.hpp"
+#include "AnimationResource.hpp"
 #include "MeshStreamHandle.hpp"
 #include "../material/MaterialAsset.hpp"
 #include "../material/MaterialInstanceAsset.hpp"
+#include "../animator/AnimatorAsset.hpp"
 #include <bit>
 #include <algorithm>
 #include <cctype>
@@ -20,16 +22,11 @@ namespace resource
 
         while (running)
         {
-            // Wait for 5 minutes or until notified to wake up early.
             cleanupCondition.wait_for(lock, 1min);
 
-            // Check if we should stop running before proceeding.
             if (!running)
-            {
                 break;
-            }
 
-            // Perform the cleanup.
             unloadUnusedResources();
         }
     }
@@ -45,9 +42,10 @@ namespace resource
         std::erase_if(materialCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(materialInstanceCache, [](const auto& pair) { return pair.second.expired(); });
         std::erase_if(fontCache, [](const auto& pair) { return pair.second.expired(); });
+        std::erase_if(animationCache, [](const auto& pair) { return pair.second.expired(); });
+        std::erase_if(animatorCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
-    // Helper to get expected FileType from extension
     static FileType getExpectedTypeFromExtension(const std::string& ext)
     {
         if (ext == ".vfimage") return FileType::TEXTURE;
@@ -59,7 +57,6 @@ namespace resource
         return FileType::UNKNOWN;
     }
 
-    // Helper to get FileType name for logging
     static const char* getFileTypeName(FileType type)
     {
         switch (type) {
@@ -70,20 +67,19 @@ namespace resource
             case FileType::ANIMATION: return "ANIMATION";
             case FileType::SCENE: return "SCENE";
             case FileType::FONT: return "FONT";
+            case FileType::ANIMATOR: return "ANIMATOR";
             default: return "UNKNOWN";
         }
     }
 
     FileType ResourceManager::readHeaderFile(const fs::path& filePath)
     {
-        // Validate file path
         if (filePath.empty())
         {
             vfLogError("Empty file path provided");
             return FileType::UNKNOWN;
         }
 
-        // Check if file exists
         std::error_code ec;
         if (!fs::exists(filePath, ec) || ec)
         {
@@ -91,10 +87,10 @@ namespace resource
             return FileType::UNKNOWN;
         }
 
-        // Handle text-based formats by extension
         auto extension = filePath.extension().string();
         std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
+        // Handle text-based formats by extension
         if (extension == ".vfscene")
         {
             return FileType::SCENE;
@@ -117,7 +113,6 @@ namespace resource
             return FileType::UNKNOWN;
         }
 
-        // Validate the type byte is within valid range
         if (typeByte >= static_cast<uint8_t>(FileType::UNKNOWN))
         {
             vfLogError("Invalid file type header {} in file: {}", typeByte, filePath.string());
@@ -126,7 +121,6 @@ namespace resource
 
         FileType headerType = static_cast<FileType>(typeByte);
 
-        // Validate header matches file extension
         FileType expectedType = getExpectedTypeFromExtension(extension);
         if (expectedType != FileType::UNKNOWN && headerType != expectedType)
         {
@@ -175,11 +169,6 @@ namespace resource
             });
     }
 
-    std::unique_ptr<MeshStreamHandle> ResourceManager::openMeshStream(std::string_view path)
-    {
-        return MeshStreamResource::openStream(path);
-    }
-
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {
         return loadResourceAsync<std::vector<ShaderModel>>(
@@ -194,6 +183,14 @@ namespace resource
             path,
             fontCache,
             [](std::string_view p) { return FontResource::loadFont(p); });
+    }
+
+    std::future<std::shared_ptr<AnimationData>> ResourceManager::loadAnimationAsync(std::string_view path)
+    {
+        return loadResourceAsync<AnimationData>(
+            path,
+            animationCache,
+            [](std::string_view p) { return AnimationResource::loadAnimation(p); });
     }
 
     void ResourceManager::init()
@@ -220,7 +217,6 @@ namespace resource
         std::scoped_lock lock(cacheMutex);
         unloadUnusedResources();
 
-        // Clear all caches
         textureCache.clear();
         hdrCache.clear();
         audioCache.clear();
@@ -229,13 +225,14 @@ namespace resource
         materialCache.clear();
         materialInstanceCache.clear();
         fontCache.clear();
+        animationCache.clear();
+        animatorCache.clear();
 
         vfLogInfo("All resource caches cleared");
     }
 
     std::shared_ptr<material::MaterialData> ResourceManager::loadMaterial(std::string_view path)
     {
-        // Check cache first
         {
             std::scoped_lock lock(cacheMutex);
             auto it = materialCache.find(std::string(path));
@@ -245,7 +242,7 @@ namespace resource
                 }
             }
         }
-        
+
         auto result = material::MaterialAsset::load(path);
         if (!result) {
             vfLogError("Failed to load material: {}", path);
@@ -254,7 +251,6 @@ namespace resource
 
         auto material = std::make_shared<material::MaterialData>(std::move(*result));
 
-        // Cache it
         {
             std::scoped_lock lock(cacheMutex);
             materialCache[std::string(path)] = material;
@@ -271,7 +267,6 @@ namespace resource
 
     std::shared_ptr<material::MaterialInstanceData> ResourceManager::loadMaterialInstance(std::string_view path)
     {
-        // Check cache first
         {
             std::scoped_lock lock(cacheMutex);
             auto it = materialInstanceCache.find(std::string(path));
@@ -290,7 +285,6 @@ namespace resource
 
         auto instance = std::make_shared<material::MaterialInstanceData>(std::move(*result));
 
-        // Cache it
         {
             std::scoped_lock lock(cacheMutex);
             materialInstanceCache[std::string(path)] = instance;
@@ -303,5 +297,33 @@ namespace resource
     {
         std::scoped_lock lock(cacheMutex);
         materialInstanceCache.erase(std::string(path));
+    }
+
+    std::shared_ptr<animator::AnimatorData> ResourceManager::loadAnimator(std::string_view path)
+    {
+        {
+            std::scoped_lock lock(cacheMutex);
+            auto it = animatorCache.find(std::string(path));
+            if (it != animatorCache.end()) {
+                if (auto existing = it->second.lock()) {
+                    return existing;
+                }
+            }
+        }
+
+        auto result = animator::AnimatorAsset::load(path);
+        if (!result) {
+            vfLogError("Failed to load animator: {}", path);
+            return nullptr;
+        }
+
+        auto animatorData = std::make_shared<animator::AnimatorData>(std::move(*result));
+
+        {
+            std::scoped_lock lock(cacheMutex);
+            animatorCache[std::string(path)] = animatorData;
+        }
+
+        return animatorData;
     }
 }

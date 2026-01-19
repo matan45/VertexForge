@@ -10,8 +10,15 @@
 namespace resource
 {
     // Standard meshlet sizes based on NVIDIA recommendations
+    // These must be <= 255 as they're stored in uint8 fields and packed indices
     constexpr uint32_t MAX_MESHLET_VERTICES = 64;
     constexpr uint32_t MAX_MESHLET_PRIMITIVES = 124; // 126 max, use 124 for alignment
+
+    // Compile-time validation: indices are packed as uint8, counts stored in uint8 fields
+    static_assert(MAX_MESHLET_VERTICES <= 255,
+        "MAX_MESHLET_VERTICES must be <= 255 (triangle indices packed as uint8)");
+    static_assert(MAX_MESHLET_PRIMITIVES <= 255,
+        "MAX_MESHLET_PRIMITIVES must be <= 255 (primitive count stored as uint8)");
 
     // Meshlet descriptor - describes one meshlet's data location
     struct MeshletDescriptor

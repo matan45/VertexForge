@@ -20,10 +20,11 @@ namespace components
     struct ScriptComponent;
     struct ColliderComponent;
     struct RigidBodyComponent;
+    struct AnimatorComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
-                                               ScriptComponent, ColliderComponent, RigidBodyComponent>;
+                                               ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent>;
 
     struct WorldTransformComponent
     {
@@ -184,6 +185,7 @@ namespace components
     struct MeshComponent
     {
         std::string meshPath;
+        std::string animatorPath;  // Path to .vfAnimator file (optional)
         bool showBoundingBox = false;
     };
 
@@ -374,12 +376,39 @@ namespace components
         }
     };
 
+    /**
+     * AnimatorComponent provides ECS access to an entity's animation state machine.
+     *
+     * OWNERSHIP MODEL:
+     * - The stateMachine pointer is NON-OWNING (observer pattern)
+     * - Actual ownership: RuntimeAnimatorSystem singleton owns all AnimatorStateMachine instances
+     * - Lifetime guarantee: RuntimeAnimatorSystem clears this pointer before destroying the state machine
+     *
+     * USAGE:
+     * - Do NOT delete or store this pointer long-term
+     * - Do NOT access after RuntimeAnimatorSystem::shutdown()
+     * - Prefer using AnimatorComponentService or EventDispatcher commands for safe access
+     * - Direct pointer access is only safe during the frame it was retrieved
+     *
+     * WHY void*:
+     * - Avoids circular header dependencies (Components.hpp cannot include AnimatorStateMachine.hpp)
+     * - Cast to animation::AnimatorStateMachine* when needed in code that includes the header
+     */
+    struct AnimatorComponent
+    {
+        // Non-owning pointer to AnimatorStateMachine (owned by RuntimeAnimatorSystem)
+        // Valid only while RuntimeAnimatorSystem is active and entity has animator initialized
+        void* stateMachine = nullptr;
 
-    // ============================================================
-    // Physics Components
-    // ============================================================
+        // Cached animator asset path (mirrors MeshComponent::animatorPath)
+        // Used by RuntimeAnimatorSystem to detect when animator needs reinitialization
+        std::string animatorPath;
 
-    // Use shared physics types from types::
+        // True when stateMachine is valid and ready for use
+        // Set to false when RuntimeAnimatorSystem destroys or reinitializes the animator
+        bool isInitialized = false;
+    };
+
     using RigidBodyType = types::RigidBodyType;
     using ColliderShape = types::ColliderShape;
 
