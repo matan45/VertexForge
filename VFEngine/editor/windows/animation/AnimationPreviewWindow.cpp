@@ -215,7 +215,7 @@ namespace windows
                         timelinePanel.setAnimationData(&animationData);
                         panelState.animationLoaded = true;
                         panelState.animationData = &animationData;
-                        updateBoneTransformsFromService();
+                        loadAnimationForPreview();
                     }
                     else
                     {

@@ -81,6 +81,12 @@ namespace resource
         {
             return pixels.size() * sizeof(float);
         }
+
+        void releaseCPUData()
+        {
+            pixels.clear();
+            pixels.shrink_to_fit();
+        }
     };
 
     struct Vertex

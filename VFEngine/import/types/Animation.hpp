@@ -7,10 +7,6 @@
 
 struct aiScene;
 struct aiAnimation;
-struct aiNode;
-struct aiMatrix4x4;
-struct aiQuaternion;
-struct aiVector3D;
 
 namespace types
 {
@@ -19,7 +15,7 @@ namespace types
     class Animation
     {
     public:
-        
+
         void loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
                           std::string_view location,
                           AnimationProgressCallback progressCallback = nullptr) const;
@@ -38,8 +34,5 @@ namespace types
         void writeChannels(std::ofstream& file, const std::vector<resource::BoneAnimation>& channels) const;
 
         static std::string sanitizeAnimationName(const std::string& name);
-        static glm::mat4 convertMatrix(const aiMatrix4x4& m);
-        static glm::quat convertQuaternion(const aiQuaternion& q);
-        static glm::vec3 convertVector(const aiVector3D& v);
     };
 }

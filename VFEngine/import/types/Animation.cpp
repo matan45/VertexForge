@@ -14,6 +14,24 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
+namespace
+{
+    glm::mat4 convertMatrix(const aiMatrix4x4& m)
+    {
+        return glm::transpose(glm::make_mat4(&m.a1));
+    }
+
+    glm::quat convertQuaternion(const aiQuaternion& q)
+    {
+        return glm::quat(q.w, q.x, q.y, q.z);
+    }
+
+    glm::vec3 convertVector(const aiVector3D& v)
+    {
+        return glm::vec3(v.x, v.y, v.z);
+    }
+}
+
 namespace types
 {
     void Animation::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
@@ -243,20 +261,5 @@ namespace types
             result.pop_back();
 
         return result;
-    }
-
-    glm::mat4 Animation::convertMatrix(const aiMatrix4x4& m)
-    {
-        return glm::transpose(glm::make_mat4(&m.a1));
-    }
-
-    glm::quat Animation::convertQuaternion(const aiQuaternion& q)
-    {
-        return glm::quat(q.w, q.x, q.y, q.z);
-    }
-
-    glm::vec3 Animation::convertVector(const aiVector3D& v)
-    {
-        return glm::vec3(v.x, v.y, v.z);
     }
 }
