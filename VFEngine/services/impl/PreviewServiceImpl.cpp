@@ -2,14 +2,15 @@
 #include "../providers/IMaterialPreviewProvider.hpp"
 #include "../providers/IMeshPreviewProvider.hpp"
 #include "../providers/IAnimationPreviewProvider.hpp"
+#include "../providers/IVFXPreviewProvider.hpp"
 #include "../events/EventDispatcher.hpp"
 #include <cassert>
 
 namespace services
 {
     PreviewServiceImpl::PreviewServiceImpl(IMaterialPreviewProvider* materialProv, IMeshPreviewProvider* meshProv,
-                                           IAnimationPreviewProvider* animProv)
-        : materialProvider(materialProv), meshProvider(meshProv), animationProvider(animProv)
+                                           IAnimationPreviewProvider* animProv, IVFXPreviewProvider* vfxProv)
+        : materialProvider(materialProv), meshProvider(meshProv), animationProvider(animProv), vfxProvider(vfxProv)
     {
         assert(materialProvider != nullptr && "PreviewServiceImpl requires a valid IMaterialPreviewProvider");
         assert(meshProvider != nullptr && "PreviewServiceImpl requires a valid IMeshPreviewProvider");
@@ -225,6 +226,76 @@ namespace services
                 [this](const events::animpreview::GetAnimationPreviewEvaluatedBonesQuery& query)
                 {
                     return getAnimationPreviewEvaluatedBones(query.instanceId);
+                });
+        }
+
+        // VFX Preview event handlers
+        if (vfxProvider)
+        {
+            dispatcher.registerCommandHandler<events::vfxpreview::InitVFXPreviewCommand>(
+                [this](const events::vfxpreview::InitVFXPreviewCommand& cmd)
+                {
+                    initVFXPreview(cmd.instanceId);
+                });
+
+            dispatcher.registerCommandHandler<events::vfxpreview::CleanUpVFXPreviewCommand>(
+                [this](const events::vfxpreview::CleanUpVFXPreviewCommand& cmd)
+                {
+                    cleanUpVFXPreview(cmd.instanceId);
+                });
+
+            dispatcher.registerCommandHandler<events::vfxpreview::SetVFXParamsCommand>(
+                [this](const events::vfxpreview::SetVFXParamsCommand& cmd)
+                {
+                    setVFXParams(cmd.instanceId, cmd.params);
+                });
+
+            dispatcher.registerCommandHandler<events::vfxpreview::UpdateVFXCameraCommand>(
+                [this](const events::vfxpreview::UpdateVFXCameraCommand& cmd)
+                {
+                    updateVFXCamera(cmd.instanceId, cmd.view, cmd.projection, cmd.cameraPos, cmd.time);
+                });
+
+            dispatcher.registerCommandHandler<events::vfxpreview::UpdateVFXSimulationCommand>(
+                [this](const events::vfxpreview::UpdateVFXSimulationCommand& cmd)
+                {
+                    updateVFXSimulation(cmd.instanceId, cmd.deltaTime);
+                });
+
+            dispatcher.registerCommandHandler<events::vfxpreview::PlayVFXCommand>(
+                [this](const events::vfxpreview::PlayVFXCommand& cmd)
+                {
+                    playVFX(cmd.instanceId);
+                });
+
+            dispatcher.registerCommandHandler<events::vfxpreview::PauseVFXCommand>(
+                [this](const events::vfxpreview::PauseVFXCommand& cmd)
+                {
+                    pauseVFX(cmd.instanceId);
+                });
+
+            dispatcher.registerCommandHandler<events::vfxpreview::StopVFXCommand>(
+                [this](const events::vfxpreview::StopVFXCommand& cmd)
+                {
+                    stopVFX(cmd.instanceId);
+                });
+
+            dispatcher.registerQueryHandler<events::vfxpreview::RenderVFXPreviewQuery>(
+                [this](const events::vfxpreview::RenderVFXPreviewQuery& query)
+                {
+                    return renderVFXPreview(query.instanceId);
+                });
+
+            dispatcher.registerQueryHandler<events::vfxpreview::IsVFXPlayingQuery>(
+                [this](const events::vfxpreview::IsVFXPlayingQuery& query)
+                {
+                    return isVFXPlaying(query.instanceId);
+                });
+
+            dispatcher.registerQueryHandler<events::vfxpreview::IsVFXPreviewInitializedQuery>(
+                [this](const events::vfxpreview::IsVFXPreviewInitializedQuery& query)
+                {
+                    return isVFXPreviewInitialized(query.instanceId);
                 });
         }
     }
@@ -471,5 +542,109 @@ namespace services
             return animationProvider->getAnimationPreviewEvaluatedBones(instanceId);
         }
         return {};
+    }
+
+    // VFX Preview implementations
+
+    void PreviewServiceImpl::initVFXPreview(PreviewInstanceId instanceId)
+    {
+        if (vfxProvider)
+        {
+            vfxProvider->initVFXPreview(instanceId);
+        }
+    }
+
+    void PreviewServiceImpl::cleanUpVFXPreview(PreviewInstanceId instanceId)
+    {
+        if (vfxProvider)
+        {
+            vfxProvider->cleanUpVFXPreview(instanceId);
+        }
+    }
+
+    bool PreviewServiceImpl::isVFXPreviewInitialized(PreviewInstanceId instanceId) const
+    {
+        if (vfxProvider)
+        {
+            return vfxProvider->isVFXPreviewInitialized(instanceId);
+        }
+        return false;
+    }
+
+    void PreviewServiceImpl::setVFXParams(PreviewInstanceId instanceId, const VFXPreviewParams& params)
+    {
+        if (vfxProvider)
+        {
+            vfxProvider->setVFXParams(instanceId, params);
+        }
+    }
+
+    VFXPreviewParams PreviewServiceImpl::getVFXParams(PreviewInstanceId instanceId) const
+    {
+        if (vfxProvider)
+        {
+            return vfxProvider->getVFXParams(instanceId);
+        }
+        return {};
+    }
+
+    void PreviewServiceImpl::updateVFXCamera(PreviewInstanceId instanceId, const glm::mat4& view,
+                                              const glm::mat4& projection, const glm::vec3& cameraPos, float time)
+    {
+        if (vfxProvider)
+        {
+            vfxProvider->updateVFXCamera(instanceId, view, projection, cameraPos, time);
+        }
+    }
+
+    void PreviewServiceImpl::updateVFXSimulation(PreviewInstanceId instanceId, float deltaTime)
+    {
+        if (vfxProvider)
+        {
+            vfxProvider->updateVFXSimulation(instanceId, deltaTime);
+        }
+    }
+
+    void PreviewServiceImpl::playVFX(PreviewInstanceId instanceId)
+    {
+        if (vfxProvider)
+        {
+            vfxProvider->playVFX(instanceId);
+        }
+    }
+
+    void PreviewServiceImpl::pauseVFX(PreviewInstanceId instanceId)
+    {
+        if (vfxProvider)
+        {
+            vfxProvider->pauseVFX(instanceId);
+        }
+    }
+
+    void PreviewServiceImpl::stopVFX(PreviewInstanceId instanceId)
+    {
+        if (vfxProvider)
+        {
+            vfxProvider->stopVFX(instanceId);
+        }
+    }
+
+    bool PreviewServiceImpl::isVFXPlaying(PreviewInstanceId instanceId) const
+    {
+        if (vfxProvider)
+        {
+            return vfxProvider->isVFXPlaying(instanceId);
+        }
+        return false;
+    }
+
+    ViewportTextureHandle PreviewServiceImpl::renderVFXPreview(PreviewInstanceId instanceId)
+    {
+        ViewportTextureHandle handle;
+        if (vfxProvider)
+        {
+            handle.imguiDescriptorSet = vfxProvider->renderVFXPreview(instanceId);
+        }
+        return handle;
     }
 }

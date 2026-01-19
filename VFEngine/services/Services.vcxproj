@@ -119,6 +119,7 @@
     <ClInclude Include="events\SceneEvents.hpp" />
     <ClInclude Include="events\ScriptingEvents.hpp" />
     <ClInclude Include="events\UndoRedoEvents.hpp" />
+    <ClInclude Include="events\VFXPreviewEvents.hpp" />
     <ClInclude Include="impl\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\EditorModeServiceImpl.hpp" />
     <ClInclude Include="impl\EditorRenderServiceImpl.hpp" />
@@ -169,6 +170,7 @@
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
+    <ClInclude Include="providers\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
   </ItemGroup>
   <ItemGroup>

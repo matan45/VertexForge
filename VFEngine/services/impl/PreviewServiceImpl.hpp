@@ -2,12 +2,14 @@
 #include "../interfaces/IPreviewService.hpp"
 #include "../events/PreviewEvents.hpp"
 #include "../events/AnimationPreviewEvents.hpp"
+#include "../events/VFXPreviewEvents.hpp"
 
 namespace services
 {
     class IMaterialPreviewProvider;
     class IMeshPreviewProvider;
     class IAnimationPreviewProvider;
+    class IVFXPreviewProvider;
 
 
     class PreviewServiceImpl : public IPreviewService
@@ -16,10 +18,12 @@ namespace services
         IMaterialPreviewProvider* materialProvider;
         IMeshPreviewProvider* meshProvider;
         IAnimationPreviewProvider* animationProvider;
+        IVFXPreviewProvider* vfxProvider;
 
     public:
         explicit PreviewServiceImpl(IMaterialPreviewProvider* materialProvider, IMeshPreviewProvider* meshProvider,
-                                    IAnimationPreviewProvider* animationProvider = nullptr);
+                                    IAnimationPreviewProvider* animationProvider = nullptr,
+                                    IVFXPreviewProvider* vfxProvider = nullptr);
         ~PreviewServiceImpl() override;
 
         void registerEventHandlers() override;
@@ -71,5 +75,24 @@ namespace services
         [[nodiscard]] ViewportTextureHandle renderAnimationPreview(PreviewInstanceId instanceId) override;
         [[nodiscard]] std::vector<EvaluatedBoneInfo>
         getAnimationPreviewEvaluatedBones(PreviewInstanceId instanceId) const override;
+
+        // VFX Preview
+        void initVFXPreview(PreviewInstanceId instanceId) override;
+        void cleanUpVFXPreview(PreviewInstanceId instanceId) override;
+        [[nodiscard]] bool isVFXPreviewInitialized(PreviewInstanceId instanceId) const override;
+
+        void setVFXParams(PreviewInstanceId instanceId, const VFXPreviewParams& params) override;
+        [[nodiscard]] VFXPreviewParams getVFXParams(PreviewInstanceId instanceId) const override;
+
+        void updateVFXCamera(PreviewInstanceId instanceId, const glm::mat4& view,
+                             const glm::mat4& projection, const glm::vec3& cameraPos, float time) override;
+        void updateVFXSimulation(PreviewInstanceId instanceId, float deltaTime) override;
+
+        void playVFX(PreviewInstanceId instanceId) override;
+        void pauseVFX(PreviewInstanceId instanceId) override;
+        void stopVFX(PreviewInstanceId instanceId) override;
+        [[nodiscard]] bool isVFXPlaying(PreviewInstanceId instanceId) const override;
+
+        [[nodiscard]] ViewportTextureHandle renderVFXPreview(PreviewInstanceId instanceId) override;
     };
 }

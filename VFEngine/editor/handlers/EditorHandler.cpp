@@ -149,7 +149,8 @@ namespace handlers
         previewService = std::make_shared<services::PreviewServiceImpl>(
             bootstrap->getMaterialPreviewProvider(),
             bootstrap->getMeshPreviewProvider(),
-            bootstrap->getAnimationPreviewProvider()
+            bootstrap->getAnimationPreviewProvider(),
+            bootstrap->getVFXPreviewProvider()
         );
         editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
