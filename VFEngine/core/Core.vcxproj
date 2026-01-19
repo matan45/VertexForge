@@ -107,7 +107,6 @@
     <ClInclude Include="adapters\MeshPreviewAdapter.hpp" />
     <ClInclude Include="adapters\NativeAPIRegistry.hpp" />
     <ClInclude Include="adapters\OffScreenAdapter.hpp" />
-    <ClInclude Include="adapters\AnimatorAdapter.hpp" />
     <ClInclude Include="adapters\PhysicsAdapter.hpp" />
     <ClInclude Include="adapters\ScriptingAdapter.hpp" />
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
@@ -152,7 +151,6 @@
     <ClCompile Include="adapters\MeshPreviewAdapter.cpp" />
     <ClCompile Include="adapters\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\OffScreenAdapter.cpp" />
-    <ClCompile Include="adapters\AnimatorAdapter.cpp" />
     <ClCompile Include="adapters\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\ScriptingAdapter.cpp" />
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />

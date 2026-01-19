@@ -194,6 +194,9 @@ namespace windows
         case Animator:
             icon = AtlasIcon::Animator;
             break;
+        case VFX:
+            icon = AtlasIcon::VFX;
+            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

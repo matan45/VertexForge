@@ -141,6 +141,8 @@
     <ClInclude Include="types\PhysicsTypes.hpp" />
     <ClInclude Include="types\RenderSettings.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
+    <ClInclude Include="vfx\VFXAsset.hpp" />
+    <ClInclude Include="vfx\VFXTypes.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="animator\AnimatorAsset.cpp" />
@@ -170,6 +172,8 @@
     <ClCompile Include="string\StringUtil.cpp" />
     <ClCompile Include="texture\OrmTexturePacker.cpp" />
     <ClCompile Include="time\Timer.cpp" />
+    <ClCompile Include="vfx\VFXAsset.cpp" />
+    <ClCompile Include="vfx\VFXTypes.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\spdLog.vcxproj">

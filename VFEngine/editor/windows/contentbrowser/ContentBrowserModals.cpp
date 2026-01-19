@@ -7,6 +7,7 @@
 #include "events/FileOperationsEvents.hpp"
 #include <material/MaterialAsset.hpp>
 #include <animator/AnimatorAsset.hpp>
+#include <vfx/VFXAsset.hpp>
 
 namespace windows
 {
@@ -64,6 +65,12 @@ namespace windows
         }
         drawCreateAnimatorModal(currentPath);
 
+        if (showCreateVFXModal)
+        {
+            ImGui::OpenPopup("Create New VFX");
+        }
+        drawCreateVFXModal(currentPath);
+
         if (showSavePrefabModal)
         {
             ImGui::OpenPopup("Save Prefab");
@@ -109,6 +116,11 @@ namespace windows
                 {
                     showCreateAnimatorModal = true;
                     newAnimatorName.clear();
+                }
+                if (ImGui::MenuItem("VFX"))
+                {
+                    showCreateVFXModal = true;
+                    newVFXName.clear();
                 }
                 ImGui::EndMenu();
             }
@@ -286,6 +298,53 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showCreateAnimatorModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawCreateVFXModal(const fs::path& currentPath)
+    {
+        if (showCreateVFXModal &&
+            ImGui::BeginPopupModal("Create New VFX", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            char buffer[256];
+            std::strncpy(buffer, newVFXName.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText("VFX Name", buffer, IM_ARRAYSIZE(buffer)))
+            {
+                newVFXName = std::string(buffer);
+            }
+
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                if (!newVFXName.empty())
+                {
+                    std::string extension = ".vfVFX";
+                    fs::path newVFXPath = currentPath / (newVFXName + extension);
+
+                    int counter = 1;
+                    while (fs::exists(newVFXPath))
+                    {
+                        newVFXPath = currentPath / (newVFXName + "_" + std::to_string(counter) + extension);
+                        counter++;
+                    }
+
+                    std::string pathStr = StringUtil::wstringToUtf8(newVFXPath.wstring());
+                    auto defaultVFX = vfx::VFXAsset::createDefault(newVFXName);
+                    if (vfx::VFXAsset::save(pathStr, defaultVFX))
+                    {
+                        if (refreshCallback) refreshCallback();
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+                showCreateVFXModal = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showCreateVFXModal = false;
             }
             ImGui::EndPopup();
         }

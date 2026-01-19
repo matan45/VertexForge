@@ -15,6 +15,7 @@ namespace windows
         Material,
         MaterialInstance,
         Animator,
+        VFX,
         Prefab,
         Script,
         Font,
@@ -37,7 +38,8 @@ namespace windows
         Prefab = 10,
         Font = 11,
         Project = 12,
-        Animator = 13
+        Animator = 13,
+        VFX = 14
     };
 
     struct Asset
