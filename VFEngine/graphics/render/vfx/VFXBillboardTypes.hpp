@@ -131,6 +131,7 @@ namespace render::vfx
         glm::vec4 startColor{1.0f, 1.0f, 1.0f, 1.0f};  // Initial RGBA color
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};     // Direction for initial velocity
         std::string texturePath;        // Optional texture path (empty = default white)
+        bool looping = true;            // Whether VFX loops continuously
     };
 
     // Constants

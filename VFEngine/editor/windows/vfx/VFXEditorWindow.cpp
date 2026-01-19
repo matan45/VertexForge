@@ -120,6 +120,16 @@ namespace windows
             return defaultValue;
         };
 
+        auto getBool = [](const vfx::VFXNode& node, const std::string& propName, bool defaultValue) -> bool {
+            auto it = node.properties.find(propName);
+            if (it != node.properties.end()) {
+                if (auto* val = std::get_if<bool>(&it->second.value)) {
+                    return *val;
+                }
+            }
+            return defaultValue;
+        };
+
         // Extract properties from emitter node
         services::VFXPreviewParams params;
         params.spawnRate = getFloat(*emitterNode, "spawnRate", vfx::EmitterDefaults::SPAWN_RATE);
@@ -128,6 +138,7 @@ namespace windows
         params.startSpeed = getFloat(*emitterNode, "startSpeed", vfx::EmitterDefaults::START_SPEED);
         params.emitDirection = getVec3(*emitterNode, "startVelocity", glm::vec3(0.0f, 1.0f, 0.0f));
         params.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
 
         previewPanel->setParams(params);
     }

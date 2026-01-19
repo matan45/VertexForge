@@ -26,6 +26,7 @@ namespace vfx
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
         static glm::vec3 getVec3(const VFXNode& node, const std::string& propName, const glm::vec3& defaultValue);
         static glm::vec4 getVec4(const VFXNode& node, const std::string& propName, const glm::vec4& defaultValue);
+        static bool getBool(const VFXNode& node, const std::string& propName, bool defaultValue);
     };
 
     // Template implementation
@@ -62,6 +63,11 @@ namespace vfx
         return getPropertyValue<glm::vec4>(node, propName, defaultValue);
     }
 
+    inline bool VFXEmitterConfigLoader::getBool(const VFXNode& node, const std::string& propName, bool defaultValue)
+    {
+        return getPropertyValue<bool>(node, propName, defaultValue);
+    }
+
     inline std::optional<render::vfx::VFXEmitterConfig> VFXEmitterConfigLoader::loadFromFile(std::string_view path)
     {
         auto vfxData = VFXAsset::load(path);
@@ -96,6 +102,9 @@ namespace vfx
 
         // startColor is stored as Color type (same as Vec4)
         config.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+        // Looping property
+        config.looping = getBool(*emitterNode, "looping", EmitterDefaults::LOOPING);
 
         // Texture path (future extension)
         auto texIt = emitterNode->properties.find("texturePath");

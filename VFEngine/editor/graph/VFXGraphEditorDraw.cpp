@@ -60,88 +60,92 @@ namespace editor::graph {
 
         ed::BeginNode(toEditorNodeId(node.id));
 
-        // Node header with colored background
-        ImVec2 headerMin = ImGui::GetCursorScreenPos();
-
-        // Node title
-        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 255, 255));
+        // Node title with colored text
+        ImGui::PushStyleColor(ImGuiCol_Text, ImColor(headerColor).Value);
         ImGui::TextUnformatted(node.name.empty() ? getNodeTypeName(node.type) : node.name.c_str());
         ImGui::PopStyleColor();
 
-        ImVec2 headerMax = ImGui::GetCursorScreenPos();
-        headerMax.x = headerMin.x + ImGui::GetContentRegionAvail().x + 20;
+        ImGui::Spacing();
 
-        // Draw header background
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(
-            ImVec2(headerMin.x - 8, headerMin.y - 4),
-            ImVec2(headerMax.x, headerMax.y),
-            headerColor, 4.0f, ImDrawFlags_RoundCornersTop);
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
         float pinSize = 10.0f;
         ImU32 pinColor = getFlowPinColor();
 
         if (node.type == vfx::VFXNodeType::Emitter) {
             // Emitter node: show properties + output pin
-
-            // Draw properties
-            ImGui::PushItemWidth(100);
+            // Draw properties with compact layout - label on left, value on right
             for (auto& [propName, prop] : node.properties) {
-                ImGui::TextUnformatted(propName.c_str());
-                ImGui::SameLine(80);
-
                 std::string widgetId = "##" + propName + std::to_string(node.id);
 
                 switch (prop.type) {
                     case vfx::VFXPropertyType::Float: {
                         float* val = std::get_if<float>(&prop.value);
                         if (val) {
-                            if (ImGui::DragFloat(widgetId.c_str(), val, 0.1f, prop.min, prop.max)) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(70);
+                            ImGui::PushItemWidth(50);
+                            if (ImGui::DragFloat(widgetId.c_str(), val, 0.1f, prop.min, prop.max, "%.1f")) {
                                 if (onGraphChanged) onGraphChanged();
                             }
+                            ImGui::PopItemWidth();
                         }
                         break;
                     }
                     case vfx::VFXPropertyType::Vec3: {
                         glm::vec3* val = std::get_if<glm::vec3>(&prop.value);
                         if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::PushItemWidth(90);
                             float v[3] = {val->x, val->y, val->z};
-                            if (ImGui::DragFloat3(widgetId.c_str(), v, 0.1f)) {
+                            if (ImGui::InputFloat3(widgetId.c_str(), v, "%.1f")) {
                                 *val = glm::vec3(v[0], v[1], v[2]);
                                 if (onGraphChanged) onGraphChanged();
                             }
+                            ImGui::PopItemWidth();
                         }
                         break;
                     }
                     case vfx::VFXPropertyType::Color: {
                         glm::vec4* val = std::get_if<glm::vec4>(&prop.value);
                         if (val) {
-                            float c[4] = {val->x, val->y, val->z, val->w};
-                            if (ImGui::ColorEdit4(widgetId.c_str(), c,
-                                    ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
-                                *val = glm::vec4(c[0], c[1], c[2], c[3]);
-                                if (onGraphChanged) onGraphChanged();
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(70);
+                            ImVec4 color(val->x, val->y, val->z, val->w);
+                            if (ImGui::ColorButton(widgetId.c_str(), color, ImGuiColorEditFlags_AlphaPreview, ImVec2(20, 20))) {
+                                ImGui::OpenPopup(("ColorPicker" + widgetId).c_str());
                             }
+                            ed::Suspend();
+                            if (ImGui::BeginPopup(("ColorPicker" + widgetId).c_str())) {
+                                float c[4] = {val->x, val->y, val->z, val->w};
+                                if (ImGui::ColorPicker4("##picker", c, ImGuiColorEditFlags_AlphaBar)) {
+                                    *val = glm::vec4(c[0], c[1], c[2], c[3]);
+                                    if (onGraphChanged) onGraphChanged();
+                                }
+                                ImGui::EndPopup();
+                            }
+                            ed::Resume();
                         }
                         break;
                     }
                     case vfx::VFXPropertyType::Int: {
                         int32_t* val = std::get_if<int32_t>(&prop.value);
                         if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(70);
+                            ImGui::PushItemWidth(50);
                             if (ImGui::DragInt(widgetId.c_str(), val, 1,
                                     static_cast<int>(prop.min), static_cast<int>(prop.max))) {
                                 if (onGraphChanged) onGraphChanged();
                             }
+                            ImGui::PopItemWidth();
                         }
                         break;
                     }
                     case vfx::VFXPropertyType::Bool: {
                         bool* val = std::get_if<bool>(&prop.value);
                         if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(70);
                             if (ImGui::Checkbox(widgetId.c_str(), val)) {
                                 if (onGraphChanged) onGraphChanged();
                             }
@@ -153,15 +157,10 @@ namespace editor::graph {
                         break;
                 }
             }
-            ImGui::PopItemWidth();
 
             ImGui::Spacing();
 
-            // Output pin (right side)
-            float nodeWidth = ImGui::GetContentRegionAvail().x;
-            float labelWidth = ImGui::CalcTextSize("Output").x;
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + nodeWidth - labelWidth - pinSize - 8);
-
+            // Output pin
             uint32_t outputPinId = getOutputPinId(node.id);
             ed::BeginPin(toEditorPinId(outputPinId), ed::PinKind::Output);
 
@@ -191,6 +190,22 @@ namespace editor::graph {
             ImGui::TextUnformatted("Input");
 
             ed::EndPin();
+
+            // VK-85: Show validation status indicator
+            ImGui::Spacing();
+            bool graphValid = currentGraph ? currentGraph->isValid() : false;
+            if (graphValid) {
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(100, 255, 100, 255));
+                ImGui::TextUnformatted("Ready");
+                ImGui::PopStyleColor();
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 100, 100, 255));
+                ImGui::TextUnformatted("Not Connected");
+                ImGui::PopStyleColor();
+                if (ImGui::IsItemHovered() && currentGraph) {
+                    ImGui::SetTooltip("%s", currentGraph->getValidationError().c_str());
+                }
+            }
         }
 
         ed::EndNode();

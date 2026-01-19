@@ -85,4 +85,46 @@ namespace vfx
         if (str == "OutSystem") return VFXNodeType::OutSystem;
         return VFXNodeType::Emitter;
     }
+
+    bool VFXGraph::isValid() const
+    {
+        // Check if Emitter node exists
+        const VFXNode* emitter = findEmitterNode();
+        if (!emitter)
+            return false;
+
+        // Check if OutSystem node exists
+        const VFXNode* outSystem = findOutSystemNode();
+        if (!outSystem)
+            return false;
+
+        // Check if there's a link from Emitter to OutSystem
+        for (const auto& link : links)
+        {
+            if (link.sourceNodeId == emitter->id && link.targetNodeId == outSystem->id)
+                return true;
+        }
+
+        return false;
+    }
+
+    std::string VFXGraph::getValidationError() const
+    {
+        const VFXNode* emitter = findEmitterNode();
+        if (!emitter)
+            return "Missing Emitter node";
+
+        const VFXNode* outSystem = findOutSystemNode();
+        if (!outSystem)
+            return "Missing OutSystem node";
+
+        // Check if there's a link from Emitter to OutSystem
+        for (const auto& link : links)
+        {
+            if (link.sourceNodeId == emitter->id && link.targetNodeId == outSystem->id)
+                return "";  // No error
+        }
+
+        return "Emitter is not connected to OutSystem";
+    }
 }

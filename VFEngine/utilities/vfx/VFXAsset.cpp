@@ -401,6 +401,10 @@ namespace vfx
             "startColor", VFXPropertyType::Color,
             glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0.0f, 1.0f
         };
+        emitterNode.properties["looping"] = VFXProperty{
+            "looping", VFXPropertyType::Bool,
+            EmitterDefaults::LOOPING, 0.0f, 1.0f
+        };
 
         vfxData.graph.nodes.push_back(std::move(emitterNode));
 

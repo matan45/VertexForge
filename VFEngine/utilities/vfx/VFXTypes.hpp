@@ -76,6 +76,10 @@ namespace vfx
         const VFXNode* findNode(uint32_t nodeId) const;
         const VFXNode* findEmitterNode() const;
         const VFXNode* findOutSystemNode() const;
+
+        // Graph validation (VK-85: OutSystem validates execution)
+        bool isValid() const;
+        std::string getValidationError() const;
     };
 
     // Root VFX asset data
@@ -94,6 +98,7 @@ namespace vfx
         inline constexpr float LIFETIME = 2.0f;             // seconds
         inline constexpr float START_SIZE = 1.0f;           // scale
         inline constexpr float START_SPEED = 1.0f;          // units per second
+        inline constexpr bool LOOPING = true;               // whether VFX loops
     }
 
     // Type conversion utilities
