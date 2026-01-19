@@ -214,4 +214,10 @@ namespace core {
         return offScreen ? offScreen->getViewMode() : 0;
     }
 
+    void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
+        if (offScreen) {
+            offScreen->setVFXRuntimeProvider(provider);
+        }
+    }
+
 }

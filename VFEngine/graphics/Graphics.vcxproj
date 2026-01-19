@@ -112,6 +112,7 @@
     <ClInclude Include="controllers\RenderController.hpp" />
     <ClInclude Include="controllers\TextureController.hpp" />
     <ClInclude Include="controllers\VFXPreviewController.hpp" />
+    <ClInclude Include="controllers\VFXSceneRenderer.hpp" />
     <ClInclude Include="controllers\offscreen\CameraController.hpp" />
     <ClInclude Include="controllers\offscreen\CullingStatsCollector.hpp" />
     <ClInclude Include="controllers\offscreen\FramePreparationSystem.hpp" />
@@ -184,6 +185,7 @@
     <ClInclude Include="render\vfx\VFXBillboardPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardTypes.hpp" />
     <ClInclude Include="render\vfx\VFXParticleSystem.hpp" />
+    <ClInclude Include="render\vfx\VFXScenePipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="animation\AnimationBlender.cpp" />
@@ -199,6 +201,7 @@
     <ClCompile Include="controllers\RenderController.cpp" />
     <ClCompile Include="controllers\TextureController.cpp" />
     <ClCompile Include="controllers\VFXPreviewController.cpp" />
+    <ClCompile Include="controllers\VFXSceneRenderer.cpp" />
     <ClCompile Include="controllers\offscreen\CameraController.cpp" />
     <ClCompile Include="controllers\offscreen\CullingStatsCollector.cpp" />
     <ClCompile Include="controllers\offscreen\FramePreparationSystem.cpp" />
@@ -262,6 +265,7 @@
     <ClCompile Include="render\tools\PhysicsDebugRenderer.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
+    <ClCompile Include="render\vfx\VFXScenePipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />

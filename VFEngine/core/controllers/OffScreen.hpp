@@ -9,6 +9,11 @@
 #include "../../services/providers/IOffScreenProvider.hpp"
 #include "../../utilities/types/CameraTypes.hpp"
 
+namespace services
+{
+	class IVFXRuntimeProvider;
+}
+
 namespace controllers {
 
 	using types::CameraId;
@@ -89,5 +94,8 @@ namespace controllers {
 		// View Mode API
 		void setViewMode(uint32_t mode);
 		uint32_t getViewMode() const;
+
+		// VFX Runtime API
+		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 	};
 }

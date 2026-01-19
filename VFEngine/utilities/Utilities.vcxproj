@@ -142,6 +142,7 @@
     <ClInclude Include="types\RenderSettings.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
     <ClInclude Include="vfx\VFXAsset.hpp" />
+    <ClInclude Include="vfx\VFXEmitterConfigLoader.hpp" />
     <ClInclude Include="vfx\VFXTypes.hpp" />
   </ItemGroup>
   <ItemGroup>

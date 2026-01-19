@@ -6,6 +6,7 @@
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
+#include "../adapters/VFXRuntimeAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 
@@ -28,11 +29,16 @@ namespace core
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
+        vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
 
         offScreen->init();
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();
+
+        // Wire VFX runtime provider to offscreen renderer
+        // This allows VFX to be rendered as part of the scene
+        offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
 
         // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
         coreInterface->setResizeCallback([this]()
@@ -68,6 +74,7 @@ namespace core
             physicsAdapter->cleanUp();
         }
 
+        vfxRuntimeAdapter.reset();
         offScreenAdapter.reset();
         audioAdapter.reset();
         scriptingAdapter.reset();
@@ -103,6 +110,11 @@ namespace core
     services::IAnimatorProvider* RuntimeBootstrap::getAnimatorProvider()
     {
         return animatorAdapter.get();
+    }
+
+    services::IVFXRuntimeProvider* RuntimeBootstrap::getVFXRuntimeProvider()
+    {
+        return vfxRuntimeAdapter.get();
     }
 
     window::Window* RuntimeBootstrap::getWindow()

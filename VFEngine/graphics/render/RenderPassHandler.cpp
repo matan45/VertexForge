@@ -14,7 +14,10 @@
 #include "tools/PhysicsDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
+#include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "print/Logger.hpp"
+
+// Note: IVFXRuntimeProvider is included above for VFX scene integration
 
 namespace render
 {
@@ -63,6 +66,12 @@ namespace render
         if (enableGPUDriven)
         {
             initGPUDrivenRenderer();
+        }
+
+        // Initialize VFX runtime provider with mesh pipeline's render pass
+        if (vfxRuntimeProvider && !vfxRuntimeProvider->isInitialized())
+        {
+            vfxRuntimeProvider->init(meshPipeline->getRenderPass());
         }
     }
 
@@ -118,6 +127,12 @@ namespace render
                 meshPipeline->getRenderPass(),
                 meshPipeline->getIBLDescriptorSetLayout());
         }
+
+        // Update VFX runtime with new render pass
+        if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+        {
+            vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
+        }
     }
 
     void RenderPassHandler::reinitMeshPipelineWithIBL()
@@ -147,6 +162,12 @@ namespace render
             gpuDrivenRenderer->updateRenderPass(
                 meshPipeline->getRenderPass(),
                 meshPipeline->getIBLDescriptorSetLayout());
+        }
+
+        // Update VFX runtime with new render pass
+        if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+        {
+            vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
         }
     }
 
@@ -302,6 +323,11 @@ namespace render
         return false;
     }
 
+    void RenderPassHandler::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
+    {
+        vfxRuntimeProvider = provider;
+    }
+
     void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
         currentView = view;
@@ -369,6 +395,12 @@ namespace render
             {
                 gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
             }
+
+            // Recreate VFX runtime with new render pass
+            if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+            {
+                vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
+            }
         }
 
         if (debugRendererInitialized)
@@ -433,9 +465,10 @@ namespace render
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
         iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
-        // Determine if we need to run the mesh render pass (for meshes or debug rendering)
+        // Determine if we need to run the mesh render pass (for meshes, debug rendering, or VFX)
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
-        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems);
+        bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized() && vfxRuntimeProvider->getInstanceCount() > 0;
+        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems || hasVFX);
 
         // Always update GPU-driven scene data (even when empty to reset stats)
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
@@ -477,6 +510,12 @@ namespace render
                                              });
                 }
 
+                // Render VFX particles inline (before ending render pass for proper depth testing)
+                if (hasVFX)
+                {
+                    vfxRuntimeProvider->recordDrawCommands(commandBuffer);
+                }
+
                 meshPipeline->endRenderPass(commandBuffer);
             }
             else if (!currentMeshDrawList.empty() || hasDebugItems)
@@ -484,6 +523,21 @@ namespace render
                 // CPU fallback path (used when GPU-driven rendering is not available)
                 meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
                                                   debugRendererPtr, currentView, currentProjection);
+
+                // VFX needs separate render pass in CPU fallback (recordCommandBuffer closes its pass)
+                if (hasVFX)
+                {
+                    meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+                    vfxRuntimeProvider->recordDrawCommands(commandBuffer);
+                    meshPipeline->endRenderPass(commandBuffer);
+                }
+            }
+            else if (hasVFX)
+            {
+                // Only VFX to render, no meshes or debug items
+                meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+                vfxRuntimeProvider->recordDrawCommands(commandBuffer);
+                meshPipeline->endRenderPass(commandBuffer);
             }
         }
 

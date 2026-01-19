@@ -209,4 +209,9 @@ namespace controllers {
 	{
 		return offScreenController->getViewMode();
 	}
+
+	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
+	{
+		offScreenController->setVFXRuntimeProvider(provider);
+	}
 }

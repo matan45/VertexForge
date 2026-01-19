@@ -24,6 +24,11 @@ namespace render
     class OffScreenViewPort;
 }
 
+namespace services
+{
+    class IVFXRuntimeProvider;
+}
+
 namespace controllers::offscreen
 {
     class IBLController;
@@ -137,5 +142,8 @@ namespace controllers
         // View Mode API
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;
+
+        // VFX Runtime API
+        void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
     };
 }
