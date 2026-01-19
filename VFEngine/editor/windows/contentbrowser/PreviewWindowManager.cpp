@@ -8,6 +8,7 @@
 #include "../FontPreviewWindow.hpp"
 #include "../animation/AnimationPreviewWindow.hpp"
 #include "../animation/AnimatorEditorWindow.hpp"
+#include "../vfx/VFXEditorWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
 
@@ -48,6 +49,9 @@ namespace windows
             return true;
         case AssetType::Animator:
             openAnimatorEditor(path);
+            return true;
+        case AssetType::VFX:
+            openVFXEditor(path);
             return true;
         default:
             return false;
@@ -90,6 +94,10 @@ namespace windows
 
         auto animatorIt = openAnimatorEditors.find(path);
         if (animatorIt != openAnimatorEditors.end() && !animatorIt->second.expired())
+            return true;
+
+        auto vfxIt = openVFXEditors.find(path);
+        if (vfxIt != openVFXEditors.end() && !vfxIt->second.expired())
             return true;
 
         return false;
@@ -191,6 +199,17 @@ namespace windows
             auto editorWindow = std::make_shared<AnimatorEditorWindow>(path);
             controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
             openAnimatorEditors[path] = editorWindow;
+        }
+    }
+
+    void PreviewWindowManager::openVFXEditor(const std::string& path)
+    {
+        auto it = openVFXEditors.find(path);
+        if (it == openVFXEditors.end() || it->second.expired())
+        {
+            auto editorWindow = std::make_shared<VFXEditorWindow>(path);
+            controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
+            openVFXEditors[path] = editorWindow;
         }
     }
 }

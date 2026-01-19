@@ -170,6 +170,7 @@
     <ClInclude Include="windows\material\MaterialPreviewPanel.hpp" />
     <ClInclude Include="windows\material\MaterialPropertyPanel.hpp" />
     <ClInclude Include="windows\material\OrmPackingDialog.hpp" />
+    <ClInclude Include="windows\vfx\VFXEditorWindow.hpp" />
     <ClInclude Include="windows\vfx\VFXPreviewPanel.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -243,6 +244,7 @@
     <ClCompile Include="windows\material\MaterialPreviewPanel.cpp" />
     <ClCompile Include="windows\material\MaterialPropertyPanel.cpp" />
     <ClCompile Include="windows\material\OrmPackingDialog.cpp" />
+    <ClCompile Include="windows\vfx\VFXEditorWindow.cpp" />
     <ClCompile Include="windows\vfx\VFXPreviewPanel.cpp" />
   </ItemGroup>
   <ItemGroup>

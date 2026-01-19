@@ -18,6 +18,7 @@ namespace windows
     class FontPreviewWindow;
     class AnimationPreviewWindow;
     class AnimatorEditorWindow;
+    class VFXEditorWindow;
 
     class PreviewWindowManager
     {
@@ -31,6 +32,7 @@ namespace windows
         std::unordered_map<std::string, std::weak_ptr<FontPreviewWindow>> openFontPreviews;
         std::unordered_map<std::string, std::weak_ptr<AnimationPreviewWindow>> openAnimationPreviews;
         std::unordered_map<std::string, std::weak_ptr<AnimatorEditorWindow>> openAnimatorEditors;
+        std::unordered_map<std::string, std::weak_ptr<VFXEditorWindow>> openVFXEditors;
     public:
         explicit PreviewWindowManager() = default;
         ~PreviewWindowManager() = default;
@@ -48,5 +50,6 @@ namespace windows
         void openFontPreview(const std::string& path);
         void openAnimationPreview(const std::string& path);
         void openAnimatorEditor(const std::string& path);
+        void openVFXEditor(const std::string& path);
     };
 }
