@@ -107,6 +107,7 @@
     <ClInclude Include="dragdrop\DragDropManager.hpp" />
     <ClInclude Include="graph\ShaderGraphCompiler.hpp" />
     <ClInclude Include="graph\ShaderGraphEditor.hpp" />
+    <ClInclude Include="graph\VFXGraphEditor.hpp" />
     <ClInclude Include="graph\nodes\ConstantNodes.hpp" />
     <ClInclude Include="graph\nodes\ConversionNodes.hpp" />
     <ClInclude Include="graph\nodes\MathNodes.hpp" />
@@ -180,6 +181,9 @@
     <ClCompile Include="graph\ShaderGraphEditorDraw.cpp" />
     <ClCompile Include="graph\ShaderGraphEditorEvents.cpp" />
     <ClCompile Include="graph\ShaderGraphEditorUtils.cpp" />
+    <ClCompile Include="graph\VFXGraphEditor.cpp" />
+    <ClCompile Include="graph\VFXGraphEditorDraw.cpp" />
+    <ClCompile Include="graph\VFXGraphEditorEvents.cpp" />
     <ClCompile Include="graph\nodes\ShaderNodeFactory.cpp" />
     <ClCompile Include="handlers\EditorHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
