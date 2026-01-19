@@ -51,7 +51,6 @@ namespace render::gpudriven
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
 
-        // Create mesh stream manager (streaming enabled by default)
         if (meshStreamingEnabled)
         {
             meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
@@ -62,7 +61,6 @@ namespace render::gpudriven
         if (!batchManager->initWithAutoConfig())
         {
             loggerError("GPUDrivenRenderer: Failed to initialize batch manager - GPU memory allocation failed");
-            // Fall back to minimal configuration
             if (!batchManager->init(2, 50000, 8))
             {
                 loggerError(
@@ -77,7 +75,6 @@ namespace render::gpudriven
         cullPipeline = std::make_unique<GPUCullLODPipeline>(device);
         cullPipeline->init();
 
-        // Create camera UBO for compute shader
         cameraBuffer = std::make_unique<GPUDrivenCameraBuffer>(device, swapChain);
         cameraBuffer->init();
 
@@ -102,7 +99,6 @@ namespace render::gpudriven
             meshletBuffer = std::make_unique<MeshletBuffer>(device);
             meshletBuffer->init();
 
-            // Create bone matrix manager for GPU skinning
             boneMatrixManager = std::make_unique<BoneMatrixManager>(device);
             boneMatrixManager->init();
 
@@ -138,7 +134,6 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        // Cleanup sub-components
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (boneMatrixManager) boneMatrixManager->cleanup();
         if (meshletBuffer) meshletBuffer->cleanup();
@@ -267,10 +262,6 @@ namespace render::gpudriven
             };
         }
 
-        // Shader group indices:
-        // 0 = default (no Time node)
-        // 1 = UV animation (Time connected to texture UV)
-        // 2 = Emission animation (Time connected to EmissionStrength)
         ShaderGroupResolver shaderGroupResolver = [](const std::string& materialPath) -> uint32_t
         {
             if (materialPath.empty())
@@ -299,7 +290,6 @@ namespace render::gpudriven
                 return 0;
             }
 
-            // Find Time node ID
             uint32_t timeNodeId = 0;
             bool hasTimeNode = false;
             for (const auto& node : matData->graph.nodes)
@@ -317,8 +307,6 @@ namespace render::gpudriven
                 return 0;
             }
 
-            // Trace connections from Time node to determine animation type
-            // Use BFS to find what the Time node ultimately connects to
             std::unordered_set<uint32_t> visitedNodes;
             std::queue<uint32_t> nodesToVisit;
             nodesToVisit.push(timeNodeId);
@@ -351,7 +339,7 @@ namespace render::gpudriven
                                 if (node.type == material::NodeType::TextureSample &&
                                     link.targetPin == "UV")
                                 {
-                                    return 1; // UV animation
+                                    return 1;
                                 }
                                 nodesToVisit.push(link.targetNodeId);
                                 break;
@@ -364,34 +352,25 @@ namespace render::gpudriven
             return 1;
         };
 
-        // Process ALL animated entities and update bone matrices
-        // Important: We must update bone matrices for all animated entities, not just visible ones,
-        // because GPU meshlet culling may render meshlets that CPU frustum culling missed
         BoneOffsetResolver boneOffsetResolver = nullptr;
         if (boneMatrixManager)
         {
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
             auto& registry = scene::EntityRegistry::getRegistry();
 
-            // Iterate through ALL entities with MeshComponent that have an animatorPath
-            // Don't require AnimatorComponent as it might not be added yet on first frame
             auto view = registry.view<components::MeshComponent>();
             for (auto entity : view)
             {
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
 
-                // Skip entities without animator path
                 if (meshComp.animatorPath.empty())
                 {
                     continue;
                 }
 
-                // Get animator for this entity, create if needed
                 animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(entity);
                 if (!animator)
                 {
-                    // Animator doesn't exist yet - create it now
-                    // This handles the case where syncWithRegistry hasn't run yet
                     animatorSystem.initializeEntityAnimator(entity, meshComp.animatorPath);
                     animator = animatorSystem.getAnimator(entity);
                     if (!animator)
@@ -400,35 +379,29 @@ namespace render::gpudriven
                     }
                 }
 
-                // Get bone matrices from animator
                 const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
                 if (boneMatrices.empty())
                 {
                     continue;
                 }
 
-                // Allocate bone space if needed (returns existing allocation if already allocated)
                 uint32_t boneCount = static_cast<uint32_t>(boneMatrices.size());
                 uint32_t boneOffset = boneMatrixManager->allocate(entity, boneCount);
 
                 if (boneOffset != INVALID_BONE_OFFSET)
                 {
-                    // Update bone matrices for this entity
                     boneMatrixManager->updateBoneMatrices(entity, boneMatrices);
                 }
             }
 
-            // Create resolver that looks up bone offset for each entity
             boneOffsetResolver = [this](entt::entity entity) -> uint32_t
             {
                 return boneMatrixManager->getBoneOffset(entity);
             };
         }
 
-        // Update object buffer with current frame's render data (pass time for Time node evaluation)
         mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
 
-        // Update camera data for compute shader
         CameraUpdateParams cameraParams{
             .view = view,
             .projection = projection,
@@ -445,7 +418,6 @@ namespace render::gpudriven
         };
         cameraBuffer->update(cameraParams);
 
-        // Update cull pipeline descriptors with combined batch buffers
         cullPipeline->updateDescriptors(
             mergedBuffer->getObjectBuffer(),
             cameraBuffer->getBuffer(),
@@ -454,8 +426,6 @@ namespace render::gpudriven
             batchManager->getCombinedDrawCountBuffer()
         );
 
-        // Update per-draw data descriptor for mesh shader pipeline (uses combined buffer)
-        // Only update when there's actual data to render
         if (meshShaderPipeline && mergedBuffer->getObjectCount() > 0)
         {
             meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
@@ -463,7 +433,6 @@ namespace render::gpudriven
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
         }
 
-        // Update stats
         stats.totalObjects = mergedBuffer->getObjectCount();
     }
 
@@ -496,7 +465,6 @@ namespace render::gpudriven
         }
         mergedBuffer->uploadObjects(cmd);
 
-        // Upload bone matrices for animated entities
         if (boneMatrixManager)
         {
             boneMatrixManager->uploadToGPU(cmd);
@@ -534,13 +502,6 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        // Bind all 6 descriptor sets:
-        // Set 0: IBL (camera UBO + IBL textures)
-        // Set 1: Per-draw data
-        // Set 2: Bindless textures
-        // Set 3: Meshlet data (meshlet buffer, vertex indices, primitive indices)
-        // Set 4: Vertex data (merged vertex buffer)
-        // Set 5: Bone matrices (for GPU skinning)
         std::array<vk::DescriptorSet, 6> descriptorSets = {
             iblDescriptorSet,
             meshShaderPipeline->getPerDrawDataDescriptorSet(),
@@ -560,7 +521,6 @@ namespace render::gpudriven
 
         auto extent = swapChain.getSwapchainExtent();
 
-        // Render shader groups: 0 (default), 1 (UV animation), 2 (emission animation)
         for (uint32_t shaderGroup = 0; shaderGroup <= 2; ++shaderGroup)
         {
             for (uint32_t batch = 0; batch < batchCount; ++batch)
@@ -761,19 +721,16 @@ namespace render::gpudriven
             return;
         }
 
-        // Read back and aggregate stats from all batches (expensive - causes sync)
         GPUDrivenStats aggregated = batchManager->readBackAggregatedStats();
 
         stats.visibleObjects = aggregated.visibleObjects;
-        stats.drawCalls = aggregated.drawCalls; // One draw call per batch
+        stats.drawCalls = aggregated.drawCalls;
 
-        // LOD distribution from GPU (aggregated across all batches)
         stats.objectsLOD0 = aggregated.objectsLOD0;
         stats.objectsLOD1 = aggregated.objectsLOD1;
         stats.objectsLOD2 = aggregated.objectsLOD2;
         stats.objectsLOD3 = aggregated.objectsLOD3;
 
-        // Culling stats directly from GPU counters (aggregated)
         stats.culledByFrustum = aggregated.culledByFrustum;
         stats.culledByOcclusion = aggregated.culledByOcclusion;
     }

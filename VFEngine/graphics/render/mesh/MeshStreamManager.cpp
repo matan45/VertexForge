@@ -342,7 +342,6 @@ namespace render::mesh
     float MeshStreamManager::calculatePriority(const StreamingRequest& request,
                                                const glm::vec3& cameraPos) const
     {
-        // Base priority: lower LOD = higher urgency (LOD3 loads first)
         float lodUrgency = (4.0f - static_cast<float>(request.lodLevel)) * 25.0f;
 
         float distance = glm::length(request.worldCenter - cameraPos);
@@ -367,7 +366,6 @@ namespace render::mesh
             auto it = meshStates.find(meshPath);
             if (it == meshStates.end() || !it->second.handle)
             {
-                // Return failed future immediately
                 std::promise<StreamingResult> promise;
                 StreamingResult result;
                 result.meshPath = meshPath;
@@ -393,7 +391,6 @@ namespace render::mesh
                 return promise.get_future();
             }
 
-            // Use the passed submeshIndex directly (no name lookup needed)
             lodInfo = header.submeshes[submeshIndex].lods[lodLevel];
             hasBoneData = it->second.handle->hasBoneData();
         }
@@ -406,7 +403,6 @@ namespace render::mesh
             result.submeshIndex = submeshIndex;
             result.lodLevel = lodLevel;
 
-            // Use static method that opens its own file handle (thread-safe)
             result.success = resource::MeshStreamResource::readLODFromFile(
                 meshPath, lodInfo, result.vertices, result.indices, hasBoneData);
 

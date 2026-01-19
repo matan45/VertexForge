@@ -24,7 +24,6 @@ namespace resource
 
 namespace render::mesh
 {
-    struct MeshMetadata;
     struct MeshRenderData;
 }
 
@@ -47,7 +46,6 @@ namespace render::gpudriven
 
     using ShaderGroupResolver = std::function<uint32_t(const std::string& materialPath)>;
 
-    // Returns bone matrix offset for an entity (INVALID_BONE_OFFSET if static/no animation)
     using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
     class MergedMeshBuffer
@@ -78,13 +76,13 @@ namespace render::gpudriven
         uint32_t totalIndexCount = 0;
         uint32_t currentObjectCount = 0;
 
-        static constexpr uint32_t vertexStride = 64; // Full Vertex with bone data (pos + normal + uv + boneIndices + boneWeights)
+        static constexpr uint32_t vertexStride = 64;
 
         std::vector<MergedMeshInfo> registeredMeshes;
         std::unordered_map<std::string, size_t> meshPathToIndex;
 
         std::vector<SubmeshLocation> allSubmeshLocations;
-        std::unordered_map<std::string, size_t> submeshKeyToIndex; // "meshPath:submeshName" -> index
+        std::unordered_map<std::string, size_t> submeshKeyToIndex;
 
         bool initialized = false;
 
@@ -108,12 +106,8 @@ namespace render::gpudriven
                            const BoneOffsetResolver& boneOffsetResolver = nullptr,
                            float time = 0.0f);
 
-        MergedMeshInfo* registerMeshFromMetadata(const std::string& meshPath,
-                                                 const mesh::MeshMetadata& metadata);
-
         void uploadObjects(vk::CommandBuffer cmd);
 
-        // Accessors
         vk::Buffer getVertexBuffer() const { return vertexBuffer; }
         vk::Buffer getObjectBuffer() const { return objectBuffer; }
 
@@ -126,8 +120,6 @@ namespace render::gpudriven
                                                   uint32_t submeshIndex) const;
 
         const std::vector<MergedMeshInfo>& getRegisteredMeshes() const { return registeredMeshes; }
-
-        // ===== STREAMING SUPPORT =====
 
         MergedMeshInfo* reserveMesh(const std::string& meshPath,
                                     const resource::MeshStreamHeader& header);
@@ -144,13 +136,10 @@ namespace render::gpudriven
                           uint32_t submeshIndex,
                           uint32_t lodLevel);
 
-        bool hasRenderableData(const std::string& meshPath) const;
-
         SubmeshLocation* getSubmeshLocationMutable(const std::string& meshPath,
                                                    const std::string& submeshName,
                                                    uint32_t submeshIndex);
 
-        // Ensure all pending async transfers are complete before rendering
         void flushPendingTransfers();
 
     private:

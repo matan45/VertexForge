@@ -13,6 +13,8 @@ namespace scene
 
 namespace services
 {
+    class IAnimatorProvider;
+
     // Existing component services
     class CameraComponentService;
     class MeshComponentService;
@@ -51,7 +53,8 @@ namespace services
         std::unique_ptr<ScenePersistenceService> persistenceService;
 
     public:
-        explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
+        explicit SceneServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
+                                  IAnimatorProvider* animatorProvider);
         ~SceneServiceImpl() override;
 
         void registerEventHandlers() override;

@@ -136,7 +136,10 @@ namespace handlers
 
     void EditorHandler::initializeServices()
     {
-        sceneService = std::make_shared<services::SceneServiceImpl>(bootstrap->getSceneGraphSystem());
+        sceneService = std::make_shared<services::SceneServiceImpl>(
+            bootstrap->getSceneGraphSystem(),
+            bootstrap->getAnimatorProvider()
+        );
         renderService = std::make_shared<services::EditorRenderServiceImpl>(
             bootstrap->getOffScreenProvider(),
             bootstrap->getEditorTextureProvider()

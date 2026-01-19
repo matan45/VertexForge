@@ -12,7 +12,6 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "print/Logger.hpp"
 #include <imgui_impl_vulkan.h>
-#include <unordered_map>
 
 namespace controllers
 {
@@ -279,7 +278,6 @@ namespace controllers
 
         loggerInfo("Loaded mesh with {} bones from: {}", skeletonData.bones.size(), meshPath);
 
-        // Re-initialize animation evaluator with new skeleton if animation is loaded
         if (animationLoaded && !animationData.channels.empty())
         {
             animEvaluator.loadAnimation(animationData, skeletonData);
@@ -315,7 +313,6 @@ namespace controllers
         playbackState.duration = animationData.duration / ticksPerSec;
         playbackState.currentTime = 0.0f;
 
-        // Initialize animation evaluator with skeleton if mesh is loaded
         if (meshLoaded && !skeletonData.bones.empty())
         {
             animEvaluator.loadAnimation(animationData, skeletonData);
@@ -350,7 +347,6 @@ namespace controllers
         skeletonData = resource::SkeletonData{};
         playbackState = render::mesh::AnimationPlaybackState{};
         meshBounds = math::AABB{};
-        meshToAnimBoneMapping.clear();
     }
 
     void AnimatedMeshPreviewController::setPlaybackTime(float timeSeconds)
@@ -364,7 +360,6 @@ namespace controllers
 
             if (!boneMatrices.empty() && skinnedPipeline)
             {
-                // Bone matrices are already in skeleton bone order (matching vertex bone indices)
                 skinnedPipeline->updateBoneMatrices(boneMatrices);
             }
         }
@@ -381,7 +376,6 @@ namespace controllers
 
             if (!boneMatrices.empty() && skinnedPipeline)
             {
-                // Bone matrices are already in skeleton bone order (matching vertex bone indices)
                 skinnedPipeline->updateBoneMatrices(boneMatrices);
             }
         }
@@ -432,85 +426,5 @@ namespace controllers
         device.getGraphicsQueue().waitIdle();
 
         return static_cast<void*>(offscreenResources->colorImages[imageIndex].descriptorSet);
-    }
-
-    void AnimatedMeshPreviewController::buildBoneMapping()
-    {
-        meshToAnimBoneMapping.clear();
-
-        if (skeletonData.bones.empty())
-        {
-            return;
-        }
-
-        // Build channel name to index mapping from animation data
-        std::unordered_map<std::string, size_t> animChannelNameToIndex;
-        for (size_t i = 0; i < animationData.channels.size(); ++i)
-        {
-            animChannelNameToIndex[animationData.channels[i].boneName] = i;
-        }
-
-        meshToAnimBoneMapping.resize(skeletonData.bones.size(), -1);
-        size_t matchedCount = 0;
-
-        for (size_t boneIdx = 0; boneIdx < skeletonData.bones.size(); ++boneIdx)
-        {
-            const std::string& boneName = skeletonData.bones[boneIdx].name;
-            auto it = animChannelNameToIndex.find(boneName);
-
-            if (it != animChannelNameToIndex.end())
-            {
-                meshToAnimBoneMapping[boneIdx] = static_cast<int32_t>(it->second);
-                matchedCount++;
-            }
-        }
-
-        loggerInfo("Bone mapping built: {}/{} skeleton bones matched to animation channels",
-                   matchedCount, skeletonData.bones.size());
-    }
-
-    std::vector<glm::mat4> AnimatedMeshPreviewController::remapBoneMatrices(
-        const std::vector<glm::mat4>& animBoneMatrices) const
-    {
-        if (skeletonData.bones.empty())
-        {
-            return animBoneMatrices;
-        }
-
-        size_t boneCount = skeletonData.bones.size();
-
-        if (boneCount == animBoneMatrices.size() && meshToAnimBoneMapping.empty())
-        {
-            return animBoneMatrices;
-        }
-
-        if (!meshToAnimBoneMapping.empty())
-        {
-            std::vector<glm::mat4> remappedMatrices(boneCount, glm::mat4(1.0f));
-            static bool loggedOnce = false;
-
-            for (size_t boneIdx = 0; boneIdx < boneCount; ++boneIdx)
-            {
-                int32_t animBoneIdx = meshToAnimBoneMapping[boneIdx];
-                if (animBoneIdx >= 0 && animBoneIdx < static_cast<int32_t>(animBoneMatrices.size()))
-                {
-                    remappedMatrices[boneIdx] = animBoneMatrices[animBoneIdx];
-
-                    if (!loggedOnce && boneIdx < 3)
-                    {
-                        loggerInfo("Remap bone[{}] '{}': animChannel={}, matrix[3]=({:.2f},{:.2f},{:.2f})",
-                                   boneIdx, skeletonData.bones[boneIdx].name, animBoneIdx,
-                                   animBoneMatrices[animBoneIdx][3][0],
-                                   animBoneMatrices[animBoneIdx][3][1],
-                                   animBoneMatrices[animBoneIdx][3][2]);
-                    }
-                }
-            }
-
-            if (!loggedOnce) loggedOnce = true;
-            return remappedMatrices;
-        }
-
-        return animBoneMatrices;
     }
 }

@@ -5,7 +5,6 @@
 #include "../ibl/IBLTypes.hpp"
 #include <memory>
 #include <vector>
-#include <string_view>
 #include <string>
 
 namespace core
@@ -28,13 +27,12 @@ namespace render::ibl
 
 namespace render::mesh
 {
-    // GPU resources for skinned mesh rendering
     struct SkinnedMeshGPUData
     {
         std::string meshPath;
-        MeshGPUData meshData; // Reuse static mesh GPU data
+        MeshGPUData meshData;
         bool hasSkinning = false;
-        resource::SkeletonInfo skeleton; // Mesh skeleton info for bone name verification
+        resource::SkeletonInfo skeleton;
     };
 
     class SkinnedMeshPipeline
@@ -50,17 +48,14 @@ namespace render::mesh
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
-        // Descriptor set layout for camera + IBL (set 0)
         vk::DescriptorSetLayout cameraIBLDescriptorSetLayout;
         vk::DescriptorPool cameraIBLDescriptorPool;
         vk::DescriptorSet cameraIBLDescriptorSet;
 
-        // Descriptor set layout for textures (set 1)
         vk::DescriptorSetLayout textureDescriptorSetLayout;
         vk::DescriptorPool textureDescriptorPool;
         vk::DescriptorSet textureDescriptorSet;
 
-        // Descriptor set layout for bone matrices SSBO (set 2)
         vk::DescriptorSetLayout boneDescriptorSetLayout;
         vk::DescriptorPool boneDescriptorPool;
         vk::DescriptorSet boneDescriptorSet;
@@ -91,10 +86,8 @@ namespace render::mesh
         void init();
         void cleanUp();
 
-        bool loadMeshFromData(const resource::MeshesData& meshData);
         bool loadMeshFromFile(const std::string& meshPath);
         void unloadMesh();
-        const SkinnedMeshGPUData* getLoadedMesh() const { return loadedMesh.get(); }
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;

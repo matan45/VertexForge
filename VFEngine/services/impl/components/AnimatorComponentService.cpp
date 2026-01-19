@@ -1,281 +1,103 @@
 #include "AnimatorComponentService.hpp"
-#include "../../../utilities/scene/EntityRegistry.hpp"
-#include "../../../utilities/components/Components.hpp"
-#include "../../../graphics/animation/RuntimeAnimatorSystem.hpp"
-#include "../../../graphics/animation/AnimatorStateMachine.hpp"
-#include "../../data/EntityConversion.hpp"
+#include "../../providers/IAnimatorProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/AnimatorEvents.hpp"
 
 namespace services
 {
+    AnimatorComponentService::AnimatorComponentService(IAnimatorProvider* provider)
+        : animatorProvider(provider)
+    {
+    }
+
     void AnimatorComponentService::setFloat(EntityHandle entity, const std::string& paramName, float value)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->setFloat(paramName, value);
-        }
+        animatorProvider->setFloat(entity, paramName, value);
     }
 
     void AnimatorComponentService::setInt(EntityHandle entity, const std::string& paramName, int32_t value)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->setInt(paramName, value);
-        }
+        animatorProvider->setInt(entity, paramName, value);
     }
 
     void AnimatorComponentService::setBool(EntityHandle entity, const std::string& paramName, bool value)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->setBool(paramName, value);
-        }
+        animatorProvider->setBool(entity, paramName, value);
     }
 
     void AnimatorComponentService::setTrigger(EntityHandle entity, const std::string& paramName)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->setTrigger(paramName);
-        }
+        animatorProvider->setTrigger(entity, paramName);
     }
 
     float AnimatorComponentService::getFloat(EntityHandle entity, const std::string& paramName) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return 0.0f;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            return animator->getFloat(paramName);
-        }
-        return 0.0f;
+        return animatorProvider->getFloat(entity, paramName);
     }
 
     int32_t AnimatorComponentService::getInt(EntityHandle entity, const std::string& paramName) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return 0;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            return animator->getInt(paramName);
-        }
-        return 0;
+        return animatorProvider->getInt(entity, paramName);
     }
 
     bool AnimatorComponentService::getBool(EntityHandle entity, const std::string& paramName) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return false;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            return animator->getBool(paramName);
-        }
-        return false;
+        return animatorProvider->getBool(entity, paramName);
     }
 
     void AnimatorComponentService::play(EntityHandle entity)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->play();
-        }
+        animatorProvider->play(entity);
     }
 
     void AnimatorComponentService::pause(EntityHandle entity)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->pause();
-        }
+        animatorProvider->pause(entity);
     }
 
     void AnimatorComponentService::stop(EntityHandle entity)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->stop();
-        }
+        animatorProvider->stop(entity);
     }
 
     void AnimatorComponentService::reset(EntityHandle entity)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->reset();
-        }
+        animatorProvider->reset(entity);
     }
 
     bool AnimatorComponentService::isPlaying(EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return false;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            return animator->isPlaying();
-        }
-        return false;
+        return animatorProvider->isPlaying(entity);
     }
 
     bool AnimatorComponentService::isBlending(EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return false;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            return animator->isBlending();
-        }
-        return false;
+        return animatorProvider->isBlending(entity);
     }
 
     std::string AnimatorComponentService::getCurrentState(EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return "";
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator && animator->isInitialized())
-        {
-            auto* currentState = animator->getCurrentAnimatorState();
-            if (currentState)
-            {
-                return currentState->name;
-            }
-        }
-        return "";
+        return animatorProvider->getCurrentState(entity);
     }
 
     float AnimatorComponentService::getNormalizedTime(EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return 0.0f;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            return animator->getNormalizedStateTime();
-        }
-        return 0.0f;
+        return animatorProvider->getNormalizedTime(entity);
     }
 
     bool AnimatorComponentService::hasAnimator(EntityHandle entity) const
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return false;
-        }
-
-        return animation::RuntimeAnimatorSystem::instance().hasAnimator(internal::fromHandle(entity));
+        return animatorProvider->hasAnimator(entity);
     }
 
-    bool AnimatorComponentService::forceTransitionTo(EntityHandle entity, const std::string& stateName, float blendDuration)
+    bool AnimatorComponentService::forceTransitionTo(EntityHandle entity, const std::string& stateName,
+                                                     float blendDuration)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (!internal::isValidHandle(entity, registry))
-        {
-            return false;
-        }
-
-        auto* animator = animation::RuntimeAnimatorSystem::instance().getAnimator(internal::fromHandle(entity));
-        if (animator)
-        {
-            animator->forceTransitionTo(stateName, blendDuration);
-            return true;
-        }
-        return false;
+        return animatorProvider->forceTransitionTo(entity, stateName, blendDuration);
     }
 
     void AnimatorComponentService::registerEventHandlers(::events::EventDispatcher& dispatcher)
     {
-        // Parameter setters
         dispatcher.registerCommandHandler<events::animator::SetEntityAnimatorFloatCommand>(
             [this](const events::animator::SetEntityAnimatorFloatCommand& cmd)
             {
@@ -300,7 +122,6 @@ namespace services
                 setTrigger(cmd.entity, cmd.parameterName);
             });
 
-        // Playback control
         dispatcher.registerCommandHandler<events::animator::PlayEntityAnimatorCommand>(
             [this](const events::animator::PlayEntityAnimatorCommand& cmd)
             {
@@ -325,14 +146,12 @@ namespace services
                 reset(cmd.entity);
             });
 
-        // Transition control
         dispatcher.registerCommandHandler<events::animator::ForceEntityTransitionToCommand>(
             [this](const events::animator::ForceEntityTransitionToCommand& cmd)
             {
                 return forceTransitionTo(cmd.entity, cmd.stateName, cmd.blendDuration);
             });
 
-        // Parameter getters
         dispatcher.registerQueryHandler<events::animator::GetEntityAnimatorFloatQuery>(
             [this](const events::animator::GetEntityAnimatorFloatQuery& query)
             {
@@ -351,7 +170,6 @@ namespace services
                 return getBool(query.entity, query.parameterName);
             });
 
-        // State queries
         dispatcher.registerQueryHandler<events::animator::IsEntityAnimatorPlayingQuery>(
             [this](const events::animator::IsEntityAnimatorPlayingQuery& query)
             {

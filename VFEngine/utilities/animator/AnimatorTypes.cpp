@@ -3,10 +3,6 @@
 
 namespace animator
 {
-    // ============================================================
-    // AnimatorGraph Implementation
-    // ============================================================
-
     const AnimatorState* AnimatorGraph::findStateById(uint32_t id) const
     {
         auto it = std::find_if(states.begin(), states.end(),
@@ -61,10 +57,6 @@ namespace animator
             });
         return result;
     }
-
-    // ============================================================
-    // AnimatorRuntimeParameters Implementation
-    // ============================================================
 
     void AnimatorRuntimeParameters::setFloat(const std::string& name, float value)
     {
@@ -138,10 +130,6 @@ namespace animator
             values[param.name] = param.defaultValue;
         }
     }
-
-    // ============================================================
-    // Utility Functions
-    // ============================================================
 
     const char* parameterTypeToString(AnimatorParameterType type)
     {

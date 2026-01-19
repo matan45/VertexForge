@@ -78,11 +78,9 @@ namespace resource
         MeshStreamHandle() = default;
         ~MeshStreamHandle();
 
-        // Non-copyable
         MeshStreamHandle(const MeshStreamHandle&) = delete;
         MeshStreamHandle& operator=(const MeshStreamHandle&) = delete;
 
-        // Movable
         MeshStreamHandle(MeshStreamHandle&& other) noexcept;
         MeshStreamHandle& operator=(MeshStreamHandle&& other) noexcept;
 
@@ -109,10 +107,6 @@ namespace resource
         bool hasSkeletonData() const { return hasSkeleton; }
 
         bool readSkeleton(SkeletonData& outSkeleton);
-
-        uint32_t getTotalVertexCount(uint32_t lodLevel) const;
-
-        uint32_t getTotalIndexCount(uint32_t lodLevel) const;
 
     private:
         bool parseHeader();

@@ -2,12 +2,12 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
+#include "GPUDrivenTypes.hpp"
 #include <algorithm>
-#include <cstring>
-#include <stdexcept>
 
-namespace render::gpudriven {
 
+namespace render::gpudriven
+{
     BoneMatrixManager::BoneMatrixManager(core::Device& device)
         : device(device)
     {
@@ -20,7 +20,8 @@ namespace render::gpudriven {
 
     void BoneMatrixManager::init()
     {
-        if (initialized) {
+        if (initialized)
+        {
             return;
         }
 
@@ -48,22 +49,22 @@ namespace render::gpudriven {
 
     void BoneMatrixManager::cleanup()
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             return;
         }
 
         vk::Device vkDevice = device.getLogicalDevice();
-
-        // Wait for device to be idle before cleanup
         vkDevice.waitIdle();
 
-        // Descriptor resources
-        if (descriptorPool) {
+        if (descriptorPool)
+        {
             vkDevice.destroyDescriptorPool(descriptorPool);
             descriptorPool = nullptr;
         }
 
-        if (descriptorSetLayout) {
+        if (descriptorSetLayout)
+        {
             vkDevice.destroyDescriptorSetLayout(descriptorSetLayout);
             descriptorSetLayout = nullptr;
         }
@@ -85,26 +86,23 @@ namespace render::gpudriven {
 
         vk::DeviceSize bufferSize = maxBoneMatrices * sizeof(glm::mat4);
 
-        // Create device-local bone SSBO
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
-                           vk::BufferUsageFlagBits::eTransferDst;
+                vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, boneBuffer, boneBufferMemory);
         }
 
-        // Create staging buffer (host-visible, persistently mapped)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                vk::MemoryPropertyFlagBits::eHostCoherent;
+                vk::MemoryPropertyFlagBits::eHostCoherent;
             core::BufferUtilities::createBuffer(request, stagingBuffer, stagingMemory);
 
-            // Persistently map staging buffer
             stagingMapped = logicalDevice.mapMemory(stagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 
@@ -116,7 +114,8 @@ namespace render::gpudriven {
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (stagingMapped) {
+        if (stagingMapped)
+        {
             logicalDevice.unmapMemory(stagingMemory);
             stagingMapped = nullptr;
         }
@@ -127,11 +126,9 @@ namespace render::gpudriven {
 
     void BoneMatrixManager::initializeGPUBuffer()
     {
-        // Copy identity matrices from CPU to staging buffer
         size_t bufferSize = maxBoneMatrices * sizeof(glm::mat4);
         std::memcpy(stagingMapped, cpuBoneMatrices.data(), bufferSize);
 
-        // Use a one-time command buffer to copy from staging to device buffer
         vk::Device vkDevice = device.getLogicalDevice();
         vk::CommandPool cmdPool = device.getStagingCommandPool();
 
@@ -171,14 +168,13 @@ namespace render::gpudriven {
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Single SSBO binding for bone matrices
         vk::DescriptorSetLayoutBinding boneBinding{};
         boneBinding.binding = 0;
         boneBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
         boneBinding.descriptorCount = 1;
         boneBinding.stageFlags = vk::ShaderStageFlagBits::eMeshEXT |
-                                 vk::ShaderStageFlagBits::eVertex |
-                                 vk::ShaderStageFlagBits::eCompute;
+            vk::ShaderStageFlagBits::eVertex |
+            vk::ShaderStageFlagBits::eCompute;
         boneBinding.pImmutableSamplers = nullptr;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
@@ -243,35 +239,36 @@ namespace render::gpudriven {
 
     uint32_t BoneMatrixManager::allocate(entt::entity entity, uint32_t boneCount)
     {
-        if (!initialized) {
+        if (!initialized)
+        {
             loggerError("BoneMatrixManager: Cannot allocate before initialization");
             return INVALID_BONE_OFFSET;
         }
 
-        // Check if already allocated
         auto it = allocations.find(entity);
-        if (it != allocations.end()) {
-            // Return existing allocation if bone count matches
-            if (it->second.boneCount == boneCount) {
+        if (it != allocations.end())
+        {
+            if (it->second.boneCount == boneCount)
+            {
                 return it->second.boneMatrixOffset;
             }
-            // Otherwise free and reallocate
             free(entity);
         }
 
-        if (boneCount == 0 || boneCount > MAX_BONES_PER_OBJECT) {
+        if (boneCount == 0 || boneCount > MAX_BONES_PER_OBJECT)
+        {
             loggerWarning("BoneMatrixManager: Invalid bone count {} (max {})",
                           boneCount, MAX_BONES_PER_OBJECT);
             return INVALID_BONE_OFFSET;
         }
 
         uint32_t offset = boneAllocator.allocate(boneCount);
-        if (offset == FreeListAllocator::ALLOCATION_FAILED) {
+        if (offset == FreeListAllocator::ALLOCATION_FAILED)
+        {
             loggerError("BoneMatrixManager: Failed to allocate {} bone matrices", boneCount);
             return INVALID_BONE_OFFSET;
         }
 
-        // Mark as used immediately
         boneAllocator.markUsed(boneCount);
 
         AnimatedObjectBoneData data{};
@@ -290,16 +287,17 @@ namespace render::gpudriven {
     void BoneMatrixManager::free(entt::entity entity)
     {
         auto it = allocations.find(entity);
-        if (it == allocations.end()) {
+        if (it == allocations.end())
+        {
             return;
         }
 
         boneAllocator.free(it->second.boneMatrixOffset, it->second.boneCount);
         allocations.erase(it);
 
-        // Remove from dirty list if present
         auto dirtyIt = std::find(dirtyEntities.begin(), dirtyEntities.end(), entity);
-        if (dirtyIt != dirtyEntities.end()) {
+        if (dirtyIt != dirtyEntities.end())
+        {
             dirtyEntities.erase(dirtyIt);
         }
 
@@ -315,7 +313,8 @@ namespace render::gpudriven {
     uint32_t BoneMatrixManager::getBoneOffset(entt::entity entity) const
     {
         auto it = allocations.find(entity);
-        if (it != allocations.end()) {
+        if (it != allocations.end())
+        {
             return it->second.boneMatrixOffset;
         }
         return INVALID_BONE_OFFSET;
@@ -324,49 +323,50 @@ namespace render::gpudriven {
     void BoneMatrixManager::updateBoneMatrices(entt::entity entity, const std::vector<glm::mat4>& matrices)
     {
         auto it = allocations.find(entity);
-        if (it == allocations.end()) {
+        if (it == allocations.end())
+        {
             loggerWarning("BoneMatrixManager: No allocation for entity {}", static_cast<uint32_t>(entity));
             return;
         }
 
         AnimatedObjectBoneData& data = it->second;
 
-        if (matrices.size() > data.boneCount) {
+        if (matrices.size() > data.boneCount)
+        {
             loggerWarning("BoneMatrixManager: Matrix count {} exceeds allocation {} for entity {}",
                           matrices.size(), data.boneCount, static_cast<uint32_t>(entity));
             return;
         }
 
-        // Copy to CPU buffer
         uint32_t offset = data.boneMatrixOffset;
-        for (size_t i = 0; i < matrices.size(); ++i) {
+        for (size_t i = 0; i < matrices.size(); ++i)
+        {
             cpuBoneMatrices[offset + i] = matrices[i];
         }
 
-        // Mark as dirty for upload - always add to dirtyEntities if not already present
-        // Using dirty flag to avoid duplicate entries within the same frame
-        if (!data.dirty) {
+        if (!data.dirty)
+        {
             data.dirty = true;
             dirtyEntities.push_back(entity);
         }
-        // If already dirty but dirtyEntities was cleared (e.g., init or error),
-        // we need to re-add the entity
-        else if (std::find(dirtyEntities.begin(), dirtyEntities.end(), entity) == dirtyEntities.end()) {
+        else if (std::find(dirtyEntities.begin(), dirtyEntities.end(), entity) == dirtyEntities.end())
+        {
             dirtyEntities.push_back(entity);
         }
     }
 
     void BoneMatrixManager::uploadToGPU(vk::CommandBuffer cmd)
     {
-        if (!initialized || dirtyEntities.empty()) {
+        if (!initialized || dirtyEntities.empty())
+        {
             return;
         }
 
-        // Collect copy regions for dirty entities
         std::vector<vk::BufferCopy> copyRegions;
         copyRegions.reserve(dirtyEntities.size());
 
-        for (entt::entity entity : dirtyEntities) {
+        for (entt::entity entity : dirtyEntities)
+        {
             auto it = allocations.find(entity);
             if (it == allocations.end()) continue;
 
@@ -374,14 +374,12 @@ namespace render::gpudriven {
             uint32_t offset = data.boneMatrixOffset;
             uint32_t count = data.boneCount;
 
-            // Copy to staging buffer
             size_t copyOffset = offset * sizeof(glm::mat4);
             size_t copySize = count * sizeof(glm::mat4);
             std::memcpy(static_cast<char*>(stagingMapped) + copyOffset,
-                       &cpuBoneMatrices[offset],
-                       copySize);
+                        &cpuBoneMatrices[offset],
+                        copySize);
 
-            // Record copy region for GPU transfer
             vk::BufferCopy region{};
             region.srcOffset = copyOffset;
             region.dstOffset = copyOffset;
@@ -391,12 +389,11 @@ namespace render::gpudriven {
             data.dirty = false;
         }
 
-        // Copy only dirty regions from staging to device buffer
-        if (!copyRegions.empty()) {
+        if (!copyRegions.empty())
+        {
             cmd.copyBuffer(stagingBuffer, boneBuffer, copyRegions);
         }
 
-        // Barrier to ensure copy completes before shader reads
         vk::BufferMemoryBarrier barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -408,7 +405,8 @@ namespace render::gpudriven {
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
-            vk::PipelineStageFlagBits::eMeshShaderEXT | vk::PipelineStageFlagBits::eVertexShader | vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eMeshShaderEXT | vk::PipelineStageFlagBits::eVertexShader |
+            vk::PipelineStageFlagBits::eComputeShader,
             {},
             {},
             barrier,
@@ -417,5 +415,4 @@ namespace render::gpudriven {
 
         dirtyEntities.clear();
     }
-
 }

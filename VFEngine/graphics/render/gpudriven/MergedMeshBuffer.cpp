@@ -13,7 +13,6 @@
 #include <cmath>
 #include <unordered_set>
 
-// Verify vertex stride matches actual Vertex struct (64 bytes with bone data)
 static_assert(sizeof(resource::Vertex) == 64, "Vertex size must be 64 bytes for MergedMeshBuffer");
 
 namespace render::gpudriven
@@ -85,18 +84,16 @@ namespace render::gpudriven
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
-        // Create merged vertex buffer (device-local)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxVertexCount * vertexStride;
             request.usage = vk::BufferUsageFlagBits::eVertexBuffer |
                 vk::BufferUsageFlagBits::eTransferDst |
-                vk::BufferUsageFlagBits::eStorageBuffer; // For compute access if needed
+                vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, vertexBuffer, vertexBufferMemory);
         }
 
-        // Create merged index buffer (device-local)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxIndexCount * sizeof(uint32_t);
@@ -107,7 +104,6 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, indexBuffer, indexBufferMemory);
         }
 
-        // Create object buffer (device-local storage buffer)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxObjectCount * sizeof(GPUObjectData);
@@ -117,7 +113,6 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferMemory);
         }
 
-        // Create staging buffer for object updates (host-visible, persistently mapped)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxObjectCount * sizeof(GPUObjectData);
@@ -126,7 +121,6 @@ namespace render::gpudriven
                 vk::MemoryPropertyFlagBits::eHostCoherent;
             core::BufferUtilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
 
-            // Persistently map staging buffer
             objectStagingMapped = logicalDevice.mapMemory(
                 objectStagingMemory, 0, request.size, vk::MemoryMapFlags{}
             );
@@ -159,18 +153,15 @@ namespace render::gpudriven
             return;
         }
 
-        // Copy CPU data to staging buffer
         size_t copySize = currentObjectCount * sizeof(GPUObjectData);
         std::memcpy(objectStagingMapped, cpuObjectData.data(), copySize);
 
-        // Copy from staging to device-local buffer
         vk::BufferCopy copyRegion;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = copySize;
         cmd.copyBuffer(objectStagingBuffer, objectBuffer, copyRegion);
 
-        // Barrier to ensure copy completes before compute shader reads
         vk::BufferMemoryBarrier barrier;
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -202,8 +193,6 @@ namespace render::gpudriven
         }
         return nullptr;
     }
-
-    // ===== STREAMING SUPPORT IMPLEMENTATION =====
 
     void MergedMeshBuffer::uploadVertexDataAt(uint32_t offset, const void* data, uint32_t vertexCount)
     {
@@ -348,7 +337,6 @@ namespace render::gpudriven
 
         const auto& lodInfo = loc->lods[lodLevel];
 
-        // Validate counts match reservation
         if (lodInfo.vertexCount != vertexCount || lodInfo.indexCount != indexCount)
         {
             loggerError("MergedMeshBuffer::uploadLOD: Count mismatch for {}:{} LOD{}: "
@@ -359,10 +347,8 @@ namespace render::gpudriven
             return false;
         }
 
-        // Upload vertex data
         if (vertexData && vertexCount > 0)
         {
-            // Debug: log first vertex bone data per mesh to verify it's being read correctly
             static std::unordered_set<std::string> loggedMeshes;
             if (loggedMeshes.find(meshPath) == loggedMeshes.end())
             {
@@ -376,13 +362,11 @@ namespace render::gpudriven
             uploadVertexDataAt(lodInfo.vertexOffset, vertexData, vertexCount);
         }
 
-        // Upload index data
         if (indexData && indexCount > 0)
         {
             uploadIndexDataAt(lodInfo.indexOffset, indexData, indexCount);
         }
 
-        // Update state to uploading
         loc->lodStates[lodLevel] = LODStreamState::Uploading;
 
        
@@ -427,22 +411,6 @@ namespace render::gpudriven
         }
     }
 
-    bool MergedMeshBuffer::hasRenderableData(const std::string& meshPath) const
-    {
-        auto it = meshPathToIndex.find(meshPath);
-        if (it == meshPathToIndex.end()) return false;
-
-        const auto& meshInfo = registeredMeshes[it->second];
-        for (const auto& submesh : meshInfo.submeshes)
-        {
-            if (submesh.hasRenderableLOD())
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     SubmeshLocation* MergedMeshBuffer::getSubmeshLocationMutable(const std::string& meshPath,
                                                                  const std::string& submeshName,
                                                                  uint32_t submeshIndex)
@@ -464,80 +432,6 @@ namespace render::gpudriven
         }
     }
 
-    // ===== METADATA-BASED REGISTRATION (for streaming path) =====
-
-    MergedMeshInfo* MergedMeshBuffer::registerMeshFromMetadata(const std::string& meshPath,
-                                                               const mesh::MeshMetadata& metadata)
-    {
-        if (!initialized)
-        {
-            loggerError("MergedMeshBuffer not initialized");
-            return nullptr;
-        }
-
-        auto it = meshPathToIndex.find(meshPath);
-        if (it != meshPathToIndex.end())
-        {
-            return &registeredMeshes[it->second];
-        }
-
-        MergedMeshInfo meshInfo;
-        meshInfo.meshPath = meshPath;
-        meshInfo.firstSubmeshIndex = static_cast<uint32_t>(allSubmeshLocations.size());
-        meshInfo.submeshCount = 0;
-
-        for (size_t subIdx = 0; subIdx < metadata.subMeshes.size(); ++subIdx)
-        {
-            const auto& subMeta = metadata.subMeshes[subIdx];
-
-            SubmeshLocation loc;
-            loc.meshPath = meshPath;
-            loc.submeshName = subMeta.name;
-            loc.submeshIndex = static_cast<uint32_t>(subIdx);
-            loc.aabbMin = subMeta.boundingBox.min;
-            loc.aabbMax = subMeta.boundingBox.max;
-            loc.calculateBoundingSphere();
-
-            if (loc.boundingSphere.w <= 0.0f || std::isnan(loc.boundingSphere.w) || std::isinf(loc.boundingSphere.w))
-            {
-                loc.boundingSphere.w = 1.0f;
-            }
-
-            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
-            {
-                const auto& lodMeta = subMeta.lodLevels[lod];
-                if (!allocateLODSpace(loc, lod, lodMeta.vertexCount, lodMeta.indexCount, meshPath))
-                {
-                    return nullptr;
-                }
-            }
-
-            if (meshInfo.submeshCount == 0)
-            {
-                meshInfo.aabbMin = loc.aabbMin;
-                meshInfo.aabbMax = loc.aabbMax;
-            }
-            else
-            {
-                meshInfo.aabbMin = glm::min(meshInfo.aabbMin, loc.aabbMin);
-                meshInfo.aabbMax = glm::max(meshInfo.aabbMax, loc.aabbMax);
-            }
-
-            std::string key = makeSubmeshKey(meshPath, subMeta.name, static_cast<uint32_t>(subIdx));
-            submeshKeyToIndex[key] = allSubmeshLocations.size();
-            allSubmeshLocations.push_back(std::move(loc));
-            meshInfo.submeshes.push_back(allSubmeshLocations.back());
-            meshInfo.submeshCount++;
-        }
-
-        meshPathToIndex[meshPath] = registeredMeshes.size();
-        registeredMeshes.push_back(std::move(meshInfo));
-
-        loggerInfo("MergedMeshBuffer: Reserved space for mesh {} ({} submeshes, metadata path)",
-                   meshPath, metadata.subMeshes.size());
-        return &registeredMeshes.back();
-    }
-
     void MergedMeshBuffer::populateObjectData(GPUObjectData& obj,
                                               const mesh::MeshRenderData& meshRender,
                                               const SubmeshLocation& submeshLoc,
@@ -549,7 +443,6 @@ namespace render::gpudriven
         obj.modelMatrix = meshRender.modelMatrix;
         obj.boundingSphere = submeshLoc.boundingSphere;
 
-        // LOD data (vertex/index based)
         for (uint32_t i = 0; i < LOD_LEVEL_COUNT; ++i)
         {
             glm::uvec4& lodData = (i == 0)
@@ -567,8 +460,6 @@ namespace render::gpudriven
             );
         }
 
-        // Meshlet LOD data (for mesh shader path)
-        // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding)
         obj.meshletLod0 = glm::uvec4(
             submeshLoc.meshletLods[0].meshletOffset,
             submeshLoc.meshletLods[0].meshletCount,
@@ -587,7 +478,7 @@ namespace render::gpudriven
             submeshLoc.meshletLods[2].baseVertexOffset,
             0
         );
-        // Determine bone offset: use resolver if provided and entity is valid
+
         uint32_t boneOffset = INVALID_BONE_OFFSET;
         if (boneOffsetResolver && meshRender.entity != entt::null)
         {
@@ -598,7 +489,7 @@ namespace render::gpudriven
             submeshLoc.meshletLods[3].meshletOffset,
             submeshLoc.meshletLods[3].meshletCount,
             submeshLoc.meshletLods[3].baseVertexOffset,
-            boneOffset  // Bone matrix offset (INVALID_BONE_OFFSET for static meshes)
+            boneOffset
         );
 
         float bias = meshRender.lodBias;
@@ -609,7 +500,6 @@ namespace render::gpudriven
             bias
         );
 
-        // Material data
         const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
         std::string materialPath;
 
@@ -628,7 +518,6 @@ namespace render::gpudriven
             float iblDiffuse = 1.0f, iblSpecular = 0.5f;
             if (!materialPath.empty())
             {
-                // Use unified extraction that handles both .vfMat and .vfMatInstance
                 auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath);
                 iblDiffuse = pbrValues.iblDiffuse;
                 iblSpecular = pbrValues.iblSpecular;
@@ -638,10 +527,8 @@ namespace render::gpudriven
                                            meshRender.emission);
         }
 
-        // Dynamic emission - need parent material for shader graph
         if (!materialPath.empty() && time > 0.0f)
         {
-            // For instances, load the parent material to get the shader graph
             std::string effectiveMaterialPath = materialPath;
             if (material::isInstanceFile(materialPath))
             {
@@ -668,7 +555,6 @@ namespace render::gpudriven
             }
         }
 
-        // Texture indices
         if (textureResolver && !materialPath.empty())
         {
             obj.textureIndices0 = glm::uvec4(
@@ -690,7 +576,6 @@ namespace render::gpudriven
             obj.textureIndices1 = glm::uvec4(INVALID_TEXTURE_INDEX);
         }
 
-        // Flags
         obj.flags = 0;
         if (subMat && subMat->blendMode == 1)
         {

@@ -9,10 +9,6 @@
 
 namespace animator
 {
-    // ============================================================
-    // Parameter Types
-    // ============================================================
-
     enum class AnimatorParameterType : uint8_t
     {
         Float,
@@ -29,10 +25,6 @@ namespace animator
         AnimatorParameterType type = AnimatorParameterType::Float;
         AnimatorParameterValue defaultValue = 0.0f;
     };
-
-    // ============================================================
-    // Transition Conditions
-    // ============================================================
 
     enum class ComparisonOperator : uint8_t
     {
@@ -51,10 +43,6 @@ namespace animator
         AnimatorParameterValue value = 0.0f;
     };
 
-    // ============================================================
-    // Animation State
-    // ============================================================
-
     struct AnimatorState
     {
         uint32_t id = 0;
@@ -67,10 +55,6 @@ namespace animator
         glm::vec2 position{0.0f, 0.0f};
     };
 
-    // ============================================================
-    // Transition
-    // ============================================================
-
     struct AnimatorTransition
     {
         uint32_t id = 0;
@@ -82,10 +66,6 @@ namespace animator
         float exitTime = 1.0f;  // Normalized time (0-1) when exit time is enabled
         int32_t priority = 0;  // Lower = higher priority
     };
-
-    // ============================================================
-    // Animator Graph
-    // ============================================================
 
     struct AnimatorGraph
     {
@@ -110,20 +90,12 @@ namespace animator
         std::vector<const AnimatorTransition*> getTransitionsFromState(uint32_t stateId) const;
     };
 
-    // ============================================================
-    // Animator Data (full asset)
-    // ============================================================
-
     struct AnimatorData
     {
         std::string version = "1.0";
         std::string name;
         AnimatorGraph graph;
     };
-
-    // ============================================================
-    // Runtime Parameter State
-    // ============================================================
 
     struct AnimatorRuntimeParameters
     {
@@ -142,10 +114,6 @@ namespace animator
 
         void initializeFromGraph(const AnimatorGraph& graph);
     };
-
-    // ============================================================
-    // Utility Functions
-    // ============================================================
 
     const char* parameterTypeToString(AnimatorParameterType type);
     AnimatorParameterType stringToParameterType(const std::string& str);

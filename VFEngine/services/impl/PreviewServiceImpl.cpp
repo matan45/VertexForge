@@ -13,7 +13,6 @@ namespace services
     {
         assert(materialProvider != nullptr && "PreviewServiceImpl requires a valid IMaterialPreviewProvider");
         assert(meshProvider != nullptr && "PreviewServiceImpl requires a valid IMeshPreviewProvider");
-        // animationProvider can be null initially
     }
 
     PreviewServiceImpl::~PreviewServiceImpl() = default;
@@ -22,7 +21,6 @@ namespace services
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Material Preview Commands
         dispatcher.registerCommandHandler<events::preview::InitMaterialPreviewCommand>(
             [this](const events::preview::InitMaterialPreviewCommand& cmd)
             {
@@ -47,7 +45,6 @@ namespace services
                 updateMaterialCamera(cmd.instanceId, cmd.view, cmd.projection, cmd.cameraPos, cmd.time);
             });
 
-        // Material Preview Queries
         dispatcher.registerQueryHandler<events::preview::RenderMaterialPreviewQuery>(
             [this](const events::preview::RenderMaterialPreviewQuery& query)
             {
@@ -60,7 +57,6 @@ namespace services
                 return getMaterialShaderError(query.instanceId);
             });
 
-        // Mesh Preview Commands
         dispatcher.registerCommandHandler<events::preview::InitMeshPreviewCommand>(
             [this](const events::preview::InitMeshPreviewCommand& cmd)
             {
@@ -85,7 +81,6 @@ namespace services
                 updateMeshCamera(cmd.instanceId, cmd.view, cmd.projection, cmd.cameraPos);
             });
 
-        // Mesh Preview Queries
         dispatcher.registerQueryHandler<events::preview::GetPreviewMeshSubMeshInfoQuery>(
             [this](const events::preview::GetPreviewMeshSubMeshInfoQuery& query)
             {
@@ -110,7 +105,6 @@ namespace services
                 return renderMeshPreview(query.instanceId);
             });
 
-        // Async Mesh Loading Commands
         dispatcher.registerCommandHandler<events::preview::LoadPreviewMeshAsyncCommand>(
             [this](const events::preview::LoadPreviewMeshAsyncCommand& cmd)
             {
@@ -123,14 +117,12 @@ namespace services
                 cancelMeshLoading(cmd.instanceId);
             });
 
-        // Async Mesh Loading Queries
         dispatcher.registerQueryHandler<events::preview::GetMeshLoadingProgressQuery>(
             [this](const events::preview::GetMeshLoadingProgressQuery& query)
             {
                 return getMeshLoadingProgress(query.instanceId);
             });
 
-        // Animation Preview Commands (only register if provider is available)
         if (animationProvider)
         {
             dispatcher.registerCommandHandler<events::animpreview::InitAnimationPreviewCommand>(
@@ -237,8 +229,6 @@ namespace services
         }
     }
 
-    // === Material Preview ===
-
     void PreviewServiceImpl::initMaterialPreview(PreviewInstanceId instanceId)
     {
         materialProvider->initMaterialPreview(instanceId);
@@ -272,8 +262,6 @@ namespace services
     {
         return materialProvider->getMaterialShaderError(instanceId);
     }
-
-    // === Mesh Preview ===
 
     void PreviewServiceImpl::initMeshPreview(PreviewInstanceId instanceId)
     {
@@ -319,8 +307,6 @@ namespace services
         return handle;
     }
 
-    // === Async Mesh Loading ===
-
     void PreviewServiceImpl::loadPreviewMeshAsync(PreviewInstanceId instanceId, const std::string& meshPath)
     {
         meshProvider->loadPreviewMeshAsync(instanceId, meshPath);
@@ -340,8 +326,6 @@ namespace services
     {
         meshProvider->processAsyncLoading();
     }
-
-    // === Animation Preview ===
 
     void PreviewServiceImpl::initAnimationPreview(PreviewInstanceId instanceId)
     {

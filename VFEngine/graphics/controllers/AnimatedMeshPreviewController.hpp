@@ -54,8 +54,6 @@ namespace controllers
         std::string loadedAnimationPath;
         math::AABB meshBounds;
 
-        std::vector<int32_t> meshToAnimBoneMapping;
-
     public:
         explicit AnimatedMeshPreviewController();
         ~AnimatedMeshPreviewController();
@@ -69,8 +67,6 @@ namespace controllers
         bool loadMesh(const std::string& meshPath);
         bool loadAnimation(const std::string& animationPath);
         void unload();
-        const std::string& getLoadedMeshPath() const { return loadedMeshPath; }
-        bool isMeshLoaded() const { return meshLoaded; }
 
         void play() { playbackState.play(); }
         void pause() { playbackState.pause(); }
@@ -103,8 +99,5 @@ namespace controllers
         void cleanupOffscreenResources();
         void createSampler();
         void updateDescriptorSet(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
-
-        void buildBoneMapping();
-        std::vector<glm::mat4> remapBoneMatrices(const std::vector<glm::mat4>& animBoneMatrices) const;
     };
 }

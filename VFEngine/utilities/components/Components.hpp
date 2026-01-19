@@ -376,11 +376,6 @@ namespace components
         }
     };
 
-
-    // ============================================================
-    // Animator Component
-    // ============================================================
-
     /**
      * AnimatorComponent provides ECS access to an entity's animation state machine.
      *
@@ -414,12 +409,6 @@ namespace components
         bool isInitialized = false;
     };
 
-
-    // ============================================================
-    // Physics Components
-    // ============================================================
-
-    // Use shared physics types from types::
     using RigidBodyType = types::RigidBodyType;
     using ColliderShape = types::ColliderShape;
 

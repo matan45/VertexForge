@@ -54,12 +54,9 @@ namespace resource {
 
 		static std::shared_ptr<animator::AnimatorData> loadAnimator(std::string_view path);
 
-		static std::unique_ptr<MeshStreamHandle> openMeshStream(std::string_view path);
-
 		// Invalidate cache entries (for reload support)
 		static void invalidateMaterialCache(std::string_view path);
 		static void invalidateMaterialInstanceCache(std::string_view path);
-		static void invalidateAnimatorCache(std::string_view path);
 
 		static void init();
 		static void cleanUp();

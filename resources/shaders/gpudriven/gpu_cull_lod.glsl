@@ -282,7 +282,6 @@ void main() {
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
     uint commandsPerSection = getCommandsPerSection();
 
-    // Frustum Culling
     if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
             atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
@@ -290,7 +289,6 @@ void main() {
         }
     }
 
-    // Hi-Z Occlusion Culling
     if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u) {
         if (camera.hiZMipLevels > 0u) {
             if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
@@ -300,7 +298,6 @@ void main() {
         }
     }
 
-    // LOD Selection
     uint targetLOD = 0;
     if (camera.enableLODSelection != 0u) {
         vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
@@ -334,7 +331,6 @@ void main() {
         return;
     }
 
-    // Emit Mesh Shader Dispatch Command
     uint localDrawIndex = atomicAdd(batchStats[sectionIndex].drawCount, 1);
     if (localDrawIndex >= commandsPerSection) {
         atomicAdd(batchStats[sectionIndex].drawCount, uint(-1));

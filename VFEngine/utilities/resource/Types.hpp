@@ -45,25 +45,6 @@ namespace resource
         std::vector<unsigned char> data;
     };
 
-    struct MipLevelDataHDR
-    {
-        uint32_t width = 0;
-        uint32_t height = 0;
-        std::vector<float> data;
-    };
-    
-    inline uint32_t calculateMipLevels(uint32_t width, uint32_t height)
-    {
-        uint32_t levels = 1;
-        while (width > 1 || height > 1)
-        {
-            width = (std::max)(1u, width / 2);
-            height = (std::max)(1u, height / 2);
-            levels++;
-        }
-        return levels;
-    }
-
     struct TextureData
     {
         FileType headerFileType = FileType::TEXTURE;
@@ -78,30 +59,12 @@ namespace resource
             static std::vector<unsigned char> empty;
             return mipData.empty() ? empty : mipData[0].data;
         }
-        
-        void setTextureData(std::vector<unsigned char>&& data) {
-            mipData.clear();
-            mipData.push_back({width, height, std::move(data)});
-            mipLevels = 1;
-        }
-        
+
         void releaseCPUData() {
             for (auto& mip : mipData) {
                 mip.data.clear();
                 mip.data.shrink_to_fit();
             }
-        }
-        
-        bool hasCPUData() const {
-            return !mipData.empty() && !mipData[0].data.empty();
-        }
-        
-        size_t getCPUMemoryUsage() const {
-            size_t total = 0;
-            for (const auto& mip : mipData) {
-                total += mip.data.capacity();
-            }
-            return total;
         }
     };
 
@@ -117,12 +80,6 @@ namespace resource
         [[nodiscard]] size_t getDataSize() const
         {
             return pixels.size() * sizeof(float);
-        }
-
-        void releaseCPUData()
-        {
-            pixels.clear();
-            pixels.shrink_to_fit();
         }
     };
 
@@ -148,15 +105,6 @@ namespace resource
     {
         std::string name;
         std::vector<LODLevel> lodLevels;
-        
-        const std::vector<Vertex>& vertices() const {
-            static std::vector<Vertex> empty;
-            return lodLevels.empty() ? empty : lodLevels[0].vertices;
-        }
-        const std::vector<uint32_t>& indices() const {
-            static std::vector<uint32_t> empty;
-            return lodLevels.empty() ? empty : lodLevels[0].indices;
-        }
     };
     
 
@@ -350,24 +298,6 @@ namespace resource
         uint32_t height = 0;
         FontAtlasFormat format = FontAtlasFormat::GRAYSCALE_8;
         std::vector<unsigned char> pixels;
-
-        [[nodiscard]] size_t getDataSize() const
-        {
-            size_t bytesPerPixel = 1;
-            if (format == FontAtlasFormat::RGBA_32) bytesPerPixel = 4;
-            return static_cast<size_t>(width) * height * bytesPerPixel;
-        }
-
-        void releaseCPUData()
-        {
-            pixels.clear();
-            pixels.shrink_to_fit();
-        }
-
-        [[nodiscard]] bool hasCPUData() const
-        {
-            return !pixels.empty();
-        }
     };
 
     struct FontData
@@ -428,19 +358,9 @@ namespace resource
             return (it != kerningMap.end()) ? it->second : 0.0f;
         }
 
-        void invalidateKerningCache()
-        {
-            kerningMapBuilt = false;
-        }
-
         [[nodiscard]] bool isSDF() const
         {
             return hasFlag(formatFlags, FontFormatFlags::SDF_ENABLED);
-        }
-
-        void releaseCPUData()
-        {
-            atlas.releaseCPUData();
         }
     };
 

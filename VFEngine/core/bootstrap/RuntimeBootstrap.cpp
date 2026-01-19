@@ -5,6 +5,7 @@
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
+#include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 
@@ -26,6 +27,7 @@ namespace core
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
+        animatorAdapter = std::make_unique<AnimatorAdapter>();
 
         offScreen->init();
         audioAdapter->init();
@@ -70,6 +72,7 @@ namespace core
         audioAdapter.reset();
         scriptingAdapter.reset();
         physicsAdapter.reset();
+        animatorAdapter.reset();
 
         if (coreInterface)
         {
@@ -95,6 +98,11 @@ namespace core
     services::IPhysicsProvider* RuntimeBootstrap::getPhysicsProvider()
     {
         return physicsAdapter.get();
+    }
+
+    services::IAnimatorProvider* RuntimeBootstrap::getAnimatorProvider()
+    {
+        return animatorAdapter.get();
     }
 
     window::Window* RuntimeBootstrap::getWindow()

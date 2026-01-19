@@ -2,13 +2,15 @@
 #include <fstream>
 #include <functional>
 #include <string>
-#include <unordered_map>
 #include "config/Config.hpp"
 #include "resource/Types.hpp"
 
 struct aiScene;
 struct aiAnimation;
 struct aiNode;
+struct aiMatrix4x4;
+struct aiQuaternion;
+struct aiVector3D;
 
 namespace types
 {
@@ -36,5 +38,8 @@ namespace types
         void writeChannels(std::ofstream& file, const std::vector<resource::BoneAnimation>& channels) const;
 
         static std::string sanitizeAnimationName(const std::string& name);
+        static glm::mat4 convertMatrix(const aiMatrix4x4& m);
+        static glm::quat convertQuaternion(const aiQuaternion& q);
+        static glm::vec3 convertVector(const aiVector3D& v);
     };
 }

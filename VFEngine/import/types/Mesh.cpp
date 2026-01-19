@@ -13,7 +13,6 @@
 #include <assimp/postprocess.h>
 #include <meshoptimizer.h>
 
-// V-HACD for convex decomposition (header-only, implementation in this TU)
 #define ENABLE_VHACD_IMPLEMENTATION 1
 #include <VHACD.h>
 
@@ -45,7 +44,6 @@ namespace types
     {
         ExtractedSkeleton result;
 
-        // First pass: collect bone names in order from mesh bones
         std::vector<std::string> boneNamesInOrder;
         std::unordered_set<std::string> boneNamesSet;
 
@@ -68,7 +66,6 @@ namespace types
                 boneNamesSet.insert(boneName);
                 boneNamesInOrder.push_back(boneName);
 
-                // Store inverse bind pose
                 glm::mat4 invBindPose = convertMatrix(bone->mOffsetMatrix);
                 result.inverseBindPoses.push_back(invBindPose);
             }
@@ -77,21 +74,17 @@ namespace types
         if (!result.hasSkinning)
             return result;
 
-        // Build bone index map
         for (size_t i = 0; i < boneNamesInOrder.size(); ++i)
         {
             result.boneNameToIndex[boneNamesInOrder[i]] = static_cast<uint32_t>(i);
         }
 
-        // Build node map for hierarchy lookup
         std::unordered_map<std::string, const aiNode*> nodeMap;
         buildNodeMap(scene->mRootNode, nodeMap);
 
-        // Compute global inverse transform
         glm::mat4 rootTransform = convertMatrix(scene->mRootNode->mTransformation);
         result.globalInverseTransform = glm::inverse(rootTransform);
 
-        // Second pass: build full bone data with hierarchy
         result.bones.reserve(boneNamesInOrder.size());
 
         for (const auto& boneName : boneNamesInOrder)
@@ -105,7 +98,6 @@ namespace types
                 const aiNode* boneNode = nodeIt->second;
                 bone.offsetMatrix = convertMatrix(boneNode->mTransformation);
 
-                // Find parent bone
                 bone.parentIndex = -1;
                 const aiNode* parentNode = boneNode->mParent;
 
@@ -121,7 +113,6 @@ namespace types
                     parentNode = parentNode->mParent;
                 }
 
-                // Compute preTransform (accumulated transforms from non-bone ancestors)
                 bone.preTransform = glm::mat4(1.0f);
                 parentNode = boneNode->mParent;
                 std::vector<glm::mat4> nonBoneTransforms;
@@ -260,7 +251,6 @@ namespace types
                 }
             }
 
-            // Normalize bone weights for each vertex
             size_t verticesWithBones = 0;
             for (auto& vertex : result.vertices)
             {
@@ -309,13 +299,11 @@ namespace types
         }
 
         size_t targetIndexCount = static_cast<size_t>(source.indices.size() * targetRatio);
-        // Ensure at least 3 indices (one triangle)
         targetIndexCount = std::max(targetIndexCount, static_cast<size_t>(3));
-        // Round to multiple of 3
         targetIndexCount = (targetIndexCount / 3) * 3;
 
         LODMeshData result;
-        result.indices.resize(source.indices.size()); // Allocate max size initially
+        result.indices.resize(source.indices.size());
 
         size_t actualIndexCount = meshopt_simplifySloppy(
             result.indices.data(),
@@ -325,8 +313,8 @@ namespace types
             source.vertices.size(),
             sizeof(resource::Vertex),
             targetIndexCount,
-            FLT_MAX, // No error limit - allow maximum simplification
-            nullptr // No result error output needed
+            FLT_MAX,
+            nullptr
         );
 
         result.indices.resize(actualIndexCount);
@@ -337,7 +325,6 @@ namespace types
             return source;
         }
 
-        // Optimize vertex cache for better GPU performance
         meshopt_optimizeVertexCache(
             result.indices.data(),
             result.indices.data(),
@@ -378,10 +365,8 @@ namespace types
     {
         std::array<LODMeshData, resource::LOD_LEVEL_COUNT> lodLevels;
 
-        // LOD0: Original mesh (100%)
         lodLevels[0] = lod0;
 
-        // Generate LOD1, LOD2, LOD3 by simplifying from LOD0
         for (uint32_t level = 1; level < resource::LOD_LEVEL_COUNT; ++level)
         {
             lodLevels[level] = simplifyMesh(lod0, lodRatios[level]);
@@ -426,7 +411,7 @@ namespace types
             sizeof(resource::Vertex),
             resource::MAX_MESHLET_VERTICES,
             resource::MAX_MESHLET_PRIMITIVES,
-            0.0f // cone_weight: 0 = balanced locality
+            0.0f
         );
 
         if (meshletCount == 0)
@@ -442,7 +427,6 @@ namespace types
         meshletVertexIndices.resize(totalVertexIndices);
         meshletTriangleIndices.resize(totalTriangleIndices);
 
-        // Convert to our format and compute bounds
         result.meshlets.resize(meshletCount);
         result.meshletVertices.resize(totalVertexIndices);
         result.meshletPrimitives.reserve((totalTriangleIndices + 3) / 4);
@@ -452,13 +436,10 @@ namespace types
             result.meshletVertices[i] = meshletVertexIndices[i];
         }
 
-        // Pack triangle indices (3 uint8 per triangle -> 1 uint32 per triangle)
-        // Triangle indices are local to each meshlet's vertex array, so they must be < vertex_count
         for (size_t i = 0; i < meshletCount; ++i)
         {
             const auto& m = meshoptMeshlets[i];
 
-            // Runtime validation: ensure counts fit in uint8 (should always pass due to static_assert)
             if (m.vertex_count > 255 || m.triangle_count > 255)
             {
                 vfLogError("Meshlet {} has invalid counts: vertices={}, triangles={} (max 255)",
@@ -470,7 +451,6 @@ namespace types
             {
                 size_t triOffset = m.triangle_offset + t * 3;
 
-                // Validate triangle indices are within meshlet's vertex range
                 unsigned char idx0 = meshletTriangleIndices[triOffset + 0];
                 unsigned char idx1 = meshletTriangleIndices[triOffset + 1];
                 unsigned char idx2 = meshletTriangleIndices[triOffset + 2];
@@ -517,7 +497,6 @@ namespace types
                 bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius
             );
 
-            // Cone for backface culling (cutoff >= 1.0 means no backface culling)
             outMeshlet.bounds.cone = glm::vec4(
                 bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2],
                 bounds.cone_cutoff
@@ -636,17 +615,14 @@ namespace types
             return;
         }
 
-        // Extract skeleton from all meshes first (for vertex bone indices)
         ExtractedSkeleton skeleton = extractSkeleton(scene);
 
-        // Write header with version 0.0.7 (LOD + Meshlet + Convex + Skeleton reference)
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
-        resource::endian::writeLE<uint32_t>(outFile, 0); // major
-        resource::endian::writeLE<uint32_t>(outFile, 0); // minor
-        resource::endian::writeLE<uint32_t>(outFile, 7); // patch - version 0.0.7 for skeleton reference
+        resource::endian::writeLE<uint32_t>(outFile, 0);
+        resource::endian::writeLE<uint32_t>(outFile, 0);
+        resource::endian::writeLE<uint32_t>(outFile, 7);
         resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
 
-        // Write empty skeleton reference (self-contained animation format - no external skeleton)
         resource::endian::writeLE<uint32_t>(outFile, 0);
 
         vfLogInfo("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
@@ -687,7 +663,6 @@ namespace types
 
             writeMeshletData(outFile, meshletResults);
 
-            // Use LOD0 for best accuracy in convex decomposition
             resource::ConvexDecompositionData convexData = generateConvexDecomposition(
                 lod0, config.meshConfig);
             writeConvexDecompositionData(outFile, convexData);
@@ -699,7 +674,6 @@ namespace types
             }
         }
 
-        // Write skeleton data at the end of the file
         writeSkeletonData(outFile, skeleton);
 
         outFile.close();
@@ -758,7 +732,6 @@ namespace types
             result.params.maxVerticesPerHull = config.maxVerticesPerHull;
             result.params.minVolumePercentError = config.minVolumePercentError;
 
-            // Jolt Physics hard limit for convex hull vertices
             constexpr uint32_t joltMaxVertices = 256;
             const uint32_t effectiveMaxVertices = std::min(config.maxVerticesPerHull, joltMaxVertices);
 
@@ -890,10 +863,8 @@ namespace types
         uint32_t boneCount = static_cast<uint32_t>(skeleton.bones.size());
         resource::endian::writeLE<uint32_t>(outFile, boneCount);
 
-        // Write bone data (name, parentIndex, offsetMatrix, preTransform)
         for (const auto& bone : skeleton.bones)
         {
-            // Write bone name
             uint32_t nameLength = static_cast<uint32_t>(bone.name.length());
             resource::endian::writeLE<uint32_t>(outFile, nameLength);
             if (nameLength > 0)
@@ -901,10 +872,8 @@ namespace types
                 outFile.write(bone.name.data(), nameLength);
             }
 
-            // Write parent index
             resource::endian::writeLE<int32_t>(outFile, bone.parentIndex);
 
-            // Write offset matrix
             for (int col = 0; col < 4; ++col)
             {
                 for (int row = 0; row < 4; ++row)
@@ -913,7 +882,6 @@ namespace types
                 }
             }
 
-            // Write pre-transform
             for (int col = 0; col < 4; ++col)
             {
                 for (int row = 0; row < 4; ++row)
@@ -923,7 +891,6 @@ namespace types
             }
         }
 
-        // Write inverse bind poses
         for (const auto& matrix : skeleton.inverseBindPoses)
         {
             for (int col = 0; col < 4; ++col)
@@ -935,7 +902,6 @@ namespace types
             }
         }
 
-        // Write global inverse transform
         for (int col = 0; col < 4; ++col)
         {
             for (int row = 0; row < 4; ++row)

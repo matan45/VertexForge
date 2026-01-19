@@ -8,6 +8,7 @@ namespace services
     class IAudioProvider;
     class IScriptingProvider;
     class IPhysicsProvider;
+    class IAnimatorProvider;
 }
 
 namespace window
@@ -32,6 +33,7 @@ namespace core
     class AudioAdapter;
     class ScriptingAdapter;
     class PhysicsAdapter;
+    class AnimatorAdapter;
 
     class RuntimeBootstrap
     {
@@ -43,6 +45,7 @@ namespace core
         std::unique_ptr<AudioAdapter> audioAdapter;
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
+        std::unique_ptr<AnimatorAdapter> animatorAdapter;
 
     public:
         explicit RuntimeBootstrap();
@@ -67,6 +70,8 @@ namespace core
         services::IScriptingProvider* getScriptingProvider();
 
         services::IPhysicsProvider* getPhysicsProvider();
+
+        services::IAnimatorProvider* getAnimatorProvider();
 
         // === Other Accessors ===
 

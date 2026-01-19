@@ -6,7 +6,6 @@
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
-#include <cctype>
 
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -14,28 +13,6 @@
 #include <assimp/anim.h>
 
 #include <glm/gtc/type_ptr.hpp>
-
-namespace
-{
-    // Assimp to GLM conversion helpers (internal to this translation unit)
-    glm::mat4 convertMatrix(const aiMatrix4x4& m)
-    {
-        // Assimp uses row-major, GLM uses column-major
-        // We need to transpose during conversion
-        return glm::transpose(glm::make_mat4(&m.a1));
-    }
-
-    glm::quat convertQuaternion(const aiQuaternion& q)
-    {
-        // GLM quaternion constructor: (w, x, y, z)
-        return glm::quat(q.w, q.x, q.y, q.z);
-    }
-
-    glm::vec3 convertVector(const aiVector3D& v)
-    {
-        return glm::vec3(v.x, v.y, v.z);
-    }
-}
 
 namespace types
 {
@@ -117,8 +94,6 @@ namespace types
         animData.duration = static_cast<float>(anim->mDuration);
         animData.ticksPerSecond = anim->mTicksPerSecond > 0.0 ? static_cast<float>(anim->mTicksPerSecond) : 24.0f;
 
-        // Extract animation channels, merging FBX helper nodes
-        // FBX splits transforms into separate Translation/Rotation/Scaling nodes
         std::unordered_map<std::string, resource::BoneAnimation> channelMap;
 
         for (uint32_t c = 0; c < anim->mNumChannels; ++c)
@@ -126,7 +101,6 @@ namespace types
             const aiNodeAnim* channel = anim->mChannels[c];
             std::string channelName = channel->mNodeName.C_Str();
 
-            // Strip Assimp's FBX helper suffixes: "Bone_$AssimpFbx$_Rotation" -> "Bone"
             size_t assimpSuffix = channelName.find("_$AssimpFbx$");
             if (assimpSuffix != std::string::npos)
                 channelName = channelName.substr(0, assimpSuffix);
@@ -185,7 +159,6 @@ namespace types
             return;
         }
 
-        // Header v0.0.8: keyframes only, skeleton comes from mesh
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(animData.headerFileType));
         resource::endian::writeLE<uint32_t>(outFile, 0);
         resource::endian::writeLE<uint32_t>(outFile, 0);
@@ -270,5 +243,20 @@ namespace types
             result.pop_back();
 
         return result;
+    }
+
+    glm::mat4 Animation::convertMatrix(const aiMatrix4x4& m)
+    {
+        return glm::transpose(glm::make_mat4(&m.a1));
+    }
+
+    glm::quat Animation::convertQuaternion(const aiQuaternion& q)
+    {
+        return glm::quat(q.w, q.x, q.y, q.z);
+    }
+
+    glm::vec3 Animation::convertVector(const aiVector3D& v)
+    {
+        return glm::vec3(v.x, v.y, v.z);
     }
 }

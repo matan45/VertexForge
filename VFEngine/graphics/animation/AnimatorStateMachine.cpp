@@ -13,29 +13,19 @@ namespace animation
         skeletonData = skeleton;
         animationLoadCallback = std::move(loadCallback);
 
-        // Initialize parameters with defaults from the graph
         parameters.initializeFromGraph(data.graph);
 
-        // Set initial state to the default state
         state = AnimatorStateMachineState{};
         state.currentStateId = data.graph.defaultStateId;
         state.isPlaying = true;
 
-        // Clear any previously cached animations before loading new ones
         loadedAnimations.clear();
 
-        // Load animation for the default state
         loadAnimationForState(state.currentStateId);
 
         initialized = true;
 
-        // Evaluate initial pose so bone matrices are ready immediately
         evaluateCurrentPose();
-    }
-
-    void AnimatorStateMachine::setSkeleton(const resource::SkeletonData* skeleton)
-    {
-        skeletonData = skeleton;
     }
 
     void AnimatorStateMachine::update(float deltaTime)
@@ -45,11 +35,9 @@ namespace animation
             return;
         }
 
-        // Update state time
         const animator::AnimatorState* currentState = getCurrentAnimatorState();
         if (currentState)
         {
-            // Store previous normalized time for exit-time threshold detection
             float duration = getAnimationDuration(state.currentStateId);
             if (duration > 0.0f)
             {
@@ -58,7 +46,6 @@ namespace animation
 
             state.stateTime += deltaTime * currentState->playbackSpeed;
 
-            // Handle looping
             if (duration > 0.0f && !state.isBlending)
             {
                 if (currentState->loop)
@@ -72,7 +59,6 @@ namespace animation
             }
         }
 
-        // Update previous state time during blending
         if (state.isBlending)
         {
             const animator::AnimatorState* prevState = getPreviousAnimatorState();
@@ -80,7 +66,6 @@ namespace animation
             {
                 state.previousStateTime += deltaTime * prevState->playbackSpeed;
 
-                // Handle looping for previous state during blend
                 float prevDuration = getAnimationDuration(state.previousStateId);
                 if (prevDuration > 0.0f && prevState->loop)
                 {
@@ -92,16 +77,13 @@ namespace animation
             }
         }
 
-        // Update blending
         updateBlending(deltaTime);
 
-        // Check for transitions (only when not already blending)
         if (!state.isBlending)
         {
             evaluateTransitions();
         }
 
-        // Evaluate the current pose
         evaluateCurrentPose();
     }
 
@@ -113,13 +95,9 @@ namespace animation
 
         if (!isLooping)
         {
-            // Non-looping: evaluate once we've reached the exit time
             return normalizedTime >= exitTime;
         }
 
-        // Looping animation: need to handle several cases carefully
-
-        // Case 1: Already evaluated exit-time this loop iteration
         bool alreadyEvaluatedThisLoop = (state.exitTimeEvaluatedAtLoop == state.currentLoopCount) &&
                                         (prevTime >= exitTime);
         if (alreadyEvaluatedThisLoop)
@@ -127,21 +105,17 @@ namespace animation
             return false;
         }
 
-        // Case 2: Normal threshold crossing (previous frame was before, current is at/after)
         bool crossedThisFrame = (prevTime < exitTime) && (normalizedTime >= exitTime);
         if (crossedThisFrame)
         {
             return true;
         }
 
-        // Case 3: Currently at or past exit time (handles multiple transitions with same exit time)
         if (normalizedTime >= exitTime)
         {
             return true;
         }
 
-        // Case 4: Loop wrap-around - time went "backwards" because animation looped.
-        // If we were below exitTime before looping, we must have crossed it.
         bool loopOccurred = normalizedTime < prevTime;
         bool wasBeforeExitTime = prevTime < exitTime;
         if (loopOccurred && wasBeforeExitTime)
@@ -149,7 +123,6 @@ namespace animation
             return true;
         }
 
-        // Haven't reached exit time yet
         return false;
     }
 
@@ -162,13 +135,11 @@ namespace animation
 
         for (const animator::AnimatorTransition* transition : transitions)
         {
-            // Skip self-transitions (except from "Any State" which has sourceStateId == 0)
             if (transition->sourceStateId != 0 && transition->targetStateId == state.currentStateId)
             {
                 continue;
             }
 
-            // Check exit-time condition if enabled
             if (transition->hasExitTime)
             {
                 float duration = getAnimationDuration(state.currentStateId);
@@ -185,10 +156,8 @@ namespace animation
                 }
             }
 
-            // Evaluate parameter conditions
             if (animator::evaluateAllConditions(transition->conditions, parameters))
             {
-                // Mark exit-time as evaluated before transitioning
                 if (transition->hasExitTime)
                 {
                     state.exitTimeEvaluatedAtLoop = state.currentLoopCount;
@@ -196,7 +165,6 @@ namespace animation
 
                 startTransition(*transition);
 
-                // Reset consumed triggers
                 for (const auto& condition : transition->conditions)
                 {
                     const auto* param = animatorData->graph.findParameter(condition.parameterName);
@@ -209,7 +177,6 @@ namespace animation
             }
             else if (transition->hasExitTime)
             {
-                // Conditions failed but exit-time was reached - mark to prevent re-evaluation
                 state.exitTimeEvaluatedAtLoop = state.currentLoopCount;
             }
         }
@@ -217,26 +184,20 @@ namespace animation
 
     void AnimatorStateMachine::startTransition(const animator::AnimatorTransition& transition)
     {
-        // Store previous state info
         state.previousStateId = state.currentStateId;
         state.previousStateTime = state.stateTime;
 
-        // Load animation for previous state if not loaded
         loadAnimationForState(state.previousStateId);
 
-        // Set new current state
         state.currentStateId = transition.targetStateId;
         state.stateTime = 0.0f;
 
-        // Reset loop tracking for the new state
         state.currentLoopCount = 0;
         state.exitTimeEvaluatedAtLoop = 0;
         state.previousNormalizedTime = 0.0f;
 
-        // Load animation for new state
         loadAnimationForState(state.currentStateId);
 
-        // Setup blending
         state.blendDuration = transition.blendDuration;
         state.blendElapsed = 0.0f;
         state.blendWeight = 0.0f;
@@ -261,7 +222,6 @@ namespace animation
             state.blendWeight = 1.0f;
         }
 
-        // Check if blend is complete
         if (state.blendWeight >= 1.0f)
         {
             state.isBlending = false;
@@ -283,7 +243,6 @@ namespace animation
 
         if (state.isBlending)
         {
-            // Evaluate both poses and blend
             auto itPrev = loadedAnimations.find(state.previousStateId);
             auto itCurr = loadedAnimations.find(state.currentStateId);
 
@@ -303,7 +262,6 @@ namespace animation
             }
             else if (itCurr != loadedAnimations.end() && itCurr->second)
             {
-                // Only current pose available
                 currentEvaluator.loadAnimation(*itCurr->second, *skeletonData);
                 float timeInTicks = currentEvaluator.secondsToTicks(state.stateTime);
                 currentBoneMatrices = currentEvaluator.evaluatePose(timeInTicks);
@@ -311,7 +269,6 @@ namespace animation
         }
         else
         {
-            // Just evaluate current state
             auto it = loadedAnimations.find(state.currentStateId);
             if (it != loadedAnimations.end() && it->second)
             {
@@ -334,14 +291,12 @@ namespace animation
             return false;
         }
 
-        // Check if already loaded
         auto it = loadedAnimations.find(stateId);
         if (it != loadedAnimations.end())
         {
             return it->second != nullptr;
         }
 
-        // Find the state
         const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
         if (!animState)
         {
@@ -355,7 +310,6 @@ namespace animation
             return false;
         }
 
-        // Load animation via callback
         const resource::AnimationData* animData = animationLoadCallback(animState->animationPath);
         loadedAnimations[stateId] = animData;
 
@@ -462,15 +416,12 @@ namespace animation
         if (!animatorData)
             return;
 
-        // Reset to initial state
         state = AnimatorStateMachineState{};
         state.currentStateId = animatorData->graph.defaultStateId;
         state.isPlaying = true;
 
-        // Reset parameters to defaults
         parameters.initializeFromGraph(animatorData->graph);
 
-        // Reload animation for default state
         loadAnimationForState(state.currentStateId);
     }
 
@@ -479,14 +430,12 @@ namespace animation
         if (!animatorData)
             return;
 
-        // Verify state exists
         const animator::AnimatorState* targetState = animatorData->graph.findStateById(stateId);
         if (!targetState)
         {
             return;
         }
 
-        // Create a temporary transition
         animator::AnimatorTransition tempTransition;
         tempTransition.sourceStateId = state.currentStateId;
         tempTransition.targetStateId = stateId;

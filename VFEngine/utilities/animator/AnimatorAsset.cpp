@@ -14,15 +14,15 @@ namespace animator
     {
         switch (type)
         {
-            case AnimatorParameterType::Float:
-                return std::holds_alternative<float>(val) ? std::get<float>(val) : 0.0f;
-            case AnimatorParameterType::Int:
-                return std::holds_alternative<int32_t>(val) ? std::get<int32_t>(val) : 0;
-            case AnimatorParameterType::Bool:
-            case AnimatorParameterType::Trigger:
-                return std::holds_alternative<bool>(val) ? std::get<bool>(val) : false;
-            default:
-                return 0.0f;
+        case AnimatorParameterType::Float:
+            return std::holds_alternative<float>(val) ? std::get<float>(val) : 0.0f;
+        case AnimatorParameterType::Int:
+            return std::holds_alternative<int32_t>(val) ? std::get<int32_t>(val) : 0;
+        case AnimatorParameterType::Bool:
+        case AnimatorParameterType::Trigger:
+            return std::holds_alternative<bool>(val) ? std::get<bool>(val) : false;
+        default:
+            return 0.0f;
         }
     }
 
@@ -32,15 +32,15 @@ namespace animator
         {
             switch (type)
             {
-                case AnimatorParameterType::Float:
-                    return j.is_number() ? j.get<float>() : 0.0f;
-                case AnimatorParameterType::Int:
-                    return j.is_number_integer() ? j.get<int32_t>() : 0;
-                case AnimatorParameterType::Bool:
-                case AnimatorParameterType::Trigger:
-                    return j.is_boolean() ? j.get<bool>() : false;
-                default:
-                    return 0.0f;
+            case AnimatorParameterType::Float:
+                return j.is_number() ? j.get<float>() : 0.0f;
+            case AnimatorParameterType::Int:
+                return j.is_number_integer() ? j.get<int32_t>() : 0;
+            case AnimatorParameterType::Bool:
+            case AnimatorParameterType::Trigger:
+                return j.is_boolean() ? j.get<bool>() : false;
+            default:
+                return 0.0f;
             }
         }
         catch (const json::exception&)
@@ -106,7 +106,6 @@ namespace animator
         j["parameter"] = condition.parameterName;
         j["operator"] = comparisonOperatorToString(condition.op);
 
-        // Serialize value based on its type
         std::visit([&j](auto&& arg)
         {
             using T = std::decay_t<decltype(arg)>;
@@ -263,7 +262,6 @@ namespace animator
                 logWarningLimited("Animator has empty name, using default");
             }
 
-            // Parse parameters
             if (j.contains("parameters") && j["parameters"].is_array())
             {
                 for (size_t i = 0; i < j["parameters"].size(); ++i)
@@ -278,7 +276,6 @@ namespace animator
                 }
             }
 
-            // Parse states
             if (j.contains("states") && j["states"].is_array())
             {
                 for (size_t i = 0; i < j["states"].size(); ++i)
@@ -295,7 +292,6 @@ namespace animator
                 }
             }
 
-            // Parse transitions
             if (j.contains("transitions") && j["transitions"].is_array())
             {
                 for (size_t i = 0; i < j["transitions"].size(); ++i)
@@ -312,10 +308,8 @@ namespace animator
                 }
             }
 
-            // Parse default state
             animator.graph.defaultStateId = j.value("defaultState", 1u);
 
-            // Parse node graph positions
             if (j.contains("anyStatePosition") && j["anyStatePosition"].is_array() && j["anyStatePosition"].size() >= 2)
             {
                 animator.graph.anyStatePosition.x = j["anyStatePosition"][0].get<float>();
@@ -328,7 +322,6 @@ namespace animator
                 animator.graph.entryPosition.y = j["entryPosition"][1].get<float>();
             }
 
-            // Validate default state exists
             if (!animator.graph.states.empty())
             {
                 bool defaultExists = animator.graph.findStateById(animator.graph.defaultStateId) != nullptr;
@@ -373,7 +366,6 @@ namespace animator
         j["anyStatePosition"] = json::array({animator.graph.anyStatePosition.x, animator.graph.anyStatePosition.y});
         j["entryPosition"] = json::array({animator.graph.entryPosition.x, animator.graph.entryPosition.y});
 
-        // Serialize parameters
         json parametersJson = json::array();
         for (const auto& param : animator.graph.parameters)
         {
@@ -381,7 +373,6 @@ namespace animator
         }
         j["parameters"] = parametersJson;
 
-        // Serialize states
         json statesJson = json::array();
         for (const auto& state : animator.graph.states)
         {
@@ -389,7 +380,6 @@ namespace animator
         }
         j["states"] = statesJson;
 
-        // Serialize transitions
         json transitionsJson = json::array();
         for (const auto& transition : animator.graph.transitions)
         {
@@ -397,7 +387,6 @@ namespace animator
         }
         j["transitions"] = transitionsJson;
 
-        // Write to file
         try
         {
             fs::path filePath(path);
@@ -427,16 +416,14 @@ namespace animator
         animator.name = name;
         animator.version = ANIMATOR_FORMAT_VERSION;
 
-        // Set default node positions for better initial layout
         animator.graph.entryPosition = glm::vec2(50.0f, 100.0f);
         animator.graph.anyStatePosition = glm::vec2(50.0f, 250.0f);
 
-        // Create a default idle state
         AnimatorState idleState;
         idleState.id = animator.graph.nextStateId++;
         idleState.name = "Idle";
         idleState.loop = true;
-        idleState.position = glm::vec2(250.0f, 100.0f);  // Position to the right of Entry node
+        idleState.position = glm::vec2(250.0f, 100.0f);
         animator.graph.states.push_back(std::move(idleState));
 
         animator.graph.defaultStateId = 1;

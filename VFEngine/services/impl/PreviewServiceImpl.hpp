@@ -24,7 +24,6 @@ namespace services
 
         void registerEventHandlers() override;
 
-        // === Material Preview (IPreviewService) ===
         void initMaterialPreview(PreviewInstanceId instanceId) override;
         void cleanUpMaterialPreview(PreviewInstanceId instanceId) override;
         void setMaterialParams(PreviewInstanceId instanceId, const MaterialPreviewParams& params) override;
@@ -33,7 +32,6 @@ namespace services
         [[nodiscard]] ViewportTextureHandle renderMaterialPreview(PreviewInstanceId instanceId) override;
         [[nodiscard]] std::string getMaterialShaderError(PreviewInstanceId instanceId) const override;
 
-        // === Mesh Preview (IPreviewService) ===
         void initMeshPreview(PreviewInstanceId instanceId) override;
         void cleanUpMeshPreview(PreviewInstanceId instanceId) override;
         [[nodiscard]] std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const override;
@@ -44,13 +42,11 @@ namespace services
                               const glm::vec3& cameraPos) override;
         [[nodiscard]] ViewportTextureHandle renderMeshPreview(PreviewInstanceId instanceId) override;
 
-        // Async mesh loading
         void loadPreviewMeshAsync(PreviewInstanceId instanceId, const std::string& meshPath) override;
         void cancelMeshLoading(PreviewInstanceId instanceId) override;
         [[nodiscard]] MeshLoadingProgress getMeshLoadingProgress(PreviewInstanceId instanceId) const override;
         void processAsyncLoading() override;
 
-        // === Animation Preview (IPreviewService) ===
         void initAnimationPreview(PreviewInstanceId instanceId) override;
         void cleanUpAnimationPreview(PreviewInstanceId instanceId) override;
         bool loadAnimationPreviewMesh(PreviewInstanceId instanceId, const std::string& meshPath) override;

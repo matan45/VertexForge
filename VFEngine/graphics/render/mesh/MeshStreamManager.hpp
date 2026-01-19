@@ -36,8 +36,6 @@ namespace render::mesh
         uint32_t submeshIndex;
         uint32_t lodLevel;
         float priority;
-
-        // For priority updates
         glm::vec3 worldCenter;
         float boundingRadius;
 
@@ -47,7 +45,6 @@ namespace render::mesh
         }
     };
 
-    // Result of async LOD read
     struct StreamingResult
     {
         std::string meshPath;

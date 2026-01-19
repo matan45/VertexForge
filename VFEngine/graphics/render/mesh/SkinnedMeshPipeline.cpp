@@ -160,7 +160,6 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::createRenderPass()
     {
-        // Color attachment - clear to background color each frame
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -175,7 +174,6 @@ namespace render::mesh
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
 
-        // Depth attachment
         vk::AttachmentDescription depthAttachment{};
         depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -209,29 +207,24 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::createDescriptorSetLayouts()
     {
-        // Set 0: Camera UBO + IBL textures
         {
             std::vector<vk::DescriptorSetLayoutBinding> bindings(4);
 
-            // Binding 0: Camera UBO
             bindings[0].binding = 0;
             bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
             bindings[0].descriptorCount = 1;
             bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-            // Binding 1: Irradiance cubemap
             bindings[1].binding = 1;
             bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
             bindings[1].descriptorCount = 1;
             bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-            // Binding 2: Prefilter cubemap
             bindings[2].binding = 2;
             bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
             bindings[2].descriptorCount = 1;
             bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-            // Binding 3: BRDF LUT
             bindings[3].binding = 3;
             bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
             bindings[3].descriptorCount = 1;
@@ -244,7 +237,6 @@ namespace render::mesh
             cameraIBLDescriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
         }
 
-        // Set 1: Material textures (empty for now - using default PBR values)
         {
             vk::DescriptorSetLayoutBinding textureBinding{};
             textureBinding.binding = 0;
@@ -259,7 +251,6 @@ namespace render::mesh
             textureDescriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
         }
 
-        // Set 2: Bone matrices SSBO
         {
             vk::DescriptorSetLayoutBinding boneBinding{};
             boneBinding.binding = 0;
@@ -277,7 +268,6 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::createDescriptorPools()
     {
-        // Pool for camera + IBL (set 0)
         {
             std::array<vk::DescriptorPoolSize, 2> poolSizes{};
             poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
@@ -293,7 +283,6 @@ namespace render::mesh
             cameraIBLDescriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
         }
 
-        // Pool for textures (set 1) - using defaults for now
         {
             vk::DescriptorPoolSize poolSize{};
             poolSize.type = vk::DescriptorType::eCombinedImageSampler;
@@ -307,7 +296,6 @@ namespace render::mesh
             textureDescriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
         }
 
-        // Pool for bone matrices (set 2)
         {
             vk::DescriptorPoolSize poolSize{};
             poolSize.type = vk::DescriptorType::eStorageBuffer;
@@ -343,7 +331,6 @@ namespace render::mesh
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
         core::BufferUtilities::createBuffer(bufferRequest, boneSSBO, boneSSBOMemory);
 
-        // Map persistently
         vk::Result result = device.getLogicalDevice().mapMemory(boneSSBOMemory, 0, bufferSize, {}, &boneSSBOMapped);
         if (result != vk::Result::eSuccess)
         {
@@ -352,7 +339,6 @@ namespace render::mesh
         }
         else
         {
-            // Initialize with identity matrices
             BoneMatricesSSBO initData{};
             for (int i = 0; i < MAX_BONES; ++i)
             {
@@ -462,8 +448,6 @@ namespace render::mesh
 
             textureDescriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
 
-            // For now, bind default IBL brdfLUT as placeholder for all texture slots
-            // This is a workaround - proper textures would be bound when materials are supported
             std::array<vk::DescriptorImageInfo, 16> imageInfos;
             for (auto& info : imageInfos)
             {
@@ -490,7 +474,6 @@ namespace render::mesh
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(SkinnedMeshPushConstants);
 
-        // Three descriptor set layouts: set 0 (camera + IBL), set 1 (textures), set 2 (bones)
         std::array<vk::DescriptorSetLayout, 3> setLayouts = {
             cameraIBLDescriptorSetLayout,
             textureDescriptorSetLayout,
@@ -610,50 +593,6 @@ namespace render::mesh
         }
     }
 
-    bool SkinnedMeshPipeline::loadMeshFromData(const resource::MeshesData& meshData)
-    {
-        if (meshData.meshes.empty())
-        {
-            loggerError("MeshesData has no meshes");
-            return false;
-        }
-
-        unloadMesh();
-
-        loadedMesh = std::make_unique<SkinnedMeshGPUData>();
-        loadedMesh->meshPath = "data";
-        loadedMesh->hasSkinning = !meshData.skeleton.bones.empty();
-
-        // Populate skeleton info from SkeletonData
-        if (loadedMesh->hasSkinning)
-        {
-            loadedMesh->skeleton.boneNames.reserve(meshData.skeleton.bones.size());
-            loadedMesh->skeleton.inverseBindPoses = meshData.skeleton.inverseBindPoses;
-            for (const auto& bone : meshData.skeleton.bones)
-            {
-                loadedMesh->skeleton.boneNames.push_back(bone.name);
-            }
-        }
-
-        createMeshGPUBuffers(meshData);
-
-        uint32_t totalVertices = 0;
-        uint32_t totalIndices = 0;
-        for (const auto& mesh : meshData.meshes)
-        {
-            if (!mesh.lodLevels.empty())
-            {
-                totalVertices += static_cast<uint32_t>(mesh.lodLevels[0].vertices.size());
-                totalIndices += static_cast<uint32_t>(mesh.lodLevels[0].indices.size());
-            }
-        }
-
-        loggerInfo("Loaded mesh from data: {} vertices, {} indices, {} bones",
-                   totalVertices, totalIndices, meshData.skeleton.bones.size());
-
-        return true;
-    }
-
     bool SkinnedMeshPipeline::loadMeshFromFile(const std::string& meshPath)
     {
         if (meshPath.empty())
@@ -675,7 +614,6 @@ namespace render::mesh
         loadedMesh->meshPath = meshPath;
         loadedMesh->hasSkinning = !meshData.skeleton.bones.empty();
 
-        // Populate skeleton info from SkeletonData
         if (loadedMesh->hasSkinning)
         {
             loadedMesh->skeleton.boneNames.reserve(meshData.skeleton.bones.size());
@@ -773,9 +711,11 @@ namespace render::mesh
                 vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * srcLOD.vertices.size();
                 core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
                 vertexBufferRequest.size = vertexBufferSize;
-                vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+                vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer |
+                    vk::BufferUsageFlagBits::eTransferDst;
                 vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::BufferUtilities::createBuffer(vertexBufferRequest, dstLOD.vertexBuffer, dstLOD.vertexBufferMemory);
+                core::BufferUtilities::createBuffer(vertexBufferRequest, dstLOD.vertexBuffer,
+                                                    dstLOD.vertexBufferMemory);
 
                 core::BufferUtilities::copyToBuffer(
                     device.getLogicalDevice(),
@@ -792,9 +732,11 @@ namespace render::mesh
                     vk::DeviceSize indexBufferSize = sizeof(uint32_t) * srcLOD.indices.size();
                     core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
                     indexBufferRequest.size = indexBufferSize;
-                    indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+                    indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer |
+                        vk::BufferUsageFlagBits::eTransferDst;
                     indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                    core::BufferUtilities::createBuffer(indexBufferRequest, dstLOD.indexBuffer, dstLOD.indexBufferMemory);
+                    core::BufferUtilities::createBuffer(indexBufferRequest, dstLOD.indexBuffer,
+                                                        dstLOD.indexBufferMemory);
 
                     core::BufferUtilities::copyToBuffer(
                         device.getLogicalDevice(),
@@ -811,7 +753,6 @@ namespace render::mesh
                 dstLOD.indexCount = static_cast<uint32_t>(srcLOD.indices.size());
             }
 
-            // Fill remaining LODs with highest available LOD
             for (uint32_t lod = lodCount; lod < resource::LOD_LEVEL_COUNT; ++lod)
             {
                 const auto& srcLOD = meshData.lodLevels[lodCount - 1];
@@ -825,9 +766,11 @@ namespace render::mesh
                 vk::DeviceSize vertexBufferSize = sizeof(resource::Vertex) * srcLOD.vertices.size();
                 core::BufferInfoRequest vertexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
                 vertexBufferRequest.size = vertexBufferSize;
-                vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+                vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer |
+                    vk::BufferUsageFlagBits::eTransferDst;
                 vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::BufferUtilities::createBuffer(vertexBufferRequest, dstLOD.vertexBuffer, dstLOD.vertexBufferMemory);
+                core::BufferUtilities::createBuffer(vertexBufferRequest, dstLOD.vertexBuffer,
+                                                    dstLOD.vertexBufferMemory);
 
                 core::BufferUtilities::copyToBuffer(
                     device.getLogicalDevice(),
@@ -844,9 +787,11 @@ namespace render::mesh
                     vk::DeviceSize indexBufferSize = sizeof(uint32_t) * srcLOD.indices.size();
                     core::BufferInfoRequest indexBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
                     indexBufferRequest.size = indexBufferSize;
-                    indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+                    indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer |
+                        vk::BufferUsageFlagBits::eTransferDst;
                     indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                    core::BufferUtilities::createBuffer(indexBufferRequest, dstLOD.indexBuffer, dstLOD.indexBufferMemory);
+                    core::BufferUtilities::createBuffer(indexBufferRequest, dstLOD.indexBuffer,
+                                                        dstLOD.indexBufferMemory);
 
                     core::BufferUtilities::copyToBuffer(
                         device.getLogicalDevice(),
@@ -929,8 +874,8 @@ namespace render::mesh
             if (!warnedOnce)
             {
                 loggerWarning("Bone count ({}) exceeds MAX_BONES ({}). Excess bones will be ignored. "
-                             "Consider increasing MAX_BONES or simplifying the skeleton.",
-                             boneMatrices.size(), MAX_BONES);
+                              "Consider increasing MAX_BONES or simplifying the skeleton.",
+                              boneMatrices.size(), MAX_BONES);
                 warnedOnce = true;
             }
         }
@@ -946,8 +891,8 @@ namespace render::mesh
     }
 
     void SkinnedMeshPipeline::recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
-                                                   uint32_t imageIndex,
-                                                   const SkinnedMeshRenderData& renderData) const
+                                                  uint32_t imageIndex,
+                                                  const SkinnedMeshRenderData& renderData) const
     {
         if (!loadedMesh || loadedMesh->meshData.subMeshes.empty())
         {
@@ -977,7 +922,7 @@ namespace render::mesh
             boneDescriptorSet
         };
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-            0, descriptorSets, nullptr);
+                                         0, descriptorSets, nullptr);
 
         SkinnedMeshPushConstants pc{};
         pc.model = renderData.modelMatrix;
@@ -988,8 +933,8 @@ namespace render::mesh
         pc.emission = renderData.emission;
 
         commandBuffer.pushConstants(pipelineLayout,
-            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-            0, sizeof(SkinnedMeshPushConstants), &pc);
+                                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                    0, sizeof(SkinnedMeshPushConstants), &pc);
 
         for (const auto& subMesh : loadedMesh->meshData.subMeshes)
         {

@@ -160,6 +160,7 @@
     <ClInclude Include="interfaces\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\IWindowStateService.hpp" />
     <ClInclude Include="providers\IAnimationPreviewProvider.hpp" />
+    <ClInclude Include="providers\IAnimatorProvider.hpp" />
     <ClInclude Include="providers\IAudioProvider.hpp" />
     <ClInclude Include="providers\IEditorTextureProvider.hpp" />
     <ClInclude Include="providers\IMaterialPreviewProvider.hpp" />

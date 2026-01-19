@@ -101,7 +101,7 @@ namespace resource
             return "";
         }
 
-        if (length > 10000)  // Sanity check for string length
+        if (length > 10000)
         {
             return "";
         }

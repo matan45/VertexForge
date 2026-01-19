@@ -349,7 +349,7 @@ namespace resource
 
         // Skip over skeleton data for header parsing
         uint32_t boneCount = endian::readLE<uint32_t>(file);
-        if (boneCount > 1000) // Sanity check
+        if (boneCount > 1000)
         {
             vfLogError("MeshStreamHandle: Invalid bone count {}", boneCount);
             return false;
@@ -365,9 +365,9 @@ namespace resource
                 return false;
             }
             file.seekg(nameLength, std::ios::cur); // Skip name
-            file.seekg(4, std::ios::cur);          // parentIndex
-            file.seekg(16 * 4, std::ios::cur);     // offsetMatrix
-            file.seekg(16 * 4, std::ios::cur);     // preTransform
+            file.seekg(4, std::ios::cur); // parentIndex
+            file.seekg(16 * 4, std::ios::cur); // offsetMatrix
+            file.seekg(16 * 4, std::ios::cur); // preTransform
         }
 
         // Skip inverse bind poses (boneCount matrices)
@@ -821,29 +821,6 @@ namespace resource
 
         return true;
     }
-
-    uint32_t MeshStreamHandle::getTotalVertexCount(uint32_t lodLevel) const
-    {
-        if (lodLevel >= LOD_LEVEL_COUNT) return 0;
-        uint32_t total = 0;
-        for (const auto& submesh : header.submeshes)
-        {
-            total += submesh.lods[lodLevel].vertexCount;
-        }
-        return total;
-    }
-
-    uint32_t MeshStreamHandle::getTotalIndexCount(uint32_t lodLevel) const
-    {
-        if (lodLevel >= LOD_LEVEL_COUNT) return 0;
-        uint32_t total = 0;
-        for (const auto& submesh : header.submeshes)
-        {
-            total += submesh.lods[lodLevel].indexCount;
-        }
-        return total;
-    }
-
 
     std::unique_ptr<MeshStreamHandle> MeshStreamResource::openStream(std::string_view path)
     {

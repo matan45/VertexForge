@@ -10,10 +10,6 @@
 
 namespace services::events::animpreview
 {
-    // ============================================================
-    // ANIMATION PREVIEW INITIALIZATION COMMANDS
-    // ============================================================
-
     struct InitAnimationPreviewCommand : ::events::ICommand<void>
     {
         PreviewInstanceId instanceId;
@@ -25,10 +21,6 @@ namespace services::events::animpreview
         PreviewInstanceId instanceId;
         std::string_view getName() const override { return "CleanUpAnimationPreview"; }
     };
-
-    // ============================================================
-    // ANIMATION PREVIEW LOADING COMMANDS
-    // ============================================================
 
     struct LoadAnimationPreviewMeshCommand : ::events::ICommand<bool>
     {
@@ -43,10 +35,6 @@ namespace services::events::animpreview
         std::string animationPath;
         std::string_view getName() const override { return "LoadAnimationPreviewAnimation"; }
     };
-
-    // ============================================================
-    // ANIMATION PLAYBACK COMMANDS
-    // ============================================================
 
     struct PlayAnimationCommand : ::events::ICommand<void>
     {
@@ -87,10 +75,6 @@ namespace services::events::animpreview
         std::string_view getName() const override { return "SetAnimationPlaybackSpeed"; }
     };
 
-    // ============================================================
-    // ANIMATION PREVIEW UPDATE COMMANDS
-    // ============================================================
-
     struct UpdateAnimationPreviewCommand : ::events::ICommand<void>
     {
         PreviewInstanceId instanceId;
@@ -113,10 +97,6 @@ namespace services::events::animpreview
         glm::vec3 cameraPos;
         std::string_view getName() const override { return "UpdateAnimationCamera"; }
     };
-
-    // ============================================================
-    // ANIMATION PREVIEW QUERIES
-    // ============================================================
 
     struct IsAnimationPlayingQuery : ::events::IQuery<bool>
     {

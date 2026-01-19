@@ -3,7 +3,8 @@
 
 namespace animation
 {
-    void AnimationEvaluator::loadAnimation(const resource::AnimationData& animation, const resource::SkeletonData& skeleton)
+    void AnimationEvaluator::loadAnimation(const resource::AnimationData& animation,
+                                           const resource::SkeletonData& skeleton)
     {
         clear();
 
@@ -23,7 +24,6 @@ namespace animation
         evaluatedBones.resize(boneCount);
         computedLocalBindPoses.resize(boneCount);
 
-        // Use the node's local transform (offsetMatrix) as the local bind pose
         for (size_t i = 0; i < boneCount; ++i)
         {
             computedLocalBindPoses[i] = skeletonData->bones[i].offsetMatrix;
@@ -68,7 +68,6 @@ namespace animation
         if (animationData->duration > 0.0f)
             timeInTicks = std::fmod(timeInTicks, animationData->duration);
 
-        // Evaluate local transforms from animation keyframes
         for (size_t i = 0; i < boneCount; ++i)
         {
             const auto& bone = skeletonData->bones[i];
@@ -78,41 +77,37 @@ namespace animation
 
             if (it != boneNameToChannelIndex.end())
             {
-                // This bone has animation data - use keyframes directly
-                // Animation keyframes contain absolute local transforms, not deltas
                 const auto& ch = animationData->channels[it->second];
 
                 glm::vec3 pos = ch.positionKeys.empty()
-                    ? glm::vec3(computedLocalBindPoses[i][3])
-                    : interpolatePosition(ch, timeInTicks);
+                                    ? glm::vec3(computedLocalBindPoses[i][3])
+                                    : interpolatePosition(ch, timeInTicks);
 
                 glm::quat rot = ch.rotationKeys.empty()
-                    ? glm::quat_cast(glm::mat3(computedLocalBindPoses[i]))
-                    : interpolateRotation(ch, timeInTicks);
+                                    ? glm::quat_cast(glm::mat3(computedLocalBindPoses[i]))
+                                    : interpolateRotation(ch, timeInTicks);
 
                 glm::vec3 scl = ch.scalingKeys.empty()
-                    ? glm::vec3(1.0f)
-                    : interpolateScale(ch, timeInTicks);
+                                    ? glm::vec3(1.0f)
+                                    : interpolateScale(ch, timeInTicks);
 
                 evaluatedBones[i].position = pos;
                 evaluatedBones[i].rotation = rot;
                 evaluatedBones[i].scale = scl;
-                animatedTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(glm::mat4(1.0f), scl);
+                animatedTransform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot) * glm::scale(
+                    glm::mat4(1.0f), scl);
             }
             else
             {
-                // No animation for this bone - use bind pose
                 evaluatedBones[i].position = glm::vec3(computedLocalBindPoses[i][3]);
                 evaluatedBones[i].rotation = glm::quat_cast(glm::mat3(computedLocalBindPoses[i]));
                 evaluatedBones[i].scale = glm::vec3(1.0f);
                 animatedTransform = computedLocalBindPoses[i];
             }
 
-            // Include preTransform (non-bone ancestor transforms) if present
             evaluatedBones[i].localTransform = bone.preTransform * animatedTransform;
         }
 
-        // Compute world transforms by walking the hierarchy
         for (size_t i = 0; i < boneCount; ++i)
         {
             int parent = skeletonData->bones[i].parentIndex;
@@ -125,7 +120,6 @@ namespace animation
             evaluatedBones[i].skinnedPosition = glm::vec3(evaluatedBones[i].worldTransform[3]);
         }
 
-        // Compute final skinning matrices: globalInverse * worldTransform * inverseBindPose
         const glm::mat4& globalInv = skeletonData->globalInverseTransform;
         std::vector<glm::mat4> result(boneCount);
         for (size_t i = 0; i < boneCount; ++i)

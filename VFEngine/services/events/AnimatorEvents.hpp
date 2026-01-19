@@ -6,10 +6,6 @@
 
 namespace services::events::animator
 {
-    // ============================================================
-    // RUNTIME ANIMATOR COMMANDS (Entity-based for scripting)
-    // ============================================================
-
     struct SetEntityAnimatorFloatCommand : ::events::ICommand<void>
     {
         ::services::EntityHandle entity;
@@ -72,10 +68,6 @@ namespace services::events::animator
         float blendDuration = 0.25f;
         std::string_view getName() const override { return "ForceEntityTransitionTo"; }
     };
-
-    // ============================================================
-    // RUNTIME ANIMATOR QUERIES (Entity-based for scripting)
-    // ============================================================
 
     struct GetEntityAnimatorFloatQuery : ::events::IQuery<float>
     {
