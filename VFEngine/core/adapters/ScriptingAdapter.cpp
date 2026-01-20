@@ -278,6 +278,10 @@ namespace core
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
 
+            // Initialize playback state to Stopped
+            instanceToPlaybackState[instanceId] = services::ScriptPlaybackState::Stopped;
+            instanceToPlaybackParams[instanceId] = services::ScriptPlaybackParams{};
+
             services::ScriptInstanceInfo info;
             info.instanceId = instanceId;
             info.className = className;
@@ -305,6 +309,8 @@ namespace core
             instanceToEntity.erase(instanceId);
             instanceToObject.erase(instanceId);
             instanceToInterfaces.erase(instanceId);
+            instanceToPlaybackState.erase(instanceId);
+            instanceToPlaybackParams.erase(instanceId);
         }
     }
 
@@ -314,6 +320,8 @@ namespace core
         instanceToEntity.clear();
         instanceToObject.clear();
         instanceToInterfaces.clear();
+        instanceToPlaybackState.clear();
+        instanceToPlaybackParams.clear();
         nextInstanceId = 1;
         vfLogInfo("[ScriptingAdapter] All scripts unloaded, instance counter reset");
     }
@@ -356,6 +364,22 @@ namespace core
             return;
         }
 
+        // Check playback state - only update if Playing
+        auto stateIt = instanceToPlaybackState.find(instanceId);
+        if (stateIt == instanceToPlaybackState.end() ||
+            stateIt->second != services::ScriptPlaybackState::Playing)
+        {
+            return;
+        }
+
+        // Apply playback speed
+        float adjustedDeltaTime = deltaTime;
+        auto paramsIt = instanceToPlaybackParams.find(instanceId);
+        if (paramsIt != instanceToPlaybackParams.end())
+        {
+            adjustedDeltaTime *= paramsIt->second.playbackSpeed;
+        }
+
         try
         {
             auto objIt = instanceToObject.find(instanceId);
@@ -363,7 +387,7 @@ namespace core
             {
                 NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, "onUpdate", {value::Value(deltaTime)});
+                interpreter->callMethod(instance, "onUpdate", {value::Value(adjustedDeltaTime)});
             }
         }
         catch (const std::exception& e)
@@ -371,6 +395,15 @@ namespace core
             setError(services::ScriptError::Type::Runtime,
                      std::string("onUpdate failed: ") + e.what());
             vfLogError("[Script] onUpdate failed: {}", e.what());
+
+            // Handle loop on error
+            auto paramsIt2 = instanceToPlaybackParams.find(instanceId);
+            if (paramsIt2 != instanceToPlaybackParams.end() && paramsIt2->second.loop)
+            {
+                vfLogInfo("[ScriptingAdapter] Restarting script {} due to loop on error", instanceId);
+                resetScript(instanceId);
+                playScript(instanceId);
+            }
         }
     }
 
@@ -397,6 +430,124 @@ namespace core
                      std::string("onDestroy failed: ") + e.what());
             vfLogError("[Script] onDestroy failed: {}", e.what());
         }
+    }
+
+    // === Playback Control ===
+
+    void ScriptingAdapter::playScript(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
+            vfLogWarning("[ScriptingAdapter] playScript: script {} not loaded", instanceId);
+            return;
+        }
+
+        auto& state = instanceToPlaybackState[instanceId];
+        if (state == services::ScriptPlaybackState::Stopped)
+        {
+            // If stopped, need to call onStart
+            callOnStart(instanceId);
+        }
+        state = services::ScriptPlaybackState::Playing;
+        vfLogInfo("[ScriptingAdapter] Script {} now playing", instanceId);
+    }
+
+    void ScriptingAdapter::pauseScript(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
+            vfLogWarning("[ScriptingAdapter] pauseScript: script {} not loaded", instanceId);
+            return;
+        }
+
+        auto& state = instanceToPlaybackState[instanceId];
+        if (state == services::ScriptPlaybackState::Playing)
+        {
+            state = services::ScriptPlaybackState::Paused;
+            vfLogInfo("[ScriptingAdapter] Script {} paused", instanceId);
+        }
+    }
+
+    void ScriptingAdapter::stopScript(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
+            vfLogWarning("[ScriptingAdapter] stopScript: script {} not loaded", instanceId);
+            return;
+        }
+
+        auto& state = instanceToPlaybackState[instanceId];
+        if (state != services::ScriptPlaybackState::Stopped)
+        {
+            callOnDestroy(instanceId);
+            state = services::ScriptPlaybackState::Stopped;
+            vfLogInfo("[ScriptingAdapter] Script {} stopped", instanceId);
+
+            // Handle loop
+            auto paramsIt = instanceToPlaybackParams.find(instanceId);
+            if (paramsIt != instanceToPlaybackParams.end() && paramsIt->second.loop)
+            {
+                vfLogInfo("[ScriptingAdapter] Restarting script {} due to loop", instanceId);
+                playScript(instanceId);
+            }
+        }
+    }
+
+    void ScriptingAdapter::resetScript(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
+            vfLogWarning("[ScriptingAdapter] resetScript: script {} not loaded", instanceId);
+            return;
+        }
+
+        // Stop first if not already stopped
+        auto& state = instanceToPlaybackState[instanceId];
+        if (state != services::ScriptPlaybackState::Stopped)
+        {
+            callOnDestroy(instanceId);
+            state = services::ScriptPlaybackState::Stopped;
+        }
+
+        // Recreate the object instance
+        auto classIt = instanceToClassName.find(instanceId);
+        auto entityIt = instanceToEntity.find(instanceId);
+        if (classIt != instanceToClassName.end() && entityIt != instanceToEntity.end())
+        {
+            try
+            {
+                auto instance = interpreter->createObject(classIt->second);
+                instanceToObject[instanceId] = std::any(instance);
+                vfLogInfo("[ScriptingAdapter] Script {} reset", instanceId);
+            }
+            catch (const std::exception& e)
+            {
+                setError(services::ScriptError::Type::Runtime,
+                         std::string("resetScript failed: ") + e.what());
+                vfLogError("[Script] resetScript failed: {}", e.what());
+            }
+        }
+    }
+
+    services::ScriptPlaybackState ScriptingAdapter::getPlaybackState(uint64_t instanceId) const
+    {
+        auto it = instanceToPlaybackState.find(instanceId);
+        return (it != instanceToPlaybackState.end()) ? it->second : services::ScriptPlaybackState::Stopped;
+    }
+
+    void ScriptingAdapter::setPlaybackParams(uint64_t instanceId, const services::ScriptPlaybackParams& params)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
+            return;
+        }
+        instanceToPlaybackParams[instanceId] = params;
+    }
+
+    services::ScriptPlaybackParams ScriptingAdapter::getPlaybackParams(uint64_t instanceId) const
+    {
+        auto it = instanceToPlaybackParams.find(instanceId);
+        return (it != instanceToPlaybackParams.end()) ? it->second : services::ScriptPlaybackParams{};
     }
 
     std::optional<services::ScriptError> ScriptingAdapter::getLastError() const

@@ -105,6 +105,74 @@ namespace services
                 return isCompiled();
             });
 
+        // === Playback Commands ===
+        dispatcher.registerCommandHandler<events::scripting::PlayScriptCommand>(
+            [this](const auto& cmd)
+            {
+                playScript(cmd.entity, cmd.scriptPath);
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::PauseScriptCommand>(
+            [this](const auto& cmd)
+            {
+                pauseScript(cmd.entity, cmd.scriptPath);
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::StopScriptCommand>(
+            [this](const auto& cmd)
+            {
+                stopScript(cmd.entity, cmd.scriptPath);
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::ResetScriptCommand>(
+            [this](const auto& cmd)
+            {
+                resetScript(cmd.entity, cmd.scriptPath);
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::SetScriptPlaybackParamsCommand>(
+            [this](const auto& cmd)
+            {
+                setScriptPlaybackParams(cmd.entity, cmd.scriptPath, cmd.params);
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::PlayAllScriptsOnEntityCommand>(
+            [this](const auto& cmd)
+            {
+                playAllScriptsOnEntity(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::PauseAllScriptsOnEntityCommand>(
+            [this](const auto& cmd)
+            {
+                pauseAllScriptsOnEntity(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scripting::StopAllScriptsOnEntityCommand>(
+            [this](const auto& cmd)
+            {
+                stopAllScriptsOnEntity(cmd.entity);
+            });
+
+        // === Playback Queries ===
+        dispatcher.registerQueryHandler<events::scripting::GetScriptPlaybackStateQuery>(
+            [this](const auto& query)
+            {
+                return getScriptPlaybackState(query.entity, query.scriptPath);
+            });
+
+        dispatcher.registerQueryHandler<events::scripting::IsScriptPlayingQuery>(
+            [this](const auto& query)
+            {
+                return isScriptPlaying(query.entity, query.scriptPath);
+            });
+
+        dispatcher.registerQueryHandler<events::scripting::GetScriptPlaybackParamsQuery>(
+            [this](const auto& query)
+            {
+                return getScriptPlaybackParams(query.entity, query.scriptPath);
+            });
+
         // === Mode Change Subscription ===
         dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& notification)
@@ -393,6 +461,9 @@ namespace services
                     if (info.has_value())
                     {
                         entry.instanceId = info->instanceId;
+                        // Auto-start script: set to Playing and call playScript
+                        entry.playbackState = ScriptPlaybackState::Playing;
+                        scriptingProvider->playScript(entry.instanceId);
                     }
                     else
                     {
@@ -400,17 +471,20 @@ namespace services
                     }
                 }
 
-                // Call onStart if not started yet
-                if (!entry.started)
+                // For backwards compatibility: if script loaded but playback state is Stopped, start it
+                if (!entry.started && entry.playbackState == ScriptPlaybackState::Stopped)
                 {
-                    vfLogInfo("[Script] Calling onStart for script '{}' (instance {})",
-                              entry.scriptPath, entry.instanceId);
-                    scriptingProvider->callOnStart(entry.instanceId);
+                    entry.playbackState = ScriptPlaybackState::Playing;
+                    scriptingProvider->playScript(entry.instanceId);
+                }
+
+                // Track started state (set when playScript calls onStart)
+                if (entry.playbackState == ScriptPlaybackState::Playing && !entry.started)
+                {
                     entry.started = true;
                 }
 
-                // Call onUpdate
-
+                // Call onUpdate - the provider will check playback state internally
                 scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
             }
         }
@@ -434,11 +508,181 @@ namespace services
                 // Reset script entry state
                 entry.instanceId = 0;
                 entry.started = false;
+                entry.playbackState = ScriptPlaybackState::Stopped;
             }
         }
 
         // Unload all scripts from provider and reset instance counter
         scriptingProvider->unloadAllScripts();
         vfLogInfo("[Script] All scripts stopped");
+    }
+
+    // === Script Playback Control ===
+
+    void ScriptingServiceImpl::playScript(EntityHandle entity, const std::string& scriptPath)
+    {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity))
+        {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        auto* entry = scriptComp.findByPath(scriptPath);
+
+        if (entry && entry->instanceId != 0)
+        {
+            scriptingProvider->playScript(entry->instanceId);
+            entry->playbackState = ScriptPlaybackState::Playing;
+            entry->started = true;
+        }
+    }
+
+    void ScriptingServiceImpl::pauseScript(EntityHandle entity, const std::string& scriptPath)
+    {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity))
+        {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        auto* entry = scriptComp.findByPath(scriptPath);
+
+        if (entry && entry->instanceId != 0)
+        {
+            scriptingProvider->pauseScript(entry->instanceId);
+            entry->playbackState = ScriptPlaybackState::Paused;
+        }
+    }
+
+    void ScriptingServiceImpl::stopScript(EntityHandle entity, const std::string& scriptPath)
+    {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity))
+        {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        auto* entry = scriptComp.findByPath(scriptPath);
+
+        if (entry && entry->instanceId != 0)
+        {
+            scriptingProvider->stopScript(entry->instanceId);
+            entry->playbackState = ScriptPlaybackState::Stopped;
+            entry->started = false;
+        }
+    }
+
+    void ScriptingServiceImpl::resetScript(EntityHandle entity, const std::string& scriptPath)
+    {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity))
+        {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        auto* entry = scriptComp.findByPath(scriptPath);
+
+        if (entry && entry->instanceId != 0)
+        {
+            scriptingProvider->resetScript(entry->instanceId);
+            entry->playbackState = ScriptPlaybackState::Stopped;
+            entry->started = false;
+        }
+    }
+
+    ScriptPlaybackState ScriptingServiceImpl::getScriptPlaybackState(EntityHandle entity, const std::string& scriptPath) const
+    {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity))
+        {
+            return ScriptPlaybackState::Stopped;
+        }
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        const auto* entry = scriptComp.findByPath(scriptPath);
+
+        return entry ? entry->playbackState : ScriptPlaybackState::Stopped;
+    }
+
+    void ScriptingServiceImpl::setScriptPlaybackParams(EntityHandle entity, const std::string& scriptPath, const ScriptPlaybackParams& params)
+    {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity))
+        {
+            return;
+        }
+
+        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        auto* entry = scriptComp.findByPath(scriptPath);
+
+        if (entry)
+        {
+            entry->playbackParams = params;
+            if (entry->instanceId != 0)
+            {
+                scriptingProvider->setPlaybackParams(entry->instanceId, params);
+            }
+        }
+    }
+
+    ScriptPlaybackParams ScriptingServiceImpl::getScriptPlaybackParams(EntityHandle entity, const std::string& scriptPath) const
+    {
+        auto enttEntity = fromHandle(entity);
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.all_of<components::ScriptComponent>(enttEntity))
+        {
+            return ScriptPlaybackParams{};
+        }
+
+        const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+        const auto* entry = scriptComp.findByPath(scriptPath);
+
+        return entry ? entry->playbackParams : ScriptPlaybackParams{};
+    }
+
+    bool ScriptingServiceImpl::isScriptPlaying(EntityHandle entity, const std::string& scriptPath) const
+    {
+        return getScriptPlaybackState(entity, scriptPath) == ScriptPlaybackState::Playing;
+    }
+
+    void ScriptingServiceImpl::playAllScriptsOnEntity(EntityHandle entity)
+    {
+        for (const auto& path : getScriptPaths(entity))
+        {
+            playScript(entity, path);
+        }
+    }
+
+    void ScriptingServiceImpl::pauseAllScriptsOnEntity(EntityHandle entity)
+    {
+        for (const auto& path : getScriptPaths(entity))
+        {
+            pauseScript(entity, path);
+        }
+    }
+
+    void ScriptingServiceImpl::stopAllScriptsOnEntity(EntityHandle entity)
+    {
+        for (const auto& path : getScriptPaths(entity))
+        {
+            stopScript(entity, path);
+        }
     }
 }

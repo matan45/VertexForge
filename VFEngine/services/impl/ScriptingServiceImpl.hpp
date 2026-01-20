@@ -38,5 +38,20 @@ namespace services
         // === System Update ===
         void updateScripts(float deltaTime) override;
         void stopAllScripts() override;
+
+        // === Script Playback Control ===
+        void playScript(EntityHandle entity, const std::string& scriptPath) override;
+        void pauseScript(EntityHandle entity, const std::string& scriptPath) override;
+        void stopScript(EntityHandle entity, const std::string& scriptPath) override;
+        void resetScript(EntityHandle entity, const std::string& scriptPath) override;
+
+        ScriptPlaybackState getScriptPlaybackState(EntityHandle entity, const std::string& scriptPath) const override;
+        void setScriptPlaybackParams(EntityHandle entity, const std::string& scriptPath, const ScriptPlaybackParams& params) override;
+        ScriptPlaybackParams getScriptPlaybackParams(EntityHandle entity, const std::string& scriptPath) const override;
+        bool isScriptPlaying(EntityHandle entity, const std::string& scriptPath) const override;
+
+        void playAllScriptsOnEntity(EntityHandle entity) override;
+        void pauseAllScriptsOnEntity(EntityHandle entity) override;
+        void stopAllScriptsOnEntity(EntityHandle entity) override;
     };
 }
