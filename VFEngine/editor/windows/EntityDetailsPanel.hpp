@@ -12,6 +12,7 @@
 #include "details/ScriptDrawer.hpp"
 #include "details/ColliderDrawer.hpp"
 #include "details/RigidBodyDrawer.hpp"
+#include "details/VFXDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -32,6 +33,7 @@ namespace windows
         details::ScriptDrawer scriptDrawer;
         details::ColliderDrawer colliderDrawer;
         details::RigidBodyDrawer rigidBodyDrawer;
+        details::VFXDrawer vfxDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

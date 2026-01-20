@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EventTypes.hpp"
-#include "../providers/IVFXRuntimeProvider.hpp"
+#include "../data/VFXTypes.hpp"
 #include <glm/glm.hpp>
 #include <string>
 

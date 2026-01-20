@@ -8,7 +8,7 @@ namespace windows::details
 {
     void AddComponentPopup::draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
-                                 bool hasCollider, bool hasRigidBody)
+                                 bool hasCollider, bool hasRigidBody, bool hasVFX)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -106,6 +106,20 @@ namespace windows::details
                 }
             }
 
+            if (!hasVFX)
+            {
+                if (ImGui::Selectable("  VFX"))
+                {
+                    events::scene::AddVFXComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Visual effects particle system");
+                }
+            }
+
             // Physics components section
             ImGui::Spacing();
             ImGui::TextDisabled("Physics");
@@ -140,7 +154,7 @@ namespace windows::details
             }
 
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
-                           hasCollider && hasRigidBody;
+                           hasCollider && hasRigidBody && hasVFX;
             if (allAdded)
             {
                 ImGui::Spacing();

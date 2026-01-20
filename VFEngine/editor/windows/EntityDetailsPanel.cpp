@@ -31,6 +31,7 @@ namespace windows
         materialDrawer.clearCache();
         audio2DDrawer.clearHandles();
         audio3DDrawer.clearHandles();
+        vfxDrawer.clearInstances();
     }
 
     void EntityDetailsPanel::draw()
@@ -81,9 +82,10 @@ namespace windows
         
         bool hasCollider = colliderDrawer.draw(handle);
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
+        bool hasVFX = vfxDrawer.draw(handle);
 
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
-                               hasCollider, hasRigidBody);
+                               hasCollider, hasRigidBody, hasVFX);
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

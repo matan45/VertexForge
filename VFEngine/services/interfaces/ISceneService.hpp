@@ -206,6 +206,20 @@ namespace services {
         virtual bool setAudioSource3DData(EntityHandle entity, const AudioSource3DData& audioData) = 0;
 
         // ============================================
+        // VFX Component Operations
+        // ============================================
+
+        virtual bool addVFXComponent(EntityHandle entity) = 0;
+
+        virtual bool removeVFXComponent(EntityHandle entity) = 0;
+
+        virtual bool hasVFXComponent(EntityHandle entity) const = 0;
+
+        virtual std::optional<VFXData> getVFXData(EntityHandle entity) const = 0;
+
+        virtual bool setVFXData(EntityHandle entity, const VFXData& vfxData) = 0;
+
+        // ============================================
         // Static Entity Operations (BVH Optimization)
         // ============================================
 

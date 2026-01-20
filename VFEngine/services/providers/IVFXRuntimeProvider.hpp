@@ -1,20 +1,10 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
-#include <glm/glm.hpp>
-#include <string>
-#include <cstdint>
+#include "../data/VFXTypes.hpp"
 
 namespace services
 {
-    using VFXInstanceId = uint32_t;
-
-    struct VFXRuntimeParams
-    {
-        std::string vfxAssetPath;
-        glm::mat4 worldTransform{1.0f};
-        bool loop = true;
-    };
 
     // Provider interface for runtime VFX rendering in the scene.
     // Unlike IVFXPreviewProvider (which renders offscreen for editor preview windows),

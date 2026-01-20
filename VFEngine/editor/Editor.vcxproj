@@ -166,6 +166,7 @@
     <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
     <ClInclude Include="windows\details\TransformDrawer.hpp" />
+    <ClInclude Include="windows\details\VFXDrawer.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
     <ClInclude Include="windows\material\MaterialPreviewPanel.hpp" />
     <ClInclude Include="windows\material\MaterialPropertyPanel.hpp" />
@@ -240,6 +241,7 @@
     <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />
     <ClCompile Include="windows\details\TransformDrawer.cpp" />
+    <ClCompile Include="windows\details\VFXDrawer.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />
     <ClCompile Include="windows\material\MaterialPreviewPanel.cpp" />
     <ClCompile Include="windows\material\MaterialPropertyPanel.cpp" />

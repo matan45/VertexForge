@@ -13,6 +13,7 @@
 #include "impl/FileOperationsServiceImpl.hpp"
 #include "impl/PhysicsServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
+#include "impl/VFXPlayModeHandler.hpp"
 #include "impl/ProjectServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
@@ -108,6 +109,7 @@ namespace handlers
         undoRedoService.reset();
         physicsService.reset();
         physicsPlayModeHandler.reset();
+        vfxPlayModeHandler.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -165,6 +167,12 @@ namespace handlers
             physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
             physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
             physicsPlayModeHandler->subscribeToEvents();
+        }
+
+        if (auto* vfxProvider = bootstrap->getVFXRuntimeProvider())
+        {
+            vfxPlayModeHandler = std::make_unique<services::VFXPlayModeHandler>(vfxProvider);
+            vfxPlayModeHandler->subscribeToEvents();
         }
 
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
