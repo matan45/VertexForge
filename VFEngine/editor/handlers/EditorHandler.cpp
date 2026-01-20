@@ -14,6 +14,7 @@
 #include "impl/PhysicsServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
 #include "impl/VFXPlayModeHandler.hpp"
+#include "impl/VFXRuntimeServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
@@ -116,6 +117,7 @@ namespace handlers
         physicsService.reset();
         physicsPlayModeHandler.reset();
         vfxPlayModeHandler.reset();
+        vfxRuntimeService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -177,6 +179,9 @@ namespace handlers
 
         if (auto* vfxProvider = bootstrap->getVFXRuntimeProvider())
         {
+            vfxRuntimeService = std::make_unique<services::VFXRuntimeServiceImpl>(vfxProvider);
+            vfxRuntimeService->registerEventHandlers();
+
             vfxPlayModeHandler = std::make_unique<services::VFXPlayModeHandler>(vfxProvider);
             vfxPlayModeHandler->subscribeToEvents();
         }

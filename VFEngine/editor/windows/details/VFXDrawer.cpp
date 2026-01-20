@@ -2,12 +2,10 @@
 #include "../EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
-#include "events/VFXRuntimeEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "print/EditorLogger.hpp"
 #include <imgui.h>
 #include <fstream>
-#include <glm/gtc/matrix_transform.hpp>
 
 namespace windows::details
 {
@@ -60,12 +58,6 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
 
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            drawPlaybackControls(handle, vfxData);
-
             ImGui::Unindent(10.0f);
         }
 
@@ -76,17 +68,6 @@ namespace windows::details
             events::scene::RemoveVFXComponentCommand cmd;
             cmd.entity = handle;
             dispatcher.execute(cmd);
-
-            // Clean up any editor preview instance
-            uint64_t previewKey = handle.id;
-            auto it = vfxPreviewInstances.find(previewKey);
-            if (it != vfxPreviewInstances.end())
-            {
-                services::events::vfxruntime::DestroyVFXInstanceCommand destroyCmd;
-                destroyCmd.instanceId = it->second;
-                dispatcher.execute(destroyCmd);
-                vfxPreviewInstances.erase(it);
-            }
         }
 
         return true;
@@ -189,131 +170,8 @@ namespace windows::details
         return changed;
     }
 
-    void VFXDrawer::drawPlaybackControls(services::EntityHandle handle, const services::VFXData& vfxData)
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        uint64_t previewKey = handle.id;
-        auto previewIt = vfxPreviewInstances.find(previewKey);
-        bool hasPreviewInstance = previewIt != vfxPreviewInstances.end();
-
-        // Check if instance is still active
-        bool isInstanceActive = false;
-        if (hasPreviewInstance)
-        {
-            services::events::vfxruntime::IsVFXInstanceActiveQuery activeQuery;
-            activeQuery.instanceId = previewIt->second;
-            isInstanceActive = dispatcher.query(activeQuery);
-        }
-
-        // Clean up invalid instances
-        if (hasPreviewInstance && !isInstanceActive)
-        {
-            vfxPreviewInstances.erase(previewIt);
-            hasPreviewInstance = false;
-            previewIt = vfxPreviewInstances.end();
-        }
-
-        // Check if currently playing
-        bool isCurrentlyPlaying = false;
-        if (hasPreviewInstance)
-        {
-            services::events::vfxruntime::IsVFXInstancePlayingQuery playingQuery;
-            playingQuery.instanceId = previewIt->second;
-            isCurrentlyPlaying = dispatcher.query(playingQuery);
-        }
-
-        ImGui::TextDisabled("Editor Preview:");
-
-        // Play button
-        bool canPlay = !vfxData.vfxPath.empty() && !isCurrentlyPlaying;
-        if (!canPlay) ImGui::BeginDisabled();
-        if (ImGui::Button("Play##VFX", ImVec2(60, 0)))
-        {
-            if (hasPreviewInstance)
-            {
-                // Resume existing instance
-                services::events::vfxruntime::PlayVFXInstanceCommand playCmd;
-                playCmd.instanceId = previewIt->second;
-                dispatcher.execute(playCmd);
-            }
-            else
-            {
-                // Get world transform for the VFX instance
-                events::scene::GetTransformQuery transformQuery;
-                transformQuery.entity = handle;
-                auto transformOpt = dispatcher.query(transformQuery);
-
-                glm::mat4 worldTransform = glm::mat4(1.0f);
-                if (transformOpt.has_value())
-                {
-                    worldTransform = glm::translate(glm::mat4(1.0f), transformOpt->position);
-                    // Apply rotation
-                    worldTransform = glm::rotate(worldTransform, glm::radians(transformOpt->rotation.x), glm::vec3(1, 0, 0));
-                    worldTransform = glm::rotate(worldTransform, glm::radians(transformOpt->rotation.y), glm::vec3(0, 1, 0));
-                    worldTransform = glm::rotate(worldTransform, glm::radians(transformOpt->rotation.z), glm::vec3(0, 0, 1));
-                    worldTransform = glm::scale(worldTransform, transformOpt->scale);
-                }
-
-                // Create new instance
-                services::events::vfxruntime::CreateVFXInstanceCommand createCmd;
-                createCmd.params.vfxAssetPath = vfxData.vfxPath;
-                createCmd.params.worldTransform = worldTransform;
-                createCmd.params.loop = vfxData.loop;
-
-                services::VFXInstanceId newInstance = dispatcher.execute(createCmd);
-                if (newInstance != 0)
-                {
-                    vfxPreviewInstances[previewKey] = newInstance;
-
-                    services::events::vfxruntime::PlayVFXInstanceCommand playCmd;
-                    playCmd.instanceId = newInstance;
-                    dispatcher.execute(playCmd);
-                }
-            }
-        }
-        if (!canPlay) ImGui::EndDisabled();
-
-        // Stop button
-        ImGui::SameLine();
-        if (!hasPreviewInstance) ImGui::BeginDisabled();
-        if (ImGui::Button("Stop##VFX", ImVec2(60, 0)))
-        {
-            if (hasPreviewInstance)
-            {
-                services::events::vfxruntime::StopVFXInstanceCommand stopCmd;
-                stopCmd.instanceId = previewIt->second;
-                dispatcher.execute(stopCmd);
-            }
-        }
-        if (!hasPreviewInstance) ImGui::EndDisabled();
-
-        // Reset button
-        ImGui::SameLine();
-        if (!hasPreviewInstance) ImGui::BeginDisabled();
-        if (ImGui::Button("Reset##VFX", ImVec2(60, 0)))
-        {
-            if (hasPreviewInstance)
-            {
-                services::events::vfxruntime::ResetVFXInstanceCommand resetCmd;
-                resetCmd.instanceId = previewIt->second;
-                dispatcher.execute(resetCmd);
-            }
-        }
-        if (!hasPreviewInstance) ImGui::EndDisabled();
-    }
-
     void VFXDrawer::clearInstances()
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        for (const auto& [key, instanceId] : vfxPreviewInstances)
-        {
-            services::events::vfxruntime::DestroyVFXInstanceCommand destroyCmd;
-            destroyCmd.instanceId = instanceId;
-            dispatcher.execute(destroyCmd);
-        }
-
-        vfxPreviewInstances.clear();
+        // No preview instances to clear anymore
     }
 }

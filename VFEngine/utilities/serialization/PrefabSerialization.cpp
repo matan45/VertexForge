@@ -82,6 +82,12 @@ namespace serialization
                 entity.getComponent<components::RigidBodyComponent>());
         }
 
+        if (entity.hasComponent<components::VFXComponent>())
+        {
+            componentsJson["vfx"] = SceneSerialization::serializeVFX(
+                entity.getComponent<components::VFXComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -166,6 +172,18 @@ namespace serialization
         {
             auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
             SceneSerialization::deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
+        }
+
+        if (componentsJson.contains("vfx"))
+        {
+            auto& vfxComp = entity.addOrReplaceComponent<components::VFXComponent>();
+            SceneSerialization::deserializeVFX(componentsJson["vfx"], vfxComp);
+            // Auto-attach billboard if not explicitly serialized
+            if (!componentsJson.contains("billboard"))
+            {
+                auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+                billboard.iconType = components::BillboardIconType::Particle;
+            }
         }
     }
 

@@ -136,6 +136,7 @@
     <ClInclude Include="impl\ScriptingServiceImpl.hpp" />
     <ClInclude Include="impl\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\VFXPlayModeHandler.hpp" />
+    <ClInclude Include="impl\VFXRuntimeServiceImpl.hpp" />
     <ClInclude Include="impl\WindowStateServiceImpl.hpp" />
     <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
@@ -194,6 +195,7 @@
     <ClCompile Include="impl\ScriptingServiceImpl.cpp" />
     <ClCompile Include="impl\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\VFXPlayModeHandler.cpp" />
+    <ClCompile Include="impl\VFXRuntimeServiceImpl.cpp" />
     <ClCompile Include="impl\WindowStateServiceImpl.cpp" />
     <ClCompile Include="impl\components\AnimatorComponentService.cpp" />
     <ClCompile Include="impl\components\AudioComponentService.cpp" />
