@@ -1,7 +1,6 @@
 #include "VFXPlayModeHandler.hpp"
 #include "../providers/IVFXRuntimeProvider.hpp"
 #include "../events/EditorModeEvents.hpp"
-#include "../events/VFXRuntimeEvents.hpp"
 #include "../events/SceneEvents.hpp"
 #include "../data/EditorMode.hpp"
 #include "../data/EntityConversion.hpp"
@@ -88,11 +87,7 @@ namespace services
 
         const auto& worldTransform = registry.get<components::WorldTransformComponent>(enttEntity);
 
-        auto& dispatcher = ::events::EventDispatcher::instance();
-        events::vfxruntime::SetVFXInstanceTransformCommand cmd;
-        cmd.instanceId = it->second;
-        cmd.worldTransform = worldTransform.worldMatrix;
-        dispatcher.execute(cmd);
+        vfxProvider->setInstanceTransform(it->second, worldTransform.worldMatrix);
     }
 
     void VFXPlayModeHandler::enterPlayMode()
@@ -104,7 +99,6 @@ namespace services
         }
 
         auto& registry = scene::EntityRegistry::getRegistry();
-        auto& dispatcher = ::events::EventDispatcher::instance();
 
         auto view = registry.view<components::VFXComponent, components::WorldTransformComponent>();
 
@@ -129,13 +123,13 @@ namespace services
                 }
             }
 
-            // Create VFX instance
-            events::vfxruntime::CreateVFXInstanceCommand createCmd;
-            createCmd.params.vfxAssetPath = vfxComp.vfxPath;
-            createCmd.params.worldTransform = worldTransform.worldMatrix;
-            createCmd.params.loop = vfxComp.loop;
+            // Create VFX instance using provider directly
+            VFXRuntimeParams params;
+            params.vfxAssetPath = vfxComp.vfxPath;
+            params.worldTransform = worldTransform.worldMatrix;
+            params.loop = vfxComp.loop;
 
-            VFXInstanceId instanceId = dispatcher.execute(createCmd);
+            VFXInstanceId instanceId = vfxProvider->createInstance(params);
 
             if (instanceId != 0)
             {
@@ -148,9 +142,7 @@ namespace services
                 // Auto-play if configured
                 if (vfxComp.autoPlay)
                 {
-                    events::vfxruntime::PlayVFXInstanceCommand playCmd;
-                    playCmd.instanceId = instanceId;
-                    dispatcher.execute(playCmd);
+                    vfxProvider->playInstance(instanceId);
                     vfxComp.isPlaying = true;
                 }
             }
@@ -168,14 +160,11 @@ namespace services
         }
 
         auto& registry = scene::EntityRegistry::getRegistry();
-        auto& dispatcher = ::events::EventDispatcher::instance();
 
         // Destroy all VFX instances
         for (const auto& [handle, instanceId] : activeVFXInstances)
         {
-            events::vfxruntime::DestroyVFXInstanceCommand destroyCmd;
-            destroyCmd.instanceId = instanceId;
-            dispatcher.execute(destroyCmd);
+            vfxProvider->destroyInstance(instanceId);
 
             // Reset component runtime state
             auto enttEntity = internal::fromHandle(handle);
@@ -195,8 +184,11 @@ namespace services
 
     void VFXPlayModeHandler::update(float deltaTime)
     {
-        // VFX runtime update is handled by the offscreen renderer
-        // Transform syncing happens via TransformChangedNotification
-        // No per-frame work needed here
+        if (!vfxActive || !vfxProvider)
+        {
+            return;
+        }
+
+        vfxProvider->update(deltaTime);
     }
 }

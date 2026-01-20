@@ -468,6 +468,12 @@ namespace render
         // Determine if we need to run the mesh render pass (for meshes, debug rendering, or VFX)
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
         bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized() && vfxRuntimeProvider->getInstanceCount() > 0;
+
+        // Update VFX camera for proper billboarding
+        if (hasVFX)
+        {
+            vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
+        }
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems || hasVFX);
 
         // Always update GPU-driven scene data (even when empty to reset stats)

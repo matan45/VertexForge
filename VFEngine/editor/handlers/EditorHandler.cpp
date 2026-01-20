@@ -64,7 +64,8 @@ namespace handlers
                 // Update order is critical:
                 // 1. Physics - steps simulation and syncs transforms to ECS
                 // 2. Scripts - can read updated transforms and apply game logic
-                // 3. Audio   - uses final camera/listener positions
+                // 3. VFX     - updates particle simulations
+                // 4. Audio   - uses final camera/listener positions
 
                 if (physicsPlayModeHandler)
                 {
@@ -74,6 +75,11 @@ namespace handlers
                 if (scriptingService)
                 {
                     scriptingService->updateScripts(deltaTime);
+                }
+
+                if (vfxPlayModeHandler)
+                {
+                    vfxPlayModeHandler->update(deltaTime);
                 }
 
                 if (audioSceneUpdater)
