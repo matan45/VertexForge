@@ -37,11 +37,11 @@ namespace services
 
         [[nodiscard]] virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const =
         0;
-        
+
         [[nodiscard]] virtual std::vector<LODInfo> getPreviewMeshLODInfo(PreviewInstanceId instanceId) const = 0;
-        
+
         [[nodiscard]] virtual math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const = 0;
-        
+
         virtual void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) = 0;
 
         virtual void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
@@ -79,7 +79,7 @@ namespace services
 
         [[nodiscard]] virtual ViewportTextureHandle renderAnimationPreview(PreviewInstanceId instanceId) = 0;
         [[nodiscard]] virtual std::vector<EvaluatedBoneInfo>
-            getAnimationPreviewEvaluatedBones(PreviewInstanceId instanceId) const = 0;
+        getAnimationPreviewEvaluatedBones(PreviewInstanceId instanceId) const = 0;
 
         // VFX Preview
         virtual void initVFXPreview(PreviewInstanceId instanceId) = 0;

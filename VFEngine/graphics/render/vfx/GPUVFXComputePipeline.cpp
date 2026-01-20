@@ -389,4 +389,68 @@ namespace render::vfx
             {}
         );
     }
+
+    void GPUVFXComputePipeline::insertBarriersBeforeTransfer(
+        vk::CommandBuffer cmd,
+        vk::Buffer stateBuffer,
+        vk::Buffer drawCommandBuffer,
+        vk::Buffer particleBuffer)
+    {
+        // Barriers: Compute shader read/write → Transfer write
+        // Ensures previous frame's compute is complete before we overwrite buffers
+        std::array<vk::BufferMemoryBarrier, 3> barriers{};
+
+        // State buffer: Compute write → Transfer write
+        barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+        barriers[0].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barriers[0].buffer = stateBuffer;
+        barriers[0].offset = 0;
+        barriers[0].size = VK_WHOLE_SIZE;
+
+        // Draw command buffer: Compute write → Transfer write
+        barriers[1].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        barriers[1].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barriers[1].buffer = drawCommandBuffer;
+        barriers[1].offset = 0;
+        barriers[1].size = VK_WHOLE_SIZE;
+
+        // Particle buffer: Compute read/write → Transfer write
+        barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
+        barriers[2].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barriers[2].buffer = particleBuffer;
+        barriers[2].offset = 0;
+        barriers[2].size = VK_WHOLE_SIZE;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eTransfer,
+            {},
+            {},
+            barriers,
+            {}
+        );
+    }
+
+    void GPUVFXComputePipeline::insertTransferToTransferBarrier(
+        vk::CommandBuffer cmd,
+        vk::Buffer stateBuffer)
+    {
+        // Barrier: Transfer write (copyBuffer) → Transfer write (fillBuffer)
+        // Ensures uploadStateBuffer completes before resetAllActiveCounts
+        vk::BufferMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.buffer = stateBuffer;
+        barrier.offset = 0;
+        barrier.size = VK_WHOLE_SIZE;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eTransfer,
+            {},
+            {},
+            {barrier},
+            {}
+        );
+    }
 }

@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
+#include <array>
 
 namespace core
 {
@@ -15,6 +16,8 @@ namespace render::vfx
     class GPUVFXBufferManager
     {
     public:
+        static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
+
         explicit GPUVFXBufferManager(core::Device& device);
         ~GPUVFXBufferManager();
 
@@ -70,6 +73,10 @@ namespace render::vfx
         // Reset particle buffer cleared flag (call when all instances are destroyed)
         void resetParticleBufferClearedFlag() { particleBufferCleared = false; }
 
+        // Frame management for ring-buffered staging
+        void advanceFrame() { currentFrameIndex = (currentFrameIndex + 1) % FRAMES_IN_FLIGHT; }
+        uint32_t getCurrentFrameIndex() const { return currentFrameIndex; }
+
     private:
         core::Device& device;
 
@@ -84,9 +91,10 @@ namespace render::vfx
         vk::Buffer stateBuffer;             // Emitter states (device-local, compute RW)
         vk::DeviceMemory stateMemory;
 
-        vk::Buffer stateStaging;            // Staging for state updates
-        vk::DeviceMemory stateStagingMemory;
-        void* stateStagingMapped = nullptr;
+        // Ring-buffered staging for state updates (avoids CPU/GPU race)
+        std::array<vk::Buffer, FRAMES_IN_FLIGHT> stateStagingBuffers{};
+        std::array<vk::DeviceMemory, FRAMES_IN_FLIGHT> stateStagingMemories{};
+        std::array<void*, FRAMES_IN_FLIGHT> stateStagingMapped{};
 
         vk::Buffer drawCommandBuffer;       // Indirect draw commands (device-local)
         vk::DeviceMemory drawCommandMemory;
@@ -94,6 +102,7 @@ namespace render::vfx
         // Configuration
         uint32_t maxParticles = 0;
         uint32_t maxEmitters = 0;
+        uint32_t currentFrameIndex = 0;
         bool initialized = false;
         bool particleBufferCleared = false;
 

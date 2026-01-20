@@ -249,16 +249,10 @@ namespace controllers
         auto it = instances.find(id);
         if (it != instances.end())
         {
-            // Wait for GPU to finish using the buffers
-            if (it->second.gpuDriven)
-            {
-                device.getLogicalDevice().waitIdle();
-            }
-
-            // Free GPU resources if allocated
+            // Queue GPU emitter for deferred freeing (avoids per-instance waitIdle)
             if (it->second.gpuDriven && gpuBufferManager)
             {
-                gpuBufferManager->freeEmitter(it->second.gpuEmitterIndex);
+                pendingEmitterFrees.emplace_back(it->second.gpuEmitterIndex, frameNumber);
             }
 
             loggerInfo("Destroyed VFX instance {}", id);
@@ -268,8 +262,11 @@ namespace controllers
 
     void VFXSceneRenderer::destroyAllInstances()
     {
-        // Wait for GPU to finish using the buffers
+        // Wait for GPU only when destroying ALL instances (bulk operation)
         device.getLogicalDevice().waitIdle();
+
+        // Clear any pending deferred frees
+        pendingEmitterFrees.clear();
 
         for (auto& [id, instance] : instances)
         {
@@ -378,6 +375,9 @@ namespace controllers
 
     void VFXSceneRenderer::update(float deltaTime)
     {
+        // Process deferred emitter frees (GPU resources safe to release after N frames)
+        processPendingEmitterFrees();
+
         if (gpuDrivenEnabled)
         {
             updateGPU(deltaTime);
@@ -388,6 +388,40 @@ namespace controllers
         }
 
         frameNumber++;
+
+        // Advance ring buffer index for staging buffers
+        if (gpuBufferManager)
+        {
+            gpuBufferManager->advanceFrame();
+        }
+    }
+
+    void VFXSceneRenderer::processPendingEmitterFrees()
+    {
+        if (!gpuBufferManager || pendingEmitterFrees.empty())
+        {
+            return;
+        }
+
+        // Free emitters that have been pending for enough frames
+        auto it = pendingEmitterFrees.begin();
+        while (it != pendingEmitterFrees.end())
+        {
+            uint32_t emitterIndex = it->first;
+            uint32_t destroyedFrame = it->second;
+
+            // Check if enough frames have passed (handles wraparound)
+            uint32_t framesPassed = frameNumber - destroyedFrame;
+            if (framesPassed >= FRAMES_BEFORE_FREE)
+            {
+                gpuBufferManager->freeEmitter(emitterIndex);
+                it = pendingEmitterFrees.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
     }
 
     void VFXSceneRenderer::updateCPU(float deltaTime)
@@ -511,7 +545,7 @@ namespace controllers
         {
             gpuState.flags |= render::vfx::EmitterFlags::Looping;
         }
-        gpuState.completedWorkgroups = 0;
+        gpuState.spawnCounter = 0;
         gpuState.padding = 0;
         return gpuState;
     }
@@ -562,6 +596,14 @@ namespace controllers
             return;
         }
 
+        // Insert barrier: Compute → Transfer (wait for previous frame's compute)
+        gpuComputePipeline->insertBarriersBeforeTransfer(
+            cmd,
+            gpuBufferManager->getStateBuffer(),
+            gpuBufferManager->getDrawCommandBuffer(),
+            gpuBufferManager->getParticleBuffer()
+        );
+
         // Clear particle buffer on first use (sets all flags to inactive)
         gpuBufferManager->clearParticleBufferIfNeeded(cmd);
 
@@ -570,6 +612,12 @@ namespace controllers
 
         // Clear draw commands (sets instanceCount=0 for all emitters)
         gpuBufferManager->clearDrawCommands(cmd);
+
+        // Insert barrier: Transfer → Transfer (ensure copy completes before fill)
+        gpuComputePipeline->insertTransferToTransferBarrier(
+            cmd,
+            gpuBufferManager->getStateBuffer()
+        );
 
         // Reset all active counts before compute
         gpuBufferManager->resetAllActiveCounts(cmd);

@@ -41,17 +41,63 @@ namespace render::vfx
 
         externalRenderPass = renderPass;
 
-        loadShader();
-        createDescriptorSetLayout();
-        createDescriptorPool();
-        createBuffers();
-        createDefaultTexture();
-        createSampler();
-        allocateDescriptorSet();
-        createPipeline();
+        try
+        {
+            loadShader();
+            if (!gpuShader)
+            {
+                loggerError("VFXSceneGPUPipeline: Failed to load shader");
+                return;
+            }
 
-        initialized = true;
-        loggerInfo("VFXSceneGPUPipeline initialized");
+            createDescriptorSetLayout();
+            if (!descriptorSetLayout)
+            {
+                loggerError("VFXSceneGPUPipeline: Failed to create descriptor set layout");
+                return;
+            }
+
+            createDescriptorPool();
+            if (!descriptorPool)
+            {
+                loggerError("VFXSceneGPUPipeline: Failed to create descriptor pool");
+                cleanup();
+                return;
+            }
+
+            createBuffers();
+            if (!cameraUBO || !quadVertexBuffer || !quadIndexBuffer)
+            {
+                loggerError("VFXSceneGPUPipeline: Failed to create buffers");
+                cleanup();
+                return;
+            }
+
+            createDefaultTexture();
+            createSampler();
+            allocateDescriptorSet();
+
+            createPipeline();
+            if (!graphicsPipeline || !pipelineLayout)
+            {
+                loggerError("VFXSceneGPUPipeline: Failed to create graphics pipeline");
+                cleanup();
+                return;
+            }
+
+            initialized = true;
+            loggerInfo("VFXSceneGPUPipeline initialized");
+        }
+        catch (const vk::SystemError& e)
+        {
+            loggerError("VFXSceneGPUPipeline: Vulkan error during init - {}", e.what());
+            cleanup();
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("VFXSceneGPUPipeline: Exception during init - {}", e.what());
+            cleanup();
+        }
     }
 
     void VFXSceneGPUPipeline::recreate(vk::RenderPass renderPass)
@@ -103,7 +149,12 @@ namespace render::vfx
             descriptorSetLayout = nullptr;
         }
 
-        // Clean up buffers
+        // Unmap and clean up buffers
+        if (cameraUBOMapped && cameraUBOMemory)
+        {
+            vkDevice.unmapMemory(cameraUBOMemory);
+            cameraUBOMapped = nullptr;
+        }
         core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, quadVertexBuffer, quadVertexBufferMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, quadIndexBuffer, quadIndexBufferMemory);
@@ -222,7 +273,7 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::writeDescriptors()
+    void VFXSceneGPUPipeline::writeDescriptors() const
     {
         if (!descriptorsNeedUpdate || !cachedParticleBuffer)
         {
@@ -309,13 +360,14 @@ namespace render::vfx
     {
         auto vkDevice = device.getLogicalDevice();
 
-        // Camera UBO
+        // Camera UBO (persistently mapped for efficient per-frame updates)
         core::BufferInfoRequest uboRequest(vkDevice, device.getPhysicalDevice());
         uboRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                 vk::MemoryPropertyFlagBits::eHostCoherent;
         uboRequest.size = sizeof(GPUVFXCameraUBO);
         core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
+        cameraUBOMapped = vkDevice.mapMemory(cameraUBOMemory, 0, sizeof(GPUVFXCameraUBO));
 
         // Quad vertex buffer
         constexpr vk::DeviceSize vertexBufferSize = sizeof(VFXQuadVertex) * QUAD_VERTICES.size();
@@ -467,15 +519,19 @@ namespace render::vfx
         const glm::vec3& cameraPos,
         float time) const
     {
+        if (!cameraUBOMapped)
+        {
+            return;
+        }
+
         GPUVFXCameraUBO ubo{};
         ubo.view = view;
         ubo.projection = projection;
         ubo.cameraPos = cameraPos;
         ubo.time = time;
 
-        void* data = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo));
-        std::memcpy(data, &ubo, sizeof(ubo));
-        device.getLogicalDevice().unmapMemory(cameraUBOMemory);
+        // Use persistent mapping - no map/unmap overhead
+        std::memcpy(cameraUBOMapped, &ubo, sizeof(ubo));
     }
 
     void VFXSceneGPUPipeline::recordCommandsInline(
@@ -488,8 +544,8 @@ namespace render::vfx
             return;
         }
 
-        // Write descriptors if needed (const_cast because we cache state)
-        const_cast<VFXSceneGPUPipeline*>(this)->writeDescriptors();
+        // Write descriptors if needed (uses mutable flag for lazy updates)
+        writeDescriptors();
 
         // Bind pipeline
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);

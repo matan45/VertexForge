@@ -50,7 +50,7 @@ namespace render::vfx
         core::SwapChain& swapChain;
 
         bool initialized = false;
-        bool descriptorsNeedUpdate = true;
+        mutable bool descriptorsNeedUpdate = true;  // mutable: caching flag for lazy descriptor writes
 
         std::shared_ptr<core::Shader> gpuShader;
 
@@ -68,6 +68,7 @@ namespace render::vfx
         vk::DeviceMemory quadIndexBufferMemory;
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
+        void* cameraUBOMapped = nullptr;  // Persistently mapped for efficient per-frame updates
 
         // Cached particle buffer info
         vk::Buffer cachedParticleBuffer;
@@ -88,6 +89,6 @@ namespace render::vfx
         void createBuffers();
         void createDefaultTexture();
         void createSampler();
-        void writeDescriptors();
+        void writeDescriptors() const;
     };
 }

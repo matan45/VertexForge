@@ -168,30 +168,40 @@ namespace render::vfx
 
         core::BufferUtilities::createBuffer(stateRequest, stateBuffer, stateMemory);
 
-        // Staging buffer for state updates
-        core::BufferInfoRequest stagingRequest(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            getStateBufferSize(),
-            vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible |
-            vk::MemoryPropertyFlagBits::eHostCoherent
-        );
-
-        core::BufferUtilities::createBuffer(stagingRequest, stateStaging, stateStagingMemory);
-
-        if (stateBuffer && stateMemory && stateStaging && stateStagingMemory)
+        if (!stateBuffer || !stateMemory)
         {
+            return false;
+        }
+
+        // Create ring-buffered staging buffers to avoid CPU/GPU race conditions
+        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
+        {
+            core::BufferInfoRequest stagingRequest(
+                device.getLogicalDevice(),
+                device.getPhysicalDevice(),
+                getStateBufferSize(),
+                vk::BufferUsageFlagBits::eTransferSrc,
+                vk::MemoryPropertyFlagBits::eHostVisible |
+                vk::MemoryPropertyFlagBits::eHostCoherent
+            );
+
+            core::BufferUtilities::createBuffer(stagingRequest, stateStagingBuffers[i], stateStagingMemories[i]);
+
+            if (!stateStagingBuffers[i] || !stateStagingMemories[i])
+            {
+                return false;
+            }
+
             // Map staging buffer persistently
-            stateStagingMapped = device.getLogicalDevice().mapMemory(
-                stateStagingMemory, 0, getStateBufferSize(), vk::MemoryMapFlags{}
+            stateStagingMapped[i] = device.getLogicalDevice().mapMemory(
+                stateStagingMemories[i], 0, getStateBufferSize(), vk::MemoryMapFlags{}
             );
 
             // Zero-initialize
-            std::memset(stateStagingMapped, 0, getStateBufferSize());
-            return true;
+            std::memset(stateStagingMapped[i], 0, getStateBufferSize());
         }
-        return false;
+
+        return true;
     }
 
     bool GPUVFXBufferManager::createDrawCommandBuffer()
@@ -222,17 +232,21 @@ namespace render::vfx
             configMapped = nullptr;
         }
 
-        if (stateStagingMapped && stateStagingMemory)
+        // Unmap and destroy ring-buffered staging buffers
+        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
         {
-            vkDevice.unmapMemory(stateStagingMemory);
-            stateStagingMapped = nullptr;
+            if (stateStagingMapped[i] && stateStagingMemories[i])
+            {
+                vkDevice.unmapMemory(stateStagingMemories[i]);
+                stateStagingMapped[i] = nullptr;
+            }
+            core::BufferUtilities::destroyBuffer(vkDevice, stateStagingBuffers[i], stateStagingMemories[i]);
         }
 
         // Destroy buffers
         core::BufferUtilities::destroyBuffer(vkDevice, particleBuffer, particleMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, configBuffer, configMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, stateBuffer, stateMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, stateStaging, stateStagingMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, drawCommandBuffer, drawCommandMemory);
     }
 
@@ -269,12 +283,13 @@ namespace render::vfx
 
     void GPUVFXBufferManager::updateEmitterState(uint32_t emitterIndex, const GPUEmitterState& state)
     {
-        if (!initialized || emitterIndex >= maxEmitters || !stateStagingMapped)
+        if (!initialized || emitterIndex >= maxEmitters || !stateStagingMapped[currentFrameIndex])
         {
             return;
         }
 
-        auto* states = static_cast<GPUEmitterState*>(stateStagingMapped);
+        // Write to current frame's staging buffer (avoids race with in-flight GPU copy)
+        auto* states = static_cast<GPUEmitterState*>(stateStagingMapped[currentFrameIndex]);
         states[emitterIndex] = state;
     }
 
@@ -289,12 +304,12 @@ namespace render::vfx
         vk::DeviceSize stateOffset = static_cast<vk::DeviceSize>(emitterIndex) * sizeof(GPUEmitterState);
         vk::DeviceSize activeCountOffset = stateOffset + offsetof(GPUEmitterState, activeCount);
 
-        // Fill activeCount with 0 (4 bytes)
+        // Fill activeCount with 0 (4 bytes) - compute shader will accumulate active particles
         cmd.fillBuffer(stateBuffer, activeCountOffset, sizeof(uint32_t), 0);
 
-        // Also reset completedWorkgroups counter
-        vk::DeviceSize completedWorkgroupsOffset = stateOffset + offsetof(GPUEmitterState, completedWorkgroups);
-        cmd.fillBuffer(stateBuffer, completedWorkgroupsOffset, sizeof(uint32_t), 0);
+        // Also reset spawnCounter - compute shader uses this for atomic spawn slot allocation
+        vk::DeviceSize spawnCounterOffset = stateOffset + offsetof(GPUEmitterState, spawnCounter);
+        cmd.fillBuffer(stateBuffer, spawnCounterOffset, sizeof(uint32_t), 0);
     }
 
     void GPUVFXBufferManager::resetAllActiveCounts(vk::CommandBuffer cmd)
@@ -316,18 +331,18 @@ namespace render::vfx
 
     void GPUVFXBufferManager::uploadStateBuffer(vk::CommandBuffer cmd)
     {
-        if (!initialized || !stateStaging || !stateBuffer)
+        if (!initialized || !stateStagingBuffers[currentFrameIndex] || !stateBuffer)
         {
             return;
         }
 
-        // Copy entire staging buffer to device-local state buffer
+        // Copy current frame's staging buffer to device-local state buffer
         vk::BufferCopy copyRegion{};
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = getStateBufferSize();
 
-        cmd.copyBuffer(stateStaging, stateBuffer, copyRegion);
+        cmd.copyBuffer(stateStagingBuffers[currentFrameIndex], stateBuffer, copyRegion);
     }
 
     void GPUVFXBufferManager::clearDrawCommands(vk::CommandBuffer cmd)

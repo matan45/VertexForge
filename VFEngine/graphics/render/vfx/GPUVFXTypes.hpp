@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <cstdint>
+#include <cstddef>
 
 namespace render::vfx
 {
@@ -22,6 +23,15 @@ namespace render::vfx
         glm::vec2 padding;      // 8 bytes  - Alignment padding
     };
     static_assert(sizeof(GPUParticle) == 64, "GPUParticle must be 64 bytes for GPU alignment");
+    // Offset assertions to match GLSL std430 layout exactly
+    static_assert(offsetof(GPUParticle, position) == 0, "GPUParticle::position offset mismatch");
+    static_assert(offsetof(GPUParticle, lifetime) == 12, "GPUParticle::lifetime offset mismatch");
+    static_assert(offsetof(GPUParticle, velocity) == 16, "GPUParticle::velocity offset mismatch");
+    static_assert(offsetof(GPUParticle, maxLifetime) == 28, "GPUParticle::maxLifetime offset mismatch");
+    static_assert(offsetof(GPUParticle, color) == 32, "GPUParticle::color offset mismatch");
+    static_assert(offsetof(GPUParticle, size) == 48, "GPUParticle::size offset mismatch");
+    static_assert(offsetof(GPUParticle, flags) == 52, "GPUParticle::flags offset mismatch");
+    static_assert(offsetof(GPUParticle, padding) == 56, "GPUParticle::padding offset mismatch");
 
     // ============================================================================
     // GPU Emitter Configuration (64 bytes, std430 aligned)
@@ -41,6 +51,16 @@ namespace render::vfx
         float padding;              // 4 bytes  - Alignment padding
     };
     static_assert(sizeof(GPUEmitterConfig) == 64, "GPUEmitterConfig must be 64 bytes for GPU alignment");
+    static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, lifetime) == 36, "GPUEmitterConfig::lifetime offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, startSize) == 40, "GPUEmitterConfig::startSize offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, startSpeed) == 44, "GPUEmitterConfig::startSpeed offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, maxParticles) == 48, "GPUEmitterConfig::maxParticles offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, seed) == 52, "GPUEmitterConfig::seed offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, deltaTime) == 56, "GPUEmitterConfig::deltaTime offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, padding) == 60, "GPUEmitterConfig::padding offset mismatch");
 
     // ============================================================================
     // GPU Emitter State (96 bytes, std430 aligned)
@@ -51,14 +71,23 @@ namespace render::vfx
         glm::mat4 worldTransform;       // 64 bytes - Emitter world transform matrix
         uint32_t particleOffset;        // 4 bytes  - Offset into global particle buffer
         uint32_t maxParticles;          // 4 bytes  - Particles allocated for this emitter
-        uint32_t activeCount;           // 4 bytes  - Active particles (written by compute, atomic)
+        uint32_t activeCount;           // 4 bytes  - Active particles (atomic, written by compute shader)
         uint32_t spawnThisFrame;        // 4 bytes  - Particles to spawn this frame (set by CPU)
         float spawnAccumulator;         // 4 bytes  - Fractional spawn accumulator
         uint32_t flags;                 // 4 bytes  - Bit 0 = playing, bit 1 = looping
-        uint32_t completedWorkgroups;   // 4 bytes  - Workgroup completion counter (atomic)
+        uint32_t spawnCounter;          // 4 bytes  - Atomic spawn slot counter (reset each frame by CPU)
         uint32_t padding;               // 4 bytes  - Alignment padding
     };
     static_assert(sizeof(GPUEmitterState) == 96, "GPUEmitterState must be 96 bytes for GPU alignment");
+    static_assert(offsetof(GPUEmitterState, worldTransform) == 0, "GPUEmitterState::worldTransform offset mismatch");
+    static_assert(offsetof(GPUEmitterState, particleOffset) == 64, "GPUEmitterState::particleOffset offset mismatch");
+    static_assert(offsetof(GPUEmitterState, maxParticles) == 68, "GPUEmitterState::maxParticles offset mismatch");
+    static_assert(offsetof(GPUEmitterState, activeCount) == 72, "GPUEmitterState::activeCount offset mismatch");
+    static_assert(offsetof(GPUEmitterState, spawnThisFrame) == 76, "GPUEmitterState::spawnThisFrame offset mismatch");
+    static_assert(offsetof(GPUEmitterState, spawnAccumulator) == 80, "GPUEmitterState::spawnAccumulator offset mismatch");
+    static_assert(offsetof(GPUEmitterState, flags) == 84, "GPUEmitterState::flags offset mismatch");
+    static_assert(offsetof(GPUEmitterState, spawnCounter) == 88, "GPUEmitterState::spawnCounter offset mismatch");
+    static_assert(offsetof(GPUEmitterState, padding) == 92, "GPUEmitterState::padding offset mismatch");
 
     // ============================================================================
     // Indirect Draw Command (20 bytes)
@@ -73,6 +102,11 @@ namespace render::vfx
         uint32_t firstInstance;     // Particle buffer offset (for gl_InstanceIndex)
     };
     static_assert(sizeof(VFXDrawIndirectCommand) == 20, "VFXDrawIndirectCommand must match VkDrawIndexedIndirectCommand");
+    static_assert(offsetof(VFXDrawIndirectCommand, indexCount) == 0, "VFXDrawIndirectCommand::indexCount offset mismatch");
+    static_assert(offsetof(VFXDrawIndirectCommand, instanceCount) == 4, "VFXDrawIndirectCommand::instanceCount offset mismatch");
+    static_assert(offsetof(VFXDrawIndirectCommand, firstIndex) == 8, "VFXDrawIndirectCommand::firstIndex offset mismatch");
+    static_assert(offsetof(VFXDrawIndirectCommand, vertexOffset) == 12, "VFXDrawIndirectCommand::vertexOffset offset mismatch");
+    static_assert(offsetof(VFXDrawIndirectCommand, firstInstance) == 16, "VFXDrawIndirectCommand::firstInstance offset mismatch");
 
     // ============================================================================
     // Constants
@@ -82,7 +116,8 @@ namespace render::vfx
         inline constexpr uint32_t MAX_GPU_PARTICLES = 65536;      // Total particle budget (4MB)
         inline constexpr uint32_t MAX_EMITTERS = 64;              // Max concurrent emitters
         inline constexpr uint32_t DEFAULT_PARTICLES_PER_EMITTER = 1024;
-        inline constexpr uint32_t WORKGROUP_SIZE = 64;            // Compute shader workgroup size
+        // IMPORTANT: Must match local_size_x in vfx_particle_sim.glsl
+        inline constexpr uint32_t WORKGROUP_SIZE = 64;
         inline constexpr uint32_t QUAD_INDEX_COUNT = 6;           // Indices per billboard quad
     }
 
@@ -115,6 +150,10 @@ namespace render::vfx
         float time;                 // 4 bytes
     };
     static_assert(sizeof(GPUVFXCameraUBO) == 144, "GPUVFXCameraUBO must be 144 bytes");
+    static_assert(offsetof(GPUVFXCameraUBO, view) == 0, "GPUVFXCameraUBO::view offset mismatch");
+    static_assert(offsetof(GPUVFXCameraUBO, projection) == 64, "GPUVFXCameraUBO::projection offset mismatch");
+    static_assert(offsetof(GPUVFXCameraUBO, cameraPos) == 128, "GPUVFXCameraUBO::cameraPos offset mismatch");
+    static_assert(offsetof(GPUVFXCameraUBO, time) == 140, "GPUVFXCameraUBO::time offset mismatch");
 
     // ============================================================================
     // Compute Shader Push Constants
@@ -127,4 +166,8 @@ namespace render::vfx
         uint32_t totalWorkgroups;   // Total workgroups dispatched for this emitter
     };
     static_assert(sizeof(GPUVFXComputePushConstants) == 16, "Push constants must be 16 bytes");
+    static_assert(offsetof(GPUVFXComputePushConstants, emitterIndex) == 0, "GPUVFXComputePushConstants::emitterIndex offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, frameNumber) == 4, "GPUVFXComputePushConstants::frameNumber offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, emitterCount) == 8, "GPUVFXComputePushConstants::emitterCount offset mismatch");
+    static_assert(offsetof(GPUVFXComputePushConstants, totalWorkgroups) == 12, "GPUVFXComputePushConstants::totalWorkgroups offset mismatch");
 }

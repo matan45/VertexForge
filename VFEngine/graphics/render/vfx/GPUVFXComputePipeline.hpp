@@ -59,6 +59,20 @@ namespace render::vfx
             vk::Buffer particleBuffer
         );
 
+        // Insert barrier before transfer operations (after previous frame's compute)
+        void insertBarriersBeforeTransfer(
+            vk::CommandBuffer cmd,
+            vk::Buffer stateBuffer,
+            vk::Buffer drawCommandBuffer,
+            vk::Buffer particleBuffer
+        );
+
+        // Insert barrier between transfer operations (uploadStateBuffer -> resetAllActiveCounts)
+        void insertTransferToTransferBarrier(
+            vk::CommandBuffer cmd,
+            vk::Buffer stateBuffer
+        );
+
     private:
         core::Device& device;
 

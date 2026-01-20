@@ -74,10 +74,15 @@ namespace controllers
 
         std::unordered_map<VFXInstanceId, VFXRuntimeInstance> instances;
 
+        // Deferred destruction queue to avoid per-instance waitIdle()
+        // Each entry is (emitterIndex, frameWhenDestroyed)
+        std::vector<std::pair<uint32_t, uint32_t>> pendingEmitterFrees;
+
         VFXInstanceId nextInstanceId = 1;
         bool initialized = false;
         bool gpuDrivenEnabled = true;  // Enable GPU mode by default
         uint32_t frameNumber = 0;
+        static constexpr uint32_t FRAMES_BEFORE_FREE = 3;  // Wait this many frames before freeing
 
         // Camera data for billboard orientation
         glm::mat4 currentView{1.0f};
@@ -139,6 +144,7 @@ namespace controllers
         void cleanupGPUMode();
         void updateGPU(float deltaTime);
         void recordGPUDrawCommands(vk::CommandBuffer cmd);
+        void processPendingEmitterFrees();
 
         // Config conversion
         render::vfx::GPUEmitterConfig toGPUConfig(

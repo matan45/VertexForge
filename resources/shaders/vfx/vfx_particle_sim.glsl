@@ -6,6 +6,7 @@
 // Simulates particles entirely on GPU with SSBO storage
 // ============================================================================
 
+// IMPORTANT: This must match GPUVFXConstants::WORKGROUP_SIZE in GPUVFXTypes.hpp
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 // ----------------------------------------------------------------------------
@@ -43,11 +44,11 @@ struct GPUEmitterState
     mat4 worldTransform;        // Emitter world transform
     uint particleOffset;        // Offset into particle buffer
     uint maxParticles;          // Allocated particles
-    uint activeCount;           // Active particles (atomic counter)
-    uint spawnThisFrame;        // Particles to spawn this frame
+    uint activeCount;           // Active particles (atomic counter, written by shader)
+    uint spawnThisFrame;        // Particles to spawn this frame (set by CPU)
     float spawnAccumulator;     // Fractional spawn accumulator (unused in shader)
     uint flags;                 // Bit 0 = playing, bit 1 = looping
-    uint completedWorkgroups;   // Workgroup completion counter (atomic)
+    uint spawnCounter;          // Atomic counter for spawn slots (reset each frame)
     uint padding;               // Alignment
 };
 
@@ -160,28 +161,39 @@ void main()
     }
 
     GPUEmitterConfig config = configs[pc.emitterIndex];
-    GPUEmitterState state = states[pc.emitterIndex];
 
     // Check if this thread is within the emitter's particle range
-    if (localIdx >= state.maxParticles)
+    // Read maxParticles directly to avoid race with state updates
+    uint maxParts = states[pc.emitterIndex].maxParticles;
+    if (localIdx >= maxParts)
     {
         return;
     }
 
+    // Read other state values
+    uint particleOffset = states[pc.emitterIndex].particleOffset;
+    uint spawnThisFrame = states[pc.emitterIndex].spawnThisFrame;
+    mat4 worldTransform = states[pc.emitterIndex].worldTransform;
+    uint emitterFlags = states[pc.emitterIndex].flags;
+
     // Check if emitter is playing
-    bool isPlaying = (state.flags & FLAG_PLAYING) != 0u;
+    bool isPlaying = (emitterFlags & FLAG_PLAYING) != 0u;
 
     // Calculate global particle index
-    uint particleIdx = state.particleOffset + localIdx;
+    uint particleIdx = particleOffset + localIdx;
     GPUParticle p = particles[particleIdx];
 
     // Initialize random seed unique to this particle and frame
     uint seed = pcg_hash(particleIdx ^ (pc.frameNumber * 1000000u) ^ config.seed);
 
+    // Track if this particle is active after updates
+    bool wasActive = (p.flags & FLAG_ACTIVE) != 0u;
+    bool isActive = wasActive;
+
     // ========================================================================
     // Phase 1: Update existing active particles
     // ========================================================================
-    if ((p.flags & FLAG_ACTIVE) != 0u)
+    if (wasActive)
     {
         p.lifetime += config.deltaTime;
 
@@ -189,6 +201,7 @@ void main()
         {
             // Particle died
             p.flags &= ~FLAG_ACTIVE;
+            isActive = false;
         }
         else
         {
@@ -206,41 +219,22 @@ void main()
     }
 
     // ========================================================================
-    // Phase 2: Spawn new particles
-    // Inactive particles compete for spawn slots using atomic counter
-    // This ensures spawns go to any available inactive slot
+    // Phase 2: Spawn new particles using atomic counter
+    // Inactive particles compete for spawn slots - exactly spawnThisFrame will spawn
     // ========================================================================
-    if (isPlaying && (p.flags & FLAG_ACTIVE) == 0u && state.spawnThisFrame > 0u)
+    if (isPlaying && !isActive && spawnThisFrame > 0u)
     {
-        // Try to grab a spawn slot atomically
-        // activeCount starts at 0 and is reset each frame, we reuse it temporarily
-        // Actually we need a separate counter - let's use completedWorkgroups before it's used
-        // Better: just check if we're in the spawn range based on atomic grab
+        // Atomically grab a spawn slot
+        uint spawnSlot = atomicAdd(states[pc.emitterIndex].spawnCounter, 1u);
 
-        // Use spawnThisFrame as a limit - first N inactive particles to reach here spawn
-        // We'll use a simple heuristic: lower indexed inactive particles get priority
-        // Check if there are spawn slots remaining using a simple probability check
-        // Thread with lower index has higher chance of spawning
-
-        // Simple approach: use atomicAdd on a spawn counter (reuse completedWorkgroups temporarily)
-        // No wait - that counter is used later. Let's just use the activeCount before it's accumulated
-
-        // Simplest fix: probabilistic spawn based on spawn rate
-        // If we want to spawn N particles and have M inactive, probability = N/M
-        // But we don't know M easily...
-
-        // Let's just use a rotating spawn pattern based on frame number
-        // Each frame, a different set of particle indices can spawn
-        uint spawnBase = (pc.frameNumber * 17u) % state.maxParticles;  // 17 is a prime for good distribution
-        uint mySpawnIndex = (localIdx + state.maxParticles - spawnBase) % state.maxParticles;
-
-        if (mySpawnIndex < state.spawnThisFrame)
+        if (spawnSlot < spawnThisFrame)
         {
-            // Spawn new particle
+            // Won a spawn slot - activate this particle
             p.flags |= FLAG_ACTIVE;
+            isActive = true;
 
             // Spawn at emitter origin (extract translation from world transform)
-            p.position = vec3(state.worldTransform[3]);
+            p.position = vec3(worldTransform[3]);
 
             p.lifetime = 0.0;
             p.maxLifetime = config.lifetime;
@@ -254,7 +248,7 @@ void main()
             p.velocity = dir * config.startSpeed;
 
             // Apply emitter rotation to velocity (upper 3x3 of world transform)
-            mat3 rotation = mat3(state.worldTransform);
+            mat3 rotation = mat3(worldTransform);
             p.velocity = rotation * p.velocity;
         }
     }
@@ -263,17 +257,29 @@ void main()
     particles[particleIdx] = p;
 
     // ========================================================================
-    // Phase 3: Write indirect draw command
-    // Since cross-workgroup synchronization is complex, we simply draw ALL
-    // particles and let the vertex shader filter inactive ones (it already does).
-    // This is slightly less efficient but guarantees correctness.
+    // Phase 3: Count active particles using atomic add
+    // Each active particle increments the counter (used for stats/debugging)
     // ========================================================================
-    if (gl_GlobalInvocationID.x == 0)
+    if (isActive)
     {
-        drawCommands[pc.emitterIndex].indexCount = 6u;           // Quad indices
-        drawCommands[pc.emitterIndex].instanceCount = state.maxParticles;  // Draw all, VS filters
+        atomicAdd(states[pc.emitterIndex].activeCount, 1u);
+    }
+
+    // ========================================================================
+    // Phase 4: Write indirect draw command
+    // NOTE: Cross-workgroup synchronization is not possible in a single dispatch.
+    // We cannot reliably read the final activeCount within the same dispatch.
+    // Solution: Draw all allocated particles; vertex shader skips inactive ones.
+    // This is slightly less efficient but guarantees correctness.
+    // Future optimization: Use a separate small compute pass to copy activeCount
+    // to instanceCount after the main simulation completes.
+    // ========================================================================
+    if (gl_GlobalInvocationID.x == 0u)
+    {
+        drawCommands[pc.emitterIndex].indexCount = 6u;
+        drawCommands[pc.emitterIndex].instanceCount = maxParts;  // Draw all, VS filters inactive
         drawCommands[pc.emitterIndex].firstIndex = 0u;
         drawCommands[pc.emitterIndex].vertexOffset = 0;
-        drawCommands[pc.emitterIndex].firstInstance = state.particleOffset;
+        drawCommands[pc.emitterIndex].firstInstance = particleOffset;
     }
 }
