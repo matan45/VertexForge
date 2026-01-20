@@ -182,9 +182,13 @@
     <ClInclude Include="render\tools\FrustumDebugRenderer.hpp" />
     <ClInclude Include="render\tools\GridRenderer.hpp" />
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
+    <ClInclude Include="render\vfx\GPUVFXBufferManager.hpp" />
+    <ClInclude Include="render\vfx\GPUVFXComputePipeline.hpp" />
+    <ClInclude Include="render\vfx\GPUVFXTypes.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardTypes.hpp" />
     <ClInclude Include="render\vfx\VFXParticleSystem.hpp" />
+    <ClInclude Include="render\vfx\VFXSceneGPUPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXScenePipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -263,8 +267,11 @@
     <ClCompile Include="render\tools\FrustumDebugRenderer.cpp" />
     <ClCompile Include="render\tools\GridRenderer.cpp" />
     <ClCompile Include="render\tools\PhysicsDebugRenderer.cpp" />
+    <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
+    <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
+    <ClCompile Include="render\vfx\VFXSceneGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\VFXScenePipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -289,6 +296,8 @@
     <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />
+    <None Include="..\..\resources\shaders\vfx\vfx_billboard_gpu.glsl" />
+    <None Include="..\..\resources\shaders\vfx\vfx_particle_sim.glsl" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">

@@ -46,7 +46,10 @@ namespace core
         void setCamera(const glm::mat4& view, const glm::mat4& projection,
                        const glm::vec3& cameraPos, float time) override;
 
-        // Draw commands
+        // Compute commands (call before render pass)
+        void recordComputeCommands(const vk::CommandBuffer& cmd) override;
+
+        // Draw commands (call during render pass)
         void recordDrawCommands(const vk::CommandBuffer& cmd) override;
 
         // Stats

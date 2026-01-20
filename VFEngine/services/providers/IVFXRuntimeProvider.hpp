@@ -38,6 +38,9 @@ namespace services
         virtual void setCamera(const glm::mat4& view, const glm::mat4& projection,
                                const glm::vec3& cameraPos, float time) = 0;
 
+        // Called before render pass to dispatch compute shaders (GPU mode)
+        virtual void recordComputeCommands(const vk::CommandBuffer& cmd) = 0;
+
         // Called during scene render pass to record VFX draw commands
         virtual void recordDrawCommands(const vk::CommandBuffer& cmd) = 0;
 

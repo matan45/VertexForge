@@ -494,6 +494,12 @@ namespace render
         {
             render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
 
+            // Dispatch VFX compute shaders BEFORE render pass (GPU particle simulation)
+            if (hasVFX)
+            {
+                vfxRuntimeProvider->recordComputeCommands(commandBuffer);
+            }
+
             // GPU-driven rendering
             if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {

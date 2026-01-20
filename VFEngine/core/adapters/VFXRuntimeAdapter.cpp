@@ -139,6 +139,14 @@ namespace core
         }
     }
 
+    void VFXRuntimeAdapter::recordComputeCommands(const vk::CommandBuffer& cmd)
+    {
+        if (renderer)
+        {
+            renderer->recordComputeCommands(cmd);
+        }
+    }
+
     void VFXRuntimeAdapter::recordDrawCommands(const vk::CommandBuffer& cmd)
     {
         if (renderer)
