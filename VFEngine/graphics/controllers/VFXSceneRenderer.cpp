@@ -249,6 +249,12 @@ namespace controllers
         auto it = instances.find(id);
         if (it != instances.end())
         {
+            // Wait for GPU to finish using the buffers
+            if (it->second.gpuDriven)
+            {
+                device.getLogicalDevice().waitIdle();
+            }
+
             // Free GPU resources if allocated
             if (it->second.gpuDriven && gpuBufferManager)
             {
@@ -262,6 +268,9 @@ namespace controllers
 
     void VFXSceneRenderer::destroyAllInstances()
     {
+        // Wait for GPU to finish using the buffers
+        device.getLogicalDevice().waitIdle();
+
         for (auto& [id, instance] : instances)
         {
             if (instance.gpuDriven && gpuBufferManager)
@@ -270,6 +279,13 @@ namespace controllers
             }
         }
         instances.clear();
+
+        // Reset particle buffer cleared flag so it gets cleared again on next use
+        if (gpuBufferManager)
+        {
+            gpuBufferManager->resetParticleBufferClearedFlag();
+        }
+
         loggerInfo("Destroyed all VFX instances");
     }
 

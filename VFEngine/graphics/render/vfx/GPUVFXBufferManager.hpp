@@ -67,6 +67,9 @@ namespace render::vfx
         uint32_t getAllocatedParticleCount() const { return allocatedParticleCount; }
         uint32_t getActiveEmitterCount() const { return activeEmitterCount; }
 
+        // Reset particle buffer cleared flag (call when all instances are destroyed)
+        void resetParticleBufferClearedFlag() { particleBufferCleared = false; }
+
     private:
         core::Device& device;
 

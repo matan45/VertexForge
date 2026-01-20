@@ -134,13 +134,14 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        if (vfxData.vfxPath.empty()) ImGui::BeginDisabled();
+        bool wasEmpty = vfxData.vfxPath.empty();
+        if (wasEmpty) ImGui::BeginDisabled();
         if (ImGui::Button("Clear##VFX"))
         {
             vfxData.vfxPath = "";
             changed = true;
         }
-        if (vfxData.vfxPath.empty()) ImGui::EndDisabled();
+        if (wasEmpty) ImGui::EndDisabled();
 
         return changed;
     }
