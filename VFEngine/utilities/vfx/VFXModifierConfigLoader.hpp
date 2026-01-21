@@ -62,6 +62,7 @@ namespace vfx
         // Traverse from Emitter to OutSystem, collecting modifier nodes in order
         uint32_t currentNodeId = emitter->id;
         std::vector<uint32_t> visited;
+        bool reachedOutput = false;
 
         while (currentNodeId != outSystem->id)
         {
@@ -94,6 +95,13 @@ namespace vfx
 
             if (!foundNext)
                 break;
+        }
+
+        // VK-238: Only return modifiers if the chain reaches Output node
+        reachedOutput = (currentNodeId == outSystem->id);
+        if (!reachedOutput)
+        {
+            chain.clear();  // Graph incomplete - no modifiers applied
         }
 
         return chain;
