@@ -7,8 +7,10 @@
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
+#include "vfx/VFXModifierTypes.hpp"
 #include "print/Logger.hpp"
 #include <random>
+#include <type_traits>
 
 namespace controllers
 {
@@ -497,7 +499,48 @@ namespace controllers
         gpuConfig.maxParticles = maxParticles;
         gpuConfig.seed = seed;
         gpuConfig.deltaTime = deltaTime;
-        gpuConfig.padding = 0.0f;
+
+        // VK-238: Initialize modifier data with defaults
+        gpuConfig.modifierFlags = 0;
+        gpuConfig.colorStart = cpuConfig.startColor;
+        gpuConfig.colorEnd = cpuConfig.startColor;
+        gpuConfig.sizeStartMult = 1.0f;
+        gpuConfig.sizeEndMult = 1.0f;
+        gpuConfig.speedStartMult = 1.0f;
+        gpuConfig.speedEndMult = 1.0f;
+        gpuConfig.angularVelocity = 0.0f;
+
+        // VK-238: Extract modifier settings from modifier chain
+        for (const auto& modifier : cpuConfig.modifiers.modifiers)
+        {
+            std::visit([&gpuConfig](const auto& mod) {
+                using T = std::decay_t<decltype(mod)>;
+                if constexpr (std::is_same_v<T, ::vfx::ColorOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::ColorOverLifetime;
+                    gpuConfig.colorStart = mod.startColor;
+                    gpuConfig.colorEnd = mod.endColor;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::SizeOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SizeOverLifetime;
+                    gpuConfig.sizeStartMult = mod.startMultiplier;
+                    gpuConfig.sizeEndMult = mod.endMultiplier;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::SpeedOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SpeedOverLifetime;
+                    gpuConfig.speedStartMult = mod.startMultiplier;
+                    gpuConfig.speedEndMult = mod.endMultiplier;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::RotationOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::RotationOverLifetime;
+                    gpuConfig.angularVelocity = glm::radians(mod.angularVelocity);
+                }
+            }, modifier);
+        }
+
         return gpuConfig;
     }
 

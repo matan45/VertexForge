@@ -14,8 +14,9 @@ namespace render::vfx
         float maxLifetime;
         glm::vec4 color;
         float size;
-        uint32_t flags;
-        glm::vec2 padding;
+        float rotation;         // VK-238: Rotation angle in radians
+        float initialSize;      // VK-238: For size modifier calculations
+        float initialSpeed;     // VK-238: For speed modifier calculations
     };
     static_assert(sizeof(GPUParticle) == 64, "GPUParticle must be 64 bytes for GPU alignment");
     static_assert(offsetof(GPUParticle, position) == 0, "GPUParticle::position offset mismatch");
@@ -24,11 +25,22 @@ namespace render::vfx
     static_assert(offsetof(GPUParticle, maxLifetime) == 28, "GPUParticle::maxLifetime offset mismatch");
     static_assert(offsetof(GPUParticle, color) == 32, "GPUParticle::color offset mismatch");
     static_assert(offsetof(GPUParticle, size) == 48, "GPUParticle::size offset mismatch");
-    static_assert(offsetof(GPUParticle, flags) == 52, "GPUParticle::flags offset mismatch");
-    static_assert(offsetof(GPUParticle, padding) == 56, "GPUParticle::padding offset mismatch");
+    static_assert(offsetof(GPUParticle, rotation) == 52, "GPUParticle::rotation offset mismatch");
+    static_assert(offsetof(GPUParticle, initialSize) == 56, "GPUParticle::initialSize offset mismatch");
+    static_assert(offsetof(GPUParticle, initialSpeed) == 60, "GPUParticle::initialSpeed offset mismatch");
+
+    // VK-238: Modifier flags for GPU
+    namespace ModifierFlags
+    {
+        inline constexpr uint32_t ColorOverLifetime = 1 << 0;
+        inline constexpr uint32_t SizeOverLifetime = 1 << 1;
+        inline constexpr uint32_t SpeedOverLifetime = 1 << 2;
+        inline constexpr uint32_t RotationOverLifetime = 1 << 3;
+    }
 
     struct alignas(16) GPUEmitterConfig
     {
+        // Original fields (64 bytes)
         glm::vec4 emitDirection;
         glm::vec4 startColor;
         float spawnRate;
@@ -38,9 +50,21 @@ namespace render::vfx
         uint32_t maxParticles;
         uint32_t seed;
         float deltaTime;
-        float padding;
+        uint32_t modifierFlags;  // VK-238: Bitmask of active modifiers
+
+        // VK-238: Modifier data (64 bytes)
+        glm::vec4 colorStart;           // Color over lifetime start
+        glm::vec4 colorEnd;             // Color over lifetime end
+        float sizeStartMult;            // Size over lifetime start multiplier
+        float sizeEndMult;              // Size over lifetime end multiplier
+        float speedStartMult;           // Speed over lifetime start multiplier
+        float speedEndMult;             // Speed over lifetime end multiplier
+        float angularVelocity;          // Rotation over lifetime (radians/sec)
+        float modPadding1;
+        float modPadding2;
+        float modPadding3;
     };
-    static_assert(sizeof(GPUEmitterConfig) == 64, "GPUEmitterConfig must be 64 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 128, "GPUEmitterConfig must be 128 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -50,7 +74,14 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, maxParticles) == 48, "GPUEmitterConfig::maxParticles offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, seed) == 52, "GPUEmitterConfig::seed offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, deltaTime) == 56, "GPUEmitterConfig::deltaTime offset mismatch");
-    static_assert(offsetof(GPUEmitterConfig, padding) == 60, "GPUEmitterConfig::padding offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, modifierFlags) == 60, "GPUEmitterConfig::modifierFlags offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, colorStart) == 64, "GPUEmitterConfig::colorStart offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, colorEnd) == 80, "GPUEmitterConfig::colorEnd offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, sizeStartMult) == 96, "GPUEmitterConfig::sizeStartMult offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, sizeEndMult) == 100, "GPUEmitterConfig::sizeEndMult offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, speedStartMult) == 104, "GPUEmitterConfig::speedStartMult offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, speedEndMult) == 108, "GPUEmitterConfig::speedEndMult offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, angularVelocity) == 112, "GPUEmitterConfig::angularVelocity offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

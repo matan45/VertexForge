@@ -53,6 +53,7 @@ namespace controllers
         config.startColor = currentParams.startColor;
         config.emitDirection = currentParams.emitDirection;
         config.texturePath = currentParams.texturePath;
+        config.modifiers = currentParams.modifiers;  // VK-238
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
@@ -124,6 +125,7 @@ namespace controllers
             config.startColor = params.startColor;
             config.emitDirection = params.emitDirection;
             config.texturePath = params.texturePath;
+            config.modifiers = params.modifiers;  // VK-238
             particleSystem->setEmitterConfig(config);
         }
 

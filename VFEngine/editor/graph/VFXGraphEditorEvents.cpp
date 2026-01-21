@@ -20,13 +20,17 @@ namespace editor::graph {
         bool startIsOutput = isOutputPin(startPinId);
         bool endIsOutput = isOutputPin(endPinId);
 
+        // Can't connect same pin types
         if (startIsOutput == endIsOutput) return false;
 
         const vfx::VFXNode* sourceNode = startIsOutput ? startNode : endNode;
         const vfx::VFXNode* targetNode = startIsOutput ? endNode : startNode;
 
-        if (sourceNode->type != vfx::VFXNodeType::Emitter) return false;
-        if (targetNode->type != vfx::VFXNodeType::OutSystem) return false;
+        // VK-238: Source must have an output pin (Emitter or Modifier)
+        if (!vfx::hasOutputPin(sourceNode->type)) return false;
+
+        // VK-238: Target must have an input pin (OutSystem or Modifier)
+        if (!vfx::hasInputPin(targetNode->type)) return false;
 
         return true;
     }
@@ -154,6 +158,54 @@ namespace editor::graph {
         ed::EndDelete();
     }
 
+    // VK-238: Helper function to create a modifier node with default properties
+    static void initializeModifierProperties(vfx::VFXNode& node) {
+        switch (node.type) {
+            case vfx::VFXNodeType::ColorOverLifetime:
+                node.properties["startColor"] = vfx::VFXProperty{
+                    "startColor", vfx::VFXPropertyType::Color,
+                    vfx::ModifierDefaults::COLOR_START, 0.0f, 1.0f
+                };
+                node.properties["endColor"] = vfx::VFXProperty{
+                    "endColor", vfx::VFXPropertyType::Color,
+                    vfx::ModifierDefaults::COLOR_END, 0.0f, 1.0f
+                };
+                break;
+
+            case vfx::VFXNodeType::SizeOverLifetime:
+                node.properties["startMultiplier"] = vfx::VFXProperty{
+                    "startMultiplier", vfx::VFXPropertyType::Float,
+                    vfx::ModifierDefaults::SIZE_START_MULTIPLIER, 0.0f, 10.0f
+                };
+                node.properties["endMultiplier"] = vfx::VFXProperty{
+                    "endMultiplier", vfx::VFXPropertyType::Float,
+                    vfx::ModifierDefaults::SIZE_END_MULTIPLIER, 0.0f, 10.0f
+                };
+                break;
+
+            case vfx::VFXNodeType::SpeedOverLifetime:
+                node.properties["startMultiplier"] = vfx::VFXProperty{
+                    "startMultiplier", vfx::VFXPropertyType::Float,
+                    vfx::ModifierDefaults::SPEED_START_MULTIPLIER, 0.0f, 10.0f
+                };
+                node.properties["endMultiplier"] = vfx::VFXProperty{
+                    "endMultiplier", vfx::VFXPropertyType::Float,
+                    vfx::ModifierDefaults::SPEED_END_MULTIPLIER, 0.0f, 10.0f
+                };
+                break;
+
+            case vfx::VFXNodeType::RotationOverLifetime:
+                node.properties["angularVelocity"] = vfx::VFXProperty{
+                    "angularVelocity", vfx::VFXPropertyType::Float,
+                    vfx::ModifierDefaults::ANGULAR_VELOCITY, -720.0f, 720.0f
+                };
+                break;
+
+            default:
+                break;
+        }
+    }
+
     void VFXGraphEditor::handleContextMenu() {
         if (showContextMenu) {
             ImGui::OpenPopup("VFXContextMenu");
@@ -161,10 +213,53 @@ namespace editor::graph {
         }
 
         if (ImGui::BeginPopup("VFXContextMenu")) {
-            // Part 1: No new nodes can be added from context menu
-            ImGui::TextDisabled("No nodes available");
+            ImGui::TextDisabled("Add Node");
             ImGui::Separator();
-            ImGui::TextDisabled("(Part 1 - Emitter and Output only)");
+
+            // VK-238: Modifiers submenu
+            if (ImGui::BeginMenu("Modifiers")) {
+                if (ImGui::MenuItem("Color Over Lifetime")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::ColorOverLifetime;
+                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ColorOverLifetime);
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeModifierProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Size Over Lifetime")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::SizeOverLifetime;
+                    newNode.name = getNodeTypeName(vfx::VFXNodeType::SizeOverLifetime);
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeModifierProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Speed Over Lifetime")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::SpeedOverLifetime;
+                    newNode.name = getNodeTypeName(vfx::VFXNodeType::SpeedOverLifetime);
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeModifierProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Rotation Over Lifetime")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::RotationOverLifetime;
+                    newNode.name = getNodeTypeName(vfx::VFXNodeType::RotationOverLifetime);
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeModifierProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                ImGui::EndMenu();
+            }
 
             ImGui::EndPopup();
         }

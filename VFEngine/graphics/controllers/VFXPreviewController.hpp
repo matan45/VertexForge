@@ -2,6 +2,7 @@
 
 #include "../render/vfx/VFXBillboardTypes.hpp"
 #include "../core/OffScreen.hpp"
+#include <vfx/VFXModifierTypes.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -30,6 +31,9 @@ namespace controllers
         glm::vec4 startColor{1.0f, 1.0f, 1.0f, 1.0f};
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};
         std::string texturePath;
+
+        // Modifier chain (VK-238)
+        ::vfx::VFXModifierChain modifiers;
     };
 
     class VFXPreviewController

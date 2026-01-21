@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VFXBillboardTypes.hpp"
+#include "../../../utilities/vfx/VFXModifierTypes.hpp"
 #include <vector>
 #include <random>
 
@@ -38,5 +39,12 @@ namespace render::vfx
         void spawnParticle();
         void updateParticle(VFXParticle& particle, float deltaTime);
         VFXParticle* findInactiveParticle();
+
+        // Modifier application (VK-238)
+        void applyModifiers(VFXParticle& particle, float lifetimeRatio, float deltaTime);
+        void applyModifier(VFXParticle& particle, const ::vfx::ColorOverLifetimeConfig& mod, float t, float deltaTime);
+        void applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float deltaTime);
+        void applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float deltaTime);
+        void applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime);
     };
 }

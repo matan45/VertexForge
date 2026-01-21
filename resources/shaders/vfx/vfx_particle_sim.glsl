@@ -13,12 +13,20 @@ struct GPUParticle
     float maxLifetime;      // Total lifetime in seconds
     vec4 color;             // RGBA color
     float size;             // Particle scale
-    uint flags;             // Bit 0 = active
-    vec2 padding;           // Alignment
+    float rotation;         // VK-238: Rotation angle in radians
+    float initialSize;      // VK-238: Initial size for modifier calculations
+    float initialSpeed;     // VK-238: Initial speed for modifier calculations
 };
+
+// VK-238: Modifier flags (must match ModifierFlags namespace in C++)
+const uint MODIFIER_COLOR_OVER_LIFETIME = 1u;
+const uint MODIFIER_SIZE_OVER_LIFETIME = 2u;
+const uint MODIFIER_SPEED_OVER_LIFETIME = 4u;
+const uint MODIFIER_ROTATION_OVER_LIFETIME = 8u;
 
 struct GPUEmitterConfig
 {
+    // Original fields (64 bytes)
     vec4 emitDirection;     // xyz = direction, w = spread angle (radians)
     vec4 startColor;        // Initial RGBA color
     float spawnRate;        // Particles per second
@@ -28,7 +36,19 @@ struct GPUEmitterConfig
     uint maxParticles;      // Max particles for this emitter
     uint seed;              // Random seed (per frame)
     float deltaTime;        // Frame delta time
-    float padding;          // Alignment
+    uint modifierFlags;     // VK-238: Bitmask of active modifiers
+
+    // VK-238: Modifier data (64 bytes)
+    vec4 colorStart;        // Color over lifetime start
+    vec4 colorEnd;          // Color over lifetime end
+    float sizeStartMult;    // Size over lifetime start multiplier
+    float sizeEndMult;      // Size over lifetime end multiplier
+    float speedStartMult;   // Speed over lifetime start multiplier
+    float speedEndMult;     // Speed over lifetime end multiplier
+    float angularVelocity;  // Rotation over lifetime (radians/sec)
+    float modPadding1;
+    float modPadding2;
+    float modPadding3;
 };
 
 struct GPUEmitterState
@@ -113,6 +133,41 @@ vec3 randomInCone(inout uint seed, vec3 baseDir, float spreadAngle)
     return normalize(baseDir * cosPhi + offset);
 }
 
+// VK-238: Apply modifiers based on lifetime ratio
+void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetimeRatio)
+{
+    // Color Over Lifetime
+    if ((config.modifierFlags & MODIFIER_COLOR_OVER_LIFETIME) != 0u)
+    {
+        p.color = mix(config.colorStart, config.colorEnd, lifetimeRatio);
+    }
+
+    // Size Over Lifetime
+    if ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u)
+    {
+        float sizeMult = mix(config.sizeStartMult, config.sizeEndMult, lifetimeRatio);
+        p.size = p.initialSize * sizeMult;
+    }
+
+    // Speed Over Lifetime
+    if ((config.modifierFlags & MODIFIER_SPEED_OVER_LIFETIME) != 0u)
+    {
+        float speedMult = mix(config.speedStartMult, config.speedEndMult, lifetimeRatio);
+        float currentSpeed = length(p.velocity);
+        if (currentSpeed > 0.001)
+        {
+            vec3 dir = p.velocity / currentSpeed;
+            p.velocity = dir * p.initialSpeed * speedMult;
+        }
+    }
+
+    // Rotation Over Lifetime
+    if ((config.modifierFlags & MODIFIER_ROTATION_OVER_LIFETIME) != 0u)
+    {
+        p.rotation += config.angularVelocity * config.deltaTime;
+    }
+}
+
 void main()
 {
     uint localIdx = gl_GlobalInvocationID.x;
@@ -140,7 +195,7 @@ void main()
     // Random seed unique to this particle and frame
     uint seed = pcg_hash(particleIdx ^ (pc.frameNumber * 1000000u) ^ config.seed);
 
-    bool wasActive = (p.flags & FLAG_ACTIVE) != 0u;
+    bool wasActive = (p.size > 0.0); // VK-238: Use size > 0 as active check (flags removed)
     bool isActive = wasActive;
 
     // Phase 1: Update existing active particles
@@ -150,19 +205,28 @@ void main()
 
         if (p.lifetime >= p.maxLifetime)
         {
-            p.flags &= ~FLAG_ACTIVE;
+            p.size = 0.0; // Mark as inactive
             isActive = false;
         }
         else
         {
             p.position += p.velocity * config.deltaTime;
 
-            // Fade alpha near end of life
+            // VK-238: Apply modifiers
             float lifetimeRatio = p.lifetime / p.maxLifetime;
-            if (lifetimeRatio > FADE_START)
+
+            if (config.modifierFlags != 0u)
             {
-                float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
-                p.color.a = config.startColor.a * (1.0 - fadeProgress);
+                applyModifiers(p, config, lifetimeRatio);
+            }
+            else
+            {
+                // Default behavior: Fade alpha near end of life
+                if (lifetimeRatio > FADE_START)
+                {
+                    float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
+                    p.color.a = config.startColor.a * (1.0 - fadeProgress);
+                }
             }
         }
     }
@@ -174,7 +238,6 @@ void main()
 
         if (spawnSlot < spawnThisFrame)
         {
-            p.flags |= FLAG_ACTIVE;
             isActive = true;
 
             // Spawn at emitter origin
@@ -183,6 +246,11 @@ void main()
             p.maxLifetime = config.lifetime;
             p.size = config.startSize;
             p.color = config.startColor;
+            p.rotation = 0.0;  // VK-238: Reset rotation
+
+            // VK-238: Store initial values for modifier calculations
+            p.initialSize = config.startSize;
+            p.initialSpeed = config.startSpeed;
 
             // Initial velocity with random spread
             vec3 baseDir = normalize(config.emitDirection.xyz);

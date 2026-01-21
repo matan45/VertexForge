@@ -1,6 +1,7 @@
 #include "VFXParticleSystem.hpp"
 #include <algorithm>
 #include <chrono>
+#include <glm/gtc/constants.hpp>
 
 namespace render::vfx
 {
@@ -65,6 +66,7 @@ namespace render::vfx
                 instance.size = particle.size;
                 instance.color = particle.color;
                 instance.lifetimeRatio = particle.lifetime / particle.maxLifetime;
+                instance.rotation = particle.rotation;
                 instances.push_back(instance);
             }
         }
@@ -92,6 +94,12 @@ namespace render::vfx
         particle->maxLifetime = config.lifetime;
         particle->size = config.startSize;
         particle->color = config.startColor;
+        particle->rotation = 0.0f;
+
+        // Store initial values for modifier calculations (VK-238)
+        particle->initialColor = config.startColor;
+        particle->initialSize = config.startSize;
+        particle->initialSpeed = config.startSpeed;
 
         glm::vec3 direction = glm::normalize(config.emitDirection);
 
@@ -114,16 +122,26 @@ namespace render::vfx
             return;
         }
 
-        particle.position += particle.velocity * deltaTime;
-
         float lifetimeRatio = particle.lifetime / particle.maxLifetime;
 
-        float fadeStart = 0.7f;
-        if (lifetimeRatio > fadeStart)
+        // Apply modifiers (VK-238)
+        if (!config.modifiers.empty())
         {
-            float fadeProgress = (lifetimeRatio - fadeStart) / (1.0f - fadeStart);
-            particle.color.a = config.startColor.a * (1.0f - fadeProgress);
+            applyModifiers(particle, lifetimeRatio, deltaTime);
         }
+        else
+        {
+            // Default behavior when no modifiers: fade out in last 30% of lifetime
+            float fadeStart = 0.7f;
+            if (lifetimeRatio > fadeStart)
+            {
+                float fadeProgress = (lifetimeRatio - fadeStart) / (1.0f - fadeStart);
+                particle.color.a = config.startColor.a * (1.0f - fadeProgress);
+            }
+        }
+
+        // Update position based on (potentially modified) velocity
+        particle.position += particle.velocity * deltaTime;
     }
 
     VFXParticle* VFXParticleSystem::findInactiveParticle()
@@ -136,5 +154,47 @@ namespace render::vfx
             }
         }
         return nullptr;
+    }
+
+    // Modifier application (VK-238)
+    void VFXParticleSystem::applyModifiers(VFXParticle& particle, float lifetimeRatio, float deltaTime)
+    {
+        for (const auto& modifier : config.modifiers.modifiers)
+        {
+            std::visit([&](const auto& mod) {
+                applyModifier(particle, mod, lifetimeRatio, deltaTime);
+            }, modifier);
+        }
+    }
+
+    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::ColorOverLifetimeConfig& mod, float t, float /*deltaTime*/)
+    {
+        // Interpolate between start and end color based on lifetime ratio
+        particle.color = glm::mix(mod.startColor, mod.endColor, t);
+    }
+
+    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float /*deltaTime*/)
+    {
+        // Interpolate size multiplier and apply to initial size
+        float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
+        particle.size = particle.initialSize * multiplier;
+    }
+
+    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float /*deltaTime*/)
+    {
+        // Interpolate speed multiplier and apply to velocity
+        float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
+        float currentSpeed = glm::length(particle.velocity);
+        if (currentSpeed > 0.001f)
+        {
+            glm::vec3 direction = particle.velocity / currentSpeed;
+            particle.velocity = direction * particle.initialSpeed * multiplier;
+        }
+    }
+
+    void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float /*t*/, float deltaTime)
+    {
+        // Apply angular velocity (convert degrees to radians)
+        particle.rotation += glm::radians(mod.angularVelocity) * deltaTime;
     }
 }

@@ -7,6 +7,7 @@ layout(location = 1) in vec2 inTexCoord;
 layout(location = 2) in vec4 inWorldPosAndSize;
 layout(location = 3) in vec4 inColor;
 layout(location = 4) in float inLifetimeRatio;
+layout(location = 5) in float inRotation;  // VK-238: Rotation angle in radians
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
@@ -23,12 +24,20 @@ void main() {
     vec3 worldPos = inWorldPosAndSize.xyz;
     float particleSize = inWorldPosAndSize.w;
 
+    // VK-238: Apply rotation to local quad position before billboard transform
+    float cosR = cos(inRotation);
+    float sinR = sin(inRotation);
+    vec2 rotatedPos = vec2(
+        inPosition.x * cosR - inPosition.y * sinR,
+        inPosition.x * sinR + inPosition.y * cosR
+    );
+
     vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
     vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
 
     vec3 vertexPos = worldPos
-        + cameraRight * inPosition.x * particleSize
-        + cameraUp * inPosition.y * particleSize;
+        + cameraRight * rotatedPos.x * particleSize
+        + cameraUp * rotatedPos.y * particleSize;
 
     gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
 

@@ -51,6 +51,7 @@ namespace core
         controllerParams.startColor = params.startColor;
         controllerParams.emitDirection = params.emitDirection;
         controllerParams.texturePath = params.texturePath;
+        controllerParams.modifiers = params.modifiers;  // VK-238
 
         controller->setParams(controllerParams);
     }

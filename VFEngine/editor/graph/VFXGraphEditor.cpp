@@ -156,9 +156,18 @@ namespace editor::graph
         switch (type)
         {
         case vfx::VFXNodeType::Emitter:
-            return IM_COL32(100, 180, 100, 255);
+            return IM_COL32(100, 180, 100, 255);  // Green
         case vfx::VFXNodeType::OutSystem:
-            return IM_COL32(180, 100, 100, 255);
+            return IM_COL32(180, 100, 100, 255);  // Red
+        // Modifier nodes (VK-238)
+        case vfx::VFXNodeType::ColorOverLifetime:
+            return IM_COL32(180, 120, 200, 255);  // Purple
+        case vfx::VFXNodeType::SizeOverLifetime:
+            return IM_COL32(200, 160, 80, 255);   // Orange
+        case vfx::VFXNodeType::SpeedOverLifetime:
+            return IM_COL32(80, 160, 200, 255);   // Blue
+        case vfx::VFXNodeType::RotationOverLifetime:
+            return IM_COL32(200, 200, 80, 255);   // Yellow
         default:
             return IM_COL32(100, 100, 100, 255);
         }
@@ -170,6 +179,11 @@ namespace editor::graph
         {
         case vfx::VFXNodeType::Emitter: return "Emitter";
         case vfx::VFXNodeType::OutSystem: return "Output";
+        // Modifier nodes (VK-238)
+        case vfx::VFXNodeType::ColorOverLifetime: return "Color Over Lifetime";
+        case vfx::VFXNodeType::SizeOverLifetime: return "Size Over Lifetime";
+        case vfx::VFXNodeType::SpeedOverLifetime: return "Speed Over Lifetime";
+        case vfx::VFXNodeType::RotationOverLifetime: return "Rotation Over Lifetime";
         default: return "Unknown";
         }
     }

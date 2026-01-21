@@ -2,6 +2,7 @@
 
 #include "VFXTypes.hpp"
 #include "VFXAsset.hpp"
+#include "VFXModifierConfigLoader.hpp"
 #include <optional>
 #include <string_view>
 
@@ -113,6 +114,9 @@ namespace vfx
 
         // Texture path
         config.texturePath = getString(*emitterNode, "texture", "");
+
+        // Load modifier chain (VK-238)
+        config.modifiers = VFXModifierConfigLoader::fromGraph(data.graph);
 
         return config;
     }

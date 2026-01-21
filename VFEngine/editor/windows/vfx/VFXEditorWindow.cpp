@@ -3,6 +3,7 @@
 #include "../../graph/VFXGraphEditor.hpp"
 #include <vfx/VFXAsset.hpp>
 #include <vfx/VFXTypes.hpp>
+#include <vfx/VFXModifierConfigLoader.hpp>
 #include <providers/IVFXPreviewProvider.hpp>
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
@@ -145,6 +146,9 @@ namespace windows
         params.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
         params.texturePath = getString(*emitterNode, "texture", "");
+
+        // VK-238: Extract modifier chain from graph
+        params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData->graph);
 
         previewPanel->setParams(params);
     }

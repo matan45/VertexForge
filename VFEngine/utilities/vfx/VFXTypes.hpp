@@ -25,12 +25,38 @@ namespace vfx
     // Property value variant - holds any supported property type
     using VFXPropertyValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4, int32_t, bool, std::string>;
 
-    // VFX Node types - Part 1 only has Emitter and OutSystem
+    // VFX Node types
     enum class VFXNodeType : uint8_t
     {
         Emitter, // Start node - particle spawn configuration
-        OutSystem // End node - final output of the VFX system
+        OutSystem, // End node - final output of the VFX system
+        // Modifier nodes (VK-238)
+        ColorOverLifetime, // Interpolates color from start to end over particle lifetime
+        SizeOverLifetime, // Scales size from start to end multiplier over particle lifetime
+        SpeedOverLifetime, // Scales velocity from start to end multiplier over particle lifetime
+        RotationOverLifetime // Applies angular velocity for spinning particles
     };
+
+    // Helper function to check if a node type is a modifier
+    inline bool isModifierNode(VFXNodeType type)
+    {
+        return type == VFXNodeType::ColorOverLifetime ||
+               type == VFXNodeType::SizeOverLifetime ||
+               type == VFXNodeType::SpeedOverLifetime ||
+               type == VFXNodeType::RotationOverLifetime;
+    }
+
+    // Check if node type has an input pin (all except Emitter)
+    inline bool hasInputPin(VFXNodeType type)
+    {
+        return type != VFXNodeType::Emitter;
+    }
+
+    // Check if node type has an output pin (all except OutSystem)
+    inline bool hasOutputPin(VFXNodeType type)
+    {
+        return type != VFXNodeType::OutSystem;
+    }
 
     // A property definition for a node
     struct VFXProperty
@@ -100,6 +126,25 @@ namespace vfx
         inline constexpr float START_SIZE = 1.0f; // scale
         inline constexpr float START_SPEED = 1.0f; // units per second
         inline constexpr bool LOOPING = true; // whether VFX loops
+    }
+
+    // Default values for Modifier nodes (VK-238)
+    namespace ModifierDefaults
+    {
+        // Color Over Lifetime
+        inline const glm::vec4 COLOR_START{1.0f, 1.0f, 1.0f, 1.0f};
+        inline const glm::vec4 COLOR_END{1.0f, 1.0f, 1.0f, 0.0f}; // Fade out alpha
+
+        // Size Over Lifetime
+        inline constexpr float SIZE_START_MULTIPLIER = 1.0f;
+        inline constexpr float SIZE_END_MULTIPLIER = 0.0f; // Shrink to nothing
+
+        // Speed Over Lifetime
+        inline constexpr float SPEED_START_MULTIPLIER = 1.0f;
+        inline constexpr float SPEED_END_MULTIPLIER = 0.5f; // Slow down
+
+        // Rotation Over Lifetime
+        inline constexpr float ANGULAR_VELOCITY = 0.0f; // degrees per second
     }
 
     // Type conversion utilities
