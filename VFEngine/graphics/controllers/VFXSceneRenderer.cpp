@@ -232,6 +232,20 @@ namespace controllers
 
         instances[id] = std::move(instance);
 
+        // Set texture on pipelines if config has a texture path
+        const auto& storedConfig = instances[id].config;
+        if (!storedConfig.texturePath.empty())
+        {
+            if (cpuPipeline)
+            {
+                cpuPipeline->setTexture(storedConfig.texturePath);
+            }
+            if (gpuRenderPipeline)
+            {
+                gpuRenderPipeline->setTexture(storedConfig.texturePath);
+            }
+        }
+
         loggerInfo("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
         return id;

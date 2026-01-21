@@ -3,11 +3,13 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/Texture.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
+#include <filesystem>
 
 namespace render::vfx
 {
@@ -90,6 +92,9 @@ namespace render::vfx
             dev.freeMemory(instanceBufferMemory);
             instanceBuffer = nullptr;
         }
+
+        customTexture.reset();
+        currentTexturePath.clear();
 
         if (textureSampler) dev.destroySampler(textureSampler);
         if (defaultTextureImageView) dev.destroyImageView(defaultTextureImageView);
@@ -178,8 +183,16 @@ namespace render::vfx
 
         vk::DescriptorImageInfo textureImageInfo{};
         textureImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        textureImageInfo.imageView = defaultTextureImageView;
-        textureImageInfo.sampler = textureSampler;
+        if (customTexture)
+        {
+            textureImageInfo.imageView = customTexture->getImageView();
+            textureImageInfo.sampler = customTexture->getSampler();
+        }
+        else
+        {
+            textureImageInfo.imageView = defaultTextureImageView;
+            textureImageInfo.sampler = textureSampler;
+        }
 
         vk::WriteDescriptorSet textureWrite{};
         textureWrite.dstSet = descriptorSet;
@@ -410,6 +423,45 @@ namespace render::vfx
             std::memcpy(data, instances.data(), bufferSize);
             device.getLogicalDevice().unmapMemory(instanceBufferMemory);
         }
+    }
+
+    void VFXScenePipeline::setTexture(const std::string& texturePath)
+    {
+        if (texturePath == currentTexturePath)
+        {
+            return;
+        }
+
+        device.getLogicalDevice().waitIdle();
+
+        customTexture.reset();
+        currentTexturePath.clear();
+
+        if (texturePath.empty() || !std::filesystem::exists(texturePath))
+        {
+            if (!texturePath.empty())
+            {
+                loggerWarning("VFX scene texture not found: {}", texturePath);
+            }
+            updateDescriptorSet();
+            return;
+        }
+
+        try
+        {
+            customTexture = std::make_unique<core::Texture>(device);
+            customTexture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
+            currentTexturePath = texturePath;
+            loggerInfo("VFX scene texture loaded: {}", texturePath);
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("Failed to load VFX scene texture '{}': {}", texturePath, e.what());
+            customTexture.reset();
+            currentTexturePath.clear();
+        }
+
+        updateDescriptorSet();
     }
 
     void VFXScenePipeline::recordCommandsInline(const vk::CommandBuffer& commandBuffer) const
