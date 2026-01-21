@@ -80,9 +80,9 @@ namespace render::vfx
         float speedStartMult;           // Speed over lifetime start multiplier
         float speedEndMult;             // Speed over lifetime end multiplier
         float angularVelocity;          // Rotation over lifetime (radians/sec)
-        float modPadding1;
-        float modPadding2;
-        float modPadding3;
+        float modPadding1 = 0.0f;
+        float modPadding2 = 0.0f;
+        float modPadding3 = 0.0f;
 
         // VK-239: Force data (96 bytes)
         glm::vec4 gravityDir;           // xyz = normalized direction, w = strength
@@ -95,7 +95,7 @@ namespace render::vfx
         // VK-240: Shape data (32 bytes)
         glm::vec4 shapeDimensions;      // Shape-specific: Sphere(r), Cone(r,h,angle), Box(hx,hy,hz), Circle(r,arc)
         uint32_t shapeFlags;            // Shape type and emit flags (bits 8-13 of modifierFlags moved here for clarity)
-        float shapePadding[3];          // Alignment padding
+        float shapePadding[3] = {0.0f, 0.0f, 0.0f};  // Alignment padding
     };
     static_assert(sizeof(GPUEmitterConfig) == 256, "GPUEmitterConfig must be 256 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -136,7 +136,7 @@ namespace render::vfx
         float spawnAccumulator;
         uint32_t flags;
         uint32_t spawnCounter;
-        uint32_t padding;
+        uint32_t padding = 0;
     };
     static_assert(sizeof(GPUEmitterState) == 96, "GPUEmitterState must be 96 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterState, worldTransform) == 0, "GPUEmitterState::worldTransform offset mismatch");

@@ -110,6 +110,8 @@ namespace render::vfx
         // Generate direction based on shape config (VK-240)
         glm::vec3 direction = generateDirectionFromShape(particle->position);
 
+        // Store initial direction for speed modifier (prevents no-op when velocity becomes zero)
+        particle->initialDirection = direction;
         particle->velocity = direction * config.startSpeed;
     }
 
@@ -189,14 +191,10 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        // Interpolate speed multiplier and apply to velocity
+        // Interpolate speed multiplier and apply to velocity using stored initial direction
+        // This ensures speed modifier works even if forces reduce velocity to zero
         float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
-        float currentSpeed = glm::length(particle.velocity);
-        if (currentSpeed > 0.001f)
-        {
-            glm::vec3 direction = particle.velocity / currentSpeed;
-            particle.velocity = direction * particle.initialSpeed * multiplier;
-        }
+        particle.velocity = particle.initialDirection * particle.initialSpeed * multiplier;
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float /*t*/, float deltaTime)

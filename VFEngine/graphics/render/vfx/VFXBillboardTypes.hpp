@@ -25,6 +25,7 @@ namespace render::vfx
         glm::vec4 initialColor{1.0f};
         float initialSize = 1.0f;
         float initialSpeed = 1.0f;
+        glm::vec3 initialDirection{0.0f, 1.0f, 0.0f};  // Stored at spawn for speed modifier
     };
 
     struct VFXInstanceData

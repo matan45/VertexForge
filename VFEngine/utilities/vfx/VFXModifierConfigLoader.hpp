@@ -3,6 +3,7 @@
 #include "VFXTypes.hpp"
 #include "VFXModifierTypes.hpp"
 #include <vector>
+#include <unordered_set>
 
 namespace vfx
 {
@@ -53,33 +54,42 @@ namespace vfx
         // Start from Emitter node
         const VFXNode* emitter = graph.findEmitterNode();
         if (!emitter)
+        {
             return chain;
+        }
 
         const VFXNode* outSystem = graph.findOutSystemNode();
         if (!outSystem)
+        {
             return chain;
+        }
 
         // Traverse from Emitter to OutSystem, collecting modifier nodes in order
         uint32_t currentNodeId = emitter->id;
-        std::vector<uint32_t> visited;
-        bool reachedOutput = false;
+        std::unordered_set<uint32_t> visited;  // O(1) lookup for cycle detection
 
         while (currentNodeId != outSystem->id)
         {
-            // Prevent infinite loops
-            if (std::find(visited.begin(), visited.end(), currentNodeId) != visited.end())
-                break;
-            visited.push_back(currentNodeId);
+            // Prevent infinite loops - cycle detection
+            if (visited.count(currentNodeId) > 0)
+            {
+                chain.clear();
+                return chain;
+            }
+            visited.insert(currentNodeId);
 
-            // Find outgoing link from current node
+            // Find outgoing link from current node (only follow "Input" links, not "Shape" links)
             bool foundNext = false;
             for (const auto& link : graph.links)
             {
-                if (link.sourceNodeId == currentNodeId)
+                if (link.sourceNodeId == currentNodeId && link.targetPin != "Shape")
                 {
                     const VFXNode* targetNode = graph.findNode(link.targetNodeId);
                     if (!targetNode)
-                        break;
+                    {
+                        chain.clear();
+                        return chain;
+                    }
 
                     // If it's a modifier, add to chain and continue
                     if (isModifierNode(targetNode->type))
@@ -94,14 +104,10 @@ namespace vfx
             }
 
             if (!foundNext)
-                break;
-        }
-
-        // VK-238: Only return modifiers if the chain reaches Output node
-        reachedOutput = (currentNodeId == outSystem->id);
-        if (!reachedOutput)
-        {
-            chain.clear();  // Graph incomplete - no modifiers applied
+            {
+                chain.clear();
+                return chain;
+            }
         }
 
         return chain;

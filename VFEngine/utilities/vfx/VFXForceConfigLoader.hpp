@@ -3,6 +3,8 @@
 #include "VFXTypes.hpp"
 #include "VFXForceTypes.hpp"
 #include <vector>
+#include <unordered_set>
+#include <algorithm>
 
 namespace vfx
 {
@@ -55,33 +57,42 @@ namespace vfx
         // Start from Emitter node
         const VFXNode* emitter = graph.findEmitterNode();
         if (!emitter)
+        {
             return chain;
+        }
 
         const VFXNode* outSystem = graph.findOutSystemNode();
         if (!outSystem)
+        {
             return chain;
+        }
 
         // Traverse from Emitter to OutSystem, collecting force nodes in order
         uint32_t currentNodeId = emitter->id;
-        std::vector<uint32_t> visited;
-        bool reachedOutput = false;
+        std::unordered_set<uint32_t> visited;  // O(1) lookup for cycle detection
 
         while (currentNodeId != outSystem->id)
         {
-            // Prevent infinite loops
-            if (std::find(visited.begin(), visited.end(), currentNodeId) != visited.end())
-                break;
-            visited.push_back(currentNodeId);
+            // Prevent infinite loops - cycle detection
+            if (visited.count(currentNodeId) > 0)
+            {
+                chain.clear();
+                return chain;
+            }
+            visited.insert(currentNodeId);
 
-            // Find outgoing link from current node
+            // Find outgoing link from current node (only follow "Input" links, not "Shape" links)
             bool foundNext = false;
             for (const auto& link : graph.links)
             {
-                if (link.sourceNodeId == currentNodeId)
+                if (link.sourceNodeId == currentNodeId && link.targetPin != "Shape")
                 {
                     const VFXNode* targetNode = graph.findNode(link.targetNodeId);
                     if (!targetNode)
-                        break;
+                    {
+                        chain.clear();
+                        return chain;
+                    }
 
                     // If it's a force node, add to chain
                     if (isForceNode(targetNode->type))
@@ -96,14 +107,10 @@ namespace vfx
             }
 
             if (!foundNext)
-                break;
-        }
-
-        // Only return forces if the chain reaches Output node
-        reachedOutput = (currentNodeId == outSystem->id);
-        if (!reachedOutput)
-        {
-            chain.clear();  // Graph incomplete - no forces applied
+            {
+                chain.clear();
+                return chain;
+            }
         }
 
         return chain;
@@ -153,7 +160,7 @@ namespace vfx
         config.strength = getFloat(node, "strength", ForceDefaults::TURBULENCE_STRENGTH);
         config.frequency = getFloat(node, "frequency", ForceDefaults::TURBULENCE_FREQUENCY);
         config.scrollSpeed = getFloat(node, "scrollSpeed", ForceDefaults::TURBULENCE_SCROLL_SPEED);
-        config.octaves = getInt(node, "octaves", ForceDefaults::TURBULENCE_OCTAVES);
+        config.octaves = std::clamp(getInt(node, "octaves", ForceDefaults::TURBULENCE_OCTAVES), 1, 4);
         config.space = getBool(node, "localSpace", false) ? ForceSpace::Local : ForceSpace::World;
         return config;
     }
