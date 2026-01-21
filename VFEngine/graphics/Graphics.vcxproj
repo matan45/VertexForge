@@ -188,6 +188,7 @@
     <ClInclude Include="render\vfx\VFXBillboardPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXBillboardTypes.hpp" />
     <ClInclude Include="render\vfx\VFXParticleSystem.hpp" />
+    <ClInclude Include="render\vfx\VFXQuadData.hpp" />
     <ClInclude Include="render\vfx\VFXSceneGPUPipeline.hpp" />
     <ClInclude Include="render\vfx\VFXScenePipeline.hpp" />
   </ItemGroup>

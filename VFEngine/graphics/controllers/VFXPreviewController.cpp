@@ -35,7 +35,6 @@ namespace controllers
         createSampler();
         createOffscreenResources();
 
-        // Create per-frame fences for command buffer synchronization
         vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
         inFlightFences.resize(swapChain.getImageCount());
         for (auto& fence : inFlightFences)
@@ -43,11 +42,9 @@ namespace controllers
             fence = device.getLogicalDevice().createFence(fenceInfo);
         }
 
-        // Create VFX billboard pipeline
         pipeline = std::make_unique<render::vfx::VFXBillboardPipeline>(device, swapChain, offscreenResources);
         pipeline->init();
 
-        // Initialize particle system with default config
         render::vfx::VFXEmitterConfig config;
         config.spawnRate = currentParams.spawnRate;
         config.lifetime = currentParams.lifetime;
@@ -58,7 +55,6 @@ namespace controllers
         config.texturePath = currentParams.texturePath;
         particleSystem->setEmitterConfig(config);
 
-        // Set initial texture if one was specified in params
         if (!currentParams.texturePath.empty())
         {
             pipeline->setTexture(currentParams.texturePath);
@@ -131,7 +127,6 @@ namespace controllers
             particleSystem->setEmitterConfig(config);
         }
 
-        // Update pipeline texture
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->setTexture(params.texturePath);
@@ -141,8 +136,6 @@ namespace controllers
     void VFXPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
                                              const glm::vec3& cameraPos, float time)
     {
-        currentTime = time;
-
         if (pipeline && pipeline->isInitialized())
         {
             pipeline->updateCameraUBO(view, projection, cameraPos, time);
@@ -196,20 +189,17 @@ namespace controllers
 
         uint32_t imageIndex = core::RenderManager::getImageIndex();
 
-        // Wait for the previous frame using this command buffer to complete
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
-        // Update particle instances
         if (particleSystem)
         {
             auto instances = particleSystem->getInstanceData();
             pipeline->setParticleInstances(instances);
         }
 
-        // Record commands
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
 
@@ -217,7 +207,6 @@ namespace controllers
         pipeline->recordCommandBuffer(commandBuffer, imageIndex);
         commandBuffer.end();
 
-        // Submit
         vk::SubmitInfo submitInfo(
             0, nullptr, nullptr,
             1, &commandBuffer,
@@ -225,7 +214,6 @@ namespace controllers
         );
 
         device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
-        device.getGraphicsQueue().waitIdle();
 
         return static_cast<void*>(offscreenResources.colorImages[imageIndex].descriptorSet);
     }
@@ -237,7 +225,6 @@ namespace controllers
 
         vk::Extent2D extent = swapChain.getSwapchainExtent();
 
-        // Create color images
         for (uint32_t i = 0; i < imageCount; i++)
         {
             core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
@@ -259,7 +246,6 @@ namespace controllers
                                  offscreenResources.colorImages[i].colorImageView);
         }
 
-        // Create depth image
         core::ImageInfoRequest depthInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         depthInfo.width = extent.width;
         depthInfo.height = extent.height;

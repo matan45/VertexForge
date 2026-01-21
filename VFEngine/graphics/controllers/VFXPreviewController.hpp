@@ -41,14 +41,12 @@ namespace controllers
         std::unique_ptr<render::vfx::VFXBillboardPipeline> pipeline;
         std::unique_ptr<render::vfx::VFXParticleSystem> particleSystem;
 
-        // Offscreen resources
         core::OffscreenResources offscreenResources;
         vk::Sampler sampler;
         std::vector<vk::Fence> inFlightFences;
 
         VFXPreviewParams currentParams;
         bool initialized = false;
-        float currentTime = 0.0f;
 
     public:
         explicit VFXPreviewController();

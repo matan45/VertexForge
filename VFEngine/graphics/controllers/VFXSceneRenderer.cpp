@@ -30,11 +30,9 @@ namespace controllers
             return;
         }
 
-        // Always initialize CPU pipeline as fallback
         cpuPipeline = std::make_unique<render::vfx::VFXScenePipeline>(device, swapChain);
         cpuPipeline->init(sceneRenderPass);
 
-        // Try to initialize GPU mode
         if (gpuDrivenEnabled)
         {
             if (!initGPUMode(sceneRenderPass))
@@ -52,7 +50,6 @@ namespace controllers
     {
         try
         {
-            // Create buffer manager
             gpuBufferManager = std::make_unique<render::vfx::GPUVFXBufferManager>(device);
             if (!gpuBufferManager->init())
             {
@@ -60,7 +57,6 @@ namespace controllers
                 return false;
             }
 
-            // Create compute pipeline
             gpuComputePipeline = std::make_unique<render::vfx::GPUVFXComputePipeline>(device);
             gpuComputePipeline->init();
             if (!gpuComputePipeline->isInitialized())
@@ -69,7 +65,6 @@ namespace controllers
                 return false;
             }
 
-            // Create render pipeline
             gpuRenderPipeline = std::make_unique<render::vfx::VFXSceneGPUPipeline>(device, swapChain);
             gpuRenderPipeline->init(renderPass);
             if (!gpuRenderPipeline->isInitialized())
@@ -78,7 +73,6 @@ namespace controllers
                 return false;
             }
 
-            // Update compute pipeline descriptors
             gpuComputePipeline->updateDescriptors(
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getConfigBuffer(),
@@ -86,7 +80,6 @@ namespace controllers
                 gpuBufferManager->getDrawCommandBuffer()
             );
 
-            // Update render pipeline particle buffer
             gpuRenderPipeline->updateParticleBuffer(
                 gpuBufferManager->getParticleBuffer(),
                 gpuBufferManager->getParticleBufferSize()
@@ -153,7 +146,6 @@ namespace controllers
 
         device.getLogicalDevice().waitIdle();
 
-        // Destroy all instances
         destroyAllInstances();
 
         cleanupGPUMode();
@@ -194,7 +186,6 @@ namespace controllers
         instance.worldTransform = params.worldTransform;
         instance.loop = params.loop;
 
-        // Load emitter config from asset file
         auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(params.vfxAssetPath);
         if (configOpt.has_value())
         {
@@ -205,7 +196,6 @@ namespace controllers
             loggerWarning("Failed to load VFX asset: {}, using default config", params.vfxAssetPath);
         }
 
-        // Try GPU allocation first
         if (gpuDrivenEnabled && gpuBufferManager)
         {
             auto allocation = gpuBufferManager->allocateEmitter(
@@ -229,7 +219,6 @@ namespace controllers
             }
         }
 
-        // Fall back to CPU mode
         if (!instance.gpuDriven)
         {
             instance.particleSystem = std::make_unique<render::vfx::VFXParticleSystem>();
@@ -249,7 +238,6 @@ namespace controllers
         auto it = instances.find(id);
         if (it != instances.end())
         {
-            // Queue GPU emitter for deferred freeing (avoids per-instance waitIdle)
             if (it->second.gpuDriven && gpuBufferManager)
             {
                 pendingEmitterFrees.emplace_back(it->second.gpuEmitterIndex, frameNumber);
@@ -262,10 +250,8 @@ namespace controllers
 
     void VFXSceneRenderer::destroyAllInstances()
     {
-        // Wait for GPU only when destroying ALL instances (bulk operation)
         device.getLogicalDevice().waitIdle();
 
-        // Clear any pending deferred frees
         pendingEmitterFrees.clear();
 
         for (auto& [id, instance] : instances)
@@ -277,7 +263,6 @@ namespace controllers
         }
         instances.clear();
 
-        // Reset particle buffer cleared flag so it gets cleared again on next use
         if (gpuBufferManager)
         {
             gpuBufferManager->resetParticleBufferClearedFlag();
@@ -375,7 +360,6 @@ namespace controllers
 
     void VFXSceneRenderer::update(float deltaTime)
     {
-        // Process deferred emitter frees (GPU resources safe to release after N frames)
         processPendingEmitterFrees();
 
         if (gpuDrivenEnabled)
@@ -389,7 +373,6 @@ namespace controllers
 
         frameNumber++;
 
-        // Advance ring buffer index for staging buffers
         if (gpuBufferManager)
         {
             gpuBufferManager->advanceFrame();
@@ -403,14 +386,12 @@ namespace controllers
             return;
         }
 
-        // Free emitters that have been pending for enough frames
         auto it = pendingEmitterFrees.begin();
         while (it != pendingEmitterFrees.end())
         {
             uint32_t emitterIndex = it->first;
             uint32_t destroyedFrame = it->second;
 
-            // Check if enough frames have passed (handles wraparound)
             uint32_t framesPassed = frameNumber - destroyedFrame;
             if (framesPassed >= FRAMES_BEFORE_FREE)
             {
@@ -430,14 +411,13 @@ namespace controllers
         {
             if (instance.gpuDriven)
             {
-                continue;  // Skip GPU instances in CPU update
+                continue;
             }
 
             if (instance.particleSystem && instance.active)
             {
                 instance.particleSystem->update(deltaTime);
 
-                // Check if non-looping VFX has finished
                 if (!instance.loop)
                 {
                     size_t activeCount = instance.particleSystem->getActiveParticleCount();
@@ -457,7 +437,6 @@ namespace controllers
             return;
         }
 
-        // Update CPU instances (fallback)
         for (auto& [id, instance] : instances)
         {
             if (!instance.gpuDriven && instance.particleSystem && instance.active)
@@ -466,7 +445,6 @@ namespace controllers
             }
         }
 
-        // Update GPU emitter configs and states
         static std::random_device rd;
         static std::mt19937 gen(rd());
         std::uniform_int_distribution<uint32_t> dist;
@@ -478,7 +456,6 @@ namespace controllers
                 continue;
             }
 
-            // Calculate spawn count for this frame
             uint32_t spawnThisFrame = 0;
             if (instance.active)
             {
@@ -487,7 +464,6 @@ namespace controllers
                 instance.spawnAccumulator -= static_cast<float>(spawnThisFrame);
             }
 
-            // Create GPU config
             auto gpuConfig = toGPUConfig(
                 instance.config,
                 deltaTime,
@@ -496,7 +472,6 @@ namespace controllers
             );
             gpuBufferManager->updateEmitterConfig(instance.gpuEmitterIndex, gpuConfig);
 
-            // Create GPU state
             auto gpuState = toGPUState(instance);
             gpuState.spawnThisFrame = spawnThisFrame;
             gpuBufferManager->updateEmitterState(instance.gpuEmitterIndex, gpuState);
@@ -581,7 +556,6 @@ namespace controllers
             return;
         }
 
-        // Count active GPU emitters
         uint32_t activeGPUEmitters = 0;
         for (const auto& [id, instance] : instances)
         {
@@ -596,7 +570,6 @@ namespace controllers
             return;
         }
 
-        // Insert barrier: Compute → Transfer (wait for previous frame's compute)
         gpuComputePipeline->insertBarriersBeforeTransfer(
             cmd,
             gpuBufferManager->getStateBuffer(),
@@ -604,25 +577,19 @@ namespace controllers
             gpuBufferManager->getParticleBuffer()
         );
 
-        // Clear particle buffer on first use (sets all flags to inactive)
         gpuBufferManager->clearParticleBufferIfNeeded(cmd);
 
-        // Upload state buffer from staging to device-local
         gpuBufferManager->uploadStateBuffer(cmd);
 
-        // Clear draw commands (sets instanceCount=0 for all emitters)
         gpuBufferManager->clearDrawCommands(cmd);
 
-        // Insert barrier: Transfer → Transfer (ensure copy completes before fill)
         gpuComputePipeline->insertTransferToTransferBarrier(
             cmd,
             gpuBufferManager->getStateBuffer()
         );
 
-        // Reset all active counts before compute
         gpuBufferManager->resetAllActiveCounts(cmd);
 
-        // Insert barrier: Transfer → Compute
         gpuComputePipeline->insertBarriersBeforeCompute(
             cmd,
             gpuBufferManager->getStateBuffer(),
@@ -630,7 +597,6 @@ namespace controllers
             gpuBufferManager->getParticleBuffer()
         );
 
-        // Dispatch compute for each active GPU emitter
         for (const auto& [id, instance] : instances)
         {
             if (!instance.gpuDriven || !instance.active)
@@ -647,7 +613,6 @@ namespace controllers
             );
         }
 
-        // Insert barrier: Compute → Indirect Draw + Vertex Shader
         gpuComputePipeline->insertBarriersAfterCompute(
             cmd,
             gpuBufferManager->getParticleBuffer(),
@@ -668,7 +633,6 @@ namespace controllers
             recordGPUDrawCommands(cmd);
         }
 
-        // Always record CPU instances (fallback or mixed mode)
         recordCPUDrawCommands(cmd);
     }
 
@@ -679,7 +643,6 @@ namespace controllers
             return;
         }
 
-        // Collect CPU particle instances
         collectAllParticleInstances();
 
         if (collectedInstances.empty())
@@ -698,7 +661,6 @@ namespace controllers
             return;
         }
 
-        // Count active GPU emitters
         uint32_t activeGPUEmitters = 0;
         for (const auto& [id, instance] : instances)
         {
@@ -726,7 +688,6 @@ namespace controllers
 
         for (const auto& [id, instance] : instances)
         {
-            // Skip GPU-driven instances (they use indirect draw)
             if (instance.gpuDriven)
             {
                 continue;
@@ -739,7 +700,6 @@ namespace controllers
 
             auto particleData = instance.particleSystem->getInstanceData();
 
-            // Transform particle positions by the instance's world transform
             for (auto& particle : particleData)
             {
                 glm::vec4 worldPos = instance.worldTransform * glm::vec4(particle.worldPosition, 1.0f);
@@ -762,8 +722,6 @@ namespace controllers
 
             if (instance.gpuDriven)
             {
-                // For GPU instances, we'd need to read back from GPU
-                // For now, estimate based on allocation
                 total += instance.gpuParticleCount;
             }
             else if (instance.particleSystem)

@@ -84,10 +84,8 @@ namespace services
         // VFX Preview
         virtual void initVFXPreview(PreviewInstanceId instanceId) = 0;
         virtual void cleanUpVFXPreview(PreviewInstanceId instanceId) = 0;
-        [[nodiscard]] virtual bool isVFXPreviewInitialized(PreviewInstanceId instanceId) const = 0;
 
         virtual void setVFXParams(PreviewInstanceId instanceId, const VFXPreviewParams& params) = 0;
-        [[nodiscard]] virtual VFXPreviewParams getVFXParams(PreviewInstanceId instanceId) const = 0;
 
         virtual void updateVFXCamera(PreviewInstanceId instanceId, const glm::mat4& view,
                                      const glm::mat4& projection, const glm::vec3& cameraPos, float time) = 0;
@@ -96,7 +94,6 @@ namespace services
         virtual void playVFX(PreviewInstanceId instanceId) = 0;
         virtual void pauseVFX(PreviewInstanceId instanceId) = 0;
         virtual void stopVFX(PreviewInstanceId instanceId) = 0;
-        [[nodiscard]] virtual bool isVFXPlaying(PreviewInstanceId instanceId) const = 0;
 
         [[nodiscard]] virtual ViewportTextureHandle renderVFXPreview(PreviewInstanceId instanceId) = 0;
     };

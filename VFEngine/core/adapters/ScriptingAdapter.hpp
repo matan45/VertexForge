@@ -30,9 +30,7 @@ namespace core
         // Interface implementation cache (for collision/trigger callbacks)
         std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces; // instanceId -> implemented interfaces
 
-        // Playback state tracking
         std::unordered_map<uint64_t, ::services::ScriptPlaybackState> instanceToPlaybackState;
-        std::unordered_map<uint64_t, ::services::ScriptPlaybackParams> instanceToPlaybackParams;
 
         // Error tracking
         mutable std::optional<::services::ScriptError> lastError;
@@ -80,15 +78,7 @@ namespace core
         void callOnUpdate(uint64_t instanceId, float deltaTime) override;
         void callOnDestroy(uint64_t instanceId) override;
 
-        // === Playback Control ===
-        void playScript(uint64_t instanceId) override;
-        void pauseScript(uint64_t instanceId) override;
-        void stopScript(uint64_t instanceId) override;
-        void resetScript(uint64_t instanceId) override;
-
-        ::services::ScriptPlaybackState getPlaybackState(uint64_t instanceId) const override;
-        void setPlaybackParams(uint64_t instanceId, const ::services::ScriptPlaybackParams& params) override;
-        ::services::ScriptPlaybackParams getPlaybackParams(uint64_t instanceId) const override;
+        void playVFX(uint64_t instanceId) override;
 
         std::optional<::services::ScriptError> getLastError() const override;
         void clearError() override;

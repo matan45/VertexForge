@@ -285,18 +285,6 @@ namespace services
                 {
                     return renderVFXPreview(query.instanceId);
                 });
-
-            dispatcher.registerQueryHandler<events::vfxpreview::IsVFXPlayingQuery>(
-                [this](const events::vfxpreview::IsVFXPlayingQuery& query)
-                {
-                    return isVFXPlaying(query.instanceId);
-                });
-
-            dispatcher.registerQueryHandler<events::vfxpreview::IsVFXPreviewInitializedQuery>(
-                [this](const events::vfxpreview::IsVFXPreviewInitializedQuery& query)
-                {
-                    return isVFXPreviewInitialized(query.instanceId);
-                });
         }
     }
 
@@ -562,30 +550,12 @@ namespace services
         }
     }
 
-    bool PreviewServiceImpl::isVFXPreviewInitialized(PreviewInstanceId instanceId) const
-    {
-        if (vfxProvider)
-        {
-            return vfxProvider->isVFXPreviewInitialized(instanceId);
-        }
-        return false;
-    }
-
     void PreviewServiceImpl::setVFXParams(PreviewInstanceId instanceId, const VFXPreviewParams& params)
     {
         if (vfxProvider)
         {
             vfxProvider->setVFXParams(instanceId, params);
         }
-    }
-
-    VFXPreviewParams PreviewServiceImpl::getVFXParams(PreviewInstanceId instanceId) const
-    {
-        if (vfxProvider)
-        {
-            return vfxProvider->getVFXParams(instanceId);
-        }
-        return {};
     }
 
     void PreviewServiceImpl::updateVFXCamera(PreviewInstanceId instanceId, const glm::mat4& view,
@@ -627,15 +597,6 @@ namespace services
         {
             vfxProvider->stopVFX(instanceId);
         }
-    }
-
-    bool PreviewServiceImpl::isVFXPlaying(PreviewInstanceId instanceId) const
-    {
-        if (vfxProvider)
-        {
-            return vfxProvider->isVFXPlaying(instanceId);
-        }
-        return false;
     }
 
     ViewportTextureHandle PreviewServiceImpl::renderVFXPreview(PreviewInstanceId instanceId)

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "GPUVFXTypes.hpp"
+
 #include "VFXBillboardTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -19,32 +19,7 @@ namespace render::vfx
     // Works with GPUVFXComputePipeline and GPUVFXBufferManager
     class VFXSceneGPUPipeline
     {
-    public:
-        VFXSceneGPUPipeline(core::Device& device, core::SwapChain& swapChain);
-        ~VFXSceneGPUPipeline();
-
-        VFXSceneGPUPipeline(const VFXSceneGPUPipeline&) = delete;
-        VFXSceneGPUPipeline& operator=(const VFXSceneGPUPipeline&) = delete;
-
-        // Initialization
-        void init(vk::RenderPass renderPass);
-        void recreate(vk::RenderPass renderPass);
-        void cleanup();
-        bool isInitialized() const { return initialized; }
-
-        // Update camera UBO
-        void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
-                             const glm::vec3& cameraPos, float time) const;
-
-        // Update particle buffer binding (called when buffer changes)
-        void updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize);
-
-        // Record indirect draw commands inline within existing render pass
-        void recordCommandsInline(
-            vk::CommandBuffer cmd,
-            vk::Buffer drawCommandBuffer,
-            uint32_t emitterCount) const;
-
+    private:
     private:
         core::Device& device;
         core::SwapChain& swapChain;
@@ -80,6 +55,33 @@ namespace render::vfx
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
+    public:
+        explicit VFXSceneGPUPipeline(core::Device& device, core::SwapChain& swapChain);
+        ~VFXSceneGPUPipeline();
+
+        VFXSceneGPUPipeline(const VFXSceneGPUPipeline&) = delete;
+        VFXSceneGPUPipeline& operator=(const VFXSceneGPUPipeline&) = delete;
+
+        // Initialization
+        void init(vk::RenderPass renderPass);
+        void recreate(vk::RenderPass renderPass);
+        void cleanup();
+        bool isInitialized() const { return initialized; }
+
+        // Update camera UBO
+        void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
+                             const glm::vec3& cameraPos, float time) const;
+
+        // Update particle buffer binding (called when buffer changes)
+        void updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize);
+
+        // Record indirect draw commands inline within existing render pass
+        void recordCommandsInline(
+            vk::CommandBuffer cmd,
+            vk::Buffer drawCommandBuffer,
+            uint32_t emitterCount) const;
+
+    private:
         // Internal helpers
         void loadShader();
         void createDescriptorSetLayout();

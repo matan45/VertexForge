@@ -1,4 +1,5 @@
 #include "VFXBillboardPipeline.hpp"
+#include "VFXQuadData.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -14,16 +15,6 @@
 
 namespace render::vfx
 {
-    // Quad vertices for billboards
-    static constexpr std::array<VFXQuadVertex, 4> QUAD_VERTICES = {{
-        {{-0.5f, -0.5f}, {0.0f, 1.0f}},  // Bottom-left
-        {{ 0.5f, -0.5f}, {1.0f, 1.0f}},  // Bottom-right
-        {{ 0.5f,  0.5f}, {1.0f, 0.0f}},  // Top-right
-        {{-0.5f,  0.5f}, {0.0f, 0.0f}},  // Top-left
-    }};
-
-    static constexpr std::array<uint16_t, 6> QUAD_INDICES = {0, 1, 2, 2, 3, 0};
-
     VFXBillboardPipeline::VFXBillboardPipeline(core::Device& device, core::SwapChain& swapChain,
                                                core::OffscreenResources& offscreenResources)
         : device{device}
@@ -94,7 +85,6 @@ namespace render::vfx
 
         if (renderPass) dev.destroyRenderPass(renderPass);
 
-        // Clean up buffers
         if (cameraUBO)
         {
             dev.destroyBuffer(cameraUBO);
@@ -120,11 +110,9 @@ namespace render::vfx
             instanceBuffer = nullptr;
         }
 
-        // Clean up custom texture
         customTexture.reset();
         currentTexturePath.clear();
 
-        // Clean up default texture
         if (textureSampler) dev.destroySampler(textureSampler);
         if (defaultTextureImageView) dev.destroyImageView(defaultTextureImageView);
         if (defaultTextureImage)
@@ -145,7 +133,6 @@ namespace render::vfx
 
     void VFXBillboardPipeline::createRenderPass()
     {
-        // Color attachment - clear to transparent for VFX preview
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -160,7 +147,6 @@ namespace render::vfx
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
 
-        // Depth attachment
         vk::AttachmentDescription depthAttachment{};
         depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -183,7 +169,6 @@ namespace render::vfx
 
         std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
 
-        // Dependencies for proper synchronization
         vk::SubpassDependency dependency{};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
@@ -210,14 +195,12 @@ namespace render::vfx
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings(2);
 
-        // Binding 0: Camera UBO
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex;
         bindings[0].pImmutableSamplers = nullptr;
 
-        // Binding 1: Particle texture
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[1].descriptorCount = 1;
@@ -275,7 +258,6 @@ namespace render::vfx
         uboWrite.descriptorCount = 1;
         uboWrite.pBufferInfo = &uboBufferInfo;
 
-        // Use custom texture if available, otherwise use default white texture
         vk::DescriptorImageInfo textureImageInfo{};
         textureImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         if (customTexture)
@@ -359,7 +341,6 @@ namespace render::vfx
 
     void VFXBillboardPipeline::createBuffers()
     {
-        // Camera UBO
         core::BufferInfoRequest uboRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         uboRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
@@ -367,7 +348,6 @@ namespace render::vfx
         uboRequest.size = sizeof(VFXCameraUBO);
         core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
 
-        // Quad vertex buffer
         constexpr vk::DeviceSize vertexBufferSize = sizeof(VFXQuadVertex) * QUAD_VERTICES.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
@@ -375,7 +355,6 @@ namespace render::vfx
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferMemory);
 
-        // Quad index buffer
         constexpr vk::DeviceSize indexBufferSize = sizeof(uint16_t) * QUAD_INDICES.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
@@ -383,7 +362,6 @@ namespace render::vfx
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferMemory);
 
-        // Upload quad vertices
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
@@ -394,7 +372,6 @@ namespace render::vfx
             vertexBufferSize
         );
 
-        // Upload quad indices
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
@@ -405,7 +382,6 @@ namespace render::vfx
             indexBufferSize
         );
 
-        // Instance buffer (host-visible for dynamic updates)
         vk::DeviceSize instanceBufferSize = sizeof(VFXInstanceData) * maxInstances;
         core::BufferInfoRequest instanceRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         instanceRequest.size = instanceBufferSize;
@@ -417,7 +393,6 @@ namespace render::vfx
 
     void VFXBillboardPipeline::createDefaultTexture()
     {
-        // Create 1x1 white texture
         constexpr uint32_t texSize = 1;
 
         core::ImageInfoRequest imageInfo(
@@ -440,11 +415,9 @@ namespace render::vfx
         );
         core::ImageUtilities::createImageView(viewInfo, defaultTextureImageView);
 
-        // White pixel data
-        std::vector<uint8_t> pixelData = {255, 255, 255, 255};  // RGBA white
+        std::vector<uint8_t> pixelData = {255, 255, 255, 255};
         vk::DeviceSize imageSize = pixelData.size();
 
-        // Create staging buffer
         core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         stagingRequest.size = imageSize;
         stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
@@ -455,7 +428,6 @@ namespace render::vfx
         vk::DeviceMemory stagingMemory;
         core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
 
-        // Copy pixel data to staging buffer
         void* data;
         vk::Result mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
         if (mapResult == vk::Result::eSuccess)
@@ -464,7 +436,6 @@ namespace render::vfx
             device.getLogicalDevice().unmapMemory(stagingMemory);
         }
 
-        // Transition and copy
         auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), device.getStagingCommandPool());
 
         core::ImageUtilities::transitionImageLayout(cmd.get(), defaultTextureImage,
@@ -490,7 +461,6 @@ namespace render::vfx
 
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
 
-        // Clean up staging buffer
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingMemory);
     }
@@ -558,20 +528,16 @@ namespace render::vfx
 
     void VFXBillboardPipeline::setTexture(const std::string& texturePath)
     {
-        // Skip if same texture is already loaded
         if (texturePath == currentTexturePath)
         {
             return;
         }
 
-        // Wait for device to be idle before changing texture
         device.getLogicalDevice().waitIdle();
 
-        // Clear existing custom texture
         customTexture.reset();
         currentTexturePath.clear();
 
-        // If path is empty or file doesn't exist, use default texture
         if (texturePath.empty() || !std::filesystem::exists(texturePath))
         {
             if (!texturePath.empty())
@@ -582,7 +548,6 @@ namespace render::vfx
             return;
         }
 
-        // Load the new texture
         try
         {
             customTexture = std::make_unique<core::Texture>(device);
@@ -597,7 +562,6 @@ namespace render::vfx
             currentTexturePath.clear();
         }
 
-        // Update descriptor set to use new texture (or default if load failed)
         updateDescriptorSet();
     }
 

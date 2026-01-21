@@ -3,11 +3,11 @@
 
 #include "VFXAPI.hpp"
 #include "NativeHelpers.hpp"
-#include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/VFXRuntimeEvents.hpp"
-#include "../../../utilities/scene/EntityRegistry.hpp"
-#include "../../../utilities/components/Components.hpp"
-#include "../../../services/data/EntityConversion.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/VFXRuntimeEvents.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
+#include "data/EntityConversion.hpp"
 
 namespace core::api
 {

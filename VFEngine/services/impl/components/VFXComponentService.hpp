@@ -23,7 +23,6 @@ namespace services {
 
         void registerEventHandlers(events::EventDispatcher& dispatcher);
 
-        // VFX Component Operations
         bool addVFXComponent(EntityHandle entity);
         bool removeVFXComponent(EntityHandle entity);
         bool hasVFXComponent(EntityHandle entity) const;

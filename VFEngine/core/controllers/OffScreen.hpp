@@ -6,8 +6,8 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
-#include "../../services/providers/IOffScreenProvider.hpp"
-#include "../../utilities/types/CameraTypes.hpp"
+#include "providers/IOffScreenProvider.hpp"
+#include "types/CameraTypes.hpp"
 
 namespace services
 {

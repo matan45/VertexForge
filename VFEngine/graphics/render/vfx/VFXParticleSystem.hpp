@@ -18,7 +18,7 @@ namespace render::vfx
         std::uniform_real_distribution<float> randomDist{-1.0f, 1.0f};
 
     public:
-        VFXParticleSystem();
+        explicit VFXParticleSystem();
         ~VFXParticleSystem() = default;
 
         void setEmitterConfig(const VFXEmitterConfig& emitterConfig);

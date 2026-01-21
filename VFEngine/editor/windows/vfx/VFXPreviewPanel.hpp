@@ -17,7 +17,6 @@ namespace editor::vfxeditor
         void* instanceId;
         std::unique_ptr<OrbitCamera> camera;
         bool needsInit = true;
-        float panelWidth = 250.0f;
         bool isDraggingPreview = false;
         bool isPlaying = false;
         float lastFrameTime = 0.0f;
@@ -34,11 +33,8 @@ namespace editor::vfxeditor
 
         bool isInitialized() const { return !needsInit; }
 
-        // Update VFX parameters from the graph
         void setParams(const services::VFXPreviewParams& params);
-        services::VFXPreviewParams getParams() const;
 
-        // Playback control
         void play();
         void pause();
         void stop();

@@ -423,7 +423,6 @@ namespace controllers
         );
 
         device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
-        device.getGraphicsQueue().waitIdle();
 
         return static_cast<void*>(offscreenResources->colorImages[imageIndex].descriptorSet);
     }

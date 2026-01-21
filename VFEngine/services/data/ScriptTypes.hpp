@@ -4,17 +4,9 @@
 
 namespace services {
 
-    // Playback state for script execution control
     enum class ScriptPlaybackState {
-        Stopped,    // Not started or explicitly stopped
-        Playing,    // Running onUpdate every frame
-        Paused      // Started but onUpdate skipped
-    };
-
-    // Parameters controlling script playback behavior
-    struct ScriptPlaybackParams {
-        bool loop = false;           // Restart onStart if stopped/error
-        float playbackSpeed = 1.0f;  // Multiplier for deltaTime passed to onUpdate
+        Stopped,
+        Playing
     };
 
     // Data for attaching a script to an entity

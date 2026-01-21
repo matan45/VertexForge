@@ -96,11 +96,6 @@ namespace editor::vfxeditor
         events::EventDispatcher::instance().execute(cmd);
     }
 
-    services::VFXPreviewParams VFXPreviewPanel::getParams() const
-    {
-        return {};
-    }
-
     void VFXPreviewPanel::play()
     {
         services::events::vfxpreview::PlayVFXCommand cmd;
@@ -186,12 +181,10 @@ namespace editor::vfxeditor
 
             auto& dispatcher = events::EventDispatcher::instance();
 
-            // Calculate delta time
             float currentTime = static_cast<float>(engineTime::Timer::getElapsedTime());
             float deltaTime = currentTime - lastFrameTime;
             lastFrameTime = currentTime;
 
-            // Update camera
             services::events::vfxpreview::UpdateVFXCameraCommand cameraCmd;
             cameraCmd.instanceId = services::PreviewInstanceId(instanceId);
             cameraCmd.view = camera->getViewMatrix();
@@ -200,7 +193,6 @@ namespace editor::vfxeditor
             cameraCmd.time = currentTime;
             dispatcher.execute(cameraCmd);
 
-            // Update simulation
             if (isPlaying)
             {
                 services::events::vfxpreview::UpdateVFXSimulationCommand simCmd;
@@ -209,7 +201,6 @@ namespace editor::vfxeditor
                 dispatcher.execute(simCmd);
             }
 
-            // Render
             services::events::vfxpreview::RenderVFXPreviewQuery renderQuery;
             renderQuery.instanceId = services::PreviewInstanceId(instanceId);
             auto textureHandle = dispatcher.query(renderQuery);

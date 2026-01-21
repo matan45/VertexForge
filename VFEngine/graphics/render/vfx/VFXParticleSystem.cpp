@@ -22,7 +22,6 @@ namespace render::vfx
             return;
         }
 
-        // Update existing particles
         for (auto& particle : particles)
         {
             if (particle.active)
@@ -31,7 +30,6 @@ namespace render::vfx
             }
         }
 
-        // Spawn new particles based on spawn rate
         if (config.spawnRate > 0.0f)
         {
             spawnAccumulator += deltaTime * config.spawnRate;
@@ -85,20 +83,18 @@ namespace render::vfx
         VFXParticle* particle = findInactiveParticle();
         if (!particle)
         {
-            return; // No available slots
+            return;
         }
 
         particle->active = true;
-        particle->position = glm::vec3(0.0f);  // Spawn at origin
+        particle->position = glm::vec3(0.0f);
         particle->lifetime = 0.0f;
         particle->maxLifetime = config.lifetime;
         particle->size = config.startSize;
         particle->color = config.startColor;
 
-        // Calculate initial velocity with slight randomization
         glm::vec3 direction = glm::normalize(config.emitDirection);
 
-        // Add small random spread
         float spreadX = randomDist(rng) * 0.2f;
         float spreadZ = randomDist(rng) * 0.2f;
         direction.x += spreadX;
@@ -112,20 +108,16 @@ namespace render::vfx
     {
         particle.lifetime += deltaTime;
 
-        // Check if particle should die
         if (particle.lifetime >= particle.maxLifetime)
         {
             particle.active = false;
             return;
         }
 
-        // Update position based on velocity
         particle.position += particle.velocity * deltaTime;
 
-        // Calculate lifetime ratio for fading
         float lifetimeRatio = particle.lifetime / particle.maxLifetime;
 
-        // Fade out alpha near end of life
         float fadeStart = 0.7f;
         if (lifetimeRatio > fadeStart)
         {

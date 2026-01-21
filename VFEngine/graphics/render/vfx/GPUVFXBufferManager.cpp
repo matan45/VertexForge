@@ -2,7 +2,6 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
-#include <cstring>
 
 namespace render::vfx
 {
@@ -27,7 +26,6 @@ namespace render::vfx
         this->maxParticles = maxParticles;
         this->maxEmitters = maxEmitters;
 
-        // Initialize allocation tracking
         emitterSlots.resize(maxEmitters, false);
         emitterParticleOffsets.resize(maxEmitters, 0);
         emitterParticleCounts.resize(maxEmitters, 0);
@@ -65,7 +63,7 @@ namespace render::vfx
             loggerInfo("GPUVFXBufferManager initialized: {} particles, {} emitters, {:.2f} MB total",
                        maxParticles, maxEmitters,
                        static_cast<float>(getParticleBufferSize() + getConfigBufferSize() +
-                                          getStateBufferSize() + getDrawCommandBufferSize()) / (1024.0f * 1024.0f));
+                           getStateBufferSize() + getDrawCommandBufferSize()) / (1024.0f * 1024.0f));
             return true;
         }
         catch (const vk::OutOfDeviceMemoryError& e)
@@ -89,7 +87,6 @@ namespace render::vfx
             return;
         }
 
-        // Wait for device to be idle before destroying buffers
         device.getLogicalDevice().waitIdle();
 
         destroyBuffers();
@@ -110,14 +107,12 @@ namespace render::vfx
 
     bool GPUVFXBufferManager::createParticleBuffer()
     {
-        // Particle buffer: device-local SSBO
-        // Written and read by compute shader, read by vertex shader
         core::BufferInfoRequest request(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             getParticleBufferSize(),
             vk::BufferUsageFlagBits::eStorageBuffer |
-            vk::BufferUsageFlagBits::eTransferDst,    // For clearing/initialization
+            vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
@@ -127,13 +122,12 @@ namespace render::vfx
 
     bool GPUVFXBufferManager::createConfigBuffer()
     {
-        // Config buffer: host-visible for frequent CPU updates
         core::BufferInfoRequest request(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             getConfigBufferSize(),
             vk::BufferUsageFlagBits::eStorageBuffer |
-            vk::BufferUsageFlagBits::eTransferSrc,    // Can copy to device-local if needed
+            vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent
         );
@@ -142,12 +136,10 @@ namespace render::vfx
 
         if (configBuffer && configMemory)
         {
-            // Map persistently
             configMapped = device.getLogicalDevice().mapMemory(
                 configMemory, 0, getConfigBufferSize(), vk::MemoryMapFlags{}
             );
 
-            // Zero-initialize
             std::memset(configMapped, 0, getConfigBufferSize());
             return true;
         }
@@ -156,13 +148,12 @@ namespace render::vfx
 
     bool GPUVFXBufferManager::createStateBuffer()
     {
-        // State buffer: device-local for compute shader read/write
         core::BufferInfoRequest stateRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             getStateBufferSize(),
             vk::BufferUsageFlagBits::eStorageBuffer |
-            vk::BufferUsageFlagBits::eTransferDst,    // For resetting counters
+            vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
@@ -173,8 +164,7 @@ namespace render::vfx
             return false;
         }
 
-        // Create ring-buffered staging buffers to avoid CPU/GPU race conditions
-        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
         {
             core::BufferInfoRequest stagingRequest(
                 device.getLogicalDevice(),
@@ -192,12 +182,10 @@ namespace render::vfx
                 return false;
             }
 
-            // Map staging buffer persistently
             stateStagingMapped[i] = device.getLogicalDevice().mapMemory(
                 stateStagingMemories[i], 0, getStateBufferSize(), vk::MemoryMapFlags{}
             );
 
-            // Zero-initialize
             std::memset(stateStagingMapped[i], 0, getStateBufferSize());
         }
 
@@ -206,14 +194,13 @@ namespace render::vfx
 
     bool GPUVFXBufferManager::createDrawCommandBuffer()
     {
-        // Draw command buffer: device-local, written by compute, read by indirect draw
         core::BufferInfoRequest request(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             getDrawCommandBufferSize(),
             vk::BufferUsageFlagBits::eStorageBuffer |
             vk::BufferUsageFlagBits::eIndirectBuffer |
-            vk::BufferUsageFlagBits::eTransferDst,    // For initialization
+            vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
@@ -225,15 +212,13 @@ namespace render::vfx
     {
         auto& vkDevice = device.getLogicalDevice();
 
-        // Unmap before destroying
         if (configMapped && configMemory)
         {
             vkDevice.unmapMemory(configMemory);
             configMapped = nullptr;
         }
 
-        // Unmap and destroy ring-buffered staging buffers
-        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
         {
             if (stateStagingMapped[i] && stateStagingMemories[i])
             {
@@ -243,7 +228,6 @@ namespace render::vfx
             core::BufferUtilities::destroyBuffer(vkDevice, stateStagingBuffers[i], stateStagingMemories[i]);
         }
 
-        // Destroy buffers
         core::BufferUtilities::destroyBuffer(vkDevice, particleBuffer, particleMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, configBuffer, configMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, stateBuffer, stateMemory);
@@ -288,7 +272,6 @@ namespace render::vfx
             return;
         }
 
-        // Write to current frame's staging buffer (avoids race with in-flight GPU copy)
         auto* states = static_cast<GPUEmitterState*>(stateStagingMapped[currentFrameIndex]);
         states[emitterIndex] = state;
     }
@@ -300,14 +283,11 @@ namespace render::vfx
             return;
         }
 
-        // Calculate offset to activeCount field within GPUEmitterState
         vk::DeviceSize stateOffset = static_cast<vk::DeviceSize>(emitterIndex) * sizeof(GPUEmitterState);
         vk::DeviceSize activeCountOffset = stateOffset + offsetof(GPUEmitterState, activeCount);
 
-        // Fill activeCount with 0 (4 bytes) - compute shader will accumulate active particles
         cmd.fillBuffer(stateBuffer, activeCountOffset, sizeof(uint32_t), 0);
 
-        // Also reset spawnCounter - compute shader uses this for atomic spawn slot allocation
         vk::DeviceSize spawnCounterOffset = stateOffset + offsetof(GPUEmitterState, spawnCounter);
         cmd.fillBuffer(stateBuffer, spawnCounterOffset, sizeof(uint32_t), 0);
     }
@@ -319,7 +299,6 @@ namespace render::vfx
             return;
         }
 
-        // Reset all active counts by filling specific offsets
         for (uint32_t i = 0; i < maxEmitters; ++i)
         {
             if (emitterSlots[i])
@@ -336,7 +315,6 @@ namespace render::vfx
             return;
         }
 
-        // Copy current frame's staging buffer to device-local state buffer
         vk::BufferCopy copyRegion{};
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
@@ -352,7 +330,6 @@ namespace render::vfx
             return;
         }
 
-        // Zero out all draw commands (sets instanceCount to 0 for all emitters)
         cmd.fillBuffer(drawCommandBuffer, 0, getDrawCommandBufferSize(), 0);
     }
 
@@ -363,7 +340,6 @@ namespace render::vfx
             return;
         }
 
-        // Zero out entire particle buffer (sets all flags to 0 = inactive)
         cmd.fillBuffer(particleBuffer, 0, getParticleBufferSize(), 0);
         particleBufferCleared = true;
     }
@@ -379,7 +355,6 @@ namespace render::vfx
             return allocation;
         }
 
-        // Find free emitter slot
         uint32_t freeSlot = UINT32_MAX;
         for (uint32_t i = 0; i < maxEmitters; ++i)
         {
@@ -396,7 +371,6 @@ namespace render::vfx
             return allocation;
         }
 
-        // Check particle budget
         if (allocatedParticleCount + particleCount > maxParticles)
         {
             loggerError("GPUVFXBufferManager::allocateEmitter: Not enough particle budget ({} + {} > {})",
@@ -404,12 +378,10 @@ namespace render::vfx
             return allocation;
         }
 
-        // Allocate particles (simple linear allocation)
         allocation.emitterIndex = freeSlot;
         allocation.particleOffset = allocatedParticleCount;
         allocation.particleCount = particleCount;
 
-        // Update tracking
         emitterSlots[freeSlot] = true;
         emitterParticleOffsets[freeSlot] = allocatedParticleCount;
         emitterParticleCounts[freeSlot] = particleCount;
@@ -429,8 +401,6 @@ namespace render::vfx
             return;
         }
 
-        // Note: This simple allocator doesn't reclaim particle memory
-        // A more sophisticated allocator would use a free list
         emitterSlots[emitterIndex] = false;
         activeEmitterCount--;
 

@@ -7,14 +7,11 @@ namespace ed = ax::NodeEditor;
 namespace editor::graph {
 
     bool VFXGraphEditor::canCreateLink(uint32_t startPinId, uint32_t endPinId) const {
-        // Get nodes from pin IDs
         uint32_t startNodeId = getNodeIdFromPinId(startPinId);
         uint32_t endNodeId = getNodeIdFromPinId(endPinId);
 
-        // Cannot connect same node to itself
         if (startNodeId == endNodeId) return false;
 
-        // Get nodes
         const vfx::VFXNode* startNode = currentGraph->findNode(startNodeId);
         const vfx::VFXNode* endNode = currentGraph->findNode(endNodeId);
 
@@ -23,14 +20,11 @@ namespace editor::graph {
         bool startIsOutput = isOutputPin(startPinId);
         bool endIsOutput = isOutputPin(endPinId);
 
-        // Cannot connect output to output or input to input
         if (startIsOutput == endIsOutput) return false;
 
-        // Determine source (output) and target (input)
         const vfx::VFXNode* sourceNode = startIsOutput ? startNode : endNode;
         const vfx::VFXNode* targetNode = startIsOutput ? endNode : startNode;
 
-        // Only Emitter can have output, only OutSystem can have input
         if (sourceNode->type != vfx::VFXNodeType::Emitter) return false;
         if (targetNode->type != vfx::VFXNodeType::OutSystem) return false;
 
@@ -49,7 +43,6 @@ namespace editor::graph {
                         vfx::VFXNodeLink newLink;
                         newLink.id = currentGraph->nextLinkId++;
 
-                        // Determine source (output) and target (input)
                         bool startIsOutput = isOutputPin(startId);
                         uint32_t sourceNodeId = startIsOutput ? getNodeIdFromPinId(startId) : getNodeIdFromPinId(endId);
                         uint32_t targetNodeId = startIsOutput ? getNodeIdFromPinId(endId) : getNodeIdFromPinId(startId);
@@ -81,7 +74,6 @@ namespace editor::graph {
                 } else {
                     ed::RejectNewItem(ImColor(255, 0, 0), 2.0f);
 
-                    // Show error tooltip
                     if (startId && endId) {
                         uint32_t startNodeId = getNodeIdFromPinId(startId);
                         uint32_t endNodeId = getNodeIdFromPinId(endId);
@@ -115,7 +107,6 @@ namespace editor::graph {
 
     void VFXGraphEditor::handleDeletion() {
         if (ed::BeginDelete()) {
-            // Handle link deletion
             ed::LinkId linkId;
             while (ed::QueryDeletedLink(&linkId)) {
                 if (ed::AcceptDeletedItem()) {
@@ -140,9 +131,7 @@ namespace editor::graph {
                         node->type == vfx::VFXNodeType::OutSystem) {
                         ed::RejectDeletedItem();
                     } else {
-                        // For future node types, allow deletion
                         if (ed::AcceptDeletedItem()) {
-                            // Remove all links connected to this node
                             currentGraph->links.erase(
                                 std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
                                     [id](const vfx::VFXNodeLink& link) {
@@ -151,7 +140,6 @@ namespace editor::graph {
                                 currentGraph->links.end()
                             );
 
-                            // Remove the node
                             auto it = std::find_if(currentGraph->nodes.begin(), currentGraph->nodes.end(),
                                 [id](const vfx::VFXNode& n) { return n.id == id; });
                             if (it != currentGraph->nodes.end()) {

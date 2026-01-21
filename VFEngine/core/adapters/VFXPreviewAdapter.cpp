@@ -1,5 +1,4 @@
 #include "VFXPreviewAdapter.hpp"
-#include "print/Logger.hpp"
 
 namespace core
 {
@@ -38,14 +37,8 @@ namespace core
         }
     }
 
-    bool VFXPreviewAdapter::isVFXPreviewInitialized(services::PreviewInstanceId instanceId) const
-    {
-        auto* controller = getController(instanceId);
-        return controller && controller->isInitialized();
-    }
-
     void VFXPreviewAdapter::setVFXParams(services::PreviewInstanceId instanceId,
-                                          const services::VFXPreviewParams& params)
+                                         const services::VFXPreviewParams& params)
     {
         auto* controller = getController(instanceId);
         if (!controller) return;
@@ -62,25 +55,8 @@ namespace core
         controller->setParams(controllerParams);
     }
 
-    services::VFXPreviewParams VFXPreviewAdapter::getVFXParams(services::PreviewInstanceId instanceId) const
-    {
-        services::VFXPreviewParams result;
-        auto* controller = getController(instanceId);
-        if (!controller) return result;
-
-        const auto& controllerParams = controller->getParams();
-        result.spawnRate = controllerParams.spawnRate;
-        result.lifetime = controllerParams.lifetime;
-        result.startSize = controllerParams.startSize;
-        result.startSpeed = controllerParams.startSpeed;
-        result.startColor = controllerParams.startColor;
-        result.emitDirection = controllerParams.emitDirection;
-        result.texturePath = controllerParams.texturePath;
-        return result;
-    }
-
     void VFXPreviewAdapter::updateVFXCamera(services::PreviewInstanceId instanceId, const glm::mat4& view,
-                                             const glm::mat4& projection, const glm::vec3& cameraPos, float time)
+                                            const glm::mat4& projection, const glm::vec3& cameraPos, float time)
     {
         auto* controller = getController(instanceId);
         if (controller)
@@ -123,12 +99,6 @@ namespace core
         {
             controller->stop();
         }
-    }
-
-    bool VFXPreviewAdapter::isVFXPlaying(services::PreviewInstanceId instanceId) const
-    {
-        auto* controller = getController(instanceId);
-        return controller ? controller->isPlaying() : false;
     }
 
     void* VFXPreviewAdapter::renderVFXPreview(services::PreviewInstanceId instanceId)

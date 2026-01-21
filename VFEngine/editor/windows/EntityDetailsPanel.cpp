@@ -31,7 +31,6 @@ namespace windows
         materialDrawer.clearCache();
         audio2DDrawer.clearHandles();
         audio3DDrawer.clearHandles();
-        vfxDrawer.clearInstances();
     }
 
     void EntityDetailsPanel::draw()

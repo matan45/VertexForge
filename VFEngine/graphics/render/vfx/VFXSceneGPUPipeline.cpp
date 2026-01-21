@@ -1,4 +1,5 @@
 #include "VFXSceneGPUPipeline.hpp"
+#include "VFXQuadData.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -7,20 +8,10 @@
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
-#include <cstring>
+#include "GPUVFXTypes.hpp"
 
 namespace render::vfx
 {
-    // Quad vertices for billboards (same as CPU version)
-    static constexpr std::array<VFXQuadVertex, 4> QUAD_VERTICES = {{
-        {{-0.5f, -0.5f}, {0.0f, 1.0f}},  // Bottom-left
-        {{ 0.5f, -0.5f}, {1.0f, 1.0f}},  // Bottom-right
-        {{ 0.5f,  0.5f}, {1.0f, 0.0f}},  // Top-right
-        {{-0.5f,  0.5f}, {0.0f, 0.0f}},  // Top-left
-    }};
-
-    static constexpr std::array<uint16_t, 6> QUAD_INDICES = {0, 1, 2, 2, 3, 0};
-
     VFXSceneGPUPipeline::VFXSceneGPUPipeline(core::Device& device, core::SwapChain& swapChain)
         : device(device)
         , swapChain(swapChain)

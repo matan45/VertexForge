@@ -1,4 +1,5 @@
 #include "GPUVFXComputePipeline.hpp"
+#include "GPUVFXTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "print/Logger.hpp"
@@ -77,25 +78,21 @@ namespace render::vfx
 
         std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
 
-        // Binding 0: Particle buffer (storage, read/write)
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-        // Binding 1: Emitter config buffer (storage, read only)
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-        // Binding 2: Emitter state buffer (storage, read/write for atomics)
         bindings[2].binding = 2;
         bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-        // Binding 3: Draw command buffer (storage, write only)
         bindings[3].binding = 3;
         bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[3].descriptorCount = 1;
@@ -112,7 +109,6 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Push constants for per-dispatch data
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eCompute;
         pushConstantRange.offset = 0;
@@ -131,7 +127,6 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Load and compile the compute shader
         shader = std::make_unique<core::Shader>(device);
         shader->readShader("../../resources/shaders/vfx/vfx_particle_sim.glsl");
 
@@ -143,7 +138,6 @@ namespace render::vfx
             return;
         }
 
-        // Create compute pipeline
         vk::ComputePipelineCreateInfo pipelineInfo{};
         pipelineInfo.stage = stages[0];  // Single compute stage
         pipelineInfo.layout = pipelineLayout;
@@ -164,7 +158,7 @@ namespace render::vfx
 
         std::array<vk::DescriptorPoolSize, 1> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 4;  // 4 storage buffers
+        poolSizes[0].descriptorCount = 4;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -215,7 +209,6 @@ namespace render::vfx
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Buffer infos
         vk::DescriptorBufferInfo particleInfo{};
         particleInfo.buffer = cachedParticleBuffer;
         particleInfo.offset = 0;
@@ -238,28 +231,24 @@ namespace render::vfx
 
         std::array<vk::WriteDescriptorSet, 4> writes{};
 
-        // Binding 0: Particle buffer
         writes[0].dstSet = descriptorSet;
         writes[0].dstBinding = 0;
         writes[0].descriptorCount = 1;
         writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[0].pBufferInfo = &particleInfo;
 
-        // Binding 1: Config buffer
         writes[1].dstSet = descriptorSet;
         writes[1].dstBinding = 1;
         writes[1].descriptorCount = 1;
         writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[1].pBufferInfo = &configInfo;
 
-        // Binding 2: State buffer
         writes[2].dstSet = descriptorSet;
         writes[2].dstBinding = 2;
         writes[2].descriptorCount = 1;
         writes[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[2].pBufferInfo = &stateInfo;
 
-        // Binding 3: Draw command buffer
         writes[3].dstSet = descriptorSet;
         writes[3].dstBinding = 3;
         writes[3].descriptorCount = 1;
@@ -289,11 +278,9 @@ namespace render::vfx
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
                                0, descriptorSet, {});
 
-        // Calculate workgroup count
         uint32_t groupCount = (particleCount + GPUVFXConstants::WORKGROUP_SIZE - 1) /
                               GPUVFXConstants::WORKGROUP_SIZE;
 
-        // Push constants
         GPUVFXComputePushConstants pushConstants{};
         pushConstants.emitterIndex = emitterIndex;
         pushConstants.frameNumber = frameNumber;
@@ -303,7 +290,6 @@ namespace render::vfx
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
                           0, sizeof(GPUVFXComputePushConstants), &pushConstants);
 
-        // Dispatch workgroups
         cmd.dispatch(groupCount, 1, 1);
     }
 
@@ -313,24 +299,20 @@ namespace render::vfx
         vk::Buffer drawCommandBuffer,
         vk::Buffer particleBuffer)
     {
-        // Barriers: Transfer (fillBuffer/copy) → Compute shader read/write
         std::array<vk::BufferMemoryBarrier, 3> barriers{};
 
-        // State buffer barrier
         barriers[0].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
         barriers[0].buffer = stateBuffer;
         barriers[0].offset = 0;
         barriers[0].size = VK_WHOLE_SIZE;
 
-        // Draw command buffer barrier
         barriers[1].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barriers[1].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[1].buffer = drawCommandBuffer;
         barriers[1].offset = 0;
         barriers[1].size = VK_WHOLE_SIZE;
 
-        // Particle buffer barrier (may have been cleared with fillBuffer on first frame)
         barriers[2].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
         barriers[2].buffer = particleBuffer;
@@ -355,24 +337,18 @@ namespace render::vfx
     {
         std::array<vk::BufferMemoryBarrier, 3> barriers{};
 
-        // Barrier 1: Particle buffer
-        // Compute shader write → Vertex shader read
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderRead;
         barriers[0].buffer = particleBuffer;
         barriers[0].offset = 0;
         barriers[0].size = VK_WHOLE_SIZE;
 
-        // Barrier 2: State buffer (for next frame's reset)
-        // Compute shader write → Transfer write (for next reset)
         barriers[1].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[1].dstAccessMask = vk::AccessFlagBits::eShaderRead;
         barriers[1].buffer = stateBuffer;
         barriers[1].offset = 0;
         barriers[1].size = VK_WHOLE_SIZE;
 
-        // Barrier 3: Draw command buffer
-        // Compute shader write → Indirect command read
         barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[2].dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
         barriers[2].buffer = drawCommandBuffer;
@@ -396,25 +372,20 @@ namespace render::vfx
         vk::Buffer drawCommandBuffer,
         vk::Buffer particleBuffer)
     {
-        // Barriers: Compute shader read/write → Transfer write
-        // Ensures previous frame's compute is complete before we overwrite buffers
         std::array<vk::BufferMemoryBarrier, 3> barriers{};
 
-        // State buffer: Compute write → Transfer write
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
         barriers[0].buffer = stateBuffer;
         barriers[0].offset = 0;
         barriers[0].size = VK_WHOLE_SIZE;
 
-        // Draw command buffer: Compute write → Transfer write
         barriers[1].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[1].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
         barriers[1].buffer = drawCommandBuffer;
         barriers[1].offset = 0;
         barriers[1].size = VK_WHOLE_SIZE;
 
-        // Particle buffer: Compute read/write → Transfer write
         barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
         barriers[2].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
         barriers[2].buffer = particleBuffer;
@@ -435,8 +406,6 @@ namespace render::vfx
         vk::CommandBuffer cmd,
         vk::Buffer stateBuffer)
     {
-        // Barrier: Transfer write (copyBuffer) → Transfer write (fillBuffer)
-        // Ensures uploadStateBuffer completes before resetAllActiveCounts
         vk::BufferMemoryBarrier barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;

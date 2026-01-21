@@ -8,7 +8,6 @@ namespace windows::details
     {
     public:
         bool draw(services::EntityHandle handle);
-        void clearInstances();
 
     private:
         bool drawHeader(bool& outRemove);

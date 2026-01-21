@@ -79,10 +79,8 @@ namespace services
         // VFX Preview
         void initVFXPreview(PreviewInstanceId instanceId) override;
         void cleanUpVFXPreview(PreviewInstanceId instanceId) override;
-        [[nodiscard]] bool isVFXPreviewInitialized(PreviewInstanceId instanceId) const override;
 
         void setVFXParams(PreviewInstanceId instanceId, const VFXPreviewParams& params) override;
-        [[nodiscard]] VFXPreviewParams getVFXParams(PreviewInstanceId instanceId) const override;
 
         void updateVFXCamera(PreviewInstanceId instanceId, const glm::mat4& view,
                              const glm::mat4& projection, const glm::vec3& cameraPos, float time) override;
@@ -91,7 +89,6 @@ namespace services
         void playVFX(PreviewInstanceId instanceId) override;
         void pauseVFX(PreviewInstanceId instanceId) override;
         void stopVFX(PreviewInstanceId instanceId) override;
-        [[nodiscard]] bool isVFXPlaying(PreviewInstanceId instanceId) const override;
 
         [[nodiscard]] ViewportTextureHandle renderVFXPreview(PreviewInstanceId instanceId) override;
     };

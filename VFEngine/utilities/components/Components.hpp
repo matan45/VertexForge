@@ -329,9 +329,7 @@ namespace components
         bool started = false;
         uint64_t instanceId = 0;
 
-        // Playback control
         services::ScriptPlaybackState playbackState = services::ScriptPlaybackState::Stopped;
-        services::ScriptPlaybackParams playbackParams;
     };
 
     struct ScriptComponent

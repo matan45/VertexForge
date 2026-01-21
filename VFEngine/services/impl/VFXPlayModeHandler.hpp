@@ -8,7 +8,7 @@
 
 namespace services
 {
-    class IVFXRuntimeProvider;  // Forward declaration
+    class IVFXRuntimeProvider;
 
     class VFXPlayModeHandler
     {

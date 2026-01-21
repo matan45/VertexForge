@@ -10,9 +10,7 @@ namespace controllers
 
 namespace core
 {
-    // Adapter implementing IVFXRuntimeProvider by delegating to VFXSceneRenderer.
-    // Unlike VFXPreviewAdapter (which manages multiple controllers for preview windows),
-    // this adapter wraps a single VFXSceneRenderer that manages all VFX instances in the scene.
+   
     class VFXRuntimeAdapter : public services::IVFXRuntimeProvider
     {
     private:

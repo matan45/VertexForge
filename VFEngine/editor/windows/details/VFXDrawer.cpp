@@ -170,9 +170,4 @@ namespace windows::details
 
         return changed;
     }
-
-    void VFXDrawer::clearInstances()
-    {
-        // No preview instances to clear anymore
-    }
 }

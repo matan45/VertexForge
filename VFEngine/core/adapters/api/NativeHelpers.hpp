@@ -122,8 +122,10 @@ namespace core::api
         if (type == "AudioSource2D") return services::ComponentTypeId::AudioSource2D;
         if (type == "AudioSource3D") return services::ComponentTypeId::AudioSource3D;
         if (type == "Script") return services::ComponentTypeId::Script;
-        if (type == "RigidBody") return services::ComponentTypeId::RigidBody;
         if (type == "Collider") return services::ComponentTypeId::Collider;
+        if (type == "RigidBody") return services::ComponentTypeId::RigidBody;
+        if (type == "Animator") return services::ComponentTypeId::Animator;
+        if (type == "VFX") return services::ComponentTypeId::VFX;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -146,8 +148,10 @@ namespace core::api
         case services::ComponentTypeId::AudioSource2D: return "AudioSource2D";
         case services::ComponentTypeId::AudioSource3D: return "AudioSource3D";
         case services::ComponentTypeId::Script: return "Script";
-        case services::ComponentTypeId::RigidBody: return "RigidBody";
         case services::ComponentTypeId::Collider: return "Collider";
+        case services::ComponentTypeId::RigidBody: return "RigidBody";
+        case services::ComponentTypeId::Animator: return "Animator";
+        case services::ComponentTypeId::VFX: return "VFX";
         default: return "Unknown";
         }
     }

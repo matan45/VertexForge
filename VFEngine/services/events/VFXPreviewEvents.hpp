@@ -75,16 +75,4 @@ namespace services::events::vfxpreview
         PreviewInstanceId instanceId;
         std::string_view getName() const override { return "RenderVFXPreview"; }
     };
-
-    struct IsVFXPlayingQuery : ::events::IQuery<bool>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsVFXPlaying"; }
-    };
-
-    struct IsVFXPreviewInitializedQuery : ::events::IQuery<bool>
-    {
-        PreviewInstanceId instanceId;
-        std::string_view getName() const override { return "IsVFXPreviewInitialized"; }
-    };
 }

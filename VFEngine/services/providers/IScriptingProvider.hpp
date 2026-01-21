@@ -45,15 +45,7 @@ namespace services {
         virtual void callOnUpdate(uint64_t instanceId, float deltaTime) = 0;
         virtual void callOnDestroy(uint64_t instanceId) = 0;
 
-        // === Playback Control ===
-        virtual void playScript(uint64_t instanceId) = 0;
-        virtual void pauseScript(uint64_t instanceId) = 0;
-        virtual void stopScript(uint64_t instanceId) = 0;
-        virtual void resetScript(uint64_t instanceId) = 0;
-
-        virtual ScriptPlaybackState getPlaybackState(uint64_t instanceId) const = 0;
-        virtual void setPlaybackParams(uint64_t instanceId, const ScriptPlaybackParams& params) = 0;
-        virtual ScriptPlaybackParams getPlaybackParams(uint64_t instanceId) const = 0;
+        virtual void playVFX(uint64_t instanceId) = 0;
 
         // === Error Handling ===
         virtual std::optional<ScriptError> getLastError() const = 0;

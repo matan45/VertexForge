@@ -113,13 +113,11 @@ namespace services
             auto& vfxComp = view.get<components::VFXComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Skip entities without a VFX asset
             if (vfxComp.vfxPath.empty())
             {
                 continue;
             }
 
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -129,7 +127,6 @@ namespace services
                 }
             }
 
-            // Create VFX instance via events
             events::vfxruntime::CreateVFXInstanceCommand createCmd;
             createCmd.params.vfxAssetPath = vfxComp.vfxPath;
             createCmd.params.worldTransform = worldTransform.worldMatrix;
@@ -141,11 +138,8 @@ namespace services
             {
                 EntityHandle handle = internal::toHandle(entity);
                 activeVFXInstances[handle] = instanceId;
-
-                // Update component runtime state
                 vfxComp.runtimeInstanceId = instanceId;
 
-                // Auto-play if configured
                 if (vfxComp.autoPlay)
                 {
                     events::vfxruntime::PlayVFXInstanceCommand playCmd;
@@ -170,14 +164,12 @@ namespace services
         auto& registry = scene::EntityRegistry::getRegistry();
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Destroy all VFX instances
         for (const auto& [handle, instanceId] : activeVFXInstances)
         {
             events::vfxruntime::DestroyVFXInstanceCommand destroyCmd;
             destroyCmd.instanceId = instanceId;
             dispatcher.execute(destroyCmd);
 
-            // Reset component runtime state
             auto enttEntity = internal::fromHandle(handle);
             if (registry.valid(enttEntity) && registry.all_of<components::VFXComponent>(enttEntity))
             {

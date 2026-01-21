@@ -36,7 +36,6 @@ namespace render::vfx
 
         std::vector<vk::Framebuffer> framebuffers;
 
-        // Buffers
         vk::Buffer quadVertexBuffer;
         vk::DeviceMemory quadVertexBufferMemory;
         vk::Buffer quadIndexBuffer;
@@ -49,13 +48,11 @@ namespace render::vfx
         uint32_t maxInstances = 1024;
         uint32_t currentInstanceCount = 0;
 
-        // Default texture (white 1x1)
         vk::Image defaultTextureImage;
         vk::DeviceMemory defaultTextureMemory;
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
-        // Custom particle texture
         std::unique_ptr<core::Texture> customTexture;
         std::string currentTexturePath;
 
@@ -78,8 +75,6 @@ namespace render::vfx
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
-
-        vk::RenderPass getRenderPass() const { return renderPass; }
 
     private:
         void loadShader();

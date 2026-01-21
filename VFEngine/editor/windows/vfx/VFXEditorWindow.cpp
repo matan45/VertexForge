@@ -37,7 +37,7 @@ namespace windows
             graphEditor->setGraph(&vfxData->graph);
             graphEditor->setOnGraphChanged([this]() { onGraphChanged(); });
             graphEditor->navigateToContent();
-            needsPreviewUpdate = true;  // Deferred until preview panel is initialized
+            needsPreviewUpdate = true;
         }
     }
 
@@ -83,11 +83,9 @@ namespace windows
     {
         if (!vfxData) return;
 
-        // Find emitter node in the graph
         const vfx::VFXNode* emitterNode = vfxData->graph.findEmitterNode();
         if (!emitterNode) return;
 
-        // Helper to extract property values
         auto getFloat = [](const vfx::VFXNode& node, const std::string& propName, float defaultValue) -> float {
             auto it = node.properties.find(propName);
             if (it != node.properties.end()) {
@@ -138,7 +136,6 @@ namespace windows
             return defaultValue;
         };
 
-        // Extract properties from emitter node
         services::VFXPreviewParams params;
         params.spawnRate = getFloat(*emitterNode, "spawnRate", vfx::EmitterDefaults::SPAWN_RATE);
         params.lifetime = getFloat(*emitterNode, "lifetime", vfx::EmitterDefaults::LIFETIME);
@@ -179,22 +176,19 @@ namespace windows
 
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
-                // Preview panel (left)
                 ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, contentSize.y), true);
                 previewPanel->draw();
                 ImGui::EndChild();
 
-                // Apply deferred preview update after preview panel is initialized
                 if (needsPreviewUpdate)
                 {
                     updatePreviewFromGraph();
-                    previewPanel->play();  // Auto-play on load
+                    previewPanel->play();
                     needsPreviewUpdate = false;
                 }
 
                 ImGui::SameLine();
 
-                // Graph panel (right)
                 float graphWidth = contentSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("GraphPanel", ImVec2(graphWidth, contentSize.y), true,
                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);

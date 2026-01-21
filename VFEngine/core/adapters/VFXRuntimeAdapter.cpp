@@ -1,5 +1,5 @@
 #include "VFXRuntimeAdapter.hpp"
-#include "../../graphics/controllers/VFXSceneRenderer.hpp"
+#include "VFXSceneRenderer.hpp"
 #include "../../graphics/core/VulkanContext.hpp"
 #include "print/Logger.hpp"
 

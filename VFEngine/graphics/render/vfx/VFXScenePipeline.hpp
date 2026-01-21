@@ -3,7 +3,6 @@
 #include "VFXBillboardTypes.hpp"
 #include <memory>
 #include <vector>
-#include <string>
 
 namespace core
 {
@@ -14,9 +13,6 @@ namespace core
 
 namespace render::vfx
 {
-    // VFX pipeline variant designed for scene-integrated rendering.
-    // Unlike VFXBillboardPipeline (which creates its own render pass for offscreen preview),
-    // this pipeline uses an external render pass provided by the scene rendering system.
     class VFXScenePipeline
     {
     private:
@@ -27,14 +23,13 @@ namespace render::vfx
 
         std::shared_ptr<core::Shader> vfxShader;
 
-        vk::RenderPass externalRenderPass;  // Not owned - provided by scene
+        vk::RenderPass externalRenderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSet;
 
-        // Buffers
         vk::Buffer quadVertexBuffer;
         vk::DeviceMemory quadVertexBufferMemory;
         vk::Buffer quadIndexBuffer;
@@ -44,10 +39,9 @@ namespace render::vfx
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
 
-        uint32_t maxInstances = 4096;  // Higher limit for multiple scene VFX emitters
+        uint32_t maxInstances = 4096;
         uint32_t currentInstanceCount = 0;
 
-        // Default texture (white 1x1)
         vk::Image defaultTextureImage;
         vk::DeviceMemory defaultTextureMemory;
         vk::ImageView defaultTextureImageView;
@@ -57,7 +51,6 @@ namespace render::vfx
         explicit VFXScenePipeline(core::Device& device, core::SwapChain& swapChain);
         ~VFXScenePipeline();
 
-        // Initialize with external render pass (scene's render pass)
         void init(vk::RenderPass renderPass);
         void recreate(vk::RenderPass renderPass);
         void cleanUp();
@@ -67,12 +60,9 @@ namespace render::vfx
 
         void setParticleInstances(const std::vector<VFXInstanceData>& instances);
 
-        // Record draw commands inline within existing render pass (no begin/end)
         void recordCommandsInline(const vk::CommandBuffer& commandBuffer) const;
 
         bool isInitialized() const { return initialized; }
-
-        uint32_t getInstanceCount() const { return currentInstanceCount; }
 
     private:
         void loadShader();
