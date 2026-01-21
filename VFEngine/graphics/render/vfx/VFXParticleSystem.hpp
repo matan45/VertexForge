@@ -15,7 +15,7 @@ namespace render::vfx
         VFXEmitterConfig config;
         float spawnAccumulator = 0.0f;
         float emissionTime = 0.0f;  // Tracks total emission time for looping control
-        bool playing = true;
+        bool playing = false;  // Start paused, require explicit play() call
 
         std::mt19937 rng;
         std::uniform_real_distribution<float> randomDist{-1.0f, 1.0f};

@@ -212,7 +212,7 @@ namespace controllers
                 instance.gpuParticleOffset = allocation.particleOffset;
                 instance.gpuParticleCount = allocation.particleCount;
                 instance.particleSystem = nullptr;  // No CPU particle system needed
-                instance.active = true;
+                instance.active = false;  // Start paused, require explicit playInstance() call
 
                 loggerInfo("Created GPU-driven VFX instance {} with {} particles at offset {}",
                            id, instance.gpuParticleCount, instance.gpuParticleOffset);
@@ -227,7 +227,7 @@ namespace controllers
         {
             instance.particleSystem = std::make_unique<render::vfx::VFXParticleSystem>();
             instance.particleSystem->setEmitterConfig(instance.config);
-            instance.active = true;
+            instance.active = false;  // Start paused, require explicit playInstance() call
         }
 
         instances[id] = std::move(instance);
