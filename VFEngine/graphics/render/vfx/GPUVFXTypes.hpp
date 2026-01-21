@@ -47,6 +47,17 @@ namespace render::vfx
         inline constexpr uint32_t Vortex = 1 << 7;
     }
 
+    // VK-240: Shape flags for GPU (bits 8-13)
+    namespace ShapeFlags
+    {
+        inline constexpr uint32_t ShapeSphere = 1 << 8;
+        inline constexpr uint32_t ShapeCone = 1 << 9;
+        inline constexpr uint32_t ShapeBox = 1 << 10;
+        inline constexpr uint32_t ShapeCircle = 1 << 11;
+        inline constexpr uint32_t EmitFromSurface = 1 << 12;
+        inline constexpr uint32_t RandomDirection = 1 << 13;
+    }
+
     struct alignas(16) GPUEmitterConfig
     {
         // Original fields (64 bytes)
@@ -73,15 +84,20 @@ namespace render::vfx
         float modPadding2;
         float modPadding3;
 
-        // VK-239: Force data (64 bytes)
+        // VK-239: Force data (96 bytes)
         glm::vec4 gravityDir;           // xyz = normalized direction, w = strength
         glm::vec4 windDir;              // xyz = direction, w = strength
         glm::vec4 windNoise;            // x = noiseStrength, y = noiseFrequency, zw = unused
         glm::vec4 turbulence;           // x = strength, y = frequency, z = scrollSpeed, w = octaves
         glm::vec4 vortexAxis;           // xyz = axis, w = strength
         glm::vec4 vortexCenter;         // xyz = center, w = radialPull
+
+        // VK-240: Shape data (32 bytes)
+        glm::vec4 shapeDimensions;      // Shape-specific: Sphere(r), Cone(r,h,angle), Box(hx,hy,hz), Circle(r,arc)
+        uint32_t shapeFlags;            // Shape type and emit flags (bits 8-13 of modifierFlags moved here for clarity)
+        float shapePadding[3];          // Alignment padding
     };
-    static_assert(sizeof(GPUEmitterConfig) == 224, "GPUEmitterConfig must be 224 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 256, "GPUEmitterConfig must be 256 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -106,6 +122,9 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, turbulence) == 176, "GPUEmitterConfig::turbulence offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, vortexAxis) == 192, "GPUEmitterConfig::vortexAxis offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, vortexCenter) == 208, "GPUEmitterConfig::vortexCenter offset mismatch");
+    // VK-240: Shape field offsets
+    static_assert(offsetof(GPUEmitterConfig, shapeDimensions) == 224, "GPUEmitterConfig::shapeDimensions offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, shapeFlags) == 240, "GPUEmitterConfig::shapeFlags offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

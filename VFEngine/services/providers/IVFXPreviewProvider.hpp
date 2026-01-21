@@ -3,6 +3,7 @@
 #include "PreviewInstanceId.hpp"
 #include <vfx/VFXModifierTypes.hpp>
 #include <vfx/VFXForceTypes.hpp>
+#include <vfx/VFXShapeTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 
@@ -24,6 +25,9 @@ namespace services
 
         // Force chain (VK-239)
         ::vfx::VFXForceChain forces;
+
+        // Shape config (VK-240)
+        ::vfx::ShapeConfig shape;
     };
 
     class IVFXPreviewProvider

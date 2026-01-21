@@ -30,6 +30,14 @@ const uint FORCE_WIND = 32u;
 const uint FORCE_TURBULENCE = 64u;
 const uint FORCE_VORTEX = 128u;
 
+// VK-240: Shape flags (must match ShapeFlags namespace in C++)
+const uint SHAPE_SPHERE = 256u;
+const uint SHAPE_CONE = 512u;
+const uint SHAPE_BOX = 1024u;
+const uint SHAPE_CIRCLE = 2048u;
+const uint SHAPE_EMIT_FROM_SURFACE = 4096u;
+const uint SHAPE_RANDOM_DIRECTION = 8192u;
+
 struct GPUEmitterConfig
 {
     // Original fields (64 bytes)
@@ -63,6 +71,13 @@ struct GPUEmitterConfig
     vec4 turbulence;        // x = strength, y = frequency, z = scrollSpeed, w = octaves
     vec4 vortexAxis;        // xyz = axis, w = strength
     vec4 vortexCenter;      // xyz = center, w = radialPull
+
+    // VK-240: Shape data (32 bytes)
+    vec4 shapeDimensions;   // Sphere(r), Cone(r,h,angle), Box(hx,hy,hz), Circle(r,arc)
+    uint shapeFlags;        // Shape type and emit flags
+    float shapePadding1;
+    float shapePadding2;
+    float shapePadding3;
 };
 
 struct GPUEmitterState
@@ -145,6 +160,200 @@ vec3 randomInCone(inout uint seed, vec3 baseDir, float spreadAngle)
     vec3 offset = right * (sinPhi * cos(theta)) + forward * (sinPhi * sin(theta));
 
     return normalize(baseDir * cosPhi + offset);
+}
+
+// VK-240: Shape-based position generation
+vec3 generateSpherePosition(inout uint seed, float radius, bool surfaceOnly)
+{
+    // Generate random point on unit sphere using spherical coordinates
+    float theta = randomFloat(seed) * 6.28318530718;  // Azimuthal angle [0, 2π]
+    float u = randomFloat(seed) * 2.0 - 1.0;          // Uniform in [-1, 1]
+    float phi = acos(u);                               // Polar angle [0, π] (uniform on sphere)
+
+    vec3 direction;
+    direction.x = sin(phi) * cos(theta);
+    direction.y = cos(phi);
+    direction.z = sin(phi) * sin(theta);
+
+    float r = radius;
+    if (!surfaceOnly)
+    {
+        // Use cube root for uniform volume distribution
+        r = radius * pow(randomFloat(seed), 1.0 / 3.0);
+    }
+
+    return direction * r;
+}
+
+vec3 generateConePosition(inout uint seed, float baseRadius, float height, float angle, bool surfaceOnly)
+{
+    // Cone with apex at origin, opening upward (+Y)
+    float t = randomFloat(seed);  // Position along cone height [0, 1]
+
+    if (!surfaceOnly)
+    {
+        // Volume distribution - use sqrt for uniform area distribution along height
+        t = sqrt(randomFloat(seed));
+    }
+
+    float y = t * height;
+    float currentRadius = t * baseRadius * tan(angle);
+
+    // Random angle around Y axis
+    float theta = randomFloat(seed) * 6.28318530718;
+
+    float r = currentRadius;
+    if (!surfaceOnly)
+    {
+        // Random radius within the cone at this height
+        r = currentRadius * sqrt(randomFloat(seed));
+    }
+
+    return vec3(r * cos(theta), y, r * sin(theta));
+}
+
+vec3 generateBoxPosition(inout uint seed, vec3 halfExtents, bool surfaceOnly)
+{
+    if (!surfaceOnly)
+    {
+        // Volume: random point inside box
+        return vec3(
+            (randomFloat(seed) * 2.0 - 1.0) * halfExtents.x,
+            (randomFloat(seed) * 2.0 - 1.0) * halfExtents.y,
+            (randomFloat(seed) * 2.0 - 1.0) * halfExtents.z
+        );
+    }
+
+    // Surface: pick random face, then random point on that face
+    float areaXY = halfExtents.x * halfExtents.y;
+    float areaXZ = halfExtents.x * halfExtents.z;
+    float areaYZ = halfExtents.y * halfExtents.z;
+    float totalArea = 2.0 * (areaXY + areaXZ + areaYZ);
+
+    float faceSelect = randomFloat(seed) * totalArea;
+    float u = randomFloat(seed) * 2.0 - 1.0;
+    float v = randomFloat(seed) * 2.0 - 1.0;
+
+    if (faceSelect < areaYZ)
+        return vec3(halfExtents.x, u * halfExtents.y, v * halfExtents.z);
+    faceSelect -= areaYZ;
+
+    if (faceSelect < areaYZ)
+        return vec3(-halfExtents.x, u * halfExtents.y, v * halfExtents.z);
+    faceSelect -= areaYZ;
+
+    if (faceSelect < areaXZ)
+        return vec3(u * halfExtents.x, halfExtents.y, v * halfExtents.z);
+    faceSelect -= areaXZ;
+
+    if (faceSelect < areaXZ)
+        return vec3(u * halfExtents.x, -halfExtents.y, v * halfExtents.z);
+    faceSelect -= areaXZ;
+
+    if (faceSelect < areaXY)
+        return vec3(u * halfExtents.x, v * halfExtents.y, halfExtents.z);
+
+    return vec3(u * halfExtents.x, v * halfExtents.y, -halfExtents.z);
+}
+
+vec3 generateCirclePosition(inout uint seed, float radius, float arc, bool surfaceOnly)
+{
+    // Circle on XZ plane (Y = 0)
+    float theta = randomFloat(seed) * arc;  // Random angle within arc
+
+    if (surfaceOnly)
+    {
+        // Edge only
+        return vec3(radius * cos(theta), 0.0, radius * sin(theta));
+    }
+
+    // Disk (filled circle) - use sqrt for uniform area distribution
+    float r = radius * sqrt(randomFloat(seed));
+    return vec3(r * cos(theta), 0.0, r * sin(theta));
+}
+
+vec3 generateSpawnPosition(inout uint seed, GPUEmitterConfig config)
+{
+    bool surfaceOnly = (config.shapeFlags & SHAPE_EMIT_FROM_SURFACE) != 0u;
+
+    if ((config.shapeFlags & SHAPE_SPHERE) != 0u)
+    {
+        return generateSpherePosition(seed, config.shapeDimensions.x, surfaceOnly);
+    }
+    else if ((config.shapeFlags & SHAPE_CONE) != 0u)
+    {
+        return generateConePosition(seed, config.shapeDimensions.x, config.shapeDimensions.y, config.shapeDimensions.z, surfaceOnly);
+    }
+    else if ((config.shapeFlags & SHAPE_BOX) != 0u)
+    {
+        return generateBoxPosition(seed, config.shapeDimensions.xyz, surfaceOnly);
+    }
+    else if ((config.shapeFlags & SHAPE_CIRCLE) != 0u)
+    {
+        return generateCirclePosition(seed, config.shapeDimensions.x, config.shapeDimensions.y, surfaceOnly);
+    }
+
+    // Point (default)
+    return vec3(0.0);
+}
+
+vec3 generateDirectionFromShape(inout uint seed, vec3 position, GPUEmitterConfig config)
+{
+    // If randomDirection is true, use emit direction with spread
+    if ((config.shapeFlags & SHAPE_RANDOM_DIRECTION) != 0u)
+    {
+        vec3 baseDir = normalize(config.emitDirection.xyz);
+        float spread = config.emitDirection.w;
+        return randomInCone(seed, baseDir, spread);
+    }
+
+    // Otherwise, generate direction based on shape type (surface normal)
+    if ((config.shapeFlags & SHAPE_SPHERE) != 0u)
+    {
+        // Direction is outward from center
+        float len = length(position);
+        if (len > 0.001)
+            return position / len;
+        return vec3(0.0, 1.0, 0.0);
+    }
+    else if ((config.shapeFlags & SHAPE_CONE) != 0u)
+    {
+        // Direction is along the cone surface normal
+        float angle = config.shapeDimensions.z;
+        vec3 radial = vec3(position.x, 0.0, position.z);
+        float radialLen = length(radial);
+
+        if (radialLen > 0.001)
+        {
+            vec3 outward = radial / radialLen;
+            return normalize(outward * sin(angle) + vec3(0.0, cos(angle), 0.0));
+        }
+        return vec3(0.0, 1.0, 0.0);
+    }
+    else if ((config.shapeFlags & SHAPE_BOX) != 0u)
+    {
+        // Direction is outward from box face
+        vec3 halfExtents = config.shapeDimensions.xyz;
+        vec3 absPos = abs(position);
+        vec3 normalizedPos = absPos / max(halfExtents, vec3(0.001));
+
+        if (normalizedPos.x >= normalizedPos.y && normalizedPos.x >= normalizedPos.z)
+            return vec3(position.x > 0.0 ? 1.0 : -1.0, 0.0, 0.0);
+        else if (normalizedPos.y >= normalizedPos.x && normalizedPos.y >= normalizedPos.z)
+            return vec3(0.0, position.y > 0.0 ? 1.0 : -1.0, 0.0);
+        else
+            return vec3(0.0, 0.0, position.z > 0.0 ? 1.0 : -1.0);
+    }
+    else if ((config.shapeFlags & SHAPE_CIRCLE) != 0u)
+    {
+        // Direction is up (Y+) from XZ plane
+        return vec3(0.0, 1.0, 0.0);
+    }
+
+    // Point (default) - use emit direction with spread
+    vec3 baseDir = normalize(config.emitDirection.xyz);
+    float spread = config.emitDirection.w;
+    return randomInCone(seed, baseDir, spread);
 }
 
 // VK-239: Simplex noise implementation (based on Stefan Gustavson's webgl-noise)
@@ -426,8 +635,13 @@ void main()
         {
             isActive = true;
 
-            // Spawn at emitter origin
-            p.position = vec3(worldTransform[3]);
+            // VK-240: Generate spawn position based on shape
+            vec3 localPos = generateSpawnPosition(seed, config);
+
+            // Transform to world space (position + rotation)
+            mat3 rotation = mat3(worldTransform);
+            p.position = vec3(worldTransform[3]) + rotation * localPos;
+
             p.lifetime = 0.0;
             p.maxLifetime = config.lifetime;
             p.size = config.startSize;
@@ -438,14 +652,11 @@ void main()
             p.initialSize = config.startSize;
             p.initialSpeed = config.startSpeed;
 
-            // Initial velocity with random spread
-            vec3 baseDir = normalize(config.emitDirection.xyz);
-            float spread = config.emitDirection.w;
-            vec3 dir = randomInCone(seed, baseDir, spread);
+            // VK-240: Generate direction based on shape
+            vec3 dir = generateDirectionFromShape(seed, localPos, config);
             p.velocity = dir * config.startSpeed;
 
-            // Apply emitter rotation
-            mat3 rotation = mat3(worldTransform);
+            // Apply emitter rotation to velocity
             p.velocity = rotation * p.velocity;
         }
     }

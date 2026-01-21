@@ -1,4 +1,5 @@
 #include "VFXGraphEditor.hpp"
+#include "vfx/VFXShapeTypes.hpp"
 #include "imgui.h"
 #include <algorithm>
 
@@ -7,8 +8,13 @@ namespace ed = ax::NodeEditor;
 namespace editor::graph {
 
     bool VFXGraphEditor::canCreateLink(uint32_t startPinId, uint32_t endPinId) const {
-        uint32_t startNodeId = getNodeIdFromPinId(startPinId);
-        uint32_t endNodeId = getNodeIdFromPinId(endPinId);
+        // VK-240: Handle shape pin connections
+        bool startIsShapePin = isShapePin(startPinId);
+        bool endIsShapePin = isShapePin(endPinId);
+
+        // Get node IDs based on pin type
+        uint32_t startNodeId = startIsShapePin ? getNodeIdFromShapePinId(startPinId) : getNodeIdFromPinId(startPinId);
+        uint32_t endNodeId = endIsShapePin ? getNodeIdFromShapePinId(endPinId) : getNodeIdFromPinId(endPinId);
 
         if (startNodeId == endNodeId) return false;
 
@@ -16,6 +22,25 @@ namespace editor::graph {
         const vfx::VFXNode* endNode = currentGraph->findNode(endNodeId);
 
         if (!startNode || !endNode) return false;
+
+        // VK-240: Shape pin connections (Shape node output -> Emitter shape input)
+        if (startIsShapePin || endIsShapePin) {
+            // One end must be shape pin (input on Emitter), other must be output pin
+            const vfx::VFXNode* shapePinNode = startIsShapePin ? startNode : endNode;
+            const vfx::VFXNode* outputPinNode = startIsShapePin ? endNode : startNode;
+            uint32_t outputPinId = startIsShapePin ? endPinId : startPinId;
+
+            // Shape pin is always input, so the other must be output
+            if (!isOutputPin(outputPinId)) return false;
+
+            // Shape pin owner must be Emitter
+            if (shapePinNode->type != vfx::VFXNodeType::Emitter) return false;
+
+            // Output pin owner must be Shape node
+            if (outputPinNode->type != vfx::VFXNodeType::Shape) return false;
+
+            return true;
+        }
 
         bool startIsOutput = isOutputPin(startPinId);
         bool endIsOutput = isOutputPin(endPinId);
@@ -26,11 +51,14 @@ namespace editor::graph {
         const vfx::VFXNode* sourceNode = startIsOutput ? startNode : endNode;
         const vfx::VFXNode* targetNode = startIsOutput ? endNode : startNode;
 
-        // VK-238: Source must have an output pin (Emitter or Modifier)
+        // VK-238: Source must have an output pin (Emitter, Modifier, Force, or Shape)
         if (!vfx::hasOutputPin(sourceNode->type)) return false;
 
-        // VK-238: Target must have an input pin (OutSystem or Modifier)
+        // VK-238: Target must have an input pin (OutSystem, Modifier, or Force)
         if (!vfx::hasInputPin(targetNode->type)) return false;
+
+        // VK-240: Shape nodes can only connect to Emitter's shape pin, not to regular input pins
+        if (sourceNode->type == vfx::VFXNodeType::Shape) return false;
 
         return true;
     }
@@ -47,30 +75,66 @@ namespace editor::graph {
                         vfx::VFXNodeLink newLink;
                         newLink.id = currentGraph->nextLinkId++;
 
-                        bool startIsOutput = isOutputPin(startId);
-                        uint32_t sourceNodeId = startIsOutput ? getNodeIdFromPinId(startId) : getNodeIdFromPinId(endId);
-                        uint32_t targetNodeId = startIsOutput ? getNodeIdFromPinId(endId) : getNodeIdFromPinId(startId);
+                        // VK-240: Handle shape pin connections
+                        bool startIsShapePin = isShapePin(startId);
+                        bool endIsShapePin = isShapePin(endId);
 
-                        newLink.sourceNodeId = sourceNodeId;
-                        newLink.targetNodeId = targetNodeId;
-                        newLink.sourcePin = "Output";
-                        newLink.targetPin = "Input";
+                        if (startIsShapePin || endIsShapePin) {
+                            // Shape connection: Shape node output -> Emitter shape input
+                            uint32_t emitterNodeId = startIsShapePin
+                                ? getNodeIdFromShapePinId(startId)
+                                : getNodeIdFromShapePinId(endId);
+                            uint32_t shapeNodeId = startIsShapePin
+                                ? getNodeIdFromPinId(endId)
+                                : getNodeIdFromPinId(startId);
 
-                        // Remove any existing link to this target (single connection allowed)
-                        currentGraph->links.erase(
-                            std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
-                                [targetNodeId](const vfx::VFXNodeLink& existing) {
-                                    return existing.targetNodeId == targetNodeId;
-                                }),
-                            currentGraph->links.end());
+                            newLink.sourceNodeId = shapeNodeId;
+                            newLink.targetNodeId = emitterNodeId;
+                            newLink.sourcePin = "Output";
+                            newLink.targetPin = "Shape";
 
-                        // Remove any existing link from this source (single connection from emitter)
-                        currentGraph->links.erase(
-                            std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
-                                [sourceNodeId](const vfx::VFXNodeLink& existing) {
-                                    return existing.sourceNodeId == sourceNodeId;
-                                }),
-                            currentGraph->links.end());
+                            // Remove any existing shape link to this emitter (single shape allowed)
+                            currentGraph->links.erase(
+                                std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
+                                    [emitterNodeId](const vfx::VFXNodeLink& existing) {
+                                        return existing.targetNodeId == emitterNodeId && existing.targetPin == "Shape";
+                                    }),
+                                currentGraph->links.end());
+
+                            // Remove any existing link from this shape node
+                            currentGraph->links.erase(
+                                std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
+                                    [shapeNodeId](const vfx::VFXNodeLink& existing) {
+                                        return existing.sourceNodeId == shapeNodeId;
+                                    }),
+                                currentGraph->links.end());
+                        } else {
+                            // Regular connection
+                            bool startIsOutput = isOutputPin(startId);
+                            uint32_t sourceNodeId = startIsOutput ? getNodeIdFromPinId(startId) : getNodeIdFromPinId(endId);
+                            uint32_t targetNodeId = startIsOutput ? getNodeIdFromPinId(endId) : getNodeIdFromPinId(startId);
+
+                            newLink.sourceNodeId = sourceNodeId;
+                            newLink.targetNodeId = targetNodeId;
+                            newLink.sourcePin = "Output";
+                            newLink.targetPin = "Input";
+
+                            // Remove any existing link to this target's input pin (single connection allowed)
+                            currentGraph->links.erase(
+                                std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
+                                    [targetNodeId](const vfx::VFXNodeLink& existing) {
+                                        return existing.targetNodeId == targetNodeId && existing.targetPin == "Input";
+                                    }),
+                                currentGraph->links.end());
+
+                            // Remove any existing link from this source (single connection from emitter)
+                            currentGraph->links.erase(
+                                std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
+                                    [sourceNodeId](const vfx::VFXNodeLink& existing) {
+                                        return existing.sourceNodeId == sourceNodeId;
+                                    }),
+                                currentGraph->links.end());
+                        }
 
                         currentGraph->links.push_back(newLink);
                         if (onGraphChanged) onGraphChanged();
@@ -298,6 +362,77 @@ namespace editor::graph {
         }
     }
 
+    // VK-240: Helper function to create a shape node with default properties
+    static void initializeShapeProperties(vfx::VFXNode& node, vfx::ShapeType shapeType) {
+        // Store the shape type as a string property
+        node.properties["shapeType"] = vfx::VFXProperty{
+            "shapeType", vfx::VFXPropertyType::String,
+            std::string(vfx::shapeTypeToString(shapeType)), 0.0f, 1.0f
+        };
+
+        // Emit from (Volume or Surface)
+        node.properties["emitFrom"] = vfx::VFXProperty{
+            "emitFrom", vfx::VFXPropertyType::String,
+            std::string("Volume"), 0.0f, 1.0f
+        };
+
+        // Random direction toggle
+        node.properties["randomDirection"] = vfx::VFXProperty{
+            "randomDirection", vfx::VFXPropertyType::Bool,
+            false, 0.0f, 1.0f
+        };
+
+        // Shape-specific properties
+        switch (shapeType) {
+            case vfx::ShapeType::Sphere:
+                node.properties["radius"] = vfx::VFXProperty{
+                    "radius", vfx::VFXPropertyType::Float,
+                    vfx::ShapeDefaults::SPHERE_RADIUS, 0.01f, 100.0f
+                };
+                break;
+
+            case vfx::ShapeType::Cone:
+                node.properties["radius"] = vfx::VFXProperty{
+                    "radius", vfx::VFXPropertyType::Float,
+                    vfx::ShapeDefaults::CONE_BASE_RADIUS, 0.01f, 100.0f
+                };
+                node.properties["height"] = vfx::VFXProperty{
+                    "height", vfx::VFXPropertyType::Float,
+                    vfx::ShapeDefaults::CONE_HEIGHT, 0.01f, 100.0f
+                };
+                node.properties["angle"] = vfx::VFXProperty{
+                    "angle", vfx::VFXPropertyType::Float,
+                    vfx::ShapeDefaults::CONE_ANGLE, 0.0f, 1.57f  // 0 to 90 degrees in radians
+                };
+                break;
+
+            case vfx::ShapeType::Box:
+                node.properties["halfExtents"] = vfx::VFXProperty{
+                    "halfExtents", vfx::VFXPropertyType::Vec3,
+                    glm::vec3(vfx::ShapeDefaults::BOX_HALF_EXTENT_X,
+                              vfx::ShapeDefaults::BOX_HALF_EXTENT_Y,
+                              vfx::ShapeDefaults::BOX_HALF_EXTENT_Z), 0.01f, 100.0f
+                };
+                break;
+
+            case vfx::ShapeType::Circle:
+                node.properties["radius"] = vfx::VFXProperty{
+                    "radius", vfx::VFXPropertyType::Float,
+                    vfx::ShapeDefaults::CIRCLE_RADIUS, 0.01f, 100.0f
+                };
+                node.properties["arc"] = vfx::VFXProperty{
+                    "arc", vfx::VFXPropertyType::Float,
+                    vfx::ShapeDefaults::CIRCLE_ARC, 0.0f, 6.28318530718f  // 0 to 2*PI
+                };
+                break;
+
+            case vfx::ShapeType::Point:
+            default:
+                // Point has no additional properties
+                break;
+        }
+    }
+
     void VFXGraphEditor::handleContextMenu() {
         if (showContextMenu) {
             ImGui::OpenPopup("VFXContextMenu");
@@ -392,6 +527,61 @@ namespace editor::graph {
                     newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceVortex);
                     newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
                     initializeForceProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                ImGui::EndMenu();
+            }
+
+            // VK-240: Shapes submenu
+            if (ImGui::BeginMenu("Shapes")) {
+                if (ImGui::MenuItem("Point")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::Shape;
+                    newNode.name = "Point";
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeShapeProperties(newNode, vfx::ShapeType::Point);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Sphere")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::Shape;
+                    newNode.name = "Sphere";
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeShapeProperties(newNode, vfx::ShapeType::Sphere);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Cone")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::Shape;
+                    newNode.name = "Cone";
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeShapeProperties(newNode, vfx::ShapeType::Cone);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Box")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::Shape;
+                    newNode.name = "Box";
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeShapeProperties(newNode, vfx::ShapeType::Box);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Circle")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::Shape;
+                    newNode.name = "Circle";
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeShapeProperties(newNode, vfx::ShapeType::Circle);
                     currentGraph->nodes.push_back(std::move(newNode));
                     if (onGraphChanged) onGraphChanged();
                 }

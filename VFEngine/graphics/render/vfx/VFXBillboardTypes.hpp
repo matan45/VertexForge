@@ -6,6 +6,7 @@
 #include <string>
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
+#include "vfx/VFXShapeTypes.hpp"
 
 namespace render::vfx
 {
@@ -128,6 +129,9 @@ namespace render::vfx
 
         // Force chain (VK-239)
         ::vfx::VFXForceChain forces;
+
+        // Shape config (VK-240)
+        ::vfx::ShapeConfig shape;
     };
 
     namespace VFXConstants

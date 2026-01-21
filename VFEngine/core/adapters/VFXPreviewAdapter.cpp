@@ -53,6 +53,7 @@ namespace core
         controllerParams.texturePath = params.texturePath;
         controllerParams.modifiers = params.modifiers;  // VK-238
         controllerParams.forces = params.forces;        // VK-239
+        controllerParams.shape = params.shape;          // VK-240
 
         controller->setParams(controllerParams);
     }

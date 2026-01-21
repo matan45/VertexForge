@@ -55,7 +55,21 @@ namespace render::vfx
         void applyForce(VFXParticle& particle, const ::vfx::TurbulenceForceConfig& force, float deltaTime);
         void applyForce(VFXParticle& particle, const ::vfx::VortexForceConfig& force, float deltaTime);
 
+        // Shape-based position generation (VK-240)
+        glm::vec3 generateSpawnPosition();
+        glm::vec3 generatePointPosition();
+        glm::vec3 generateSpherePosition(float radius, bool surfaceOnly);
+        glm::vec3 generateConePosition(float radius, float height, float angle, bool surfaceOnly);
+        glm::vec3 generateBoxPosition(const glm::vec3& halfExtents, bool surfaceOnly);
+        glm::vec3 generateCirclePosition(float radius, float arc, bool surfaceOnly);
+
+        // Direction generation based on shape (VK-240)
+        glm::vec3 generateDirectionFromShape(const glm::vec3& position);
+
         // Time accumulator for noise-based forces (VK-239)
         float timeAccumulator = 0.0f;
+
+        // Unit distributions for shape generation (VK-240)
+        std::uniform_real_distribution<float> unitDist{0.0f, 1.0f};
     };
 }

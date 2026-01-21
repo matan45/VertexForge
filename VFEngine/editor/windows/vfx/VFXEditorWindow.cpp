@@ -5,6 +5,7 @@
 #include <vfx/VFXTypes.hpp>
 #include <vfx/VFXModifierConfigLoader.hpp>
 #include <vfx/VFXForceConfigLoader.hpp>
+#include <vfx/VFXShapeConfigLoader.hpp>
 #include <providers/IVFXPreviewProvider.hpp>
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
@@ -153,6 +154,9 @@ namespace windows
 
         // VK-239: Extract force chain from graph
         params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData->graph);
+
+        // VK-240: Extract shape config from graph
+        params.shape = vfx::VFXShapeConfigLoader::fromGraph(vfxData->graph);
 
         previewPanel->setParams(params);
     }

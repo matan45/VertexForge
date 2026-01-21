@@ -4,6 +4,7 @@
 #include "VFXAsset.hpp"
 #include "VFXModifierConfigLoader.hpp"
 #include "VFXForceConfigLoader.hpp"
+#include "VFXShapeConfigLoader.hpp"
 #include <optional>
 #include <string_view>
 
@@ -121,6 +122,9 @@ namespace vfx
 
         // Load force chain (VK-239)
         config.forces = VFXForceConfigLoader::fromGraph(data.graph);
+
+        // Load shape config (VK-240)
+        config.shape = VFXShapeConfigLoader::fromGraph(data.graph);
 
         return config;
     }

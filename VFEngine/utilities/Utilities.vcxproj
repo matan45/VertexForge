@@ -147,6 +147,8 @@
     <ClInclude Include="vfx\VFXForceTypes.hpp" />
     <ClInclude Include="vfx\VFXModifierConfigLoader.hpp" />
     <ClInclude Include="vfx\VFXModifierTypes.hpp" />
+    <ClInclude Include="vfx\VFXShapeConfigLoader.hpp" />
+    <ClInclude Include="vfx\VFXShapeTypes.hpp" />
     <ClInclude Include="vfx\VFXTypes.hpp" />
   </ItemGroup>
   <ItemGroup>

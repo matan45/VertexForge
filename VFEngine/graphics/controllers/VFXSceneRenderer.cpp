@@ -9,6 +9,7 @@
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
+#include "vfx/VFXShapeTypes.hpp"
 #include "print/Logger.hpp"
 #include <random>
 #include <type_traits>
@@ -578,6 +579,40 @@ namespace controllers
                     gpuConfig.vortexCenter = glm::vec4(f.center, f.radialPull);
                 }
             }, force);
+        }
+
+        // VK-240: Extract shape settings
+        gpuConfig.shapeDimensions = cpuConfig.shape.dimensions;
+        gpuConfig.shapeFlags = 0;
+
+        switch (cpuConfig.shape.type)
+        {
+        case ::vfx::ShapeType::Sphere:
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeSphere;
+            break;
+        case ::vfx::ShapeType::Cone:
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeCone;
+            break;
+        case ::vfx::ShapeType::Box:
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeBox;
+            break;
+        case ::vfx::ShapeType::Circle:
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeCircle;
+            break;
+        case ::vfx::ShapeType::Point:
+        default:
+            // No flag set for Point (default behavior)
+            break;
+        }
+
+        if (cpuConfig.shape.emitFrom == ::vfx::EmitFrom::Surface)
+        {
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::EmitFromSurface;
+        }
+
+        if (cpuConfig.shape.randomDirection)
+        {
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::RandomDirection;
         }
 
         return gpuConfig;

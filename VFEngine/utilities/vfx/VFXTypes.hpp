@@ -39,7 +39,9 @@ namespace vfx
         ForceGravity,    // Constant directional force (default: downward)
         ForceWind,       // Directional force with optional noise
         ForceTurbulence, // Perlin noise-based chaotic movement
-        ForceVortex      // Spiral force around an axis
+        ForceVortex,     // Spiral force around an axis
+        // Shape nodes (VK-240)
+        Shape            // Emission shape configuration (connects to Emitter's shape input)
     };
 
     // Helper function to check if a node type is a modifier
@@ -60,10 +62,22 @@ namespace vfx
                type == VFXNodeType::ForceVortex;
     }
 
-    // Check if node type has an input pin (all except Emitter)
+    // Helper function to check if a node type is a shape (VK-240)
+    inline bool isShapeNode(VFXNodeType type)
+    {
+        return type == VFXNodeType::Shape;
+    }
+
+    // Check if node type has a shape input pin (only Emitter has this)
+    inline bool hasShapeInputPin(VFXNodeType type)
+    {
+        return type == VFXNodeType::Emitter;
+    }
+
+    // Check if node type has a data flow input pin (all except Emitter and Shape)
     inline bool hasInputPin(VFXNodeType type)
     {
-        return type != VFXNodeType::Emitter;
+        return type != VFXNodeType::Emitter && type != VFXNodeType::Shape;
     }
 
     // Check if node type has an output pin (all except OutSystem)

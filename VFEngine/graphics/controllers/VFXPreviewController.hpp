@@ -4,6 +4,7 @@
 #include "../core/OffScreen.hpp"
 #include <vfx/VFXModifierTypes.hpp>
 #include <vfx/VFXForceTypes.hpp>
+#include <vfx/VFXShapeTypes.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -38,6 +39,9 @@ namespace controllers
 
         // Force chain (VK-239)
         ::vfx::VFXForceChain forces;
+
+        // Shape config (VK-240)
+        ::vfx::ShapeConfig shape;
     };
 
     class VFXPreviewController
