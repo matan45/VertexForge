@@ -5,7 +5,9 @@
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
 #include "events/PreviewEvents.hpp"
+#include "events/MaterialEvents.hpp"
 #include "time/Timer.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <filesystem>
@@ -80,6 +82,11 @@ namespace windows
         {
             isDirty = false;
             updatePreviewMaterial();
+
+            // Notify for cache invalidation in rendering systems
+            events::material::MaterialFileSavedNotification notification;
+            notification.materialPath = instancePath;
+            events::EventDispatcher::instance().publish(notification);
         }
     }
 
@@ -437,12 +444,11 @@ namespace windows
 
         ImGui::SameLine();
 
-        // Texture path display with drag-drop target
+        // Texture path display
         fs::path texPath(currentPath);
         std::string displayName = currentPath.empty() || currentPath == " " ? "(none)" : texPath.filename().string();
 
-        // Create a button-like area for drag-drop
-        ImGui::BeginGroup();
+        // Label
         ImGui::Text("%s:", label);
         ImGui::SameLine();
 
@@ -455,19 +461,32 @@ namespace windows
         {
             ImGui::TextDisabled("%s", displayName.c_str());
         }
-        ImGui::EndGroup();
 
-        // Drag-drop target for texture files
-        if (ImGui::BeginDragDropTarget())
+        // Browse button
+        ImGui::SameLine();
+        if (ImGui::SmallButton("..."))
         {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_TEXTURE_PATH"))
+            nfd::FileDialog fileDialog;
+            std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                {L"Textures", L"*.vfImage;*.vfHdr;*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.hdr"}
+            };
+            std::string selectedPath = fileDialog.openFileDialog(filters);
+            if (!selectedPath.empty())
             {
-                const char* droppedPath = static_cast<const char*>(payload->Data);
-                instanceData->textureOverrides[slot] = droppedPath;
-                overrideEnabled = true;
+                instanceData->textureOverrides[slot] = selectedPath;
                 changed = true;
             }
-            ImGui::EndDragDropTarget();
+        }
+
+        // Clear button (only if override is enabled)
+        if (overrideEnabled)
+        {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+            {
+                instanceData->textureOverrides.erase(slot);
+                changed = true;
+            }
         }
 
         if (!overrideEnabled && !parentTexture.empty())
