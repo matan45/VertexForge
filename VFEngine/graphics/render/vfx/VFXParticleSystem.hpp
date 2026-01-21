@@ -14,6 +14,7 @@ namespace render::vfx
         std::vector<VFXParticle> particles;
         VFXEmitterConfig config;
         float spawnAccumulator = 0.0f;
+        float emissionTime = 0.0f;  // Tracks total emission time for looping control
         bool playing = true;
 
         std::mt19937 rng;

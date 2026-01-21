@@ -27,6 +27,9 @@ namespace render::vfx
         // Update time accumulator for noise-based forces (VK-239)
         timeAccumulator += deltaTime;
 
+        // Update emission time for looping control
+        emissionTime += deltaTime;
+
         for (auto& particle : particles)
         {
             if (particle.active)
@@ -35,7 +38,12 @@ namespace render::vfx
             }
         }
 
-        if (config.spawnRate > 0.0f)
+        // Only spawn new particles if:
+        // - looping is enabled, OR
+        // - we haven't exceeded the emission duration (one lifetime cycle)
+        bool canSpawn = config.looping || (emissionTime < config.lifetime);
+
+        if (config.spawnRate > 0.0f && canSpawn)
         {
             spawnAccumulator += deltaTime * config.spawnRate;
 
@@ -54,6 +62,7 @@ namespace render::vfx
             particle.active = false;
         }
         spawnAccumulator = 0.0f;
+        emissionTime = 0.0f;  // Reset emission time for looping control
     }
 
     std::vector<VFXInstanceData> VFXParticleSystem::getInstanceData() const

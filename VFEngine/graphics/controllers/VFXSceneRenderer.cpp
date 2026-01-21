@@ -188,7 +188,7 @@ namespace controllers
         VFXRuntimeInstance instance;
         instance.id = id;
         instance.worldTransform = params.worldTransform;
-        instance.loop = params.loop;
+        instance.loop = params.loop;  // Component setting takes priority
 
         auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(params.vfxAssetPath);
         if (configOpt.has_value())
@@ -474,8 +474,16 @@ namespace controllers
                 continue;
             }
 
+            // Track emission time for looping control
+            instance.emissionTime += deltaTime;
+
             uint32_t spawnThisFrame = 0;
-            if (instance.active)
+            // Only spawn new particles if:
+            // - looping is enabled, OR
+            // - we haven't exceeded the emission duration (one lifetime cycle)
+            bool canSpawn = instance.loop || (instance.emissionTime < instance.config.lifetime);
+
+            if (instance.active && canSpawn)
             {
                 instance.spawnAccumulator += instance.config.spawnRate * deltaTime;
                 spawnThisFrame = static_cast<uint32_t>(instance.spawnAccumulator);

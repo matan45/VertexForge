@@ -53,6 +53,7 @@ namespace controllers
         config.startColor = currentParams.startColor;
         config.emitDirection = currentParams.emitDirection;
         config.texturePath = currentParams.texturePath;
+        config.looping = currentParams.looping;
         config.modifiers = currentParams.modifiers;  // VK-238
         config.forces = currentParams.forces;        // VK-239
         config.shape = currentParams.shape;          // VK-240
@@ -127,6 +128,7 @@ namespace controllers
             config.startColor = params.startColor;
             config.emitDirection = params.emitDirection;
             config.texturePath = params.texturePath;
+            config.looping = params.looping;
             config.modifiers = params.modifiers;  // VK-238
             config.forces = params.forces;        // VK-239
             config.shape = params.shape;          // VK-240

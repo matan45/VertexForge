@@ -50,6 +50,7 @@ namespace controllers
         uint32_t gpuParticleOffset = 0;
         uint32_t gpuParticleCount = 0;
         float spawnAccumulator = 0.0f;
+        float emissionTime = 0.0f;  // Tracks total emission time for looping control
     };
 
     class VFXSceneRenderer

@@ -33,6 +33,7 @@ namespace controllers
         glm::vec4 startColor{1.0f, 1.0f, 1.0f, 1.0f};
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};
         std::string texturePath;
+        bool looping = true;
 
         // Modifier chain (VK-238)
         ::vfx::VFXModifierChain modifiers;
