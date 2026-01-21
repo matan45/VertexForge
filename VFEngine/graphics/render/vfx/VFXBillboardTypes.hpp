@@ -104,12 +104,6 @@ namespace render::vfx
         alignas(4) float time;
     };
 
-    struct VFXPushConstants
-    {
-        glm::vec2 viewportSize;
-        float padding[2];
-    };
-
     struct VFXEmitterConfig
     {
         float spawnRate = 10.0f;

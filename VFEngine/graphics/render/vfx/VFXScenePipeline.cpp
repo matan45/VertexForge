@@ -214,8 +214,6 @@ namespace render::vfx
             .vertexAttributes = std::move(allAttribs),
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
-            .pushConstantSize = sizeof(VFXPushConstants),
-            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,
@@ -425,15 +423,6 @@ namespace render::vfx
 
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                           0, descriptorSet, nullptr);
-
-        VFXPushConstants pushConstants{};
-        pushConstants.viewportSize = glm::vec2(
-            static_cast<float>(swapChain.getSwapchainExtent().width),
-            static_cast<float>(swapChain.getSwapchainExtent().height)
-        );
-
-        commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
-                                     0, sizeof(VFXPushConstants), &pushConstants);
 
         vk::Buffer vertexBuffers[] = {quadVertexBuffer, instanceBuffer};
         vk::DeviceSize offsets[] = {0, 0};

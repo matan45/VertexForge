@@ -23,7 +23,6 @@ namespace services
         // Instance management
         virtual VFXInstanceId createInstance(const VFXRuntimeParams& params) = 0;
         virtual void destroyInstance(VFXInstanceId id) = 0;
-        virtual void destroyAllInstances() = 0;
 
         // Instance control
         virtual void setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform) = 0;
@@ -31,7 +30,6 @@ namespace services
         virtual void stopInstance(VFXInstanceId id) = 0;
         virtual void resetInstance(VFXInstanceId id) = 0;
         virtual bool isInstancePlaying(VFXInstanceId id) const = 0;
-        virtual bool isInstanceActive(VFXInstanceId id) const = 0;
 
         // Frame update (call each frame)
         virtual void update(float deltaTime) = 0;
@@ -44,8 +42,6 @@ namespace services
         // Called during scene render pass to record VFX draw commands
         virtual void recordDrawCommands(const vk::CommandBuffer& cmd) = 0;
 
-        // Stats
         virtual size_t getInstanceCount() const = 0;
-        virtual size_t getTotalParticleCount() const = 0;
     };
 }

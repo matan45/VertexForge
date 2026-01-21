@@ -124,11 +124,9 @@ namespace render::vfx
         uint32_t emitterIndex;
         uint32_t frameNumber;
         uint32_t emitterCount;
-        uint32_t totalWorkgroups;
     };
-    static_assert(sizeof(GPUVFXComputePushConstants) == 16, "Push constants must be 16 bytes");
+    static_assert(sizeof(GPUVFXComputePushConstants) == 12, "Push constants must be 12 bytes");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterIndex) == 0, "GPUVFXComputePushConstants::emitterIndex offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, frameNumber) == 4, "GPUVFXComputePushConstants::frameNumber offset mismatch");
     static_assert(offsetof(GPUVFXComputePushConstants, emitterCount) == 8, "GPUVFXComputePushConstants::emitterCount offset mismatch");
-    static_assert(offsetof(GPUVFXComputePushConstants, totalWorkgroups) == 12, "GPUVFXComputePushConstants::totalWorkgroups offset mismatch");
 }

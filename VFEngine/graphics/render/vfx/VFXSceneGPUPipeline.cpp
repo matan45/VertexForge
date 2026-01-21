@@ -334,8 +334,6 @@ namespace render::vfx
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
-            .pushConstantSize = sizeof(VFXPushConstants),
-            .pushConstantStages = vk::ShaderStageFlagBits::eVertex,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,  // Particles don't write depth
@@ -541,19 +539,8 @@ namespace render::vfx
         // Bind pipeline
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Bind descriptors
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                0, descriptorSet, {});
-
-        // Push constants
-        VFXPushConstants pushConstants{};
-        pushConstants.viewportSize = glm::vec2(
-            static_cast<float>(swapChain.getSwapchainExtent().width),
-            static_cast<float>(swapChain.getSwapchainExtent().height)
-        );
-
-        cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
-                          0, sizeof(VFXPushConstants), &pushConstants);
 
         // Bind only quad vertex buffer (no instance buffer - data comes from SSBO)
         vk::Buffer vertexBuffers[] = {quadVertexBuffer};

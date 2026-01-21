@@ -2,7 +2,6 @@
 
 #include "VFXTypes.hpp"
 #include "VFXAsset.hpp"
-#include "../../graphics/render/vfx/VFXBillboardTypes.hpp"
 #include <optional>
 #include <string_view>
 

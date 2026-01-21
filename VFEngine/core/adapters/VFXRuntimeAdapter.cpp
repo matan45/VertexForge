@@ -72,14 +72,6 @@ namespace core
         }
     }
 
-    void VFXRuntimeAdapter::destroyAllInstances()
-    {
-        if (renderer)
-        {
-            renderer->destroyAllInstances();
-        }
-    }
-
     void VFXRuntimeAdapter::setInstanceTransform(services::VFXInstanceId id, const glm::mat4& worldTransform)
     {
         if (renderer)
@@ -115,11 +107,6 @@ namespace core
     bool VFXRuntimeAdapter::isInstancePlaying(services::VFXInstanceId id) const
     {
         return renderer ? renderer->isInstancePlaying(id) : false;
-    }
-
-    bool VFXRuntimeAdapter::isInstanceActive(services::VFXInstanceId id) const
-    {
-        return renderer ? renderer->isInstanceActive(id) : false;
     }
 
     void VFXRuntimeAdapter::update(float deltaTime)
@@ -158,10 +145,5 @@ namespace core
     size_t VFXRuntimeAdapter::getInstanceCount() const
     {
         return renderer ? renderer->getInstanceCount() : 0;
-    }
-
-    size_t VFXRuntimeAdapter::getTotalParticleCount() const
-    {
-        return renderer ? renderer->getTotalParticleCount() : 0;
     }
 }

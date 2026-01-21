@@ -285,7 +285,6 @@ namespace render::vfx
         pushConstants.emitterIndex = emitterIndex;
         pushConstants.frameNumber = frameNumber;
         pushConstants.emitterCount = emitterCount;
-        pushConstants.totalWorkgroups = groupCount;
 
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
                           0, sizeof(GPUVFXComputePushConstants), &pushConstants);

@@ -16,10 +16,10 @@ namespace vfx
         Vec2,
         Vec3,
         Vec4,
-        Color,  // Same as Vec4 but with color picker UI
+        Color, // Same as Vec4 but with color picker UI
         Int,
         Bool,
-        String  // For file paths (textures)
+        String // For file paths (textures)
     };
 
     // Property value variant - holds any supported property type
@@ -28,8 +28,8 @@ namespace vfx
     // VFX Node types - Part 1 only has Emitter and OutSystem
     enum class VFXNodeType : uint8_t
     {
-        Emitter,    // Start node - particle spawn configuration
-        OutSystem   // End node - final output of the VFX system
+        Emitter, // Start node - particle spawn configuration
+        OutSystem // End node - final output of the VFX system
     };
 
     // A property definition for a node
@@ -38,8 +38,8 @@ namespace vfx
         std::string name;
         VFXPropertyType type = VFXPropertyType::Float;
         VFXPropertyValue value;
-        float min = 0.0f;   // For numeric types
-        float max = 1.0f;   // For numeric types
+        float min = 0.0f; // For numeric types
+        float max = 1.0f; // For numeric types
     };
 
     // VFX Node structure
@@ -48,7 +48,7 @@ namespace vfx
         uint32_t id = 0;
         VFXNodeType type = VFXNodeType::Emitter;
         std::string name;
-        glm::vec2 position{0.0f, 0.0f};  // Node editor position
+        glm::vec2 position{0.0f, 0.0f}; // Node editor position
 
         // Node-specific properties stored as key-value map
         std::map<std::string, VFXProperty> properties;
@@ -60,8 +60,8 @@ namespace vfx
         uint32_t id = 0;
         uint32_t sourceNodeId = 0;
         uint32_t targetNodeId = 0;
-        std::string sourcePin;  // Output pin name
-        std::string targetPin;  // Input pin name
+        std::string sourcePin; // Output pin name
+        std::string targetPin; // Input pin name
     };
 
     // VFX Graph containing nodes and connections
@@ -95,11 +95,11 @@ namespace vfx
     // Default values for Emitter node properties
     namespace EmitterDefaults
     {
-        inline constexpr float SPAWN_RATE = 10.0f;          // particles per second
-        inline constexpr float LIFETIME = 2.0f;             // seconds
-        inline constexpr float START_SIZE = 1.0f;           // scale
-        inline constexpr float START_SPEED = 1.0f;          // units per second
-        inline constexpr bool LOOPING = true;               // whether VFX loops
+        inline constexpr float SPAWN_RATE = 10.0f; // particles per second
+        inline constexpr float LIFETIME = 2.0f; // seconds
+        inline constexpr float START_SIZE = 1.0f; // scale
+        inline constexpr float START_SPEED = 1.0f; // units per second
+        inline constexpr bool LOOPING = true; // whether VFX loops
     }
 
     // Type conversion utilities

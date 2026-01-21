@@ -1,39 +1,26 @@
 #type VERTEX
 #version 460 core
 
-// ============================================================================
-// GPU VFX Billboard Vertex Shader
-// Reads particle data from SSBO (no instance buffer needed)
-// ============================================================================
-
-// Quad vertex (binding 0, vertex rate)
-layout(location = 0) in vec2 inPosition;   // Quad corner offset (-0.5 to 0.5)
+layout(location = 0) in vec2 inPosition;
 layout(location = 1) in vec2 inTexCoord;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
 
-// ----------------------------------------------------------------------------
-// Particle Structure (must match C++ GPUParticle exactly)
-// ----------------------------------------------------------------------------
+// Must match C++ GPUParticle exactly
 struct GPUParticle
 {
-    vec3 position;          // World space position
-    float lifetime;         // Current age in seconds
-    vec3 velocity;          // World space velocity
-    float maxLifetime;      // Total lifetime in seconds
-    vec4 color;             // RGBA color
-    float size;             // Particle scale
+    vec3 position;
+    float lifetime;
+    vec3 velocity;
+    float maxLifetime;
+    vec4 color;
+    float size;
     uint flags;             // Bit 0 = active
-    vec2 padding;           // Alignment
+    vec2 padding;
 };
 
-// ----------------------------------------------------------------------------
-// Buffer Bindings
-// ----------------------------------------------------------------------------
-
-// Binding 0: Camera UBO
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
@@ -41,22 +28,10 @@ layout(binding = 0) uniform CameraUBO {
     float time;
 } camera;
 
-// Binding 2: Particle SSBO (read only)
 layout(std430, set = 0, binding = 2) readonly buffer ParticleBuffer {
     GPUParticle particles[];
 };
 
-// ----------------------------------------------------------------------------
-// Push Constants
-// ----------------------------------------------------------------------------
-layout(push_constant) uniform PushConstants {
-    vec2 viewportSize;
-    vec2 padding;
-} pc;
-
-// ----------------------------------------------------------------------------
-// Constants
-// ----------------------------------------------------------------------------
 const uint FLAG_ACTIVE = 1u;
 
 void main() {
@@ -86,10 +61,8 @@ void main() {
 
     gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
 
-    // Calculate lifetime ratio for fading
     float lifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
 
-    // Pass through to fragment shader
     fragTexCoord = inTexCoord;
     fragColor = p.color;
     fragLifetimeRatio = lifetimeRatio;
@@ -109,17 +82,14 @@ layout(binding = 1) uniform sampler2D particleTexture;
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
 
-    // Apply vertex color (includes per-particle tint and alpha from simulation)
     vec4 finalColor = texColor * fragColor;
 
-    // Additional smooth fade-out near end of lifetime
     float fadeStart = 0.8;
     if (fragLifetimeRatio > fadeStart) {
         float fadeProgress = (fragLifetimeRatio - fadeStart) / (1.0 - fadeStart);
         finalColor.a *= 1.0 - smoothstep(0.0, 1.0, fadeProgress);
     }
 
-    // Discard fully transparent pixels
     if (finalColor.a < 0.01) {
         discard;
     }

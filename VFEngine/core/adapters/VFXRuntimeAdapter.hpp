@@ -29,7 +29,6 @@ namespace core
         // Instance management
         services::VFXInstanceId createInstance(const services::VFXRuntimeParams& params) override;
         void destroyInstance(services::VFXInstanceId id) override;
-        void destroyAllInstances() override;
 
         // Instance control
         void setInstanceTransform(services::VFXInstanceId id, const glm::mat4& worldTransform) override;
@@ -37,7 +36,6 @@ namespace core
         void stopInstance(services::VFXInstanceId id) override;
         void resetInstance(services::VFXInstanceId id) override;
         bool isInstancePlaying(services::VFXInstanceId id) const override;
-        bool isInstanceActive(services::VFXInstanceId id) const override;
 
         // Frame update
         void update(float deltaTime) override;
@@ -50,8 +48,6 @@ namespace core
         // Draw commands (call during render pass)
         void recordDrawCommands(const vk::CommandBuffer& cmd) override;
 
-        // Stats
         size_t getInstanceCount() const override;
-        size_t getTotalParticleCount() const override;
     };
 }
