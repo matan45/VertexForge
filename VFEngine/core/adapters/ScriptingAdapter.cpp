@@ -308,7 +308,6 @@ namespace core
             instanceToObject.erase(instanceId);
             instanceToInterfaces.erase(instanceId);
             instanceToPlaybackState.erase(instanceId);
-            instanceToPlaybackParams.erase(instanceId);
         }
     }
 
@@ -319,7 +318,6 @@ namespace core
         instanceToObject.clear();
         instanceToInterfaces.clear();
         instanceToPlaybackState.clear();
-        instanceToPlaybackParams.clear();
         nextInstanceId = 1;
         vfLogInfo("[ScriptingAdapter] All scripts unloaded, instance counter reset");
     }

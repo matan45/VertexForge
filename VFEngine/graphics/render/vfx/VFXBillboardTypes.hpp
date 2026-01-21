@@ -36,9 +36,9 @@ namespace render::vfx
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 4> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 3> attributes{};
 
             attributes[0].binding = 1;
             attributes[0].location = 2;
@@ -54,11 +54,6 @@ namespace render::vfx
             attributes[2].location = 4;
             attributes[2].format = vk::Format::eR32Sfloat;
             attributes[2].offset = offsetof(VFXInstanceData, lifetimeRatio);
-
-            attributes[3].binding = 1;
-            attributes[3].location = 5;
-            attributes[3].format = vk::Format::eR32G32B32Sfloat;
-            attributes[3].offset = offsetof(VFXInstanceData, padding);
 
             return attributes;
         }

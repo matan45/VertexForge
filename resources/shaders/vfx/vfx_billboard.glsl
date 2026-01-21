@@ -4,10 +4,9 @@
 layout(location = 0) in vec2 inPosition;   // Quad corner offset (-0.5 to 0.5)
 layout(location = 1) in vec2 inTexCoord;
 
-layout(location = 2) in vec4 inWorldPosAndSize;  // xyz = world position, w = size
+layout(location = 2) in vec4 inWorldPosAndSize;
 layout(location = 3) in vec4 inColor;
-layout(location = 4) in float inLifetimeRatio;   // 0 = new, 1 = dying
-layout(location = 5) in vec3 inPadding;          // Alignment padding
+layout(location = 4) in float inLifetimeRatio;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
