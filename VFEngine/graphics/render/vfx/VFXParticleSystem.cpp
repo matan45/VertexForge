@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/noise.hpp>
 
 namespace render::vfx
 {
@@ -22,6 +23,9 @@ namespace render::vfx
         {
             return;
         }
+
+        // Update time accumulator for noise-based forces (VK-239)
+        timeAccumulator += deltaTime;
 
         for (auto& particle : particles)
         {
@@ -140,6 +144,12 @@ namespace render::vfx
             }
         }
 
+        // Apply forces before position update (VK-239)
+        if (!config.forces.empty())
+        {
+            applyForces(particle, deltaTime);
+        }
+
         // Update position based on (potentially modified) velocity
         particle.position += particle.velocity * deltaTime;
     }
@@ -196,5 +206,104 @@ namespace render::vfx
     {
         // Apply angular velocity (convert degrees to radians)
         particle.rotation += glm::radians(mod.angularVelocity) * deltaTime;
+    }
+
+    // Force application (VK-239)
+    void VFXParticleSystem::applyForces(VFXParticle& particle, float deltaTime)
+    {
+        for (const auto& force : config.forces.forces)
+        {
+            std::visit([&](const auto& f) {
+                applyForce(particle, f, deltaTime);
+            }, force);
+        }
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::GravityForceConfig& force, float deltaTime)
+    {
+        // Gravity: constant directional force
+        glm::vec3 direction = glm::normalize(force.direction);
+        particle.velocity += direction * force.strength * deltaTime;
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::WindForceConfig& force, float deltaTime)
+    {
+        glm::vec3 windForce = force.direction * force.strength;
+
+        // Add noise variation if enabled
+        if (force.noiseStrength > 0.0f)
+        {
+            glm::vec3 noisePos = particle.position * force.noiseFrequency + glm::vec3(timeAccumulator);
+            float noiseX = glm::simplex(noisePos);
+            float noiseY = glm::simplex(noisePos + glm::vec3(100.0f));
+            float noiseZ = glm::simplex(noisePos + glm::vec3(200.0f));
+            windForce += glm::vec3(noiseX, noiseY, noiseZ) * force.noiseStrength;
+        }
+
+        particle.velocity += windForce * deltaTime;
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::TurbulenceForceConfig& force, float deltaTime)
+    {
+        // Turbulence: 3D noise-based chaotic movement
+        glm::vec3 noisePos = particle.position * force.frequency;
+        noisePos += glm::vec3(timeAccumulator * force.scrollSpeed);
+
+        // Generate 3D force from noise (use offset positions for each axis)
+        glm::vec3 turbulenceForce;
+
+        // Simple single-octave noise or multi-octave FBM
+        if (force.octaves <= 1)
+        {
+            turbulenceForce.x = glm::simplex(noisePos);
+            turbulenceForce.y = glm::simplex(noisePos + glm::vec3(100.0f));
+            turbulenceForce.z = glm::simplex(noisePos + glm::vec3(200.0f));
+        }
+        else
+        {
+            // Fractal Brownian Motion for richer turbulence
+            float amplitude = 1.0f;
+            float frequency = 1.0f;
+            turbulenceForce = glm::vec3(0.0f);
+
+            for (int i = 0; i < force.octaves; ++i)
+            {
+                glm::vec3 samplePos = noisePos * frequency;
+                turbulenceForce.x += glm::simplex(samplePos) * amplitude;
+                turbulenceForce.y += glm::simplex(samplePos + glm::vec3(100.0f)) * amplitude;
+                turbulenceForce.z += glm::simplex(samplePos + glm::vec3(200.0f)) * amplitude;
+
+                amplitude *= 0.5f;   // Decay amplitude
+                frequency *= 2.0f;   // Increase frequency (lacunarity)
+            }
+        }
+
+        particle.velocity += turbulenceForce * force.strength * deltaTime;
+    }
+
+    void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::VortexForceConfig& force, float deltaTime)
+    {
+        // Vortex: spiral force around an axis
+        glm::vec3 toParticle = particle.position - force.center;
+        glm::vec3 axis = glm::normalize(force.axis);
+
+        // Project position onto plane perpendicular to axis
+        float axisComponent = glm::dot(toParticle, axis);
+        glm::vec3 radial = toParticle - axis * axisComponent;
+        float dist = glm::length(radial);
+
+        if (dist > 0.001f)
+        {
+            // Tangential force (perpendicular to both axis and radial)
+            glm::vec3 tangent = glm::normalize(glm::cross(axis, radial));
+            particle.velocity += tangent * force.strength * deltaTime;
+
+            // Radial pull (inward if negative, outward if positive)
+            if (std::abs(force.radialPull) > 0.001f)
+            {
+                glm::vec3 radialDir = glm::normalize(radial);
+                particle.velocity += radialDir * force.radialPull * deltaTime;
+            }
+        }
     }
 }

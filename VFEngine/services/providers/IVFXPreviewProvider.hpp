@@ -2,6 +2,7 @@
 
 #include "PreviewInstanceId.hpp"
 #include <vfx/VFXModifierTypes.hpp>
+#include <vfx/VFXForceTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 
@@ -20,6 +21,9 @@ namespace services
 
         // Modifier chain (VK-238)
         ::vfx::VFXModifierChain modifiers;
+
+        // Force chain (VK-239)
+        ::vfx::VFXForceChain forces;
     };
 
     class IVFXPreviewProvider

@@ -3,6 +3,7 @@
 #include "VFXTypes.hpp"
 #include "VFXAsset.hpp"
 #include "VFXModifierConfigLoader.hpp"
+#include "VFXForceConfigLoader.hpp"
 #include <optional>
 #include <string_view>
 
@@ -117,6 +118,9 @@ namespace vfx
 
         // Load modifier chain (VK-238)
         config.modifiers = VFXModifierConfigLoader::fromGraph(data.graph);
+
+        // Load force chain (VK-239)
+        config.forces = VFXForceConfigLoader::fromGraph(data.graph);
 
         return config;
     }

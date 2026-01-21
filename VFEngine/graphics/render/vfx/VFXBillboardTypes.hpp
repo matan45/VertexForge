@@ -5,6 +5,7 @@
 #include <array>
 #include <string>
 #include "vfx/VFXModifierTypes.hpp"
+#include "vfx/VFXForceTypes.hpp"
 
 namespace render::vfx
 {
@@ -124,6 +125,9 @@ namespace render::vfx
 
         // Modifier chain (VK-238)
         ::vfx::VFXModifierChain modifiers;
+
+        // Force chain (VK-239)
+        ::vfx::VFXForceChain forces;
     };
 
     namespace VFXConstants

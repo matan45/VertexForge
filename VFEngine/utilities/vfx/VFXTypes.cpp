@@ -82,6 +82,11 @@ namespace vfx
         case VFXNodeType::SizeOverLifetime:   return "SizeOverLifetime";
         case VFXNodeType::SpeedOverLifetime:  return "SpeedOverLifetime";
         case VFXNodeType::RotationOverLifetime: return "RotationOverLifetime";
+        // Force nodes (VK-239)
+        case VFXNodeType::ForceGravity:       return "ForceGravity";
+        case VFXNodeType::ForceWind:          return "ForceWind";
+        case VFXNodeType::ForceTurbulence:    return "ForceTurbulence";
+        case VFXNodeType::ForceVortex:        return "ForceVortex";
         default: return "Emitter";
         }
     }
@@ -94,6 +99,11 @@ namespace vfx
         if (str == "SizeOverLifetime")   return VFXNodeType::SizeOverLifetime;
         if (str == "SpeedOverLifetime")  return VFXNodeType::SpeedOverLifetime;
         if (str == "RotationOverLifetime") return VFXNodeType::RotationOverLifetime;
+        // Force nodes (VK-239)
+        if (str == "ForceGravity")       return VFXNodeType::ForceGravity;
+        if (str == "ForceWind")          return VFXNodeType::ForceWind;
+        if (str == "ForceTurbulence")    return VFXNodeType::ForceTurbulence;
+        if (str == "ForceVortex")        return VFXNodeType::ForceVortex;
         return VFXNodeType::Emitter;
     }
 
@@ -119,9 +129,10 @@ namespace vfx
                 if (!targetNode)
                     return false;
 
-                // Target must be either a modifier or OutSystem
+                // Target must be a modifier, force, or OutSystem
                 if (targetNode->type == VFXNodeType::OutSystem ||
-                    isModifierNode(targetNode->type))
+                    isModifierNode(targetNode->type) ||
+                    isForceNode(targetNode->type))
                 {
                     if (hasPathToOutSystem(graph, targetNode->id, outSystemId, visited))
                         return true;
@@ -164,6 +175,6 @@ namespace vfx
         if (hasPathToOutSystem(*this, emitter->id, outSystem->id, visited))
             return "";  // No error
 
-        return "Emitter is not connected to OutSystem (directly or through modifiers)";
+        return "Emitter is not connected to OutSystem (directly or through modifiers/forces)";
     }
 }

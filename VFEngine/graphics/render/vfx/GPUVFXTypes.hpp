@@ -38,6 +38,15 @@ namespace render::vfx
         inline constexpr uint32_t RotationOverLifetime = 1 << 3;
     }
 
+    // VK-239: Force flags for GPU
+    namespace ForceFlags
+    {
+        inline constexpr uint32_t Gravity = 1 << 4;
+        inline constexpr uint32_t Wind = 1 << 5;
+        inline constexpr uint32_t Turbulence = 1 << 6;
+        inline constexpr uint32_t Vortex = 1 << 7;
+    }
+
     struct alignas(16) GPUEmitterConfig
     {
         // Original fields (64 bytes)
@@ -63,8 +72,16 @@ namespace render::vfx
         float modPadding1;
         float modPadding2;
         float modPadding3;
+
+        // VK-239: Force data (64 bytes)
+        glm::vec4 gravityDir;           // xyz = normalized direction, w = strength
+        glm::vec4 windDir;              // xyz = direction, w = strength
+        glm::vec4 windNoise;            // x = noiseStrength, y = noiseFrequency, zw = unused
+        glm::vec4 turbulence;           // x = strength, y = frequency, z = scrollSpeed, w = octaves
+        glm::vec4 vortexAxis;           // xyz = axis, w = strength
+        glm::vec4 vortexCenter;         // xyz = center, w = radialPull
     };
-    static_assert(sizeof(GPUEmitterConfig) == 128, "GPUEmitterConfig must be 128 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 224, "GPUEmitterConfig must be 224 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -82,6 +99,13 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, speedStartMult) == 104, "GPUEmitterConfig::speedStartMult offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, speedEndMult) == 108, "GPUEmitterConfig::speedEndMult offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, angularVelocity) == 112, "GPUEmitterConfig::angularVelocity offset mismatch");
+    // VK-239: Force field offsets
+    static_assert(offsetof(GPUEmitterConfig, gravityDir) == 128, "GPUEmitterConfig::gravityDir offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, windDir) == 144, "GPUEmitterConfig::windDir offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, windNoise) == 160, "GPUEmitterConfig::windNoise offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, turbulence) == 176, "GPUEmitterConfig::turbulence offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, vortexAxis) == 192, "GPUEmitterConfig::vortexAxis offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, vortexCenter) == 208, "GPUEmitterConfig::vortexCenter offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

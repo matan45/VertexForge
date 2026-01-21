@@ -24,6 +24,12 @@ const uint MODIFIER_SIZE_OVER_LIFETIME = 2u;
 const uint MODIFIER_SPEED_OVER_LIFETIME = 4u;
 const uint MODIFIER_ROTATION_OVER_LIFETIME = 8u;
 
+// VK-239: Force flags (must match ForceFlags namespace in C++)
+const uint FORCE_GRAVITY = 16u;
+const uint FORCE_WIND = 32u;
+const uint FORCE_TURBULENCE = 64u;
+const uint FORCE_VORTEX = 128u;
+
 struct GPUEmitterConfig
 {
     // Original fields (64 bytes)
@@ -49,6 +55,14 @@ struct GPUEmitterConfig
     float modPadding1;
     float modPadding2;
     float modPadding3;
+
+    // VK-239: Force data (96 bytes)
+    vec4 gravityDir;        // xyz = normalized direction, w = strength
+    vec4 windDir;           // xyz = direction, w = strength
+    vec4 windNoise;         // x = noiseStrength, y = noiseFrequency, zw = unused
+    vec4 turbulence;        // x = strength, y = frequency, z = scrollSpeed, w = octaves
+    vec4 vortexAxis;        // xyz = axis, w = strength
+    vec4 vortexCenter;      // xyz = center, w = radialPull
 };
 
 struct GPUEmitterState
@@ -133,6 +147,174 @@ vec3 randomInCone(inout uint seed, vec3 baseDir, float spreadAngle)
     return normalize(baseDir * cosPhi + offset);
 }
 
+// VK-239: Simplex noise implementation (based on Stefan Gustavson's webgl-noise)
+vec3 mod289_3(vec3 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+}
+
+vec4 mod289_4(vec4 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+}
+
+vec4 permute(vec4 x) {
+    return mod289_4(((x * 34.0) + 1.0) * x);
+}
+
+vec4 taylorInvSqrt(vec4 r) {
+    return 1.79284291400159 - 0.85373472095314 * r;
+}
+
+float simplexNoise3D(vec3 v) {
+    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+    vec3 i = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - D.yyy;
+
+    i = mod289_3(i);
+    vec4 p = permute(permute(permute(
+        i.z + vec4(0.0, i1.z, i2.z, 1.0))
+        + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+        + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+    float n_ = 0.142857142857;
+    vec3 ns = n_ * D.wyz - D.xzx;
+
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+
+    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+
+    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+}
+
+// VK-239: Apply forces to particle velocity
+void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
+{
+    vec3 totalForce = vec3(0.0);
+
+    // Gravity
+    if ((config.modifierFlags & FORCE_GRAVITY) != 0u)
+    {
+        totalForce += config.gravityDir.xyz * config.gravityDir.w;
+    }
+
+    // Wind
+    if ((config.modifierFlags & FORCE_WIND) != 0u)
+    {
+        vec3 windForce = config.windDir.xyz * config.windDir.w;
+
+        // Add noise variation if enabled
+        if (config.windNoise.x > 0.0)
+        {
+            vec3 noisePos = p.position * config.windNoise.y + vec3(time);
+            float noiseX = simplexNoise3D(noisePos);
+            float noiseY = simplexNoise3D(noisePos + vec3(100.0));
+            float noiseZ = simplexNoise3D(noisePos + vec3(200.0));
+            windForce += vec3(noiseX, noiseY, noiseZ) * config.windNoise.x;
+        }
+
+        totalForce += windForce;
+    }
+
+    // Turbulence
+    if ((config.modifierFlags & FORCE_TURBULENCE) != 0u)
+    {
+        vec3 noisePos = p.position * config.turbulence.y;
+        noisePos += vec3(time * config.turbulence.z);
+
+        vec3 turbForce;
+        int octaves = int(config.turbulence.w);
+        if (octaves <= 1)
+        {
+            turbForce.x = simplexNoise3D(noisePos);
+            turbForce.y = simplexNoise3D(noisePos + vec3(100.0));
+            turbForce.z = simplexNoise3D(noisePos + vec3(200.0));
+        }
+        else
+        {
+            // FBM for richer turbulence
+            float amplitude = 1.0;
+            float frequency = 1.0;
+            turbForce = vec3(0.0);
+            for (int i = 0; i < octaves && i < 4; ++i)
+            {
+                vec3 samplePos = noisePos * frequency;
+                turbForce.x += simplexNoise3D(samplePos) * amplitude;
+                turbForce.y += simplexNoise3D(samplePos + vec3(100.0)) * amplitude;
+                turbForce.z += simplexNoise3D(samplePos + vec3(200.0)) * amplitude;
+                amplitude *= 0.5;
+                frequency *= 2.0;
+            }
+        }
+
+        totalForce += turbForce * config.turbulence.x;
+    }
+
+    // Vortex
+    if ((config.modifierFlags & FORCE_VORTEX) != 0u)
+    {
+        vec3 toParticle = p.position - config.vortexCenter.xyz;
+        vec3 axis = normalize(config.vortexAxis.xyz);
+
+        float axisComponent = dot(toParticle, axis);
+        vec3 radial = toParticle - axis * axisComponent;
+        float dist = length(radial);
+
+        if (dist > 0.001)
+        {
+            vec3 tangent = normalize(cross(axis, radial));
+            totalForce += tangent * config.vortexAxis.w;
+
+            // Radial pull
+            if (abs(config.vortexCenter.w) > 0.001)
+            {
+                vec3 radialDir = normalize(radial);
+                totalForce += radialDir * config.vortexCenter.w;
+            }
+        }
+    }
+
+    // Apply accumulated forces to velocity
+    p.velocity += totalForce * config.deltaTime;
+}
+
 // VK-238: Apply modifiers based on lifetime ratio
 void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetimeRatio)
 {
@@ -210,6 +392,10 @@ void main()
         }
         else
         {
+            // VK-239: Apply forces before position update
+            float time = float(pc.frameNumber) * 0.016; // Approximate time from frame count
+            applyForces(p, config, time);
+
             p.position += p.velocity * config.deltaTime;
 
             // VK-238: Apply modifiers

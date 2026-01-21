@@ -54,6 +54,7 @@ namespace controllers
         config.emitDirection = currentParams.emitDirection;
         config.texturePath = currentParams.texturePath;
         config.modifiers = currentParams.modifiers;  // VK-238
+        config.forces = currentParams.forces;        // VK-239
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
@@ -126,6 +127,7 @@ namespace controllers
             config.emitDirection = params.emitDirection;
             config.texturePath = params.texturePath;
             config.modifiers = params.modifiers;  // VK-238
+            config.forces = params.forces;        // VK-239
             particleSystem->setEmitterConfig(config);
         }
 

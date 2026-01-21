@@ -8,6 +8,7 @@
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
 #include "vfx/VFXModifierTypes.hpp"
+#include "vfx/VFXForceTypes.hpp"
 #include "print/Logger.hpp"
 #include <random>
 #include <type_traits>
@@ -539,6 +540,44 @@ namespace controllers
                     gpuConfig.angularVelocity = glm::radians(mod.angularVelocity);
                 }
             }, modifier);
+        }
+
+        // VK-239: Initialize force data with defaults
+        gpuConfig.gravityDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
+        gpuConfig.windDir = glm::vec4(0.0f);
+        gpuConfig.windNoise = glm::vec4(0.0f);
+        gpuConfig.turbulence = glm::vec4(0.0f);
+        gpuConfig.vortexAxis = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        gpuConfig.vortexCenter = glm::vec4(0.0f);
+
+        // VK-239: Extract force settings from force chain
+        for (const auto& force : cpuConfig.forces.forces)
+        {
+            std::visit([&gpuConfig](const auto& f) {
+                using T = std::decay_t<decltype(f)>;
+                if constexpr (std::is_same_v<T, ::vfx::GravityForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Gravity;
+                    gpuConfig.gravityDir = glm::vec4(glm::normalize(f.direction), f.strength);
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::WindForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Wind;
+                    gpuConfig.windDir = glm::vec4(f.direction, f.strength);
+                    gpuConfig.windNoise = glm::vec4(f.noiseStrength, f.noiseFrequency, 0.0f, 0.0f);
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::TurbulenceForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Turbulence;
+                    gpuConfig.turbulence = glm::vec4(f.strength, f.frequency, f.scrollSpeed, static_cast<float>(f.octaves));
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::VortexForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Vortex;
+                    gpuConfig.vortexAxis = glm::vec4(glm::normalize(f.axis), f.strength);
+                    gpuConfig.vortexCenter = glm::vec4(f.center, f.radialPull);
+                }
+            }, force);
         }
 
         return gpuConfig;

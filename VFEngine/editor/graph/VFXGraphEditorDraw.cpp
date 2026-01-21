@@ -306,6 +306,101 @@ namespace editor::graph {
             ImGui::Dummy(ImVec2(pinSize, pinSize));
 
             ed::EndPin();
+        } else if (vfx::isForceNode(node.type)) {
+            // VK-239: Draw force nodes with input and output pins
+
+            // Input pin (left side)
+            uint32_t inputPinId = getInputPinId(node.id);
+            ed::BeginPin(toEditorPinId(inputPinId), ed::PinKind::Input);
+
+            ImVec2 iconPos = ImGui::GetCursorScreenPos();
+            bool isLinked = isPinLinked(inputPinId);
+            drawFlowPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                           pinColor, isLinked, pinSize, false);
+            ImGui::Dummy(ImVec2(pinSize, pinSize));
+            ImGui::SameLine(0, 4);
+            ImGui::TextUnformatted("In");
+
+            ed::EndPin();
+
+            // Draw force-specific properties
+            for (auto& [propName, prop] : node.properties) {
+                std::string widgetId = "##force" + propName + std::to_string(node.id);
+
+                switch (prop.type) {
+                    case vfx::VFXPropertyType::Float: {
+                        float* val = std::get_if<float>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            ImGui::PushItemWidth(60);
+                            if (ImGui::DragFloat(widgetId.c_str(), val, 0.1f, prop.min, prop.max, "%.2f")) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Vec3: {
+                        glm::vec3* val = std::get_if<glm::vec3>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::PushItemWidth(120);
+                            float v[3] = {val->x, val->y, val->z};
+                            if (ImGui::InputFloat3(widgetId.c_str(), v, "%.2f")) {
+                                *val = glm::vec3(v[0], v[1], v[2]);
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Int: {
+                        int32_t* val = std::get_if<int32_t>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            ImGui::PushItemWidth(50);
+                            if (ImGui::DragInt(widgetId.c_str(), val, 1,
+                                    static_cast<int>(prop.min), static_cast<int>(prop.max))) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Bool: {
+                        bool* val = std::get_if<bool>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            if (ImGui::Checkbox(widgetId.c_str(), val)) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+
+            ImGui::Spacing();
+
+            // Output pin (right side)
+            uint32_t outputPinId = getOutputPinId(node.id);
+            ed::BeginPin(toEditorPinId(outputPinId), ed::PinKind::Output);
+
+            ImGui::TextUnformatted("Out");
+            ImGui::SameLine(0, 4);
+
+            iconPos = ImGui::GetCursorScreenPos();
+            isLinked = isPinLinked(outputPinId);
+            drawFlowPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                           pinColor, isLinked, pinSize, true);
+            ImGui::Dummy(ImVec2(pinSize, pinSize));
+
+            ed::EndPin();
         }
 
         ed::EndNode();

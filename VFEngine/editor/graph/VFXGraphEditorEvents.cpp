@@ -206,6 +206,98 @@ namespace editor::graph {
         }
     }
 
+    // VK-239: Helper function to create a force node with default properties
+    static void initializeForceProperties(vfx::VFXNode& node) {
+        switch (node.type) {
+            case vfx::VFXNodeType::ForceGravity:
+                node.properties["direction"] = vfx::VFXProperty{
+                    "direction", vfx::VFXPropertyType::Vec3,
+                    vfx::ForceDefaults::GRAVITY_DIRECTION, -10.0f, 10.0f
+                };
+                node.properties["strength"] = vfx::VFXProperty{
+                    "strength", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::GRAVITY_STRENGTH, 0.0f, 50.0f
+                };
+                node.properties["localSpace"] = vfx::VFXProperty{
+                    "localSpace", vfx::VFXPropertyType::Bool,
+                    false, 0.0f, 1.0f
+                };
+                break;
+
+            case vfx::VFXNodeType::ForceWind:
+                node.properties["direction"] = vfx::VFXProperty{
+                    "direction", vfx::VFXPropertyType::Vec3,
+                    vfx::ForceDefaults::WIND_DIRECTION, -10.0f, 10.0f
+                };
+                node.properties["strength"] = vfx::VFXProperty{
+                    "strength", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::WIND_STRENGTH, 0.0f, 50.0f
+                };
+                node.properties["noiseStrength"] = vfx::VFXProperty{
+                    "noiseStrength", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::WIND_NOISE_STRENGTH, 0.0f, 10.0f
+                };
+                node.properties["noiseFrequency"] = vfx::VFXProperty{
+                    "noiseFrequency", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::WIND_NOISE_FREQUENCY, 0.1f, 10.0f
+                };
+                node.properties["localSpace"] = vfx::VFXProperty{
+                    "localSpace", vfx::VFXPropertyType::Bool,
+                    false, 0.0f, 1.0f
+                };
+                break;
+
+            case vfx::VFXNodeType::ForceTurbulence:
+                node.properties["strength"] = vfx::VFXProperty{
+                    "strength", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::TURBULENCE_STRENGTH, 0.0f, 50.0f
+                };
+                node.properties["frequency"] = vfx::VFXProperty{
+                    "frequency", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::TURBULENCE_FREQUENCY, 0.1f, 10.0f
+                };
+                node.properties["scrollSpeed"] = vfx::VFXProperty{
+                    "scrollSpeed", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::TURBULENCE_SCROLL_SPEED, 0.0f, 10.0f
+                };
+                node.properties["octaves"] = vfx::VFXProperty{
+                    "octaves", vfx::VFXPropertyType::Int,
+                    vfx::ForceDefaults::TURBULENCE_OCTAVES, 1.0f, 4.0f
+                };
+                node.properties["localSpace"] = vfx::VFXProperty{
+                    "localSpace", vfx::VFXPropertyType::Bool,
+                    false, 0.0f, 1.0f
+                };
+                break;
+
+            case vfx::VFXNodeType::ForceVortex:
+                node.properties["axis"] = vfx::VFXProperty{
+                    "axis", vfx::VFXPropertyType::Vec3,
+                    vfx::ForceDefaults::VORTEX_AXIS, -1.0f, 1.0f
+                };
+                node.properties["center"] = vfx::VFXProperty{
+                    "center", vfx::VFXPropertyType::Vec3,
+                    vfx::ForceDefaults::VORTEX_CENTER, -100.0f, 100.0f
+                };
+                node.properties["strength"] = vfx::VFXProperty{
+                    "strength", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::VORTEX_STRENGTH, 0.0f, 50.0f
+                };
+                node.properties["radialPull"] = vfx::VFXProperty{
+                    "radialPull", vfx::VFXPropertyType::Float,
+                    vfx::ForceDefaults::VORTEX_RADIAL_PULL, -50.0f, 50.0f
+                };
+                node.properties["localSpace"] = vfx::VFXProperty{
+                    "localSpace", vfx::VFXPropertyType::Bool,
+                    false, 0.0f, 1.0f
+                };
+                break;
+
+            default:
+                break;
+        }
+    }
+
     void VFXGraphEditor::handleContextMenu() {
         if (showContextMenu) {
             ImGui::OpenPopup("VFXContextMenu");
@@ -255,6 +347,51 @@ namespace editor::graph {
                     newNode.name = getNodeTypeName(vfx::VFXNodeType::RotationOverLifetime);
                     newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
                     initializeModifierProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                ImGui::EndMenu();
+            }
+
+            // VK-239: Forces submenu
+            if (ImGui::BeginMenu("Forces")) {
+                if (ImGui::MenuItem("Gravity")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::ForceGravity;
+                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceGravity);
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeForceProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Wind")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::ForceWind;
+                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceWind);
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeForceProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Turbulence")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::ForceTurbulence;
+                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceTurbulence);
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeForceProperties(newNode);
+                    currentGraph->nodes.push_back(std::move(newNode));
+                    if (onGraphChanged) onGraphChanged();
+                }
+                if (ImGui::MenuItem("Vortex")) {
+                    vfx::VFXNode newNode;
+                    newNode.id = currentGraph->nextNodeId++;
+                    newNode.type = vfx::VFXNodeType::ForceVortex;
+                    newNode.name = getNodeTypeName(vfx::VFXNodeType::ForceVortex);
+                    newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
+                    initializeForceProperties(newNode);
                     currentGraph->nodes.push_back(std::move(newNode));
                     if (onGraphChanged) onGraphChanged();
                 }

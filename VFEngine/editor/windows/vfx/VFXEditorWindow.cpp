@@ -4,6 +4,7 @@
 #include <vfx/VFXAsset.hpp>
 #include <vfx/VFXTypes.hpp>
 #include <vfx/VFXModifierConfigLoader.hpp>
+#include <vfx/VFXForceConfigLoader.hpp>
 #include <providers/IVFXPreviewProvider.hpp>
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
@@ -149,6 +150,9 @@ namespace windows
 
         // VK-238: Extract modifier chain from graph
         params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData->graph);
+
+        // VK-239: Extract force chain from graph
+        params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData->graph);
 
         previewPanel->setParams(params);
     }

@@ -168,6 +168,12 @@ namespace editor::graph
             return IM_COL32(80, 160, 200, 255);   // Blue
         case vfx::VFXNodeType::RotationOverLifetime:
             return IM_COL32(200, 200, 80, 255);   // Yellow
+        // Force nodes (VK-239)
+        case vfx::VFXNodeType::ForceGravity:
+        case vfx::VFXNodeType::ForceWind:
+        case vfx::VFXNodeType::ForceTurbulence:
+        case vfx::VFXNodeType::ForceVortex:
+            return IM_COL32(80, 200, 200, 255);   // Cyan
         default:
             return IM_COL32(100, 100, 100, 255);
         }
@@ -184,6 +190,11 @@ namespace editor::graph
         case vfx::VFXNodeType::SizeOverLifetime: return "Size Over Lifetime";
         case vfx::VFXNodeType::SpeedOverLifetime: return "Speed Over Lifetime";
         case vfx::VFXNodeType::RotationOverLifetime: return "Rotation Over Lifetime";
+        // Force nodes (VK-239)
+        case vfx::VFXNodeType::ForceGravity: return "Gravity";
+        case vfx::VFXNodeType::ForceWind: return "Wind";
+        case vfx::VFXNodeType::ForceTurbulence: return "Turbulence";
+        case vfx::VFXNodeType::ForceVortex: return "Vortex";
         default: return "Unknown";
         }
     }

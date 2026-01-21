@@ -1,7 +1,8 @@
 #pragma once
 
 #include "VFXBillboardTypes.hpp"
-#include "../../../utilities/vfx/VFXModifierTypes.hpp"
+#include "vfx/VFXModifierTypes.hpp"
+#include "vfx/VFXForceTypes.hpp"
 #include <vector>
 #include <random>
 
@@ -46,5 +47,15 @@ namespace render::vfx
         void applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float deltaTime);
         void applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float deltaTime);
         void applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float t, float deltaTime);
+
+        // Force application (VK-239)
+        void applyForces(VFXParticle& particle, float deltaTime);
+        void applyForce(VFXParticle& particle, const ::vfx::GravityForceConfig& force, float deltaTime);
+        void applyForce(VFXParticle& particle, const ::vfx::WindForceConfig& force, float deltaTime);
+        void applyForce(VFXParticle& particle, const ::vfx::TurbulenceForceConfig& force, float deltaTime);
+        void applyForce(VFXParticle& particle, const ::vfx::VortexForceConfig& force, float deltaTime);
+
+        // Time accumulator for noise-based forces (VK-239)
+        float timeAccumulator = 0.0f;
     };
 }

@@ -34,7 +34,12 @@ namespace vfx
         ColorOverLifetime, // Interpolates color from start to end over particle lifetime
         SizeOverLifetime, // Scales size from start to end multiplier over particle lifetime
         SpeedOverLifetime, // Scales velocity from start to end multiplier over particle lifetime
-        RotationOverLifetime // Applies angular velocity for spinning particles
+        RotationOverLifetime, // Applies angular velocity for spinning particles
+        // Force nodes (VK-239)
+        ForceGravity,    // Constant directional force (default: downward)
+        ForceWind,       // Directional force with optional noise
+        ForceTurbulence, // Perlin noise-based chaotic movement
+        ForceVortex      // Spiral force around an axis
     };
 
     // Helper function to check if a node type is a modifier
@@ -44,6 +49,15 @@ namespace vfx
                type == VFXNodeType::SizeOverLifetime ||
                type == VFXNodeType::SpeedOverLifetime ||
                type == VFXNodeType::RotationOverLifetime;
+    }
+
+    // Helper function to check if a node type is a force (VK-239)
+    inline bool isForceNode(VFXNodeType type)
+    {
+        return type == VFXNodeType::ForceGravity ||
+               type == VFXNodeType::ForceWind ||
+               type == VFXNodeType::ForceTurbulence ||
+               type == VFXNodeType::ForceVortex;
     }
 
     // Check if node type has an input pin (all except Emitter)
@@ -145,6 +159,32 @@ namespace vfx
 
         // Rotation Over Lifetime
         inline constexpr float ANGULAR_VELOCITY = 0.0f; // degrees per second
+    }
+
+    // Default values for Force nodes (VK-239)
+    namespace ForceDefaults
+    {
+        // Gravity
+        inline const glm::vec3 GRAVITY_DIRECTION{0.0f, -1.0f, 0.0f};
+        inline constexpr float GRAVITY_STRENGTH = 9.81f;
+
+        // Wind
+        inline const glm::vec3 WIND_DIRECTION{1.0f, 0.0f, 0.0f};
+        inline constexpr float WIND_STRENGTH = 1.0f;
+        inline constexpr float WIND_NOISE_STRENGTH = 0.0f;
+        inline constexpr float WIND_NOISE_FREQUENCY = 1.0f;
+
+        // Turbulence
+        inline constexpr float TURBULENCE_STRENGTH = 1.0f;
+        inline constexpr float TURBULENCE_FREQUENCY = 1.0f;
+        inline constexpr float TURBULENCE_SCROLL_SPEED = 0.0f;
+        inline constexpr int TURBULENCE_OCTAVES = 1;
+
+        // Vortex
+        inline const glm::vec3 VORTEX_AXIS{0.0f, 1.0f, 0.0f};
+        inline const glm::vec3 VORTEX_CENTER{0.0f, 0.0f, 0.0f};
+        inline constexpr float VORTEX_STRENGTH = 1.0f;
+        inline constexpr float VORTEX_RADIAL_PULL = 0.0f;
     }
 
     // Type conversion utilities
