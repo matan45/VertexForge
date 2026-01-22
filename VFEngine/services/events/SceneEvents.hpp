@@ -227,6 +227,25 @@ namespace events::scene {
         std::string_view getName() const override { return "SetRigidBodyData"; }
     };
 
+    struct AddVFXComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddVFXComponent"; }
+    };
+
+    struct RemoveVFXComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveVFXComponent"; }
+    };
+
+    struct SetVFXDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::VFXData vfxData;
+
+        std::string_view getName() const override { return "SetVFXData"; }
+    };
+
     struct SetPhysicsSettingsCommand : ICommand<bool> {
         types::PhysicsSettings settings;
 
@@ -361,6 +380,18 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetRigidBodyData"; }
+    };
+
+    struct HasVFXComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasVFXComponent"; }
+    };
+
+    struct GetVFXDataQuery : IQuery<std::optional<services::VFXData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetVFXData"; }
     };
 
     struct GetPhysicsSettingsQuery : IQuery<types::PhysicsSettings> {

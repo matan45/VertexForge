@@ -146,6 +146,51 @@ namespace services
                 }
                 break;
             }
+        case ComponentTypeId::Script:
+            {
+                auto view = registry.view<components::ScriptComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::Collider:
+            {
+                auto view = registry.view<components::ColliderComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::RigidBody:
+            {
+                auto view = registry.view<components::RigidBodyComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::Animator:
+            {
+                auto view = registry.view<components::AnimatorComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
+        case ComponentTypeId::VFX:
+            {
+                auto view = registry.view<components::VFXComponent>();
+                for (auto entity : view)
+                {
+                    handles.push_back(internal::toHandle(entity));
+                }
+                break;
+            }
         default:
             break;
         }
@@ -195,6 +240,16 @@ namespace services
             return registry.all_of<components::AudioSource2DComponent>(enttEntity);
         case ComponentTypeId::AudioSource3D:
             return registry.all_of<components::AudioSource3DComponent>(enttEntity);
+        case ComponentTypeId::Script:
+            return registry.all_of<components::ScriptComponent>(enttEntity);
+        case ComponentTypeId::Collider:
+            return registry.all_of<components::ColliderComponent>(enttEntity);
+        case ComponentTypeId::RigidBody:
+            return registry.all_of<components::RigidBodyComponent>(enttEntity);
+        case ComponentTypeId::Animator:
+            return registry.all_of<components::AnimatorComponent>(enttEntity);
+        case ComponentTypeId::VFX:
+            return registry.all_of<components::VFXComponent>(enttEntity);
         default:
             return false;
         }
@@ -231,6 +286,16 @@ namespace services
             types.push_back(ComponentTypeId::AudioSource2D);
         if (registry.all_of<components::AudioSource3DComponent>(enttEntity))
             types.push_back(ComponentTypeId::AudioSource3D);
+        if (registry.all_of<components::ScriptComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Script);
+        if (registry.all_of<components::ColliderComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Collider);
+        if (registry.all_of<components::RigidBodyComponent>(enttEntity))
+            types.push_back(ComponentTypeId::RigidBody);
+        if (registry.all_of<components::AnimatorComponent>(enttEntity))
+            types.push_back(ComponentTypeId::Animator);
+        if (registry.all_of<components::VFXComponent>(enttEntity))
+            types.push_back(ComponentTypeId::VFX);
 
         return types;
     }

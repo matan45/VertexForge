@@ -334,4 +334,13 @@ namespace controllers
         }
         return 0;
     }
+
+    void OffScreenController::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setVFXRuntimeProvider(provider);
+        }
+    }
 }

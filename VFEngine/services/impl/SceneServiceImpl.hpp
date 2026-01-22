@@ -23,6 +23,7 @@ namespace services
     class IBLComponentService;
     class PhysicsComponentService;
     class AnimatorComponentService;
+    class VFXComponentService;
 
     // New extracted services
     class HierarchyService;
@@ -44,6 +45,7 @@ namespace services
         std::unique_ptr<IBLComponentService> iblService;
         std::unique_ptr<PhysicsComponentService> physicsService;
         std::unique_ptr<AnimatorComponentService> animatorService;
+        std::unique_ptr<VFXComponentService> vfxService;
 
         // New extracted services
         std::unique_ptr<HierarchyService> hierarchyService;
@@ -133,6 +135,13 @@ namespace services
         bool hasAudioSource3DComponent(EntityHandle entity) const override;
         std::optional<AudioSource3DData> getAudioSource3DData(EntityHandle entity) const override;
         bool setAudioSource3DData(EntityHandle entity, const AudioSource3DData& audioData) override;
+
+        // VFX Component Operations
+        bool addVFXComponent(EntityHandle entity) override;
+        bool removeVFXComponent(EntityHandle entity) override;
+        bool hasVFXComponent(EntityHandle entity) const override;
+        std::optional<VFXData> getVFXData(EntityHandle entity) const override;
+        bool setVFXData(EntityHandle entity, const VFXData& vfxData) override;
 
         // Static Entity Operations
         bool setEntityStatic(EntityHandle entity, bool isStatic) override;

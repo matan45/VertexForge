@@ -8,10 +8,6 @@
 
 namespace events::scripting {
 
-    // ============================================
-    // COMMANDS - Operations that modify script state
-    // ============================================
-
     struct AttachScriptCommand : ICommand<bool> {
         services::EntityHandle entity;
         services::ScriptData data;
@@ -34,7 +30,6 @@ namespace events::scripting {
         std::string_view getName() const override { return "SetScriptEnabled"; }
     };
 
-    // === Build Commands ===
     struct BuildScriptsCommand : ICommand<bool> {
         std::string_view getName() const override { return "BuildScripts"; }
     };
@@ -42,10 +37,6 @@ namespace events::scripting {
     struct CleanScriptsCommand : ICommand<bool> {
         std::string_view getName() const override { return "CleanScripts"; }
     };
-
-    // ============================================
-    // QUERIES - Read-only script information
-    // ============================================
 
     struct IsScriptEnabledQuery : IQuery<bool> {
         services::EntityHandle entity;
@@ -66,7 +57,6 @@ namespace events::scripting {
         std::string_view getName() const override { return "GetScriptPaths"; }
     };
 
-    // === Build Queries ===
     struct IsScriptsCompiledQuery : IQuery<bool> {
         std::string_view getName() const override { return "IsScriptsCompiled"; }
     };

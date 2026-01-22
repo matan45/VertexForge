@@ -42,6 +42,7 @@ ICON_FILES = {
     11: "font",                # other/file
     12: "project",                # other/file
     13: "animator",                # other/file
+    14: "particle",                # other/file
 }
 
 def find_icon_file(base_name):

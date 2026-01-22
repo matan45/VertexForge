@@ -7,7 +7,7 @@ namespace windows::details {
     public:
         void draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
                   bool hasAudio2D, bool hasAudio3D, bool hasScript,
-                  bool hasCollider, bool hasRigidBody);
+                  bool hasCollider, bool hasRigidBody, bool hasVFX);
     };
 
 }

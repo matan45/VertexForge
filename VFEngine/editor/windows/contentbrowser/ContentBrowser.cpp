@@ -420,6 +420,10 @@ namespace windows
                     {
                         asset.type = Animator;
                     }
+                    else if (extension == ".vfVFX")
+                    {
+                        asset.type = VFX;
+                    }
                     else if (extension == ".vfPrefab")
                     {
                         asset.type = Prefab;

@@ -27,6 +27,8 @@ namespace core::audio {
 
 namespace services {
 	class PhysicsPlayModeHandler;
+	class VFXPlayModeHandler;
+	class VFXRuntimeServiceImpl;
 }
 
 namespace handlers {
@@ -53,6 +55,8 @@ namespace handlers {
 		std::shared_ptr<services::IProjectService> projectService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
+		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;
+		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
 
 		events::SubscriptionToken resizeSubscription;
 

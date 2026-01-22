@@ -98,7 +98,6 @@ namespace services
                 return true;
             });
 
-        // === Build Queries ===
         dispatcher.registerQueryHandler<events::scripting::IsScriptsCompiledQuery>(
             [this](const auto& query)
             {
@@ -251,60 +250,6 @@ namespace services
         vfLogInfo("[Script] Detached script '{}' from entity", scriptPath);
     }
 
-    void ScriptingServiceImpl::detachAllScripts(EntityHandle entity)
-    {
-        auto enttEntity = fromHandle(entity);
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        if (!registry.all_of<components::ScriptComponent>(enttEntity))
-        {
-            return;
-        }
-
-        auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-
-        // Detach each script
-        for (auto& entry : scriptComp.scripts)
-        {
-            if (entry.started)
-            {
-                scriptingProvider->callOnDestroy(entry.instanceId);
-            }
-            scriptingProvider->unloadScript(entry.instanceId);
-        }
-
-        // Remove component
-        registry.remove<components::ScriptComponent>(enttEntity);
-
-        vfLogInfo("[Script] Detached all scripts from entity");
-    }
-
-    bool ScriptingServiceImpl::hasScripts(EntityHandle entity) const
-    {
-        auto enttEntity = fromHandle(entity);
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        if (!registry.all_of<components::ScriptComponent>(enttEntity))
-        {
-            return false;
-        }
-
-        return !registry.get<components::ScriptComponent>(enttEntity).scripts.empty();
-    }
-
-    bool ScriptingServiceImpl::hasScript(EntityHandle entity, const std::string& scriptPath) const
-    {
-        auto enttEntity = fromHandle(entity);
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        if (!registry.all_of<components::ScriptComponent>(enttEntity))
-        {
-            return false;
-        }
-
-        return registry.get<components::ScriptComponent>(enttEntity).hasScript(scriptPath);
-    }
-
     std::vector<std::string> ScriptingServiceImpl::getScriptPaths(EntityHandle entity) const
     {
         auto enttEntity = fromHandle(entity);
@@ -393,6 +338,9 @@ namespace services
                     if (info.has_value())
                     {
                         entry.instanceId = info->instanceId;
+                        // Auto-start script: set to Playing and call playScript
+                        entry.playbackState = ScriptPlaybackState::Playing;
+                        scriptingProvider->playVFX(entry.instanceId);
                     }
                     else
                     {
@@ -400,17 +348,20 @@ namespace services
                     }
                 }
 
-                // Call onStart if not started yet
-                if (!entry.started)
+                // For backwards compatibility: if script loaded but playback state is Stopped, start it
+                if (!entry.started && entry.playbackState == ScriptPlaybackState::Stopped)
                 {
-                    vfLogInfo("[Script] Calling onStart for script '{}' (instance {})",
-                              entry.scriptPath, entry.instanceId);
-                    scriptingProvider->callOnStart(entry.instanceId);
+                    entry.playbackState = ScriptPlaybackState::Playing;
+                    scriptingProvider->playVFX(entry.instanceId);
+                }
+
+                // Track started state (set when playScript calls onStart)
+                if (entry.playbackState == ScriptPlaybackState::Playing && !entry.started)
+                {
                     entry.started = true;
                 }
 
-                // Call onUpdate
-
+                // Call onUpdate - the provider will check playback state internally
                 scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
             }
         }
@@ -434,10 +385,10 @@ namespace services
                 // Reset script entry state
                 entry.instanceId = 0;
                 entry.started = false;
+                entry.playbackState = ScriptPlaybackState::Stopped;
             }
         }
 
-        // Unload all scripts from provider and reset instance counter
         scriptingProvider->unloadAllScripts();
         vfLogInfo("[Script] All scripts stopped");
     }

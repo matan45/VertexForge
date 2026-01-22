@@ -6,6 +6,7 @@
 #include "components/IBLComponentService.hpp"
 #include "components/PhysicsComponentService.hpp"
 #include "components/AnimatorComponentService.hpp"
+#include "components/VFXComponentService.hpp"
 #include "scene/HierarchyService.hpp"
 #include "scene/EntityQueryService.hpp"
 #include "scene/TransformComponentService.hpp"
@@ -27,6 +28,7 @@ namespace services
         , iblService(std::make_unique<IBLComponentService>(sceneGraph))
         , physicsService(std::make_unique<PhysicsComponentService>(sceneGraph))
         , animatorService(std::make_unique<AnimatorComponentService>(animatorProvider))
+        , vfxService(std::make_unique<VFXComponentService>(sceneGraph))
         // New extracted services
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))
@@ -50,6 +52,7 @@ namespace services
         iblService->registerEventHandlers(dispatcher);
         physicsService->registerEventHandlers(dispatcher);
         animatorService->registerEventHandlers(dispatcher);
+        vfxService->registerEventHandlers(dispatcher);
 
         // New extracted services
         hierarchyService->registerEventHandlers(dispatcher);
@@ -384,5 +387,32 @@ namespace services
     bool SceneServiceImpl::setAudioSource3DData(EntityHandle entity, const AudioSource3DData& audioData)
     {
         return audioService->setAudioSource3DData(entity, audioData);
+    }
+
+    // ========== VFX COMPONENT SERVICE DELEGATES ==========
+
+    bool SceneServiceImpl::addVFXComponent(EntityHandle entity)
+    {
+        return vfxService->addVFXComponent(entity);
+    }
+
+    bool SceneServiceImpl::removeVFXComponent(EntityHandle entity)
+    {
+        return vfxService->removeVFXComponent(entity);
+    }
+
+    bool SceneServiceImpl::hasVFXComponent(EntityHandle entity) const
+    {
+        return vfxService->hasVFXComponent(entity);
+    }
+
+    std::optional<VFXData> SceneServiceImpl::getVFXData(EntityHandle entity) const
+    {
+        return vfxService->getVFXData(entity);
+    }
+
+    bool SceneServiceImpl::setVFXData(EntityHandle entity, const VFXData& vfxData)
+    {
+        return vfxService->setVFXData(entity, vfxData);
     }
 }

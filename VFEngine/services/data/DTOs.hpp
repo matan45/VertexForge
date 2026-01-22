@@ -193,4 +193,10 @@ namespace services
         bool freezeRotationY = false;
         bool freezeRotationZ = false;
     };
+
+    struct VFXData {
+        std::string vfxPath;      // Path to .vfVFX asset file
+        bool autoPlay = true;     // Auto-start when play mode begins
+        bool loop = true;         // Loop the VFX effect
+    };
 }

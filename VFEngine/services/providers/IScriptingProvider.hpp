@@ -45,6 +45,8 @@ namespace services {
         virtual void callOnUpdate(uint64_t instanceId, float deltaTime) = 0;
         virtual void callOnDestroy(uint64_t instanceId) = 0;
 
+        virtual void playVFX(uint64_t instanceId) = 0;
+
         // === Error Handling ===
         virtual std::optional<ScriptError> getLastError() const = 0;
         virtual void clearError() = 0;

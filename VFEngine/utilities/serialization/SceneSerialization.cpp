@@ -144,6 +144,11 @@ namespace serialization
             componentsJson["rigidBody"] = serializeRigidBody(entity.getComponent<components::RigidBodyComponent>());
         }
 
+        if (entity.hasComponent<components::VFXComponent>())
+        {
+            componentsJson["vfx"] = serializeVFX(entity.getComponent<components::VFXComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         // Serialize children recursively
@@ -664,6 +669,41 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeVFX(const components::VFXComponent& vfx)
+    {
+        json j;
+        // Clean the VFX file path
+        std::string cleanPath = vfx.vfxPath;
+        if (auto pos = cleanPath.find('\0'); pos != std::string::npos)
+        {
+            cleanPath.resize(pos);
+        }
+        j["vfxPath"] = cleanPath;
+        j["autoPlay"] = vfx.autoPlay;
+        j["loop"] = vfx.loop;
+        // Note: runtimeInstanceId and isPlaying are runtime state, not serialized
+        return j;
+    }
+
+    void SceneSerialization::deserializeVFX(const json& j, components::VFXComponent& vfx)
+    {
+        if (auto it = j.find("vfxPath"); it != j.end() && it->is_string())
+        {
+            vfx.vfxPath = it->get<std::string>();
+        }
+        if (auto it = j.find("autoPlay"); it != j.end() && it->is_boolean())
+        {
+            vfx.autoPlay = it->get<bool>();
+        }
+        if (auto it = j.find("loop"); it != j.end() && it->is_boolean())
+        {
+            vfx.loop = it->get<bool>();
+        }
+        // Reset runtime state
+        vfx.runtimeInstanceId = 0;
+        vfx.isPlaying = false;
+    }
+
     json SceneSerialization::serializePhysicsSettings(const types::PhysicsSettings& settings)
     {
         json j;
@@ -1020,6 +1060,18 @@ namespace serialization
             {
                 auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
                 deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
+            }
+
+            if (componentsJson.contains("vfx"))
+            {
+                auto& vfxComp = entity.addOrReplaceComponent<components::VFXComponent>();
+                deserializeVFX(componentsJson["vfx"], vfxComp);
+                // Auto-attach billboard if not explicitly serialized
+                if (!componentsJson.contains("billboard"))
+                {
+                    auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+                    billboard.iconType = components::BillboardIconType::Particle;
+                }
             }
         }
 

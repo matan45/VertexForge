@@ -10,9 +10,9 @@
 #include <regex>
 
 #include "print/EditorLogger.hpp"
-#include "../../services/events/PhysicsEvents.hpp"
-#include "../../utilities/scene/EntityRegistry.hpp"
-#include "../../utilities/components/Components.hpp"
+#include "events/PhysicsEvents.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 
 namespace core
 {
@@ -278,6 +278,8 @@ namespace core
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
 
+            instanceToPlaybackState[instanceId] = services::ScriptPlaybackState::Stopped;
+
             services::ScriptInstanceInfo info;
             info.instanceId = instanceId;
             info.className = className;
@@ -305,6 +307,7 @@ namespace core
             instanceToEntity.erase(instanceId);
             instanceToObject.erase(instanceId);
             instanceToInterfaces.erase(instanceId);
+            instanceToPlaybackState.erase(instanceId);
         }
     }
 
@@ -314,6 +317,7 @@ namespace core
         instanceToEntity.clear();
         instanceToObject.clear();
         instanceToInterfaces.clear();
+        instanceToPlaybackState.clear();
         nextInstanceId = 1;
         vfLogInfo("[ScriptingAdapter] All scripts unloaded, instance counter reset");
     }
@@ -352,6 +356,13 @@ namespace core
     void ScriptingAdapter::callOnUpdate(uint64_t instanceId, float deltaTime)
     {
         if (!isScriptLoaded(instanceId))
+        {
+            return;
+        }
+
+        auto stateIt = instanceToPlaybackState.find(instanceId);
+        if (stateIt == instanceToPlaybackState.end() ||
+            stateIt->second != services::ScriptPlaybackState::Playing)
         {
             return;
         }
@@ -397,6 +408,23 @@ namespace core
                      std::string("onDestroy failed: ") + e.what());
             vfLogError("[Script] onDestroy failed: {}", e.what());
         }
+    }
+
+    void ScriptingAdapter::playVFX(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId))
+        {
+            vfLogWarning("[ScriptingAdapter] playScript: script {} not loaded", instanceId);
+            return;
+        }
+
+        auto& state = instanceToPlaybackState[instanceId];
+        if (state == services::ScriptPlaybackState::Stopped)
+        {
+            callOnStart(instanceId);
+        }
+        state = services::ScriptPlaybackState::Playing;
+        vfLogInfo("[ScriptingAdapter] Script {} now playing", instanceId);
     }
 
     std::optional<services::ScriptError> ScriptingAdapter::getLastError() const

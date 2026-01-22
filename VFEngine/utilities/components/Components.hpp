@@ -7,6 +7,7 @@
 #include <cstdint>
 #include "../uuid/UUID.hpp"
 #include "../types/PhysicsTypes.hpp"
+#include "../../services/data/ScriptTypes.hpp"
 
 namespace components
 {
@@ -21,10 +22,12 @@ namespace components
     struct ColliderComponent;
     struct RigidBodyComponent;
     struct AnimatorComponent;
+    struct VFXComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
-                                               ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent>;
+                                               ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
+                                               VFXComponent>;
 
     struct WorldTransformComponent
     {
@@ -325,6 +328,8 @@ namespace components
 
         bool started = false;
         uint64_t instanceId = 0;
+
+        services::ScriptPlaybackState playbackState = services::ScriptPlaybackState::Stopped;
     };
 
     struct ScriptComponent
@@ -455,5 +460,16 @@ namespace components
         bool freezeRotationX = false;
         bool freezeRotationY = false;
         bool freezeRotationZ = false;
+    };
+
+    struct VFXComponent
+    {
+        std::string vfxPath;              // Path to .vfVFX asset file
+        bool autoPlay = true;             // Auto-start when entity becomes active
+        bool loop = true;                 // Loop the VFX effect
+
+        // Runtime state (managed by VFXSceneRenderer, not serialized)
+        uint32_t runtimeInstanceId = 0;   // Internal ID for VFXSceneRenderer
+        bool isPlaying = false;           // Current playback state
     };
 }

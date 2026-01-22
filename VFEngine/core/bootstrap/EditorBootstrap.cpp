@@ -6,6 +6,8 @@
 #include "../adapters/MaterialPreviewAdapter.hpp"
 #include "../adapters/MeshPreviewAdapter.hpp"
 #include "../adapters/AnimationPreviewAdapter.hpp"
+#include "../adapters/VFXPreviewAdapter.hpp"
+#include "../adapters/VFXRuntimeAdapter.hpp"
 #include "../adapters/AudioAdapter.hpp"
 #include "../adapters/ScriptingAdapter.hpp"
 #include "../adapters/PhysicsAdapter.hpp"
@@ -33,6 +35,8 @@ namespace core
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         animationPreviewAdapter = std::make_unique<AnimationPreviewAdapter>();
+        vfxPreviewAdapter = std::make_unique<VFXPreviewAdapter>();
+        vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         audioAdapter = std::make_unique<AudioAdapter>();
         scriptingAdapter = std::make_unique<ScriptingAdapter>();
         physicsAdapter = std::make_unique<PhysicsAdapter>();
@@ -42,6 +46,10 @@ namespace core
         audioAdapter->init();
         scriptingAdapter->init();
         physicsAdapter->init();
+
+        // Wire VFX runtime provider to offscreen renderer
+        // This allows VFX to be rendered as part of the scene
+        offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());
 
         // Apply default physics settings on startup
         // Scene-specific settings will be loaded when a scene is loaded
@@ -80,6 +88,8 @@ namespace core
             physicsAdapter->cleanUp();
         }
 
+        vfxRuntimeAdapter.reset();
+        vfxPreviewAdapter.reset();
         animationPreviewAdapter.reset();
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
@@ -119,6 +129,16 @@ namespace core
     services::IAnimationPreviewProvider* EditorBootstrap::getAnimationPreviewProvider()
     {
         return animationPreviewAdapter.get();
+    }
+
+    services::IVFXPreviewProvider* EditorBootstrap::getVFXPreviewProvider()
+    {
+        return vfxPreviewAdapter.get();
+    }
+
+    services::IVFXRuntimeProvider* EditorBootstrap::getVFXRuntimeProvider()
+    {
+        return vfxRuntimeAdapter.get();
     }
 
     services::IAudioProvider* EditorBootstrap::getAudioProvider()

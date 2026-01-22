@@ -4,6 +4,11 @@
 
 namespace services {
 
+    enum class ScriptPlaybackState {
+        Stopped,
+        Playing
+    };
+
     // Data for attaching a script to an entity
     struct ScriptData {
         std::string scriptPath;     // Path to .mt source file

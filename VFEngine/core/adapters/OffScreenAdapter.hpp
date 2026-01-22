@@ -80,6 +80,9 @@ namespace core
         void setViewMode(uint32_t mode) override;
         uint32_t getViewMode() const override;
 
+        // VFX Runtime API
+        void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;
+
     private:
         bool playModeActive = false;
     };

@@ -13,6 +13,8 @@
 #include "impl/FileOperationsServiceImpl.hpp"
 #include "impl/PhysicsServiceImpl.hpp"
 #include "impl/PhysicsPlayModeHandler.hpp"
+#include "impl/VFXPlayModeHandler.hpp"
+#include "impl/VFXRuntimeServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
@@ -63,7 +65,8 @@ namespace handlers
                 // Update order is critical:
                 // 1. Physics - steps simulation and syncs transforms to ECS
                 // 2. Scripts - can read updated transforms and apply game logic
-                // 3. Audio   - uses final camera/listener positions
+                // 3. VFX     - updates particle simulations
+                // 4. Audio   - uses final camera/listener positions
 
                 if (physicsPlayModeHandler)
                 {
@@ -73,6 +76,11 @@ namespace handlers
                 if (scriptingService)
                 {
                     scriptingService->updateScripts(deltaTime);
+                }
+
+                if (vfxPlayModeHandler)
+                {
+                    vfxPlayModeHandler->update(deltaTime);
                 }
 
                 if (audioSceneUpdater)
@@ -108,6 +116,8 @@ namespace handlers
         undoRedoService.reset();
         physicsService.reset();
         physicsPlayModeHandler.reset();
+        vfxPlayModeHandler.reset();
+        vfxRuntimeService.reset();
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
@@ -149,7 +159,8 @@ namespace handlers
         previewService = std::make_shared<services::PreviewServiceImpl>(
             bootstrap->getMaterialPreviewProvider(),
             bootstrap->getMeshPreviewProvider(),
-            bootstrap->getAnimationPreviewProvider()
+            bootstrap->getAnimationPreviewProvider(),
+            bootstrap->getVFXPreviewProvider()
         );
         editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
@@ -164,6 +175,15 @@ namespace handlers
             physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
             physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
             physicsPlayModeHandler->subscribeToEvents();
+        }
+
+        if (auto* vfxProvider = bootstrap->getVFXRuntimeProvider())
+        {
+            vfxRuntimeService = std::make_unique<services::VFXRuntimeServiceImpl>(vfxProvider);
+            vfxRuntimeService->registerEventHandlers();
+
+            vfxPlayModeHandler = std::make_unique<services::VFXPlayModeHandler>(vfxProvider);
+            vfxPlayModeHandler->subscribeToEvents();
         }
 
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();

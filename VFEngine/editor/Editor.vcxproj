@@ -107,6 +107,7 @@
     <ClInclude Include="dragdrop\DragDropManager.hpp" />
     <ClInclude Include="graph\ShaderGraphCompiler.hpp" />
     <ClInclude Include="graph\ShaderGraphEditor.hpp" />
+    <ClInclude Include="graph\VFXGraphEditor.hpp" />
     <ClInclude Include="graph\nodes\ConstantNodes.hpp" />
     <ClInclude Include="graph\nodes\ConversionNodes.hpp" />
     <ClInclude Include="graph\nodes\MathNodes.hpp" />
@@ -165,10 +166,13 @@
     <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
     <ClInclude Include="windows\details\TransformDrawer.hpp" />
+    <ClInclude Include="windows\details\VFXDrawer.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
     <ClInclude Include="windows\material\MaterialPreviewPanel.hpp" />
     <ClInclude Include="windows\material\MaterialPropertyPanel.hpp" />
     <ClInclude Include="windows\material\OrmPackingDialog.hpp" />
+    <ClInclude Include="windows\vfx\VFXEditorWindow.hpp" />
+    <ClInclude Include="windows\vfx\VFXPreviewPanel.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="camera\EditorCamera.cpp" />
@@ -180,6 +184,9 @@
     <ClCompile Include="graph\ShaderGraphEditorDraw.cpp" />
     <ClCompile Include="graph\ShaderGraphEditorEvents.cpp" />
     <ClCompile Include="graph\ShaderGraphEditorUtils.cpp" />
+    <ClCompile Include="graph\VFXGraphEditor.cpp" />
+    <ClCompile Include="graph\VFXGraphEditorDraw.cpp" />
+    <ClCompile Include="graph\VFXGraphEditorEvents.cpp" />
     <ClCompile Include="graph\nodes\ShaderNodeFactory.cpp" />
     <ClCompile Include="handlers\EditorHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
@@ -234,10 +241,13 @@
     <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />
     <ClCompile Include="windows\details\TransformDrawer.cpp" />
+    <ClCompile Include="windows\details\VFXDrawer.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />
     <ClCompile Include="windows\material\MaterialPreviewPanel.cpp" />
     <ClCompile Include="windows\material\MaterialPropertyPanel.cpp" />
     <ClCompile Include="windows\material\OrmPackingDialog.cpp" />
+    <ClCompile Include="windows\vfx\VFXEditorWindow.cpp" />
+    <ClCompile Include="windows\vfx\VFXPreviewPanel.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\editor\VertexForge-icon.vfImage" />

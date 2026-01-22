@@ -12,6 +12,8 @@ namespace services {
     using types::CameraId;
     using types::MAIN_CAMERA_ID;
 
+    class IVFXRuntimeProvider;
+
     struct MeshBounds {
         glm::vec3 min{0.0f};
         glm::vec3 max{0.0f};
@@ -158,6 +160,9 @@ namespace services {
         // View Mode API
         virtual void setViewMode(uint32_t mode) = 0;
         virtual uint32_t getViewMode() const = 0;
+
+        // VFX Runtime API
+        virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;
     };
 
 }

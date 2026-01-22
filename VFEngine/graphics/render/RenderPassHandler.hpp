@@ -6,6 +6,11 @@
 #include <memory>
 #include <vector>
 
+namespace services
+{
+    class IVFXRuntimeProvider;
+}
+
 namespace core
 {
     class Device;
@@ -80,6 +85,9 @@ namespace render
         mutable float currentFarPlane = 1000.0f;
         mutable float currentTime = 0.0f;
 
+        // VFX runtime provider (for scene-integrated VFX rendering)
+        services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
+
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
                                    core::OffscreenResources& offscreenResources);
@@ -129,6 +137,10 @@ namespace render
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
+
+        // VFX Runtime
+        void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
+        services::IVFXRuntimeProvider* getVFXRuntimeProvider() const { return vfxRuntimeProvider; }
 
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;

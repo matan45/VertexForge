@@ -1,6 +1,7 @@
 #pragma once
 #include "../providers/IPreviewProvider.hpp"
 #include "../providers/IAnimationPreviewProvider.hpp"
+#include "../providers/IVFXPreviewProvider.hpp"
 #include "../data/DTOs.hpp"
 #include "../data/AsyncLoadingTypes.hpp"
 #include <math/Frustum.hpp>
@@ -36,11 +37,11 @@ namespace services
 
         [[nodiscard]] virtual std::vector<SubMeshInfo> getPreviewMeshSubMeshInfo(PreviewInstanceId instanceId) const =
         0;
-        
+
         [[nodiscard]] virtual std::vector<LODInfo> getPreviewMeshLODInfo(PreviewInstanceId instanceId) const = 0;
-        
+
         [[nodiscard]] virtual math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const = 0;
-        
+
         virtual void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) = 0;
 
         virtual void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
@@ -78,6 +79,22 @@ namespace services
 
         [[nodiscard]] virtual ViewportTextureHandle renderAnimationPreview(PreviewInstanceId instanceId) = 0;
         [[nodiscard]] virtual std::vector<EvaluatedBoneInfo>
-            getAnimationPreviewEvaluatedBones(PreviewInstanceId instanceId) const = 0;
+        getAnimationPreviewEvaluatedBones(PreviewInstanceId instanceId) const = 0;
+
+        // VFX Preview
+        virtual void initVFXPreview(PreviewInstanceId instanceId) = 0;
+        virtual void cleanUpVFXPreview(PreviewInstanceId instanceId) = 0;
+
+        virtual void setVFXParams(PreviewInstanceId instanceId, const VFXPreviewParams& params) = 0;
+
+        virtual void updateVFXCamera(PreviewInstanceId instanceId, const glm::mat4& view,
+                                     const glm::mat4& projection, const glm::vec3& cameraPos, float time) = 0;
+        virtual void updateVFXSimulation(PreviewInstanceId instanceId, float deltaTime) = 0;
+
+        virtual void playVFX(PreviewInstanceId instanceId) = 0;
+        virtual void pauseVFX(PreviewInstanceId instanceId) = 0;
+        virtual void stopVFX(PreviewInstanceId instanceId) = 0;
+
+        [[nodiscard]] virtual ViewportTextureHandle renderVFXPreview(PreviewInstanceId instanceId) = 0;
     };
 }
