@@ -51,6 +51,10 @@ namespace core
         controllerParams.startColor = params.startColor;
         controllerParams.emitDirection = params.emitDirection;
         controllerParams.texturePath = params.texturePath;
+        controllerParams.looping = params.looping;
+        controllerParams.modifiers = params.modifiers; 
+        controllerParams.forces = params.forces;       
+        controllerParams.shape = params.shape;         
 
         controller->setParams(controllerParams);
     }

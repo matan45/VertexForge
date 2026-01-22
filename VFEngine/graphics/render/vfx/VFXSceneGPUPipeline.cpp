@@ -3,12 +3,14 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/Texture.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Logger.hpp"
 #include "GPUVFXTypes.hpp"
+#include <filesystem>
 
 namespace render::vfx
 {
@@ -170,6 +172,9 @@ namespace render::vfx
             defaultTextureImage = nullptr;
         }
 
+        customTexture.reset();
+        currentTexturePath.clear();
+
         if (gpuShader)
         {
             gpuShader->cleanUp();
@@ -282,8 +287,16 @@ namespace render::vfx
         // Texture
         vk::DescriptorImageInfo textureInfo{};
         textureInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        textureInfo.imageView = defaultTextureImageView;
-        textureInfo.sampler = textureSampler;
+        if (customTexture)
+        {
+            textureInfo.imageView = customTexture->getImageView();
+            textureInfo.sampler = customTexture->getSampler();
+        }
+        else
+        {
+            textureInfo.imageView = defaultTextureImageView;
+            textureInfo.sampler = textureSampler;
+        }
 
         // Particle SSBO
         vk::DescriptorBufferInfo particleInfo{};
@@ -521,6 +534,45 @@ namespace render::vfx
 
         // Use persistent mapping - no map/unmap overhead
         std::memcpy(cameraUBOMapped, &ubo, sizeof(ubo));
+    }
+
+    void VFXSceneGPUPipeline::setTexture(const std::string& texturePath)
+    {
+        if (texturePath == currentTexturePath)
+        {
+            return;
+        }
+
+        device.getLogicalDevice().waitIdle();
+
+        customTexture.reset();
+        currentTexturePath.clear();
+
+        if (texturePath.empty() || !std::filesystem::exists(texturePath))
+        {
+            if (!texturePath.empty())
+            {
+                loggerWarning("VFX GPU texture not found: {}", texturePath);
+            }
+            descriptorsNeedUpdate = true;
+            return;
+        }
+
+        try
+        {
+            customTexture = std::make_unique<core::Texture>(device);
+            customTexture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
+            currentTexturePath = texturePath;
+            loggerInfo("VFX GPU texture loaded: {}", texturePath);
+        }
+        catch (const std::exception& e)
+        {
+            loggerError("Failed to load VFX GPU texture '{}': {}", texturePath, e.what());
+            customTexture.reset();
+            currentTexturePath.clear();
+        }
+
+        descriptorsNeedUpdate = true;
     }
 
     void VFXSceneGPUPipeline::recordCommandsInline(

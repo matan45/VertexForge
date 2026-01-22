@@ -9,62 +9,99 @@
 
 namespace vfx
 {
-    // Property types supported by VFX nodes
     enum class VFXPropertyType : uint8_t
     {
         Float,
         Vec2,
         Vec3,
         Vec4,
-        Color, // Same as Vec4 but with color picker UI
+        Color,
         Int,
         Bool,
-        String // For file paths (textures)
+        String
     };
 
-    // Property value variant - holds any supported property type
     using VFXPropertyValue = std::variant<float, glm::vec2, glm::vec3, glm::vec4, int32_t, bool, std::string>;
 
-    // VFX Node types - Part 1 only has Emitter and OutSystem
     enum class VFXNodeType : uint8_t
     {
-        Emitter, // Start node - particle spawn configuration
-        OutSystem // End node - final output of the VFX system
+        Emitter,
+        OutSystem,
+        ColorOverLifetime,
+        SizeOverLifetime,
+        SpeedOverLifetime,
+        RotationOverLifetime,
+        ForceGravity,
+        ForceWind,
+        ForceTurbulence,
+        ForceVortex,
+        Shape
     };
 
-    // A property definition for a node
+    inline bool isModifierNode(VFXNodeType type)
+    {
+        return type == VFXNodeType::ColorOverLifetime ||
+               type == VFXNodeType::SizeOverLifetime ||
+               type == VFXNodeType::SpeedOverLifetime ||
+               type == VFXNodeType::RotationOverLifetime;
+    }
+
+    inline bool isForceNode(VFXNodeType type)
+    {
+        return type == VFXNodeType::ForceGravity ||
+               type == VFXNodeType::ForceWind ||
+               type == VFXNodeType::ForceTurbulence ||
+               type == VFXNodeType::ForceVortex;
+    }
+
+    inline bool isShapeNode(VFXNodeType type)
+    {
+        return type == VFXNodeType::Shape;
+    }
+
+    inline bool hasShapeInputPin(VFXNodeType type)
+    {
+        return type == VFXNodeType::Emitter;
+    }
+
+    inline bool hasInputPin(VFXNodeType type)
+    {
+        return type != VFXNodeType::Emitter && type != VFXNodeType::Shape;
+    }
+
+    inline bool hasOutputPin(VFXNodeType type)
+    {
+        return type != VFXNodeType::OutSystem;
+    }
+
     struct VFXProperty
     {
         std::string name;
         VFXPropertyType type = VFXPropertyType::Float;
         VFXPropertyValue value;
-        float min = 0.0f; // For numeric types
-        float max = 1.0f; // For numeric types
+        float min = 0.0f;
+        float max = 1.0f;
     };
 
-    // VFX Node structure
     struct VFXNode
     {
         uint32_t id = 0;
         VFXNodeType type = VFXNodeType::Emitter;
         std::string name;
-        glm::vec2 position{0.0f, 0.0f}; // Node editor position
+        glm::vec2 position{0.0f, 0.0f};
 
-        // Node-specific properties stored as key-value map
         std::map<std::string, VFXProperty> properties;
     };
 
-    // Connection between nodes
     struct VFXNodeLink
     {
         uint32_t id = 0;
         uint32_t sourceNodeId = 0;
         uint32_t targetNodeId = 0;
-        std::string sourcePin; // Output pin name
-        std::string targetPin; // Input pin name
+        std::string sourcePin;
+        std::string targetPin;
     };
 
-    // VFX Graph containing nodes and connections
     struct VFXGraph
     {
         std::vector<VFXNode> nodes;
@@ -72,18 +109,15 @@ namespace vfx
         uint32_t nextNodeId = 1;
         uint32_t nextLinkId = 1;
 
-        // Helper methods
         VFXNode* findNode(uint32_t nodeId);
         const VFXNode* findNode(uint32_t nodeId) const;
         const VFXNode* findEmitterNode() const;
         const VFXNode* findOutSystemNode() const;
 
-        // Graph validation (VK-85: OutSystem validates execution)
         bool isValid() const;
         std::string getValidationError() const;
     };
 
-    // Root VFX asset data
     struct VFXData
     {
         std::string uuid;
@@ -92,17 +126,50 @@ namespace vfx
         VFXGraph graph;
     };
 
-    // Default values for Emitter node properties
     namespace EmitterDefaults
     {
-        inline constexpr float SPAWN_RATE = 10.0f; // particles per second
-        inline constexpr float LIFETIME = 2.0f; // seconds
-        inline constexpr float START_SIZE = 1.0f; // scale
-        inline constexpr float START_SPEED = 1.0f; // units per second
-        inline constexpr bool LOOPING = true; // whether VFX loops
+        inline constexpr float SPAWN_RATE = 10.0f;
+        inline constexpr float LIFETIME = 2.0f;
+        inline constexpr float START_SIZE = 1.0f;
+        inline constexpr float START_SPEED = 1.0f;
+        inline constexpr bool LOOPING = true;
     }
 
-    // Type conversion utilities
+    namespace ModifierDefaults
+    {
+        inline const glm::vec4 COLOR_START{1.0f, 1.0f, 1.0f, 1.0f};
+        inline const glm::vec4 COLOR_END{1.0f, 1.0f, 1.0f, 0.0f};
+
+        inline constexpr float SIZE_START_MULTIPLIER = 1.0f;
+        inline constexpr float SIZE_END_MULTIPLIER = 0.0f;
+
+        inline constexpr float SPEED_START_MULTIPLIER = 1.0f;
+        inline constexpr float SPEED_END_MULTIPLIER = 0.5f;
+
+        inline constexpr float ANGULAR_VELOCITY = 0.0f;
+    }
+
+    namespace ForceDefaults
+    {
+        inline const glm::vec3 GRAVITY_DIRECTION{0.0f, -1.0f, 0.0f};
+        inline constexpr float GRAVITY_STRENGTH = 9.81f;
+
+        inline const glm::vec3 WIND_DIRECTION{1.0f, 0.0f, 0.0f};
+        inline constexpr float WIND_STRENGTH = 1.0f;
+        inline constexpr float WIND_NOISE_STRENGTH = 0.0f;
+        inline constexpr float WIND_NOISE_FREQUENCY = 1.0f;
+
+        inline constexpr float TURBULENCE_STRENGTH = 1.0f;
+        inline constexpr float TURBULENCE_FREQUENCY = 1.0f;
+        inline constexpr float TURBULENCE_SCROLL_SPEED = 0.0f;
+        inline constexpr int TURBULENCE_OCTAVES = 1;
+
+        inline const glm::vec3 VORTEX_AXIS{0.0f, 1.0f, 0.0f};
+        inline const glm::vec3 VORTEX_CENTER{0.0f, 0.0f, 0.0f};
+        inline constexpr float VORTEX_STRENGTH = 1.0f;
+        inline constexpr float VORTEX_RADIAL_PULL = 0.0f;
+    }
+
     const char* propertyTypeToString(VFXPropertyType type);
     VFXPropertyType stringToPropertyType(const std::string& str);
     const char* nodeTypeToString(VFXNodeType type);

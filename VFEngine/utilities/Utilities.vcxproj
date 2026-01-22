@@ -143,6 +143,12 @@
     <ClInclude Include="uuid\UUID.hpp" />
     <ClInclude Include="vfx\VFXAsset.hpp" />
     <ClInclude Include="vfx\VFXEmitterConfigLoader.hpp" />
+    <ClInclude Include="vfx\VFXForceConfigLoader.hpp" />
+    <ClInclude Include="vfx\VFXForceTypes.hpp" />
+    <ClInclude Include="vfx\VFXModifierConfigLoader.hpp" />
+    <ClInclude Include="vfx\VFXModifierTypes.hpp" />
+    <ClInclude Include="vfx\VFXShapeConfigLoader.hpp" />
+    <ClInclude Include="vfx\VFXShapeTypes.hpp" />
     <ClInclude Include="vfx\VFXTypes.hpp" />
   </ItemGroup>
   <ItemGroup>

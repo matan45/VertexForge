@@ -1,15 +1,16 @@
 #pragma once
 
-
 #include "VFXBillboardTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
+#include <string>
 
 namespace core
 {
     class Device;
     class SwapChain;
     class Shader;
+    class Texture;
 }
 
 namespace render::vfx
@@ -55,6 +56,10 @@ namespace render::vfx
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
+        // Custom texture support
+        std::unique_ptr<core::Texture> customTexture;
+        std::string currentTexturePath;
+
     public:
         explicit VFXSceneGPUPipeline(core::Device& device, core::SwapChain& swapChain);
         ~VFXSceneGPUPipeline();
@@ -74,6 +79,9 @@ namespace render::vfx
 
         // Update particle buffer binding (called when buffer changes)
         void updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize);
+
+        // Set custom texture for particles
+        void setTexture(const std::string& texturePath);
 
         // Record indirect draw commands inline within existing render pass
         void recordCommandsInline(

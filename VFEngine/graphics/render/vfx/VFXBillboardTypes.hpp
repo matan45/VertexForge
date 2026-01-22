@@ -3,8 +3,10 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
-#include <cstdint>
 #include <string>
+#include "vfx/VFXModifierTypes.hpp"
+#include "vfx/VFXForceTypes.hpp"
+#include "vfx/VFXShapeTypes.hpp"
 
 namespace render::vfx
 {
@@ -14,9 +16,16 @@ namespace render::vfx
         glm::vec3 velocity{0.0f};
         glm::vec4 color{1.0f};
         float size = 1.0f;
+        float rotation = 0.0f;      // Rotation angle in radians (VK-238)
         float lifetime = 0.0f;
         float maxLifetime = 1.0f;
         bool active = false;
+
+        // Store initial values for modifier calculations (VK-238)
+        glm::vec4 initialColor{1.0f};
+        float initialSize = 1.0f;
+        float initialSpeed = 1.0f;
+        glm::vec3 initialDirection{0.0f, 1.0f, 0.0f};  // Stored at spawn for speed modifier
     };
 
     struct VFXInstanceData
@@ -25,7 +34,8 @@ namespace render::vfx
         float size;
         glm::vec4 color;
         float lifetimeRatio;
-        float padding[3];
+        float rotation;         // Rotation angle in radians (VK-238)
+        float padding[2];
 
         static vk::VertexInputBindingDescription getBindingDescription()
         {
@@ -36,9 +46,9 @@ namespace render::vfx
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 3> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 4> attributes{};
 
             attributes[0].binding = 1;
             attributes[0].location = 2;
@@ -54,6 +64,11 @@ namespace render::vfx
             attributes[2].location = 4;
             attributes[2].format = vk::Format::eR32Sfloat;
             attributes[2].offset = offsetof(VFXInstanceData, lifetimeRatio);
+
+            attributes[3].binding = 1;
+            attributes[3].location = 5;
+            attributes[3].format = vk::Format::eR32Sfloat;
+            attributes[3].offset = offsetof(VFXInstanceData, rotation);
 
             return attributes;
         }
@@ -109,6 +124,15 @@ namespace render::vfx
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};
         std::string texturePath;
         bool looping = true;
+
+        // Modifier chain (VK-238)
+        ::vfx::VFXModifierChain modifiers;
+
+        // Force chain (VK-239)
+        ::vfx::VFXForceChain forces;
+
+        // Shape config (VK-240)
+        ::vfx::ShapeConfig shape;
     };
 
     namespace VFXConstants

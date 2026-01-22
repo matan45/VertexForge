@@ -2,6 +2,9 @@
 
 #include "../render/vfx/VFXBillboardTypes.hpp"
 #include "../core/OffScreen.hpp"
+#include <vfx/VFXModifierTypes.hpp>
+#include <vfx/VFXForceTypes.hpp>
+#include <vfx/VFXShapeTypes.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -30,6 +33,11 @@ namespace controllers
         glm::vec4 startColor{1.0f, 1.0f, 1.0f, 1.0f};
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};
         std::string texturePath;
+        bool looping = true;
+
+        ::vfx::VFXModifierChain modifiers;
+        ::vfx::VFXForceChain forces;
+        ::vfx::ShapeConfig shape;
     };
 
     class VFXPreviewController

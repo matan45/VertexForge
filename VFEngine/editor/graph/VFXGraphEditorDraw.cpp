@@ -1,4 +1,5 @@
 #include "VFXGraphEditor.hpp"
+#include "vfx/VFXShapeTypes.hpp"
 #include "imgui.h"
 #include <nfd/FileDialog.hpp>
 #include <filesystem>
@@ -8,6 +9,16 @@ namespace ed = ax::NodeEditor;
 namespace editor::graph {
 
     bool VFXGraphEditor::isPinLinked(uint32_t pinId) const {
+        if (isShapePin(pinId)) {
+            uint32_t nodeId = getNodeIdFromShapePinId(pinId);
+            for (const auto& link : currentGraph->links) {
+                if (link.targetNodeId == nodeId && link.targetPin == "Shape") {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         uint32_t nodeId = getNodeIdFromPinId(pinId);
         bool isOutput = isOutputPin(pinId);
 
@@ -15,7 +26,7 @@ namespace editor::graph {
             if (isOutput && link.sourceNodeId == nodeId) {
                 return true;
             }
-            if (!isOutput && link.targetNodeId == nodeId) {
+            if (!isOutput && link.targetNodeId == nodeId && link.targetPin != "Shape") {
                 return true;
             }
         }
@@ -70,6 +81,22 @@ namespace editor::graph {
         ImU32 pinColor = getFlowPinColor();
 
         if (node.type == vfx::VFXNodeType::Emitter) {
+            uint32_t shapePinId = getShapePinId(node.id);
+            ed::BeginPin(toEditorPinId(shapePinId), ed::PinKind::Input);
+
+            ImVec2 shapeIconPos = ImGui::GetCursorScreenPos();
+            bool shapeLinked = isPinLinked(shapePinId);
+            ImU32 shapePinColor = IM_COL32(200, 100, 180, 255);  // Magenta
+            drawFlowPinShape(drawList, ImVec2(shapeIconPos.x + pinSize/2, shapeIconPos.y + pinSize/2),
+                           shapePinColor, shapeLinked, pinSize, false);
+            ImGui::Dummy(ImVec2(pinSize, pinSize));
+            ImGui::SameLine(0, 4);
+            ImGui::TextUnformatted("Shape");
+
+            ed::EndPin();
+
+            ImGui::Spacing();
+
             for (auto& [propName, prop] : node.properties) {
                 std::string widgetId = "##" + propName + std::to_string(node.id);
 
@@ -213,7 +240,6 @@ namespace editor::graph {
 
             ed::EndPin();
 
-            // VK-85: Show validation status indicator
             ImGui::Spacing();
             bool graphValid = currentGraph ? currentGraph->isValid() : false;
             if (graphValid) {
@@ -228,6 +254,250 @@ namespace editor::graph {
                     ImGui::SetTooltip("%s", currentGraph->getValidationError().c_str());
                 }
             }
+        } else if (vfx::isModifierNode(node.type)) {
+            uint32_t inputPinId = getInputPinId(node.id);
+            ed::BeginPin(toEditorPinId(inputPinId), ed::PinKind::Input);
+
+            ImVec2 iconPos = ImGui::GetCursorScreenPos();
+            bool isLinked = isPinLinked(inputPinId);
+            drawFlowPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                           pinColor, isLinked, pinSize, false);
+            ImGui::Dummy(ImVec2(pinSize, pinSize));
+            ImGui::SameLine(0, 4);
+            ImGui::TextUnformatted("In");
+
+            ed::EndPin();
+
+            for (auto& [propName, prop] : node.properties) {
+                std::string widgetId = "##mod" + propName + std::to_string(node.id);
+
+                switch (prop.type) {
+                    case vfx::VFXPropertyType::Float: {
+                        float* val = std::get_if<float>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            ImGui::PushItemWidth(60);
+                            if (ImGui::DragFloat(widgetId.c_str(), val, 0.01f, prop.min, prop.max, "%.2f")) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Color: {
+                        glm::vec4* val = std::get_if<glm::vec4>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            ImVec4 color(val->x, val->y, val->z, val->w);
+                            if (ImGui::ColorButton(widgetId.c_str(), color, ImGuiColorEditFlags_AlphaPreview, ImVec2(20, 20))) {
+                                ImGui::OpenPopup(("ColorPicker" + widgetId).c_str());
+                            }
+                            ed::Suspend();
+                            if (ImGui::BeginPopup(("ColorPicker" + widgetId).c_str())) {
+                                float c[4] = {val->x, val->y, val->z, val->w};
+                                if (ImGui::ColorPicker4("##picker", c, ImGuiColorEditFlags_AlphaBar)) {
+                                    *val = glm::vec4(c[0], c[1], c[2], c[3]);
+                                    if (onGraphChanged) onGraphChanged();
+                                }
+                                ImGui::EndPopup();
+                            }
+                            ed::Resume();
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+
+            ImGui::Spacing();
+
+            uint32_t outputPinId = getOutputPinId(node.id);
+            ed::BeginPin(toEditorPinId(outputPinId), ed::PinKind::Output);
+
+            ImGui::TextUnformatted("Out");
+            ImGui::SameLine(0, 4);
+
+            iconPos = ImGui::GetCursorScreenPos();
+            isLinked = isPinLinked(outputPinId);
+            drawFlowPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                           pinColor, isLinked, pinSize, true);
+            ImGui::Dummy(ImVec2(pinSize, pinSize));
+
+            ed::EndPin();
+        } else if (vfx::isForceNode(node.type)) {
+            uint32_t inputPinId = getInputPinId(node.id);
+            ed::BeginPin(toEditorPinId(inputPinId), ed::PinKind::Input);
+
+            ImVec2 iconPos = ImGui::GetCursorScreenPos();
+            bool isLinked = isPinLinked(inputPinId);
+            drawFlowPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                           pinColor, isLinked, pinSize, false);
+            ImGui::Dummy(ImVec2(pinSize, pinSize));
+            ImGui::SameLine(0, 4);
+            ImGui::TextUnformatted("In");
+
+            ed::EndPin();
+
+            for (auto& [propName, prop] : node.properties) {
+                std::string widgetId = "##force" + propName + std::to_string(node.id);
+
+                switch (prop.type) {
+                    case vfx::VFXPropertyType::Float: {
+                        float* val = std::get_if<float>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            ImGui::PushItemWidth(60);
+                            if (ImGui::DragFloat(widgetId.c_str(), val, 0.1f, prop.min, prop.max, "%.2f")) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Vec3: {
+                        glm::vec3* val = std::get_if<glm::vec3>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::PushItemWidth(120);
+                            float v[3] = {val->x, val->y, val->z};
+                            if (ImGui::InputFloat3(widgetId.c_str(), v, "%.2f")) {
+                                *val = glm::vec3(v[0], v[1], v[2]);
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Int: {
+                        int32_t* val = std::get_if<int32_t>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            ImGui::PushItemWidth(50);
+                            if (ImGui::DragInt(widgetId.c_str(), val, 1,
+                                    static_cast<int>(prop.min), static_cast<int>(prop.max))) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Bool: {
+                        bool* val = std::get_if<bool>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            if (ImGui::Checkbox(widgetId.c_str(), val)) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+
+            ImGui::Spacing();
+
+            uint32_t outputPinId = getOutputPinId(node.id);
+            ed::BeginPin(toEditorPinId(outputPinId), ed::PinKind::Output);
+
+            ImGui::TextUnformatted("Out");
+            ImGui::SameLine(0, 4);
+
+            iconPos = ImGui::GetCursorScreenPos();
+            isLinked = isPinLinked(outputPinId);
+            drawFlowPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                           pinColor, isLinked, pinSize, true);
+            ImGui::Dummy(ImVec2(pinSize, pinSize));
+
+            ed::EndPin();
+        } else if (vfx::isShapeNode(node.type)) {
+            for (auto& [propName, prop] : node.properties) {
+                std::string widgetId = "##shape" + propName + std::to_string(node.id);
+
+                // Skip shapeType - it's defined at creation and shown in node name
+                if (propName == "shapeType") continue;
+
+                switch (prop.type) {
+                    case vfx::VFXPropertyType::Float: {
+                        float* val = std::get_if<float>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            ImGui::PushItemWidth(60);
+                            if (ImGui::DragFloat(widgetId.c_str(), val, 0.1f, prop.min, prop.max, "%.2f")) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Vec3: {
+                        glm::vec3* val = std::get_if<glm::vec3>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::PushItemWidth(120);
+                            float v[3] = {val->x, val->y, val->z};
+                            if (ImGui::InputFloat3(widgetId.c_str(), v, "%.2f")) {
+                                *val = glm::vec3(v[0], v[1], v[2]);
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Bool: {
+                        bool* val = std::get_if<bool>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            if (ImGui::Checkbox(widgetId.c_str(), val)) {
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::String: {
+                        std::string* val = std::get_if<std::string>(&prop.value);
+                        if (val && propName == "emitFrom") {
+                            // EmitFrom toggle button (Volume/Surface)
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(100);
+                            std::string buttonLabel = *val + "##emitFrom" + std::to_string(node.id);
+                            if (ImGui::Button(buttonLabel.c_str(), ImVec2(70, 0))) {
+                                *val = (*val == "Volume") ? "Surface" : "Volume";
+                                if (onGraphChanged) onGraphChanged();
+                            }
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+
+            ImGui::Spacing();
+
+            uint32_t outputPinId = getOutputPinId(node.id);
+            ed::BeginPin(toEditorPinId(outputPinId), ed::PinKind::Output);
+
+            ImGui::TextUnformatted("Shape Out");
+            ImGui::SameLine(0, 4);
+
+            ImVec2 iconPos = ImGui::GetCursorScreenPos();
+            bool isLinked = isPinLinked(outputPinId);
+            ImU32 shapePinColor = IM_COL32(200, 100, 180, 255);
+            drawFlowPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
+                           shapePinColor, isLinked, pinSize, true);
+            ImGui::Dummy(ImVec2(pinSize, pinSize));
+
+            ed::EndPin();
         }
 
         ed::EndNode();
@@ -236,6 +506,7 @@ namespace editor::graph {
 
     void VFXGraphEditor::drawLinks() {
         ImU32 flowColor = getFlowPinColor();
+        ImU32 shapeColor = IM_COL32(200, 100, 180, 255);
 
         for (const auto& link : currentGraph->links) {
             const vfx::VFXNode* sourceNode = currentGraph->findNode(link.sourceNodeId);
@@ -244,12 +515,21 @@ namespace editor::graph {
             if (!sourceNode || !targetNode) continue;
 
             uint32_t sourcePinId = getOutputPinId(link.sourceNodeId);
-            uint32_t targetPinId = getInputPinId(link.targetNodeId);
+
+            uint32_t targetPinId;
+            ImU32 linkColor;
+            if (link.targetPin == "Shape") {
+                targetPinId = getShapePinId(link.targetNodeId);
+                linkColor = shapeColor;
+            } else {
+                targetPinId = getInputPinId(link.targetNodeId);
+                linkColor = flowColor;
+            }
 
             ed::Link(toEditorLinkId(link.id),
                     toEditorPinId(sourcePinId),
                     toEditorPinId(targetPinId),
-                    ImColor(flowColor), 2.0f);
+                    ImColor(linkColor), 2.0f);
         }
     }
 

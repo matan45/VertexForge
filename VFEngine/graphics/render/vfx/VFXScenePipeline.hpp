@@ -3,12 +3,14 @@
 #include "VFXBillboardTypes.hpp"
 #include <memory>
 #include <vector>
+#include <string>
 
 namespace core
 {
     class Device;
     class SwapChain;
     class Shader;
+    class Texture;
 }
 
 namespace render::vfx
@@ -47,6 +49,9 @@ namespace render::vfx
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 
+        std::unique_ptr<core::Texture> customTexture;
+        std::string currentTexturePath;
+
     public:
         explicit VFXScenePipeline(core::Device& device, core::SwapChain& swapChain);
         ~VFXScenePipeline();
@@ -59,6 +64,8 @@ namespace render::vfx
                              const glm::vec3& cameraPos, float time) const;
 
         void setParticleInstances(const std::vector<VFXInstanceData>& instances);
+
+        void setTexture(const std::string& texturePath);
 
         void recordCommandsInline(const vk::CommandBuffer& commandBuffer) const;
 

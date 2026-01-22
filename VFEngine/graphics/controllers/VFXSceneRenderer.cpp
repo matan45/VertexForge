@@ -7,8 +7,12 @@
 #include "../render/vfx/GPUVFXComputePipeline.hpp"
 #include "../render/vfx/VFXSceneGPUPipeline.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
+#include "vfx/VFXModifierTypes.hpp"
+#include "vfx/VFXForceTypes.hpp"
+#include "vfx/VFXShapeTypes.hpp"
 #include "print/Logger.hpp"
 #include <random>
+#include <type_traits>
 
 namespace controllers
 {
@@ -184,7 +188,7 @@ namespace controllers
         VFXRuntimeInstance instance;
         instance.id = id;
         instance.worldTransform = params.worldTransform;
-        instance.loop = params.loop;
+        instance.loop = params.loop;  // Component setting takes priority
 
         auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(params.vfxAssetPath);
         if (configOpt.has_value())
@@ -208,7 +212,7 @@ namespace controllers
                 instance.gpuParticleOffset = allocation.particleOffset;
                 instance.gpuParticleCount = allocation.particleCount;
                 instance.particleSystem = nullptr;  // No CPU particle system needed
-                instance.active = true;
+                instance.active = false;  // Start paused, require explicit playInstance() call
 
                 loggerInfo("Created GPU-driven VFX instance {} with {} particles at offset {}",
                            id, instance.gpuParticleCount, instance.gpuParticleOffset);
@@ -223,10 +227,24 @@ namespace controllers
         {
             instance.particleSystem = std::make_unique<render::vfx::VFXParticleSystem>();
             instance.particleSystem->setEmitterConfig(instance.config);
-            instance.active = true;
+            instance.active = false;  // Start paused, require explicit playInstance() call
         }
 
         instances[id] = std::move(instance);
+
+        // Set texture on pipelines if config has a texture path
+        const auto& storedConfig = instances[id].config;
+        if (!storedConfig.texturePath.empty())
+        {
+            if (cpuPipeline)
+            {
+                cpuPipeline->setTexture(storedConfig.texturePath);
+            }
+            if (gpuRenderPipeline)
+            {
+                gpuRenderPipeline->setTexture(storedConfig.texturePath);
+            }
+        }
 
         loggerInfo("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
@@ -456,8 +474,16 @@ namespace controllers
                 continue;
             }
 
+            // Track emission time for looping control
+            instance.emissionTime += deltaTime;
+
             uint32_t spawnThisFrame = 0;
-            if (instance.active)
+            // Only spawn new particles if:
+            // - looping is enabled, OR
+            // - we haven't exceeded the emission duration (one lifetime cycle)
+            bool canSpawn = instance.loop || (instance.emissionTime < instance.config.lifetime);
+
+            if (instance.active && canSpawn)
             {
                 instance.spawnAccumulator += instance.config.spawnRate * deltaTime;
                 spawnThisFrame = static_cast<uint32_t>(instance.spawnAccumulator);
@@ -497,7 +523,115 @@ namespace controllers
         gpuConfig.maxParticles = maxParticles;
         gpuConfig.seed = seed;
         gpuConfig.deltaTime = deltaTime;
-        gpuConfig.padding = 0.0f;
+
+        gpuConfig.modifierFlags = 0;
+        gpuConfig.colorStart = cpuConfig.startColor;
+        gpuConfig.colorEnd = cpuConfig.startColor;
+        gpuConfig.sizeStartMult = 1.0f;
+        gpuConfig.sizeEndMult = 1.0f;
+        gpuConfig.speedStartMult = 1.0f;
+        gpuConfig.speedEndMult = 1.0f;
+        gpuConfig.angularVelocity = 0.0f;
+
+        for (const auto& modifier : cpuConfig.modifiers.modifiers)
+        {
+            std::visit([&gpuConfig](const auto& mod) {
+                using T = std::decay_t<decltype(mod)>;
+                if constexpr (std::is_same_v<T, ::vfx::ColorOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::ColorOverLifetime;
+                    gpuConfig.colorStart = mod.startColor;
+                    gpuConfig.colorEnd = mod.endColor;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::SizeOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SizeOverLifetime;
+                    gpuConfig.sizeStartMult = mod.startMultiplier;
+                    gpuConfig.sizeEndMult = mod.endMultiplier;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::SpeedOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::SpeedOverLifetime;
+                    gpuConfig.speedStartMult = mod.startMultiplier;
+                    gpuConfig.speedEndMult = mod.endMultiplier;
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::RotationOverLifetimeConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ModifierFlags::RotationOverLifetime;
+                    gpuConfig.angularVelocity = glm::radians(mod.angularVelocity);
+                }
+            }, modifier);
+        }
+
+        gpuConfig.gravityDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
+        gpuConfig.windDir = glm::vec4(0.0f);
+        gpuConfig.windNoise = glm::vec4(0.0f);
+        gpuConfig.turbulence = glm::vec4(0.0f);
+        gpuConfig.vortexAxis = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        gpuConfig.vortexCenter = glm::vec4(0.0f);
+
+        for (const auto& force : cpuConfig.forces.forces)
+        {
+            std::visit([&gpuConfig](const auto& f) {
+                using T = std::decay_t<decltype(f)>;
+                if constexpr (std::is_same_v<T, ::vfx::GravityForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Gravity;
+                    gpuConfig.gravityDir = glm::vec4(glm::normalize(f.direction), f.strength);
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::WindForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Wind;
+                    gpuConfig.windDir = glm::vec4(f.direction, f.strength);
+                    gpuConfig.windNoise = glm::vec4(f.noiseStrength, f.noiseFrequency, 0.0f, 0.0f);
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::TurbulenceForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Turbulence;
+                    gpuConfig.turbulence = glm::vec4(f.strength, f.frequency, f.scrollSpeed, static_cast<float>(f.octaves));
+                }
+                else if constexpr (std::is_same_v<T, ::vfx::VortexForceConfig>)
+                {
+                    gpuConfig.modifierFlags |= render::vfx::ForceFlags::Vortex;
+                    gpuConfig.vortexAxis = glm::vec4(glm::normalize(f.axis), f.strength);
+                    gpuConfig.vortexCenter = glm::vec4(f.center, f.radialPull);
+                }
+            }, force);
+        }
+
+        gpuConfig.shapeDimensions = cpuConfig.shape.dimensions;
+        gpuConfig.shapeFlags = 0;
+
+        switch (cpuConfig.shape.type)
+        {
+        case ::vfx::ShapeType::Sphere:
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeSphere;
+            break;
+        case ::vfx::ShapeType::Cone:
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeCone;
+            break;
+        case ::vfx::ShapeType::Box:
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeBox;
+            break;
+        case ::vfx::ShapeType::Circle:
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::ShapeCircle;
+            break;
+        case ::vfx::ShapeType::Point:
+        default:
+            // No flag set for Point (default behavior)
+            break;
+        }
+
+        if (cpuConfig.shape.emitFrom == ::vfx::EmitFrom::Surface)
+        {
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::EmitFromSurface;
+        }
+
+        if (cpuConfig.shape.randomDirection)
+        {
+            gpuConfig.shapeFlags |= render::vfx::ShapeFlags::RandomDirection;
+        }
+
         return gpuConfig;
     }
 

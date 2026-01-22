@@ -1,6 +1,9 @@
 #pragma once
 
 #include "PreviewInstanceId.hpp"
+#include <vfx/VFXModifierTypes.hpp>
+#include <vfx/VFXForceTypes.hpp>
+#include <vfx/VFXShapeTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 
@@ -16,6 +19,10 @@ namespace services
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};
         std::string texturePath;
         bool looping = true;
+
+        ::vfx::VFXModifierChain modifiers;
+        ::vfx::VFXForceChain forces;
+        ::vfx::ShapeConfig shape;
     };
 
     class IVFXPreviewProvider

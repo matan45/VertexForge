@@ -53,6 +53,10 @@ namespace controllers
         config.startColor = currentParams.startColor;
         config.emitDirection = currentParams.emitDirection;
         config.texturePath = currentParams.texturePath;
+        config.looping = currentParams.looping;
+        config.modifiers = currentParams.modifiers;
+        config.forces = currentParams.forces;
+        config.shape = currentParams.shape;
         particleSystem->setEmitterConfig(config);
 
         if (!currentParams.texturePath.empty())
@@ -124,6 +128,10 @@ namespace controllers
             config.startColor = params.startColor;
             config.emitDirection = params.emitDirection;
             config.texturePath = params.texturePath;
+            config.looping = params.looping;
+            config.modifiers = params.modifiers;
+            config.forces = params.forces;
+            config.shape = params.shape;
             particleSystem->setEmitterConfig(config);
         }
 

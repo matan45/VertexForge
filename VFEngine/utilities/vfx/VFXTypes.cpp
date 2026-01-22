@@ -1,4 +1,5 @@
 #include "VFXTypes.hpp"
+#include <algorithm>
 
 namespace vfx
 {
@@ -75,39 +76,80 @@ namespace vfx
     {
         switch (type)
         {
-        case VFXNodeType::Emitter:   return "Emitter";
-        case VFXNodeType::OutSystem: return "OutSystem";
+        case VFXNodeType::Emitter:            return "Emitter";
+        case VFXNodeType::OutSystem:          return "OutSystem";
+        case VFXNodeType::ColorOverLifetime:  return "ColorOverLifetime";
+        case VFXNodeType::SizeOverLifetime:   return "SizeOverLifetime";
+        case VFXNodeType::SpeedOverLifetime:  return "SpeedOverLifetime";
+        case VFXNodeType::RotationOverLifetime: return "RotationOverLifetime";
+        case VFXNodeType::ForceGravity:       return "ForceGravity";
+        case VFXNodeType::ForceWind:          return "ForceWind";
+        case VFXNodeType::ForceTurbulence:    return "ForceTurbulence";
+        case VFXNodeType::ForceVortex:        return "ForceVortex";
+        case VFXNodeType::Shape:              return "Shape";
         default: return "Emitter";
         }
     }
 
     VFXNodeType stringToNodeType(const std::string& str)
     {
-        if (str == "Emitter")   return VFXNodeType::Emitter;
-        if (str == "OutSystem") return VFXNodeType::OutSystem;
+        if (str == "Emitter")            return VFXNodeType::Emitter;
+        if (str == "OutSystem")          return VFXNodeType::OutSystem;
+        if (str == "ColorOverLifetime")  return VFXNodeType::ColorOverLifetime;
+        if (str == "SizeOverLifetime")   return VFXNodeType::SizeOverLifetime;
+        if (str == "SpeedOverLifetime")  return VFXNodeType::SpeedOverLifetime;
+        if (str == "RotationOverLifetime") return VFXNodeType::RotationOverLifetime;
+        if (str == "ForceGravity")       return VFXNodeType::ForceGravity;
+        if (str == "ForceWind")          return VFXNodeType::ForceWind;
+        if (str == "ForceTurbulence")    return VFXNodeType::ForceTurbulence;
+        if (str == "ForceVortex")        return VFXNodeType::ForceVortex;
+        if (str == "Shape")              return VFXNodeType::Shape;
         return VFXNodeType::Emitter;
+    }
+
+    static bool hasPathToOutSystem(const VFXGraph& graph, uint32_t currentNodeId, uint32_t outSystemId,
+                                   std::vector<uint32_t>& visited)
+    {
+        if (std::find(visited.begin(), visited.end(), currentNodeId) != visited.end())
+            return false;
+        visited.push_back(currentNodeId);
+
+        if (currentNodeId == outSystemId)
+            return true;
+
+        for (const auto& link : graph.links)
+        {
+            if (link.sourceNodeId == currentNodeId)
+            {
+                const VFXNode* targetNode = graph.findNode(link.targetNodeId);
+                if (!targetNode)
+                    return false;
+
+                if (targetNode->type == VFXNodeType::OutSystem ||
+                    isModifierNode(targetNode->type) ||
+                    isForceNode(targetNode->type))
+                {
+                    if (hasPathToOutSystem(graph, targetNode->id, outSystemId, visited))
+                        return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     bool VFXGraph::isValid() const
     {
-        // Check if Emitter node exists
         const VFXNode* emitter = findEmitterNode();
         if (!emitter)
             return false;
 
-        // Check if OutSystem node exists
         const VFXNode* outSystem = findOutSystemNode();
         if (!outSystem)
             return false;
 
-        // Check if there's a link from Emitter to OutSystem
-        for (const auto& link : links)
-        {
-            if (link.sourceNodeId == emitter->id && link.targetNodeId == outSystem->id)
-                return true;
-        }
-
-        return false;
+        std::vector<uint32_t> visited;
+        return hasPathToOutSystem(*this, emitter->id, outSystem->id, visited);
     }
 
     std::string VFXGraph::getValidationError() const
@@ -120,13 +162,10 @@ namespace vfx
         if (!outSystem)
             return "Missing OutSystem node";
 
-        // Check if there's a link from Emitter to OutSystem
-        for (const auto& link : links)
-        {
-            if (link.sourceNodeId == emitter->id && link.targetNodeId == outSystem->id)
-                return "";  // No error
-        }
+        std::vector<uint32_t> visited;
+        if (hasPathToOutSystem(*this, emitter->id, outSystem->id, visited))
+            return "";
 
-        return "Emitter is not connected to OutSystem";
+        return "Emitter is not connected to OutSystem (directly or through modifiers/forces)";
     }
 }

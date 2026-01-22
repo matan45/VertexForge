@@ -3,6 +3,9 @@
 #include "../../graph/VFXGraphEditor.hpp"
 #include <vfx/VFXAsset.hpp>
 #include <vfx/VFXTypes.hpp>
+#include <vfx/VFXModifierConfigLoader.hpp>
+#include <vfx/VFXForceConfigLoader.hpp>
+#include <vfx/VFXShapeConfigLoader.hpp>
 #include <providers/IVFXPreviewProvider.hpp>
 #include "imgui.h"
 #include "print/EditorLogger.hpp"
@@ -145,6 +148,10 @@ namespace windows
         params.startColor = getVec4(*emitterNode, "startColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
         params.texturePath = getString(*emitterNode, "texture", "");
+
+        params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData->graph);
+        params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData->graph);
+        params.shape = vfx::VFXShapeConfigLoader::fromGraph(vfxData->graph);
 
         previewPanel->setParams(params);
     }
