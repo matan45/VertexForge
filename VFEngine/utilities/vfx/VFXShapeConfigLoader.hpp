@@ -5,24 +5,16 @@
 
 namespace vfx
 {
-    // VK-240: Loader for extracting shape configuration from VFX graph
     class VFXShapeConfigLoader
     {
     public:
-        // Extract shape config from graph (finds shape node connected to emitter's shape pin)
-        // Returns default Point config if no shape is connected
         static ShapeConfig fromGraph(const VFXGraph& graph);
 
     private:
-        // Find shape node connected to emitter
         static const VFXNode* findShapeNode(const VFXGraph& graph);
-
-        // Convert shape node to runtime config
         static ShapeConfig nodeToConfig(const VFXNode& node);
 
-        // Property extraction helpers
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
-        static int getInt(const VFXNode& node, const std::string& propName, int defaultValue);
         static bool getBool(const VFXNode& node, const std::string& propName, bool defaultValue);
         static glm::vec3 getVec3(const VFXNode& node, const std::string& propName, const glm::vec3& defaultValue);
         static std::string getString(const VFXNode& node, const std::string& propName, const std::string& defaultValue);
@@ -34,7 +26,6 @@ namespace vfx
 
         if (!shapeNode)
         {
-            // No shape connected - return default Point config
             ShapeConfig defaultConfig;
             defaultConfig.type = ShapeType::Point;
             return defaultConfig;
@@ -45,15 +36,12 @@ namespace vfx
 
     inline const VFXNode* VFXShapeConfigLoader::findShapeNode(const VFXGraph& graph)
     {
-        // Find the emitter node
         const VFXNode* emitter = graph.findEmitterNode();
         if (!emitter)
             return nullptr;
 
-        // Find a link from a Shape node to the Emitter's Shape pin
         for (const auto& link : graph.links)
         {
-            // VK-240: Shape links have targetPin == "Shape"
             if (link.targetNodeId == emitter->id && link.targetPin == "Shape")
             {
                 const VFXNode* sourceNode = graph.findNode(link.sourceNodeId);
@@ -71,18 +59,14 @@ namespace vfx
     {
         ShapeConfig config;
 
-        // Get shape type from property
         std::string shapeTypeStr = getString(node, "shapeType", "Point");
         config.type = stringToShapeType(shapeTypeStr);
 
-        // Get emit mode
         std::string emitFromStr = getString(node, "emitFrom", "Volume");
         config.emitFrom = stringToEmitFrom(emitFromStr);
 
-        // Get random direction flag
         config.randomDirection = getBool(node, "randomDirection", false);
 
-        // Get dimensions based on shape type
         switch (config.type)
         {
         case ShapeType::Point:
@@ -125,18 +109,6 @@ namespace vfx
             return defaultValue;
 
         if (auto* val = std::get_if<float>(&it->second.value))
-            return *val;
-
-        return defaultValue;
-    }
-
-    inline int VFXShapeConfigLoader::getInt(const VFXNode& node, const std::string& propName, int defaultValue)
-    {
-        auto it = node.properties.find(propName);
-        if (it == node.properties.end())
-            return defaultValue;
-
-        if (auto* val = std::get_if<int32_t>(&it->second.value))
             return *val;
 
         return defaultValue;

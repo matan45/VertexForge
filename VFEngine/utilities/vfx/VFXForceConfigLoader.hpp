@@ -11,23 +11,17 @@ namespace vfx
     class VFXForceConfigLoader
     {
     public:
-        // Extract ordered force chain from graph
         static VFXForceChain fromGraph(const VFXGraph& graph);
 
     private:
-        // Build ordered list of force nodes from Emitter to OutSystem
         static std::vector<const VFXNode*> getForceNodeChain(const VFXGraph& graph);
-
-        // Convert a force node to its runtime config
         static VFXForceConfig nodeToConfig(const VFXNode& node);
 
-        // Individual extractors
         static GravityForceConfig extractGravityConfig(const VFXNode& node);
         static WindForceConfig extractWindConfig(const VFXNode& node);
         static TurbulenceForceConfig extractTurbulenceConfig(const VFXNode& node);
         static VortexForceConfig extractVortexConfig(const VFXNode& node);
 
-        // Property extraction helpers
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
         static int getInt(const VFXNode& node, const std::string& propName, int defaultValue);
         static bool getBool(const VFXNode& node, const std::string& propName, bool defaultValue);
@@ -38,10 +32,8 @@ namespace vfx
     {
         VFXForceChain chain;
 
-        // Get ordered list of force nodes
         std::vector<const VFXNode*> forceNodes = getForceNodeChain(graph);
 
-        // Convert each node to its config
         for (const VFXNode* node : forceNodes)
         {
             chain.forces.push_back(nodeToConfig(*node));
@@ -54,7 +46,6 @@ namespace vfx
     {
         std::vector<const VFXNode*> chain;
 
-        // Start from Emitter node
         const VFXNode* emitter = graph.findEmitterNode();
         if (!emitter)
         {
@@ -67,13 +58,11 @@ namespace vfx
             return chain;
         }
 
-        // Traverse from Emitter to OutSystem, collecting force nodes in order
         uint32_t currentNodeId = emitter->id;
-        std::unordered_set<uint32_t> visited;  // O(1) lookup for cycle detection
+        std::unordered_set<uint32_t> visited;
 
         while (currentNodeId != outSystem->id)
         {
-            // Prevent infinite loops - cycle detection
             if (visited.count(currentNodeId) > 0)
             {
                 chain.clear();
@@ -81,7 +70,6 @@ namespace vfx
             }
             visited.insert(currentNodeId);
 
-            // Find outgoing link from current node (only follow "Input" links, not "Shape" links)
             bool foundNext = false;
             for (const auto& link : graph.links)
             {
@@ -94,7 +82,6 @@ namespace vfx
                         return chain;
                     }
 
-                    // If it's a force node, add to chain
                     if (isForceNode(targetNode->type))
                     {
                         chain.push_back(targetNode);
@@ -129,7 +116,6 @@ namespace vfx
         case VFXNodeType::ForceVortex:
             return extractVortexConfig(node);
         default:
-            // Return default gravity config for unknown types
             return GravityForceConfig{};
         }
     }

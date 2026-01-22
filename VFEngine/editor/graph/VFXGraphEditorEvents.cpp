@@ -8,11 +8,9 @@ namespace ed = ax::NodeEditor;
 namespace editor::graph {
 
     bool VFXGraphEditor::canCreateLink(uint32_t startPinId, uint32_t endPinId) const {
-        // VK-240: Handle shape pin connections
         bool startIsShapePin = isShapePin(startPinId);
         bool endIsShapePin = isShapePin(endPinId);
 
-        // Get node IDs based on pin type
         uint32_t startNodeId = startIsShapePin ? getNodeIdFromShapePinId(startPinId) : getNodeIdFromPinId(startPinId);
         uint32_t endNodeId = endIsShapePin ? getNodeIdFromShapePinId(endPinId) : getNodeIdFromPinId(endPinId);
 
@@ -23,20 +21,13 @@ namespace editor::graph {
 
         if (!startNode || !endNode) return false;
 
-        // VK-240: Shape pin connections (Shape node output -> Emitter shape input)
         if (startIsShapePin || endIsShapePin) {
-            // One end must be shape pin (input on Emitter), other must be output pin
             const vfx::VFXNode* shapePinNode = startIsShapePin ? startNode : endNode;
             const vfx::VFXNode* outputPinNode = startIsShapePin ? endNode : startNode;
             uint32_t outputPinId = startIsShapePin ? endPinId : startPinId;
 
-            // Shape pin is always input, so the other must be output
             if (!isOutputPin(outputPinId)) return false;
-
-            // Shape pin owner must be Emitter
             if (shapePinNode->type != vfx::VFXNodeType::Emitter) return false;
-
-            // Output pin owner must be Shape node
             if (outputPinNode->type != vfx::VFXNodeType::Shape) return false;
 
             return true;
@@ -45,19 +36,13 @@ namespace editor::graph {
         bool startIsOutput = isOutputPin(startPinId);
         bool endIsOutput = isOutputPin(endPinId);
 
-        // Can't connect same pin types
         if (startIsOutput == endIsOutput) return false;
 
         const vfx::VFXNode* sourceNode = startIsOutput ? startNode : endNode;
         const vfx::VFXNode* targetNode = startIsOutput ? endNode : startNode;
 
-        // VK-238: Source must have an output pin (Emitter, Modifier, Force, or Shape)
         if (!vfx::hasOutputPin(sourceNode->type)) return false;
-
-        // VK-238: Target must have an input pin (OutSystem, Modifier, or Force)
         if (!vfx::hasInputPin(targetNode->type)) return false;
-
-        // VK-240: Shape nodes can only connect to Emitter's shape pin, not to regular input pins
         if (sourceNode->type == vfx::VFXNodeType::Shape) return false;
 
         return true;
@@ -75,12 +60,10 @@ namespace editor::graph {
                         vfx::VFXNodeLink newLink;
                         newLink.id = currentGraph->nextLinkId++;
 
-                        // VK-240: Handle shape pin connections
                         bool startIsShapePin = isShapePin(startId);
                         bool endIsShapePin = isShapePin(endId);
 
                         if (startIsShapePin || endIsShapePin) {
-                            // Shape connection: Shape node output -> Emitter shape input
                             uint32_t emitterNodeId = startIsShapePin
                                 ? getNodeIdFromShapePinId(startId)
                                 : getNodeIdFromShapePinId(endId);
@@ -93,7 +76,6 @@ namespace editor::graph {
                             newLink.sourcePin = "Output";
                             newLink.targetPin = "Shape";
 
-                            // Remove any existing shape link to this emitter (single shape allowed)
                             currentGraph->links.erase(
                                 std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
                                     [emitterNodeId](const vfx::VFXNodeLink& existing) {
@@ -101,7 +83,6 @@ namespace editor::graph {
                                     }),
                                 currentGraph->links.end());
 
-                            // Remove any existing link from this shape node
                             currentGraph->links.erase(
                                 std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
                                     [shapeNodeId](const vfx::VFXNodeLink& existing) {
@@ -109,7 +90,6 @@ namespace editor::graph {
                                     }),
                                 currentGraph->links.end());
                         } else {
-                            // Regular connection
                             bool startIsOutput = isOutputPin(startId);
                             uint32_t sourceNodeId = startIsOutput ? getNodeIdFromPinId(startId) : getNodeIdFromPinId(endId);
                             uint32_t targetNodeId = startIsOutput ? getNodeIdFromPinId(endId) : getNodeIdFromPinId(startId);
@@ -119,7 +99,6 @@ namespace editor::graph {
                             newLink.sourcePin = "Output";
                             newLink.targetPin = "Input";
 
-                            // Remove any existing link to this target's input pin (single connection allowed)
                             currentGraph->links.erase(
                                 std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
                                     [targetNodeId](const vfx::VFXNodeLink& existing) {
@@ -127,7 +106,6 @@ namespace editor::graph {
                                     }),
                                 currentGraph->links.end());
 
-                            // Remove any existing link from this source (single connection from emitter)
                             currentGraph->links.erase(
                                 std::remove_if(currentGraph->links.begin(), currentGraph->links.end(),
                                     [sourceNodeId](const vfx::VFXNodeLink& existing) {
@@ -166,7 +144,6 @@ namespace editor::graph {
 
             ed::PinId pinId;
             if (ed::QueryNewNode(&pinId)) {
-                // Don't allow creating nodes from pins in Part 1
                 ed::RejectNewItem();
             }
         }
@@ -188,13 +165,11 @@ namespace editor::graph {
                 }
             }
 
-            // Handle node deletion - reject deletion of Emitter and OutSystem nodes (Part 1)
             ed::NodeId nodeId;
             while (ed::QueryDeletedNode(&nodeId)) {
                 uint32_t id = fromEditorNodeId(nodeId);
                 auto node = currentGraph->findNode(id);
                 if (node) {
-                    // Reject deletion of core nodes in Part 1
                     if (node->type == vfx::VFXNodeType::Emitter ||
                         node->type == vfx::VFXNodeType::OutSystem) {
                         ed::RejectDeletedItem();
@@ -222,7 +197,6 @@ namespace editor::graph {
         ed::EndDelete();
     }
 
-    // VK-238: Helper function to create a modifier node with default properties
     static void initializeModifierProperties(vfx::VFXNode& node) {
         switch (node.type) {
             case vfx::VFXNodeType::ColorOverLifetime:
@@ -270,7 +244,6 @@ namespace editor::graph {
         }
     }
 
-    // VK-239: Helper function to create a force node with default properties
     static void initializeForceProperties(vfx::VFXNode& node) {
         switch (node.type) {
             case vfx::VFXNodeType::ForceGravity:
@@ -362,27 +335,22 @@ namespace editor::graph {
         }
     }
 
-    // VK-240: Helper function to create a shape node with default properties
     static void initializeShapeProperties(vfx::VFXNode& node, vfx::ShapeType shapeType) {
-        // Store the shape type as a string property
         node.properties["shapeType"] = vfx::VFXProperty{
             "shapeType", vfx::VFXPropertyType::String,
             std::string(vfx::shapeTypeToString(shapeType)), 0.0f, 1.0f
         };
 
-        // Emit from (Volume or Surface)
         node.properties["emitFrom"] = vfx::VFXProperty{
             "emitFrom", vfx::VFXPropertyType::String,
             std::string("Volume"), 0.0f, 1.0f
         };
 
-        // Random direction toggle
         node.properties["randomDirection"] = vfx::VFXProperty{
             "randomDirection", vfx::VFXPropertyType::Bool,
             false, 0.0f, 1.0f
         };
 
-        // Shape-specific properties
         switch (shapeType) {
             case vfx::ShapeType::Sphere:
                 node.properties["radius"] = vfx::VFXProperty{
@@ -428,7 +396,6 @@ namespace editor::graph {
 
             case vfx::ShapeType::Point:
             default:
-                // Point has no additional properties
                 break;
         }
     }
@@ -443,7 +410,6 @@ namespace editor::graph {
             ImGui::TextDisabled("Add Node");
             ImGui::Separator();
 
-            // VK-238: Modifiers submenu
             if (ImGui::BeginMenu("Modifiers")) {
                 if (ImGui::MenuItem("Color Over Lifetime")) {
                     vfx::VFXNode newNode;
@@ -488,7 +454,6 @@ namespace editor::graph {
                 ImGui::EndMenu();
             }
 
-            // VK-239: Forces submenu
             if (ImGui::BeginMenu("Forces")) {
                 if (ImGui::MenuItem("Gravity")) {
                     vfx::VFXNode newNode;
@@ -533,7 +498,6 @@ namespace editor::graph {
                 ImGui::EndMenu();
             }
 
-            // VK-240: Shapes submenu
             if (ImGui::BeginMenu("Shapes")) {
                 if (ImGui::MenuItem("Point")) {
                     vfx::VFXNode newNode;

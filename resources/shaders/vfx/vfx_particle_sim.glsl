@@ -1,36 +1,31 @@
 #type COMPUTE
 #version 450
 
-// Must match GPUVFXConstants::WORKGROUP_SIZE in GPUVFXTypes.hpp
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-// Must match C++ GPUVFXTypes.hpp exactly
 struct GPUParticle
 {
-    vec3 position;          // World space position
-    float lifetime;         // Current age in seconds
-    vec3 velocity;          // World space velocity
-    float maxLifetime;      // Total lifetime in seconds
-    vec4 color;             // RGBA color
-    float size;             // Particle scale
-    float rotation;         // VK-238: Rotation angle in radians
-    float initialSize;      // VK-238: Initial size for modifier calculations
-    float initialSpeed;     // VK-238: Initial speed for modifier calculations
+    vec3 position;
+    float lifetime;
+    vec3 velocity;
+    float maxLifetime;
+    vec4 color;
+    float size;
+    float rotation;
+    float initialSize;
+    float initialSpeed;
 };
 
-// VK-238: Modifier flags (must match ModifierFlags namespace in C++)
 const uint MODIFIER_COLOR_OVER_LIFETIME = 1u;
 const uint MODIFIER_SIZE_OVER_LIFETIME = 2u;
 const uint MODIFIER_SPEED_OVER_LIFETIME = 4u;
 const uint MODIFIER_ROTATION_OVER_LIFETIME = 8u;
 
-// VK-239: Force flags (must match ForceFlags namespace in C++)
 const uint FORCE_GRAVITY = 16u;
 const uint FORCE_WIND = 32u;
 const uint FORCE_TURBULENCE = 64u;
 const uint FORCE_VORTEX = 128u;
 
-// VK-240: Shape flags (must match ShapeFlags namespace in C++)
 const uint SHAPE_SPHERE = 256u;
 const uint SHAPE_CONE = 512u;
 const uint SHAPE_BOX = 1024u;
@@ -40,41 +35,37 @@ const uint SHAPE_RANDOM_DIRECTION = 8192u;
 
 struct GPUEmitterConfig
 {
-    // Original fields (64 bytes)
-    vec4 emitDirection;     // xyz = direction, w = spread angle (radians)
-    vec4 startColor;        // Initial RGBA color
-    float spawnRate;        // Particles per second
-    float lifetime;         // Particle lifetime in seconds
-    float startSize;        // Initial size
-    float startSpeed;       // Initial velocity magnitude
-    uint maxParticles;      // Max particles for this emitter
-    uint seed;              // Random seed (per frame)
-    float deltaTime;        // Frame delta time
-    uint modifierFlags;     // VK-238: Bitmask of active modifiers
+    vec4 emitDirection;
+    vec4 startColor;
+    float spawnRate;
+    float lifetime;
+    float startSize;
+    float startSpeed;
+    uint maxParticles;
+    uint seed;
+    float deltaTime;
+    uint modifierFlags;
 
-    // VK-238: Modifier data (64 bytes)
-    vec4 colorStart;        // Color over lifetime start
-    vec4 colorEnd;          // Color over lifetime end
-    float sizeStartMult;    // Size over lifetime start multiplier
-    float sizeEndMult;      // Size over lifetime end multiplier
-    float speedStartMult;   // Speed over lifetime start multiplier
-    float speedEndMult;     // Speed over lifetime end multiplier
-    float angularVelocity;  // Rotation over lifetime (radians/sec)
+    vec4 colorStart;
+    vec4 colorEnd;
+    float sizeStartMult;
+    float sizeEndMult;
+    float speedStartMult;
+    float speedEndMult;
+    float angularVelocity;
     float modPadding1;
     float modPadding2;
     float modPadding3;
 
-    // VK-239: Force data (96 bytes)
-    vec4 gravityDir;        // xyz = normalized direction, w = strength
-    vec4 windDir;           // xyz = direction, w = strength
-    vec4 windNoise;         // x = noiseStrength, y = noiseFrequency, zw = unused
-    vec4 turbulence;        // x = strength, y = frequency, z = scrollSpeed, w = octaves
-    vec4 vortexAxis;        // xyz = axis, w = strength
-    vec4 vortexCenter;      // xyz = center, w = radialPull
+    vec4 gravityDir;
+    vec4 windDir;
+    vec4 windNoise;
+    vec4 turbulence;
+    vec4 vortexAxis;
+    vec4 vortexCenter;
 
-    // VK-240: Shape data (32 bytes)
-    vec4 shapeDimensions;   // Sphere(r), Cone(r,h,angle), Box(hx,hy,hz), Circle(r,arc)
-    uint shapeFlags;        // Shape type and emit flags
+    vec4 shapeDimensions;
+    uint shapeFlags;
     float shapePadding1;
     float shapePadding2;
     float shapePadding3;
@@ -82,24 +73,24 @@ struct GPUEmitterConfig
 
 struct GPUEmitterState
 {
-    mat4 worldTransform;        // Emitter world transform
-    uint particleOffset;        // Offset into particle buffer
-    uint maxParticles;          // Allocated particles
-    uint activeCount;           // Active particles (atomic counter, written by shader)
-    uint spawnThisFrame;        // Particles to spawn this frame (set by CPU)
-    float spawnAccumulator;     // Fractional spawn accumulator (unused in shader)
-    uint flags;                 // Bit 0 = playing, bit 1 = looping
-    uint spawnCounter;          // Atomic counter for spawn slots (reset each frame)
-    uint padding;               // Alignment
+    mat4 worldTransform;
+    uint particleOffset;
+    uint maxParticles;
+    uint activeCount;
+    uint spawnThisFrame;
+    float spawnAccumulator;
+    uint flags;
+    uint spawnCounter;
+    uint padding;
 };
 
 struct VFXDrawIndirectCommand
 {
-    uint indexCount;        // 6 for quad
-    uint instanceCount;     // Active particle count
-    uint firstIndex;        // 0
-    int vertexOffset;       // 0
-    uint firstInstance;     // Particle offset
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
 };
 
 layout(std430, set = 0, binding = 0) buffer ParticleBuffer {
@@ -124,12 +115,9 @@ layout(push_constant) uniform PushConstants {
     uint emitterCount;
 } pc;
 
-const uint FLAG_ACTIVE = 1u;
 const uint FLAG_PLAYING = 1u;
-const uint FLAG_LOOPING = 2u;
 const float FADE_START = 0.7;
 
-// PCG random number generation
 uint pcg_hash(uint v)
 {
     uint state = v * 747796405u + 2891336453u;
@@ -145,16 +133,13 @@ float randomFloat(inout uint seed)
 
 vec3 randomInCone(inout uint seed, vec3 baseDir, float spreadAngle)
 {
-    // Generate random direction within a cone around baseDir
-    float theta = randomFloat(seed) * 6.28318530718;  // Random angle around cone
-    float phi = randomFloat(seed) * spreadAngle;       // Random angle from center
+    float theta = randomFloat(seed) * 6.28318530718;
+    float phi = randomFloat(seed) * spreadAngle;
 
-    // Create perpendicular basis
     vec3 up = abs(baseDir.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
     vec3 right = normalize(cross(up, baseDir));
     vec3 forward = normalize(cross(baseDir, right));
 
-    // Compute offset direction
     float sinPhi = sin(phi);
     float cosPhi = cos(phi);
     vec3 offset = right * (sinPhi * cos(theta)) + forward * (sinPhi * sin(theta));
@@ -162,13 +147,11 @@ vec3 randomInCone(inout uint seed, vec3 baseDir, float spreadAngle)
     return normalize(baseDir * cosPhi + offset);
 }
 
-// VK-240: Shape-based position generation
 vec3 generateSpherePosition(inout uint seed, float radius, bool surfaceOnly)
 {
-    // Generate random point on unit sphere using spherical coordinates
-    float theta = randomFloat(seed) * 6.28318530718;  // Azimuthal angle [0, 2π]
-    float u = randomFloat(seed) * 2.0 - 1.0;          // Uniform in [-1, 1]
-    float phi = acos(u);                               // Polar angle [0, π] (uniform on sphere)
+    float theta = randomFloat(seed) * 6.28318530718;
+    float u = randomFloat(seed) * 2.0 - 1.0;
+    float phi = acos(u);
 
     vec3 direction;
     direction.x = sin(phi) * cos(theta);
@@ -178,7 +161,6 @@ vec3 generateSpherePosition(inout uint seed, float radius, bool surfaceOnly)
     float r = radius;
     if (!surfaceOnly)
     {
-        // Use cube root for uniform volume distribution
         r = radius * pow(randomFloat(seed), 1.0 / 3.0);
     }
 
@@ -187,25 +169,21 @@ vec3 generateSpherePosition(inout uint seed, float radius, bool surfaceOnly)
 
 vec3 generateConePosition(inout uint seed, float baseRadius, float height, float angle, bool surfaceOnly)
 {
-    // Cone with apex at origin, opening upward (+Y)
-    float t = randomFloat(seed);  // Position along cone height [0, 1]
+    float t = randomFloat(seed);
 
     if (!surfaceOnly)
     {
-        // Volume distribution - use sqrt for uniform area distribution along height
         t = sqrt(randomFloat(seed));
     }
 
     float y = t * height;
     float currentRadius = t * baseRadius * tan(angle);
 
-    // Random angle around Y axis
     float theta = randomFloat(seed) * 6.28318530718;
 
     float r = currentRadius;
     if (!surfaceOnly)
     {
-        // Random radius within the cone at this height
         r = currentRadius * sqrt(randomFloat(seed));
     }
 
@@ -216,7 +194,6 @@ vec3 generateBoxPosition(inout uint seed, vec3 halfExtents, bool surfaceOnly)
 {
     if (!surfaceOnly)
     {
-        // Volume: random point inside box
         return vec3(
             (randomFloat(seed) * 2.0 - 1.0) * halfExtents.x,
             (randomFloat(seed) * 2.0 - 1.0) * halfExtents.y,
@@ -224,7 +201,6 @@ vec3 generateBoxPosition(inout uint seed, vec3 halfExtents, bool surfaceOnly)
         );
     }
 
-    // Surface: pick random face, then random point on that face
     float areaXY = halfExtents.x * halfExtents.y;
     float areaXZ = halfExtents.x * halfExtents.z;
     float areaYZ = halfExtents.y * halfExtents.z;
@@ -258,16 +234,13 @@ vec3 generateBoxPosition(inout uint seed, vec3 halfExtents, bool surfaceOnly)
 
 vec3 generateCirclePosition(inout uint seed, float radius, float arc, bool surfaceOnly)
 {
-    // Circle on XZ plane (Y = 0)
-    float theta = randomFloat(seed) * arc;  // Random angle within arc
+    float theta = randomFloat(seed) * arc;
 
     if (surfaceOnly)
     {
-        // Edge only
         return vec3(radius * cos(theta), 0.0, radius * sin(theta));
     }
 
-    // Disk (filled circle) - use sqrt for uniform area distribution
     float r = radius * sqrt(randomFloat(seed));
     return vec3(r * cos(theta), 0.0, r * sin(theta));
 }
@@ -293,13 +266,11 @@ vec3 generateSpawnPosition(inout uint seed, GPUEmitterConfig config)
         return generateCirclePosition(seed, config.shapeDimensions.x, config.shapeDimensions.y, surfaceOnly);
     }
 
-    // Point (default)
     return vec3(0.0);
 }
 
 vec3 generateDirectionFromShape(inout uint seed, vec3 position, GPUEmitterConfig config)
 {
-    // If randomDirection is true, use emit direction with spread
     if ((config.shapeFlags & SHAPE_RANDOM_DIRECTION) != 0u)
     {
         vec3 baseDir = normalize(config.emitDirection.xyz);
@@ -307,10 +278,8 @@ vec3 generateDirectionFromShape(inout uint seed, vec3 position, GPUEmitterConfig
         return randomInCone(seed, baseDir, spread);
     }
 
-    // Otherwise, generate direction based on shape type (surface normal)
     if ((config.shapeFlags & SHAPE_SPHERE) != 0u)
     {
-        // Direction is outward from center
         float len = length(position);
         if (len > 0.001)
             return position / len;
@@ -318,7 +287,6 @@ vec3 generateDirectionFromShape(inout uint seed, vec3 position, GPUEmitterConfig
     }
     else if ((config.shapeFlags & SHAPE_CONE) != 0u)
     {
-        // Direction is along the cone surface normal
         float angle = config.shapeDimensions.z;
         vec3 radial = vec3(position.x, 0.0, position.z);
         float radialLen = length(radial);
@@ -332,7 +300,6 @@ vec3 generateDirectionFromShape(inout uint seed, vec3 position, GPUEmitterConfig
     }
     else if ((config.shapeFlags & SHAPE_BOX) != 0u)
     {
-        // Direction is outward from box face
         vec3 halfExtents = config.shapeDimensions.xyz;
         vec3 absPos = abs(position);
         vec3 normalizedPos = absPos / max(halfExtents, vec3(0.001));
@@ -346,17 +313,14 @@ vec3 generateDirectionFromShape(inout uint seed, vec3 position, GPUEmitterConfig
     }
     else if ((config.shapeFlags & SHAPE_CIRCLE) != 0u)
     {
-        // Direction is up (Y+) from XZ plane
         return vec3(0.0, 1.0, 0.0);
     }
 
-    // Point (default) - use emit direction with spread
     vec3 baseDir = normalize(config.emitDirection.xyz);
     float spread = config.emitDirection.w;
     return randomInCone(seed, baseDir, spread);
 }
 
-// VK-239: Simplex noise implementation (based on Stefan Gustavson's webgl-noise)
 vec3 mod289_3(vec3 x) {
     return x - floor(x * (1.0 / 289.0)) * 289.0;
 }
@@ -433,23 +397,19 @@ float simplexNoise3D(vec3 v) {
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 
-// VK-239: Apply forces to particle velocity
 void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
 {
     vec3 totalForce = vec3(0.0);
 
-    // Gravity
     if ((config.modifierFlags & FORCE_GRAVITY) != 0u)
     {
         totalForce += config.gravityDir.xyz * config.gravityDir.w;
     }
 
-    // Wind
     if ((config.modifierFlags & FORCE_WIND) != 0u)
     {
         vec3 windForce = config.windDir.xyz * config.windDir.w;
 
-        // Add noise variation if enabled
         if (config.windNoise.x > 0.0)
         {
             vec3 noisePos = p.position * config.windNoise.y + vec3(time);
@@ -462,7 +422,6 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
         totalForce += windForce;
     }
 
-    // Turbulence
     if ((config.modifierFlags & FORCE_TURBULENCE) != 0u)
     {
         vec3 noisePos = p.position * config.turbulence.y;
@@ -478,7 +437,6 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
         }
         else
         {
-            // FBM for richer turbulence
             float amplitude = 1.0;
             float frequency = 1.0;
             turbForce = vec3(0.0);
@@ -496,7 +454,6 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
         totalForce += turbForce * config.turbulence.x;
     }
 
-    // Vortex
     if ((config.modifierFlags & FORCE_VORTEX) != 0u)
     {
         vec3 toParticle = p.position - config.vortexCenter.xyz;
@@ -511,7 +468,6 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
             vec3 tangent = normalize(cross(axis, radial));
             totalForce += tangent * config.vortexAxis.w;
 
-            // Radial pull
             if (abs(config.vortexCenter.w) > 0.001)
             {
                 vec3 radialDir = normalize(radial);
@@ -520,27 +476,22 @@ void applyForces(inout GPUParticle p, GPUEmitterConfig config, float time)
         }
     }
 
-    // Apply accumulated forces to velocity
     p.velocity += totalForce * config.deltaTime;
 }
 
-// VK-238: Apply modifiers based on lifetime ratio
 void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetimeRatio)
 {
-    // Color Over Lifetime
     if ((config.modifierFlags & MODIFIER_COLOR_OVER_LIFETIME) != 0u)
     {
         p.color = mix(config.colorStart, config.colorEnd, lifetimeRatio);
     }
 
-    // Size Over Lifetime
     if ((config.modifierFlags & MODIFIER_SIZE_OVER_LIFETIME) != 0u)
     {
         float sizeMult = mix(config.sizeStartMult, config.sizeEndMult, lifetimeRatio);
         p.size = p.initialSize * sizeMult;
     }
 
-    // Speed Over Lifetime
     if ((config.modifierFlags & MODIFIER_SPEED_OVER_LIFETIME) != 0u)
     {
         float speedMult = mix(config.speedStartMult, config.speedEndMult, lifetimeRatio);
@@ -552,7 +503,6 @@ void applyModifiers(inout GPUParticle p, GPUEmitterConfig config, float lifetime
         }
     }
 
-    // Rotation Over Lifetime
     if ((config.modifierFlags & MODIFIER_ROTATION_OVER_LIFETIME) != 0u)
     {
         p.rotation += config.angularVelocity * config.deltaTime;
@@ -568,7 +518,6 @@ void main()
 
     GPUEmitterConfig config = configs[pc.emitterIndex];
 
-    // Read maxParticles directly to avoid race with state updates
     uint maxParts = states[pc.emitterIndex].maxParticles;
     if (localIdx >= maxParts)
         return;
@@ -583,31 +532,27 @@ void main()
     uint particleIdx = particleOffset + localIdx;
     GPUParticle p = particles[particleIdx];
 
-    // Random seed unique to this particle and frame
     uint seed = pcg_hash(particleIdx ^ (pc.frameNumber * 1000000u) ^ config.seed);
 
-    bool wasActive = (p.size > 0.0); // VK-238: Use size > 0 as active check (flags removed)
+    bool wasActive = (p.size > 0.0);
     bool isActive = wasActive;
 
-    // Phase 1: Update existing active particles
     if (wasActive)
     {
         p.lifetime += config.deltaTime;
 
         if (p.lifetime >= p.maxLifetime)
         {
-            p.size = 0.0; // Mark as inactive
+            p.size = 0.0;
             isActive = false;
         }
         else
         {
-            // VK-239: Apply forces before position update
-            float time = float(pc.frameNumber) * 0.016; // Approximate time from frame count
+            float time = float(pc.frameNumber) * 0.016;
             applyForces(p, config, time);
 
             p.position += p.velocity * config.deltaTime;
 
-            // VK-238: Apply modifiers
             float lifetimeRatio = p.lifetime / p.maxLifetime;
 
             if (config.modifierFlags != 0u)
@@ -616,7 +561,6 @@ void main()
             }
             else
             {
-                // Default behavior: Fade alpha near end of life
                 if (lifetimeRatio > FADE_START)
                 {
                     float fadeProgress = (lifetimeRatio - FADE_START) / (1.0 - FADE_START);
@@ -626,7 +570,6 @@ void main()
         }
     }
 
-    // Phase 2: Spawn new particles (inactive particles compete for spawn slots)
     if (isPlaying && !isActive && spawnThisFrame > 0u)
     {
         uint spawnSlot = atomicAdd(states[pc.emitterIndex].spawnCounter, 1u);
@@ -635,10 +578,8 @@ void main()
         {
             isActive = true;
 
-            // VK-240: Generate spawn position based on shape
             vec3 localPos = generateSpawnPosition(seed, config);
 
-            // Transform to world space (position + rotation)
             mat3 rotation = mat3(worldTransform);
             p.position = vec3(worldTransform[3]) + rotation * localPos;
 
@@ -646,32 +587,25 @@ void main()
             p.maxLifetime = config.lifetime;
             p.size = config.startSize;
             p.color = config.startColor;
-            p.rotation = 0.0;  // VK-238: Reset rotation
+            p.rotation = 0.0;
 
-            // VK-238: Store initial values for modifier calculations
             p.initialSize = config.startSize;
             p.initialSpeed = config.startSpeed;
 
-            // VK-240: Generate direction based on shape
             vec3 dir = generateDirectionFromShape(seed, localPos, config);
             p.velocity = dir * config.startSpeed;
 
-            // Apply emitter rotation to velocity
             p.velocity = rotation * p.velocity;
         }
     }
 
     particles[particleIdx] = p;
 
-    // Phase 3: Count active particles (for stats/debugging)
     if (isActive)
     {
         atomicAdd(states[pc.emitterIndex].activeCount, 1u);
     }
 
-    // Phase 4: Write indirect draw command
-    // Draw all allocated particles; vertex shader skips inactive ones
-    // (cross-workgroup sync not possible in single dispatch)
     if (gl_GlobalInvocationID.x == 0u)
     {
         drawCommands[pc.emitterIndex].indexCount = 6u;

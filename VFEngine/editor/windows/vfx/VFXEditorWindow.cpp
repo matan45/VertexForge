@@ -149,13 +149,8 @@ namespace windows
         params.looping = getBool(*emitterNode, "looping", vfx::EmitterDefaults::LOOPING);
         params.texturePath = getString(*emitterNode, "texture", "");
 
-        // VK-238: Extract modifier chain from graph
         params.modifiers = vfx::VFXModifierConfigLoader::fromGraph(vfxData->graph);
-
-        // VK-239: Extract force chain from graph
         params.forces = vfx::VFXForceConfigLoader::fromGraph(vfxData->graph);
-
-        // VK-240: Extract shape config from graph
         params.shape = vfx::VFXShapeConfigLoader::fromGraph(vfxData->graph);
 
         previewPanel->setParams(params);

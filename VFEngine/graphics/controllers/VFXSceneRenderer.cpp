@@ -524,7 +524,6 @@ namespace controllers
         gpuConfig.seed = seed;
         gpuConfig.deltaTime = deltaTime;
 
-        // VK-238: Initialize modifier data with defaults
         gpuConfig.modifierFlags = 0;
         gpuConfig.colorStart = cpuConfig.startColor;
         gpuConfig.colorEnd = cpuConfig.startColor;
@@ -534,7 +533,6 @@ namespace controllers
         gpuConfig.speedEndMult = 1.0f;
         gpuConfig.angularVelocity = 0.0f;
 
-        // VK-238: Extract modifier settings from modifier chain
         for (const auto& modifier : cpuConfig.modifiers.modifiers)
         {
             std::visit([&gpuConfig](const auto& mod) {
@@ -565,7 +563,6 @@ namespace controllers
             }, modifier);
         }
 
-        // VK-239: Initialize force data with defaults
         gpuConfig.gravityDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
         gpuConfig.windDir = glm::vec4(0.0f);
         gpuConfig.windNoise = glm::vec4(0.0f);
@@ -573,7 +570,6 @@ namespace controllers
         gpuConfig.vortexAxis = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
         gpuConfig.vortexCenter = glm::vec4(0.0f);
 
-        // VK-239: Extract force settings from force chain
         for (const auto& force : cpuConfig.forces.forces)
         {
             std::visit([&gpuConfig](const auto& f) {
@@ -603,7 +599,6 @@ namespace controllers
             }, force);
         }
 
-        // VK-240: Extract shape settings
         gpuConfig.shapeDimensions = cpuConfig.shape.dimensions;
         gpuConfig.shapeFlags = 0;
 

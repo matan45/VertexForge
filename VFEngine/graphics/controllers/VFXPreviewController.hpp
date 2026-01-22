@@ -35,13 +35,8 @@ namespace controllers
         std::string texturePath;
         bool looping = true;
 
-        // Modifier chain (VK-238)
         ::vfx::VFXModifierChain modifiers;
-
-        // Force chain (VK-239)
         ::vfx::VFXForceChain forces;
-
-        // Shape config (VK-240)
         ::vfx::ShapeConfig shape;
     };
 

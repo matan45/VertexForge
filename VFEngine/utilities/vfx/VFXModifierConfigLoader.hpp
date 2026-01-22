@@ -10,23 +10,17 @@ namespace vfx
     class VFXModifierConfigLoader
     {
     public:
-        // Extract ordered modifier chain from graph
         static VFXModifierChain fromGraph(const VFXGraph& graph);
 
     private:
-        // Build ordered list of modifier nodes from Emitter to OutSystem
         static std::vector<const VFXNode*> getModifierNodeChain(const VFXGraph& graph);
-
-        // Convert a modifier node to its runtime config
         static VFXModifierConfig nodeToConfig(const VFXNode& node);
 
-        // Individual extractors
         static ColorOverLifetimeConfig extractColorConfig(const VFXNode& node);
         static SizeOverLifetimeConfig extractSizeConfig(const VFXNode& node);
         static SpeedOverLifetimeConfig extractSpeedConfig(const VFXNode& node);
         static RotationOverLifetimeConfig extractRotationConfig(const VFXNode& node);
 
-        // Property extraction helpers
         static float getFloat(const VFXNode& node, const std::string& propName, float defaultValue);
         static glm::vec4 getVec4(const VFXNode& node, const std::string& propName, const glm::vec4& defaultValue);
     };
@@ -35,10 +29,8 @@ namespace vfx
     {
         VFXModifierChain chain;
 
-        // Get ordered list of modifier nodes
         std::vector<const VFXNode*> modifierNodes = getModifierNodeChain(graph);
 
-        // Convert each node to its config
         for (const VFXNode* node : modifierNodes)
         {
             chain.modifiers.push_back(nodeToConfig(*node));
@@ -51,7 +43,6 @@ namespace vfx
     {
         std::vector<const VFXNode*> chain;
 
-        // Start from Emitter node
         const VFXNode* emitter = graph.findEmitterNode();
         if (!emitter)
         {
@@ -64,13 +55,11 @@ namespace vfx
             return chain;
         }
 
-        // Traverse from Emitter to OutSystem, collecting modifier nodes in order
         uint32_t currentNodeId = emitter->id;
-        std::unordered_set<uint32_t> visited;  // O(1) lookup for cycle detection
+        std::unordered_set<uint32_t> visited;
 
         while (currentNodeId != outSystem->id)
         {
-            // Prevent infinite loops - cycle detection
             if (visited.count(currentNodeId) > 0)
             {
                 chain.clear();
@@ -78,7 +67,6 @@ namespace vfx
             }
             visited.insert(currentNodeId);
 
-            // Find outgoing link from current node (only follow "Input" links, not "Shape" links)
             bool foundNext = false;
             for (const auto& link : graph.links)
             {
@@ -91,7 +79,6 @@ namespace vfx
                         return chain;
                     }
 
-                    // If it's a modifier, add to chain and continue
                     if (isModifierNode(targetNode->type))
                     {
                         chain.push_back(targetNode);
@@ -126,7 +113,6 @@ namespace vfx
         case VFXNodeType::RotationOverLifetime:
             return extractRotationConfig(node);
         default:
-            // Return default color config for unknown types
             return ColorOverLifetimeConfig{};
         }
     }

@@ -14,9 +14,9 @@ namespace render::vfx
         float maxLifetime;
         glm::vec4 color;
         float size;
-        float rotation;         // VK-238: Rotation angle in radians
-        float initialSize;      // VK-238: For size modifier calculations
-        float initialSpeed;     // VK-238: For speed modifier calculations
+        float rotation;
+        float initialSize;
+        float initialSpeed;
     };
     static_assert(sizeof(GPUParticle) == 64, "GPUParticle must be 64 bytes for GPU alignment");
     static_assert(offsetof(GPUParticle, position) == 0, "GPUParticle::position offset mismatch");
@@ -29,7 +29,6 @@ namespace render::vfx
     static_assert(offsetof(GPUParticle, initialSize) == 56, "GPUParticle::initialSize offset mismatch");
     static_assert(offsetof(GPUParticle, initialSpeed) == 60, "GPUParticle::initialSpeed offset mismatch");
 
-    // VK-238: Modifier flags for GPU
     namespace ModifierFlags
     {
         inline constexpr uint32_t ColorOverLifetime = 1 << 0;
@@ -38,7 +37,6 @@ namespace render::vfx
         inline constexpr uint32_t RotationOverLifetime = 1 << 3;
     }
 
-    // VK-239: Force flags for GPU
     namespace ForceFlags
     {
         inline constexpr uint32_t Gravity = 1 << 4;
@@ -47,7 +45,6 @@ namespace render::vfx
         inline constexpr uint32_t Vortex = 1 << 7;
     }
 
-    // VK-240: Shape flags for GPU (bits 8-13)
     namespace ShapeFlags
     {
         inline constexpr uint32_t ShapeSphere = 1 << 8;
@@ -60,7 +57,6 @@ namespace render::vfx
 
     struct alignas(16) GPUEmitterConfig
     {
-        // Original fields (64 bytes)
         glm::vec4 emitDirection;
         glm::vec4 startColor;
         float spawnRate;
@@ -70,32 +66,29 @@ namespace render::vfx
         uint32_t maxParticles;
         uint32_t seed;
         float deltaTime;
-        uint32_t modifierFlags;  // VK-238: Bitmask of active modifiers
+        uint32_t modifierFlags;
 
-        // VK-238: Modifier data (64 bytes)
-        glm::vec4 colorStart;           // Color over lifetime start
-        glm::vec4 colorEnd;             // Color over lifetime end
-        float sizeStartMult;            // Size over lifetime start multiplier
-        float sizeEndMult;              // Size over lifetime end multiplier
-        float speedStartMult;           // Speed over lifetime start multiplier
-        float speedEndMult;             // Speed over lifetime end multiplier
-        float angularVelocity;          // Rotation over lifetime (radians/sec)
+        glm::vec4 colorStart;
+        glm::vec4 colorEnd;
+        float sizeStartMult;
+        float sizeEndMult;
+        float speedStartMult;
+        float speedEndMult;
+        float angularVelocity;
         float modPadding1 = 0.0f;
         float modPadding2 = 0.0f;
         float modPadding3 = 0.0f;
 
-        // VK-239: Force data (96 bytes)
-        glm::vec4 gravityDir;           // xyz = normalized direction, w = strength
-        glm::vec4 windDir;              // xyz = direction, w = strength
-        glm::vec4 windNoise;            // x = noiseStrength, y = noiseFrequency, zw = unused
-        glm::vec4 turbulence;           // x = strength, y = frequency, z = scrollSpeed, w = octaves
-        glm::vec4 vortexAxis;           // xyz = axis, w = strength
-        glm::vec4 vortexCenter;         // xyz = center, w = radialPull
+        glm::vec4 gravityDir;
+        glm::vec4 windDir;
+        glm::vec4 windNoise;
+        glm::vec4 turbulence;
+        glm::vec4 vortexAxis;
+        glm::vec4 vortexCenter;
 
-        // VK-240: Shape data (32 bytes)
-        glm::vec4 shapeDimensions;      // Shape-specific: Sphere(r), Cone(r,h,angle), Box(hx,hy,hz), Circle(r,arc)
-        uint32_t shapeFlags;            // Shape type and emit flags (bits 8-13 of modifierFlags moved here for clarity)
-        float shapePadding[3] = {0.0f, 0.0f, 0.0f};  // Alignment padding
+        glm::vec4 shapeDimensions;
+        uint32_t shapeFlags;
+        float shapePadding[3] = {0.0f, 0.0f, 0.0f};
     };
     static_assert(sizeof(GPUEmitterConfig) == 256, "GPUEmitterConfig must be 256 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -115,14 +108,12 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, speedStartMult) == 104, "GPUEmitterConfig::speedStartMult offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, speedEndMult) == 108, "GPUEmitterConfig::speedEndMult offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, angularVelocity) == 112, "GPUEmitterConfig::angularVelocity offset mismatch");
-    // VK-239: Force field offsets
     static_assert(offsetof(GPUEmitterConfig, gravityDir) == 128, "GPUEmitterConfig::gravityDir offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, windDir) == 144, "GPUEmitterConfig::windDir offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, windNoise) == 160, "GPUEmitterConfig::windNoise offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, turbulence) == 176, "GPUEmitterConfig::turbulence offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, vortexAxis) == 192, "GPUEmitterConfig::vortexAxis offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, vortexCenter) == 208, "GPUEmitterConfig::vortexCenter offset mismatch");
-    // VK-240: Shape field offsets
     static_assert(offsetof(GPUEmitterConfig, shapeDimensions) == 224, "GPUEmitterConfig::shapeDimensions offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, shapeFlags) == 240, "GPUEmitterConfig::shapeFlags offset mismatch");
 

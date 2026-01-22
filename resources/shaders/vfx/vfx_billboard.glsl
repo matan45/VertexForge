@@ -1,13 +1,13 @@
 #type VERTEX
 #version 460 core
 
-layout(location = 0) in vec2 inPosition;   // Quad corner offset (-0.5 to 0.5)
+layout(location = 0) in vec2 inPosition;
 layout(location = 1) in vec2 inTexCoord;
 
 layout(location = 2) in vec4 inWorldPosAndSize;
 layout(location = 3) in vec4 inColor;
 layout(location = 4) in float inLifetimeRatio;
-layout(location = 5) in float inRotation;  // VK-238: Rotation angle in radians
+layout(location = 5) in float inRotation;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
@@ -24,7 +24,6 @@ void main() {
     vec3 worldPos = inWorldPosAndSize.xyz;
     float particleSize = inWorldPosAndSize.w;
 
-    // VK-238: Apply rotation to local quad position before billboard transform
     float cosR = cos(inRotation);
     float sinR = sin(inRotation);
     vec2 rotatedPos = vec2(
@@ -61,7 +60,6 @@ void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
     vec4 finalColor = texColor * fragColor;
 
-    // Smooth fade-out near end of lifetime
     float fadeStart = 0.8;
     if (fragLifetimeRatio > fadeStart) {
         float fadeProgress = (fragLifetimeRatio - fadeStart) / (1.0 - fadeStart);

@@ -82,12 +82,10 @@ namespace vfx
         case VFXNodeType::SizeOverLifetime:   return "SizeOverLifetime";
         case VFXNodeType::SpeedOverLifetime:  return "SpeedOverLifetime";
         case VFXNodeType::RotationOverLifetime: return "RotationOverLifetime";
-        // Force nodes (VK-239)
         case VFXNodeType::ForceGravity:       return "ForceGravity";
         case VFXNodeType::ForceWind:          return "ForceWind";
         case VFXNodeType::ForceTurbulence:    return "ForceTurbulence";
         case VFXNodeType::ForceVortex:        return "ForceVortex";
-        // Shape nodes (VK-240)
         case VFXNodeType::Shape:              return "Shape";
         default: return "Emitter";
         }
@@ -101,30 +99,24 @@ namespace vfx
         if (str == "SizeOverLifetime")   return VFXNodeType::SizeOverLifetime;
         if (str == "SpeedOverLifetime")  return VFXNodeType::SpeedOverLifetime;
         if (str == "RotationOverLifetime") return VFXNodeType::RotationOverLifetime;
-        // Force nodes (VK-239)
         if (str == "ForceGravity")       return VFXNodeType::ForceGravity;
         if (str == "ForceWind")          return VFXNodeType::ForceWind;
         if (str == "ForceTurbulence")    return VFXNodeType::ForceTurbulence;
         if (str == "ForceVortex")        return VFXNodeType::ForceVortex;
-        // Shape nodes (VK-240)
         if (str == "Shape")              return VFXNodeType::Shape;
         return VFXNodeType::Emitter;
     }
 
-    // Helper function to check if there's a valid path from a node to OutSystem
     static bool hasPathToOutSystem(const VFXGraph& graph, uint32_t currentNodeId, uint32_t outSystemId,
                                    std::vector<uint32_t>& visited)
     {
-        // Prevent infinite loops
         if (std::find(visited.begin(), visited.end(), currentNodeId) != visited.end())
             return false;
         visited.push_back(currentNodeId);
 
-        // If we reached OutSystem, we have a valid path
         if (currentNodeId == outSystemId)
             return true;
 
-        // Find outgoing link from this node
         for (const auto& link : graph.links)
         {
             if (link.sourceNodeId == currentNodeId)
@@ -133,7 +125,6 @@ namespace vfx
                 if (!targetNode)
                     return false;
 
-                // Target must be a modifier, force, or OutSystem
                 if (targetNode->type == VFXNodeType::OutSystem ||
                     isModifierNode(targetNode->type) ||
                     isForceNode(targetNode->type))
@@ -149,17 +140,14 @@ namespace vfx
 
     bool VFXGraph::isValid() const
     {
-        // Check if Emitter node exists
         const VFXNode* emitter = findEmitterNode();
         if (!emitter)
             return false;
 
-        // Check if OutSystem node exists
         const VFXNode* outSystem = findOutSystemNode();
         if (!outSystem)
             return false;
 
-        // Check if there's a path from Emitter to OutSystem (directly or through modifiers)
         std::vector<uint32_t> visited;
         return hasPathToOutSystem(*this, emitter->id, outSystem->id, visited);
     }
@@ -174,10 +162,9 @@ namespace vfx
         if (!outSystem)
             return "Missing OutSystem node";
 
-        // Check if there's a path from Emitter to OutSystem
         std::vector<uint32_t> visited;
         if (hasPathToOutSystem(*this, emitter->id, outSystem->id, visited))
-            return "";  // No error
+            return "";
 
         return "Emitter is not connected to OutSystem (directly or through modifiers/forces)";
     }

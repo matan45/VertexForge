@@ -24,10 +24,7 @@ namespace render::vfx
             return;
         }
 
-        // Update time accumulator for noise-based forces (VK-239)
         timeAccumulator += deltaTime;
-
-        // Update emission time for looping control
         emissionTime += deltaTime;
 
         for (auto& particle : particles)
@@ -62,7 +59,7 @@ namespace render::vfx
             particle.active = false;
         }
         spawnAccumulator = 0.0f;
-        emissionTime = 0.0f;  // Reset emission time for looping control
+        emissionTime = 0.0f;
     }
 
     std::vector<VFXInstanceData> VFXParticleSystem::getInstanceData() const
@@ -108,18 +105,14 @@ namespace render::vfx
         particle->color = config.startColor;
         particle->rotation = 0.0f;
 
-        // Store initial values for modifier calculations (VK-238)
         particle->initialColor = config.startColor;
         particle->initialSize = config.startSize;
         particle->initialSpeed = config.startSpeed;
 
-        // Generate spawn position based on shape (VK-240)
         particle->position = generateSpawnPosition();
 
-        // Generate direction based on shape config (VK-240)
         glm::vec3 direction = generateDirectionFromShape(particle->position);
 
-        // Store initial direction for speed modifier (prevents no-op when velocity becomes zero)
         particle->initialDirection = direction;
         particle->velocity = direction * config.startSpeed;
     }
@@ -136,7 +129,6 @@ namespace render::vfx
 
         float lifetimeRatio = particle.lifetime / particle.maxLifetime;
 
-        // Apply modifiers (VK-238)
         if (!config.modifiers.empty())
         {
             applyModifiers(particle, lifetimeRatio, deltaTime);
@@ -152,7 +144,6 @@ namespace render::vfx
             }
         }
 
-        // Apply forces before position update (VK-239)
         if (!config.forces.empty())
         {
             applyForces(particle, deltaTime);
@@ -174,7 +165,6 @@ namespace render::vfx
         return nullptr;
     }
 
-    // Modifier application (VK-238)
     void VFXParticleSystem::applyModifiers(VFXParticle& particle, float lifetimeRatio, float deltaTime)
     {
         for (const auto& modifier : config.modifiers.modifiers)
@@ -187,32 +177,26 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::ColorOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        // Interpolate between start and end color based on lifetime ratio
         particle.color = glm::mix(mod.startColor, mod.endColor, t);
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SizeOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        // Interpolate size multiplier and apply to initial size
         float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
         particle.size = particle.initialSize * multiplier;
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::SpeedOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        // Interpolate speed multiplier and apply to velocity using stored initial direction
-        // This ensures speed modifier works even if forces reduce velocity to zero
         float multiplier = glm::mix(mod.startMultiplier, mod.endMultiplier, t);
         particle.velocity = particle.initialDirection * particle.initialSpeed * multiplier;
     }
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::RotationOverLifetimeConfig& mod, float /*t*/, float deltaTime)
     {
-        // Apply angular velocity (convert degrees to radians)
         particle.rotation += glm::radians(mod.angularVelocity) * deltaTime;
     }
 
-    // Force application (VK-239)
     void VFXParticleSystem::applyForces(VFXParticle& particle, float deltaTime)
     {
         for (const auto& force : config.forces.forces)
@@ -225,7 +209,6 @@ namespace render::vfx
 
     void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::GravityForceConfig& force, float deltaTime)
     {
-        // Gravity: constant directional force
         glm::vec3 direction = glm::normalize(force.direction);
         particle.velocity += direction * force.strength * deltaTime;
     }
@@ -249,14 +232,11 @@ namespace render::vfx
 
     void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::TurbulenceForceConfig& force, float deltaTime)
     {
-        // Turbulence: 3D noise-based chaotic movement
         glm::vec3 noisePos = particle.position * force.frequency;
         noisePos += glm::vec3(timeAccumulator * force.scrollSpeed);
 
-        // Generate 3D force from noise (use offset positions for each axis)
         glm::vec3 turbulenceForce;
 
-        // Simple single-octave noise or multi-octave FBM
         if (force.octaves <= 1)
         {
             turbulenceForce.x = glm::simplex(noisePos);
@@ -265,7 +245,6 @@ namespace render::vfx
         }
         else
         {
-            // Fractal Brownian Motion for richer turbulence
             float amplitude = 1.0f;
             float frequency = 1.0f;
             turbulenceForce = glm::vec3(0.0f);
@@ -287,7 +266,6 @@ namespace render::vfx
 
     void VFXParticleSystem::applyForce(VFXParticle& particle, const ::vfx::VortexForceConfig& force, float deltaTime)
     {
-        // Vortex: spiral force around an axis
         glm::vec3 toParticle = particle.position - force.center;
         glm::vec3 axis = glm::normalize(force.axis);
 
@@ -298,11 +276,9 @@ namespace render::vfx
 
         if (dist > 0.001f)
         {
-            // Tangential force (perpendicular to both axis and radial)
             glm::vec3 tangent = glm::normalize(glm::cross(axis, radial));
             particle.velocity += tangent * force.strength * deltaTime;
 
-            // Radial pull (inward if negative, outward if positive)
             if (std::abs(force.radialPull) > 0.001f)
             {
                 glm::vec3 radialDir = glm::normalize(radial);
@@ -311,7 +287,6 @@ namespace render::vfx
         }
     }
 
-    // Shape-based position generation (VK-240)
     glm::vec3 VFXParticleSystem::generateSpawnPosition()
     {
         const auto& shape = config.shape;
@@ -344,9 +319,8 @@ namespace render::vfx
 
     glm::vec3 VFXParticleSystem::generateSpherePosition(float radius, bool surfaceOnly)
     {
-        // Generate random point on unit sphere using spherical coordinates
-        float theta = unitDist(rng) * 2.0f * glm::pi<float>();  // Azimuthal angle [0, 2π]
-        float phi = std::acos(1.0f - 2.0f * unitDist(rng));     // Polar angle [0, π] (uniform on sphere)
+        float theta = unitDist(rng) * 2.0f * glm::pi<float>();
+        float phi = std::acos(1.0f - 2.0f * unitDist(rng));
 
         glm::vec3 direction;
         direction.x = std::sin(phi) * std::cos(theta);
@@ -356,7 +330,6 @@ namespace render::vfx
         float r = radius;
         if (!surfaceOnly)
         {
-            // Use cube root for uniform volume distribution
             r = radius * std::cbrt(unitDist(rng));
         }
 
@@ -365,26 +338,21 @@ namespace render::vfx
 
     glm::vec3 VFXParticleSystem::generateConePosition(float baseRadius, float height, float angle, bool surfaceOnly)
     {
-        // Cone with apex at origin, opening upward (+Y)
-        // Height determines the length, angle determines the spread
-        float t = unitDist(rng);  // Position along cone height [0, 1]
+        float t = unitDist(rng);
 
         if (!surfaceOnly)
         {
-            // Volume distribution - use sqrt for uniform area distribution along height
             t = std::sqrt(unitDist(rng));
         }
 
         float y = t * height;
         float currentRadius = t * baseRadius * std::tan(angle);
 
-        // Random angle around Y axis
         float theta = unitDist(rng) * 2.0f * glm::pi<float>();
 
         float r = currentRadius;
         if (!surfaceOnly)
         {
-            // Random radius within the cone at this height
             r = currentRadius * std::sqrt(unitDist(rng));
         }
 
@@ -399,7 +367,6 @@ namespace render::vfx
     {
         if (!surfaceOnly)
         {
-            // Volume: random point inside box
             return glm::vec3(
                 (unitDist(rng) * 2.0f - 1.0f) * halfExtents.x,
                 (unitDist(rng) * 2.0f - 1.0f) * halfExtents.y,
@@ -407,8 +374,6 @@ namespace render::vfx
             );
         }
 
-        // Surface: pick random face, then random point on that face
-        // Face areas: 2 * (xy + xz + yz) for full surface
         float areaXY = halfExtents.x * halfExtents.y;
         float areaXZ = halfExtents.x * halfExtents.z;
         float areaYZ = halfExtents.y * halfExtents.z;
@@ -419,51 +384,33 @@ namespace render::vfx
         float v = unitDist(rng) * 2.0f - 1.0f;
 
         if (faceSelect < areaYZ)
-        {
-            // +X face
             return glm::vec3(halfExtents.x, u * halfExtents.y, v * halfExtents.z);
-        }
         faceSelect -= areaYZ;
 
         if (faceSelect < areaYZ)
-        {
-            // -X face
             return glm::vec3(-halfExtents.x, u * halfExtents.y, v * halfExtents.z);
-        }
         faceSelect -= areaYZ;
 
         if (faceSelect < areaXZ)
-        {
-            // +Y face
             return glm::vec3(u * halfExtents.x, halfExtents.y, v * halfExtents.z);
-        }
         faceSelect -= areaXZ;
 
         if (faceSelect < areaXZ)
-        {
-            // -Y face
             return glm::vec3(u * halfExtents.x, -halfExtents.y, v * halfExtents.z);
-        }
         faceSelect -= areaXZ;
 
         if (faceSelect < areaXY)
-        {
-            // +Z face
             return glm::vec3(u * halfExtents.x, v * halfExtents.y, halfExtents.z);
-        }
 
-        // -Z face
         return glm::vec3(u * halfExtents.x, v * halfExtents.y, -halfExtents.z);
     }
 
     glm::vec3 VFXParticleSystem::generateCirclePosition(float radius, float arc, bool surfaceOnly)
     {
-        // Circle on XZ plane (Y = 0)
-        float theta = unitDist(rng) * arc;  // Random angle within arc
+        float theta = unitDist(rng) * arc;
 
         if (surfaceOnly)
         {
-            // Edge only
             return glm::vec3(
                 radius * std::cos(theta),
                 0.0f,
@@ -471,7 +418,6 @@ namespace render::vfx
             );
         }
 
-        // Disk (filled circle) - use sqrt for uniform area distribution
         float r = radius * std::sqrt(unitDist(rng));
         return glm::vec3(
             r * std::cos(theta),
@@ -484,8 +430,6 @@ namespace render::vfx
     {
         const auto& shape = config.shape;
 
-        // randomDirection = true: use emit direction with random spread
-        // randomDirection = false: use shape-based direction (surface normal)
         if (shape.randomDirection)
         {
             // Use emit direction with spread
@@ -497,12 +441,10 @@ namespace render::vfx
             return glm::normalize(direction);
         }
 
-        // Generate direction based on shape type (surface normal)
         switch (shape.type)
         {
         case ::vfx::ShapeType::Sphere:
         {
-            // Direction is outward from center
             float len = glm::length(position);
             if (len > 0.001f)
             {
@@ -513,7 +455,6 @@ namespace render::vfx
 
         case ::vfx::ShapeType::Cone:
         {
-            // Direction is along the cone surface normal (roughly outward and up)
             float angle = shape.dimensions.z;
             glm::vec3 radial = glm::vec3(position.x, 0.0f, position.z);
             float radialLen = glm::length(radial);
@@ -521,7 +462,6 @@ namespace render::vfx
             if (radialLen > 0.001f)
             {
                 glm::vec3 outward = radial / radialLen;
-                // Blend between outward and up based on cone angle
                 return glm::normalize(outward * std::sin(angle) + glm::vec3(0.0f, std::cos(angle), 0.0f));
             }
             return glm::vec3(0.0f, 1.0f, 0.0f);
@@ -529,12 +469,10 @@ namespace render::vfx
 
         case ::vfx::ShapeType::Box:
         {
-            // Direction is outward from box face (based on which dimension is at extent)
             const glm::vec3& halfExtents = glm::vec3(shape.dimensions);
             glm::vec3 absPos = glm::abs(position);
             glm::vec3 normalizedPos = absPos / halfExtents;
 
-            // Find which face we're closest to
             if (normalizedPos.x >= normalizedPos.y && normalizedPos.x >= normalizedPos.z)
             {
                 return glm::vec3(position.x > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f);
@@ -550,15 +488,11 @@ namespace render::vfx
         }
 
         case ::vfx::ShapeType::Circle:
-        {
-            // Direction is up (Y+) from XZ plane
             return glm::vec3(0.0f, 1.0f, 0.0f);
-        }
 
         case ::vfx::ShapeType::Point:
         default:
         {
-            // Point shape: use emit direction with spread
             glm::vec3 direction = glm::normalize(config.emitDirection);
             float spreadX = randomDist(rng) * 0.2f;
             float spreadZ = randomDist(rng) * 0.2f;

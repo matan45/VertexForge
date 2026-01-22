@@ -9,7 +9,6 @@ namespace ed = ax::NodeEditor;
 namespace editor::graph {
 
     bool VFXGraphEditor::isPinLinked(uint32_t pinId) const {
-        // VK-240: Handle shape pins separately
         if (isShapePin(pinId)) {
             uint32_t nodeId = getNodeIdFromShapePinId(pinId);
             for (const auto& link : currentGraph->links) {
@@ -82,7 +81,6 @@ namespace editor::graph {
         ImU32 pinColor = getFlowPinColor();
 
         if (node.type == vfx::VFXNodeType::Emitter) {
-            // VK-240: Shape input pin (magenta color)
             uint32_t shapePinId = getShapePinId(node.id);
             ed::BeginPin(toEditorPinId(shapePinId), ed::PinKind::Input);
 
@@ -242,7 +240,6 @@ namespace editor::graph {
 
             ed::EndPin();
 
-            // VK-85: Show validation status indicator
             ImGui::Spacing();
             bool graphValid = currentGraph ? currentGraph->isValid() : false;
             if (graphValid) {
@@ -258,9 +255,6 @@ namespace editor::graph {
                 }
             }
         } else if (vfx::isModifierNode(node.type)) {
-            // VK-238: Draw modifier nodes with input and output pins
-
-            // Input pin (left side)
             uint32_t inputPinId = getInputPinId(node.id);
             ed::BeginPin(toEditorPinId(inputPinId), ed::PinKind::Input);
 
@@ -274,7 +268,6 @@ namespace editor::graph {
 
             ed::EndPin();
 
-            // Draw modifier-specific properties
             for (auto& [propName, prop] : node.properties) {
                 std::string widgetId = "##mod" + propName + std::to_string(node.id);
 
@@ -321,7 +314,6 @@ namespace editor::graph {
 
             ImGui::Spacing();
 
-            // Output pin (right side)
             uint32_t outputPinId = getOutputPinId(node.id);
             ed::BeginPin(toEditorPinId(outputPinId), ed::PinKind::Output);
 
@@ -336,9 +328,6 @@ namespace editor::graph {
 
             ed::EndPin();
         } else if (vfx::isForceNode(node.type)) {
-            // VK-239: Draw force nodes with input and output pins
-
-            // Input pin (left side)
             uint32_t inputPinId = getInputPinId(node.id);
             ed::BeginPin(toEditorPinId(inputPinId), ed::PinKind::Input);
 
@@ -352,7 +341,6 @@ namespace editor::graph {
 
             ed::EndPin();
 
-            // Draw force-specific properties
             for (auto& [propName, prop] : node.properties) {
                 std::string widgetId = "##force" + propName + std::to_string(node.id);
 
@@ -416,7 +404,6 @@ namespace editor::graph {
 
             ImGui::Spacing();
 
-            // Output pin (right side)
             uint32_t outputPinId = getOutputPinId(node.id);
             ed::BeginPin(toEditorPinId(outputPinId), ed::PinKind::Output);
 
@@ -431,9 +418,6 @@ namespace editor::graph {
 
             ed::EndPin();
         } else if (vfx::isShapeNode(node.type)) {
-            // VK-240: Draw shape nodes with only output pin (connects to Emitter's shape input)
-
-            // Draw shape-specific properties
             for (auto& [propName, prop] : node.properties) {
                 std::string widgetId = "##shape" + propName + std::to_string(node.id);
 
@@ -500,7 +484,6 @@ namespace editor::graph {
 
             ImGui::Spacing();
 
-            // Output pin only (connects to Emitter's shape input)
             uint32_t outputPinId = getOutputPinId(node.id);
             ed::BeginPin(toEditorPinId(outputPinId), ed::PinKind::Output);
 
@@ -509,7 +492,6 @@ namespace editor::graph {
 
             ImVec2 iconPos = ImGui::GetCursorScreenPos();
             bool isLinked = isPinLinked(outputPinId);
-            // Use magenta color for shape pins
             ImU32 shapePinColor = IM_COL32(200, 100, 180, 255);
             drawFlowPinShape(drawList, ImVec2(iconPos.x + pinSize/2, iconPos.y + pinSize/2),
                            shapePinColor, isLinked, pinSize, true);
@@ -524,7 +506,7 @@ namespace editor::graph {
 
     void VFXGraphEditor::drawLinks() {
         ImU32 flowColor = getFlowPinColor();
-        ImU32 shapeColor = IM_COL32(200, 100, 180, 255);  // VK-240: Magenta for shape links
+        ImU32 shapeColor = IM_COL32(200, 100, 180, 255);
 
         for (const auto& link : currentGraph->links) {
             const vfx::VFXNode* sourceNode = currentGraph->findNode(link.sourceNodeId);
@@ -534,7 +516,6 @@ namespace editor::graph {
 
             uint32_t sourcePinId = getOutputPinId(link.sourceNodeId);
 
-            // VK-240: Use shape pin ID for shape links
             uint32_t targetPinId;
             ImU32 linkColor;
             if (link.targetPin == "Shape") {

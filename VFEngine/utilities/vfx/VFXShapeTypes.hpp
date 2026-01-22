@@ -6,54 +6,48 @@
 
 namespace vfx
 {
-    // VK-240: Shape types for particle emission
     enum class ShapeType : uint8_t
     {
-        Point = 0,  // Emit from single point (default)
-        Sphere,     // Emit from sphere surface or volume
-        Cone,       // Emit in cone shape with angle control
-        Box,        // Emit from box surface or volume
-        Circle      // Emit from circle edge or disk
+        Point = 0,
+        Sphere,
+        Cone,
+        Box,
+        Circle
     };
 
-    // Emission mode: from volume or surface only
     enum class EmitFrom : uint8_t
     {
-        Volume = 0,  // Random point inside shape
-        Surface      // Random point on surface only
+        Volume = 0,
+        Surface
     };
 
-    // Shape configuration
     struct ShapeConfig
     {
         ShapeType type = ShapeType::Point;
         EmitFrom emitFrom = EmitFrom::Volume;
-        bool randomDirection = false;  // If false, velocity = surface normal; if true, random hemisphere
+        bool randomDirection = false;
 
-        // Shape-specific dimensions (interpretation depends on type):
-        // Point:  unused
+        // Dimensions interpretation by shape type:
         // Sphere: x = radius
         // Cone:   x = baseRadius, y = height, z = angle (radians)
-        // Box:    x = halfExtentX, y = halfExtentY, z = halfExtentZ
-        // Circle: x = radius, y = arc (radians, 2*PI for full circle)
+        // Box:    xyz = halfExtents
+        // Circle: x = radius, y = arc (radians)
         glm::vec4 dimensions{0.0f, 0.0f, 0.0f, 0.0f};
     };
 
-    // Default values for shape properties
     namespace ShapeDefaults
     {
         inline constexpr float SPHERE_RADIUS = 1.0f;
         inline constexpr float CONE_BASE_RADIUS = 1.0f;
         inline constexpr float CONE_HEIGHT = 2.0f;
-        inline constexpr float CONE_ANGLE = 0.5236f;  // 30 degrees in radians
+        inline constexpr float CONE_ANGLE = 0.5236f;
         inline constexpr float BOX_HALF_EXTENT_X = 0.5f;
         inline constexpr float BOX_HALF_EXTENT_Y = 0.5f;
         inline constexpr float BOX_HALF_EXTENT_Z = 0.5f;
         inline constexpr float CIRCLE_RADIUS = 1.0f;
-        inline constexpr float CIRCLE_ARC = 6.28318530718f;  // Full circle (2*PI)
+        inline constexpr float CIRCLE_ARC = 6.28318530718f;
     }
 
-    // Helper to get default dimensions for a shape type
     inline glm::vec4 getDefaultDimensions(ShapeType type)
     {
         switch (type)
@@ -73,7 +67,6 @@ namespace vfx
         }
     }
 
-    // String conversion helpers
     inline const char* shapeTypeToString(ShapeType type)
     {
         switch (type)
