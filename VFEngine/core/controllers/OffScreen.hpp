@@ -63,6 +63,7 @@ namespace controllers {
 		CameraId getActiveCameraId() const;
 		void prepareFrameCameraFrustums();
 		void prepareFrameAudioSpheres();
+		void prepareFrameLightGizmos();
 
 		// Billboard API
 		void prepareFrameBillboards();

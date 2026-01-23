@@ -95,6 +95,7 @@ namespace controllers
         void prepareFrameBillboards();
         void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();
+        void prepareFrameLightGizmos();
 
         // Billboard visibility toggle
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }

@@ -125,6 +125,11 @@ namespace controllers {
 		offScreenController->prepareFrameAudioSpheres();
 	}
 
+	void OffScreen::prepareFrameLightGizmos()
+	{
+		offScreenController->prepareFrameLightGizmos();
+	}
+
 	void OffScreen::prepareFrameBillboards()
 	{
 		offScreenController->prepareFrameBillboards();

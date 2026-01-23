@@ -12,6 +12,7 @@
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
+#include "tools/LightGizmoDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
@@ -303,6 +304,14 @@ namespace render
         if (debugRenderer)
         {
             debugRenderer->setPhysicsColliderDrawList(std::move(colliders));
+        }
+    }
+
+    void RenderPassHandler::setLightGizmoDrawList(std::vector<mesh::LightGizmoRenderData>&& gizmos)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setLightGizmoDrawList(std::move(gizmos));
         }
     }
 

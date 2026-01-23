@@ -1,8 +1,10 @@
 #pragma once
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
+#include "../../render/tools/LightGizmoDebugRenderer.hpp"
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace render
 {
@@ -35,6 +37,10 @@ namespace controllers::offscreen
         const render::mesh::ExtractedPBRValues* getCachedPBRValues(const std::string& materialPath);
         void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath);
 
+        void collectDirectionalLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
+        void collectPointLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
+        void collectSpotLightGizmos(std::vector<render::mesh::LightGizmoRenderData>& drawList);
+
     public:
         FramePreparationSystem() = default;
 
@@ -44,6 +50,7 @@ namespace controllers::offscreen
         void prepareAudioSpheres(const FrameContext& ctx);
         void prepareGrid(const FrameContext& ctx);
         void preparePhysicsColliders(const FrameContext& ctx);
+        void prepareLightGizmos(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
         

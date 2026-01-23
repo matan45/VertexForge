@@ -56,6 +56,7 @@ namespace windows::details {
             changed |= ImGui::DragFloat("Inner Angle", &light.innerAngle, 0.5f, 0.0f, 89.0f);
             changed |= ImGui::DragFloat("Outer Angle", &light.outerAngle, 0.5f, 1.0f, 90.0f);
             changed |= ImGui::DragFloat("Range", &light.range, 0.1f, 0.1f, 1000.0f);
+            changed |= ImGui::Checkbox("Show Gizmo", &light.showGizmo);
 
             if (changed)
             {

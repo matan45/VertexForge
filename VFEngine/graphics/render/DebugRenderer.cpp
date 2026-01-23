@@ -4,6 +4,7 @@
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/GridRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
+#include "tools/LightGizmoDebugRenderer.hpp"
 
 namespace render
 {
@@ -15,6 +16,7 @@ namespace render
         audioSphereRenderer = std::make_unique<mesh::AudioSphereDebugRenderer>(device, swapChain);
         gridRenderer = std::make_unique<mesh::GridRenderer>(device, swapChain);
         physicsDebugRenderer = std::make_unique<mesh::PhysicsDebugRenderer>(device, swapChain);
+        lightGizmoRenderer = std::make_unique<mesh::LightGizmoDebugRenderer>(device, swapChain);
     }
 
     DebugRenderer::~DebugRenderer() = default;
@@ -26,6 +28,7 @@ namespace render
         audioSphereRenderer->init(renderPass);
         gridRenderer->init(renderPass);
         physicsDebugRenderer->init(renderPass);
+        lightGizmoRenderer->init(renderPass);
         initialized = true;
     }
 
@@ -36,6 +39,7 @@ namespace render
         audioSphereRenderer->recreate(renderPass);
         gridRenderer->recreate(renderPass);
         physicsDebugRenderer->recreate(renderPass);
+        lightGizmoRenderer->recreate(renderPass);
     }
 
     void DebugRenderer::cleanUp()
@@ -59,6 +63,10 @@ namespace render
         if (physicsDebugRenderer)
         {
             physicsDebugRenderer->cleanUp();
+        }
+        if (lightGizmoRenderer)
+        {
+            lightGizmoRenderer->cleanUp();
         }
         initialized = false;
     }
@@ -85,6 +93,10 @@ namespace render
         {
             physicsDebugRenderer->cleanUpShader();
         }
+        if (lightGizmoRenderer)
+        {
+            lightGizmoRenderer->cleanUpShader();
+        }
     }
 
     void DebugRenderer::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
@@ -100,6 +112,11 @@ namespace render
     void DebugRenderer::setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders)
     {
         physicsColliderDrawList = std::move(colliders);
+    }
+
+    void DebugRenderer::setLightGizmoDrawList(std::vector<mesh::LightGizmoRenderData>&& gizmos)
+    {
+        lightGizmoDrawList = std::move(gizmos);
     }
 
     void DebugRenderer::render(const vk::CommandBuffer& commandBuffer,
@@ -132,12 +149,18 @@ namespace render
         {
             physicsDebugRenderer->render(commandBuffer, physicsColliderDrawList, view, projection);
         }
+
+        if (lightGizmoRenderer && !lightGizmoDrawList.empty())
+        {
+            lightGizmoRenderer->render(commandBuffer, lightGizmoDrawList, view, projection);
+        }
     }
 
     bool DebugRenderer::hasItemsToRender() const
     {
         return showGrid || !cameraFrustumDrawList.empty() || !audioSphereDrawList.empty() ||
-            hasBoundingBoxesToRender || (showPhysicsDebug && !physicsColliderDrawList.empty());
+            hasBoundingBoxesToRender || (showPhysicsDebug && !physicsColliderDrawList.empty()) ||
+            !lightGizmoDrawList.empty();
     }
 
     void DebugRenderer::setShowGrid(bool show)
