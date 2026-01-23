@@ -25,6 +25,14 @@ public class ComponentType {
     public static final string POINT_LIGHT = "PointLight";
     public static final string SPOT_LIGHT = "SpotLight";
 
+    // Physics components
+    public static final string COLLIDER = "Collider";
+    public static final string RIGID_BODY = "RigidBody";
+
+    // Animation and effects
+    public static final string ANIMATOR = "Animator";
+    public static final string VFX = "VFX";
+
     // Editor/rendering components
     public static final string IBL = "IBL";
     public static final string BILLBOARD = "Billboard";

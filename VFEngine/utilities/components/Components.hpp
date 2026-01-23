@@ -83,7 +83,6 @@ namespace components
         bool isDirty = true;
         bool isStatic = true;
 
-
         void setPosition(const glm::vec3& newPos)
         {
             position = newPos;
@@ -175,7 +174,6 @@ namespace components
             projectionMatrix[1][1] *= -1;
         }
 
-
         void updateViewMatrix(const glm::vec3& position, const glm::vec3& rotation)
         {
             glm::mat4 model = glm::mat4(1.0f);
@@ -247,13 +245,11 @@ namespace components
         }
     };
 
-
     enum class BillboardSizeMode : uint8_t
     {
         ScreenSpace,
         WorldSpace
     };
-
 
     enum class BillboardIconType : uint8_t
     {
@@ -272,8 +268,7 @@ namespace components
         BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
         glm::vec2 size{64.0f, 64.0f}; // Pixels (screen-space) or world units
 
-        glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f}; // RGBA
-
+        glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
 
         bool editorOnly = true;
         bool selectable = true;
@@ -296,7 +291,6 @@ namespace components
         }
     };
 
-
     struct AudioSource2DComponent
     {
         std::string audioFilePath;
@@ -307,7 +301,6 @@ namespace components
         uint64_t activeHandle = 0;
         bool isPlaying = false;
     };
-
 
     struct AudioSource3DComponent
     {
@@ -322,7 +315,6 @@ namespace components
         uint64_t activeHandle = 0;
         bool isPlaying = false;
     };
-
 
     struct ScriptEntry
     {
@@ -478,27 +470,23 @@ namespace components
 
     struct DirectionalLightComponent
     {
-        glm::vec3 color{1.0f, 1.0f, 1.0f};  // RGB color
-        float intensity{1.0f};              // Light strength multiplier
-        // Direction is computed from TransformComponent rotation, not stored here
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity{1.0f};
     };
 
     struct PointLightComponent
     {
-        glm::vec3 color{1.0f, 1.0f, 1.0f};  // RGB color
-        float intensity{1.0f};              // Light strength multiplier
-        float radius{10.0f};                // Attenuation radius
-        // Position is derived from WorldTransformComponent, not stored here
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity{1.0f};
+        float radius{10.0f};
     };
 
     struct SpotLightComponent
     {
-        glm::vec3 color{1.0f, 1.0f, 1.0f};  // RGB color
-        float intensity{1.0f};              // Light strength multiplier
-        float innerAngle{30.0f};            // Inner cone angle in degrees
-        float outerAngle{45.0f};            // Outer cone angle in degrees
-        float range{20.0f};                 // Maximum distance
-        // Direction computed from TransformComponent rotation
-        // Position derived from WorldTransformComponent
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity{1.0f};
+        float innerAngle{30.0f};  // degrees
+        float outerAngle{45.0f};  // degrees
+        float range{20.0f};
     };
 }
