@@ -472,6 +472,7 @@ namespace components
     {
         glm::vec3 color{1.0f, 1.0f, 1.0f};
         float intensity{1.0f};
+        bool showGizmo = false;
     };
 
     struct PointLightComponent
@@ -479,6 +480,7 @@ namespace components
         glm::vec3 color{1.0f, 1.0f, 1.0f};
         float intensity{1.0f};
         float radius{10.0f};
+        bool showGizmo = false;
     };
 
     struct SpotLightComponent
@@ -488,5 +490,6 @@ namespace components
         float innerAngle{30.0f};  // degrees
         float outerAngle{45.0f};  // degrees
         float range{20.0f};
+        bool showGizmo = false;
     };
 }

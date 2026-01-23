@@ -727,6 +727,7 @@ namespace serialization
         json j;
         j["color"] = json::array({light.color.r, light.color.g, light.color.b});
         j["intensity"] = light.intensity;
+        j["showGizmo"] = light.showGizmo;
         return j;
     }
 
@@ -740,6 +741,10 @@ namespace serialization
         {
             light.intensity = it->get<float>();
         }
+        if (auto it = j.find("showGizmo"); it != j.end() && it->is_boolean())
+        {
+            light.showGizmo = it->get<bool>();
+        }
     }
 
     json SceneSerialization::serializePointLight(const components::PointLightComponent& light)
@@ -748,6 +753,7 @@ namespace serialization
         j["color"] = json::array({light.color.r, light.color.g, light.color.b});
         j["intensity"] = light.intensity;
         j["radius"] = light.radius;
+        j["showGizmo"] = light.showGizmo;
         return j;
     }
 
@@ -765,6 +771,10 @@ namespace serialization
         {
             light.radius = it->get<float>();
         }
+        if (auto it = j.find("showGizmo"); it != j.end() && it->is_boolean())
+        {
+            light.showGizmo = it->get<bool>();
+        }
     }
 
     json SceneSerialization::serializeSpotLight(const components::SpotLightComponent& light)
@@ -775,6 +785,7 @@ namespace serialization
         j["innerAngle"] = light.innerAngle;
         j["outerAngle"] = light.outerAngle;
         j["range"] = light.range;
+        j["showGizmo"] = light.showGizmo;
         return j;
     }
 
@@ -799,6 +810,10 @@ namespace serialization
         if (auto it = j.find("range"); it != j.end() && it->is_number())
         {
             light.range = it->get<float>();
+        }
+        if (auto it = j.find("showGizmo"); it != j.end() && it->is_boolean())
+        {
+            light.showGizmo = it->get<bool>();
         }
     }
 

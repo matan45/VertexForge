@@ -48,6 +48,7 @@ namespace core
         services::CameraId getActiveCameraId() const override;
         void prepareFrameCameraFrustums() override;
         void prepareFrameAudioSpheres() override;
+        void prepareFrameLightGizmos() override;
 
         // Billboard API
         void prepareFrameBillboards() override;

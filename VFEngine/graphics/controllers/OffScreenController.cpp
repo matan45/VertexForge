@@ -176,6 +176,20 @@ namespace controllers
         framePreparation->prepareAudioSpheres(ctx);
     }
 
+    void OffScreenController::prepareFrameLightGizmos()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.showDebugRendering = showDebugRendering;
+        ctx.showBillboardIcons = showBillboardIcons;
+        ctx.showGrid = showGrid;
+
+        framePreparation->prepareLightGizmos(ctx);
+    }
+
     void OffScreenController::prepareGrid()
     {
         offscreen::FrameContext ctx;

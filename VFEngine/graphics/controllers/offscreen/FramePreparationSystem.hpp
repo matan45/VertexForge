@@ -44,6 +44,7 @@ namespace controllers::offscreen
         void prepareAudioSpheres(const FrameContext& ctx);
         void prepareGrid(const FrameContext& ctx);
         void preparePhysicsColliders(const FrameContext& ctx);
+        void prepareLightGizmos(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
         

@@ -53,6 +53,7 @@ namespace windows::details {
 
             changed |= ImGui::ColorEdit3("Color", &light.color.x);
             changed |= ImGui::DragFloat("Intensity", &light.intensity, 0.01f, 0.0f, 100.0f);
+            changed |= ImGui::Checkbox("Show Gizmo", &light.showGizmo);
 
             if (changed)
             {

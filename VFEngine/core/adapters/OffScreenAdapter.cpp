@@ -93,6 +93,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameLightGizmos() {
+        if (offScreen) {
+            offScreen->prepareFrameLightGizmos();
+        }
+    }
+
     void OffScreenAdapter::prepareFrameBillboards() {
         if (offScreen) {
             offScreen->prepareFrameBillboards();
