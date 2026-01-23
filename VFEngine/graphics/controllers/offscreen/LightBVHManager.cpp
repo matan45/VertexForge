@@ -1,5 +1,4 @@
 #include "LightBVHManager.hpp"
-#include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/SceneEvents.hpp"
 #include "../../../services/events/LightCullingEvents.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -8,11 +7,6 @@
 namespace controllers::offscreen
 {
     LightBVHManager::LightBVHManager() = default;
-
-    LightBVHManager::~LightBVHManager()
-    {
-        cleanUp();
-    }
 
     // Helper function to check if an entity has any light component
     static bool hasAnyLightComponent(entt::registry& registry, entt::entity entity)
@@ -44,9 +38,14 @@ namespace controllers::offscreen
                     lightBVH.markDynamicLightDirty(entityId);
                 }
             });
-        transformChangedSubscription = std::make_unique<events::SubscriptionToken>(transformToken);
+        transformChangedSubscription = events::ScopedSubscription(transformToken);
 
         // Subscribe to entity deleted notification
+        // NOTE: This handles the case where an entire entity is deleted.
+        // If a light component was explicitly removed first (via LightComponentChangedNotification),
+        // this may mark dirty redundantly, but that's harmless (idempotent boolean flags).
+        // EnTT's internal component destruction during entity deletion does NOT go through
+        // our service layer, so LightComponentChangedNotification won't fire in that case.
         auto deletedToken = events::EventDispatcher::instance().subscribe<
             events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& notification)
@@ -54,6 +53,7 @@ namespace controllers::offscreen
                 uint32_t entityId = static_cast<uint32_t>(notification.entity.id);
 
                 // Check which tree the light was in and mark it dirty
+                // This uses BVH membership since the entity/components are already gone
                 if (lightBVH.isStaticLight(entityId))
                 {
                     lightBVH.markStaticDirty();
@@ -62,10 +62,12 @@ namespace controllers::offscreen
                 {
                     lightBVH.markDynamicDirty();
                 }
+                // If not found in either tree, entity had no light or was already handled
             });
-        entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(deletedToken);
+        entityDeletedSubscription = events::ScopedSubscription(deletedToken);
 
         // Subscribe to entity static changed notification
+        // This is a STRUCTURAL change - the light moves between static and dynamic trees
         auto staticChangedToken = events::EventDispatcher::instance().subscribe<
             events::scene::EntityStaticChangedNotification>(
             [this](const events::scene::EntityStaticChangedNotification& notification)
@@ -78,10 +80,11 @@ namespace controllers::offscreen
                     return;
                 }
 
-                // Light moved between static and dynamic trees - mark both as dirty
+                // Light moves between static and dynamic trees - this is a structural change
+                // requiring full rebuild of both trees (not just refit)
                 lightBVH.markDirty();
             });
-        entityStaticChangedSubscription = std::make_unique<events::SubscriptionToken>(staticChangedToken);
+        entityStaticChangedSubscription = events::ScopedSubscription(staticChangedToken);
 
         // Subscribe to light data changed notification (from our new events)
         auto lightDataToken = events::EventDispatcher::instance().subscribe<
@@ -108,36 +111,64 @@ namespace controllers::offscreen
                     lightBVH.markDynamicLightDirty(entityId);
                 }
             });
-        lightDataChangedSubscription = std::make_unique<events::SubscriptionToken>(lightDataToken);
+        lightDataChangedSubscription = events::ScopedSubscription(lightDataToken);
 
-        // Subscribe to light component added notification
-        auto lightAddedToken = events::EventDispatcher::instance().subscribe<
+        // Subscribe to light component changed notification (handles both add and remove)
+        // NOTE: This handles explicit component add/remove via service layer.
+        // Distinction from EntityDeletedNotification:
+        // - LightComponentChangedNotification: component removed, entity still exists
+        // - EntityDeletedNotification: entire entity deleted (EnTT destroys components internally)
+        auto lightChangedToken = events::EventDispatcher::instance().subscribe<
             events::lighting::LightComponentChangedNotification>(
             [this](const events::lighting::LightComponentChangedNotification& notification)
             {
-                auto& registry = scene::EntityRegistry::getRegistry();
-                auto entity = static_cast<entt::entity>(notification.entity.id);
+                uint32_t entityId = static_cast<uint32_t>(notification.entity.id);
 
-                if (!registry.valid(entity))
+                if (notification.added)
                 {
-                    return;
+                    // Light component added - check TransformComponent to determine tree
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto entity = static_cast<entt::entity>(entityId);
+
+                    if (!registry.valid(entity))
+                    {
+                        return;
+                    }
+
+                    if (registry.all_of<components::TransformComponent>(entity))
+                    {
+                        const auto& transform = registry.get<components::TransformComponent>(entity);
+                        if (transform.isStatic)
+                        {
+                            lightBVH.markStaticDirty();
+                        }
+                        else
+                        {
+                            lightBVH.markDynamicDirty();
+                        }
+                    }
                 }
-
-                // Check if entity is static or dynamic
-                if (registry.all_of<components::TransformComponent>(entity))
+                else
                 {
-                    const auto& transform = registry.get<components::TransformComponent>(entity);
-                    if (transform.isStatic)
+                    // Light component removed - check which BVH the light was in
+                    // We must use BVH membership since the component is already gone
+                    if (lightBVH.isStaticLight(entityId))
                     {
                         lightBVH.markStaticDirty();
                     }
-                    else
+                    else if (lightBVH.isDynamicLight(entityId))
                     {
                         lightBVH.markDynamicDirty();
                     }
+                    // Note: If entity wasn't in any BVH, it's a no-op (e.g., directional light)
+                    // For directional lights, mark both dirty to be safe
+                    else
+                    {
+                        lightBVH.markDirty();
+                    }
                 }
             });
-        lightComponentAddedSubscription = std::make_unique<events::SubscriptionToken>(lightAddedToken);
+        lightComponentChangedSubscription = events::ScopedSubscription(lightChangedToken);
 
         // Subscribe to scene loaded notification - rebuild BVH when a new scene is loaded
         auto sceneLoadedToken = events::EventDispatcher::instance().subscribe<
@@ -147,7 +178,7 @@ namespace controllers::offscreen
                 // Entire scene changed - rebuild both trees
                 lightBVH.markDirty();
             });
-        sceneLoadedSubscription = std::make_unique<events::SubscriptionToken>(sceneLoadedToken);
+        sceneLoadedSubscription = events::ScopedSubscription(sceneLoadedToken);
 
         // Subscribe to scene cleared notification - clear BVH when scene is cleared
         auto sceneClearedToken = events::EventDispatcher::instance().subscribe<
@@ -157,7 +188,7 @@ namespace controllers::offscreen
                 // Scene cleared - rebuild both trees (will be empty)
                 lightBVH.markDirty();
             });
-        sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneClearedToken);
+        sceneClearedSubscription = events::ScopedSubscription(sceneClearedToken);
 
         // Subscribe to prefab instantiated notification - prefab may contain lights
         auto prefabToken = events::EventDispatcher::instance().subscribe<
@@ -167,7 +198,7 @@ namespace controllers::offscreen
                 // Prefab may contain lights - mark both trees dirty
                 lightBVH.markDirty();
             });
-        prefabInstantiatedSubscription = std::make_unique<events::SubscriptionToken>(prefabToken);
+        prefabInstantiatedSubscription = events::ScopedSubscription(prefabToken);
 
         // Subscribe to entity duplicated notification - duplicated entity may have lights
         auto duplicatedToken = events::EventDispatcher::instance().subscribe<
@@ -196,49 +227,7 @@ namespace controllers::offscreen
                     }
                 }
             });
-        entityDuplicatedSubscription = std::make_unique<events::SubscriptionToken>(duplicatedToken);
-    }
-
-    void LightBVHManager::cleanUp()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        if (transformChangedSubscription && transformChangedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*transformChangedSubscription);
-        }
-        if (entityDeletedSubscription && entityDeletedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*entityDeletedSubscription);
-        }
-        if (entityStaticChangedSubscription && entityStaticChangedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*entityStaticChangedSubscription);
-        }
-        if (lightDataChangedSubscription && lightDataChangedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*lightDataChangedSubscription);
-        }
-        if (lightComponentAddedSubscription && lightComponentAddedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*lightComponentAddedSubscription);
-        }
-        if (sceneLoadedSubscription && sceneLoadedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*sceneLoadedSubscription);
-        }
-        if (sceneClearedSubscription && sceneClearedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*sceneClearedSubscription);
-        }
-        if (prefabInstantiatedSubscription && prefabInstantiatedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*prefabInstantiatedSubscription);
-        }
-        if (entityDuplicatedSubscription && entityDuplicatedSubscription->isValid())
-        {
-            dispatcher.unsubscribe(*entityDuplicatedSubscription);
-        }
+        entityDuplicatedSubscription = events::ScopedSubscription(duplicatedToken);
     }
 
     void LightBVHManager::rebuild()

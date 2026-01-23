@@ -1,11 +1,9 @@
 #pragma once
 #include "scene/LightBVH.hpp"
 #include "math/Frustum.hpp"
-#include <memory>
+#include "../../../services/events/EventDispatcher.hpp"
 #include <vector>
 #include <cstdint>
-
-namespace events { struct SubscriptionToken; }
 
 namespace controllers::offscreen
 {
@@ -16,27 +14,23 @@ namespace controllers::offscreen
     private:
         scene::LightBVH lightBVH;
 
-        // Event subscriptions
-        std::unique_ptr<events::SubscriptionToken> lightDataChangedSubscription;
-        std::unique_ptr<events::SubscriptionToken> lightComponentAddedSubscription;
-        std::unique_ptr<events::SubscriptionToken> lightComponentRemovedSubscription;
-        std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
-        std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
-        std::unique_ptr<events::SubscriptionToken> transformChangedSubscription;
-        std::unique_ptr<events::SubscriptionToken> sceneLoadedSubscription;
-        std::unique_ptr<events::SubscriptionToken> sceneClearedSubscription;
-        std::unique_ptr<events::SubscriptionToken> prefabInstantiatedSubscription;
-        std::unique_ptr<events::SubscriptionToken> entityDuplicatedSubscription;
+        // Event subscriptions (RAII - automatically unsubscribe on destruction)
+        events::ScopedSubscription lightDataChangedSubscription;
+        events::ScopedSubscription lightComponentChangedSubscription;  // Handles both add/remove
+        events::ScopedSubscription entityDeletedSubscription;
+        events::ScopedSubscription entityStaticChangedSubscription;
+        events::ScopedSubscription transformChangedSubscription;
+        events::ScopedSubscription sceneLoadedSubscription;
+        events::ScopedSubscription sceneClearedSubscription;
+        events::ScopedSubscription prefabInstantiatedSubscription;
+        events::ScopedSubscription entityDuplicatedSubscription;
 
     public:
         explicit LightBVHManager();
-        ~LightBVHManager();
+        ~LightBVHManager() = default;  // RAII handles cleanup
 
         // Initialize the manager and set up event subscriptions
         void init();
-
-        // Clean up resources and unsubscribe from events
-        void cleanUp();
 
         // Force rebuild of both BVH trees
         void rebuild();

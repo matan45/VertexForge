@@ -66,8 +66,11 @@ namespace math
         }
 
         // Compute AABB for a directional light
-        // Directional lights have no spatial bounds (they affect everything)
-        // Returns an infinite AABB that will always intersect any frustum
+        // WARNING: Directional lights have no spatial bounds (they affect everything).
+        // Do NOT use this for BVH - directional lights should be stored separately
+        // and always included in query results without spatial culling.
+        // This function is kept for compatibility but should rarely be needed.
+        [[deprecated("Directional lights should not be stored in BVH - handle separately")]]
         static AABB computeDirectionalLightAABB()
         {
             constexpr float inf = std::numeric_limits<float>::max() * 0.5f;
