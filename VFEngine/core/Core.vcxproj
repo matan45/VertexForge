@@ -115,6 +115,7 @@
     <ClInclude Include="adapters\api\AudioAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
     <ClInclude Include="adapters\api\InputAPI.hpp" />
+    <ClInclude Include="adapters\api\LightAPI.hpp" />
     <ClInclude Include="adapters\api\LogAPI.hpp" />
     <ClInclude Include="adapters\api\NativeHelpers.hpp" />
     <ClInclude Include="adapters\api\PhysicsAPI.hpp" />
@@ -162,6 +163,7 @@
     <ClCompile Include="adapters\api\AudioAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
     <ClCompile Include="adapters\api\InputAPI.cpp" />
+    <ClCompile Include="adapters\api\LightAPI.cpp" />
     <ClCompile Include="adapters\api\LogAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsAPI.cpp" />
     <ClCompile Include="adapters\api\VFXAPI.cpp" />

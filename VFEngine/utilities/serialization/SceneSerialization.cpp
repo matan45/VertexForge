@@ -149,6 +149,24 @@ namespace serialization
             componentsJson["vfx"] = serializeVFX(entity.getComponent<components::VFXComponent>());
         }
 
+        if (entity.hasComponent<components::DirectionalLightComponent>())
+        {
+            componentsJson["directionalLight"] = serializeDirectionalLight(
+                entity.getComponent<components::DirectionalLightComponent>());
+        }
+
+        if (entity.hasComponent<components::PointLightComponent>())
+        {
+            componentsJson["pointLight"] = serializePointLight(
+                entity.getComponent<components::PointLightComponent>());
+        }
+
+        if (entity.hasComponent<components::SpotLightComponent>())
+        {
+            componentsJson["spotLight"] = serializeSpotLight(
+                entity.getComponent<components::SpotLightComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         // Serialize children recursively
@@ -704,6 +722,86 @@ namespace serialization
         vfx.isPlaying = false;
     }
 
+    json SceneSerialization::serializeDirectionalLight(const components::DirectionalLightComponent& light)
+    {
+        json j;
+        j["color"] = json::array({light.color.r, light.color.g, light.color.b});
+        j["intensity"] = light.intensity;
+        return j;
+    }
+
+    void SceneSerialization::deserializeDirectionalLight(const json& j, components::DirectionalLightComponent& light)
+    {
+        if (auto it = j.find("color"); it != j.end() && it->is_array() && it->size() >= 3)
+        {
+            light.color = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+        }
+        if (auto it = j.find("intensity"); it != j.end() && it->is_number())
+        {
+            light.intensity = it->get<float>();
+        }
+    }
+
+    json SceneSerialization::serializePointLight(const components::PointLightComponent& light)
+    {
+        json j;
+        j["color"] = json::array({light.color.r, light.color.g, light.color.b});
+        j["intensity"] = light.intensity;
+        j["radius"] = light.radius;
+        return j;
+    }
+
+    void SceneSerialization::deserializePointLight(const json& j, components::PointLightComponent& light)
+    {
+        if (auto it = j.find("color"); it != j.end() && it->is_array() && it->size() >= 3)
+        {
+            light.color = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+        }
+        if (auto it = j.find("intensity"); it != j.end() && it->is_number())
+        {
+            light.intensity = it->get<float>();
+        }
+        if (auto it = j.find("radius"); it != j.end() && it->is_number())
+        {
+            light.radius = it->get<float>();
+        }
+    }
+
+    json SceneSerialization::serializeSpotLight(const components::SpotLightComponent& light)
+    {
+        json j;
+        j["color"] = json::array({light.color.r, light.color.g, light.color.b});
+        j["intensity"] = light.intensity;
+        j["innerAngle"] = light.innerAngle;
+        j["outerAngle"] = light.outerAngle;
+        j["range"] = light.range;
+        return j;
+    }
+
+    void SceneSerialization::deserializeSpotLight(const json& j, components::SpotLightComponent& light)
+    {
+        if (auto it = j.find("color"); it != j.end() && it->is_array() && it->size() >= 3)
+        {
+            light.color = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+        }
+        if (auto it = j.find("intensity"); it != j.end() && it->is_number())
+        {
+            light.intensity = it->get<float>();
+        }
+        if (auto it = j.find("innerAngle"); it != j.end() && it->is_number())
+        {
+            light.innerAngle = it->get<float>();
+        }
+        if (auto it = j.find("outerAngle"); it != j.end() && it->is_number())
+        {
+            light.outerAngle = it->get<float>();
+        }
+        if (auto it = j.find("range"); it != j.end() && it->is_number())
+        {
+            light.range = it->get<float>();
+        }
+    }
+
     json SceneSerialization::serializePhysicsSettings(const types::PhysicsSettings& settings)
     {
         json j;
@@ -1071,6 +1169,42 @@ namespace serialization
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                     billboard.iconType = components::BillboardIconType::Particle;
+                }
+            }
+
+            if (componentsJson.contains("directionalLight"))
+            {
+                auto& lightComp = entity.addOrReplaceComponent<components::DirectionalLightComponent>();
+                deserializeDirectionalLight(componentsJson["directionalLight"], lightComp);
+                // Auto-attach billboard if not explicitly serialized
+                if (!componentsJson.contains("billboard"))
+                {
+                    auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+                    billboard.iconType = components::BillboardIconType::Light;
+                }
+            }
+
+            if (componentsJson.contains("pointLight"))
+            {
+                auto& lightComp = entity.addOrReplaceComponent<components::PointLightComponent>();
+                deserializePointLight(componentsJson["pointLight"], lightComp);
+                // Auto-attach billboard if not explicitly serialized
+                if (!componentsJson.contains("billboard"))
+                {
+                    auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+                    billboard.iconType = components::BillboardIconType::Light;
+                }
+            }
+
+            if (componentsJson.contains("spotLight"))
+            {
+                auto& lightComp = entity.addOrReplaceComponent<components::SpotLightComponent>();
+                deserializeSpotLight(componentsJson["spotLight"], lightComp);
+                // Auto-attach billboard if not explicitly serialized
+                if (!componentsJson.contains("billboard"))
+                {
+                    auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
+                    billboard.iconType = components::BillboardIconType::Light;
                 }
             }
         }

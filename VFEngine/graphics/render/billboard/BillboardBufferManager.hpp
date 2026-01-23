@@ -12,10 +12,10 @@ namespace core
 namespace render::billboard
 {
     inline constexpr std::array<BillboardVertex, 4> QUAD_VERTICES = {{
-        {{-0.5f, -0.5f}, {0.0f, 1.0f}},  // Bottom-left
-        {{ 0.5f, -0.5f}, {1.0f, 1.0f}},  // Bottom-right
-        {{ 0.5f,  0.5f}, {1.0f, 0.0f}},  // Top-right
-        {{-0.5f,  0.5f}, {0.0f, 0.0f}},  // Top-left
+        {{-0.5f, -0.5f}, {0.0f, 0.0f}},  // Bottom-left
+        {{ 0.5f, -0.5f}, {1.0f, 0.0f}},  // Bottom-right
+        {{ 0.5f,  0.5f}, {1.0f, 1.0f}},  // Top-right
+        {{-0.5f,  0.5f}, {0.0f, 1.0f}},  // Top-left
     }};
 
     inline constexpr std::array<uint16_t, 6> QUAD_INDICES = {0, 1, 2, 2, 3, 0};

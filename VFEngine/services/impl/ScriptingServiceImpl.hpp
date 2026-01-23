@@ -1,7 +1,7 @@
 #pragma once
 #include "../interfaces/IScriptingService.hpp"
 #include "../providers/IScriptingProvider.hpp"
-#include "../../utilities/scene/SceneGraphSystem.hpp"
+#include "scene/SceneGraphSystem.hpp"
 
 namespace services
 {

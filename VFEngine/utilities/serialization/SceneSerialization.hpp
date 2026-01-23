@@ -80,6 +80,15 @@ namespace serialization
         static json serializeVFX(const components::VFXComponent& vfx);
         static void deserializeVFX(const json& j, components::VFXComponent& vfx);
 
+        static json serializeDirectionalLight(const components::DirectionalLightComponent& light);
+        static void deserializeDirectionalLight(const json& j, components::DirectionalLightComponent& light);
+
+        static json serializePointLight(const components::PointLightComponent& light);
+        static void deserializePointLight(const json& j, components::PointLightComponent& light);
+
+        static json serializeSpotLight(const components::SpotLightComponent& light);
+        static void deserializeSpotLight(const json& j, components::SpotLightComponent& light);
+
         static json serializePhysicsSettings(const types::PhysicsSettings& settings);
         static void deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings);
 

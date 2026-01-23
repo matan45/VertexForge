@@ -1,6 +1,6 @@
 #pragma once
 #include "../data/EntityHandle.hpp"
-#include "../../utilities/types/PhysicsTypes.hpp"
+#include "types/PhysicsTypes.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>

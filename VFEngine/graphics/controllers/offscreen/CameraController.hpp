@@ -1,7 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include "math/Frustum.hpp"
-#include "../../../utilities/types/CameraTypes.hpp"
+#include "types/CameraTypes.hpp"
 
 namespace render
 {

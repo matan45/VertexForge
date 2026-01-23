@@ -5,8 +5,8 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/AudioEvents.hpp"
-#include "../../../utilities/scene/EntityRegistry.hpp"
-#include "../../../utilities/components/Components.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 
 namespace core::api
