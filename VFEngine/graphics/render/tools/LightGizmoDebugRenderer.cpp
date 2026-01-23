@@ -56,7 +56,6 @@ namespace render::mesh
             wireframePipelineLayout = nullptr;
         }
 
-        // Cleanup sphere buffers
         if (sphereVertexBuffer)
         {
             dev.destroyBuffer(sphereVertexBuffer);
@@ -72,7 +71,6 @@ namespace render::mesh
             sphereIndexBufferMemory = nullptr;
         }
 
-        // Cleanup cone buffers
         if (coneVertexBuffer)
         {
             dev.destroyBuffer(coneVertexBuffer);
@@ -88,7 +86,6 @@ namespace render::mesh
             coneIndexBufferMemory = nullptr;
         }
 
-        // Cleanup arrow buffers
         if (arrowVertexBuffer)
         {
             dev.destroyBuffer(arrowVertexBuffer);
@@ -144,7 +141,6 @@ namespace render::mesh
         const float pi = 3.14159265358979323846f;
         const int segments = SPHERE_SEGMENTS;
 
-        // Generate circle vertices for 3 planes (XY, XZ, YZ)
         // XY plane
         int baseIndex = 0;
         for (int i = 0; i < segments; ++i)
@@ -186,7 +182,6 @@ namespace render::mesh
 
         sphereIndexCount = static_cast<uint32_t>(indices.size());
 
-        // Create vertex buffer
         vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * vertices.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
@@ -204,7 +199,6 @@ namespace render::mesh
             vertexBufferSize
         );
 
-        // Create index buffer
         vk::DeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
@@ -231,14 +225,10 @@ namespace render::mesh
         const float pi = 3.14159265358979323846f;
         const int segments = CONE_SEGMENTS;
 
-        // Cone tip at origin, base at z = -1 (will be scaled by range)
-        // Unit cone with base radius = 1
-
-        // Tip vertex
+        // Unit cone: tip at origin, base at z = -1, radius = 1
         vertices.push_back(glm::vec3(0.0f, 0.0f, 0.0f));
         uint32_t tipIndex = 0;
 
-        // Base circle vertices
         uint32_t baseStartIndex = static_cast<uint32_t>(vertices.size());
         for (int i = 0; i < segments; ++i)
         {
@@ -246,14 +236,12 @@ namespace render::mesh
             vertices.push_back(glm::vec3(std::cos(angle), std::sin(angle), -1.0f));
         }
 
-        // Lines from tip to base
-        for (int i = 0; i < segments; i += segments / 4) // 4 lines for cleaner look
+        for (int i = 0; i < segments; i += segments / 4)
         {
             indices.push_back(tipIndex);
             indices.push_back(baseStartIndex + i);
         }
 
-        // Base circle
         for (int i = 0; i < segments; ++i)
         {
             indices.push_back(baseStartIndex + i);
@@ -262,7 +250,6 @@ namespace render::mesh
 
         coneIndexCount = static_cast<uint32_t>(indices.size());
 
-        // Create vertex buffer
         vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * vertices.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
@@ -280,7 +267,6 @@ namespace render::mesh
             vertexBufferSize
         );
 
-        // Create index buffer
         vk::DeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
@@ -304,44 +290,31 @@ namespace render::mesh
         std::vector<glm::vec3> vertices;
         std::vector<uint32_t> indices;
 
-        // Arrow pointing in -Z direction (forward in typical coordinate system)
-        // Origin at 0,0,0, pointing toward -Z
-
-        // Main shaft
-        vertices.push_back(glm::vec3(0.0f, 0.0f, 0.0f));    // 0: Origin
-        vertices.push_back(glm::vec3(0.0f, 0.0f, -1.0f));   // 1: Tip
-
-        // Arrow head (4 lines forming a cross at the tip)
+        // Unit arrow pointing in -Z direction
         float headSize = 0.15f;
-        vertices.push_back(glm::vec3(headSize, 0.0f, -0.8f));   // 2
+        float crossSize = 0.2f;
+
+        vertices.push_back(glm::vec3(0.0f, 0.0f, 0.0f));        // 0: Origin
+        vertices.push_back(glm::vec3(0.0f, 0.0f, -1.0f));       // 1: Tip
+        vertices.push_back(glm::vec3(headSize, 0.0f, -0.8f));   // 2: Arrow head
         vertices.push_back(glm::vec3(-headSize, 0.0f, -0.8f));  // 3
         vertices.push_back(glm::vec3(0.0f, headSize, -0.8f));   // 4
         vertices.push_back(glm::vec3(0.0f, -headSize, -0.8f));  // 5
-
-        // Cross at origin (to mark position)
-        float crossSize = 0.2f;
-        vertices.push_back(glm::vec3(crossSize, 0.0f, 0.0f));   // 6
+        vertices.push_back(glm::vec3(crossSize, 0.0f, 0.0f));   // 6: Cross at origin
         vertices.push_back(glm::vec3(-crossSize, 0.0f, 0.0f));  // 7
         vertices.push_back(glm::vec3(0.0f, crossSize, 0.0f));   // 8
         vertices.push_back(glm::vec3(0.0f, -crossSize, 0.0f));  // 9
 
-        // Indices for lines
-        // Main shaft
         indices.push_back(0); indices.push_back(1);
-
-        // Arrow head
         indices.push_back(1); indices.push_back(2);
         indices.push_back(1); indices.push_back(3);
         indices.push_back(1); indices.push_back(4);
         indices.push_back(1); indices.push_back(5);
-
-        // Cross at origin
         indices.push_back(6); indices.push_back(7);
         indices.push_back(8); indices.push_back(9);
 
         arrowIndexCount = static_cast<uint32_t>(indices.size());
 
-        // Create vertex buffer
         vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * vertices.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
@@ -359,7 +332,6 @@ namespace render::mesh
             vertexBufferSize
         );
 
-        // Create index buffer
         vk::DeviceSize indexBufferSize = sizeof(uint32_t) * indices.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
@@ -424,10 +396,7 @@ namespace render::mesh
         vk::DeviceSize offsets[] = {0};
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-        // Extract position from world matrix
         glm::vec3 position = glm::vec3(light.worldMatrix[3]);
-
-        // Create model matrix with radius scale
         glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
         model = glm::scale(model, glm::vec3(light.radius));
 
@@ -457,13 +426,10 @@ namespace render::mesh
         vk::DeviceSize offsets[] = {0};
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-        // Calculate cone radius from outer angle
         float outerRadians = glm::radians(light.outerAngle);
         float outerRadius = std::tan(outerRadians) * light.range;
 
-        // Use entity transform (includes rotation for direction)
         glm::mat4 model = light.worldMatrix;
-        // Scale: X/Y by outer radius, Z by range
         model = glm::scale(model, glm::vec3(outerRadius, outerRadius, light.range));
 
         LightGizmoPushConstants pushConstants{};
@@ -476,7 +442,6 @@ namespace render::mesh
 
         commandBuffer.drawIndexed(coneIndexCount, 1, 0, 0, 0);
 
-        // Optionally draw inner cone with slightly different alpha
         if (light.innerAngle > 0.0f && light.innerAngle < light.outerAngle)
         {
             float innerRadians = glm::radians(light.innerAngle);
@@ -486,7 +451,7 @@ namespace render::mesh
             innerModel = glm::scale(innerModel, glm::vec3(innerRadius, innerRadius, light.range));
 
             pushConstants.mvp = viewProj * innerModel;
-            pushConstants.color = glm::vec4(light.color, 0.5f); // More transparent for inner cone
+            pushConstants.color = glm::vec4(light.color, 0.5f);
 
             commandBuffer.pushConstants(wireframePipelineLayout,
                                         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
@@ -511,9 +476,7 @@ namespace render::mesh
         vk::DeviceSize offsets[] = {0};
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 
-        // Use entity transform (includes rotation for direction)
         glm::mat4 model = light.worldMatrix;
-        // Scale arrow to fixed length
         model = glm::scale(model, glm::vec3(ARROW_LENGTH));
 
         LightGizmoPushConstants pushConstants{};

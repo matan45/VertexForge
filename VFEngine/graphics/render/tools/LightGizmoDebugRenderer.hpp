@@ -26,10 +26,10 @@ namespace render::mesh
         LightGizmoType type;
         glm::mat4 worldMatrix;
         glm::vec3 color;
-        float radius = 10.0f;       // Point light
-        float innerAngle = 30.0f;   // Spot light (degrees)
-        float outerAngle = 45.0f;   // Spot light (degrees)
-        float range = 20.0f;        // Spot light
+        float radius = 10.0f;
+        float innerAngle = 30.0f;   // degrees
+        float outerAngle = 45.0f;   // degrees
+        float range = 20.0f;
     };
 
     struct LightGizmoPushConstants
@@ -49,21 +49,18 @@ namespace render::mesh
         vk::Pipeline wireframePipeline;
         vk::PipelineLayout wireframePipelineLayout;
 
-        // Sphere buffers (for point lights)
         vk::Buffer sphereVertexBuffer;
         vk::DeviceMemory sphereVertexBufferMemory;
         vk::Buffer sphereIndexBuffer;
         vk::DeviceMemory sphereIndexBufferMemory;
         uint32_t sphereIndexCount = 0;
 
-        // Cone buffers (for spot lights)
         vk::Buffer coneVertexBuffer;
         vk::DeviceMemory coneVertexBufferMemory;
         vk::Buffer coneIndexBuffer;
         vk::DeviceMemory coneIndexBufferMemory;
         uint32_t coneIndexCount = 0;
 
-        // Arrow buffers (for directional lights)
         vk::Buffer arrowVertexBuffer;
         vk::DeviceMemory arrowVertexBufferMemory;
         vk::Buffer arrowIndexBuffer;

@@ -542,6 +542,112 @@ namespace controllers::offscreen
         renderHandler->setPhysicsColliderDrawList(std::move(colliderDrawList));
     }
 
+    void FramePreparationSystem::collectDirectionalLightGizmos(
+        std::vector<render::mesh::LightGizmoRenderData>& drawList)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::DirectionalLightComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& lightComp = view.get<components::DirectionalLightComponent>(entity);
+            if (!lightComp.showGizmo)
+            {
+                continue;
+            }
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::LightGizmoRenderData renderData;
+            renderData.type = render::mesh::LightGizmoType::Directional;
+            renderData.worldMatrix = worldTransform.worldMatrix;
+            renderData.color = lightComp.color;
+
+            drawList.push_back(renderData);
+        }
+    }
+
+    void FramePreparationSystem::collectPointLightGizmos(
+        std::vector<render::mesh::LightGizmoRenderData>& drawList)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& lightComp = view.get<components::PointLightComponent>(entity);
+            if (!lightComp.showGizmo)
+            {
+                continue;
+            }
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::LightGizmoRenderData renderData;
+            renderData.type = render::mesh::LightGizmoType::Point;
+            renderData.worldMatrix = worldTransform.worldMatrix;
+            renderData.color = lightComp.color;
+            renderData.radius = lightComp.radius;
+
+            drawList.push_back(renderData);
+        }
+    }
+
+    void FramePreparationSystem::collectSpotLightGizmos(
+        std::vector<render::mesh::LightGizmoRenderData>& drawList)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& lightComp = view.get<components::SpotLightComponent>(entity);
+            if (!lightComp.showGizmo)
+            {
+                continue;
+            }
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::LightGizmoRenderData renderData;
+            renderData.type = render::mesh::LightGizmoType::Spot;
+            renderData.worldMatrix = worldTransform.worldMatrix;
+            renderData.color = lightComp.color;
+            renderData.innerAngle = lightComp.innerAngle;
+            renderData.outerAngle = lightComp.outerAngle;
+            renderData.range = lightComp.range;
+
+            drawList.push_back(renderData);
+        }
+    }
+
     void FramePreparationSystem::prepareLightGizmos(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
@@ -554,104 +660,9 @@ namespace controllers::offscreen
 
         std::vector<render::mesh::LightGizmoRenderData> lightGizmoDrawList;
 
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        // Process directional lights
-        {
-            auto view = registry.view<components::DirectionalLightComponent, components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                if (registry.all_of<components::NameComponent>(entity))
-                {
-                    const auto& nameComp = registry.get<components::NameComponent>(entity);
-                    if (!nameComp.isActive)
-                    {
-                        continue;
-                    }
-                }
-
-                const auto& lightComp = view.get<components::DirectionalLightComponent>(entity);
-                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-                if (!lightComp.showGizmo)
-                {
-                    continue;
-                }
-
-                render::mesh::LightGizmoRenderData renderData;
-                renderData.type = render::mesh::LightGizmoType::Directional;
-                renderData.worldMatrix = worldTransform.worldMatrix;
-                renderData.color = lightComp.color;
-
-                lightGizmoDrawList.push_back(renderData);
-            }
-        }
-
-        // Process point lights
-        {
-            auto view = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                if (registry.all_of<components::NameComponent>(entity))
-                {
-                    const auto& nameComp = registry.get<components::NameComponent>(entity);
-                    if (!nameComp.isActive)
-                    {
-                        continue;
-                    }
-                }
-
-                const auto& lightComp = view.get<components::PointLightComponent>(entity);
-                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-                if (!lightComp.showGizmo)
-                {
-                    continue;
-                }
-
-                render::mesh::LightGizmoRenderData renderData;
-                renderData.type = render::mesh::LightGizmoType::Point;
-                renderData.worldMatrix = worldTransform.worldMatrix;
-                renderData.color = lightComp.color;
-                renderData.radius = lightComp.radius;
-
-                lightGizmoDrawList.push_back(renderData);
-            }
-        }
-
-        // Process spot lights
-        {
-            auto view = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                if (registry.all_of<components::NameComponent>(entity))
-                {
-                    const auto& nameComp = registry.get<components::NameComponent>(entity);
-                    if (!nameComp.isActive)
-                    {
-                        continue;
-                    }
-                }
-
-                const auto& lightComp = view.get<components::SpotLightComponent>(entity);
-                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-                if (!lightComp.showGizmo)
-                {
-                    continue;
-                }
-
-                render::mesh::LightGizmoRenderData renderData;
-                renderData.type = render::mesh::LightGizmoType::Spot;
-                renderData.worldMatrix = worldTransform.worldMatrix;
-                renderData.color = lightComp.color;
-                renderData.innerAngle = lightComp.innerAngle;
-                renderData.outerAngle = lightComp.outerAngle;
-                renderData.range = lightComp.range;
-
-                lightGizmoDrawList.push_back(renderData);
-            }
-        }
+        collectDirectionalLightGizmos(lightGizmoDrawList);
+        collectPointLightGizmos(lightGizmoDrawList);
+        collectSpotLightGizmos(lightGizmoDrawList);
 
         if (!lightGizmoDrawList.empty())
         {
