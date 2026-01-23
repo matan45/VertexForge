@@ -3,6 +3,7 @@
 #include "../../data/DTOs.hpp"
 #include <memory>
 #include <optional>
+#include <cstdint>
 
 namespace scene {
     class SceneGraphSystem;
@@ -10,6 +11,10 @@ namespace scene {
 
 namespace events {
     class EventDispatcher;
+}
+
+namespace components {
+    enum class BillboardIconType : uint8_t;
 }
 
 namespace services {
@@ -45,8 +50,8 @@ namespace services {
         bool setSpotLightData(EntityHandle entity, const SpotLightData& lightData);
 
     private:
-        void autoAttachBillboard(EntityHandle entity);
-        void autoDetachBillboard(EntityHandle entity);
+        void autoAttachBillboard(EntityHandle entity, components::BillboardIconType iconType);
+        void autoDetachBillboard(EntityHandle entity, components::BillboardIconType iconType);
         bool hasAnyLightComponent(EntityHandle entity) const;
     };
 

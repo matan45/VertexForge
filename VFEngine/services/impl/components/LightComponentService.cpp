@@ -51,7 +51,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::DirectionalLightComponent>()) {
             sceneEntity.addComponent<components::DirectionalLightComponent>();
-            autoAttachBillboard(entity);
+            autoAttachBillboard(entity, components::BillboardIconType::DirectionalLight);
 
             // Publish notification for BVH update
             events::lighting::LightComponentChangedNotification notification;
@@ -76,7 +76,7 @@ namespace services {
             sceneEntity.removeComponent<components::DirectionalLightComponent>();
             // Only remove billboard if no other light component exists
             if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity);
+                autoDetachBillboard(entity, components::BillboardIconType::DirectionalLight);
             }
 
             // Publish notification for BVH update
@@ -161,7 +161,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::PointLightComponent>()) {
             sceneEntity.addComponent<components::PointLightComponent>();
-            autoAttachBillboard(entity);
+            autoAttachBillboard(entity, components::BillboardIconType::PointLight);
 
             // Publish notification for BVH update
             events::lighting::LightComponentChangedNotification notification;
@@ -186,7 +186,7 @@ namespace services {
             sceneEntity.removeComponent<components::PointLightComponent>();
             // Only remove billboard if no other light component exists
             if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity);
+                autoDetachBillboard(entity, components::BillboardIconType::PointLight);
             }
 
             // Publish notification for BVH update
@@ -276,7 +276,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::SpotLightComponent>()) {
             sceneEntity.addComponent<components::SpotLightComponent>();
-            autoAttachBillboard(entity);
+            autoAttachBillboard(entity, components::BillboardIconType::SpotLight);
 
             // Publish notification for BVH update
             events::lighting::LightComponentChangedNotification notification;
@@ -301,7 +301,7 @@ namespace services {
             sceneEntity.removeComponent<components::SpotLightComponent>();
             // Only remove billboard if no other light component exists
             if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity);
+                autoDetachBillboard(entity, components::BillboardIconType::SpotLight);
             }
 
             // Publish notification for BVH update
@@ -401,7 +401,7 @@ namespace services {
                sceneEntity.hasComponent<components::SpotLightComponent>();
     }
 
-    void LightComponentService::autoAttachBillboard(EntityHandle entity) {
+    void LightComponentService::autoAttachBillboard(EntityHandle entity, components::BillboardIconType iconType) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return;
@@ -410,13 +410,13 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
             auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = components::BillboardIconType::Light;
+            billboard.iconType = iconType;
             billboard.editorOnly = true;
             billboard.selectable = true;
         }
     }
 
-    void LightComponentService::autoDetachBillboard(EntityHandle entity) {
+    void LightComponentService::autoDetachBillboard(EntityHandle entity, components::BillboardIconType iconType) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return;
@@ -425,8 +425,8 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::BillboardComponent>()) {
             auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            // Only remove if it's a light billboard (auto-attached)
-            if (billboard.iconType == components::BillboardIconType::Light) {
+            // Only remove if it matches the expected light billboard (auto-attached)
+            if (billboard.iconType == iconType) {
                 sceneEntity.removeComponent<components::BillboardComponent>();
             }
         }

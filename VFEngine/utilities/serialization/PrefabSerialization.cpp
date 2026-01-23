@@ -165,7 +165,7 @@ namespace serialization
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::AudioSource;
+                billboard.iconType = components::BillboardIconType::Audio2D;
             }
         }
 
@@ -176,7 +176,7 @@ namespace serialization
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::AudioSource;
+                billboard.iconType = components::BillboardIconType::Audio3D;
             }
         }
 
@@ -212,7 +212,7 @@ namespace serialization
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::Light;
+                billboard.iconType = components::BillboardIconType::DirectionalLight;
             }
         }
 
@@ -224,7 +224,7 @@ namespace serialization
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::Light;
+                billboard.iconType = components::BillboardIconType::PointLight;
             }
         }
 
@@ -236,7 +236,7 @@ namespace serialization
             if (!componentsJson.contains("billboard"))
             {
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::Light;
+                billboard.iconType = components::BillboardIconType::SpotLight;
             }
         }
     }
