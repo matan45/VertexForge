@@ -30,7 +30,6 @@ namespace render::mesh
         float innerAngle = 30.0f;   // Spot light (degrees)
         float outerAngle = 45.0f;   // Spot light (degrees)
         float range = 20.0f;        // Spot light
-        bool showGizmo = false;
     };
 
     struct LightGizmoPushConstants

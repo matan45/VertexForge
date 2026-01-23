@@ -383,22 +383,7 @@ namespace render::mesh
                                           const glm::mat4& view,
                                           const glm::mat4& projection) const
     {
-        if (!initialized || !wireframePipeline)
-        {
-            return;
-        }
-
-        bool hasGizmosToRender = false;
-        for (const auto& light : lightGizmoDrawList)
-        {
-            if (light.showGizmo)
-            {
-                hasGizmosToRender = true;
-                break;
-            }
-        }
-
-        if (!hasGizmosToRender)
+        if (!initialized || !wireframePipeline || lightGizmoDrawList.empty())
         {
             return;
         }
@@ -409,11 +394,6 @@ namespace render::mesh
 
         for (const auto& light : lightGizmoDrawList)
         {
-            if (!light.showGizmo)
-            {
-                continue;
-            }
-
             switch (light.type)
             {
             case LightGizmoType::Point:

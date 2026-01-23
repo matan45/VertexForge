@@ -582,7 +582,6 @@ namespace controllers::offscreen
                 renderData.type = render::mesh::LightGizmoType::Directional;
                 renderData.worldMatrix = worldTransform.worldMatrix;
                 renderData.color = lightComp.color;
-                renderData.showGizmo = lightComp.showGizmo;
 
                 lightGizmoDrawList.push_back(renderData);
             }
@@ -615,7 +614,6 @@ namespace controllers::offscreen
                 renderData.worldMatrix = worldTransform.worldMatrix;
                 renderData.color = lightComp.color;
                 renderData.radius = lightComp.radius;
-                renderData.showGizmo = lightComp.showGizmo;
 
                 lightGizmoDrawList.push_back(renderData);
             }
@@ -650,7 +648,6 @@ namespace controllers::offscreen
                 renderData.innerAngle = lightComp.innerAngle;
                 renderData.outerAngle = lightComp.outerAngle;
                 renderData.range = lightComp.range;
-                renderData.showGizmo = lightComp.showGizmo;
 
                 lightGizmoDrawList.push_back(renderData);
             }
