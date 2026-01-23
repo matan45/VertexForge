@@ -93,9 +93,9 @@ namespace vfx
             }
             break;
 
-        case ShapeType::Circle:
-            config.dimensions.x = getFloat(node, "radius", ShapeDefaults::CIRCLE_RADIUS);
-            config.dimensions.y = getFloat(node, "arc", ShapeDefaults::CIRCLE_ARC);
+        case ShapeType::Torus:
+            config.dimensions.x = getFloat(node, "majorRadius", ShapeDefaults::TORUS_MAJOR_RADIUS);
+            config.dimensions.y = getFloat(node, "minorRadius", ShapeDefaults::TORUS_MINOR_RADIUS);
             break;
         }
 

@@ -59,7 +59,7 @@ namespace render::vfx
         glm::vec3 generateSpherePosition(float radius, bool surfaceOnly);
         glm::vec3 generateConePosition(float radius, float height, float angle, bool surfaceOnly);
         glm::vec3 generateBoxPosition(const glm::vec3& halfExtents, bool surfaceOnly);
-        glm::vec3 generateCirclePosition(float radius, float arc, bool surfaceOnly);
+        glm::vec3 generateTorusPosition(float majorRadius, float minorRadius, bool surfaceOnly);
 
         glm::vec3 generateDirectionFromShape(const glm::vec3& position);
 

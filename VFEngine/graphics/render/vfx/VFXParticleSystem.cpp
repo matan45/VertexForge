@@ -303,8 +303,8 @@ namespace render::vfx
         case ::vfx::ShapeType::Box:
             return generateBoxPosition(glm::vec3(shape.dimensions), surfaceOnly);
 
-        case ::vfx::ShapeType::Circle:
-            return generateCirclePosition(shape.dimensions.x, shape.dimensions.y, surfaceOnly);
+        case ::vfx::ShapeType::Torus:
+            return generateTorusPosition(shape.dimensions.x, shape.dimensions.y, surfaceOnly);
 
         case ::vfx::ShapeType::Point:
         default:
@@ -405,24 +405,29 @@ namespace render::vfx
         return glm::vec3(u * halfExtents.x, v * halfExtents.y, -halfExtents.z);
     }
 
-    glm::vec3 VFXParticleSystem::generateCirclePosition(float radius, float arc, bool surfaceOnly)
+    glm::vec3 VFXParticleSystem::generateTorusPosition(float majorRadius, float minorRadius, bool surfaceOnly)
     {
-        float theta = unitDist(rng) * arc;
+        // theta: angle around the main ring (0 to 2*PI)
+        // phi: angle around the tube cross-section (0 to 2*PI)
+        float theta = unitDist(rng) * 2.0f * glm::pi<float>();
+        float phi = unitDist(rng) * 2.0f * glm::pi<float>();
 
-        if (surfaceOnly)
+        float tubeRadius = minorRadius;
+        if (!surfaceOnly)
         {
-            return glm::vec3(
-                radius * std::cos(theta),
-                0.0f,
-                radius * std::sin(theta)
-            );
+            // For volume emission, sample within the tube
+            tubeRadius = minorRadius * std::sqrt(unitDist(rng));
         }
 
-        float r = radius * std::sqrt(unitDist(rng));
+        // Parametric torus equation:
+        // x = (R + r*cos(phi)) * cos(theta)
+        // y = r * sin(phi)
+        // z = (R + r*cos(phi)) * sin(theta)
+        float ringDist = majorRadius + tubeRadius * std::cos(phi);
         return glm::vec3(
-            r * std::cos(theta),
-            0.0f,
-            r * std::sin(theta)
+            ringDist * std::cos(theta),
+            tubeRadius * std::sin(phi),
+            ringDist * std::sin(theta)
         );
     }
 
@@ -487,8 +492,24 @@ namespace render::vfx
             }
         }
 
-        case ::vfx::ShapeType::Circle:
+        case ::vfx::ShapeType::Torus:
+        {
+            // Direction points outward from tube center
+            // Find the nearest point on the torus ring (center of tube at that angle)
+            glm::vec3 radial = glm::vec3(position.x, 0.0f, position.z);
+            float radialLen = glm::length(radial);
+            if (radialLen > 0.001f)
+            {
+                glm::vec3 ringPoint = (radial / radialLen) * shape.dimensions.x; // majorRadius
+                glm::vec3 tubeDir = position - ringPoint;
+                float tubeLen = glm::length(tubeDir);
+                if (tubeLen > 0.001f)
+                {
+                    return tubeDir / tubeLen;
+                }
+            }
             return glm::vec3(0.0f, 1.0f, 0.0f);
+        }
 
         case ::vfx::ShapeType::Point:
         default:

@@ -12,7 +12,7 @@ namespace vfx
         Sphere,
         Cone,
         Box,
-        Circle
+        Torus
     };
 
     enum class EmitFrom : uint8_t
@@ -31,7 +31,7 @@ namespace vfx
         // Sphere: x = radius
         // Cone:   x = baseRadius, y = height, z = angle (radians)
         // Box:    xyz = halfExtents
-        // Circle: x = radius, y = arc (radians)
+        // Torus:  x = majorRadius (ring radius), y = minorRadius (tube radius)
         glm::vec4 dimensions{0.0f, 0.0f, 0.0f, 0.0f};
     };
 
@@ -44,8 +44,8 @@ namespace vfx
         inline constexpr float BOX_HALF_EXTENT_X = 0.5f;
         inline constexpr float BOX_HALF_EXTENT_Y = 0.5f;
         inline constexpr float BOX_HALF_EXTENT_Z = 0.5f;
-        inline constexpr float CIRCLE_RADIUS = 1.0f;
-        inline constexpr float CIRCLE_ARC = 6.28318530718f;
+        inline constexpr float TORUS_MAJOR_RADIUS = 1.0f;
+        inline constexpr float TORUS_MINOR_RADIUS = 0.25f;
     }
 
     inline glm::vec4 getDefaultDimensions(ShapeType type)
@@ -60,8 +60,8 @@ namespace vfx
             return glm::vec4(ShapeDefaults::CONE_BASE_RADIUS, ShapeDefaults::CONE_HEIGHT, ShapeDefaults::CONE_ANGLE, 0.0f);
         case ShapeType::Box:
             return glm::vec4(ShapeDefaults::BOX_HALF_EXTENT_X, ShapeDefaults::BOX_HALF_EXTENT_Y, ShapeDefaults::BOX_HALF_EXTENT_Z, 0.0f);
-        case ShapeType::Circle:
-            return glm::vec4(ShapeDefaults::CIRCLE_RADIUS, ShapeDefaults::CIRCLE_ARC, 0.0f, 0.0f);
+        case ShapeType::Torus:
+            return glm::vec4(ShapeDefaults::TORUS_MAJOR_RADIUS, ShapeDefaults::TORUS_MINOR_RADIUS, 0.0f, 0.0f);
         default:
             return glm::vec4(0.0f);
         }
@@ -75,7 +75,7 @@ namespace vfx
         case ShapeType::Sphere: return "Sphere";
         case ShapeType::Cone:   return "Cone";
         case ShapeType::Box:    return "Box";
-        case ShapeType::Circle: return "Circle";
+        case ShapeType::Torus: return "Torus";
         default:                return "Point";
         }
     }
@@ -85,7 +85,7 @@ namespace vfx
         if (str == "Sphere") return ShapeType::Sphere;
         if (str == "Cone")   return ShapeType::Cone;
         if (str == "Box")    return ShapeType::Box;
-        if (str == "Circle") return ShapeType::Circle;
+        if (str == "Torus") return ShapeType::Torus;
         return ShapeType::Point;
     }
 
