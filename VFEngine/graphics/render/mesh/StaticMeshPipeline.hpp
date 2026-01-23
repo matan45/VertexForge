@@ -3,6 +3,7 @@
 #include "MeshTypes.hpp"
 #include "../ibl/IBLTypes.hpp"
 #include "material/MaterialTypes.hpp"
+#include "material/MaterialManager.hpp"
 #include <array>
 #include <memory>
 #include <mutex>
@@ -85,6 +86,9 @@ namespace render::mesh
         mutable float currentTime{0.0f};
 
         std::unique_ptr<MaterialCacheManager> materialCacheManager;
+
+        // Callback ID for MaterialManager change notifications
+        material::CallbackId materialChangeCallbackId = 0;
 
         // Prepare textures for frame rendering
         void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;

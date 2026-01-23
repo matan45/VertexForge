@@ -40,7 +40,7 @@ namespace render::mesh
         materialCacheManager->setTextureCache(textureCache.get());
 
         // Register callback to invalidate material cache when materials change
-        material::MaterialManager::instance().registerChangeCallback(
+        materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
             [this](const std::string& materialPath) {
                 if (materialCacheManager) {
                     materialCacheManager->invalidate(materialPath);
@@ -48,7 +48,13 @@ namespace render::mesh
             });
     }
 
-    StaticMeshPipeline::~StaticMeshPipeline() = default;
+    StaticMeshPipeline::~StaticMeshPipeline()
+    {
+        // Unregister the material change callback to prevent dangling pointer access
+        if (materialChangeCallbackId != 0) {
+            material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+        }
+    }
 
     void StaticMeshPipeline::init(const ibl::ImageData& irradianceMap,
                                   const ibl::ImageData& prefilterMap,

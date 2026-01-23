@@ -65,9 +65,16 @@ namespace material {
         return material;
     }
 
-    void MaterialManager::registerChangeCallback(MaterialChangedCallback callback) {
+    CallbackId MaterialManager::registerChangeCallback(MaterialChangedCallback callback) {
         std::lock_guard<std::mutex> lock(callbackMutex);
-        changeCallbacks.push_back(std::move(callback));
+        CallbackId id = nextCallbackId++;
+        changeCallbacks[id] = std::move(callback);
+        return id;
+    }
+
+    void MaterialManager::unregisterChangeCallback(CallbackId id) {
+        std::lock_guard<std::mutex> lock(callbackMutex);
+        changeCallbacks.erase(id);
     }
 
     void MaterialManager::clearCallbacks() {
@@ -83,13 +90,13 @@ namespace material {
     }
 
     void MaterialManager::notifyMaterialChanged(const std::string& path) {
-        std::vector<MaterialChangedCallback> callbacks;
+        std::unordered_map<CallbackId, MaterialChangedCallback> callbacksCopy;
         {
             std::lock_guard<std::mutex> lock(callbackMutex);
-            callbacks = changeCallbacks;
+            callbacksCopy = changeCallbacks;
         }
 
-        for (const auto& callback : callbacks) {
+        for (const auto& [id, callback] : callbacksCopy) {
             callback(path);
         }
     }
