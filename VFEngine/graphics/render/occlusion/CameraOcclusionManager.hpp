@@ -6,7 +6,7 @@
 #include <memory>
 #include <cstdint>
 #include <unordered_map>
-#include "../../../utilities/types/CameraTypes.hpp"
+#include "types/CameraTypes.hpp"
 
 namespace core
 {

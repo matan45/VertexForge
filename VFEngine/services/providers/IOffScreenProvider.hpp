@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
-#include "../../utilities/types/CameraTypes.hpp"
+#include "types/CameraTypes.hpp"
 
 namespace services {
 

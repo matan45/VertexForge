@@ -6,7 +6,7 @@
 #include "../core/Utilities.hpp"
 #include "../core/RenderManager.hpp"
 #include "../render/RenderPassHandler.hpp"
-#include "../../utilities/types/CameraTypes.hpp"
+#include "types/CameraTypes.hpp"
 #include <imgui_impl_vulkan.h>
 
 namespace render
