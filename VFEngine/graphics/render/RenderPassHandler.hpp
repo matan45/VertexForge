@@ -1,10 +1,12 @@
 #pragma once
 #include "../core/OffScreen.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
+#include "material/MaterialManager.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 
 namespace services
 {
@@ -68,6 +70,7 @@ namespace render
         bool meshPipelineInitialized = false;
         mutable std::vector<mesh::MeshRenderData> currentMeshDrawList;
         mutable std::vector<mesh::MeshRenderData> customShaderMeshDrawList; // Meshes requiring custom material shaders
+        mutable std::vector<mesh::MeshRenderData> combinedMeshDrawList;     // Pre-combined list for debug/CPU fallback
         const math::Frustum* currentFrustum = nullptr;
 
         // Billboard rendering state
@@ -88,6 +91,10 @@ namespace render
 
         // VFX runtime provider (for scene-integrated VFX rendering)
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
+
+        // Cache for custom shader requirement check (avoids expensive file I/O and graph traversal every frame)
+        mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
+        material::CallbackId materialChangeCallbackId{};
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -172,6 +179,10 @@ namespace render
         void updateGPUDrivenHiZ() const;
 
         // Check if material requires custom shader rendering (has connected Time node)
-        static bool materialRequiresCustomShader(const std::string& materialPath);
+        // Uses cache to avoid expensive file I/O and graph traversal every frame
+        bool materialRequiresCustomShader(const std::string& materialPath) const;
+
+        // Uncached implementation for actual computation
+        static bool computeMaterialRequiresCustomShader(const std::string& materialPath);
     };
 }

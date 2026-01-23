@@ -67,7 +67,7 @@ namespace material {
 
     CallbackId MaterialManager::registerChangeCallback(MaterialChangedCallback callback) {
         std::lock_guard<std::mutex> lock(callbackMutex);
-        CallbackId id = nextCallbackId++;
+        CallbackId id{nextCallbackIdValue++};
         changeCallbacks[id] = std::move(callback);
         return id;
     }

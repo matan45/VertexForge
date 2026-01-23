@@ -51,7 +51,7 @@ namespace render::mesh
     StaticMeshPipeline::~StaticMeshPipeline()
     {
         // Unregister the material change callback to prevent dangling pointer access
-        if (materialChangeCallbackId != 0) {
+        if (materialChangeCallbackId) {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
         }
     }

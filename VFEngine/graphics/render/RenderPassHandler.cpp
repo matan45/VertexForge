@@ -36,9 +36,33 @@ namespace render
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
     {
+        // Register callback to invalidate custom shader cache when materials change
+        materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
+            [this](const std::string& materialPath) {
+                // Invalidate the specific material from cache
+                customShaderRequirementCache.erase(materialPath);
+
+                // Also invalidate any instances that might use this material as parent
+                // by clearing entries that could be affected
+                // Note: For instances, we can't easily know which ones use this parent
+                // without iterating, so we just clear all instance entries when a .vfMat changes
+                if (!material::isInstanceFile(materialPath)) {
+                    // A parent material changed - clear all instance cache entries
+                    // since any of them might reference this parent
+                    std::erase_if(customShaderRequirementCache, [](const auto& pair) {
+                        return material::isInstanceFile(pair.first);
+                    });
+                }
+            });
     }
 
-    RenderPassHandler::~RenderPassHandler() = default;
+    RenderPassHandler::~RenderPassHandler()
+    {
+        // Unregister the material change callback to prevent dangling pointer access
+        if (materialChangeCallbackId) {
+            material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+        }
+    }
 
     void RenderPassHandler::init()
     {
@@ -236,6 +260,14 @@ namespace render
             }
             debugRenderer->setHasBoundingBoxes(hasBoundingBoxes);
         }
+
+        // Build combined list once (avoids per-frame allocation in render loop)
+        combinedMeshDrawList.clear();
+        combinedMeshDrawList.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
+        combinedMeshDrawList.insert(combinedMeshDrawList.end(),
+                                    currentMeshDrawList.begin(), currentMeshDrawList.end());
+        combinedMeshDrawList.insert(combinedMeshDrawList.end(),
+                                    customShaderMeshDrawList.begin(), customShaderMeshDrawList.end());
     }
 
     void RenderPassHandler::initBillboardPipeline()
@@ -569,13 +601,8 @@ namespace render
 
                 if (debugRendererPtr)
                 {
-                    // Combine both lists for debug rendering
-                    std::vector<mesh::MeshRenderData> allMeshes;
-                    allMeshes.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
-                    allMeshes.insert(allMeshes.end(), currentMeshDrawList.begin(), currentMeshDrawList.end());
-                    allMeshes.insert(allMeshes.end(), customShaderMeshDrawList.begin(), customShaderMeshDrawList.end());
-
-                    debugRendererPtr->render(commandBuffer, allMeshes, currentView, currentProjection,
+                    // Use pre-built combined list (built in setMeshDrawList, avoids per-frame allocation)
+                    debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
                                              [this](const std::string& meshId)
                                              {
                                                  return meshPipeline->getMesh(meshId);
@@ -593,13 +620,8 @@ namespace render
             else if (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems)
             {
                 // CPU fallback path (used when GPU-driven rendering is not available)
-                // Combine both lists for rendering
-                std::vector<mesh::MeshRenderData> allMeshes;
-                allMeshes.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
-                allMeshes.insert(allMeshes.end(), currentMeshDrawList.begin(), currentMeshDrawList.end());
-                allMeshes.insert(allMeshes.end(), customShaderMeshDrawList.begin(), customShaderMeshDrawList.end());
-
-                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, allMeshes, currentFrustum,
+                // Use pre-built combined list (built in setMeshDrawList, avoids per-frame allocation)
+                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, combinedMeshDrawList, currentFrustum,
                                                   debugRendererPtr, currentView, currentProjection);
 
                 // VFX needs separate render pass in CPU fallback (recordCommandBuffer closes its pass)
@@ -638,7 +660,27 @@ namespace render
         }
     }
 
-    bool RenderPassHandler::materialRequiresCustomShader(const std::string& materialPath)
+    bool RenderPassHandler::materialRequiresCustomShader(const std::string& materialPath) const
+    {
+        if (materialPath.empty())
+        {
+            return false;
+        }
+
+        // Check cache first
+        auto it = customShaderRequirementCache.find(materialPath);
+        if (it != customShaderRequirementCache.end())
+        {
+            return it->second;
+        }
+
+        // Cache miss - compute and store result
+        bool result = computeMaterialRequiresCustomShader(materialPath);
+        customShaderRequirementCache[materialPath] = result;
+        return result;
+    }
+
+    bool RenderPassHandler::computeMaterialRequiresCustomShader(const std::string& materialPath)
     {
         if (materialPath.empty())
         {
@@ -709,12 +751,22 @@ namespace render
                     {
                         if (node.id == link.targetNodeId)
                         {
-                            // Time is connected to something - needs custom shader
-                            if (node.type == material::NodeType::PBROutput ||
-                                node.type == material::NodeType::TextureSample)
+                            // Check if Time reaches a node/pin that requires custom shader
+                            if (node.type == material::NodeType::PBROutput)
                             {
+                                // Any time-varying PBR parameter needs custom shader
+                                // (GPU-driven uses static material parameters)
                                 return true;
                             }
+
+                            if (node.type == material::NodeType::TextureSample &&
+                                link.targetPin == "UV")
+                            {
+                                // Time connected to UV input = UV animation
+                                return true;
+                            }
+
+                            // Continue BFS through other nodes
                             nodesToVisit.push(link.targetNodeId);
                             break;
                         }

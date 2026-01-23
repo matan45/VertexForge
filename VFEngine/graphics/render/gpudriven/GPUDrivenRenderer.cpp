@@ -14,8 +14,6 @@
 #include "print/Logger.hpp"
 #include <array>
 #include <unordered_map>
-#include <unordered_set>
-#include <queue>
 #include <memory>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
@@ -262,95 +260,14 @@ namespace render::gpudriven
             };
         }
 
-        ShaderGroupResolver shaderGroupResolver = [](const std::string& materialPath) -> uint32_t
+        // Shader group resolver - returns 0 for all materials in GPU-driven path
+        // Note: Materials requiring Time-based animations (UV scrolling, emission pulsing)
+        // are filtered out by RenderPassHandler::materialRequiresCustomShader() before
+        // reaching GPU-driven rendering. They use the custom shader CPU path instead.
+        // This resolver exists for future extensibility (e.g., other shader group types).
+        ShaderGroupResolver shaderGroupResolver = [](const std::string& /*materialPath*/) -> uint32_t
         {
-            if (materialPath.empty())
-            {
-                return 0;
-            }
-
-            std::string parentPath = materialPath;
-
-            if (material::isInstanceFile(materialPath))
-            {
-                auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-                if (instanceData && !instanceData->parentMaterialPath.empty())
-                {
-                    parentPath = instanceData->parentMaterialPath;
-                }
-                else
-                {
-                    return 0;
-                }
-            }
-
-            auto matData = resource::ResourceManager::loadMaterial(parentPath);
-            if (!matData)
-            {
-                return 0;
-            }
-
-            uint32_t timeNodeId = 0;
-            bool hasTimeNode = false;
-            for (const auto& node : matData->graph.nodes)
-            {
-                if (node.type == material::NodeType::Time)
-                {
-                    timeNodeId = node.id;
-                    hasTimeNode = true;
-                    break;
-                }
-            }
-
-            if (!hasTimeNode)
-            {
-                return 0;
-            }
-
-            std::unordered_set<uint32_t> visitedNodes;
-            std::queue<uint32_t> nodesToVisit;
-            nodesToVisit.push(timeNodeId);
-
-            while (!nodesToVisit.empty())
-            {
-                uint32_t currentNodeId = nodesToVisit.front();
-                nodesToVisit.pop();
-
-                if (visitedNodes.contains(currentNodeId))
-                {
-                    continue;
-                }
-                visitedNodes.insert(currentNodeId);
-
-                for (const auto& link : matData->graph.links)
-                {
-                    if (link.sourceNodeId == currentNodeId)
-                    {
-                        for (const auto& node : matData->graph.nodes)
-                        {
-                            if (node.id == link.targetNodeId)
-                            {
-                                if (node.type == material::NodeType::PBROutput &&
-                                    link.targetPin == "EmissionStrength")
-                                {
-                                    return 2; // Emission animation
-                                }
-
-                                if (node.type == material::NodeType::TextureSample &&
-                                    link.targetPin == "UV")
-                                {
-                                    return 1;
-                                }
-                                nodesToVisit.push(link.targetNodeId);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Time node exists but isn't connected to anything that uses it
-            return 0;
+            return 0; // Standard PBR shader group
         };
 
         BoneOffsetResolver boneOffsetResolver = nullptr;

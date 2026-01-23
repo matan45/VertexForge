@@ -88,7 +88,7 @@ namespace render::mesh
         std::unique_ptr<MaterialCacheManager> materialCacheManager;
 
         // Callback ID for MaterialManager change notifications
-        material::CallbackId materialChangeCallbackId = 0;
+        material::CallbackId materialChangeCallbackId{};
 
         // Prepare textures for frame rendering
         void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
