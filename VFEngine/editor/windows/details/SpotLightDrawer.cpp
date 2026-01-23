@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include <imgui.h>
+#include <algorithm>
 
 namespace windows::details {
 
@@ -52,12 +53,31 @@ namespace windows::details {
 
             changed |= ImGui::ColorEdit3("Color", &light.color.x);
             changed |= ImGui::DragFloat("Intensity", &light.intensity, 0.01f, 0.0f, 100.0f);
-            changed |= ImGui::DragFloat("Inner Angle", &light.innerAngle, 0.5f, 0.0f, light.outerAngle);
-            changed |= ImGui::DragFloat("Outer Angle", &light.outerAngle, 0.5f, light.innerAngle, 90.0f);
+            changed |= ImGui::DragFloat("Inner Angle", &light.innerAngle, 0.5f, 0.0f, 89.0f);
+            changed |= ImGui::DragFloat("Outer Angle", &light.outerAngle, 0.5f, 1.0f, 90.0f);
             changed |= ImGui::DragFloat("Range", &light.range, 0.1f, 0.1f, 1000.0f);
 
             if (changed)
             {
+                // Clamp values to valid ranges
+                light.color = glm::clamp(light.color, glm::vec3(0.0f), glm::vec3(1.0f));
+                light.intensity = std::max(0.0f, light.intensity);
+                light.range = std::max(0.1f, light.range);
+
+                // Ensure angles are in valid range
+                light.innerAngle = std::clamp(light.innerAngle, 0.0f, 89.0f);
+                light.outerAngle = std::clamp(light.outerAngle, 1.0f, 90.0f);
+
+                // Ensure inner < outer (with minimum 1 degree gap)
+                if (light.innerAngle >= light.outerAngle)
+                {
+                    light.outerAngle = std::min(light.innerAngle + 1.0f, 90.0f);
+                    if (light.innerAngle >= light.outerAngle)
+                    {
+                        light.innerAngle = light.outerAngle - 1.0f;
+                    }
+                }
+
                 events::scene::SetSpotLightDataCommand cmd;
                 cmd.entity = handle;
                 cmd.lightData = light;

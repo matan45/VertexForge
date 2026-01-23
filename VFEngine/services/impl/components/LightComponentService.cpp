@@ -9,6 +9,33 @@
 
 namespace services {
 
+    namespace {
+        // Validation helper for color values (clamps to valid range)
+        glm::vec3 validateColor(const glm::vec3& color) {
+            return glm::clamp(color, glm::vec3(0.0f), glm::vec3(1.0f));
+        }
+
+        // Validation helper for intensity (must be non-negative)
+        bool isValidIntensity(float intensity) {
+            return intensity >= 0.0f;
+        }
+
+        // Validation helper for radius/range (must be positive)
+        bool isValidRadius(float radius) {
+            return radius > 0.0f;
+        }
+
+        // Validation helper for spot light angles
+        bool isValidSpotAngles(float innerAngle, float outerAngle) {
+            // Angles must be in valid range (0-90 degrees for half-angle)
+            if (innerAngle < 0.0f || innerAngle > 90.0f) return false;
+            if (outerAngle < 0.0f || outerAngle > 90.0f) return false;
+            // Inner angle must be less than outer angle
+            if (innerAngle >= outerAngle) return false;
+            return true;
+        }
+    }
+
     LightComponentService::LightComponentService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
         : sceneGraph(std::move(sceneGraph)) {}
 
@@ -76,6 +103,11 @@ namespace services {
     }
 
     bool LightComponentService::setDirectionalLightData(EntityHandle entity, const DirectionalLightData& lightData) {
+        // Validate intensity
+        if (!isValidIntensity(lightData.intensity)) {
+            return false;
+        }
+
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return false;
@@ -87,7 +119,7 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::DirectionalLightComponent>();
-        comp.color = lightData.color;
+        comp.color = validateColor(lightData.color);
         comp.intensity = lightData.intensity;
         return true;
     }
@@ -157,6 +189,14 @@ namespace services {
     }
 
     bool LightComponentService::setPointLightData(EntityHandle entity, const PointLightData& lightData) {
+        // Validate intensity and radius
+        if (!isValidIntensity(lightData.intensity)) {
+            return false;
+        }
+        if (!isValidRadius(lightData.radius)) {
+            return false;
+        }
+
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return false;
@@ -168,7 +208,7 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::PointLightComponent>();
-        comp.color = lightData.color;
+        comp.color = validateColor(lightData.color);
         comp.intensity = lightData.intensity;
         comp.radius = lightData.radius;
         return true;
@@ -241,6 +281,17 @@ namespace services {
     }
 
     bool LightComponentService::setSpotLightData(EntityHandle entity, const SpotLightData& lightData) {
+        // Validate intensity, range, and angles
+        if (!isValidIntensity(lightData.intensity)) {
+            return false;
+        }
+        if (!isValidRadius(lightData.range)) {
+            return false;
+        }
+        if (!isValidSpotAngles(lightData.innerAngle, lightData.outerAngle)) {
+            return false;
+        }
+
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return false;
@@ -252,7 +303,7 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::SpotLightComponent>();
-        comp.color = lightData.color;
+        comp.color = validateColor(lightData.color);
         comp.intensity = lightData.intensity;
         comp.innerAngle = lightData.innerAngle;
         comp.outerAngle = lightData.outerAngle;
