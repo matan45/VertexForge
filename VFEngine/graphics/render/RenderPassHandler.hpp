@@ -68,26 +68,26 @@ namespace render
 
         // Mesh rendering state
         bool meshPipelineInitialized = false;
-        mutable std::vector<mesh::MeshRenderData> currentMeshDrawList;
-        mutable std::vector<mesh::MeshRenderData> customShaderMeshDrawList; // Meshes requiring custom material shaders
-        mutable std::vector<mesh::MeshRenderData> combinedMeshDrawList;     // Pre-combined list for debug/CPU fallback
+        std::vector<mesh::MeshRenderData> currentMeshDrawList;
+        std::vector<mesh::MeshRenderData> customShaderMeshDrawList; // Meshes requiring custom material shaders
+        std::vector<mesh::MeshRenderData> combinedMeshDrawList;     // Pre-combined list for debug/CPU fallback
         const math::Frustum* currentFrustum = nullptr;
 
         // Billboard rendering state
         bool billboardPipelineInitialized = false;
-        mutable std::vector<billboard::BillboardRenderData> currentBillboardDrawList;
+        std::vector<billboard::BillboardRenderData> currentBillboardDrawList;
 
         // Debug rendering state
         bool debugRendererInitialized = false;
-        mutable glm::mat4 currentView{1.0f};
-        mutable glm::mat4 currentProjection{1.0f};
+        glm::mat4 currentView{1.0f};
+        glm::mat4 currentProjection{1.0f};
 
         // GPU-driven rendering state
         bool gpuDrivenRendererInitialized = false;
-        mutable glm::vec3 currentCameraPosition{0.0f};
-        mutable float currentNearPlane = 0.1f;
-        mutable float currentFarPlane = 1000.0f;
-        mutable float currentTime = 0.0f;
+        glm::vec3 currentCameraPosition{0.0f};
+        float currentNearPlane = 0.1f;
+        float currentFarPlane = 1000.0f;
+        float currentTime = 0.0f;
 
         // VFX runtime provider (for scene-integrated VFX rendering)
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;

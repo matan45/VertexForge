@@ -518,8 +518,8 @@ namespace controllers
             }
         }
 
-        // Always update bindings when using custom shader (after compile/save),
-        // when new textures were loaded, or when any texture slot has a path
+        // Mark descriptors as needing update (deferred to render time for safe synchronization)
+        // This avoids blocking the entire GPU with waitIdle()
         bool hasAnyTexture = false;
         for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES && !hasAnyTexture; ++i)
         {
@@ -530,37 +530,46 @@ namespace controllers
 
         if (shouldUpdateBindings)
         {
-            auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
-            if (meshPipeline)
-            {
-                // Wait for GPU to finish any in-flight operations before updating descriptor sets
-                // This prevents crashes when descriptor sets are being used by a command buffer
-                device.getLogicalDevice().waitIdle();
-
-                std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES> imageViews;
-                std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES> samplers;
-
-                for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
-                {
-                    if (!textureManager->textureSlots[i].empty())
-                    {
-                        auto it = textureManager->textureCache.find(textureManager->textureSlots[i]);
-                        if (it != textureManager->textureCache.end() && it->second.valid)
-                        {
-                            imageViews[i] = it->second.imageView;
-                            samplers[i] = it->second.sampler;
-                            continue;
-                        }
-                    }
-                    // Use default texture for empty/invalid slots
-                    imageViews[i] = textureManager->defaultTexture.imageView;
-                    samplers[i] = textureManager->defaultTexture.sampler;
-                }
-
-                meshPipeline->updatePreviewTextureDescriptors(imageViews, samplers);
-                textureManager->texturesNeedUpdate = false;
-            }
+            pendingDescriptorUpdate = true;
         }
+    }
+
+    void MaterialPreviewController::updateTextureDescriptorsIfPending()
+    {
+        if (!pendingDescriptorUpdate || !textureManager->defaultTexture.valid)
+        {
+            return;
+        }
+
+        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        if (!meshPipeline)
+        {
+            return;
+        }
+
+        std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES> imageViews;
+        std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES> samplers;
+
+        for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
+        {
+            if (!textureManager->textureSlots[i].empty())
+            {
+                auto it = textureManager->textureCache.find(textureManager->textureSlots[i]);
+                if (it != textureManager->textureCache.end() && it->second.valid)
+                {
+                    imageViews[i] = it->second.imageView;
+                    samplers[i] = it->second.sampler;
+                    continue;
+                }
+            }
+            // Use default texture for empty/invalid slots
+            imageViews[i] = textureManager->defaultTexture.imageView;
+            samplers[i] = textureManager->defaultTexture.sampler;
+        }
+
+        meshPipeline->updatePreviewTextureDescriptors(imageViews, samplers);
+        textureManager->texturesNeedUpdate = false;
+        pendingDescriptorUpdate = false;
     }
 
     void MaterialPreviewController::cleanUp()
@@ -683,8 +692,12 @@ namespace controllers
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
 
-        // Render and return descriptor set
-        vk::DescriptorSet descriptorSet = offScreen->render();
+        // Render with pre-render callback for safe descriptor updates
+        // The callback is invoked after the frame fence wait, before command recording
+        vk::DescriptorSet descriptorSet = offScreen->render([this]()
+        {
+            updateTextureDescriptorsIfPending();
+        });
         return static_cast<void*>(descriptorSet);
     }
 

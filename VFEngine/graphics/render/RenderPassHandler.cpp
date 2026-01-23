@@ -36,24 +36,9 @@ namespace render
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
     {
-        // Register callback to invalidate custom shader cache when materials change
-        materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
-            [this](const std::string& materialPath) {
-                // Invalidate the specific material from cache
-                customShaderRequirementCache.erase(materialPath);
-
-                // Also invalidate any instances that might use this material as parent
-                // by clearing entries that could be affected
-                // Note: For instances, we can't easily know which ones use this parent
-                // without iterating, so we just clear all instance entries when a .vfMat changes
-                if (!material::isInstanceFile(materialPath)) {
-                    // A parent material changed - clear all instance cache entries
-                    // since any of them might reference this parent
-                    std::erase_if(customShaderRequirementCache, [](const auto& pair) {
-                        return material::isInstanceFile(pair.first);
-                    });
-                }
-            });
+        // Note: Callback registration moved to init() for exception safety.
+        // If constructor body threw after registering callback, destructor wouldn't
+        // be called and the callback would leak.
     }
 
     RenderPassHandler::~RenderPassHandler()
@@ -67,6 +52,29 @@ namespace render
     void RenderPassHandler::init()
     {
         clearColor->init();
+
+        // Register callback to invalidate custom shader cache when materials change
+        // Done in init() rather than constructor for exception safety - if init() fails,
+        // destructor will still be called and properly unregister the callback
+        if (!materialChangeCallbackId) {
+            materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
+                [this](const std::string& materialPath) {
+                    // Invalidate the specific material from cache
+                    customShaderRequirementCache.erase(materialPath);
+
+                    // Also invalidate any instances that might use this material as parent
+                    // by clearing entries that could be affected
+                    // Note: For instances, we can't easily know which ones use this parent
+                    // without iterating, so we just clear all instance entries when a .vfMat changes
+                    if (!material::isInstanceFile(materialPath)) {
+                        // A parent material changed - clear all instance cache entries
+                        // since any of them might reference this parent
+                        std::erase_if(customShaderRequirementCache, [](const auto& pair) {
+                            return material::isInstanceFile(pair.first);
+                        });
+                    }
+                });
+        }
     }
 
     void RenderPassHandler::initMeshPipeline(bool enableGPUDriven)
@@ -204,13 +212,43 @@ namespace render
         currentMeshDrawList.clear();
         customShaderMeshDrawList.clear();
 
+        // Collect unique material paths first to avoid redundant cache lookups
+        // when the same materials appear across many meshes
+        std::unordered_set<std::string> uniqueMaterials;
+        for (const auto& mesh : meshes)
+        {
+            if (!mesh.defaultMaterialPath.empty())
+            {
+                uniqueMaterials.insert(mesh.defaultMaterialPath);
+            }
+            for (const auto& [submeshName, matInfo] : mesh.submeshMaterials)
+            {
+                if (!matInfo.materialPath.empty())
+                {
+                    uniqueMaterials.insert(matInfo.materialPath);
+                }
+            }
+        }
+
+        // Build local lookup for materials requiring custom shader
+        // This does cache lookups only once per unique material
+        std::unordered_set<std::string> customShaderMaterials;
+        for (const auto& matPath : uniqueMaterials)
+        {
+            if (materialRequiresCustomShader(matPath))
+            {
+                customShaderMaterials.insert(matPath);
+            }
+        }
+
         // Split meshes: those with connected Time nodes go to custom shader list
         for (auto& mesh : meshes)
         {
             bool needsCustomShader = false;
 
             // Check default material
-            if (!mesh.defaultMaterialPath.empty() && materialRequiresCustomShader(mesh.defaultMaterialPath))
+            if (!mesh.defaultMaterialPath.empty() &&
+                customShaderMaterials.contains(mesh.defaultMaterialPath))
             {
                 needsCustomShader = true;
             }
@@ -220,7 +258,8 @@ namespace render
             {
                 for (const auto& [submeshName, matInfo] : mesh.submeshMaterials)
                 {
-                    if (!matInfo.materialPath.empty() && materialRequiresCustomShader(matInfo.materialPath))
+                    if (!matInfo.materialPath.empty() &&
+                        customShaderMaterials.contains(matInfo.materialPath))
                     {
                         needsCustomShader = true;
                         break;

@@ -304,6 +304,23 @@ namespace material
             }
 
             file << j.dump(4); // Pretty print with 4-space indent
+
+            // Flush to OS buffers before closing to avoid race conditions
+            // where readers might see incomplete/stale data
+            file.flush();
+            if (!file.good())
+            {
+                vfLogError("Failed to flush material instance file: {}", path);
+                return false;
+            }
+
+            file.close();
+            if (file.fail())
+            {
+                vfLogError("Failed to close material instance file: {}", path);
+                return false;
+            }
+
             vfLogInfo("Saved material instance: {} to {}", instance.name, path);
             return true;
         }

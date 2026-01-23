@@ -90,6 +90,9 @@ namespace render::mesh
         // Callback ID for MaterialManager change notifications
         material::CallbackId materialChangeCallbackId{};
 
+        // Register material change callback (called from init methods for exception safety)
+        void registerMaterialChangeCallback();
+
         // Prepare textures for frame rendering
         void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
 

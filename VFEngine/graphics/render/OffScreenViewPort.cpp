@@ -48,7 +48,7 @@ namespace render
                                    swapChain.getSwapchainDepthStencilFormat());
     }
 
-    vk::DescriptorSet OffScreenViewPort::render()
+    vk::DescriptorSet OffScreenViewPort::render(const PreRenderCallback& preRenderCallback)
     {
         uint32_t imageIndex = core::RenderManager::getImageIndex();
 
@@ -57,6 +57,12 @@ namespace render
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result; // Suppress unused warning
+
+        // Safe point for descriptor set updates (previous frame completed)
+        if (preRenderCallback)
+        {
+            preRenderCallback();
+        }
 
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();

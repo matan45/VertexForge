@@ -39,13 +39,9 @@ namespace render::mesh
         materialCacheManager->setShaderCache(materialShaderCache.get());
         materialCacheManager->setTextureCache(textureCache.get());
 
-        // Register callback to invalidate material cache when materials change
-        materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
-            [this](const std::string& materialPath) {
-                if (materialCacheManager) {
-                    materialCacheManager->invalidate(materialPath);
-                }
-            });
+        // Note: Callback registration moved to init methods for exception safety.
+        // If constructor threw after registering callback, destructor wouldn't be
+        // called and the callback would leak.
     }
 
     StaticMeshPipeline::~StaticMeshPipeline()
@@ -53,6 +49,20 @@ namespace render::mesh
         // Unregister the material change callback to prevent dangling pointer access
         if (materialChangeCallbackId) {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+        }
+    }
+
+    void StaticMeshPipeline::registerMaterialChangeCallback()
+    {
+        // Register callback to invalidate material cache when materials change
+        // Done in init rather than constructor for exception safety
+        if (!materialChangeCallbackId) {
+            materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
+                [this](const std::string& materialPath) {
+                    if (materialCacheManager) {
+                        materialCacheManager->invalidate(materialPath);
+                    }
+                });
         }
     }
 
@@ -73,6 +83,7 @@ namespace render::mesh
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
         initializeDefaultTextureDescriptors(); // Initialize set 1 with defaults
         createFramebuffers();
+        registerMaterialChangeCallback();
     }
 
     void StaticMeshPipeline::initWithDefaults()
@@ -98,6 +109,7 @@ namespace render::mesh
         initializeDefaultTextureDescriptors(); // Initialize set 1 with defaults
         createFramebuffers();
         usingDefaultTextures = true;
+        registerMaterialChangeCallback();
     }
 
     void StaticMeshPipeline::loadShaders()
