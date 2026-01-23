@@ -23,11 +23,14 @@ namespace components
     struct RigidBodyComponent;
     struct AnimatorComponent;
     struct VFXComponent;
+    struct DirectionalLightComponent;
+    struct PointLightComponent;
+    struct SpotLightComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
-                                               VFXComponent>;
+                                               VFXComponent, DirectionalLightComponent, PointLightComponent, SpotLightComponent>;
 
     struct WorldTransformComponent
     {
@@ -471,5 +474,31 @@ namespace components
         // Runtime state (managed by VFXSceneRenderer, not serialized)
         uint32_t runtimeInstanceId = 0;   // Internal ID for VFXSceneRenderer
         bool isPlaying = false;           // Current playback state
+    };
+
+    struct DirectionalLightComponent
+    {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};  // RGB color
+        float intensity{1.0f};              // Light strength multiplier
+        // Direction is computed from TransformComponent rotation, not stored here
+    };
+
+    struct PointLightComponent
+    {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};  // RGB color
+        float intensity{1.0f};              // Light strength multiplier
+        float radius{10.0f};                // Attenuation radius
+        // Position is derived from WorldTransformComponent, not stored here
+    };
+
+    struct SpotLightComponent
+    {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};  // RGB color
+        float intensity{1.0f};              // Light strength multiplier
+        float innerAngle{30.0f};            // Inner cone angle in degrees
+        float outerAngle{45.0f};            // Outer cone angle in degrees
+        float range{20.0f};                 // Maximum distance
+        // Direction computed from TransformComponent rotation
+        // Position derived from WorldTransformComponent
     };
 }

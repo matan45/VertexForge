@@ -142,6 +142,7 @@
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
     <ClInclude Include="impl\components\CameraComponentService.hpp" />
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
+    <ClInclude Include="impl\components\LightComponentService.hpp" />
     <ClInclude Include="impl\components\MaterialComponentService.hpp" />
     <ClInclude Include="impl\components\MeshComponentService.hpp" />
     <ClInclude Include="impl\components\PhysicsComponentService.hpp" />
@@ -201,6 +202,7 @@
     <ClCompile Include="impl\components\AudioComponentService.cpp" />
     <ClCompile Include="impl\components\CameraComponentService.cpp" />
     <ClCompile Include="impl\components\IBLComponentService.cpp" />
+    <ClCompile Include="impl\components\LightComponentService.cpp" />
     <ClCompile Include="impl\components\MaterialComponentService.cpp" />
     <ClCompile Include="impl\components\MeshComponentService.cpp" />
     <ClCompile Include="impl\components\PhysicsComponentService.cpp" />

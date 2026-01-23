@@ -24,6 +24,7 @@ namespace services
     class PhysicsComponentService;
     class AnimatorComponentService;
     class VFXComponentService;
+    class LightComponentService;
 
     // New extracted services
     class HierarchyService;
@@ -46,6 +47,7 @@ namespace services
         std::unique_ptr<PhysicsComponentService> physicsService;
         std::unique_ptr<AnimatorComponentService> animatorService;
         std::unique_ptr<VFXComponentService> vfxService;
+        std::unique_ptr<LightComponentService> lightService;
 
         // New extracted services
         std::unique_ptr<HierarchyService> hierarchyService;

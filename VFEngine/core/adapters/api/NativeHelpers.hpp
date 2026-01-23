@@ -116,7 +116,9 @@ namespace core::api
         if (type == "WorldTransform") return services::ComponentTypeId::WorldTransform;
         if (type == "IBL") return services::ComponentTypeId::IBL;
         if (type == "Mesh") return services::ComponentTypeId::Mesh;
-        if (type == "Light") return services::ComponentTypeId::Light;
+        if (type == "DirectionalLight") return services::ComponentTypeId::DirectionalLight;
+        if (type == "PointLight") return services::ComponentTypeId::PointLight;
+        if (type == "SpotLight") return services::ComponentTypeId::SpotLight;
         if (type == "Material") return services::ComponentTypeId::Material;
         if (type == "Billboard") return services::ComponentTypeId::Billboard;
         if (type == "AudioSource2D") return services::ComponentTypeId::AudioSource2D;
@@ -142,7 +144,9 @@ namespace core::api
         case services::ComponentTypeId::WorldTransform: return "WorldTransform";
         case services::ComponentTypeId::IBL: return "IBL";
         case services::ComponentTypeId::Mesh: return "Mesh";
-        case services::ComponentTypeId::Light: return "Light";
+        case services::ComponentTypeId::DirectionalLight: return "DirectionalLight";
+        case services::ComponentTypeId::PointLight: return "PointLight";
+        case services::ComponentTypeId::SpotLight: return "SpotLight";
         case services::ComponentTypeId::Material: return "Material";
         case services::ComponentTypeId::Billboard: return "Billboard";
         case services::ComponentTypeId::AudioSource2D: return "AudioSource2D";

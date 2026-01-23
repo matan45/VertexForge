@@ -20,6 +20,11 @@ public class ComponentType {
     public static final string AUDIO_2D = "AudioSource2D";
     public static final string AUDIO_3D = "AudioSource3D";
 
+    // Light components
+    public static final string DIRECTIONAL_LIGHT = "DirectionalLight";
+    public static final string POINT_LIGHT = "PointLight";
+    public static final string SPOT_LIGHT = "SpotLight";
+
     // Editor/rendering components
     public static final string IBL = "IBL";
     public static final string BILLBOARD = "Billboard";
