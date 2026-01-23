@@ -658,7 +658,14 @@ namespace controllers::offscreen
             return;
         }
 
+        auto& registry = scene::EntityRegistry::getRegistry();
+        size_t estimatedCount =
+            registry.view<components::DirectionalLightComponent>().size() +
+            registry.view<components::PointLightComponent>().size() +
+            registry.view<components::SpotLightComponent>().size();
+
         std::vector<render::mesh::LightGizmoRenderData> lightGizmoDrawList;
+        lightGizmoDrawList.reserve(estimatedCount);
 
         collectDirectionalLightGizmos(lightGizmoDrawList);
         collectPointLightGizmos(lightGizmoDrawList);
