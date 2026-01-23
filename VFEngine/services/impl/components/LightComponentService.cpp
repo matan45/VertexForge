@@ -6,6 +6,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
+#include "../../events/LightCullingEvents.hpp"
 
 namespace services {
 
@@ -51,6 +52,14 @@ namespace services {
         if (!sceneEntity.hasComponent<components::DirectionalLightComponent>()) {
             sceneEntity.addComponent<components::DirectionalLightComponent>();
             autoAttachBillboard(entity);
+
+            // Publish notification for BVH update
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Directional;
+            notification.added = true;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -69,6 +78,14 @@ namespace services {
             if (!hasAnyLightComponent(entity)) {
                 autoDetachBillboard(entity);
             }
+
+            // Publish notification for BVH update
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Directional;
+            notification.added = false;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -123,6 +140,13 @@ namespace services {
         comp.color = validateColor(lightData.color);
         comp.intensity = lightData.intensity;
         comp.showGizmo = lightData.showGizmo;
+
+        // Publish notification for BVH update (directional lights have no bounds, but notify anyway)
+        events::lighting::LightDataChangedNotification notification;
+        notification.entity = entity;
+        notification.lightType = events::lighting::LightType::Directional;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
 
@@ -138,6 +162,14 @@ namespace services {
         if (!sceneEntity.hasComponent<components::PointLightComponent>()) {
             sceneEntity.addComponent<components::PointLightComponent>();
             autoAttachBillboard(entity);
+
+            // Publish notification for BVH update
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Point;
+            notification.added = true;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -156,6 +188,14 @@ namespace services {
             if (!hasAnyLightComponent(entity)) {
                 autoDetachBillboard(entity);
             }
+
+            // Publish notification for BVH update
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Point;
+            notification.added = false;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -215,6 +255,13 @@ namespace services {
         comp.intensity = lightData.intensity;
         comp.radius = lightData.radius;
         comp.showGizmo = lightData.showGizmo;
+
+        // Publish notification for BVH update (radius affects bounds)
+        events::lighting::LightDataChangedNotification notification;
+        notification.entity = entity;
+        notification.lightType = events::lighting::LightType::Point;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
 
@@ -230,6 +277,14 @@ namespace services {
         if (!sceneEntity.hasComponent<components::SpotLightComponent>()) {
             sceneEntity.addComponent<components::SpotLightComponent>();
             autoAttachBillboard(entity);
+
+            // Publish notification for BVH update
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Spot;
+            notification.added = true;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -248,6 +303,14 @@ namespace services {
             if (!hasAnyLightComponent(entity)) {
                 autoDetachBillboard(entity);
             }
+
+            // Publish notification for BVH update
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Spot;
+            notification.added = false;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -314,6 +377,13 @@ namespace services {
         comp.outerAngle = lightData.outerAngle;
         comp.range = lightData.range;
         comp.showGizmo = lightData.showGizmo;
+
+        // Publish notification for BVH update (range and angles affect bounds)
+        events::lighting::LightDataChangedNotification notification;
+        notification.entity = entity;
+        notification.lightType = events::lighting::LightType::Spot;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
 

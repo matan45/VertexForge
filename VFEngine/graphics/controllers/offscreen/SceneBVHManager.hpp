@@ -23,6 +23,10 @@ namespace controllers::offscreen
         std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
         std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
+        std::unique_ptr<events::SubscriptionToken> sceneLoadedSubscription;
+        std::unique_ptr<events::SubscriptionToken> sceneClearedSubscription;
+        std::unique_ptr<events::SubscriptionToken> prefabInstantiatedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entityDuplicatedSubscription;
     public:
         explicit SceneBVHManager();
         ~SceneBVHManager();

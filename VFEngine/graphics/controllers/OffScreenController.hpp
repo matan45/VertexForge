@@ -35,6 +35,7 @@ namespace controllers::offscreen
     class MeshAssetManager;
     class CameraController;
     class SceneBVHManager;
+    class LightBVHManager;
     class FramePreparationSystem;
     class CullingStatsCollector;
 }
@@ -53,6 +54,7 @@ namespace controllers
         std::unique_ptr<offscreen::MeshAssetManager> meshAssetManager;
         std::unique_ptr<offscreen::CameraController> cameraController;
         std::unique_ptr<offscreen::SceneBVHManager> bvhManager;
+        std::unique_ptr<offscreen::LightBVHManager> lightBvhManager;
         std::unique_ptr<offscreen::FramePreparationSystem> framePreparation;
         std::unique_ptr<offscreen::CullingStatsCollector> statsCollector;
 

@@ -117,6 +117,7 @@
     <ClInclude Include="controllers\offscreen\CullingStatsCollector.hpp" />
     <ClInclude Include="controllers\offscreen\FramePreparationSystem.hpp" />
     <ClInclude Include="controllers\offscreen\IBLController.hpp" />
+    <ClInclude Include="controllers\offscreen\LightBVHManager.hpp" />
     <ClInclude Include="controllers\offscreen\MeshAssetManager.hpp" />
     <ClInclude Include="controllers\offscreen\SceneBVHManager.hpp" />
     <ClInclude Include="core\BufferUtilities.hpp" />
@@ -212,6 +213,7 @@
     <ClCompile Include="controllers\offscreen\CullingStatsCollector.cpp" />
     <ClCompile Include="controllers\offscreen\FramePreparationSystem.cpp" />
     <ClCompile Include="controllers\offscreen\IBLController.cpp" />
+    <ClCompile Include="controllers\offscreen\LightBVHManager.cpp" />
     <ClCompile Include="controllers\offscreen\MeshAssetManager.cpp" />
     <ClCompile Include="controllers\offscreen\SceneBVHManager.cpp" />
     <ClCompile Include="core\BufferUtilities.cpp" />

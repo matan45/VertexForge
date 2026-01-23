@@ -110,6 +110,7 @@
     <ClInclude Include="events\EventTypes.hpp" />
     <ClInclude Include="events\FileOperationsEvents.hpp" />
     <ClInclude Include="events\InputEvents.hpp" />
+    <ClInclude Include="events\LightCullingEvents.hpp" />
     <ClInclude Include="events\MaterialEvents.hpp" />
     <ClInclude Include="events\PhysicsEvents.hpp" />
     <ClInclude Include="events\PhysicsSettingsEvents.hpp" />
