@@ -39,11 +39,10 @@ namespace material {
 
         std::string pathStr(path);
 
+        // Invalidate cache so other systems reload fresh data when needed.
+        // Don't reload immediately - this avoids file system race conditions
+        // where the read might get stale data before the write fully flushes.
         resource::ResourceManager::invalidateMaterialCache(path);
-        auto cached = resource::ResourceManager::loadMaterial(path);
-        if (cached) {
-            cached->needsRecompile = true;
-        }
 
         notifyMaterialChanged(pathStr);
 
@@ -131,9 +130,9 @@ namespace material {
 
         std::string pathStr(path);
 
-        // Update cache
+        // Invalidate cache so other systems reload fresh data when needed.
+        // Don't reload immediately - this avoids file system race conditions.
         resource::ResourceManager::invalidateMaterialInstanceCache(path);
-        resource::ResourceManager::loadMaterialInstance(path);
 
         // Register/update instance relationship
         registerInstance(pathStr, instance.parentMaterialPath);

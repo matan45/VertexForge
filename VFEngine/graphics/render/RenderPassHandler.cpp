@@ -15,7 +15,11 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
+#include "resource/ResourceManager.hpp"
+#include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
+#include <queue>
+#include <unordered_set>
 
 // Note: IVFXRuntimeProvider is included above for VFX scene integration
 
@@ -173,13 +177,56 @@ namespace render
 
     void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes)
     {
-        currentMeshDrawList = std::move(meshes);
+        currentMeshDrawList.clear();
+        customShaderMeshDrawList.clear();
+
+        // Split meshes: those with connected Time nodes go to custom shader list
+        for (auto& mesh : meshes)
+        {
+            bool needsCustomShader = false;
+
+            // Check default material
+            if (!mesh.defaultMaterialPath.empty() && materialRequiresCustomShader(mesh.defaultMaterialPath))
+            {
+                needsCustomShader = true;
+            }
+
+            // Check submesh materials
+            if (!needsCustomShader)
+            {
+                for (const auto& [submeshName, matInfo] : mesh.submeshMaterials)
+                {
+                    if (!matInfo.materialPath.empty() && materialRequiresCustomShader(matInfo.materialPath))
+                    {
+                        needsCustomShader = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needsCustomShader)
+            {
+                customShaderMeshDrawList.push_back(std::move(mesh));
+            }
+            else
+            {
+                currentMeshDrawList.push_back(std::move(mesh));
+            }
+        }
 
         // Check if any meshes have showBoundingBox enabled for debug rendering
         if (debugRendererInitialized && debugRenderer)
         {
             bool hasBoundingBoxes = false;
             for (const auto& mesh : currentMeshDrawList)
+            {
+                if (mesh.showBoundingBox)
+                {
+                    hasBoundingBoxes = true;
+                    break;
+                }
+            }
+            for (const auto& mesh : customShaderMeshDrawList)
             {
                 if (mesh.showBoundingBox)
                 {
@@ -468,13 +515,14 @@ namespace render
         // Determine if we need to run the mesh render pass (for meshes, debug rendering, or VFX)
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
         bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized() && vfxRuntimeProvider->getInstanceCount() > 0;
+        bool hasCustomShaderMeshes = !customShaderMeshDrawList.empty();
 
         // Update VFX camera for proper billboarding
         if (hasVFX)
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
-        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems || hasVFX);
+        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems || hasVFX);
 
         // Always update GPU-driven scene data (even when empty to reset stats)
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
@@ -500,7 +548,7 @@ namespace render
                 vfxRuntimeProvider->recordComputeCommands(commandBuffer);
             }
 
-            // GPU-driven rendering
+            // GPU-driven rendering for standard materials
             if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
                 updateGPUDrivenHiZ();
@@ -513,9 +561,21 @@ namespace render
 
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
+                // Render custom shader meshes (materials with connected Time nodes) using CPU path
+                if (hasCustomShaderMeshes)
+                {
+                    meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+                }
+
                 if (debugRendererPtr)
                 {
-                    debugRendererPtr->render(commandBuffer, currentMeshDrawList, currentView, currentProjection,
+                    // Combine both lists for debug rendering
+                    std::vector<mesh::MeshRenderData> allMeshes;
+                    allMeshes.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
+                    allMeshes.insert(allMeshes.end(), currentMeshDrawList.begin(), currentMeshDrawList.end());
+                    allMeshes.insert(allMeshes.end(), customShaderMeshDrawList.begin(), customShaderMeshDrawList.end());
+
+                    debugRendererPtr->render(commandBuffer, allMeshes, currentView, currentProjection,
                                              [this](const std::string& meshId)
                                              {
                                                  return meshPipeline->getMesh(meshId);
@@ -530,10 +590,16 @@ namespace render
 
                 meshPipeline->endRenderPass(commandBuffer);
             }
-            else if (!currentMeshDrawList.empty() || hasDebugItems)
+            else if (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems)
             {
                 // CPU fallback path (used when GPU-driven rendering is not available)
-                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
+                // Combine both lists for rendering
+                std::vector<mesh::MeshRenderData> allMeshes;
+                allMeshes.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
+                allMeshes.insert(allMeshes.end(), currentMeshDrawList.begin(), currentMeshDrawList.end());
+                allMeshes.insert(allMeshes.end(), customShaderMeshDrawList.begin(), customShaderMeshDrawList.end());
+
+                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, allMeshes, currentFrustum,
                                                   debugRendererPtr, currentView, currentProjection);
 
                 // VFX needs separate render pass in CPU fallback (recordCommandBuffer closes its pass)
@@ -570,5 +636,93 @@ namespace render
                 cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
             }
         }
+    }
+
+    bool RenderPassHandler::materialRequiresCustomShader(const std::string& materialPath)
+    {
+        if (materialPath.empty())
+        {
+            return false;
+        }
+
+        std::string parentPath = materialPath;
+
+        // If this is an instance, check the parent material
+        if (material::isInstanceFile(materialPath))
+        {
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+            if (instanceData && !instanceData->parentMaterialPath.empty())
+            {
+                parentPath = instanceData->parentMaterialPath;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        auto matData = resource::ResourceManager::loadMaterial(parentPath);
+        if (!matData)
+        {
+            return false;
+        }
+
+        // Find Time node
+        uint32_t timeNodeId = 0;
+        bool hasTimeNode = false;
+        for (const auto& node : matData->graph.nodes)
+        {
+            if (node.type == material::NodeType::Time)
+            {
+                timeNodeId = node.id;
+                hasTimeNode = true;
+                break;
+            }
+        }
+
+        if (!hasTimeNode)
+        {
+            return false;
+        }
+
+        // BFS to check if Time node is connected to the output
+        std::unordered_set<uint32_t> visitedNodes;
+        std::queue<uint32_t> nodesToVisit;
+        nodesToVisit.push(timeNodeId);
+
+        while (!nodesToVisit.empty())
+        {
+            uint32_t currentNodeId = nodesToVisit.front();
+            nodesToVisit.pop();
+
+            if (visitedNodes.contains(currentNodeId))
+            {
+                continue;
+            }
+            visitedNodes.insert(currentNodeId);
+
+            for (const auto& link : matData->graph.links)
+            {
+                if (link.sourceNodeId == currentNodeId)
+                {
+                    for (const auto& node : matData->graph.nodes)
+                    {
+                        if (node.id == link.targetNodeId)
+                        {
+                            // Time is connected to something - needs custom shader
+                            if (node.type == material::NodeType::PBROutput ||
+                                node.type == material::NodeType::TextureSample)
+                            {
+                                return true;
+                            }
+                            nodesToVisit.push(link.targetNodeId);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 }

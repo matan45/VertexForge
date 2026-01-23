@@ -1028,6 +1028,58 @@ namespace render::mesh
         commandBuffer.endRenderPass();
     }
 
+    void StaticMeshPipeline::renderMeshList(const vk::CommandBuffer& commandBuffer,
+                                            uint32_t imageIndex,
+                                            const std::vector<MeshRenderData>& meshDrawList,
+                                            const math::Frustum* frustum) const
+    {
+        if (meshDrawList.empty())
+        {
+            return;
+        }
+
+        prepareTexturesForFrame(meshDrawList);
+
+        auto cacheLock = materialCacheManager->acquireSharedLock();
+        const auto& materialCache = materialCacheManager->getCache();
+
+        // Bind descriptor sets
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                         pipelineLayout, 0, descriptorSet, nullptr);
+
+        if (textureDescriptorsInitialized && textureDescriptorSet)
+        {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                             pipelineLayout, 1, textureDescriptorSet, nullptr);
+        }
+
+        // Collect and sort submeshes
+        std::vector<SortedSubmesh> opaqueSubmeshes;
+        std::vector<SortedSubmesh> maskedSubmeshes;
+        collectSortedSubmeshes(meshDrawList, frustum, materialCache, opaqueSubmeshes, maskedSubmeshes);
+
+        // Initialize render state
+        RenderState state;
+        state.currentMaterialDescriptorSet = textureDescriptorSet;
+
+        // Render opaque pass
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        state.currentPipeline = graphicsPipeline;
+
+        for (const auto& item : opaqueSubmeshes)
+        {
+            renderSubmesh(commandBuffer, *item.meshData, *item.subMesh, item.subMeshIndex,
+                         material::BlendMode::Opaque, materialCache, state);
+        }
+
+        // Render masked pass
+        for (const auto& item : maskedSubmeshes)
+        {
+            renderSubmesh(commandBuffer, *item.meshData, *item.subMesh, item.subMeshIndex,
+                         material::BlendMode::Masked, materialCache, state);
+        }
+    }
+
     void StaticMeshPipeline::prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const
     {
         // Check if any meshes have materials. If not (e.g., material preview),

@@ -533,6 +533,10 @@ namespace controllers
             auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
             if (meshPipeline)
             {
+                // Wait for GPU to finish any in-flight operations before updating descriptor sets
+                // This prevents crashes when descriptor sets are being used by a command buffer
+                device.getLogicalDevice().waitIdle();
+
                 std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES> imageViews;
                 std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES> samplers;
 

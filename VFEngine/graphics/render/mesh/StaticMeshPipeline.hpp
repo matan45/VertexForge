@@ -161,6 +161,12 @@ namespace render::mesh
                                  const glm::mat4& debugView = glm::mat4(1.0f),
                                  const glm::mat4& debugProjection = glm::mat4(1.0f)) const;
 
+        // Render meshes without beginning/ending render pass (for use when render pass is already active)
+        void renderMeshList(const vk::CommandBuffer& commandBuffer,
+                           uint32_t imageIndex,
+                           const std::vector<MeshRenderData>& meshDrawList,
+                           const math::Frustum* frustum) const;
+
     private:
         void unloadAllMeshes();
 

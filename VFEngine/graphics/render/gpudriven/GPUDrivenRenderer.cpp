@@ -349,7 +349,8 @@ namespace render::gpudriven
                 }
             }
 
-            return 1;
+            // Time node exists but isn't connected to anything that uses it
+            return 0;
         };
 
         BoneOffsetResolver boneOffsetResolver = nullptr;

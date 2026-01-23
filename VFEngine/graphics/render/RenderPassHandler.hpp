@@ -67,6 +67,7 @@ namespace render
         // Mesh rendering state
         bool meshPipelineInitialized = false;
         mutable std::vector<mesh::MeshRenderData> currentMeshDrawList;
+        mutable std::vector<mesh::MeshRenderData> customShaderMeshDrawList; // Meshes requiring custom material shaders
         const math::Frustum* currentFrustum = nullptr;
 
         // Billboard rendering state
@@ -167,7 +168,10 @@ namespace render
         
     private:
         void initGPUDrivenRenderer();
-        
+
         void updateGPUDrivenHiZ() const;
+
+        // Check if material requires custom shader rendering (has connected Time node)
+        static bool materialRequiresCustomShader(const std::string& materialPath);
     };
 }

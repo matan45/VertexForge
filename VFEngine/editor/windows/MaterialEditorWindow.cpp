@@ -94,7 +94,9 @@ namespace windows
             notification.materialPath = materialPath;
             events::EventDispatcher::instance().publish(notification);
 
-            previewPanel->updateFromGraph(materialData, materialPath, true);
+            // Note: updateFromGraph is already called in compileMaterial() above,
+            // so we don't need to call it again here. Calling it twice can cause
+            // descriptor set updates without proper GPU synchronization.
         }
         else
         {
