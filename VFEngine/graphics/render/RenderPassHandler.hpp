@@ -134,6 +134,10 @@ namespace render
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
 
+        // BVH light culling: set visible lights from frustum query
+        void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
+        void clearVisibleLights();
+
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         services::IVFXRuntimeProvider* getVFXRuntimeProvider() const { return vfxRuntimeProvider; }
 

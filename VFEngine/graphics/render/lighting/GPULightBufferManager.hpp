@@ -3,6 +3,7 @@
 #include "GPULightTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
+#include <unordered_set>
 
 namespace core
 {
@@ -85,8 +86,12 @@ namespace render::lighting
         void cleanup();
         bool isInitialized() const { return initialized; }
 
-        // Update light data from ECS scene
+        // Update light data from ECS scene (collects ALL lights - no culling)
         void updateFromScene();
+
+        // Update light data with BVH pre-culling (only collects visible lights)
+        // Pass the set of entity IDs returned from LightBVH::queryFrustum()
+        void updateFromScene(const std::unordered_set<uint32_t>& visibleLightIds);
 
         // Upload staged data to GPU (call within command buffer recording)
         void uploadToGPU(vk::CommandBuffer cmd);
@@ -99,6 +104,10 @@ namespace render::lighting
         uint32_t getPointLightCount() const { return pointCount; }
         uint32_t getSpotLightCount() const { return spotCount; }
 
+        // Buffer accessors for light culling pipeline
+        vk::Buffer getPointBuffer() const { return pointBuffer; }
+        vk::Buffer getSpotBuffer() const { return spotBuffer; }
+
     private:
         void createBuffers();
         void destroyBuffers();
@@ -107,9 +116,9 @@ namespace render::lighting
         void allocateDescriptorSet();
         void updateDescriptors();
 
-        void collectDirectionalLights();
-        void collectPointLights();
-        void collectSpotLights();
+        void collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
+        void collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
+        void collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
         void updateCountsBuffer();
         bool detectChanges();
     };

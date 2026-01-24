@@ -100,5 +100,31 @@ namespace scene
         size_t getDynamicNodeCount() const { return dynamicBVH.getNodeCount(); }
         size_t getStaticLightCount() const { return staticBVH.getPrimitiveCount() + staticDirectionalLights.size(); }
         size_t getDynamicLightCount() const { return dynamicBVH.getPrimitiveCount() + dynamicDirectionalLights.size(); }
+
+        // Query lights visible in the camera frustum
+        // Returns entity IDs of all lights (point, spot) intersecting the frustum
+        // Directional lights are always included (they're global/infinite)
+        void queryFrustum(const math::Frustum& frustum, std::vector<uint32_t>& visibleLights) const
+        {
+            visibleLights.clear();
+
+            // Query both static and dynamic BVH trees
+            staticBVH.queryFrustumAppend(frustum, visibleLights);
+            dynamicBVH.queryFrustumAppend(frustum, visibleLights);
+
+            // Directional lights are always visible (infinite range)
+            for (uint32_t entityId : staticDirectionalLights)
+            {
+                visibleLights.push_back(entityId);
+            }
+            for (uint32_t entityId : dynamicDirectionalLights)
+            {
+                visibleLights.push_back(entityId);
+            }
+        }
+
+        // Get all directional lights (they're always visible)
+        const std::vector<uint32_t>& getStaticDirectionalLights() const { return staticDirectionalLights; }
+        const std::vector<uint32_t>& getDynamicDirectionalLights() const { return dynamicDirectionalLights; }
     };
 }

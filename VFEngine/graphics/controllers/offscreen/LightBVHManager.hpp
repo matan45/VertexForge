@@ -1,7 +1,9 @@
 #pragma once
 #include "scene/LightBVH.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
+#include "math/Frustum.hpp"
 #include <entt/entt.hpp>
+#include <vector>
 
 namespace controllers::offscreen
 {
@@ -33,5 +35,15 @@ namespace controllers::offscreen
         size_t getDynamicLightCount() const { return lightBVH.getDynamicLightCount(); }
         size_t getStaticNodeCount() const { return lightBVH.getStaticNodeCount(); }
         size_t getDynamicNodeCount() const { return lightBVH.getDynamicNodeCount(); }
+
+        // Query lights visible in the camera frustum
+        // Returns entity IDs of all lights (point, spot, directional) intersecting the frustum
+        void queryFrustum(const math::Frustum& frustum, std::vector<uint32_t>& visibleLights) const
+        {
+            lightBVH.queryFrustum(frustum, visibleLights);
+        }
+
+        // Get direct access to the LightBVH (for advanced usage)
+        const scene::LightBVH& getLightBVH() const { return lightBVH; }
     };
 }
