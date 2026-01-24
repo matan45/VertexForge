@@ -321,6 +321,50 @@ namespace render::lighting
             return;
         }
 
+#ifndef NDEBUG
+        // Debug validation: check that visibleLightIds contain valid light entities
+        // This helps detect sync issues between LightBVH and ECS registry
+        if (!visibleLightIds.empty())
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            uint32_t invalidCount = 0;
+            uint32_t noLightComponentCount = 0;
+
+            for (uint32_t entityId : visibleLightIds)
+            {
+                auto entity = static_cast<entt::entity>(entityId);
+
+                if (!registry.valid(entity))
+                {
+                    ++invalidCount;
+                    continue;
+                }
+
+                // Check if entity has at least one light component
+                bool hasLight = registry.any_of<
+                    components::DirectionalLightComponent,
+                    components::PointLightComponent,
+                    components::SpotLightComponent>(entity);
+
+                if (!hasLight)
+                {
+                    ++noLightComponentCount;
+                }
+            }
+
+            if (invalidCount > 0)
+            {
+                loggerWarning("GPULightBufferManager: {} stale entity IDs in visibleLightIds (BVH may be out of sync)",
+                              invalidCount);
+            }
+            if (noLightComponentCount > 0)
+            {
+                loggerWarning("GPULightBufferManager: {} entity IDs have no light component (BVH contains non-light entities)",
+                              noLightComponentCount);
+            }
+        }
+#endif
+
         // If the set is empty, collect all lights (no filtering)
         // Otherwise, only collect lights that are in the visible set
         const std::unordered_set<uint32_t>* filterPtr = visibleLightIds.empty() ? nullptr : &visibleLightIds;

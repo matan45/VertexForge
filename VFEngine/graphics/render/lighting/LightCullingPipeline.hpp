@@ -98,8 +98,8 @@ namespace render::lighting
         void writeDescriptors();
 
         void dispatchReset(vk::CommandBuffer cmd);
-        void dispatchPointLightCulling(vk::CommandBuffer cmd, const glm::mat4& viewMatrix, uint32_t pointLightCount);
-        void dispatchSpotLightCulling(vk::CommandBuffer cmd, const glm::mat4& viewMatrix, uint32_t spotLightCount);
+        void dispatchLightCulling(vk::CommandBuffer cmd, const glm::mat4& viewMatrix,
+                                  uint32_t pointLightCount, uint32_t spotLightCount);
         void insertBarrier(vk::CommandBuffer cmd);
     };
 }

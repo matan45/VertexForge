@@ -131,9 +131,10 @@ namespace render::lighting
         }
 
         // ClusterLightIndexList buffer (DEVICE_LOCAL)
-        // Flat array of light indices
+        // Fixed allocation: each cluster gets MAX_LIGHTS_PER_CLUSTER slots
+        // Offset for cluster i = i * MAX_LIGHTS_PER_CLUSTER
         {
-            vk::DeviceSize bufferSize = LightCullingConstants::MAX_LIGHT_INDEX_COUNT * sizeof(uint32_t);
+            vk::DeviceSize bufferSize = computeLightIndexListSize(totalClusters) * sizeof(uint32_t);
 
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = bufferSize;
@@ -141,8 +142,8 @@ namespace render::lighting
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, clusterLightIndexListBuffer, clusterLightIndexListMemory);
 
-            loggerInfo("LightCullingPipeline: Created ClusterLightIndexList buffer ({} KB)",
-                       bufferSize / 1024);
+            loggerInfo("LightCullingPipeline: Created ClusterLightIndexList buffer ({} KB, {} clusters x {} lights)",
+                       bufferSize / 1024, totalClusters, LightCullingConstants::MAX_LIGHTS_PER_CLUSTER);
         }
 
         // Globals buffer (DEVICE_LOCAL, for atomic operations)
@@ -400,30 +401,14 @@ namespace render::lighting
                                static_cast<uint32_t>(descSets.size()), descSets.data(),
                                0, nullptr);
 
-        // Skip if no lights to cull
-        if (pointLightCount == 0 && spotLightCount == 0)
-        {
-            // Still need to dispatch reset phase to clear the buffers
-            dispatchReset(cmd);
-            insertBarrier(cmd);
-            return;
-        }
-
-        // Dispatch reset phase
+        // Phase 1: Reset cluster light data and globals
         dispatchReset(cmd);
         insertBarrier(cmd);
 
-        // Dispatch point light culling
-        if (pointLightCount > 0)
+        // Phase 2: Cluster-centric light culling (skip if no lights)
+        if (pointLightCount > 0 || spotLightCount > 0)
         {
-            dispatchPointLightCulling(cmd, viewMatrix, pointLightCount);
-            insertBarrier(cmd);
-        }
-
-        // Dispatch spot light culling
-        if (spotLightCount > 0)
-        {
-            dispatchSpotLightCulling(cmd, viewMatrix, spotLightCount);
+            dispatchLightCulling(cmd, viewMatrix, pointLightCount, spotLightCount);
             insertBarrier(cmd);
         }
     }
@@ -431,11 +416,9 @@ namespace render::lighting
     void LightCullingPipeline::dispatchReset(vk::CommandBuffer cmd)
     {
         // Pipeline and descriptor sets are already bound by dispatch()
-
+        // Zero-initialize push constants - viewMatrix/lightCounts unused in reset phase
+        // but we must push the full struct (Vulkan push constant range is fixed at pipeline creation)
         LightCullingPushConstants pushConstants{};
-        pushConstants.viewMatrix = glm::mat4(1.0f); // Not used in reset phase
-        pushConstants.pointLightCount = 0;
-        pushConstants.spotLightCount = 0;
         pushConstants.totalClusters = totalClusters;
         pushConstants.phase = LightCullingConstants::PHASE_RESET;
 
@@ -450,40 +433,20 @@ namespace render::lighting
         cmd.dispatch(groupCount, 1, 1);
     }
 
-    void LightCullingPipeline::dispatchPointLightCulling(
+    void LightCullingPipeline::dispatchLightCulling(
         vk::CommandBuffer cmd,
         const glm::mat4& viewMatrix,
-        uint32_t pointLightCount)
+        uint32_t pointLightCount,
+        uint32_t spotLightCount)
     {
+        // Cluster-centric approach: one thread per cluster
+        // Each thread tests its cluster against ALL lights (loaded via shared memory tiling)
         LightCullingPushConstants pushConstants{};
         pushConstants.viewMatrix = viewMatrix;
         pushConstants.pointLightCount = pointLightCount;
-        pushConstants.spotLightCount = 0;
-        pushConstants.totalClusters = totalClusters;
-        pushConstants.phase = LightCullingConstants::PHASE_POINT_LIGHTS;
-
-        cmd.pushConstants<LightCullingPushConstants>(
-            pipelineLayout,
-            vk::ShaderStageFlagBits::eCompute,
-            0,
-            pushConstants);
-
-        uint32_t groupCount = (pointLightCount + LightCullingConstants::LIGHT_CULL_WORKGROUP_SIZE - 1)
-                            / LightCullingConstants::LIGHT_CULL_WORKGROUP_SIZE;
-        cmd.dispatch(groupCount, 1, 1);
-    }
-
-    void LightCullingPipeline::dispatchSpotLightCulling(
-        vk::CommandBuffer cmd,
-        const glm::mat4& viewMatrix,
-        uint32_t spotLightCount)
-    {
-        LightCullingPushConstants pushConstants{};
-        pushConstants.viewMatrix = viewMatrix;
-        pushConstants.pointLightCount = 0;
         pushConstants.spotLightCount = spotLightCount;
         pushConstants.totalClusters = totalClusters;
-        pushConstants.phase = LightCullingConstants::PHASE_SPOT_LIGHTS;
+        pushConstants.phase = LightCullingConstants::PHASE_CULL_LIGHTS;
 
         cmd.pushConstants<LightCullingPushConstants>(
             pipelineLayout,
@@ -491,7 +454,8 @@ namespace render::lighting
             0,
             pushConstants);
 
-        uint32_t groupCount = (spotLightCount + LightCullingConstants::LIGHT_CULL_WORKGROUP_SIZE - 1)
+        // Dispatch one workgroup per 64 clusters
+        uint32_t groupCount = (totalClusters + LightCullingConstants::LIGHT_CULL_WORKGROUP_SIZE - 1)
                             / LightCullingConstants::LIGHT_CULL_WORKGROUP_SIZE;
         cmd.dispatch(groupCount, 1, 1);
     }

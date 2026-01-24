@@ -7,10 +7,13 @@
 namespace render::lighting
 {
     // Light culling constants
-    // Memory budget: ~540KB total for default configuration
+    // Uses FIXED ALLOCATION strategy: each cluster gets MAX_LIGHTS_PER_CLUSTER slots
+    // This eliminates the need for a prefix-sum pass to compute offsets
+    // Memory budget for 3456 clusters (16x9x24):
     //   - ClusterLightGrid: 3456 clusters x 8 bytes = ~27KB
-    //   - ClusterLightIndexList: 128K indices x 4 bytes = ~512KB
+    //   - ClusterLightIndexList: 3456 clusters x 64 lights x 4 bytes = ~884KB
     //   - LightCullingGlobals: 16 bytes
+    //   - Total: ~911KB
     namespace LightCullingConstants
     {
         // Max lights per cluster - balance between memory and scene complexity
@@ -21,14 +24,17 @@ namespace render::lighting
         // 64 is optimal for most GPUs (matches wave/warp size)
         inline constexpr uint32_t LIGHT_CULL_WORKGROUP_SIZE = 64;
 
-        // Max total light indices in the global index list
-        // Conservative estimate based on avg 32 lights/cluster for 3456 clusters
-        inline constexpr uint32_t MAX_LIGHT_INDEX_COUNT = 128 * 1024;
-
         // Phase constants for compute shader dispatch
+        // Using cluster-centric approach: single culling phase for all light types
         inline constexpr uint32_t PHASE_RESET = 0;
-        inline constexpr uint32_t PHASE_POINT_LIGHTS = 1;
-        inline constexpr uint32_t PHASE_SPOT_LIGHTS = 2;
+        inline constexpr uint32_t PHASE_CULL_LIGHTS = 1;
+    }
+
+    // Compute light index list size based on cluster count (fixed allocation)
+    // Each cluster gets MAX_LIGHTS_PER_CLUSTER slots
+    inline constexpr uint32_t computeLightIndexListSize(uint32_t clusterCount)
+    {
+        return clusterCount * LightCullingConstants::MAX_LIGHTS_PER_CLUSTER;
     }
 
     // Per-cluster light assignment data
