@@ -260,14 +260,9 @@ namespace render::gpudriven
             };
         }
 
-        // Shader group resolver - returns 0 for all materials in GPU-driven path
-        // Note: Materials requiring Time-based animations (UV scrolling, emission pulsing)
-        // are filtered out by RenderPassHandler::materialRequiresCustomShader() before
-        // reaching GPU-driven rendering. They use the custom shader CPU path instead.
-        // This resolver exists for future extensibility (e.g., other shader group types).
         ShaderGroupResolver shaderGroupResolver = [](const std::string& /*materialPath*/) -> uint32_t
         {
-            return 0; // Standard PBR shader group
+            return 0;
         };
 
         BoneOffsetResolver boneOffsetResolver = nullptr;

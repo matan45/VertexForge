@@ -21,8 +21,6 @@
 #include <queue>
 #include <unordered_set>
 
-// Note: IVFXRuntimeProvider is included above for VFX scene integration
-
 namespace render
 {
     RenderPassHandler::RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -43,7 +41,6 @@ namespace render
 
     RenderPassHandler::~RenderPassHandler()
     {
-        // Unregister the material change callback to prevent dangling pointer access
         if (materialChangeCallbackId) {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
         }
@@ -59,16 +56,11 @@ namespace render
         if (!materialChangeCallbackId) {
             materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
                 [this](const std::string& materialPath) {
-                    // Invalidate the specific material from cache
                     customShaderRequirementCache.erase(materialPath);
 
-                    // Also invalidate any instances that might use this material as parent
-                    // by clearing entries that could be affected
-                    // Note: For instances, we can't easily know which ones use this parent
-                    // without iterating, so we just clear all instance entries when a .vfMat changes
+                    // When a parent material changes, invalidate all instance entries
+                    // since we can't easily track which instances use this parent
                     if (!material::isInstanceFile(materialPath)) {
-                        // A parent material changed - clear all instance cache entries
-                        // since any of them might reference this parent
                         std::erase_if(customShaderRequirementCache, [](const auto& pair) {
                             return material::isInstanceFile(pair.first);
                         });
@@ -104,7 +96,6 @@ namespace render
             initGPUDrivenRenderer();
         }
 
-        // Initialize VFX runtime provider with mesh pipeline's render pass
         if (vfxRuntimeProvider && !vfxRuntimeProvider->isInitialized())
         {
             vfxRuntimeProvider->init(meshPipeline->getRenderPass());
@@ -123,17 +114,14 @@ namespace render
             return;
         }
 
-        // Get IBL descriptor set layout and render pass from mesh pipeline
         vk::DescriptorSetLayout iblLayout = meshPipeline->getIBLDescriptorSetLayout();
         vk::RenderPass renderPass = meshPipeline->getRenderPass();
 
         gpuDrivenRenderer->init(iblLayout, renderPass);
 
-        // Set material texture cache for texture loading in GPU-driven path
         auto& texCache = meshPipeline->getMaterialTextureCache();
         gpuDrivenRenderer->setMaterialTextureCache(&texCache);
 
-        // Set default texture for bindless array (1x1 white fallback)
         if (texCache.hasDefaultTexture())
         {
             gpuDrivenRenderer->setDefaultTexture(texCache.getDefaultView(), texCache.getDefaultSampler());
@@ -156,7 +144,6 @@ namespace render
 
         meshPipeline->initWithDefaults();
 
-        // Update GPU-driven renderer with new render pass and IBL layout
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->updateRenderPass(
@@ -164,7 +151,6 @@ namespace render
                 meshPipeline->getIBLDescriptorSetLayout());
         }
 
-        // Update VFX runtime with new render pass
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
         {
             vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
@@ -192,7 +178,6 @@ namespace render
         const auto& brdfLUT = iblRenderer->getBrdfLUTImage();
         meshPipeline->init(irradiance, prefilter, brdfLUT);
 
-        // Update GPU-driven renderer with new render pass and IBL layout
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->updateRenderPass(
@@ -200,7 +185,6 @@ namespace render
                 meshPipeline->getIBLDescriptorSetLayout());
         }
 
-        // Update VFX runtime with new render pass
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
         {
             vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
@@ -212,8 +196,6 @@ namespace render
         currentMeshDrawList.clear();
         customShaderMeshDrawList.clear();
 
-        // Collect unique material paths first to avoid redundant cache lookups
-        // when the same materials appear across many meshes
         std::unordered_set<std::string> uniqueMaterials;
         for (const auto& mesh : meshes)
         {
@@ -230,8 +212,6 @@ namespace render
             }
         }
 
-        // Build local lookup for materials requiring custom shader
-        // This does cache lookups only once per unique material
         std::unordered_set<std::string> customShaderMaterials;
         for (const auto& matPath : uniqueMaterials)
         {
@@ -241,19 +221,16 @@ namespace render
             }
         }
 
-        // Split meshes: those with connected Time nodes go to custom shader list
         for (auto& mesh : meshes)
         {
             bool needsCustomShader = false;
 
-            // Check default material
             if (!mesh.defaultMaterialPath.empty() &&
                 customShaderMaterials.contains(mesh.defaultMaterialPath))
             {
                 needsCustomShader = true;
             }
 
-            // Check submesh materials
             if (!needsCustomShader)
             {
                 for (const auto& [submeshName, matInfo] : mesh.submeshMaterials)
@@ -277,7 +254,6 @@ namespace render
             }
         }
 
-        // Check if any meshes have showBoundingBox enabled for debug rendering
         if (debugRendererInitialized && debugRenderer)
         {
             bool hasBoundingBoxes = false;
@@ -300,7 +276,6 @@ namespace render
             debugRenderer->setHasBoundingBoxes(hasBoundingBoxes);
         }
 
-        // Build combined list once (avoids per-frame allocation in render loop)
         combinedMeshDrawList.clear();
         combinedMeshDrawList.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
         combinedMeshDrawList.insert(combinedMeshDrawList.end(),
@@ -336,7 +311,6 @@ namespace render
             return;
         }
 
-        // Debug renderer needs mesh pipeline's render pass for proper depth testing
         if (!meshPipelineInitialized)
         {
             return;
@@ -379,7 +353,6 @@ namespace render
             return;
         }
 
-        // Get active camera's Hi-Z buffer
         occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
         if (!cameraOcclusionManager->isHiZInitialized(activeCameraId))
         {
@@ -392,7 +365,6 @@ namespace render
             return;
         }
 
-        // Pass Hi-Z pyramid to GPU-driven renderer
         gpuDrivenRenderer->updateHiZPyramid(
             camera->hiZBuffer->getHiZImageView(),
             camera->hiZBuffer->getHiZSampler(),
@@ -514,7 +486,6 @@ namespace render
                 gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
             }
 
-            // Recreate VFX runtime with new render pass
             if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
             {
                 vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
@@ -531,7 +502,6 @@ namespace render
             billboardPipeline->recreate();
         }
 
-        // Recreate Hi-Z for all cameras
         for (const auto& [cameraId, camera] : cameraOcclusionManager->getAllCameras())
         {
             if (camera->hiZInitialized)
@@ -583,19 +553,16 @@ namespace render
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
         iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
-        // Determine if we need to run the mesh render pass (for meshes, debug rendering, or VFX)
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
         bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized() && vfxRuntimeProvider->getInstanceCount() > 0;
         bool hasCustomShaderMeshes = !customShaderMeshDrawList.empty();
 
-        // Update VFX camera for proper billboarding
         if (hasVFX)
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems || hasVFX);
 
-        // Always update GPU-driven scene data (even when empty to reset stats)
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
         {
             gpuDrivenRenderer->updateScene(
@@ -613,13 +580,11 @@ namespace render
         {
             render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
 
-            // Dispatch VFX compute shaders BEFORE render pass (GPU particle simulation)
             if (hasVFX)
             {
                 vfxRuntimeProvider->recordComputeCommands(commandBuffer);
             }
 
-            // GPU-driven rendering for standard materials
             if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
                 updateGPUDrivenHiZ();
@@ -632,7 +597,6 @@ namespace render
 
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
-                // Render custom shader meshes (materials with connected Time nodes) using CPU path
                 if (hasCustomShaderMeshes)
                 {
                     meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
@@ -640,7 +604,6 @@ namespace render
 
                 if (debugRendererPtr)
                 {
-                    // Use pre-built combined list (built in setMeshDrawList, avoids per-frame allocation)
                     debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
                                              [this](const std::string& meshId)
                                              {
@@ -648,7 +611,6 @@ namespace render
                                              });
                 }
 
-                // Render VFX particles inline (before ending render pass for proper depth testing)
                 if (hasVFX)
                 {
                     vfxRuntimeProvider->recordDrawCommands(commandBuffer);
@@ -658,12 +620,9 @@ namespace render
             }
             else if (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems)
             {
-                // CPU fallback path (used when GPU-driven rendering is not available)
-                // Use pre-built combined list (built in setMeshDrawList, avoids per-frame allocation)
                 meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, combinedMeshDrawList, currentFrustum,
                                                   debugRendererPtr, currentView, currentProjection);
 
-                // VFX needs separate render pass in CPU fallback (recordCommandBuffer closes its pass)
                 if (hasVFX)
                 {
                     meshPipeline->beginRenderPass(commandBuffer, imageIndex);
@@ -673,7 +632,6 @@ namespace render
             }
             else if (hasVFX)
             {
-                // Only VFX to render, no meshes or debug items
                 meshPipeline->beginRenderPass(commandBuffer, imageIndex);
                 vfxRuntimeProvider->recordDrawCommands(commandBuffer);
                 meshPipeline->endRenderPass(commandBuffer);
@@ -685,7 +643,6 @@ namespace render
             billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
 
-        // Generate Hi-Z pyramid and run occlusion culling for the active camera
         occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
 
         if (cameraOcclusionManager->isHiZInitialized(activeCameraId))
@@ -706,14 +663,12 @@ namespace render
             return false;
         }
 
-        // Check cache first
         auto it = customShaderRequirementCache.find(materialPath);
         if (it != customShaderRequirementCache.end())
         {
             return it->second;
         }
 
-        // Cache miss - compute and store result
         bool result = computeMaterialRequiresCustomShader(materialPath);
         customShaderRequirementCache[materialPath] = result;
         return result;
@@ -728,7 +683,6 @@ namespace render
 
         std::string parentPath = materialPath;
 
-        // If this is an instance, check the parent material
         if (material::isInstanceFile(materialPath))
         {
             auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
@@ -748,7 +702,6 @@ namespace render
             return false;
         }
 
-        // Find Time node
         uint32_t timeNodeId = 0;
         bool hasTimeNode = false;
         for (const auto& node : matData->graph.nodes)
@@ -766,7 +719,6 @@ namespace render
             return false;
         }
 
-        // BFS to check if Time node is connected to the output
         std::unordered_set<uint32_t> visitedNodes;
         std::queue<uint32_t> nodesToVisit;
         nodesToVisit.push(timeNodeId);
@@ -790,22 +742,17 @@ namespace render
                     {
                         if (node.id == link.targetNodeId)
                         {
-                            // Check if Time reaches a node/pin that requires custom shader
                             if (node.type == material::NodeType::PBROutput)
                             {
-                                // Any time-varying PBR parameter needs custom shader
-                                // (GPU-driven uses static material parameters)
                                 return true;
                             }
 
                             if (node.type == material::NodeType::TextureSample &&
                                 link.targetPin == "UV")
                             {
-                                // Time connected to UV input = UV animation
                                 return true;
                             }
 
-                            // Continue BFS through other nodes
                             nodesToVisit.push(link.targetNodeId);
                             break;
                         }

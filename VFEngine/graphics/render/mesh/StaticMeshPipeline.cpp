@@ -24,29 +24,20 @@ namespace render::mesh
                                            core::OffscreenResources& offscreenResources)
         : device{device}, swapChain{swapChain}, offscreenResources{offscreenResources}
     {
-        // Create mesh GPU cache for mesh buffer management
         meshCache = std::make_unique<MeshGPUCache>(device);
 
-        // Create material texture cache for texture GPU resources
         textureCache = std::make_unique<MaterialTextureCache>(device);
         textureCache->init(device.getStagingCommandPool());
 
-        // Create material shader cache for per-material pipeline compilation
         materialShaderCache = std::make_unique<MaterialShaderCache>(device);
 
-        // Create material cache manager and link related caches
         materialCacheManager = std::make_unique<MaterialCacheManager>();
         materialCacheManager->setShaderCache(materialShaderCache.get());
         materialCacheManager->setTextureCache(textureCache.get());
-
-        // Note: Callback registration moved to init methods for exception safety.
-        // If constructor threw after registering callback, destructor wouldn't be
-        // called and the callback would leak.
     }
 
     StaticMeshPipeline::~StaticMeshPipeline()
     {
-        // Unregister the material change callback to prevent dangling pointer access
         if (materialChangeCallbackId) {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
         }
@@ -54,8 +45,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::registerMaterialChangeCallback()
     {
-        // Register callback to invalidate material cache when materials change
-        // Done in init rather than constructor for exception safety
         if (!materialChangeCallbackId) {
             materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
                 [this](const std::string& materialPath) {
@@ -73,15 +62,15 @@ namespace render::mesh
         loadShaders();
         createRenderPass();
         createDescriptorSetLayout();
-        createTextureDescriptorSetLayout(); // Set 1 layout
+        createTextureDescriptorSetLayout();
         createDescriptorPool();
-        createTextureDescriptorPool(); // Set 1 pool
+        createTextureDescriptorPool();
         createCameraUBO();
         createDescriptorSet(irradianceMap, prefilterMap, brdfLUT);
         createPipelineLayout();
         createGraphicsPipeline();
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
-        initializeDefaultTextureDescriptors(); // Initialize set 1 with defaults
+        initializeDefaultTextureDescriptors();
         createFramebuffers();
         registerMaterialChangeCallback();
     }
@@ -91,12 +80,11 @@ namespace render::mesh
         loadShaders();
         createRenderPass();
         createDescriptorSetLayout();
-        createTextureDescriptorSetLayout(); // Set 1 layout
+        createTextureDescriptorSetLayout();
         createDescriptorPool();
-        createTextureDescriptorPool(); // Set 1 pool
+        createTextureDescriptorPool();
         createCameraUBO();
 
-        // Create default IBL textures using the factory
         defaultIBLFactory = std::make_unique<ibl::DefaultIBLTextureFactory>(device);
         defaultIBLFactory->createDefaultTextures(device.getStagingCommandPool());
 
@@ -106,7 +94,7 @@ namespace render::mesh
         createPipelineLayout();
         createGraphicsPipeline();
         materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
-        initializeDefaultTextureDescriptors(); // Initialize set 1 with defaults
+        initializeDefaultTextureDescriptors();
         createFramebuffers();
         usingDefaultTextures = true;
         registerMaterialChangeCallback();
@@ -120,7 +108,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::recreate()
     {
-        // Cleanup framebuffers and render pass for recreation
         for (auto& framebuffer : framebuffers)
         {
             device.getLogicalDevice().destroyFramebuffer(framebuffer);
@@ -135,11 +122,10 @@ namespace render::mesh
 
     void StaticMeshPipeline::createRenderPass()
     {
-        // Color attachment - load existing content (preserve skybox)
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChain.getSwapchainImageFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad; // Preserve skybox
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
         colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
         colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
@@ -150,7 +136,6 @@ namespace render::mesh
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
 
-        // Depth attachment
         vk::AttachmentDescription depthAttachment{};
         depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -186,7 +171,6 @@ namespace render::mesh
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings(4);
 
-        // Binding 0: Camera UBO (vertex + fragment + task + mesh for mesh shader pipeline)
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[0].descriptorCount = 1;
@@ -194,21 +178,18 @@ namespace render::mesh
                                  vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
         bindings[0].pImmutableSamplers = nullptr;
 
-        // Binding 1: Irradiance cubemap (fragment only)
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
         bindings[1].pImmutableSamplers = nullptr;
 
-        // Binding 2: Prefilter cubemap (fragment only)
         bindings[2].binding = 2;
         bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
         bindings[2].pImmutableSamplers = nullptr;
 
-        // Binding 3: BRDF LUT (fragment only)
         bindings[3].binding = 3;
         bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[3].descriptorCount = 1;
@@ -260,7 +241,6 @@ namespace render::mesh
 
         descriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
 
-        // Camera UBO binding
         vk::DescriptorBufferInfo uboBufferInfo{};
         uboBufferInfo.buffer = cameraUBO;
         uboBufferInfo.offset = 0;
@@ -274,7 +254,6 @@ namespace render::mesh
         uboWrite.descriptorCount = 1;
         uboWrite.pBufferInfo = &uboBufferInfo;
 
-        // Irradiance map binding
         vk::DescriptorImageInfo irradianceImageInfo{};
         irradianceImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         irradianceImageInfo.imageView = irradianceMap.imageView;
@@ -288,7 +267,6 @@ namespace render::mesh
         irradianceWrite.descriptorCount = 1;
         irradianceWrite.pImageInfo = &irradianceImageInfo;
 
-        // Prefilter map binding
         vk::DescriptorImageInfo prefilterImageInfo{};
         prefilterImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         prefilterImageInfo.imageView = prefilterMap.imageView;
@@ -302,7 +280,6 @@ namespace render::mesh
         prefilterWrite.descriptorCount = 1;
         prefilterWrite.pImageInfo = &prefilterImageInfo;
 
-        // BRDF LUT binding
         vk::DescriptorImageInfo brdfImageInfo{};
         brdfImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         brdfImageInfo.imageView = brdfLUT.imageView;
@@ -324,8 +301,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::createTextureDescriptorSetLayout()
     {
-        // Set 1, Binding 0: Array of 16 material textures per material
-        // See material::TextureSlot for slot assignments (albedo, normal, ORM, metallic, roughness, ao, emission, etc.)
         vk::DescriptorSetLayoutBinding textureBinding{};
         textureBinding.binding = 0;
         textureBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -342,7 +317,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::createTextureDescriptorPool()
     {
-        // Legacy pool for backward compatibility - per-material pool is managed by MaterialTextureCache
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
         poolSize.descriptorCount = material::MAX_MATERIAL_TEXTURES;
@@ -428,10 +402,9 @@ namespace render::mesh
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(MeshPushConstants);
 
-        // Two descriptor set layouts: set 0 (camera + IBL), set 1 (material textures)
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
-            descriptorSetLayout, // Set 0: Camera + IBL
-            textureDescriptorSetLayout // Set 1: Material textures
+            descriptorSetLayout,
+            textureDescriptorSetLayout
         };
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
@@ -454,12 +427,10 @@ namespace render::mesh
         vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
         vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
-        // Input assembly
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-        // Viewport and scissor
         vk::Viewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -478,7 +449,6 @@ namespace render::mesh
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
 
-        // Rasterizer - back-face culling enabled for meshes
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -488,12 +458,10 @@ namespace render::mesh
         rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
         rasterizer.depthBiasEnable = VK_FALSE;
 
-        // Multisampling
         vk::PipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-        // Depth testing - enabled for meshes
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_TRUE;
         depthStencil.depthWriteEnable = VK_TRUE;
@@ -501,7 +469,6 @@ namespace render::mesh
         depthStencil.depthBoundsTestEnable = VK_FALSE;
         depthStencil.stencilTestEnable = VK_FALSE;
 
-        // Color blending - no blending
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
             vk::ColorComponentFlagBits::eG |
@@ -514,7 +481,6 @@ namespace render::mesh
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        // Create opaque pipeline
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(meshShader->getShaderStages().size());
         pipelineInfo.pStages = meshShader->getShaderStages().data();
@@ -557,7 +523,6 @@ namespace render::mesh
     void StaticMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                              const glm::vec3& cameraPos, float time) const
     {
-        // Store for AABB wireframe rendering and animation
         currentView = view;
         currentProjection = projection;
         currentCameraPos = cameraPos;
@@ -582,7 +547,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::cleanUpForReinit()
     {
-        // Clean up pipeline/descriptor resources but preserve loaded meshes and command pool
         for (auto& framebuffer : framebuffers)
         {
             device.getLogicalDevice().destroyFramebuffer(framebuffer);
@@ -612,14 +576,11 @@ namespace render::mesh
         if (descriptorSetLayout)
             device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
 
-        // Reset MaterialTextureCache descriptor resources before destroying layout
-        // (they share the same layout, so must be freed first)
         if (textureCache)
         {
             textureCache->resetDescriptorResources();
         }
 
-        // Clean up texture descriptor set (set 1)
         if (textureDescriptorPool)
         {
             if (textureDescriptorSet)
@@ -642,7 +603,6 @@ namespace render::mesh
         descriptorPool = nullptr;
         descriptorSetLayout = nullptr;
 
-        // Clean up default textures if we created them
         if (usingDefaultTextures && defaultIBLFactory)
         {
             defaultIBLFactory->cleanup();
@@ -775,12 +735,10 @@ namespace render::mesh
             {
                 const auto& subMesh = gpuData->subMeshes[subMeshIndex];
 
-                // Frustum culling
                 if (frustum && frustum->isInitialized() &&
                     !frustum->intersectsAABB(subMesh.boundingBox, meshData.modelMatrix))
                     continue;
 
-                // Get material path for sorting
                 ExtractedPBRValues pbrValues = MaterialPBRExtractor::getPBRForSubmesh(
                     meshData, subMesh.name, materialCache, currentTime);
 
@@ -795,7 +753,6 @@ namespace render::mesh
             }
         }
 
-        // Sort by material path to group same-material submeshes together
         auto materialSortComparator = [](const SortedSubmesh& a, const SortedSubmesh& b) {
             return a.materialPath < b.materialPath;
         };
@@ -845,7 +802,6 @@ namespace render::mesh
             state.currentPipeline = targetPipeline;
         }
 
-        // Get or create per-material descriptor set if material has textures
         vk::DescriptorSet materialDescSet = nullptr;
         bool hasAnyTexture = !pbrValues.albedoTexturePath.empty() ||
             !pbrValues.normalTexturePath.empty() ||
@@ -870,7 +826,6 @@ namespace render::mesh
                 pbrValues.materialPath, texPaths);
         }
 
-        // Bind material descriptor set if different from current
         if (materialDescSet && materialDescSet != state.currentMaterialDescriptorSet)
         {
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
@@ -884,7 +839,6 @@ namespace render::mesh
             state.currentMaterialDescriptorSet = textureDescriptorSet;
         }
 
-        // Setup push constants
         MeshPushConstants pushConstants{};
         pushConstants.model = meshData.modelMatrix;
         pushConstants.metallic = pbrValues.metallic;
@@ -892,13 +846,10 @@ namespace render::mesh
         pushConstants.ao = pbrValues.ao;
         pushConstants.blendMode = static_cast<float>(pbrValues.blendMode);
 
-        // Pack texture indices - check both pbrValues paths AND explicit meshData.textureIndices
-        // meshData.textureIndices is used for preview rendering where textures are set explicitly
         auto getTexIdx = [&](material::TextureSlot slot, const std::string& pbrPath) -> uint8_t {
             if (!pbrPath.empty()) {
                 return static_cast<uint8_t>(material::toIndex(slot));
             }
-            // Also check explicit texture index from meshData (for preview)
             float explicitIdx = meshData.textureIndices[material::toIndex(slot)];
             if (explicitIdx >= 0.0f) {
                 return static_cast<uint8_t>(explicitIdx);
@@ -924,7 +875,6 @@ namespace render::mesh
         pushConstants.iblDiffuse = pbrValues.iblDiffuse;
         pushConstants.iblSpecular = pbrValues.iblSpecular;
 
-        // Highlight selected submesh
         if (meshData.highlightedSubMesh >= 0 &&
             static_cast<size_t>(meshData.highlightedSubMesh) == subMeshIndex)
         {
@@ -941,7 +891,6 @@ namespace render::mesh
                                     vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                                     0, sizeof(MeshPushConstants), &pushConstants);
 
-        // Get LOD and draw
         uint32_t lodLevel = (meshData.forceLODLevel >= 0 && meshData.forceLODLevel < static_cast<int>(resource::LOD_LEVEL_COUNT))
             ? static_cast<uint32_t>(meshData.forceLODLevel) : 0;
         const auto& lodBuffers = subMesh.getLOD(lodLevel);
@@ -985,7 +934,6 @@ namespace render::mesh
         auto cacheLock = materialCacheManager->acquireSharedLock();
         const auto& materialCache = materialCacheManager->getCache();
 
-        // Begin render pass
         vk::RenderPassBeginInfo renderPassInfo{};
         renderPassInfo.renderPass = renderPass;
         renderPassInfo.framebuffer = framebuffers[imageIndex];
@@ -1000,7 +948,6 @@ namespace render::mesh
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        // Bind descriptor sets
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                          pipelineLayout, 0, descriptorSet, nullptr);
 
@@ -1010,16 +957,13 @@ namespace render::mesh
                                              pipelineLayout, 1, textureDescriptorSet, nullptr);
         }
 
-        // Collect and sort submeshes
         std::vector<SortedSubmesh> opaqueSubmeshes;
         std::vector<SortedSubmesh> maskedSubmeshes;
         collectSortedSubmeshes(meshDrawList, frustum, materialCache, opaqueSubmeshes, maskedSubmeshes);
 
-        // Initialize render state
         RenderState state;
         state.currentMaterialDescriptorSet = textureDescriptorSet;
 
-        // Render opaque pass
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         state.currentPipeline = graphicsPipeline;
 
@@ -1029,14 +973,12 @@ namespace render::mesh
                          material::BlendMode::Opaque, materialCache, state);
         }
 
-        // Render masked pass
         for (const auto& item : maskedSubmeshes)
         {
             renderSubmesh(commandBuffer, *item.meshData, *item.subMesh, item.subMeshIndex,
                          material::BlendMode::Masked, materialCache, state);
         }
 
-        // Render debug items
         if (debugRenderer && debugRenderer->hasItemsToRender())
         {
             debugRenderer->render(commandBuffer, meshDrawList, debugView, debugProjection,
@@ -1061,7 +1003,6 @@ namespace render::mesh
         auto cacheLock = materialCacheManager->acquireSharedLock();
         const auto& materialCache = materialCacheManager->getCache();
 
-        // Bind descriptor sets
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                          pipelineLayout, 0, descriptorSet, nullptr);
 
@@ -1071,16 +1012,13 @@ namespace render::mesh
                                              pipelineLayout, 1, textureDescriptorSet, nullptr);
         }
 
-        // Collect and sort submeshes
         std::vector<SortedSubmesh> opaqueSubmeshes;
         std::vector<SortedSubmesh> maskedSubmeshes;
         collectSortedSubmeshes(meshDrawList, frustum, materialCache, opaqueSubmeshes, maskedSubmeshes);
 
-        // Initialize render state
         RenderState state;
         state.currentMaterialDescriptorSet = textureDescriptorSet;
 
-        // Render opaque pass
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         state.currentPipeline = graphicsPipeline;
 
@@ -1090,7 +1028,6 @@ namespace render::mesh
                          material::BlendMode::Opaque, materialCache, state);
         }
 
-        // Render masked pass
         for (const auto& item : maskedSubmeshes)
         {
             renderSubmesh(commandBuffer, *item.meshData, *item.subMesh, item.subMeshIndex,
@@ -1100,8 +1037,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const
     {
-        // Check if any meshes have materials. If not (e.g., material preview),
-        // skip texture preparation to preserve externally-bound textures
         bool hasMaterials = false;
         for (const auto& meshData : meshDrawList)
         {
@@ -1114,12 +1049,9 @@ namespace render::mesh
 
         if (!hasMaterials)
         {
-            // No materials in draw list - don't reset texture bindings
-            // This allows external texture management (e.g., MaterialPreviewController)
             return;
         }
 
-        // Check if cache needs to be invalidated (material was saved externally)
         materialCacheManager->checkAndClearInvalidation();
 
         auto loadTexturesFromMaterial = [this](const std::shared_ptr<material::MaterialData>& matData)
@@ -1128,7 +1060,6 @@ namespace render::mesh
 
             ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
 
-            // Load all texture types that may be used
             if (!pbr.albedoTexturePath.empty())
                 textureCache->loadTexture(pbr.albedoTexturePath);
             if (!pbr.normalTexturePath.empty())
@@ -1147,8 +1078,6 @@ namespace render::mesh
                 textureCache->loadTexture(pbr.heightTexturePath);
         };
 
-        // Load all unique materials and textures into cache
-        // Per-material descriptor sets are created on-demand in recordCommandBuffer
         for (const auto& meshData : meshDrawList)
         {
             if (!meshData.defaultMaterialPath.empty())
@@ -1157,7 +1086,6 @@ namespace render::mesh
                 loadTexturesFromMaterial(matData);
             }
 
-            // Also process per-submesh materials
             for (const auto& [submeshName, matInfo] : meshData.submeshMaterials)
             {
                 if (!matInfo.materialPath.empty())
@@ -1177,7 +1105,6 @@ namespace render::mesh
         renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
         renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
 
-        // Clear values for depth only - color uses loadOp::eLoad to preserve skybox
         std::array<vk::ClearValue, 2> clearValues{};
         clearValues[0].color = vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
         clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
