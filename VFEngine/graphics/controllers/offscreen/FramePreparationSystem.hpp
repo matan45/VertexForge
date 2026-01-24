@@ -14,12 +14,14 @@ namespace render
 namespace controllers::offscreen
 {
     class SceneBVHManager;
+    class LightBVHManager;
     class CameraController;
 
     struct FrameContext
     {
         render::RenderPassHandler* renderHandler = nullptr;
         SceneBVHManager* bvhManager = nullptr;
+        LightBVHManager* lightBvhManager = nullptr;
         CameraController* cameraController = nullptr;
         bool playModeActive = false;
         bool showDebugRendering = true;

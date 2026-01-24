@@ -1,5 +1,6 @@
 #include "CullingStatsCollector.hpp"
 #include "SceneBVHManager.hpp"
+#include "LightBVHManager.hpp"
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
@@ -9,7 +10,8 @@
 namespace controllers::offscreen
 {
     services::CullingDebugStats CullingStatsCollector::collect(render::RenderPassHandler* renderHandler,
-                                                                SceneBVHManager* bvhManager) const
+                                                                SceneBVHManager* bvhManager,
+                                                                LightBVHManager* lightBvhManager) const
     {
         services::CullingDebugStats stats;
 
@@ -59,11 +61,20 @@ namespace controllers::offscreen
             stats.cameraStats.push_back(camStats);
         }
 
-        // BVH statistics
+        // Mesh BVH statistics
         stats.staticBvhEntityCount = bvhManager->getStaticEntityCount();
         stats.dynamicBvhEntityCount = bvhManager->getDynamicEntityCount();
         stats.staticBvhNodeCount = bvhManager->getStaticNodeCount();
         stats.dynamicBvhNodeCount = bvhManager->getDynamicNodeCount();
+
+        // Light BVH statistics
+        if (lightBvhManager)
+        {
+            stats.staticLightBvhCount = lightBvhManager->getStaticLightCount();
+            stats.dynamicLightBvhCount = lightBvhManager->getDynamicLightCount();
+            stats.staticLightBvhNodeCount = lightBvhManager->getStaticNodeCount();
+            stats.dynamicLightBvhNodeCount = lightBvhManager->getDynamicNodeCount();
+        }
 
         // GPU-driven rendering statistics
         auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();

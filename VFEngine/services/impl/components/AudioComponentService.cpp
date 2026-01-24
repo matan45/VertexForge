@@ -23,7 +23,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
             sceneEntity.addComponent<components::AudioSource2DComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
+            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio2D));
             return true;
         }
         return false;
@@ -40,7 +40,7 @@ namespace services {
             sceneEntity.removeComponent<components::AudioSource2DComponent>();
             // Only remove billboard if no other audio component exists
             if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
-                autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
+                autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio2D));
             }
             return true;
         }
@@ -107,7 +107,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
             sceneEntity.addComponent<components::AudioSource3DComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
+            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
             return true;
         }
         return false;
@@ -124,7 +124,7 @@ namespace services {
             sceneEntity.removeComponent<components::AudioSource3DComponent>();
             // Only remove billboard if no other audio component exists
             if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
-                autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::AudioSource));
+                autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
             }
             return true;
         }

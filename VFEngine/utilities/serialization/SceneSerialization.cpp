@@ -333,9 +333,12 @@ namespace serialization
     {
         switch (type)
         {
-        case components::BillboardIconType::Light: return "light";
+        case components::BillboardIconType::DirectionalLight: return "directionalLight";
+        case components::BillboardIconType::PointLight: return "pointLight";
+        case components::BillboardIconType::SpotLight: return "spotLight";
         case components::BillboardIconType::Camera: return "camera";
-        case components::BillboardIconType::AudioSource: return "audioSource";
+        case components::BillboardIconType::Audio2D: return "audio2D";
+        case components::BillboardIconType::Audio3D: return "audio3D";
         case components::BillboardIconType::Particle: return "particle";
         default: return "custom";
         }
@@ -343,10 +346,16 @@ namespace serialization
 
     components::BillboardIconType SceneSerialization::stringToBillboardIconType(const std::string& str)
     {
-        if (str == "light") return components::BillboardIconType::Light;
+        if (str == "directionalLight") return components::BillboardIconType::DirectionalLight;
+        if (str == "pointLight") return components::BillboardIconType::PointLight;
+        if (str == "spotLight") return components::BillboardIconType::SpotLight;
         if (str == "camera") return components::BillboardIconType::Camera;
-        if (str == "audioSource") return components::BillboardIconType::AudioSource;
+        if (str == "audio2D") return components::BillboardIconType::Audio2D;
+        if (str == "audio3D") return components::BillboardIconType::Audio3D;
         if (str == "particle") return components::BillboardIconType::Particle;
+        // Legacy support for old scene files
+        if (str == "light") return components::BillboardIconType::PointLight;
+        if (str == "audioSource") return components::BillboardIconType::Audio3D;
         return components::BillboardIconType::Custom;
     }
 
@@ -1142,7 +1151,7 @@ namespace serialization
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                    billboard.iconType = components::BillboardIconType::AudioSource;
+                    billboard.iconType = components::BillboardIconType::Audio2D;
                 }
             }
 
@@ -1153,7 +1162,7 @@ namespace serialization
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                    billboard.iconType = components::BillboardIconType::AudioSource;
+                    billboard.iconType = components::BillboardIconType::Audio3D;
                 }
             }
 
@@ -1195,7 +1204,7 @@ namespace serialization
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                    billboard.iconType = components::BillboardIconType::Light;
+                    billboard.iconType = components::BillboardIconType::DirectionalLight;
                 }
             }
 
@@ -1207,7 +1216,7 @@ namespace serialization
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                    billboard.iconType = components::BillboardIconType::Light;
+                    billboard.iconType = components::BillboardIconType::PointLight;
                 }
             }
 
@@ -1219,7 +1228,7 @@ namespace serialization
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                    billboard.iconType = components::BillboardIconType::Light;
+                    billboard.iconType = components::BillboardIconType::SpotLight;
                 }
             }
         }

@@ -9,6 +9,7 @@ namespace render
 namespace controllers::offscreen
 {
     class SceneBVHManager;
+    class LightBVHManager;
 
     class CullingStatsCollector
     {
@@ -16,6 +17,7 @@ namespace controllers::offscreen
         CullingStatsCollector() = default;
 
         services::CullingDebugStats collect(render::RenderPassHandler* renderHandler,
-                                            SceneBVHManager* bvhManager) const;
+                                            SceneBVHManager* bvhManager,
+                                            LightBVHManager* lightBvhManager) const;
     };
 }

@@ -1,45 +1,34 @@
 #include "LightComponentService.hpp"
-#include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
+#include "../../events/LightCullingEvents.hpp"
 
 namespace services {
 
     namespace {
-        // Validation helper for color values (clamps to valid range)
         glm::vec3 validateColor(const glm::vec3& color) {
             return glm::clamp(color, glm::vec3(0.0f), glm::vec3(1.0f));
         }
 
-        // Validation helper for intensity (must be non-negative)
         bool isValidIntensity(float intensity) {
             return intensity >= 0.0f;
         }
 
-        // Validation helper for radius/range (must be positive)
         bool isValidRadius(float radius) {
             return radius > 0.0f;
         }
 
-        // Validation helper for spot light angles
         bool isValidSpotAngles(float innerAngle, float outerAngle) {
-            // Angles must be in valid range (0-90 degrees for half-angle)
             if (innerAngle < 0.0f || innerAngle > 90.0f) return false;
             if (outerAngle < 0.0f || outerAngle > 90.0f) return false;
-            // Inner angle must be less than outer angle
             if (innerAngle >= outerAngle) return false;
             return true;
         }
     }
-
-    LightComponentService::LightComponentService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
-        : sceneGraph(std::move(sceneGraph)) {}
-
-    // ========== DIRECTIONAL LIGHT COMPONENT OPERATIONS ==========
 
     bool LightComponentService::addDirectionalLightComponent(EntityHandle entity) {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -50,7 +39,14 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::DirectionalLightComponent>()) {
             sceneEntity.addComponent<components::DirectionalLightComponent>();
-            autoAttachBillboard(entity);
+            autoAttachBillboard(entity, components::BillboardIconType::DirectionalLight);
+
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Directional;
+            notification.added = true;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -65,10 +61,16 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::DirectionalLightComponent>()) {
             sceneEntity.removeComponent<components::DirectionalLightComponent>();
-            // Only remove billboard if no other light component exists
             if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity);
+                autoDetachBillboard(entity, components::BillboardIconType::DirectionalLight);
             }
+
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Directional;
+            notification.added = false;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -104,7 +106,6 @@ namespace services {
     }
 
     bool LightComponentService::setDirectionalLightData(EntityHandle entity, const DirectionalLightData& lightData) {
-        // Validate intensity
         if (!isValidIntensity(lightData.intensity)) {
             return false;
         }
@@ -123,10 +124,14 @@ namespace services {
         comp.color = validateColor(lightData.color);
         comp.intensity = lightData.intensity;
         comp.showGizmo = lightData.showGizmo;
+
+        events::lighting::LightDataChangedNotification notification;
+        notification.entity = entity;
+        notification.lightType = events::lighting::LightType::Directional;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
-
-    // ========== POINT LIGHT COMPONENT OPERATIONS ==========
 
     bool LightComponentService::addPointLightComponent(EntityHandle entity) {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -137,7 +142,14 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::PointLightComponent>()) {
             sceneEntity.addComponent<components::PointLightComponent>();
-            autoAttachBillboard(entity);
+            autoAttachBillboard(entity, components::BillboardIconType::PointLight);
+
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Point;
+            notification.added = true;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -152,10 +164,16 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::PointLightComponent>()) {
             sceneEntity.removeComponent<components::PointLightComponent>();
-            // Only remove billboard if no other light component exists
             if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity);
+                autoDetachBillboard(entity, components::BillboardIconType::PointLight);
             }
+
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Point;
+            notification.added = false;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -192,7 +210,6 @@ namespace services {
     }
 
     bool LightComponentService::setPointLightData(EntityHandle entity, const PointLightData& lightData) {
-        // Validate intensity and radius
         if (!isValidIntensity(lightData.intensity)) {
             return false;
         }
@@ -215,10 +232,14 @@ namespace services {
         comp.intensity = lightData.intensity;
         comp.radius = lightData.radius;
         comp.showGizmo = lightData.showGizmo;
+
+        events::lighting::LightDataChangedNotification notification;
+        notification.entity = entity;
+        notification.lightType = events::lighting::LightType::Point;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
-
-    // ========== SPOT LIGHT COMPONENT OPERATIONS ==========
 
     bool LightComponentService::addSpotLightComponent(EntityHandle entity) {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -229,7 +250,14 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::SpotLightComponent>()) {
             sceneEntity.addComponent<components::SpotLightComponent>();
-            autoAttachBillboard(entity);
+            autoAttachBillboard(entity, components::BillboardIconType::SpotLight);
+
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Spot;
+            notification.added = true;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -244,10 +272,16 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::SpotLightComponent>()) {
             sceneEntity.removeComponent<components::SpotLightComponent>();
-            // Only remove billboard if no other light component exists
             if (!hasAnyLightComponent(entity)) {
-                autoDetachBillboard(entity);
+                autoDetachBillboard(entity, components::BillboardIconType::SpotLight);
             }
+
+            events::lighting::LightComponentChangedNotification notification;
+            notification.entity = entity;
+            notification.lightType = events::lighting::LightType::Spot;
+            notification.added = false;
+            events::EventDispatcher::instance().publish(notification);
+
             return true;
         }
         return false;
@@ -286,7 +320,6 @@ namespace services {
     }
 
     bool LightComponentService::setSpotLightData(EntityHandle entity, const SpotLightData& lightData) {
-        // Validate intensity, range, and angles
         if (!isValidIntensity(lightData.intensity)) {
             return false;
         }
@@ -314,10 +347,14 @@ namespace services {
         comp.outerAngle = lightData.outerAngle;
         comp.range = lightData.range;
         comp.showGizmo = lightData.showGizmo;
+
+        events::lighting::LightDataChangedNotification notification;
+        notification.entity = entity;
+        notification.lightType = events::lighting::LightType::Spot;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
-
-    // ========== HELPER METHODS ==========
 
     bool LightComponentService::hasAnyLightComponent(EntityHandle entity) const {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -331,7 +368,7 @@ namespace services {
                sceneEntity.hasComponent<components::SpotLightComponent>();
     }
 
-    void LightComponentService::autoAttachBillboard(EntityHandle entity) {
+    void LightComponentService::autoAttachBillboard(EntityHandle entity, components::BillboardIconType iconType) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return;
@@ -340,13 +377,13 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::BillboardComponent>()) {
             auto& billboard = sceneEntity.addComponent<components::BillboardComponent>();
-            billboard.iconType = components::BillboardIconType::Light;
+            billboard.iconType = iconType;
             billboard.editorOnly = true;
             billboard.selectable = true;
         }
     }
 
-    void LightComponentService::autoDetachBillboard(EntityHandle entity) {
+    void LightComponentService::autoDetachBillboard(EntityHandle entity, components::BillboardIconType iconType) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return;
@@ -355,15 +392,13 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::BillboardComponent>()) {
             auto& billboard = sceneEntity.getComponent<components::BillboardComponent>();
-            // Only remove if it's a light billboard (auto-attached)
-            if (billboard.iconType == components::BillboardIconType::Light) {
+            if (billboard.iconType == iconType) {
                 sceneEntity.removeComponent<components::BillboardComponent>();
             }
         }
     }
 
     void LightComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
-        // Directional Light component handlers
         dispatcher.registerCommandHandler<events::scene::AddDirectionalLightComponentCommand>(
             [this](const events::scene::AddDirectionalLightComponentCommand& cmd) {
                 return addDirectionalLightComponent(cmd.entity);
@@ -389,7 +424,6 @@ namespace services {
                 return getDirectionalLightData(query.entity);
             });
 
-        // Point Light component handlers
         dispatcher.registerCommandHandler<events::scene::AddPointLightComponentCommand>(
             [this](const events::scene::AddPointLightComponentCommand& cmd) {
                 return addPointLightComponent(cmd.entity);
@@ -415,7 +449,6 @@ namespace services {
                 return getPointLightData(query.entity);
             });
 
-        // Spot Light component handlers
         dispatcher.registerCommandHandler<events::scene::AddSpotLightComponentCommand>(
             [this](const events::scene::AddSpotLightComponentCommand& cmd) {
                 return addSpotLightComponent(cmd.entity);

@@ -253,11 +253,14 @@ namespace components
 
     enum class BillboardIconType : uint8_t
     {
-        Light = 0,
+        DirectionalLight = 0,
+        PointLight,
+        SpotLight,
         Camera,
-        AudioSource,
+        Audio2D,
+        Audio3D,
         Particle,
-        Custom,
+        Custom
     };
 
     struct BillboardComponent
@@ -282,10 +285,13 @@ namespace components
 
             switch (iconType)
             {
-            case BillboardIconType::Light: return 0;
-            case BillboardIconType::Camera: return 1;
-            case BillboardIconType::AudioSource: return 2;
-            case BillboardIconType::Particle: return 3;
+            case BillboardIconType::DirectionalLight: return 0;
+            case BillboardIconType::PointLight: return 1;
+            case BillboardIconType::SpotLight: return 2;
+            case BillboardIconType::Camera: return 3;
+            case BillboardIconType::Audio2D: return 4;
+            case BillboardIconType::Audio3D: return 5;
+            case BillboardIconType::Particle: return 6;
             default: return atlasIndex;
             }
         }

@@ -20,7 +20,6 @@ namespace controllers::offscreen
 
     void SceneBVHManager::init(render::RenderPassHandler* renderHandler)
     {
-        // Set up BVH mesh bounds callback
         sceneBVH.setMeshBoundsCallback([renderHandler](const std::string& meshPath) -> const math::AABB*
         {
             auto* meshPipeline = renderHandler->getMeshPipeline();
@@ -31,7 +30,6 @@ namespace controllers::offscreen
             return nullptr;
         });
 
-        // Subscribe to mesh data changes (mesh added/changed/removed on entity)
         auto meshChangedToken = events::EventDispatcher::instance().subscribe<
             events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
@@ -53,7 +51,6 @@ namespace controllers::offscreen
             });
         meshDataChangedSubscription = std::make_unique<events::SubscriptionToken>(meshChangedToken);
 
-        // Subscribe to entity deleted notification
         auto deletedToken = events::EventDispatcher::instance().subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& notification)
             {
@@ -69,7 +66,6 @@ namespace controllers::offscreen
             });
         entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(deletedToken);
 
-        // Subscribe to entity static changed notification
         auto staticChangedToken = events::EventDispatcher::instance().subscribe<
             events::scene::EntityStaticChangedNotification>(
             [this](const events::scene::EntityStaticChangedNotification&)
@@ -77,6 +73,57 @@ namespace controllers::offscreen
                 sceneBVH.markDirty();
             });
         entityStaticChangedSubscription = std::make_unique<events::SubscriptionToken>(staticChangedToken);
+
+        auto sceneLoadedToken = events::EventDispatcher::instance().subscribe<
+            events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification&)
+            {
+                sceneBVH.markDirty();
+            });
+        sceneLoadedSubscription = std::make_unique<events::SubscriptionToken>(sceneLoadedToken);
+
+        auto sceneClearedToken = events::EventDispatcher::instance().subscribe<
+            events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&)
+            {
+                sceneBVH.markDirty();
+            });
+        sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneClearedToken);
+
+        auto prefabToken = events::EventDispatcher::instance().subscribe<
+            events::scene::PrefabInstantiatedNotification>(
+            [this](const events::scene::PrefabInstantiatedNotification&)
+            {
+                sceneBVH.markDirty();
+            });
+        prefabInstantiatedSubscription = std::make_unique<events::SubscriptionToken>(prefabToken);
+
+        auto duplicatedToken = events::EventDispatcher::instance().subscribe<
+            events::scene::EntityDuplicatedNotification>(
+            [this](const events::scene::EntityDuplicatedNotification& notification)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = static_cast<entt::entity>(notification.duplicatedEntity.id);
+
+                if (!registry.valid(entity) || !registry.all_of<components::MeshComponent>(entity))
+                {
+                    return;
+                }
+
+                if (registry.all_of<components::TransformComponent>(entity))
+                {
+                    const auto& transform = registry.get<components::TransformComponent>(entity);
+                    if (transform.isStatic)
+                    {
+                        sceneBVH.markStaticDirty();
+                    }
+                    else
+                    {
+                        sceneBVH.markDynamicDirty();
+                    }
+                }
+            });
+        entityDuplicatedSubscription = std::make_unique<events::SubscriptionToken>(duplicatedToken);
     }
 
     void SceneBVHManager::cleanUp()
@@ -92,6 +139,22 @@ namespace controllers::offscreen
         if (entityStaticChangedSubscription && entityStaticChangedSubscription->isValid())
         {
             events::EventDispatcher::instance().unsubscribe(*entityStaticChangedSubscription);
+        }
+        if (sceneLoadedSubscription && sceneLoadedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*sceneLoadedSubscription);
+        }
+        if (sceneClearedSubscription && sceneClearedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*sceneClearedSubscription);
+        }
+        if (prefabInstantiatedSubscription && prefabInstantiatedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*prefabInstantiatedSubscription);
+        }
+        if (entityDuplicatedSubscription && entityDuplicatedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*entityDuplicatedSubscription);
         }
     }
 

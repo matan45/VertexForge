@@ -164,4 +164,67 @@ namespace events {
         return token;
     }
 
+    // RAII wrapper for automatic subscription cleanup
+    // Automatically unsubscribes when destroyed, preventing leaks from exceptions or forgotten cleanup
+    class ScopedSubscription
+    {
+    public:
+        ScopedSubscription() = default;
+
+        explicit ScopedSubscription(SubscriptionToken token)
+            : token(token)
+        {
+        }
+
+        // Move-only (no copying)
+        ScopedSubscription(const ScopedSubscription&) = delete;
+        ScopedSubscription& operator=(const ScopedSubscription&) = delete;
+
+        ScopedSubscription(ScopedSubscription&& other) noexcept
+            : token(other.token)
+        {
+            other.token = {};  // Invalidate moved-from token
+        }
+
+        ScopedSubscription& operator=(ScopedSubscription&& other) noexcept
+        {
+            if (this != &other)
+            {
+                unsubscribe();
+                token = other.token;
+                other.token = {};
+            }
+            return *this;
+        }
+
+        ~ScopedSubscription()
+        {
+            unsubscribe();
+        }
+
+        // Manual unsubscribe (also called by destructor)
+        void unsubscribe()
+        {
+            if (token.isValid())
+            {
+                EventDispatcher::instance().unsubscribe(token);
+                token = {};
+            }
+        }
+
+        // Check if subscription is active
+        bool isValid() const { return token.isValid(); }
+
+        // Release ownership without unsubscribing (use with caution)
+        SubscriptionToken release()
+        {
+            SubscriptionToken t = token;
+            token = {};
+            return t;
+        }
+
+    private:
+        SubscriptionToken token;
+    };
+
 }
