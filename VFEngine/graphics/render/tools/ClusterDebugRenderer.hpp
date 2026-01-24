@@ -23,6 +23,21 @@ namespace render::mesh
         bool showAllClusters = false;                        // Show all clusters vs only highlighted
     };
 
+    // GPU instance data for instanced rendering
+    struct ClusterInstance
+    {
+        glm::vec4 minPoint;   // xyz = view-space min, w = unused
+        glm::vec4 maxPoint;   // xyz = view-space max, w = highlighted flag
+        glm::vec4 color;      // RGBA color
+    };
+
+    // Push constants for cluster wireframe shader
+    struct ClusterPushConstants
+    {
+        glm::mat4 viewProjection;
+        glm::mat4 invViewMatrix;
+    };
+
     class ClusterDebugRenderer
     {
     private:
@@ -33,11 +48,21 @@ namespace render::mesh
 
         vk::Pipeline wireframePipeline;
         vk::PipelineLayout wireframePipelineLayout;
+        vk::DescriptorSetLayout descriptorSetLayout;
+        vk::DescriptorPool descriptorPool;
+        vk::DescriptorSet descriptorSet;
 
+        // Unit cube geometry
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
         vk::Buffer indexBuffer;
         vk::DeviceMemory indexBufferMemory;
+
+        // Instance data storage buffer
+        vk::Buffer instanceBuffer;
+        vk::DeviceMemory instanceBufferMemory;
+        void* instanceBufferMapped = nullptr;
+        static constexpr uint32_t MAX_INSTANCES = lighting::ClusterConstants::MAX_CLUSTERS;
 
         bool initialized = false;
         bool visible = false;
@@ -54,7 +79,7 @@ namespace render::mesh
         void render(const vk::CommandBuffer& commandBuffer,
                     const ClusterDebugRenderData& data,
                     const glm::mat4& view,
-                    const glm::mat4& projection) const;
+                    const glm::mat4& projection);
 
         void setVisible(bool show) { visible = show; }
         [[nodiscard]] bool isVisible() const { return visible; }
@@ -62,13 +87,12 @@ namespace render::mesh
 
     private:
         void loadShader();
+        void createDescriptorSetLayout();
         void createPipeline(vk::RenderPass renderPass);
         void createBuffers();
+        void createDescriptorPool();
+        void createDescriptorSet();
 
-        void renderClusterAABB(const vk::CommandBuffer& commandBuffer,
-                               const lighting::GPUClusterAABB& aabb,
-                               const glm::mat4& invView,
-                               const glm::mat4& viewProjection,
-                               const glm::vec4& color) const;
+        uint32_t uploadInstanceData(const ClusterDebugRenderData& data);
     };
 }

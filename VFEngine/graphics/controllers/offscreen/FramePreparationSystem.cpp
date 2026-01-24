@@ -727,6 +727,13 @@ namespace controllers::offscreen
             return;
         }
 
+        // Camera controller is required for view matrix transformations
+        if (!ctx.cameraController)
+        {
+            renderHandler->setShowClusterDebug(false);
+            return;
+        }
+
         renderHandler->setShowClusterDebug(true);
 
         // Get the cluster grid manager from GPU-driven renderer
@@ -742,16 +749,13 @@ namespace controllers::offscreen
             return;
         }
 
+        // Get view matrix once for all transformations
+        glm::mat4 viewMatrix = ctx.cameraController->getCurrentViewMatrix();
+
         // Prepare cluster debug render data
         render::mesh::ClusterDebugRenderData debugData;
         debugData.clusterAABBs = clusterGridManager->getClusterAABBs();
-
-        // Get inverse view matrix from camera
-        if (ctx.cameraController)
-        {
-            glm::mat4 viewMatrix = ctx.cameraController->getCurrentViewMatrix();
-            debugData.invViewMatrix = glm::inverse(viewMatrix);
-        }
+        debugData.invViewMatrix = glm::inverse(viewMatrix);
 
         // Check if a light entity is selected and compute affected clusters
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -770,7 +774,6 @@ namespace controllers::offscreen
                 glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
 
                 // Transform to view space
-                glm::mat4 viewMatrix = ctx.cameraController ? ctx.cameraController->getCurrentViewMatrix() : glm::mat4(1.0f);
                 glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
 
                 // Get affected clusters
@@ -797,7 +800,6 @@ namespace controllers::offscreen
                 glm::vec3 worldDir = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
                 // Transform to view space
-                glm::mat4 viewMatrix = ctx.cameraController ? ctx.cameraController->getCurrentViewMatrix() : glm::mat4(1.0f);
                 glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
                 glm::vec3 viewDir = glm::normalize(glm::vec3(viewMatrix * glm::vec4(worldDir, 0.0f)));
 

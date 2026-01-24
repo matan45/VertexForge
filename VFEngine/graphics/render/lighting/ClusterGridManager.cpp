@@ -551,6 +551,53 @@ namespace render::lighting
         return result;
     }
 
+    // Helper: Check if a point is inside the cone (within range and angle)
+    static bool pointInCone(const glm::vec3& point, const glm::vec3& apex,
+                            const glm::vec3& dir, float range, float cosAngle)
+    {
+        glm::vec3 toPoint = point - apex;
+        float dist = glm::length(toPoint);
+
+        if (dist < 0.0001f)
+        {
+            return true; // Point at apex is inside
+        }
+        if (dist > range)
+        {
+            return false;
+        }
+
+        float pointCosAngle = glm::dot(toPoint / dist, dir);
+        return pointCosAngle >= cosAngle;
+    }
+
+    // Helper: Get closest point on AABB to a given point
+    static glm::vec3 closestPointOnAABB(const glm::vec3& point,
+                                         const glm::vec3& aabbMin, const glm::vec3& aabbMax)
+    {
+        return glm::clamp(point, aabbMin, aabbMax);
+    }
+
+    // Helper: Check if cone axis intersects AABB
+    static bool coneAxisIntersectsAABB(const glm::vec3& apex, const glm::vec3& dir,
+                                        float range, const glm::vec3& aabbMin, const glm::vec3& aabbMax)
+    {
+        // Ray-AABB intersection using slab method
+        glm::vec3 invDir = 1.0f / (dir + glm::vec3(0.0001f)); // Avoid division by zero
+
+        glm::vec3 t1 = (aabbMin - apex) * invDir;
+        glm::vec3 t2 = (aabbMax - apex) * invDir;
+
+        glm::vec3 tMin = glm::min(t1, t2);
+        glm::vec3 tMax = glm::max(t1, t2);
+
+        float tNear = glm::max(glm::max(tMin.x, tMin.y), tMin.z);
+        float tFar = glm::min(glm::min(tMax.x, tMax.y), tMax.z);
+
+        // Check if ray intersects AABB within cone range
+        return tNear <= tFar && tFar >= 0.0f && tNear <= range;
+    }
+
     std::vector<uint32_t> ClusterGridManager::getClusterIndicesForSpotLight(
         const glm::vec3& lightPosViewSpace,
         const glm::vec3& lightDirViewSpace,
@@ -564,13 +611,10 @@ namespace render::lighting
             return result;
         }
 
-        result.reserve(32); // Typical number of affected clusters
+        result.reserve(32);
 
-        // For spot light, we use a conservative bounding sphere approach:
-        // The spot light cone can be bounded by a sphere centered at apex with radius = range
-
-        // First, do a quick sphere test with the cone's bounding sphere
-        // Then refine with cone-AABB test
+        // Compute sin of outer angle for distance-to-cone-surface calculations
+        float outerAngleSin = std::sqrt(1.0f - outerAngleCos * outerAngleCos);
 
         for (uint32_t i = 0; i < cpuClusterAABBs.size(); ++i)
         {
@@ -578,32 +622,21 @@ namespace render::lighting
             glm::vec3 aabbMin = glm::vec3(aabb.minPoint);
             glm::vec3 aabbMax = glm::vec3(aabb.maxPoint);
 
-            // Quick bounding sphere test first
+            // Quick bounding sphere rejection test
             if (!sphereIntersectsAABB(lightPosViewSpace, range, aabbMin, aabbMax))
             {
                 continue;
             }
 
-            // More precise cone-AABB test
-            // Check if any corner of the AABB is inside the cone, or if the cone axis intersects the AABB
-
-            // Get AABB center and check if it's within the cone
+            // Test 1: Check if AABB center is inside cone
             glm::vec3 aabbCenter = (aabbMin + aabbMax) * 0.5f;
-            glm::vec3 toCenter = aabbCenter - lightPosViewSpace;
-            float distToCenter = glm::length(toCenter);
-
-            if (distToCenter > 0.0001f && distToCenter <= range)
+            if (pointInCone(aabbCenter, lightPosViewSpace, lightDirViewSpace, range, outerAngleCos))
             {
-                // Check if the center is within the cone angle
-                float cosAngle = glm::dot(glm::normalize(toCenter), lightDirViewSpace);
-                if (cosAngle >= outerAngleCos)
-                {
-                    result.push_back(i);
-                    continue;
-                }
+                result.push_back(i);
+                continue;
             }
 
-            // Check AABB corners
+            // Test 2: Check if any AABB corner is inside cone
             glm::vec3 corners[8] = {
                 {aabbMin.x, aabbMin.y, aabbMin.z},
                 {aabbMax.x, aabbMin.y, aabbMin.z},
@@ -615,24 +648,70 @@ namespace render::lighting
                 {aabbMax.x, aabbMax.y, aabbMax.z}
             };
 
-            bool anyCornerInCone = false;
+            bool intersects = false;
             for (const auto& corner : corners)
             {
-                glm::vec3 toCorner = corner - lightPosViewSpace;
-                float dist = glm::length(toCorner);
-
-                if (dist > 0.0001f && dist <= range)
+                if (pointInCone(corner, lightPosViewSpace, lightDirViewSpace, range, outerAngleCos))
                 {
-                    float cosAngle = glm::dot(glm::normalize(toCorner), lightDirViewSpace);
-                    if (cosAngle >= outerAngleCos)
-                    {
-                        anyCornerInCone = true;
-                        break;
-                    }
+                    intersects = true;
+                    break;
                 }
             }
 
-            if (anyCornerInCone)
+            if (intersects)
+            {
+                result.push_back(i);
+                continue;
+            }
+
+            // Test 3: Check if cone axis passes through AABB
+            if (coneAxisIntersectsAABB(lightPosViewSpace, lightDirViewSpace, range, aabbMin, aabbMax))
+            {
+                result.push_back(i);
+                continue;
+            }
+
+            // Test 4: Check closest point on AABB to cone axis
+            // Project AABB center onto cone axis, then find closest point on AABB to that projection
+            glm::vec3 toCenter = aabbCenter - lightPosViewSpace;
+            float projLen = glm::dot(toCenter, lightDirViewSpace);
+
+            if (projLen > 0.0f && projLen <= range)
+            {
+                glm::vec3 projPoint = lightPosViewSpace + lightDirViewSpace * projLen;
+                glm::vec3 closestOnAABB = closestPointOnAABB(projPoint, aabbMin, aabbMax);
+
+                // Check if closest point is within the cone at that depth
+                // Cone radius at depth d = d * tan(angle) = d * sin/cos
+                float coneRadiusAtDepth = projLen * outerAngleSin / outerAngleCos;
+                float distToAxis = glm::length(closestOnAABB - projPoint);
+
+                if (distToAxis <= coneRadiusAtDepth)
+                {
+                    result.push_back(i);
+                    continue;
+                }
+            }
+
+            // Test 5: Check AABB edges against cone surface (simplified - check edge midpoints)
+            // This catches cases where an edge passes through the cone without endpoints inside
+            constexpr int edgeIndices[12][2] = {
+                {0,1}, {2,3}, {4,5}, {6,7},  // X-aligned edges
+                {0,2}, {1,3}, {4,6}, {5,7},  // Y-aligned edges
+                {0,4}, {1,5}, {2,6}, {3,7}   // Z-aligned edges
+            };
+
+            for (const auto& edge : edgeIndices)
+            {
+                glm::vec3 edgeMid = (corners[edge[0]] + corners[edge[1]]) * 0.5f;
+                if (pointInCone(edgeMid, lightPosViewSpace, lightDirViewSpace, range, outerAngleCos))
+                {
+                    intersects = true;
+                    break;
+                }
+            }
+
+            if (intersects)
             {
                 result.push_back(i);
             }

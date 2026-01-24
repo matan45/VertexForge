@@ -309,6 +309,7 @@
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
     <None Include="..\..\resources\shaders\mesh\skinned_mesh.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
+    <None Include="..\..\resources\shaders\tools\clusterWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />
     <None Include="..\..\resources\shaders\tools\sphere_wireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\wireframe.glsl" />

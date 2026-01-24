@@ -45,7 +45,7 @@ namespace render
         std::unique_ptr<mesh::GridRenderer> gridRenderer;
         std::unique_ptr<mesh::PhysicsDebugRenderer> physicsDebugRenderer;
         std::unique_ptr<mesh::LightGizmoDebugRenderer> lightGizmoRenderer;
-        std::unique_ptr<mesh::ClusterDebugRenderer> clusterDebugRenderer;
+        mutable std::unique_ptr<mesh::ClusterDebugRenderer> clusterDebugRenderer;
 
         std::vector<mesh::CameraFrustumRenderData> cameraFrustumDrawList;
 
