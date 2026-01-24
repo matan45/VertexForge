@@ -83,11 +83,17 @@ namespace services {
         std::vector<CameraCullingStats> cameraStats;
         CameraId activeCameraId = 0;
 
-        // BVH statistics
+        // Mesh BVH statistics
         size_t staticBvhEntityCount = 0;
         size_t dynamicBvhEntityCount = 0;
         size_t staticBvhNodeCount = 0;
         size_t dynamicBvhNodeCount = 0;
+
+        // Light BVH statistics
+        size_t staticLightBvhCount = 0;
+        size_t dynamicLightBvhCount = 0;
+        size_t staticLightBvhNodeCount = 0;
+        size_t dynamicLightBvhNodeCount = 0;
 
         // GPU-driven rendering statistics
         GPUDrivenDebugStats gpuDriven;

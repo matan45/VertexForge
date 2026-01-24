@@ -274,7 +274,7 @@ namespace controllers
 
     services::CullingDebugStats OffScreenController::getCullingStats() const
     {
-        return statsCollector->collect(offScreen->getRenderPassHandler(), bvhManager.get());
+        return statsCollector->collect(offScreen->getRenderPassHandler(), bvhManager.get(), lightBvhManager.get());
     }
 
     void OffScreenController::setShowGrid(bool show)

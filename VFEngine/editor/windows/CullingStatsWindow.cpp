@@ -204,12 +204,25 @@ namespace windows
             if (ImGui::CollapsingHeader("BVH Statistics (CPU)", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent();
-                ImGui::Text("Static BVH:  %zu entities, %zu nodes",
+
+                ImGui::Text("Mesh BVH:");
+                ImGui::Text("  Static:  %zu entities, %zu nodes",
                             stats.staticBvhEntityCount, stats.staticBvhNodeCount);
-                ImGui::Text("Dynamic BVH: %zu entities, %zu nodes",
+                ImGui::Text("  Dynamic: %zu entities, %zu nodes",
                             stats.dynamicBvhEntityCount, stats.dynamicBvhNodeCount);
-                ImGui::Text("Total:       %zu entities",
+                ImGui::Text("  Total:   %zu entities",
                             stats.staticBvhEntityCount + stats.dynamicBvhEntityCount);
+
+                ImGui::Separator();
+
+                ImGui::Text("Light BVH:");
+                ImGui::Text("  Static:  %zu lights, %zu nodes",
+                            stats.staticLightBvhCount, stats.staticLightBvhNodeCount);
+                ImGui::Text("  Dynamic: %zu lights, %zu nodes",
+                            stats.dynamicLightBvhCount, stats.dynamicLightBvhNodeCount);
+                ImGui::Text("  Total:   %zu lights",
+                            stats.staticLightBvhCount + stats.dynamicLightBvhCount);
+
                 ImGui::Unindent();
             }
             ImGui::Separator();

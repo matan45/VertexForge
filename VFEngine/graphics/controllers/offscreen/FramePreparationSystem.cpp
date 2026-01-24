@@ -1,5 +1,6 @@
 #include "FramePreparationSystem.hpp"
 #include "SceneBVHManager.hpp"
+#include "LightBVHManager.hpp"
 #include "CameraController.hpp"
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/mesh/StaticMeshPipeline.hpp"
@@ -651,6 +652,12 @@ namespace controllers::offscreen
     void FramePreparationSystem::prepareLightGizmos(const FrameContext& ctx)
     {
         auto* renderHandler = ctx.renderHandler;
+
+        // Update light BVH (rebuild or refit as needed)
+        if (ctx.lightBvhManager)
+        {
+            ctx.lightBvhManager->update();
+        }
 
         if (ctx.playModeActive || !ctx.showDebugRendering)
         {
