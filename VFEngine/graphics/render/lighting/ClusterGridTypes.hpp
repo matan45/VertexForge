@@ -7,16 +7,21 @@
 namespace render::lighting
 {
     // Cluster grid configuration constants
-    // Memory budget: ~216KB total for default configuration
-    //   - Params UBO: 128 bytes
-    //   - AABBs SSBO (device): 16x9x24 x 32 bytes = ~108KB
-    //   - AABBs staging: ~108KB
+    // Memory budget: ~288KB total for default configuration
+    //   - Params UBO: 144 bytes
+    //   - AABBs SSBO (device): 16x9x32 x 32 bytes = ~144KB
+    //   - AABBs staging: ~144KB
     namespace ClusterConstants
     {
+        // Default grid dimensions (current configuration: 16×9×32 = 4608 clusters)
         inline constexpr uint32_t DEFAULT_TILES_X = 16;    // Screen tiles horizontally
         inline constexpr uint32_t DEFAULT_TILES_Y = 9;     // Screen tiles vertically (16:9 aspect)
-        inline constexpr uint32_t DEFAULT_SLICES_Z = 24;   // Depth slices (logarithmic)
-        inline constexpr uint32_t MAX_CLUSTERS = 16 * 9 * 32; // 4608 max clusters
+        inline constexpr uint32_t DEFAULT_SLICES_Z = 32;   // Depth slices (logarithmic)
+
+        // Maximum cluster capacity for buffer allocation (16×9×48 = 6912)
+        // Intentionally larger than default to allow runtime configuration changes
+        // (e.g., increasing depth slices to 48) without reallocating GPU buffers
+        inline constexpr uint32_t MAX_CLUSTERS = 16 * 9 * 48;
     }
 
     // GPU-aligned cluster grid parameters (UBO)

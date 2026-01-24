@@ -114,8 +114,13 @@ namespace render::gpudriven
             );
 
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
-            meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(),
-                                     boneMatrixManager->getDescriptorSetLayout(), renderPass);
+            meshShaderPipeline->init(iblDescriptorSetLayout,
+                                     bindlessTextures->getDescriptorSetLayout(),
+                                     boneMatrixManager->getDescriptorSetLayout(),
+                                     lightBufferManager->getDescriptorSetLayout(),
+                                     clusterGridManager->getDescriptorSetLayout(),
+                                     lightCullingPipeline->getDescriptorSetLayout(),
+                                     renderPass);
 
             if (meshStreamManager)
             {
@@ -389,6 +394,15 @@ namespace render::gpudriven
             meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+
+            // Update lighting descriptor sets for clustered forward shading
+            if (meshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
+            {
+                meshShaderPipeline->updateLightingDescriptors(
+                    lightBufferManager->getDescriptorSet(),
+                    clusterGridManager->getDescriptorSet(),
+                    lightCullingPipeline->getDescriptorSet());
+            }
         }
 
         stats.totalObjects = mergedBuffer->getObjectCount();
@@ -489,13 +503,16 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        std::array<vk::DescriptorSet, 6> descriptorSets = {
-            iblDescriptorSet,
-            meshShaderPipeline->getPerDrawDataDescriptorSet(),
-            bindlessTextures->getDescriptorSet(),
-            meshShaderPipeline->getMeshletDataDescriptorSet(),
-            meshShaderPipeline->getVertexDataDescriptorSet(),
-            boneMatrixManager->getDescriptorSet()
+        std::array<vk::DescriptorSet, 9> descriptorSets = {
+            iblDescriptorSet,                                      // Set 0: Camera/IBL
+            meshShaderPipeline->getPerDrawDataDescriptorSet(),     // Set 1: Per-draw data
+            bindlessTextures->getDescriptorSet(),                  // Set 2: Bindless textures
+            meshShaderPipeline->getMeshletDataDescriptorSet(),     // Set 3: Meshlet data
+            meshShaderPipeline->getVertexDataDescriptorSet(),      // Set 4: Vertex data
+            boneMatrixManager->getDescriptorSet(),                 // Set 5: Bone matrices
+            meshShaderPipeline->getLightDataDescriptorSet(),       // Set 6: Light buffers
+            meshShaderPipeline->getClusterGridDescriptorSet(),     // Set 7: Cluster grid params
+            meshShaderPipeline->getCullingOutputDescriptorSet()    // Set 8: Light culling output
         };
 
         cmd.bindDescriptorSets(
@@ -761,10 +778,53 @@ namespace render::gpudriven
             cachedIBLLayout = newIBLLayout;
         }
 
-        if (meshShaderPipeline && boneMatrixManager)
+        // All these components are required for mesh shader pipeline recreation
+        // They should all exist if initialized is true - log errors if any are missing
+        bool canRecreate = true;
+        if (!meshShaderPipeline)
         {
-            meshShaderPipeline->recreate(cachedIBLLayout, bindlessTextures->getDescriptorSetLayout(),
-                                         boneMatrixManager->getDescriptorSetLayout(), cachedRenderPass);
+            loggerError("GPUDrivenRenderer::recreatePipelines: meshShaderPipeline is null");
+            canRecreate = false;
+        }
+        if (!boneMatrixManager)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: boneMatrixManager is null");
+            canRecreate = false;
+        }
+        if (!lightBufferManager)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: lightBufferManager is null");
+            canRecreate = false;
+        }
+        if (!clusterGridManager)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: clusterGridManager is null");
+            canRecreate = false;
+        }
+        if (!lightCullingPipeline)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: lightCullingPipeline is null");
+            canRecreate = false;
+        }
+        if (!bindlessTextures)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: bindlessTextures is null");
+            canRecreate = false;
+        }
+
+        if (canRecreate)
+        {
+            meshShaderPipeline->recreate(cachedIBLLayout,
+                                         bindlessTextures->getDescriptorSetLayout(),
+                                         boneMatrixManager->getDescriptorSetLayout(),
+                                         lightBufferManager->getDescriptorSetLayout(),
+                                         clusterGridManager->getDescriptorSetLayout(),
+                                         lightCullingPipeline->getDescriptorSetLayout(),
+                                         cachedRenderPass);
+        }
+        else
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: Cannot recreate pipeline due to missing components");
         }
     }
 }

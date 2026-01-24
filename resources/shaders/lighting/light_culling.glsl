@@ -15,6 +15,12 @@ const uint LIGHTS_PER_BATCH = 64;  // Match workgroup size for optimal loading
 const uint PHASE_RESET = 0;
 const uint PHASE_CULL_LIGHTS = 1;  // Single phase for all light types
 
+// Light index packing scheme:
+// Point lights: index stored as-is (bits 0-30)
+// Spot lights: high bit (bit 31) set to distinguish from point lights
+// This allows both types to share the same index list
+const uint SPOT_LIGHT_FLAG = 0x80000000u;
+
 // ============================================================
 // Push Constants
 // ============================================================
@@ -289,8 +295,7 @@ void main() {
                                            cachedLight.range, cachedLight.cosOuterAngle,
                                            aabbMin, aabbMax)) {
                         uint globalLightIdx = batch * LIGHTS_PER_BATCH + i;
-                        // High bit set to distinguish spot lights from point lights
-                        lightIndexList[clusterOffset + pointCount + spotCount] = globalLightIdx | 0x80000000u;
+                        lightIndexList[clusterOffset + pointCount + spotCount] = globalLightIdx | SPOT_LIGHT_FLAG;
                         spotCount++;
                     }
                 }

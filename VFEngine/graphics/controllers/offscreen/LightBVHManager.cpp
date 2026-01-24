@@ -1,6 +1,7 @@
 #include "LightBVHManager.hpp"
 #include "../../../services/events/SceneEvents.hpp"
 #include "../../../services/events/LightCullingEvents.hpp"
+#include "../../../services/events/EditorModeEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
@@ -182,6 +183,15 @@ namespace controllers::offscreen
                 }
             });
         entityDuplicatedSubscription = events::ScopedSubscription(duplicatedToken);
+
+        // Play mode transitions may recreate entities with new IDs - force full BVH rebuild
+        auto editorModeToken = events::EventDispatcher::instance().subscribe<
+            events::editor::EditorModeChangedNotification>(
+            [this](const events::editor::EditorModeChangedNotification&)
+            {
+                lightBVH.markDirty();
+            });
+        editorModeChangedSubscription = events::ScopedSubscription(editorModeToken);
     }
 
     void LightBVHManager::update()

@@ -21,6 +21,7 @@ namespace controllers::offscreen
         events::ScopedSubscription sceneClearedSubscription;
         events::ScopedSubscription prefabInstantiatedSubscription;
         events::ScopedSubscription entityDuplicatedSubscription;
+        events::ScopedSubscription editorModeChangedSubscription;
 
         static bool hasAnyLightComponent(entt::entity entity);
 
