@@ -106,6 +106,13 @@ namespace render::gpudriven
             clusterGridManager = std::make_unique<lighting::ClusterGridManager>(device);
             clusterGridManager->init();
 
+            lightCullingPipeline = std::make_unique<lighting::LightCullingPipeline>(device);
+            lightCullingPipeline->init(
+                clusterGridManager->getTotalClusters(),
+                clusterGridManager->getDescriptorSetLayout(),
+                lightBufferManager->getDescriptorSetLayout()
+            );
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(),
                                      boneMatrixManager->getDescriptorSetLayout(), renderPass);
@@ -139,6 +146,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (lightCullingPipeline) lightCullingPipeline->cleanup();
         if (clusterGridManager) clusterGridManager->cleanup();
         if (lightBufferManager) lightBufferManager->cleanup();
         if (boneMatrixManager) boneMatrixManager->cleanup();
@@ -151,6 +159,7 @@ namespace render::gpudriven
 
         meshStreamManager.reset();
         meshShaderPipeline.reset();
+        lightCullingPipeline.reset();
         clusterGridManager.reset();
         lightBufferManager.reset();
         boneMatrixManager.reset();
@@ -358,6 +367,15 @@ namespace render::gpudriven
             clusterGridManager->updateFromCamera(clusterCameraParams);
         }
 
+        // Update light culling pipeline's external descriptor sets
+        if (lightCullingPipeline && clusterGridManager && lightBufferManager)
+        {
+            lightCullingPipeline->updateExternalDescriptors(
+                clusterGridManager->getDescriptorSet(),
+                lightBufferManager->getDescriptorSet()
+            );
+        }
+
         cullPipeline->updateDescriptors(
             mergedBuffer->getObjectBuffer(),
             cameraBuffer->getBuffer(),
@@ -412,7 +430,14 @@ namespace render::gpudriven
 
         if (lightBufferManager)
         {
-            lightBufferManager->updateFromScene();
+            if (useBVHLightCulling && !visibleLightIds.empty())
+            {
+                lightBufferManager->updateFromScene(visibleLightIds);
+            }
+            else
+            {
+                lightBufferManager->updateFromScene();
+            }
             lightBufferManager->uploadToGPU(cmd);
         }
 
@@ -433,6 +458,17 @@ namespace render::gpudriven
             1, &memBarrier,
             0, nullptr,
             0, nullptr);
+
+        // Dispatch light culling compute shader
+        if (lightCullingPipeline && lightBufferManager)
+        {
+            lightCullingPipeline->dispatch(
+                cmd,
+                cameraBuffer->getData().view,
+                lightBufferManager->getPointLightCount(),
+                lightBufferManager->getSpotLightCount()
+            );
+        }
 
         cullPipeline->dispatch(cmd, stats.totalObjects);
         batchManager->insertBarriersAfterCompute(cmd);
@@ -693,6 +729,19 @@ namespace render::gpudriven
             return MeshletCullingStats{};
         }
         return meshShaderPipeline->readStats();
+    }
+
+    void GPUDrivenRenderer::setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights)
+    {
+        visibleLightIds.clear();
+        visibleLightIds.insert(visibleLights.begin(), visibleLights.end());
+        useBVHLightCulling = true;
+    }
+
+    void GPUDrivenRenderer::clearVisibleLights()
+    {
+        visibleLightIds.clear();
+        useBVHLightCulling = false;
     }
 
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)

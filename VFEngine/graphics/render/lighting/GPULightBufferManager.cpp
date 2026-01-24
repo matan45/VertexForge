@@ -310,14 +310,68 @@ namespace render::lighting
 
     void GPULightBufferManager::updateFromScene()
     {
+        // No filtering - collect all lights
+        updateFromScene(std::unordered_set<uint32_t>{});
+    }
+
+    void GPULightBufferManager::updateFromScene(const std::unordered_set<uint32_t>& visibleLightIds)
+    {
         if (!initialized)
         {
             return;
         }
 
-        collectDirectionalLights();
-        collectPointLights();
-        collectSpotLights();
+#ifndef NDEBUG
+        // Debug validation: check that visibleLightIds contain valid light entities
+        // This helps detect sync issues between LightBVH and ECS registry
+        if (!visibleLightIds.empty())
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            uint32_t invalidCount = 0;
+            uint32_t noLightComponentCount = 0;
+
+            for (uint32_t entityId : visibleLightIds)
+            {
+                auto entity = static_cast<entt::entity>(entityId);
+
+                if (!registry.valid(entity))
+                {
+                    ++invalidCount;
+                    continue;
+                }
+
+                // Check if entity has at least one light component
+                bool hasLight = registry.any_of<
+                    components::DirectionalLightComponent,
+                    components::PointLightComponent,
+                    components::SpotLightComponent>(entity);
+
+                if (!hasLight)
+                {
+                    ++noLightComponentCount;
+                }
+            }
+
+            if (invalidCount > 0)
+            {
+                loggerWarning("GPULightBufferManager: {} stale entity IDs in visibleLightIds (BVH may be out of sync)",
+                              invalidCount);
+            }
+            if (noLightComponentCount > 0)
+            {
+                loggerWarning("GPULightBufferManager: {} entity IDs have no light component (BVH contains non-light entities)",
+                              noLightComponentCount);
+            }
+        }
+#endif
+
+        // If the set is empty, collect all lights (no filtering)
+        // Otherwise, only collect lights that are in the visible set
+        const std::unordered_set<uint32_t>* filterPtr = visibleLightIds.empty() ? nullptr : &visibleLightIds;
+
+        collectDirectionalLights(filterPtr);
+        collectPointLights(filterPtr);
+        collectSpotLights(filterPtr);
 
         // Only upload if light data actually changed
         if (detectChanges())
@@ -327,7 +381,7 @@ namespace render::lighting
         }
     }
 
-    void GPULightBufferManager::collectDirectionalLights()
+    void GPULightBufferManager::collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::DirectionalLightComponent, components::WorldTransformComponent>();
@@ -337,6 +391,12 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            // Skip if filtering is enabled and this light is not visible
+            if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
+            {
+                continue;
+            }
+
             if (directionalCount >= LightConstants::MAX_DIRECTIONAL_LIGHTS)
             {
                 hitLimit = true;
@@ -372,7 +432,7 @@ namespace render::lighting
         }
     }
 
-    void GPULightBufferManager::collectPointLights()
+    void GPULightBufferManager::collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
@@ -382,6 +442,12 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            // Skip if filtering is enabled and this light is not visible
+            if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
+            {
+                continue;
+            }
+
             if (pointCount >= LightConstants::MAX_POINT_LIGHTS)
             {
                 hitLimit = true;
@@ -416,7 +482,7 @@ namespace render::lighting
         }
     }
 
-    void GPULightBufferManager::collectSpotLights()
+    void GPULightBufferManager::collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
@@ -426,6 +492,12 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            // Skip if filtering is enabled and this light is not visible
+            if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
+            {
+                continue;
+            }
+
             if (spotCount >= LightConstants::MAX_SPOT_LIGHTS)
             {
                 hitLimit = true;

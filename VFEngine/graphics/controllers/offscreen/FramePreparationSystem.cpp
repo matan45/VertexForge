@@ -269,6 +269,23 @@ namespace controllers::offscreen
             }
         }
 
+        // Query light BVH for visible lights and pass to GPU-driven renderer
+        if (useGPUDrivenCulling && ctx.lightBvhManager && frustumReady)
+        {
+            // Update light BVH if dirty
+            ctx.lightBvhManager->update();
+
+            // Query visible lights from BVH
+            std::vector<uint32_t> visibleLights;
+            ctx.lightBvhManager->queryFrustum(*activeFrustum, visibleLights);
+            renderHandler->setVisibleLightsFromBVH(visibleLights);
+        }
+        else if (useGPUDrivenCulling)
+        {
+            // No frustum or BVH - clear BVH culling to upload all lights
+            renderHandler->clearVisibleLights();
+        }
+
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
         ctx.bvhManager->updateOcclusionCullingData(renderHandler);

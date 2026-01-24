@@ -330,6 +330,22 @@ namespace render
         currentTime = time;
     }
 
+    void RenderPassHandler::setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights)
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->setVisibleLightsFromBVH(visibleLights);
+        }
+    }
+
+    void RenderPassHandler::clearVisibleLights()
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->clearVisibleLights();
+        }
+    }
+
     void RenderPassHandler::setViewMode(uint32_t mode)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

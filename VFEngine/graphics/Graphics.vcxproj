@@ -169,6 +169,8 @@
     <ClInclude Include="render\lighting\ClusterGridTypes.hpp" />
     <ClInclude Include="render\lighting\GPULightBufferManager.hpp" />
     <ClInclude Include="render\lighting\GPULightTypes.hpp" />
+    <ClInclude Include="render\lighting\LightCullingPipeline.hpp" />
+    <ClInclude Include="render\lighting\LightCullingTypes.hpp" />
     <ClInclude Include="render\material\MaterialPBRExtractor.hpp" />
     <ClInclude Include="render\material\MaterialShaderCache.hpp" />
     <ClInclude Include="render\material\MaterialTextureCache.hpp" />
@@ -261,6 +263,7 @@
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
     <ClCompile Include="render\lighting\ClusterGridManager.cpp" />
     <ClCompile Include="render\lighting\GPULightBufferManager.cpp" />
+    <ClCompile Include="render\lighting\LightCullingPipeline.cpp" />
     <ClCompile Include="render\material\MaterialPBRExtractor.cpp" />
     <ClCompile Include="render\material\MaterialShaderCache.cpp" />
     <ClCompile Include="render\material\MaterialTextureCache.cpp" />
@@ -297,6 +300,7 @@
     <None Include="..\..\resources\shaders\ibl\equirectangular_to_cubemap.glsl" />
     <None Include="..\..\resources\shaders\ibl\prefilter.glsl" />
     <None Include="..\..\resources\shaders\ibl\skybox.glsl" />
+    <None Include="..\..\resources\shaders\lighting\light_culling.glsl" />
     <None Include="..\..\resources\shaders\material\material_fragment_footer.glsl" />
     <None Include="..\..\resources\shaders\material\material_fragment_header.glsl" />
     <None Include="..\..\resources\shaders\material\material_vertex.glsl" />
