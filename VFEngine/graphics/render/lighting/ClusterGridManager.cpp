@@ -6,14 +6,6 @@
 #include <cstring>
 #include <algorithm>
 
-// Windows defines 'near' and 'far' as macros - undefine them
-#ifdef near
-#undef near
-#endif
-#ifdef far
-#undef far
-#endif
-
 namespace render::lighting
 {
     ClusterGridManager::ClusterGridManager(core::Device& device)
@@ -303,9 +295,9 @@ namespace render::lighting
 
     void ClusterGridManager::computeClusterAABBs()
     {
-        const float near = cachedCameraParams.nearPlane;
-        const float far = cachedCameraParams.farPlane;
-        const float logFarNear = std::log(far / near);
+        const float zNear = cachedCameraParams.nearPlane;
+        const float zFar = cachedCameraParams.farPlane;
+        const float logFarNear = std::log(zFar / zNear);
 
         uint32_t totalClusters = config.getTotalClusters();
         cpuClusterAABBs.resize(totalClusters);
@@ -314,8 +306,8 @@ namespace render::lighting
         for (uint32_t z = 0; z < config.slicesZ; ++z)
         {
             // Logarithmic depth slice boundaries (better near-plane precision)
-            float sliceNear = near * std::exp(static_cast<float>(z) / static_cast<float>(config.slicesZ) * logFarNear);
-            float sliceFar = near * std::exp(static_cast<float>(z + 1) / static_cast<float>(config.slicesZ) * logFarNear);
+            float sliceNear = zNear * std::exp(static_cast<float>(z) / static_cast<float>(config.slicesZ) * logFarNear);
+            float sliceFar = zNear * std::exp(static_cast<float>(z + 1) / static_cast<float>(config.slicesZ) * logFarNear);
 
             for (uint32_t y = 0; y < config.tilesY; ++y)
             {
@@ -392,9 +384,9 @@ namespace render::lighting
             return;
         }
 
-        const float near = cachedCameraParams.nearPlane;
-        const float far = cachedCameraParams.farPlane;
-        const float logFarNear = std::log(far / near);
+        const float zNear = cachedCameraParams.nearPlane;
+        const float zFar = cachedCameraParams.farPlane;
+        const float logFarNear = std::log(zFar / zNear);
 
         float screenWidth = static_cast<float>(cachedCameraParams.screenWidth);
         float screenHeight = static_cast<float>(cachedCameraParams.screenHeight);
@@ -416,8 +408,8 @@ namespace render::lighting
         );
 
         cpuParams.depthParams = glm::vec4(
-            near,
-            far,
+            zNear,
+            zFar,
             logFarNear,
             1.0f / logFarNear
         );
@@ -427,7 +419,7 @@ namespace render::lighting
         // Scale and bias for computing cluster index from screen position and depth
         // tileX = floor(screenX / tileSizeX)
         // tileY = floor(screenY / tileSizeY)
-        // sliceZ = floor(log(linearDepth/near) / log(far/near) * slicesZ)
+        // sliceZ = floor(log(linearDepth/zNear) / log(zFar/zNear) * slicesZ)
         cpuParams.clusterScale = glm::vec4(
             1.0f / tileSizeX,
             1.0f / tileSizeY,
@@ -438,7 +430,7 @@ namespace render::lighting
         cpuParams.clusterBias = glm::vec4(
             0.0f,
             0.0f,
-            -static_cast<float>(config.slicesZ) * std::log(near) / logFarNear,
+            -static_cast<float>(config.slicesZ) * std::log(zNear) / logFarNear,
             0.0f
         );
 
