@@ -435,9 +435,13 @@ float smoothDistanceAttenuation(float distance, float range) {
 }
 
 // Physical distance attenuation (inverse square with smooth cutoff)
+// Intensity scale: makes intensity=1 equivalent to a bright light at 1 meter distance
+// Without this, you'd need intensity=10000+ to see anything at typical distances
+const float LIGHT_INTENSITY_SCALE = 100.0;
+
 float physicalAttenuation(float distance, float range) {
     float windowFn = smoothDistanceAttenuation(distance, range);
-    float distAtt = 1.0 / max(distance * distance, 0.0001);
+    float distAtt = LIGHT_INTENSITY_SCALE / max(distance * distance, 0.0001);
     return distAtt * windowFn;
 }
 
