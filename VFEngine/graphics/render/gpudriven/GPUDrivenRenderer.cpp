@@ -100,6 +100,9 @@ namespace render::gpudriven
             boneMatrixManager = std::make_unique<BoneMatrixManager>(device);
             boneMatrixManager->init();
 
+            lightBufferManager = std::make_unique<lighting::GPULightBufferManager>(device);
+            lightBufferManager->init();
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(),
                                      boneMatrixManager->getDescriptorSetLayout(), renderPass);
@@ -133,6 +136,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (lightBufferManager) lightBufferManager->cleanup();
         if (boneMatrixManager) boneMatrixManager->cleanup();
         if (meshletBuffer) meshletBuffer->cleanup();
         if (cameraBuffer) cameraBuffer->cleanup();
@@ -143,6 +147,7 @@ namespace render::gpudriven
 
         meshStreamManager.reset();
         meshShaderPipeline.reset();
+        lightBufferManager.reset();
         boneMatrixManager.reset();
         meshletBuffer.reset();
         cameraBuffer.reset();
@@ -381,6 +386,12 @@ namespace render::gpudriven
         if (boneMatrixManager)
         {
             boneMatrixManager->uploadToGPU(cmd);
+        }
+
+        if (lightBufferManager)
+        {
+            lightBufferManager->updateFromScene();
+            lightBufferManager->uploadToGPU(cmd);
         }
 
         vk::MemoryBarrier memBarrier{
