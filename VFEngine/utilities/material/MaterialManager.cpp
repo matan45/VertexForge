@@ -24,8 +24,6 @@ namespace material {
         material->needsRecompile = true;
 
         notifyMaterialChanged(pathStr);
-
-        // Notify all instances that use this material as parent
         notifyInstancesOfParentChange(pathStr);
 
         return true;
@@ -39,15 +37,12 @@ namespace material {
 
         std::string pathStr(path);
 
+        // Invalidate cache so other systems reload fresh data when needed.
+        // Don't reload immediately - this avoids file system race conditions
+        // where the read might get stale data before the write fully flushes.
         resource::ResourceManager::invalidateMaterialCache(path);
-        auto cached = resource::ResourceManager::loadMaterial(path);
-        if (cached) {
-            cached->needsRecompile = true;
-        }
 
         notifyMaterialChanged(pathStr);
-
-        // Notify all instances that use this material as parent
         notifyInstancesOfParentChange(pathStr);
 
         return true;
@@ -66,9 +61,16 @@ namespace material {
         return material;
     }
 
-    void MaterialManager::registerChangeCallback(MaterialChangedCallback callback) {
+    CallbackId MaterialManager::registerChangeCallback(MaterialChangedCallback callback) {
         std::lock_guard<std::mutex> lock(callbackMutex);
-        changeCallbacks.push_back(std::move(callback));
+        CallbackId id{nextCallbackIdValue++};
+        changeCallbacks[id] = std::move(callback);
+        return id;
+    }
+
+    void MaterialManager::unregisterChangeCallback(CallbackId id) {
+        std::lock_guard<std::mutex> lock(callbackMutex);
+        changeCallbacks.erase(id);
     }
 
     void MaterialManager::clearCallbacks() {
@@ -84,13 +86,13 @@ namespace material {
     }
 
     void MaterialManager::notifyMaterialChanged(const std::string& path) {
-        std::vector<MaterialChangedCallback> callbacks;
+        std::unordered_map<CallbackId, MaterialChangedCallback> callbacksCopy;
         {
             std::lock_guard<std::mutex> lock(callbackMutex);
-            callbacks = changeCallbacks;
+            callbacksCopy = changeCallbacks;
         }
 
-        for (const auto& callback : callbacks) {
+        for (const auto& [id, callback] : callbacksCopy) {
             callback(path);
         }
     }
@@ -100,7 +102,6 @@ namespace material {
         const std::string& parentPath,
         std::string_view savePath)
     {
-        // Validate parent exists
         auto parentMaterial = resource::ResourceManager::loadMaterial(parentPath);
         if (!parentMaterial) {
             vfLogError("Cannot create instance: parent material not found: {}", parentPath);
@@ -115,8 +116,6 @@ namespace material {
                 vfLogError("Failed to save new material instance: {}", savePath);
                 return nullptr;
             }
-
-            // Register the instance relationship
             registerInstance(std::string(savePath), parentPath);
         }
 
@@ -131,11 +130,7 @@ namespace material {
 
         std::string pathStr(path);
 
-        // Update cache
         resource::ResourceManager::invalidateMaterialInstanceCache(path);
-        resource::ResourceManager::loadMaterialInstance(path);
-
-        // Register/update instance relationship
         registerInstance(pathStr, instance.parentMaterialPath);
 
         notifyMaterialChanged(pathStr);
@@ -152,8 +147,6 @@ namespace material {
             vfLogError("Failed to reload material instance: {}", path);
             return false;
         }
-
-        // Update instance relationship (in case parent changed)
         registerInstance(pathStr, instance->parentMaterialPath);
 
         notifyMaterialChanged(pathStr);
@@ -161,12 +154,9 @@ namespace material {
         return true;
     }
 
-    // Instance relationship tracking
-
     void MaterialManager::registerInstance(const std::string& instancePath, const std::string& parentPath) {
         std::lock_guard<std::mutex> lock(callbackMutex);
 
-        // Remove old parent mapping if exists
         auto oldIt = instanceToParent.find(instancePath);
         if (oldIt != instanceToParent.end()) {
             const std::string& oldParent = oldIt->second;
@@ -177,7 +167,6 @@ namespace material {
             }
         }
 
-        // Add new mapping
         instanceToParent[instancePath] = parentPath;
         parentToInstances[parentPath].push_back(instancePath);
     }
@@ -230,7 +219,6 @@ namespace material {
             }
         }
 
-        // Invalidate cache and notify for each instance
         for (const auto& instancePath : instances) {
             resource::ResourceManager::invalidateMaterialInstanceCache(instancePath);
             notifyMaterialChanged(instancePath);

@@ -693,6 +693,23 @@ namespace material
             }
 
             file << j.dump(4); // Pretty print with 4-space indent
+
+            // Flush to OS buffers before closing to avoid race conditions
+            // where readers might see incomplete/stale data
+            file.flush();
+            if (!file.good())
+            {
+                vfLogError("Failed to flush material file: {}", path);
+                return false;
+            }
+
+            file.close();
+            if (file.fail())
+            {
+                vfLogError("Failed to close material file: {}", path);
+                return false;
+            }
+
             vfLogInfo("Saved material: {} to {}", material.name, path);
             return true;
         }

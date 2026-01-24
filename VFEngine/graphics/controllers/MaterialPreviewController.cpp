@@ -15,7 +15,6 @@
 
 namespace controllers
 {
-    // Recursively evaluate a float value from the graph (handles Time, Sin, Cos, etc.)
     std::optional<float> MaterialPreviewController::evaluateFloatValue(
         const material::ShaderGraph& graph,
         uint32_t nodeId,
@@ -112,29 +111,24 @@ namespace controllers
         return std::nullopt;
     }
 
-    // Get input float from a connected node
     std::optional<float> MaterialPreviewController::getInputFloat(
         const material::ShaderGraph& graph,
         uint32_t nodeId,
         const std::string& pinName,
         float time)
     {
-        // Find link connected to this node's input pin
         for (const auto& link : graph.links)
         {
             if (link.targetNodeId == nodeId && link.targetPin == pinName)
             {
-                // Recursively evaluate the source node
                 return evaluateFloatValue(graph, link.sourceNodeId, time);
             }
         }
         return std::nullopt;
     }
 
-    // Evaluate emission strength from the graph
     float MaterialPreviewController::evaluateEmissionStrength(const material::ShaderGraph& graph, float time)
     {
-        // Find PBR Output node
         const auto* outputNode = graph.findOutputNode();
         if (!outputNode)
         {
@@ -167,18 +161,16 @@ namespace controllers
 
     MaterialPreviewController::~MaterialPreviewController()
     {
-        cleanUp(); // cleanUp() handles waitIdle() internally
+        cleanUp();
     }
 
     static void createDefaultTextureImpl(core::Device& device, PreviewTextureGPU& defaultTexture)
     {
-        // Create a 1x1 white texture
         const uint32_t width = 1;
         const uint32_t height = 1;
         const uint32_t imageSize = width * height * 4;
         std::array<unsigned char, 4> whitePixel = {255, 255, 255, 255};
 
-        // Create staging buffer
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingBufferMemory;
 
@@ -188,13 +180,11 @@ namespace controllers
         bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
         core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
-        // Copy data to staging buffer
         void* data;
         static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
         memcpy(data, whitePixel.data(), imageSize);
         device.getLogicalDevice().unmapMemory(stagingBufferMemory);
 
-        // Create image
         core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageInfo.width = width;
         imageInfo.height = height;
@@ -204,7 +194,6 @@ namespace controllers
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::ImageUtilities::createImage(imageInfo, defaultTexture.image, defaultTexture.memory);
 
-        // Transition and copy
         vk::CommandPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
         poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
@@ -216,7 +205,6 @@ namespace controllers
                                                     vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
 
-        // Copy buffer to image
         auto cmdCopy = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
         vk::BufferImageCopy region{};
         region.bufferOffset = 0;
@@ -236,11 +224,9 @@ namespace controllers
                                                     vk::ImageAspectFlagBits::eColor);
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
 
-        // Cleanup staging
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingBufferMemory);
 
-        // Create sampler
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eLinear;
         samplerInfo.minFilter = vk::Filter::eLinear;
@@ -253,7 +239,6 @@ namespace controllers
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         defaultTexture.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-        // Create image view
         core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), defaultTexture.image);
         viewRequest.format = vk::Format::eR8G8B8A8Srgb;
         core::ImageUtilities::createImageView(viewRequest, defaultTexture.imageView);
@@ -284,7 +269,6 @@ namespace controllers
 
             vk::DeviceSize imageSize = texturePtr->width * texturePtr->height * 4 * sizeof(unsigned char);
 
-            // Create staging buffer
             vk::Buffer stagingBuffer;
             vk::DeviceMemory stagingBufferMemory;
 
@@ -295,13 +279,11 @@ namespace controllers
                 vk::MemoryPropertyFlagBits::eHostCoherent;
             core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
-            // Copy data to staging buffer
             void* data;
             static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
             memcpy(data, texturePtr->textureData().data(), imageSize);
             device.getLogicalDevice().unmapMemory(stagingBufferMemory);
 
-            // Create image
             core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
             imageInfo.width = texturePtr->width;
             imageInfo.height = texturePtr->height;
@@ -311,20 +293,17 @@ namespace controllers
             imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::ImageUtilities::createImage(imageInfo, tex.image, tex.memory);
 
-            // Create command pool for transfer
             vk::CommandPoolCreateInfo poolInfo{};
             poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
             poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
             auto commandPool = device.getLogicalDevice().createCommandPoolUnique(poolInfo);
 
-            // Transition to transfer dst
             auto cmdA = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
             core::ImageUtilities::transitionImageLayout(cmdA.get(), tex.image, vk::ImageLayout::eUndefined,
                                                         vk::ImageLayout::eTransferDstOptimal,
                                                         vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
 
-            // Copy buffer to image
             auto cmdCopy = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
             vk::BufferImageCopy region{};
             region.bufferOffset = 0;
@@ -336,18 +315,15 @@ namespace controllers
             cmdCopy.get().copyBufferToImage(stagingBuffer, tex.image, vk::ImageLayout::eTransferDstOptimal, region);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdCopy);
 
-            // Transition to shader read
             auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
             core::ImageUtilities::transitionImageLayout(cmdB.get(), tex.image, vk::ImageLayout::eTransferDstOptimal,
                                                         vk::ImageLayout::eShaderReadOnlyOptimal,
                                                         vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
 
-            // Cleanup staging
             device.getLogicalDevice().destroyBuffer(stagingBuffer);
             device.getLogicalDevice().freeMemory(stagingBufferMemory);
 
-            // Create sampler
             vk::SamplerCreateInfo samplerInfo{};
             samplerInfo.magFilter = vk::Filter::eLinear;
             samplerInfo.minFilter = vk::Filter::eLinear;
@@ -359,7 +335,6 @@ namespace controllers
             samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
             tex.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-            // Create image view
             core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), tex.image);
             viewRequest.format = vk::Format::eR8G8B8A8Srgb;
             core::ImageUtilities::createImageView(viewRequest, tex.imageView);
@@ -413,7 +388,6 @@ namespace controllers
         auto* renderHandler = offScreen->getRenderPassHandler();
         renderHandler->initMeshPipeline(false);
 
-        // Generate and upload procedural sphere
         auto* meshPipeline = renderHandler->getMeshPipeline();
         if (meshPipeline)
         {
@@ -499,7 +473,6 @@ namespace controllers
             const std::string& path = texturePaths[i];
             if (!path.empty())
             {
-                // Load texture if not already in cache
                 if (textureManager->textureCache.find(path) == textureManager->textureCache.end())
                 {
                     auto tex = loadTextureFromFileImpl(device, path);
@@ -518,8 +491,6 @@ namespace controllers
             }
         }
 
-        // Always update bindings when using custom shader (after compile/save),
-        // when new textures were loaded, or when any texture slot has a path
         bool hasAnyTexture = false;
         for (int i = 0; i < TextureManagerImpl::MAX_TEXTURES && !hasAnyTexture; ++i)
         {
@@ -530,33 +501,46 @@ namespace controllers
 
         if (shouldUpdateBindings)
         {
-            auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
-            if (meshPipeline)
-            {
-                std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES> imageViews;
-                std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES> samplers;
-
-                for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
-                {
-                    if (!textureManager->textureSlots[i].empty())
-                    {
-                        auto it = textureManager->textureCache.find(textureManager->textureSlots[i]);
-                        if (it != textureManager->textureCache.end() && it->second.valid)
-                        {
-                            imageViews[i] = it->second.imageView;
-                            samplers[i] = it->second.sampler;
-                            continue;
-                        }
-                    }
-                    // Use default texture for empty/invalid slots
-                    imageViews[i] = textureManager->defaultTexture.imageView;
-                    samplers[i] = textureManager->defaultTexture.sampler;
-                }
-
-                meshPipeline->updatePreviewTextureDescriptors(imageViews, samplers);
-                textureManager->texturesNeedUpdate = false;
-            }
+            pendingDescriptorUpdate = true;
         }
+    }
+
+    void MaterialPreviewController::updateTextureDescriptorsIfPending()
+    {
+        if (!pendingDescriptorUpdate || !textureManager->defaultTexture.valid)
+        {
+            return;
+        }
+
+        auto* meshPipeline = offScreen->getRenderPassHandler()->getMeshPipeline();
+        if (!meshPipeline)
+        {
+            return;
+        }
+
+        std::array<vk::ImageView, material::MAX_MATERIAL_TEXTURES> imageViews;
+        std::array<vk::Sampler, material::MAX_MATERIAL_TEXTURES> samplers;
+
+        for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
+        {
+            if (!textureManager->textureSlots[i].empty())
+            {
+                auto it = textureManager->textureCache.find(textureManager->textureSlots[i]);
+                if (it != textureManager->textureCache.end() && it->second.valid)
+                {
+                    imageViews[i] = it->second.imageView;
+                    samplers[i] = it->second.sampler;
+                    continue;
+                }
+            }
+            // Use default texture for empty/invalid slots
+            imageViews[i] = textureManager->defaultTexture.imageView;
+            samplers[i] = textureManager->defaultTexture.sampler;
+        }
+
+        meshPipeline->updatePreviewTextureDescriptors(imageViews, samplers);
+        textureManager->texturesNeedUpdate = false;
+        pendingDescriptorUpdate = false;
     }
 
     void MaterialPreviewController::cleanUp()
@@ -574,7 +558,6 @@ namespace controllers
             sphereLoaded = false;
         }
 
-        // Cleanup textures
         if (textureManager)
         {
             for (auto& [path, tex] : textureManager->textureCache)
@@ -636,12 +619,11 @@ namespace controllers
 
         auto* renderHandler = offScreen->getRenderPassHandler();
 
-        // Create draw list with preview sphere
         std::vector<render::mesh::MeshRenderData> meshDrawList;
 
         render::mesh::MeshRenderData renderData;
         renderData.meshPath = SPHERE_MESH_ID;
-        renderData.modelMatrix = glm::mat4(1.0f); // Sphere at origin
+        renderData.modelMatrix = glm::mat4(1.0f);
         renderData.albedo = materialParams.albedo;
         renderData.metallic = materialParams.metallic;
         renderData.roughness = materialParams.roughness;
@@ -649,10 +631,8 @@ namespace controllers
         renderData.showBoundingBox = false;
         renderData.highlightedSubMesh = -1;
 
-        // Set material path for custom shader pipeline lookup
         renderData.defaultMaterialPath = materialParams.materialPath;
 
-        // Dynamically evaluate emission from material graph if available
         if (materialParams.materialData)
         {
             renderData.emission = evaluateEmissionStrength(
@@ -664,8 +644,6 @@ namespace controllers
         }
 
 
-        // Set texture indices using new slot layout
-        // Slot 0=Albedo, 1=Normal, 2=ORM, 3=Metallic, 4=Roughness, 5=AO, 6=Emission
         renderData.albedoTexIdx() = materialParams.albedoTexturePath.empty() ? -1.0f : 0.0f;
         renderData.normalTexIdx() = materialParams.normalTexturePath.empty() ? -1.0f : 1.0f;
         renderData.ormTexIdx() = materialParams.ormTexturePath.empty() ? -1.0f : 2.0f;
@@ -679,8 +657,10 @@ namespace controllers
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&currentFrustum);
 
-        // Render and return descriptor set
-        vk::DescriptorSet descriptorSet = offScreen->render();
+        vk::DescriptorSet descriptorSet = offScreen->render([this]()
+        {
+            updateTextureDescriptorsIfPending();
+        });
         return static_cast<void*>(descriptorSet);
     }
 
