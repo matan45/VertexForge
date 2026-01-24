@@ -329,6 +329,23 @@ namespace controllers
         framePreparation->preparePhysicsColliders(ctx);
     }
 
+    void OffScreenController::prepareFrameClusterDebug()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.showDebugRendering = showDebugRendering;
+        ctx.showBillboardIcons = showBillboardIcons;
+        ctx.showGrid = showGrid;
+        ctx.showPhysicsDebug = showPhysicsDebug;
+        ctx.showClusterDebug = showClusterDebug;
+
+        framePreparation->prepareClusterDebug(ctx);
+    }
+
     void OffScreenController::setPlayMode(bool playMode)
     {
         playModeActive = playMode;

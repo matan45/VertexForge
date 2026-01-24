@@ -5,6 +5,7 @@
 #include "tools/GridRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
 #include "tools/LightGizmoDebugRenderer.hpp"
+#include "tools/ClusterDebugRenderer.hpp"
 
 namespace render
 {
@@ -17,6 +18,7 @@ namespace render
         gridRenderer = std::make_unique<mesh::GridRenderer>(device, swapChain);
         physicsDebugRenderer = std::make_unique<mesh::PhysicsDebugRenderer>(device, swapChain);
         lightGizmoRenderer = std::make_unique<mesh::LightGizmoDebugRenderer>(device, swapChain);
+        clusterDebugRenderer = std::make_unique<mesh::ClusterDebugRenderer>(device, swapChain);
     }
 
     DebugRenderer::~DebugRenderer() = default;
@@ -29,6 +31,7 @@ namespace render
         gridRenderer->init(renderPass);
         physicsDebugRenderer->init(renderPass);
         lightGizmoRenderer->init(renderPass);
+        clusterDebugRenderer->init(renderPass);
         initialized = true;
     }
 
@@ -40,6 +43,7 @@ namespace render
         gridRenderer->recreate(renderPass);
         physicsDebugRenderer->recreate(renderPass);
         lightGizmoRenderer->recreate(renderPass);
+        clusterDebugRenderer->recreate(renderPass);
     }
 
     void DebugRenderer::cleanUp()
@@ -67,6 +71,10 @@ namespace render
         if (lightGizmoRenderer)
         {
             lightGizmoRenderer->cleanUp();
+        }
+        if (clusterDebugRenderer)
+        {
+            clusterDebugRenderer->cleanUp();
         }
         initialized = false;
     }
@@ -97,6 +105,10 @@ namespace render
         {
             lightGizmoRenderer->cleanUpShader();
         }
+        if (clusterDebugRenderer)
+        {
+            clusterDebugRenderer->cleanUpShader();
+        }
     }
 
     void DebugRenderer::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
@@ -117,6 +129,20 @@ namespace render
     void DebugRenderer::setLightGizmoDrawList(std::vector<mesh::LightGizmoRenderData>&& gizmos)
     {
         lightGizmoDrawList = std::move(gizmos);
+    }
+
+    void DebugRenderer::setClusterDebugData(mesh::ClusterDebugRenderData&& data)
+    {
+        clusterDebugData = std::make_unique<mesh::ClusterDebugRenderData>(std::move(data));
+    }
+
+    void DebugRenderer::setShowClusterDebug(bool show)
+    {
+        showClusterDebug = show;
+        if (clusterDebugRenderer)
+        {
+            clusterDebugRenderer->setVisible(show);
+        }
     }
 
     void DebugRenderer::render(const vk::CommandBuffer& commandBuffer,
@@ -154,13 +180,18 @@ namespace render
         {
             lightGizmoRenderer->render(commandBuffer, lightGizmoDrawList, view, projection);
         }
+
+        if (clusterDebugRenderer && showClusterDebug && clusterDebugData)
+        {
+            clusterDebugRenderer->render(commandBuffer, *clusterDebugData, view, projection);
+        }
     }
 
     bool DebugRenderer::hasItemsToRender() const
     {
         return showGrid || !cameraFrustumDrawList.empty() || !audioSphereDrawList.empty() ||
             hasBoundingBoxesToRender || (showPhysicsDebug && !physicsColliderDrawList.empty()) ||
-            !lightGizmoDrawList.empty();
+            !lightGizmoDrawList.empty() || (showClusterDebug && clusterDebugData);
     }
 
     void DebugRenderer::setShowGrid(bool show)

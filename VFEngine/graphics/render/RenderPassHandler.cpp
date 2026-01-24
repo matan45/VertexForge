@@ -13,6 +13,7 @@
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
 #include "tools/LightGizmoDebugRenderer.hpp"
+#include "tools/ClusterDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
@@ -436,6 +437,31 @@ namespace render
             return debugRenderer->getShowPhysicsDebug();
         }
         return false;
+    }
+
+    void RenderPassHandler::setShowClusterDebug(bool show)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setShowClusterDebug(show);
+        }
+    }
+
+    bool RenderPassHandler::getShowClusterDebug() const
+    {
+        if (debugRenderer)
+        {
+            return debugRenderer->getShowClusterDebug();
+        }
+        return false;
+    }
+
+    void RenderPassHandler::setClusterDebugData(mesh::ClusterDebugRenderData&& data)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setClusterDebugData(std::move(data));
+        }
     }
 
     void RenderPassHandler::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)

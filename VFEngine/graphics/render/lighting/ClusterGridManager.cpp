@@ -510,4 +510,134 @@ namespace render::lighting
 
         needsUpload = false;
     }
+
+    // Helper: Sphere-AABB intersection test
+    static bool sphereIntersectsAABB(const glm::vec3& center, float radius,
+                                      const glm::vec3& aabbMin, const glm::vec3& aabbMax)
+    {
+        // Find the closest point on the AABB to the sphere center
+        glm::vec3 closestPoint = glm::clamp(center, aabbMin, aabbMax);
+
+        // Check if the distance to the closest point is within the radius
+        float distSq = glm::dot(closestPoint - center, closestPoint - center);
+        return distSq <= radius * radius;
+    }
+
+    std::vector<uint32_t> ClusterGridManager::getClusterIndicesForPointLight(
+        const glm::vec3& lightPosViewSpace,
+        float radius) const
+    {
+        std::vector<uint32_t> result;
+
+        if (!initialized || cpuClusterAABBs.empty())
+        {
+            return result;
+        }
+
+        result.reserve(64); // Typical number of affected clusters
+
+        for (uint32_t i = 0; i < cpuClusterAABBs.size(); ++i)
+        {
+            const GPUClusterAABB& aabb = cpuClusterAABBs[i];
+            glm::vec3 aabbMin = glm::vec3(aabb.minPoint);
+            glm::vec3 aabbMax = glm::vec3(aabb.maxPoint);
+
+            if (sphereIntersectsAABB(lightPosViewSpace, radius, aabbMin, aabbMax))
+            {
+                result.push_back(i);
+            }
+        }
+
+        return result;
+    }
+
+    std::vector<uint32_t> ClusterGridManager::getClusterIndicesForSpotLight(
+        const glm::vec3& lightPosViewSpace,
+        const glm::vec3& lightDirViewSpace,
+        float range,
+        float outerAngleCos) const
+    {
+        std::vector<uint32_t> result;
+
+        if (!initialized || cpuClusterAABBs.empty())
+        {
+            return result;
+        }
+
+        result.reserve(32); // Typical number of affected clusters
+
+        // For spot light, we use a conservative bounding sphere approach:
+        // The spot light cone can be bounded by a sphere centered at apex with radius = range
+
+        // First, do a quick sphere test with the cone's bounding sphere
+        // Then refine with cone-AABB test
+
+        for (uint32_t i = 0; i < cpuClusterAABBs.size(); ++i)
+        {
+            const GPUClusterAABB& aabb = cpuClusterAABBs[i];
+            glm::vec3 aabbMin = glm::vec3(aabb.minPoint);
+            glm::vec3 aabbMax = glm::vec3(aabb.maxPoint);
+
+            // Quick bounding sphere test first
+            if (!sphereIntersectsAABB(lightPosViewSpace, range, aabbMin, aabbMax))
+            {
+                continue;
+            }
+
+            // More precise cone-AABB test
+            // Check if any corner of the AABB is inside the cone, or if the cone axis intersects the AABB
+
+            // Get AABB center and check if it's within the cone
+            glm::vec3 aabbCenter = (aabbMin + aabbMax) * 0.5f;
+            glm::vec3 toCenter = aabbCenter - lightPosViewSpace;
+            float distToCenter = glm::length(toCenter);
+
+            if (distToCenter > 0.0001f && distToCenter <= range)
+            {
+                // Check if the center is within the cone angle
+                float cosAngle = glm::dot(glm::normalize(toCenter), lightDirViewSpace);
+                if (cosAngle >= outerAngleCos)
+                {
+                    result.push_back(i);
+                    continue;
+                }
+            }
+
+            // Check AABB corners
+            glm::vec3 corners[8] = {
+                {aabbMin.x, aabbMin.y, aabbMin.z},
+                {aabbMax.x, aabbMin.y, aabbMin.z},
+                {aabbMin.x, aabbMax.y, aabbMin.z},
+                {aabbMax.x, aabbMax.y, aabbMin.z},
+                {aabbMin.x, aabbMin.y, aabbMax.z},
+                {aabbMax.x, aabbMin.y, aabbMax.z},
+                {aabbMin.x, aabbMax.y, aabbMax.z},
+                {aabbMax.x, aabbMax.y, aabbMax.z}
+            };
+
+            bool anyCornerInCone = false;
+            for (const auto& corner : corners)
+            {
+                glm::vec3 toCorner = corner - lightPosViewSpace;
+                float dist = glm::length(toCorner);
+
+                if (dist > 0.0001f && dist <= range)
+                {
+                    float cosAngle = glm::dot(glm::normalize(toCorner), lightDirViewSpace);
+                    if (cosAngle >= outerAngleCos)
+                    {
+                        anyCornerInCone = true;
+                        break;
+                    }
+                }
+            }
+
+            if (anyCornerInCone)
+            {
+                result.push_back(i);
+            }
+        }
+
+        return result;
+    }
 }

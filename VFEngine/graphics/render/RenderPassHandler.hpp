@@ -43,6 +43,7 @@ namespace render
         struct AudioSphereRenderData;
         struct PhysicsColliderRenderData;
         struct LightGizmoRenderData;
+        struct ClusterDebugRenderData;
     }
 
     namespace billboard
@@ -124,6 +125,9 @@ namespace render
         void setLightGizmoDrawList(std::vector<mesh::LightGizmoRenderData>&& gizmos);
         void setShowPhysicsDebug(bool show);
         bool getShowPhysicsDebug() const;
+        void setShowClusterDebug(bool show);
+        bool getShowClusterDebug() const;
+        void setClusterDebugData(mesh::ClusterDebugRenderData&& data);
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
         DebugRenderer* getDebugRenderer() const { return debugRenderer.get(); }

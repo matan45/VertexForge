@@ -81,6 +81,11 @@ namespace core
         void setViewMode(uint32_t mode) override;
         uint32_t getViewMode() const override;
 
+        // Cluster Debug API
+        void setShowClusterDebug(bool show) override;
+        bool getShowClusterDebug() const override;
+        void prepareFrameClusterDebug() override;
+
         // VFX Runtime API
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;
 

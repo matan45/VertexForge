@@ -111,9 +111,9 @@ namespace windows
             // Sync view mode from backend in case it was changed externally
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap"};
+            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster"};
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 4))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 5))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);

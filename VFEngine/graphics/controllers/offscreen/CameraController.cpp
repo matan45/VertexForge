@@ -66,6 +66,9 @@ namespace controllers::offscreen
         {
             renderHandler.getMeshPipeline()->updateCameraUBO(view, projection, cameraPos, time);
 
+            // Store the current view matrix for cluster debug visualization
+            currentViewMatrix = view;
+
             if (!renderHandler.isDebugRendererInitialized())
             {
                 renderHandler.initDebugRenderer();

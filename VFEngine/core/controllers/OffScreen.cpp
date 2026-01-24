@@ -215,6 +215,21 @@ namespace controllers {
 		return offScreenController->getViewMode();
 	}
 
+	void OffScreen::setShowClusterDebug(bool show)
+	{
+		offScreenController->setShowClusterDebug(show);
+	}
+
+	bool OffScreen::getShowClusterDebug() const
+	{
+		return offScreenController->getShowClusterDebug();
+	}
+
+	void OffScreen::prepareFrameClusterDebug()
+	{
+		offScreenController->prepareFrameClusterDebug();
+	}
+
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
 	{
 		offScreenController->setVFXRuntimeProvider(provider);

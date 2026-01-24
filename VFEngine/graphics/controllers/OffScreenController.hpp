@@ -66,6 +66,7 @@ namespace controllers
         bool showDebugRendering = true;
         bool showGrid = true;
         bool showPhysicsDebug = false;
+        bool showClusterDebug = false;
         bool playModeActive = false;
 
     public:
@@ -145,6 +146,11 @@ namespace controllers
         // View Mode API
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;
+
+        // Cluster Debug API
+        void setShowClusterDebug(bool show) { showClusterDebug = show; }
+        bool getShowClusterDebug() const { return showClusterDebug; }
+        void prepareFrameClusterDebug();
 
         // VFX Runtime API
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);

@@ -96,6 +96,11 @@ namespace controllers {
 		void setViewMode(uint32_t mode);
 		uint32_t getViewMode() const;
 
+		// Cluster Debug API
+		void setShowClusterDebug(bool show);
+		bool getShowClusterDebug() const;
+		void prepareFrameClusterDebug();
+
 		// VFX Runtime API
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 	};

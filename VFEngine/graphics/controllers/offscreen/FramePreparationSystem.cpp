@@ -12,7 +12,9 @@
 #include "../../render/tools/AudioSphereDebugRenderer.hpp"
 #include "../../render/tools/PhysicsDebugRenderer.hpp"
 #include "../../render/tools/LightGizmoDebugRenderer.hpp"
+#include "../../render/tools/ClusterDebugRenderer.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
+#include "../../render/lighting/ClusterGridManager.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -708,5 +710,112 @@ namespace controllers::offscreen
         }
 
         renderHandler->setLightGizmoDrawList(std::move(lightGizmoDrawList));
+    }
+
+    void FramePreparationSystem::prepareClusterDebug(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+        if (!renderHandler)
+        {
+            return;
+        }
+
+        // Only render cluster debug in editor mode when enabled
+        if (ctx.playModeActive || !ctx.showDebugRendering || !ctx.showClusterDebug)
+        {
+            renderHandler->setShowClusterDebug(false);
+            return;
+        }
+
+        renderHandler->setShowClusterDebug(true);
+
+        // Get the cluster grid manager from GPU-driven renderer
+        auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
+        if (!gpuRenderer)
+        {
+            return;
+        }
+
+        auto* clusterGridManager = gpuRenderer->getClusterGridManager();
+        if (!clusterGridManager || !clusterGridManager->isInitialized())
+        {
+            return;
+        }
+
+        // Prepare cluster debug render data
+        render::mesh::ClusterDebugRenderData debugData;
+        debugData.clusterAABBs = clusterGridManager->getClusterAABBs();
+
+        // Get inverse view matrix from camera
+        if (ctx.cameraController)
+        {
+            glm::mat4 viewMatrix = ctx.cameraController->getCurrentViewMatrix();
+            debugData.invViewMatrix = glm::inverse(viewMatrix);
+        }
+
+        // Check if a light entity is selected and compute affected clusters
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        // Query selected entity (we need to check all light types)
+        // For now, find any selected light and highlight its clusters
+        auto pointView = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
+        for (auto entity : pointView)
+        {
+            const auto& lightComp = pointView.get<components::PointLightComponent>(entity);
+
+            // Check if this light has showGizmo enabled (use as proxy for "selected")
+            if (lightComp.showGizmo)
+            {
+                const auto& worldTransform = pointView.get<components::WorldTransformComponent>(entity);
+                glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+
+                // Transform to view space
+                glm::mat4 viewMatrix = ctx.cameraController ? ctx.cameraController->getCurrentViewMatrix() : glm::mat4(1.0f);
+                glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
+
+                // Get affected clusters
+                auto affectedClusters = clusterGridManager->getClusterIndicesForPointLight(viewPos, lightComp.radius);
+                debugData.highlightedClusterIndices.insert(
+                    debugData.highlightedClusterIndices.end(),
+                    affectedClusters.begin(),
+                    affectedClusters.end()
+                );
+            }
+        }
+
+        auto spotView = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
+        for (auto entity : spotView)
+        {
+            const auto& lightComp = spotView.get<components::SpotLightComponent>(entity);
+
+            if (lightComp.showGizmo)
+            {
+                const auto& worldTransform = spotView.get<components::WorldTransformComponent>(entity);
+                glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+
+                // Get direction from transform (forward is -Z in local space)
+                glm::vec3 worldDir = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+
+                // Transform to view space
+                glm::mat4 viewMatrix = ctx.cameraController ? ctx.cameraController->getCurrentViewMatrix() : glm::mat4(1.0f);
+                glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
+                glm::vec3 viewDir = glm::normalize(glm::vec3(viewMatrix * glm::vec4(worldDir, 0.0f)));
+
+                // Get affected clusters
+                float outerAngleCos = std::cos(glm::radians(lightComp.outerAngle));
+                auto affectedClusters = clusterGridManager->getClusterIndicesForSpotLight(
+                    viewPos, viewDir, lightComp.range, outerAngleCos);
+                debugData.highlightedClusterIndices.insert(
+                    debugData.highlightedClusterIndices.end(),
+                    affectedClusters.begin(),
+                    affectedClusters.end()
+                );
+            }
+        }
+
+        // Set whether to show all clusters or just highlighted ones
+        debugData.showAllClusters = debugData.highlightedClusterIndices.empty();
+
+        renderHandler->setClusterDebugData(std::move(debugData));
     }
 }

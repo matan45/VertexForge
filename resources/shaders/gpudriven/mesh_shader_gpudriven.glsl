@@ -828,5 +828,24 @@ void main() {
         color = mipColor;
     }
 
+    // Cluster view mode - color by cluster index
+    if (viewModeValue == 4u) {
+        float linearZ = linearizeDepth(gl_FragCoord.z);
+        uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
+
+        uint h = clusterIdx;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = (h >> 16) ^ h;
+
+        vec3 clusterColor = vec3(
+            float((h >> 0) & 0xFFu) / 255.0,
+            float((h >> 8) & 0xFFu) / 255.0,
+            float((h >> 16) & 0xFFu) / 255.0
+        );
+        clusterColor = normalize(clusterColor + 0.1) * 0.8;
+        color = clusterColor;
+    }
+
     outColor = vec4(color, alpha);
 }
