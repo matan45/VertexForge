@@ -93,6 +93,12 @@ namespace controllers
         // Texture management (implementation details hidden via pImpl pattern)
         std::unique_ptr<TextureManagerImpl> textureManager;
 
+        // Deferred descriptor update state
+        bool pendingDescriptorUpdate = false;
+
+        // Update texture descriptors (called when safe after fence wait)
+        void updateTextureDescriptorsIfPending();
+
     public:
         explicit MaterialPreviewController();
         ~MaterialPreviewController();

@@ -15,9 +15,11 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
+#include "resource/ResourceManager.hpp"
+#include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
-
-// Note: IVFXRuntimeProvider is included above for VFX scene integration
+#include <queue>
+#include <unordered_set>
 
 namespace render
 {
@@ -32,13 +34,39 @@ namespace render
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
     {
+        // Note: Callback registration moved to init() for exception safety.
+        // If constructor body threw after registering callback, destructor wouldn't
+        // be called and the callback would leak.
     }
 
-    RenderPassHandler::~RenderPassHandler() = default;
+    RenderPassHandler::~RenderPassHandler()
+    {
+        if (materialChangeCallbackId) {
+            material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+        }
+    }
 
     void RenderPassHandler::init()
     {
         clearColor->init();
+
+        // Register callback to invalidate custom shader cache when materials change
+        // Done in init() rather than constructor for exception safety - if init() fails,
+        // destructor will still be called and properly unregister the callback
+        if (!materialChangeCallbackId) {
+            materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
+                [this](const std::string& materialPath) {
+                    customShaderRequirementCache.erase(materialPath);
+
+                    // When a parent material changes, invalidate all instance entries
+                    // since we can't easily track which instances use this parent
+                    if (!material::isInstanceFile(materialPath)) {
+                        std::erase_if(customShaderRequirementCache, [](const auto& pair) {
+                            return material::isInstanceFile(pair.first);
+                        });
+                    }
+                });
+        }
     }
 
     void RenderPassHandler::initMeshPipeline(bool enableGPUDriven)
@@ -68,7 +96,6 @@ namespace render
             initGPUDrivenRenderer();
         }
 
-        // Initialize VFX runtime provider with mesh pipeline's render pass
         if (vfxRuntimeProvider && !vfxRuntimeProvider->isInitialized())
         {
             vfxRuntimeProvider->init(meshPipeline->getRenderPass());
@@ -87,17 +114,14 @@ namespace render
             return;
         }
 
-        // Get IBL descriptor set layout and render pass from mesh pipeline
         vk::DescriptorSetLayout iblLayout = meshPipeline->getIBLDescriptorSetLayout();
         vk::RenderPass renderPass = meshPipeline->getRenderPass();
 
         gpuDrivenRenderer->init(iblLayout, renderPass);
 
-        // Set material texture cache for texture loading in GPU-driven path
         auto& texCache = meshPipeline->getMaterialTextureCache();
         gpuDrivenRenderer->setMaterialTextureCache(&texCache);
 
-        // Set default texture for bindless array (1x1 white fallback)
         if (texCache.hasDefaultTexture())
         {
             gpuDrivenRenderer->setDefaultTexture(texCache.getDefaultView(), texCache.getDefaultSampler());
@@ -120,7 +144,6 @@ namespace render
 
         meshPipeline->initWithDefaults();
 
-        // Update GPU-driven renderer with new render pass and IBL layout
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->updateRenderPass(
@@ -128,7 +151,6 @@ namespace render
                 meshPipeline->getIBLDescriptorSetLayout());
         }
 
-        // Update VFX runtime with new render pass
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
         {
             vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
@@ -156,7 +178,6 @@ namespace render
         const auto& brdfLUT = iblRenderer->getBrdfLUTImage();
         meshPipeline->init(irradiance, prefilter, brdfLUT);
 
-        // Update GPU-driven renderer with new render pass and IBL layout
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->updateRenderPass(
@@ -164,7 +185,6 @@ namespace render
                 meshPipeline->getIBLDescriptorSetLayout());
         }
 
-        // Update VFX runtime with new render pass
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
         {
             vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
@@ -173,9 +193,67 @@ namespace render
 
     void RenderPassHandler::setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes)
     {
-        currentMeshDrawList = std::move(meshes);
+        currentMeshDrawList.clear();
+        customShaderMeshDrawList.clear();
 
-        // Check if any meshes have showBoundingBox enabled for debug rendering
+        std::unordered_set<std::string> uniqueMaterials;
+        for (const auto& mesh : meshes)
+        {
+            if (!mesh.defaultMaterialPath.empty())
+            {
+                uniqueMaterials.insert(mesh.defaultMaterialPath);
+            }
+            for (const auto& [submeshName, matInfo] : mesh.submeshMaterials)
+            {
+                if (!matInfo.materialPath.empty())
+                {
+                    uniqueMaterials.insert(matInfo.materialPath);
+                }
+            }
+        }
+
+        std::unordered_set<std::string> customShaderMaterials;
+        for (const auto& matPath : uniqueMaterials)
+        {
+            if (materialRequiresCustomShader(matPath))
+            {
+                customShaderMaterials.insert(matPath);
+            }
+        }
+
+        for (auto& mesh : meshes)
+        {
+            bool needsCustomShader = false;
+
+            if (!mesh.defaultMaterialPath.empty() &&
+                customShaderMaterials.contains(mesh.defaultMaterialPath))
+            {
+                needsCustomShader = true;
+            }
+
+            if (!needsCustomShader)
+            {
+                for (const auto& [submeshName, matInfo] : mesh.submeshMaterials)
+                {
+                    if (!matInfo.materialPath.empty() &&
+                        customShaderMaterials.contains(matInfo.materialPath))
+                    {
+                        needsCustomShader = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needsCustomShader)
+            {
+                customShaderMeshDrawList.push_back(std::move(mesh));
+            }
+            else
+            {
+                currentMeshDrawList.push_back(std::move(mesh));
+            }
+        }
+
         if (debugRendererInitialized && debugRenderer)
         {
             bool hasBoundingBoxes = false;
@@ -187,8 +265,23 @@ namespace render
                     break;
                 }
             }
+            for (const auto& mesh : customShaderMeshDrawList)
+            {
+                if (mesh.showBoundingBox)
+                {
+                    hasBoundingBoxes = true;
+                    break;
+                }
+            }
             debugRenderer->setHasBoundingBoxes(hasBoundingBoxes);
         }
+
+        combinedMeshDrawList.clear();
+        combinedMeshDrawList.reserve(currentMeshDrawList.size() + customShaderMeshDrawList.size());
+        combinedMeshDrawList.insert(combinedMeshDrawList.end(),
+                                    currentMeshDrawList.begin(), currentMeshDrawList.end());
+        combinedMeshDrawList.insert(combinedMeshDrawList.end(),
+                                    customShaderMeshDrawList.begin(), customShaderMeshDrawList.end());
     }
 
     void RenderPassHandler::initBillboardPipeline()
@@ -218,7 +311,6 @@ namespace render
             return;
         }
 
-        // Debug renderer needs mesh pipeline's render pass for proper depth testing
         if (!meshPipelineInitialized)
         {
             return;
@@ -261,7 +353,6 @@ namespace render
             return;
         }
 
-        // Get active camera's Hi-Z buffer
         occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
         if (!cameraOcclusionManager->isHiZInitialized(activeCameraId))
         {
@@ -274,7 +365,6 @@ namespace render
             return;
         }
 
-        // Pass Hi-Z pyramid to GPU-driven renderer
         gpuDrivenRenderer->updateHiZPyramid(
             camera->hiZBuffer->getHiZImageView(),
             camera->hiZBuffer->getHiZSampler(),
@@ -396,7 +486,6 @@ namespace render
                 gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
             }
 
-            // Recreate VFX runtime with new render pass
             if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
             {
                 vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
@@ -413,7 +502,6 @@ namespace render
             billboardPipeline->recreate();
         }
 
-        // Recreate Hi-Z for all cameras
         for (const auto& [cameraId, camera] : cameraOcclusionManager->getAllCameras())
         {
             if (camera->hiZInitialized)
@@ -465,18 +553,16 @@ namespace render
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
         iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
-        // Determine if we need to run the mesh render pass (for meshes, debug rendering, or VFX)
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
         bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized() && vfxRuntimeProvider->getInstanceCount() > 0;
+        bool hasCustomShaderMeshes = !customShaderMeshDrawList.empty();
 
-        // Update VFX camera for proper billboarding
         if (hasVFX)
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
-        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasDebugItems || hasVFX);
+        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems || hasVFX);
 
-        // Always update GPU-driven scene data (even when empty to reset stats)
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
         {
             gpuDrivenRenderer->updateScene(
@@ -494,13 +580,11 @@ namespace render
         {
             render::DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
 
-            // Dispatch VFX compute shaders BEFORE render pass (GPU particle simulation)
             if (hasVFX)
             {
                 vfxRuntimeProvider->recordComputeCommands(commandBuffer);
             }
 
-            // GPU-driven rendering
             if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
                 updateGPUDrivenHiZ();
@@ -513,16 +597,20 @@ namespace render
 
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
+                if (hasCustomShaderMeshes)
+                {
+                    meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+                }
+
                 if (debugRendererPtr)
                 {
-                    debugRendererPtr->render(commandBuffer, currentMeshDrawList, currentView, currentProjection,
+                    debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
                                              [this](const std::string& meshId)
                                              {
                                                  return meshPipeline->getMesh(meshId);
                                              });
                 }
 
-                // Render VFX particles inline (before ending render pass for proper depth testing)
                 if (hasVFX)
                 {
                     vfxRuntimeProvider->recordDrawCommands(commandBuffer);
@@ -530,13 +618,11 @@ namespace render
 
                 meshPipeline->endRenderPass(commandBuffer);
             }
-            else if (!currentMeshDrawList.empty() || hasDebugItems)
+            else if (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems)
             {
-                // CPU fallback path (used when GPU-driven rendering is not available)
-                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
+                meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, combinedMeshDrawList, currentFrustum,
                                                   debugRendererPtr, currentView, currentProjection);
 
-                // VFX needs separate render pass in CPU fallback (recordCommandBuffer closes its pass)
                 if (hasVFX)
                 {
                     meshPipeline->beginRenderPass(commandBuffer, imageIndex);
@@ -546,7 +632,6 @@ namespace render
             }
             else if (hasVFX)
             {
-                // Only VFX to render, no meshes or debug items
                 meshPipeline->beginRenderPass(commandBuffer, imageIndex);
                 vfxRuntimeProvider->recordDrawCommands(commandBuffer);
                 meshPipeline->endRenderPass(commandBuffer);
@@ -558,7 +643,6 @@ namespace render
             billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
 
-        // Generate Hi-Z pyramid and run occlusion culling for the active camera
         occlusion::CameraId activeCameraId = cameraOcclusionManager->getActiveCameraId();
 
         if (cameraOcclusionManager->isHiZInitialized(activeCameraId))
@@ -570,5 +654,113 @@ namespace render
                 cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
             }
         }
+    }
+
+    bool RenderPassHandler::materialRequiresCustomShader(const std::string& materialPath) const
+    {
+        if (materialPath.empty())
+        {
+            return false;
+        }
+
+        auto it = customShaderRequirementCache.find(materialPath);
+        if (it != customShaderRequirementCache.end())
+        {
+            return it->second;
+        }
+
+        bool result = computeMaterialRequiresCustomShader(materialPath);
+        customShaderRequirementCache[materialPath] = result;
+        return result;
+    }
+
+    bool RenderPassHandler::computeMaterialRequiresCustomShader(const std::string& materialPath)
+    {
+        if (materialPath.empty())
+        {
+            return false;
+        }
+
+        std::string parentPath = materialPath;
+
+        if (material::isInstanceFile(materialPath))
+        {
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+            if (instanceData && !instanceData->parentMaterialPath.empty())
+            {
+                parentPath = instanceData->parentMaterialPath;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        auto matData = resource::ResourceManager::loadMaterial(parentPath);
+        if (!matData)
+        {
+            return false;
+        }
+
+        uint32_t timeNodeId = 0;
+        bool hasTimeNode = false;
+        for (const auto& node : matData->graph.nodes)
+        {
+            if (node.type == material::NodeType::Time)
+            {
+                timeNodeId = node.id;
+                hasTimeNode = true;
+                break;
+            }
+        }
+
+        if (!hasTimeNode)
+        {
+            return false;
+        }
+
+        std::unordered_set<uint32_t> visitedNodes;
+        std::queue<uint32_t> nodesToVisit;
+        nodesToVisit.push(timeNodeId);
+
+        while (!nodesToVisit.empty())
+        {
+            uint32_t currentNodeId = nodesToVisit.front();
+            nodesToVisit.pop();
+
+            if (visitedNodes.contains(currentNodeId))
+            {
+                continue;
+            }
+            visitedNodes.insert(currentNodeId);
+
+            for (const auto& link : matData->graph.links)
+            {
+                if (link.sourceNodeId == currentNodeId)
+                {
+                    for (const auto& node : matData->graph.nodes)
+                    {
+                        if (node.id == link.targetNodeId)
+                        {
+                            if (node.type == material::NodeType::PBROutput)
+                            {
+                                return true;
+                            }
+
+                            if (node.type == material::NodeType::TextureSample &&
+                                link.targetPin == "UV")
+                            {
+                                return true;
+                            }
+
+                            nodesToVisit.push(link.targetNodeId);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 }

@@ -8,12 +8,36 @@
 #include <functional>
 #include <vector>
 #include <unordered_map>
+#include <cstdint>
 
 namespace material
 {
     // Callback for material changes (for hot-reload support)
     using MaterialChangedCallback = std::function<void(const std::string& materialPath)>;
 
+    // Strongly-typed callback ID to prevent accidental misuse with raw integers
+    struct CallbackId
+    {
+        uint64_t value = 0;
+
+        bool operator==(const CallbackId& other) const { return value == other.value; }
+        bool operator!=(const CallbackId& other) const { return value != other.value; }
+        explicit operator bool() const { return value != 0; }
+    };
+}
+
+// Hash specialization for use in unordered_map
+template<>
+struct std::hash<material::CallbackId>
+{
+    std::size_t operator()(const material::CallbackId& id) const noexcept
+    {
+        return std::hash<uint64_t>{}(id.value);
+    }
+};
+
+namespace material
+{
     class MaterialManager
     {
     private:
@@ -21,7 +45,8 @@ namespace material
 
         std::shared_ptr<MaterialData> defaultMaterial;
 
-        std::vector<MaterialChangedCallback> changeCallbacks;
+        std::unordered_map<CallbackId, MaterialChangedCallback> changeCallbacks;
+        uint64_t nextCallbackIdValue = 1;
 
         // Instance tracking: parent path -> list of instance paths
         std::unordered_map<std::string, std::vector<std::string>> parentToInstances;
@@ -52,7 +77,8 @@ namespace material
         std::string getParentOfInstance(const std::string& instancePath) const;
 
         // Callbacks
-        void registerChangeCallback(MaterialChangedCallback callback);
+        CallbackId registerChangeCallback(MaterialChangedCallback callback);
+        void unregisterChangeCallback(CallbackId id);
         void clearCallbacks();
 
     private:

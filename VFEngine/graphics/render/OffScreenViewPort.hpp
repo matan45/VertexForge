@@ -2,6 +2,7 @@
 #include "../core/OffScreen.hpp"
 #include <vector>
 #include <memory>
+#include <functional>
 
 namespace core
 {
@@ -13,6 +14,10 @@ namespace core
 namespace render
 {
     class RenderPassHandler;
+
+    // Callback invoked after fence wait but before command recording
+    // Useful for safe descriptor set updates
+    using PreRenderCallback = std::function<void()>;
 
     class OffScreenViewPort
     {
@@ -35,7 +40,11 @@ namespace render
 
         void init();
         void recreate();
-        vk::DescriptorSet render();
+
+        // Render with optional pre-render callback (called after fence wait, before command recording)
+        // Use for safe descriptor set updates
+        vk::DescriptorSet render(const PreRenderCallback& preRenderCallback = nullptr);
+
         void cleanUp();
         render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
 

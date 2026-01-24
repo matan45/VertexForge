@@ -94,7 +94,9 @@ namespace windows
             notification.materialPath = materialPath;
             events::EventDispatcher::instance().publish(notification);
 
-            previewPanel->updateFromGraph(materialData, materialPath, true);
+            // Note: updateFromGraph is already called in compileMaterial() above,
+            // so we don't need to call it again here. Calling it twice can cause
+            // descriptor set updates without proper GPU synchronization.
         }
         else
         {
@@ -163,19 +165,16 @@ namespace windows
                 float graphHeight = contentSize.y * 0.7f;
                 float bottomHeight = contentSize.y - graphHeight - ImGui::GetStyle().ItemSpacing.y;
 
-                // Top row
                 ImGui::BeginChild("TopRow", ImVec2(0, graphHeight), false, ImGuiWindowFlags_NoScrollbar);
                 {
                     ImVec2 topSize = ImGui::GetContentRegionAvail();
 
-                    // Preview panel (left)
                     ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, topSize.y), true);
                     previewPanel->draw(materialData, materialPath);
                     ImGui::EndChild();
 
                     ImGui::SameLine();
 
-                    // Graph panel (right)
                     float graphWidth = topSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
                     ImGui::BeginChild("GraphPanel", ImVec2(graphWidth, topSize.y), true,
                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -184,19 +183,16 @@ namespace windows
                 }
                 ImGui::EndChild();
 
-                // Bottom row
                 ImGui::BeginChild("BottomRow", ImVec2(0, bottomHeight), false, ImGuiWindowFlags_NoScrollbar);
                 {
                     ImVec2 bottomSize = ImGui::GetContentRegionAvail();
 
-                    // Parameters panel (left)
                     ImGui::BeginChild("ParametersPanel", ImVec2(previewPanelWidth, bottomSize.y), true);
                     propertyPanel->drawParameterPanel(materialData);
                     ImGui::EndChild();
 
                     ImGui::SameLine();
 
-                    // Properties panel (right)
                     float propsWidth = bottomSize.x - previewPanelWidth - ImGui::GetStyle().ItemSpacing.x;
                     ImGui::BeginChild("PropertiesPanel", ImVec2(propsWidth, bottomSize.y), true);
                     propertyPanel->drawPropertiesPanel(materialData, graphEditor.get());
@@ -209,7 +205,6 @@ namespace windows
         }
         ImGui::End();
 
-        // Check for shader errors from preview
         if (previewPanel->hasShaderError() && !showCompileError)
         {
             showCompileError = true;
@@ -292,7 +287,6 @@ namespace windows
             ImGui::EndTooltip();
         }
 
-        // Compile status
         ImGui::SameLine();
         ImGui::BeginGroup();
         ImGui::PushItemWidth(120);
