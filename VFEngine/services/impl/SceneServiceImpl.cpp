@@ -30,7 +30,7 @@ namespace services
         , physicsService(std::make_unique<PhysicsComponentService>(sceneGraph))
         , animatorService(std::make_unique<AnimatorComponentService>(animatorProvider))
         , vfxService(std::make_unique<VFXComponentService>(sceneGraph))
-        , lightService(std::make_unique<LightComponentService>(sceneGraph))
+        , lightService(std::make_unique<LightComponentService>())
         // New extracted services
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))

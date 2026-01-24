@@ -4,7 +4,6 @@ namespace scene
 {
     void LightBVH::rebuildStaticLightBVH()
     {
-        // Collect local lights (point/spot) for BVH
         std::vector<math::BVHPrimitive> primitives;
         collectStaticLightPrimitives(primitives);
 
@@ -15,8 +14,6 @@ namespace scene
         }
 
         staticBVH.build(std::move(primitives));
-
-        // Collect directional lights separately (no BVH needed)
         collectStaticDirectionalLights();
 
         staticDirty = false;
@@ -25,7 +22,6 @@ namespace scene
 
     void LightBVH::rebuildDynamicLightBVH()
     {
-        // Collect local lights (point/spot) for BVH
         std::vector<math::BVHPrimitive> primitives;
         collectDynamicLightPrimitives(primitives);
 
@@ -36,8 +32,6 @@ namespace scene
         }
 
         dynamicBVH.build(std::move(primitives));
-
-        // Collect directional lights separately (no BVH needed)
         collectDynamicDirectionalLights();
 
         dirtyDynamicLights.clear();
@@ -53,7 +47,6 @@ namespace scene
             return;
         }
 
-        // Collect new bounds for dirty lights
         std::unordered_map<uint32_t, math::AABB> updatedBounds;
         auto& registry = EntityRegistry::getRegistry();
 
@@ -72,7 +65,6 @@ namespace scene
             }
         }
 
-        // Apply batch update to BVH
         dynamicBVH.updateEntitiesBounds(updatedBounds);
 
         dirtyDynamicLights.clear();
@@ -105,62 +97,17 @@ namespace scene
         }
     }
 
-    void LightBVH::queryFrustum(const math::Frustum& frustum, std::vector<uint32_t>& results) const
-    {
-        results.clear();
-
-        // Reserve space for all potential lights
-        size_t totalLights = staticLightEntities.size() + dynamicLightEntities.size() +
-                             staticDirectionalLights.size() + dynamicDirectionalLights.size();
-        results.reserve(totalLights);
-
-        // Always include directional lights (they affect everything, no culling needed)
-        results.insert(results.end(), staticDirectionalLights.begin(), staticDirectionalLights.end());
-        results.insert(results.end(), dynamicDirectionalLights.begin(), dynamicDirectionalLights.end());
-
-        // Query BVH for local lights (point/spot) that intersect frustum
-        if (staticBVH.isBuilt())
-        {
-            staticBVH.queryFrustumAppend(frustum, results);
-        }
-
-        if (dynamicBVH.isBuilt())
-        {
-            dynamicBVH.queryFrustumAppend(frustum, results);
-        }
-    }
-
-    void LightBVH::clear()
-    {
-        staticBVH.clear();
-        dynamicBVH.clear();
-        staticLightEntities.clear();
-        dynamicLightEntities.clear();
-        dirtyDynamicLights.clear();
-        staticDirectionalLights.clear();
-        dynamicDirectionalLights.clear();
-        staticDirty = true;
-        dynamicDirty = true;
-        staticStructuralChange = true;
-        dynamicStructuralChange = true;
-    }
-
     math::AABB LightBVH::computeLightBounds(entt::entity entity, entt::registry& registry)
     {
-        // Get world transform for position/direction
         if (!registry.all_of<components::WorldTransformComponent>(entity))
         {
-            return math::AABB();  // Invalid AABB
+            return math::AABB();
         }
 
         const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
         glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
-
-        // Extract forward direction from world matrix (negative Z axis in OpenGL convention)
         glm::vec3 direction = -glm::normalize(glm::vec3(worldTransform.worldMatrix[2]));
 
-        // Check which local light type this entity has and compute appropriate bounds
-        // NOTE: Directional lights are handled separately and should NOT reach here
         if (registry.all_of<components::PointLightComponent>(entity))
         {
             const auto& light = registry.get<components::PointLightComponent>(entity);
@@ -173,14 +120,13 @@ namespace scene
             return math::LightBounds::computeSpotLightAABB(position, direction, light.range, light.outerAngle);
         }
 
-        return math::AABB();  // No local light component found
+        return math::AABB();
     }
 
     void LightBVH::collectStaticLightPrimitives(std::vector<math::BVHPrimitive>& primitives)
     {
         auto& registry = EntityRegistry::getRegistry();
 
-        // Collect static point lights
         {
             auto view = registry.view<components::PointLightComponent,
                                       components::TransformComponent,
@@ -206,7 +152,6 @@ namespace scene
             }
         }
 
-        // Collect static spot lights
         {
             auto view = registry.view<components::SpotLightComponent,
                                       components::TransformComponent,
@@ -231,15 +176,12 @@ namespace scene
                 primitives.push_back(prim);
             }
         }
-
-        // NOTE: Directional lights are collected separately via collectStaticDirectionalLights()
     }
 
     void LightBVH::collectDynamicLightPrimitives(std::vector<math::BVHPrimitive>& primitives)
     {
         auto& registry = EntityRegistry::getRegistry();
 
-        // Collect dynamic point lights
         {
             auto view = registry.view<components::PointLightComponent,
                                       components::TransformComponent,
@@ -265,7 +207,6 @@ namespace scene
             }
         }
 
-        // Collect dynamic spot lights
         {
             auto view = registry.view<components::SpotLightComponent,
                                       components::TransformComponent,
@@ -290,8 +231,6 @@ namespace scene
                 primitives.push_back(prim);
             }
         }
-
-        // NOTE: Directional lights are collected separately via collectDynamicDirectionalLights()
     }
 
     void LightBVH::collectStaticDirectionalLights()
