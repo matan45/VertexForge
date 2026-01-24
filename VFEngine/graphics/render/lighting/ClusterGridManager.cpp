@@ -30,10 +30,20 @@ namespace render::lighting
     {
         if (initialized)
         {
+            loggerWarning("ClusterGridManager: Already initialized");
             return;
         }
 
         config = gridConfig;
+
+        // Validate grid dimensions to prevent division by zero
+        if (config.tilesX == 0 || config.tilesY == 0 || config.slicesZ == 0)
+        {
+            loggerError("ClusterGridManager: Invalid grid dimensions ({}x{}x{}) - all must be > 0",
+                        config.tilesX, config.tilesY, config.slicesZ);
+            return;
+        }
+
         uint32_t totalClusters = config.getTotalClusters();
 
         if (totalClusters > ClusterConstants::MAX_CLUSTERS)
@@ -443,6 +453,15 @@ namespace render::lighting
         }
 
         uint32_t totalClusters = config.getTotalClusters();
+
+        // Validate AABB count matches expected cluster count
+        if (cpuClusterAABBs.size() != totalClusters)
+        {
+            loggerError("ClusterGridManager: AABB count mismatch ({} vs expected {})",
+                        cpuClusterAABBs.size(), totalClusters);
+            return;
+        }
+
         size_t copySize = totalClusters * sizeof(GPUClusterAABB);
 
         // Copy AABBs to staging buffer
