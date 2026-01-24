@@ -400,21 +400,37 @@ layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer
 
 const float LIGHTING_PI = 3.14159265359;
 
-// Convert NDC depth to linear view-space depth
-float linearizeDepth(float ndcZ) {
+// Light index packing scheme for the cluster light index list:
+// - Point light indices are stored as-is (bits 0-30 = index)
+// - Spot light indices have the high bit (bit 31) set to distinguish them
+// This allows both light types to share the same index list while being identifiable
+const uint SPOT_LIGHT_FLAG = 0x80000000u;  // High bit flag for spot lights
+const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu; // Mask to extract the actual light index
+
+// Convert window-space depth to linear view-space depth
+// Assumes Vulkan's standard [0, 1] depth range with default viewport settings
+// where gl_FragCoord.z maps directly to [0, 1] (near to far)
+// Formula derivation: z_view = near * far / (far - z_ndc * (far - near))
+float linearizeDepth(float windowZ) {
     float near = clusterParams.depthParams.x;
     float far = clusterParams.depthParams.y;
-    return near * far / (far - ndcZ * (far - near));
+    // Guard against division by zero (occurs if windowZ > 1, which shouldn't happen)
+    float denominator = max(far - windowZ * (far - near), 0.0001);
+    return near * far / denominator;
 }
 
 // Calculate cluster index from fragment position
 uint getClusterIndex(vec2 fragCoord, float viewZ) {
+    // Clamp viewZ to near plane to prevent undefined log() behavior
+    // This handles fragments at or behind the camera
+    float clampedZ = max(viewZ, clusterParams.depthParams.x);
+
     // Tile coordinates from screen position
     uint tileX = uint(fragCoord.x / clusterParams.screenParams.z);
     uint tileY = uint(fragCoord.y / clusterParams.screenParams.w);
 
     // Slice from logarithmic depth
-    float logRatio = log(viewZ / clusterParams.depthParams.x);
+    float logRatio = log(clampedZ / clusterParams.depthParams.x);
     uint slice = uint(logRatio * clusterParams.depthParams.w);
 
     // Clamp to valid range
@@ -448,7 +464,13 @@ float physicalAttenuation(float distance, float range) {
 // Spot light angular attenuation
 float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float cosOuter) {
     float cosAngle = dot(-lightDir, spotDir);
-    return clamp((cosAngle - cosOuter) / max(cosInner - cosOuter, 0.0001), 0.0, 1.0);
+
+    // Handle degenerate case: hard-edged spotlight with no falloff zone
+    if (cosInner <= cosOuter) {
+        return cosAngle >= cosOuter ? 1.0 : 0.0;
+    }
+
+    return clamp((cosAngle - cosOuter) / (cosInner - cosOuter), 0.0, 1.0);
 }
 
 // GGX/Trowbridge-Reitz Normal Distribution Function
@@ -487,9 +509,13 @@ vec3 evaluatePointLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
     if (distance > light.radius) return vec3(0.0);
 
     L = normalize(L);
+
+    // Early exit if surface faces away from light (avoids expensive BRDF calculations)
+    float NdotL = dot(N, L);
+    if (NdotL <= 0.0) return vec3(0.0);
+
     vec3 H = normalize(V + L);
 
-    float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 0.0);
     float NdotH = max(dot(N, H), 0.0);
     float HdotV = max(dot(H, V), 0.0);
@@ -527,9 +553,12 @@ vec3 evaluateSpotLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
     float spotAtt = spotAngleAttenuation(L, light.direction, light.cosInnerAngle, light.cosOuterAngle);
     if (spotAtt <= 0.0) return vec3(0.0);
 
+    // Early exit if surface faces away from light (avoids expensive BRDF calculations)
+    float NdotL = dot(N, L);
+    if (NdotL <= 0.0) return vec3(0.0);
+
     vec3 H = normalize(V + L);
 
-    float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 0.0);
     float NdotH = max(dot(N, H), 0.0);
     float HdotV = max(dot(H, V), 0.0);
@@ -557,9 +586,13 @@ vec3 evaluateDirectionalLight(vec3 N, vec3 V, vec3 albedo,
                               float metallic, float roughness, vec3 F0,
                               DirectionalLight light) {
     vec3 L = -normalize(light.direction);
+
+    // Early exit if surface faces away from light (avoids expensive BRDF calculations)
+    float NdotL = dot(N, L);
+    if (NdotL <= 0.0) return vec3(0.0);
+
     vec3 H = normalize(V + L);
 
-    float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 0.0);
     float NdotH = max(dot(N, H), 0.0);
     float HdotV = max(dot(H, V), 0.0);
@@ -693,29 +726,33 @@ void main() {
     // ========================================
     vec3 directLighting = vec3(0.0);
 
-    // Calculate cluster index for this fragment
-    float linearZ = linearizeDepth(gl_FragCoord.z);
-    uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
+    // Only perform cluster lookup if there are local lights in the scene
+    // This is a uniform branch (no divergence) that skips cluster fetch when no lights exist
+    if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
+        // Calculate cluster index for this fragment
+        float linearZ = linearizeDepth(gl_FragCoord.z);
+        uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
 
-    // Fetch cluster light data
-    ClusterLightData clusterData = clusterLightGrid[clusterIdx];
-    uint clusterPointCount = clusterData.counts & 0xFFFFu;
-    uint clusterSpotCount = clusterData.counts >> 16u;
-    uint lightOffset = clusterData.offset;
+        // Fetch cluster light data
+        ClusterLightData clusterData = clusterLightGrid[clusterIdx];
+        uint clusterPointCount = clusterData.counts & 0xFFFFu;
+        uint clusterSpotCount = clusterData.counts >> 16u;
+        uint lightOffset = clusterData.offset;
 
-    // Evaluate point lights from cluster
-    for (uint i = 0u; i < clusterPointCount; ++i) {
-        uint lightIdx = lightIndexList[lightOffset + i];
-        PointLight light = pointLights[lightIdx];
-        directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
-    }
+        // Evaluate point lights from cluster
+        for (uint i = 0u; i < clusterPointCount; ++i) {
+            uint lightIdx = lightIndexList[lightOffset + i];
+            PointLight light = pointLights[lightIdx];
+            directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
+        }
 
-    // Evaluate spot lights from cluster (index has high bit flag)
-    for (uint i = 0u; i < clusterSpotCount; ++i) {
-        uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
-        uint lightIdx = packedIdx & 0x7FFFFFFFu;  // Remove high bit flag
-        SpotLight light = spotLights[lightIdx];
-        directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
+        // Evaluate spot lights from cluster (indices have SPOT_LIGHT_FLAG set)
+        for (uint i = 0u; i < clusterSpotCount; ++i) {
+            uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
+            uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
+            SpotLight light = spotLights[lightIdx];
+            directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
+        }
     }
 
     // Evaluate directional lights (global, not clustered)

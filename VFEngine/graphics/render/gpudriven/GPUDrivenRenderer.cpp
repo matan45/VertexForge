@@ -396,7 +396,7 @@ namespace render::gpudriven
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
 
             // Update lighting descriptor sets for clustered forward shading
-            if (lightBufferManager && clusterGridManager && lightCullingPipeline)
+            if (meshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
             {
                 meshShaderPipeline->updateLightingDescriptors(
                     lightBufferManager->getDescriptorSet(),
@@ -778,7 +778,41 @@ namespace render::gpudriven
             cachedIBLLayout = newIBLLayout;
         }
 
-        if (meshShaderPipeline && boneMatrixManager && lightBufferManager && clusterGridManager && lightCullingPipeline)
+        // All these components are required for mesh shader pipeline recreation
+        // They should all exist if initialized is true - log errors if any are missing
+        bool canRecreate = true;
+        if (!meshShaderPipeline)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: meshShaderPipeline is null");
+            canRecreate = false;
+        }
+        if (!boneMatrixManager)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: boneMatrixManager is null");
+            canRecreate = false;
+        }
+        if (!lightBufferManager)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: lightBufferManager is null");
+            canRecreate = false;
+        }
+        if (!clusterGridManager)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: clusterGridManager is null");
+            canRecreate = false;
+        }
+        if (!lightCullingPipeline)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: lightCullingPipeline is null");
+            canRecreate = false;
+        }
+        if (!bindlessTextures)
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: bindlessTextures is null");
+            canRecreate = false;
+        }
+
+        if (canRecreate)
         {
             meshShaderPipeline->recreate(cachedIBLLayout,
                                          bindlessTextures->getDescriptorSetLayout(),
@@ -787,6 +821,10 @@ namespace render::gpudriven
                                          clusterGridManager->getDescriptorSetLayout(),
                                          lightCullingPipeline->getDescriptorSetLayout(),
                                          cachedRenderPass);
+        }
+        else
+        {
+            loggerError("GPUDrivenRenderer::recreatePipelines: Cannot recreate pipeline due to missing components");
         }
     }
 }
