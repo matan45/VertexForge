@@ -9,6 +9,7 @@
 #include "MeshShaderPipeline.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
+#include "../lighting/GPULightBufferManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -49,6 +50,7 @@ namespace render::gpudriven
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
         std::unique_ptr<MeshletBuffer> meshletBuffer;
         std::unique_ptr<BoneMatrixManager> boneMatrixManager;
+        std::unique_ptr<lighting::GPULightBufferManager> lightBufferManager;
 
         bool initialized = false;
         bool enabled = false;
@@ -149,6 +151,9 @@ namespace render::gpudriven
         uint64_t getDrawCountBufferSize() const;
         uint64_t getPerDrawDataBufferSize() const;
         uint64_t getTotalMemoryUsage() const;
+
+        // Light buffer accessors (for future shader integration in VK-140)
+        lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);
