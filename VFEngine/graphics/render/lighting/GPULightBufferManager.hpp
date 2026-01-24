@@ -57,9 +57,22 @@ namespace render::lighting
         uint32_t pointCount = 0;
         uint32_t spotCount = 0;
 
+        // Previous frame data for dirty detection
+        std::vector<GPUDirectionalLight> prevDirectionalLights;
+        std::vector<GPUPointLight> prevPointLights;
+        std::vector<GPUSpotLight> prevSpotLights;
+        uint32_t prevDirectionalCount = 0;
+        uint32_t prevPointCount = 0;
+        uint32_t prevSpotCount = 0;
+
         // State tracking
         bool needsUpload = true;
         bool initialized = false;
+
+        // Warning flags to prevent log spam (reset when count drops below limit)
+        bool warnedDirectionalLimit = false;
+        bool warnedPointLimit = false;
+        bool warnedSpotLimit = false;
 
     public:
         explicit GPULightBufferManager(core::Device& device);
@@ -98,5 +111,6 @@ namespace render::lighting
         void collectPointLights();
         void collectSpotLights();
         void updateCountsBuffer();
+        bool detectChanges();
     };
 }

@@ -318,37 +318,37 @@ namespace render::lighting
         collectDirectionalLights();
         collectPointLights();
         collectSpotLights();
-        updateCountsBuffer();
 
-        needsUpload = true;
+        // Only upload if light data actually changed
+        if (detectChanges())
+        {
+            updateCountsBuffer();
+            needsUpload = true;
+        }
     }
 
     void GPULightBufferManager::collectDirectionalLights()
     {
         auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::DirectionalLightComponent, components::TransformComponent>();
+        auto view = registry.view<components::DirectionalLightComponent, components::WorldTransformComponent>();
 
         directionalCount = 0;
+        bool hitLimit = false;
 
         for (auto entity : view)
         {
             if (directionalCount >= LightConstants::MAX_DIRECTIONAL_LIGHTS)
             {
-                loggerWarning("GPULightBufferManager: Exceeded max directional lights ({})", LightConstants::MAX_DIRECTIONAL_LIGHTS);
+                hitLimit = true;
                 break;
             }
 
             const auto& light = view.get<components::DirectionalLightComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Calculate forward direction from rotation (Euler angles in degrees)
-            float yawRad = glm::radians(transform.rotation.y);
-            float pitchRad = glm::radians(transform.rotation.x);
-            glm::vec3 direction;
-            direction.x = -std::sin(yawRad) * std::cos(pitchRad);
-            direction.y = std::sin(pitchRad);
-            direction.z = -std::cos(yawRad) * std::cos(pitchRad);
-            direction = glm::normalize(direction);
+            // Extract forward direction from world matrix (handles parented entities correctly)
+            // Transform local forward (0, 0, -1) by the world matrix rotation
+            glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
             GPUDirectionalLight& gpuLight = cpuDirectionalLights[directionalCount];
             gpuLight.direction = direction;
@@ -358,6 +358,18 @@ namespace render::lighting
 
             ++directionalCount;
         }
+
+        // One-time warning when limit is exceeded (resets when count drops below limit)
+        if (hitLimit && !warnedDirectionalLimit)
+        {
+            loggerWarning("GPULightBufferManager: Exceeded max directional lights ({}). Additional lights will be ignored.",
+                          LightConstants::MAX_DIRECTIONAL_LIGHTS);
+            warnedDirectionalLimit = true;
+        }
+        else if (!hitLimit && warnedDirectionalLimit)
+        {
+            warnedDirectionalLimit = false;
+        }
     }
 
     void GPULightBufferManager::collectPointLights()
@@ -366,12 +378,13 @@ namespace render::lighting
         auto view = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
 
         pointCount = 0;
+        bool hitLimit = false;
 
         for (auto entity : view)
         {
             if (pointCount >= LightConstants::MAX_POINT_LIGHTS)
             {
-                loggerWarning("GPULightBufferManager: Exceeded max point lights ({})", LightConstants::MAX_POINT_LIGHTS);
+                hitLimit = true;
                 break;
             }
 
@@ -389,38 +402,45 @@ namespace render::lighting
 
             ++pointCount;
         }
+
+        // One-time warning when limit is exceeded (resets when count drops below limit)
+        if (hitLimit && !warnedPointLimit)
+        {
+            loggerWarning("GPULightBufferManager: Exceeded max point lights ({}). Additional lights will be ignored.",
+                          LightConstants::MAX_POINT_LIGHTS);
+            warnedPointLimit = true;
+        }
+        else if (!hitLimit && warnedPointLimit)
+        {
+            warnedPointLimit = false;
+        }
     }
 
     void GPULightBufferManager::collectSpotLights()
     {
         auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::SpotLightComponent, components::TransformComponent, components::WorldTransformComponent>();
+        auto view = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
 
         spotCount = 0;
+        bool hitLimit = false;
 
         for (auto entity : view)
         {
             if (spotCount >= LightConstants::MAX_SPOT_LIGHTS)
             {
-                loggerWarning("GPULightBufferManager: Exceeded max spot lights ({})", LightConstants::MAX_SPOT_LIGHTS);
+                hitLimit = true;
                 break;
             }
 
             const auto& light = view.get<components::SpotLightComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
             // Extract position from world matrix
             glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
 
-            // Calculate forward direction from rotation
-            float yawRad = glm::radians(transform.rotation.y);
-            float pitchRad = glm::radians(transform.rotation.x);
-            glm::vec3 direction;
-            direction.x = -std::sin(yawRad) * std::cos(pitchRad);
-            direction.y = std::sin(pitchRad);
-            direction.z = -std::cos(yawRad) * std::cos(pitchRad);
-            direction = glm::normalize(direction);
+            // Extract forward direction from world matrix (handles parented entities correctly)
+            // Transform local forward (0, 0, -1) by the world matrix rotation
+            glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
             GPUSpotLight& gpuLight = cpuSpotLights[spotCount];
             gpuLight.position = position;
@@ -435,6 +455,18 @@ namespace render::lighting
             gpuLight.padding[2] = 0.0f;
 
             ++spotCount;
+        }
+
+        // One-time warning when limit is exceeded (resets when count drops below limit)
+        if (hitLimit && !warnedSpotLimit)
+        {
+            loggerWarning("GPULightBufferManager: Exceeded max spot lights ({}). Additional lights will be ignored.",
+                          LightConstants::MAX_SPOT_LIGHTS);
+            warnedSpotLimit = true;
+        }
+        else if (!hitLimit && warnedSpotLimit)
+        {
+            warnedSpotLimit = false;
         }
     }
 
@@ -461,7 +493,44 @@ namespace render::lighting
             return;
         }
 
-        std::vector<vk::BufferCopy> copyRegions;
+        // Barrier: Wait for previous frame's shader reads to complete before writing
+        // This prevents a race condition where we write to buffers still being read
+        std::array<vk::BufferMemoryBarrier, 3> preTransferBarriers{};
+
+        preTransferBarriers[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;
+        preTransferBarriers[0].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        preTransferBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        preTransferBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        preTransferBarriers[0].buffer = directionalBuffer;
+        preTransferBarriers[0].offset = 0;
+        preTransferBarriers[0].size = VK_WHOLE_SIZE;
+
+        preTransferBarriers[1].srcAccessMask = vk::AccessFlagBits::eShaderRead;
+        preTransferBarriers[1].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        preTransferBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        preTransferBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        preTransferBarriers[1].buffer = pointBuffer;
+        preTransferBarriers[1].offset = 0;
+        preTransferBarriers[1].size = VK_WHOLE_SIZE;
+
+        preTransferBarriers[2].srcAccessMask = vk::AccessFlagBits::eShaderRead;
+        preTransferBarriers[2].dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+        preTransferBarriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        preTransferBarriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        preTransferBarriers[2].buffer = spotBuffer;
+        preTransferBarriers[2].offset = 0;
+        preTransferBarriers[2].size = VK_WHOLE_SIZE;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eFragmentShader |
+            vk::PipelineStageFlagBits::eComputeShader |
+            vk::PipelineStageFlagBits::eMeshShaderEXT,
+            vk::PipelineStageFlagBits::eTransfer,
+            {},
+            {},
+            preTransferBarriers,
+            {}
+        );
 
         // Copy directional lights to staging buffer and record copy command
         if (directionalCount > 0)
@@ -540,6 +609,61 @@ namespace render::lighting
             {}
         );
 
+        // Save current state as previous for next frame's dirty detection
+        prevDirectionalCount = directionalCount;
+        prevPointCount = pointCount;
+        prevSpotCount = spotCount;
+
+        prevDirectionalLights.assign(cpuDirectionalLights.begin(),
+                                      cpuDirectionalLights.begin() + directionalCount);
+        prevPointLights.assign(cpuPointLights.begin(),
+                               cpuPointLights.begin() + pointCount);
+        prevSpotLights.assign(cpuSpotLights.begin(),
+                              cpuSpotLights.begin() + spotCount);
+
         needsUpload = false;
+    }
+
+    bool GPULightBufferManager::detectChanges()
+    {
+        // Check if counts changed
+        if (directionalCount != prevDirectionalCount ||
+            pointCount != prevPointCount ||
+            spotCount != prevSpotCount)
+        {
+            return true;
+        }
+
+        // Compare directional light data
+        if (directionalCount > 0)
+        {
+            if (std::memcmp(cpuDirectionalLights.data(), prevDirectionalLights.data(),
+                           directionalCount * sizeof(GPUDirectionalLight)) != 0)
+            {
+                return true;
+            }
+        }
+
+        // Compare point light data
+        if (pointCount > 0)
+        {
+            if (std::memcmp(cpuPointLights.data(), prevPointLights.data(),
+                           pointCount * sizeof(GPUPointLight)) != 0)
+            {
+                return true;
+            }
+        }
+
+        // Compare spot light data
+        if (spotCount > 0)
+        {
+            if (std::memcmp(cpuSpotLights.data(), prevSpotLights.data(),
+                           spotCount * sizeof(GPUSpotLight)) != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

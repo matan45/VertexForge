@@ -6,11 +6,20 @@
 
 namespace render::lighting
 {
+    // Light buffer capacity limits
+    // Memory budget: ~66KB device + ~66KB staging = ~132KB total
+    //   - 64 directional × 32 bytes = 2KB
+    //   - 1024 point × 32 bytes = 32KB
+    //   - 512 spot × 64 bytes = 32KB
+    //
+    // These limits support typical game scenes. For larger scenes with many lights,
+    // consider implementing frustum culling to submit only visible lights, or
+    // increase limits if GPU memory permits.
     namespace LightConstants
     {
-        inline constexpr uint32_t MAX_DIRECTIONAL_LIGHTS = 64;
-        inline constexpr uint32_t MAX_POINT_LIGHTS = 1024;
-        inline constexpr uint32_t MAX_SPOT_LIGHTS = 512;
+        inline constexpr uint32_t MAX_DIRECTIONAL_LIGHTS = 64;   // Global lights, typically few needed
+        inline constexpr uint32_t MAX_POINT_LIGHTS = 1024;       // Most common dynamic light type
+        inline constexpr uint32_t MAX_SPOT_LIGHTS = 512;         // Used for flashlights, lamps, etc.
     }
 
     struct alignas(16) GPUDirectionalLight
