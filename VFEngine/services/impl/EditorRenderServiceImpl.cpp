@@ -44,6 +44,7 @@ namespace services
         prepareFrameAudioSpheres();
         prepareFrameLightGizmos();
         prepareFramePhysicsColliders();
+        prepareFrameClusterDebug();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -401,6 +402,21 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getViewMode() : 0u;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShowClusterDebugCommand>(
+            [this](const events::render::SetShowClusterDebugCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowClusterDebug(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowClusterDebugQuery>(
+            [this](const events::render::GetShowClusterDebugQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowClusterDebug() : false;
+            });
+
         dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
             [this](const events::render::GetCullingStatsQuery&)
             {
@@ -558,5 +574,15 @@ namespace services
         }
 
         offScreenProvider->prepareFramePhysicsColliders();
+    }
+
+    void EditorRenderServiceImpl::prepareFrameClusterDebug()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameClusterDebug();
     }
 }

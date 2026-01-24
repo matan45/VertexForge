@@ -28,6 +28,7 @@ namespace controllers::offscreen
         bool showBillboardIcons = true;
         bool showGrid = true;
         bool showPhysicsDebug = false;
+        bool showClusterDebug = false;
         float deltaTime = 0.0f;  // Time since last frame in seconds
     };
 
@@ -53,6 +54,7 @@ namespace controllers::offscreen
         void prepareGrid(const FrameContext& ctx);
         void preparePhysicsColliders(const FrameContext& ctx);
         void prepareLightGizmos(const FrameContext& ctx);
+        void prepareClusterDebug(const FrameContext& ctx);
 
         void invalidateMaterialCache(const std::string& materialPath);
         

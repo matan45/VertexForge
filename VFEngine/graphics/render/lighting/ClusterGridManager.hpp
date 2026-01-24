@@ -73,6 +73,20 @@ namespace render::lighting
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
+        // Access CPU-side cluster AABBs (for debug rendering)
+        [[nodiscard]] const std::vector<GPUClusterAABB>& getClusterAABBs() const { return cpuClusterAABBs; }
+
+        // Light-cluster intersection queries (for debug visualization)
+        [[nodiscard]] std::vector<uint32_t> getClusterIndicesForPointLight(
+            const glm::vec3& lightPosViewSpace,
+            float radius) const;
+
+        [[nodiscard]] std::vector<uint32_t> getClusterIndicesForSpotLight(
+            const glm::vec3& lightPosViewSpace,
+            const glm::vec3& lightDirViewSpace,
+            float range,
+            float outerAngleCos) const;
+
     private:
         void createBuffers();
         void destroyBuffers();

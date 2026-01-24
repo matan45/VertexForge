@@ -168,6 +168,11 @@ namespace services {
         virtual void setViewMode(uint32_t mode) = 0;
         virtual uint32_t getViewMode() const = 0;
 
+        // Cluster Debug API
+        virtual void setShowClusterDebug(bool show) = 0;
+        virtual bool getShowClusterDebug() const = 0;
+        virtual void prepareFrameClusterDebug() = 0;
+
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;
     };

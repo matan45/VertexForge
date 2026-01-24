@@ -30,12 +30,14 @@ namespace controllers::offscreen
 
         const math::Frustum& getCurrentFrustum() const { return currentFrustum; }
         const glm::mat4& getCurrentViewProj() const { return currentViewProj; }
+        const glm::mat4& getCurrentViewMatrix() const { return currentViewMatrix; }
         float getCurrentNearPlane() const { return currentNearPlane; }
 
     private:
         render::RenderPassHandler& renderHandler;
 
         glm::mat4 currentViewProj{1.0f};
+        glm::mat4 currentViewMatrix{1.0f};
         float currentNearPlane = 0.1f;
         bool occlusionCullingEnabled = true;
         bool occlusionCullingReady = false;

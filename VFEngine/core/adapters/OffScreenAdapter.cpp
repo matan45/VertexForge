@@ -220,6 +220,22 @@ namespace core {
         return offScreen ? offScreen->getViewMode() : 0;
     }
 
+    void OffScreenAdapter::setShowClusterDebug(bool show) {
+        if (offScreen) {
+            offScreen->setShowClusterDebug(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowClusterDebug() const {
+        return offScreen ? offScreen->getShowClusterDebug() : false;
+    }
+
+    void OffScreenAdapter::prepareFrameClusterDebug() {
+        if (offScreen) {
+            offScreen->prepareFrameClusterDebug();
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);
