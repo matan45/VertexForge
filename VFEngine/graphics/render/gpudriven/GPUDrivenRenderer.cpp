@@ -103,6 +103,9 @@ namespace render::gpudriven
             lightBufferManager = std::make_unique<lighting::GPULightBufferManager>(device);
             lightBufferManager->init();
 
+            clusterGridManager = std::make_unique<lighting::ClusterGridManager>(device);
+            clusterGridManager->init();
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             meshShaderPipeline->init(iblDescriptorSetLayout, bindlessTextures->getDescriptorSetLayout(),
                                      boneMatrixManager->getDescriptorSetLayout(), renderPass);
@@ -136,6 +139,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (clusterGridManager) clusterGridManager->cleanup();
         if (lightBufferManager) lightBufferManager->cleanup();
         if (boneMatrixManager) boneMatrixManager->cleanup();
         if (meshletBuffer) meshletBuffer->cleanup();
@@ -147,6 +151,7 @@ namespace render::gpudriven
 
         meshStreamManager.reset();
         meshShaderPipeline.reset();
+        clusterGridManager.reset();
         lightBufferManager.reset();
         boneMatrixManager.reset();
         meshletBuffer.reset();
@@ -336,6 +341,23 @@ namespace render::gpudriven
         };
         cameraBuffer->update(cameraParams);
 
+        // Update cluster grid for clustered lighting
+        if (clusterGridManager)
+        {
+            auto extent = swapChain.getSwapchainExtent();
+            lighting::ClusterCameraParams clusterCameraParams{};
+            clusterCameraParams.nearPlane = nearPlane;
+            clusterCameraParams.farPlane = farPlane;
+            clusterCameraParams.aspectRatio = static_cast<float>(extent.width) / static_cast<float>(extent.height);
+            clusterCameraParams.screenWidth = extent.width;
+            clusterCameraParams.screenHeight = extent.height;
+            clusterCameraParams.projection = projection;
+            clusterCameraParams.invProjection = glm::inverse(projection);
+            // Extract vertical FOV from projection matrix
+            clusterCameraParams.fovY = 2.0f * glm::degrees(std::atan(1.0f / projection[1][1]));
+            clusterGridManager->updateFromCamera(clusterCameraParams);
+        }
+
         cullPipeline->updateDescriptors(
             mergedBuffer->getObjectBuffer(),
             cameraBuffer->getBuffer(),
@@ -392,6 +414,11 @@ namespace render::gpudriven
         {
             lightBufferManager->updateFromScene();
             lightBufferManager->uploadToGPU(cmd);
+        }
+
+        if (clusterGridManager)
+        {
+            clusterGridManager->uploadToGPU(cmd);
         }
 
         vk::MemoryBarrier memBarrier{
