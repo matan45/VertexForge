@@ -25,13 +25,22 @@ namespace render::gpudriven
     void MeshShaderPipeline::init(vk::DescriptorSetLayout iblLayout,
                                   vk::DescriptorSetLayout bindlessTextureLayout,
                                   vk::DescriptorSetLayout boneMatrixLayout,
+                                  vk::DescriptorSetLayout lightDataLayout,
+                                  vk::DescriptorSetLayout clusterGridLayout,
+                                  vk::DescriptorSetLayout cullingOutputLayout,
                                   vk::RenderPass renderPass)
     {
+        // Cache lighting layouts for potential pipeline recreation
+        cachedLightDataLayout = lightDataLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedCullingOutputLayout = cullingOutputLayout;
+
         createStatsBuffer();
         createPerDrawDataDescriptor();
         createMeshletDataDescriptor();
         createVertexDataDescriptor();
-        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout, renderPass);
+        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
+                                         lightDataLayout, clusterGridLayout, cullingOutputLayout, renderPass);
     }
 
     void MeshShaderPipeline::createStatsBuffer()
@@ -115,10 +124,18 @@ namespace render::gpudriven
     void MeshShaderPipeline::recreate(vk::DescriptorSetLayout iblLayout,
                                       vk::DescriptorSetLayout bindlessTextureLayout,
                                       vk::DescriptorSetLayout boneMatrixLayout,
+                                      vk::DescriptorSetLayout lightDataLayout,
+                                      vk::DescriptorSetLayout clusterGridLayout,
+                                      vk::DescriptorSetLayout cullingOutputLayout,
                                       vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
+
+        // Update cached lighting layouts
+        cachedLightDataLayout = lightDataLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedCullingOutputLayout = cullingOutputLayout;
 
         if (graphicsPipeline)
         {
@@ -137,7 +154,8 @@ namespace render::gpudriven
             meshShader->cleanUp();
         }
 
-        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout, renderPass);
+        createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
+                                         lightDataLayout, clusterGridLayout, cullingOutputLayout, renderPass);
     }
 
     void MeshShaderPipeline::updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer)
@@ -209,6 +227,17 @@ namespace render::gpudriven
         vertexWrite.pBufferInfo = &vertexInfo;
 
         device.getLogicalDevice().updateDescriptorSets(vertexWrite, {});
+    }
+
+    void MeshShaderPipeline::updateLightingDescriptors(vk::DescriptorSet lightDataDescSet,
+                                                       vk::DescriptorSet clusterGridDescSet,
+                                                       vk::DescriptorSet cullingOutputDescSet)
+    {
+        // Cache external descriptor sets for binding during rendering
+        // These are managed by GPULightBufferManager, ClusterGridManager, and LightCullingPipeline
+        lightDataDescriptorSet = lightDataDescSet;
+        clusterGridDescriptorSet = clusterGridDescSet;
+        cullingOutputDescriptorSet = cullingOutputDescSet;
     }
 
     void MeshShaderPipeline::createPerDrawDataDescriptor()
@@ -371,6 +400,9 @@ namespace render::gpudriven
     void MeshShaderPipeline::createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
                                                               vk::DescriptorSetLayout bindlessTextureLayout,
                                                               vk::DescriptorSetLayout boneMatrixLayout,
+                                                              vk::DescriptorSetLayout lightDataLayout,
+                                                              vk::DescriptorSetLayout clusterGridLayout,
+                                                              vk::DescriptorSetLayout cullingOutputLayout,
                                                               vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -402,13 +434,16 @@ namespace render::gpudriven
             return;
         }
 
-        std::array<vk::DescriptorSetLayout, 6> setLayouts = {
-            iblLayout, // Set 0: Camera/IBL
-            perDrawDataLayout, // Set 1: Per-draw data
+        std::array<vk::DescriptorSetLayout, 9> setLayouts = {
+            iblLayout,             // Set 0: Camera/IBL
+            perDrawDataLayout,     // Set 1: Per-draw data
             bindlessTextureLayout, // Set 2: Bindless textures
-            meshletDataLayout, // Set 3: Meshlet data
-            vertexDataLayout, // Set 4: Vertex data
-            boneMatrixLayout // Set 5: Bone matrices for skeletal animation
+            meshletDataLayout,     // Set 3: Meshlet data
+            vertexDataLayout,      // Set 4: Vertex data
+            boneMatrixLayout,      // Set 5: Bone matrices for skeletal animation
+            lightDataLayout,       // Set 6: Light buffers (directional, point, spot + counts)
+            clusterGridLayout,     // Set 7: Cluster grid parameters
+            cullingOutputLayout    // Set 8: Light culling output (cluster light grid + index list)
         };
 
         vk::PushConstantRange pushConstantRange{};
