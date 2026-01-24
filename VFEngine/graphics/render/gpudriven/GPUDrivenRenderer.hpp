@@ -10,6 +10,7 @@
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
+#include "../lighting/ClusterGridManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -51,6 +52,7 @@ namespace render::gpudriven
         std::unique_ptr<MeshletBuffer> meshletBuffer;
         std::unique_ptr<BoneMatrixManager> boneMatrixManager;
         std::unique_ptr<lighting::GPULightBufferManager> lightBufferManager;
+        std::unique_ptr<lighting::ClusterGridManager> clusterGridManager;
 
         bool initialized = false;
         bool enabled = false;
@@ -154,6 +156,9 @@ namespace render::gpudriven
 
         // Light buffer accessors (for future shader integration in VK-140)
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
+
+        // Cluster grid accessors (for VK-139 light culling)
+        lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);

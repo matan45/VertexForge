@@ -165,6 +165,8 @@
     <ClInclude Include="render\ibl\IrradianceGenerator.hpp" />
     <ClInclude Include="render\ibl\PrefilteredEnvGenerator.hpp" />
     <ClInclude Include="render\ibl\SkyboxRenderer.hpp" />
+    <ClInclude Include="render\lighting\ClusterGridManager.hpp" />
+    <ClInclude Include="render\lighting\ClusterGridTypes.hpp" />
     <ClInclude Include="render\lighting\GPULightBufferManager.hpp" />
     <ClInclude Include="render\lighting\GPULightTypes.hpp" />
     <ClInclude Include="render\material\MaterialPBRExtractor.hpp" />
@@ -257,6 +259,7 @@
     <ClCompile Include="render\ibl\IrradianceGenerator.cpp" />
     <ClCompile Include="render\ibl\PrefilteredEnvGenerator.cpp" />
     <ClCompile Include="render\ibl\SkyboxRenderer.cpp" />
+    <ClCompile Include="render\lighting\ClusterGridManager.cpp" />
     <ClCompile Include="render\lighting\GPULightBufferManager.cpp" />
     <ClCompile Include="render\material\MaterialPBRExtractor.cpp" />
     <ClCompile Include="render\material\MaterialShaderCache.cpp" />
