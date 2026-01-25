@@ -41,6 +41,10 @@ namespace windows
 
     void RenderConfigWindow::applySettings()
     {
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::scene::SetRenderSettingsCommand cmd;
+        cmd.settings = settings;
+        dispatcher.execute(cmd);
     }
 
     void RenderConfigWindow::drawShadowSection()
@@ -115,40 +119,44 @@ namespace windows
 
         ImGui::SetNextWindowSize(ImVec2(400, 350), ImGuiCond_FirstUseEver);
 
-        std::string title = "Render Configuration";
-        if (isDirty)
-        {
-            title += " (Modified)";
-        }
-        title += "###RenderConfig";
-
-        if (ImGui::Begin(title.c_str(), &visible))
+        if (ImGui::Begin("Render Configuration", &visible))
         {
             // Shadow settings section
             drawShadowSection();
+
+            ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            
-            // Action buttons
-            if (ImGui::Button("Save to Scene"))
+
+            // Action buttons at bottom
+            if (ImGui::Button("Save to Scene", ImVec2(100, 0)))
             {
                 saveToScene();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Reload"))
+            if (ImGui::Button("Reload", ImVec2(80, 0)))
             {
                 loadFromScene();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Apply"))
+            if (ImGui::Button("Apply", ImVec2(80, 0)))
             {
                 applySettings();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Reset Defaults"))
+            if (ImGui::Button("Reset Defaults", ImVec2(100, 0)))
             {
                 resetToDefaults();
             }
+
+            if (isDirty)
+            {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
+            }
+
+            ImGui::Spacing();
+            ImGui::TextDisabled("Render settings are saved with the scene file.");
         }
         ImGui::End();
     }
