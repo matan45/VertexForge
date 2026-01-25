@@ -2,6 +2,8 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 #include <spdlog/spdlog.h>
 
 namespace render::shadow
@@ -487,8 +489,215 @@ namespace render::shadow
         if (!data)
             return;
 
-        // Matrix calculation will be implemented in future subtasks (VK-248, VK-249, VK-250)
-        // For now, just mark as updated
+        // Get entity registry and validate entity
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto entity = static_cast<entt::entity>(entityId);
+
+        if (!registry.valid(entity) ||
+            !registry.all_of<components::WorldTransformComponent>(entity))
+        {
+            spdlog::warn("ShadowSystem: Entity {} missing WorldTransformComponent", entityId);
+            data->matricesDirty = false;
+            return;
+        }
+
+        const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+
+        // Handle PointCube shadow type (VK-249)
+        if (data->type == ShadowMapType::PointCube)
+        {
+            // Extract light position from world transform matrix
+            glm::vec3 lightPosition = glm::vec3(worldTransform.worldMatrix[3]);
+
+            // Get radius from PointLightComponent (used as far plane)
+            float farPlane = data->settings.farPlane;
+            if (registry.all_of<components::PointLightComponent>(entity))
+            {
+                const auto& pointLight = registry.get<components::PointLightComponent>(entity);
+                farPlane = pointLight.radius;
+            }
+
+            float nearPlane = data->settings.nearPlane;
+
+            // Compute all 6 cube face matrices
+            auto faceMatrices = PointShadowCalculator::computeCubeFaceMatrices(
+                lightPosition,
+                nearPlane,
+                farPlane
+            );
+
+            // Ensure we have 6 views allocated
+            if (data->views.size() != PointShadowCalculator::FACE_COUNT)
+            {
+                spdlog::error("ShadowSystem: PointCube light {} has {} views, expected 6",
+                              entityId, data->views.size());
+                data->matricesDirty = false;
+                return;
+            }
+
+            // Update each face view
+            for (uint32_t face = 0; face < PointShadowCalculator::FACE_COUNT; ++face)
+            {
+                auto& view = data->views[face];
+                const auto& faceData = faceMatrices[face];
+
+                view.viewMatrix = faceData.viewMatrix;
+                view.projectionMatrix = faceData.projMatrix;
+                view.viewProjectionMatrix = faceData.viewProjMatrix;
+                view.nearPlane = nearPlane;
+                view.farPlane = farPlane;
+                view.lightPosition = glm::vec4(lightPosition, 1.0f);
+
+                // Copy bias settings from per-light settings
+                view.depthBias = data->settings.depthBias;
+                view.slopeBias = data->settings.slopeBias;
+                view.normalBias = data->settings.normalBias;
+
+                // Face index stored in handle for GPU access
+                view.handle.layer = face;
+            }
+
+            data->matricesDirty = false;
+            needsUpdate = true;
+            return;
+        }
+
+        // Handle Spot2D shadow type (VK-250)
+        if (data->type == ShadowMapType::Spot2D)
+        {
+            // Extract light position from world transform matrix
+            glm::vec3 lightPosition = glm::vec3(worldTransform.worldMatrix[3]);
+
+            // Extract light direction from world transform matrix
+            // Spot lights point along negative Z axis in local space
+            glm::vec3 lightDirection = glm::normalize(
+                glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
+            );
+
+            // Get spot light parameters
+            float outerAngle = 45.0f;  // Default outer cone angle
+            float range = 20.0f;       // Default range
+            if (registry.all_of<components::SpotLightComponent>(entity))
+            {
+                const auto& spotLight = registry.get<components::SpotLightComponent>(entity);
+                outerAngle = spotLight.outerAngle;
+                range = spotLight.range;
+            }
+
+            float nearPlane = data->settings.nearPlane;
+
+            // Compute spot light shadow matrices
+            auto shadowData = SpotShadowCalculator::computeSpotLightMatrices(
+                lightPosition,
+                lightDirection,
+                outerAngle,
+                nearPlane,
+                range
+            );
+
+            // Ensure we have at least 1 view allocated
+            if (data->views.empty())
+            {
+                spdlog::error("ShadowSystem: Spot2D light {} has no views allocated", entityId);
+                data->matricesDirty = false;
+                return;
+            }
+
+            // Update the single view
+            auto& view = data->views[0];
+            view.viewMatrix = shadowData.viewMatrix;
+            view.projectionMatrix = shadowData.projMatrix;
+            view.viewProjectionMatrix = shadowData.viewProjMatrix;
+            view.nearPlane = nearPlane;
+            view.farPlane = range;
+            view.lightPosition = glm::vec4(lightPosition, 1.0f);
+            view.lightDirection = glm::vec4(lightDirection, 0.0f);
+
+            // Copy bias settings from per-light settings
+            view.depthBias = data->settings.depthBias;
+            view.slopeBias = data->settings.slopeBias;
+            view.normalBias = data->settings.normalBias;
+
+            data->matricesDirty = false;
+            needsUpdate = true;
+            return;
+        }
+
+        // Handle DirectionalCSM (VK-248)
+        if (data->type != ShadowMapType::DirectionalCSM)
+        {
+            // Unknown shadow type - mark as processed
+            data->matricesDirty = false;
+            needsUpdate = true;
+            return;
+        }
+
+        // DirectionalCSM implementation continues below
+        // (worldTransform already validated and retrieved above)
+
+        // Extract light direction from world transform matrix
+        // Light points along negative Z axis in local space (0, 0, -1)
+        glm::vec3 lightDirection = glm::normalize(
+            glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
+        );
+
+        // Get cascade split mode from settings
+        // TODO: When RenderSettings integration is complete, get from there
+        // For now, use Practical mode with the lambda from per-light settings
+        types::CascadeSplitMode splitMode = types::CascadeSplitMode::Practical;
+
+        // Compute cascade split distances
+        auto splits = CascadeShadowCalculator::computeSplitDistances(
+            cameraNear,
+            cameraFar,
+            data->settings.cascadeCount,
+            splitMode,
+            data->settings.cascadeSplitLambda
+        );
+
+        // Update each cascade view
+        uint32_t viewCount = std::min(static_cast<uint32_t>(data->views.size()),
+                                       data->settings.cascadeCount);
+
+        for (uint32_t i = 0; i < viewCount; ++i)
+        {
+            auto& view = data->views[i];
+
+            float cascadeNear = splits[i];
+            float cascadeFar = splits[i + 1];
+
+            // Get frustum corners in world space for this cascade range
+            auto frustumCorners = CascadeShadowCalculator::getFrustumCornersWorldSpace(
+                cameraView,
+                cameraProjection,
+                cascadeNear,
+                cascadeFar
+            );
+
+            // Compute stable cascade matrix with texel snapping
+            auto cascadeData = CascadeShadowCalculator::computeCascadeMatrix(
+                frustumCorners,
+                lightDirection,
+                data->settings.resolution
+            );
+
+            // Update view data
+            view.viewMatrix = cascadeData.viewMatrix;
+            view.projectionMatrix = cascadeData.projMatrix;
+            view.viewProjectionMatrix = cascadeData.viewProjMatrix;
+            view.nearPlane = cascadeData.nearDistance;
+            view.farPlane = cascadeData.farDistance;
+            view.lightDirection = glm::vec4(lightDirection, 0.0f);
+
+            // Copy bias settings from per-light settings
+            view.depthBias = data->settings.depthBias;
+            view.slopeBias = data->settings.slopeBias;
+            view.normalBias = data->settings.normalBias;
+
+            // Cascade index is stored in handle for GPU access
+            view.handle.cascadeIndex = static_cast<uint16_t>(i);
+        }
+
         data->matricesDirty = false;
         needsUpdate = true;
     }
@@ -504,18 +713,25 @@ namespace render::shadow
                 GPUShadowData gpu{};
                 gpu.viewProjection = view.viewProjectionMatrix;
                 gpu.atlasViewport = view.atlasViewport;
+
+                // Use bias values from the view (set by updateLightShadowMatrices)
                 gpu.biasParams = glm::vec4(
-                    view.handle.isValid() ? 0.005f : 0.0f,  // depthBias (placeholder)
-                    1.5f,   // slopeBias
-                    0.02f,  // normalBias
-                    1.0f    // softness
+                    view.depthBias,
+                    view.slopeBias,
+                    view.normalBias,
+                    1.0f    // softness (reserved for future use)
                 );
+
+                // Range params: near, far, inverse range, cascade index
+                float range = view.farPlane - view.nearPlane;
+                float invRange = (range > 0.0001f) ? (1.0f / range) : 0.0f;
                 gpu.rangeParams = glm::vec4(
                     view.nearPlane,
                     view.farPlane,
-                    1.0f / (view.farPlane - view.nearPlane),
+                    invRange,
                     static_cast<float>(view.handle.cascadeIndex)
                 );
+
                 gpuShadowData.push_back(gpu);
             }
         };

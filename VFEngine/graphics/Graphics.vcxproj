@@ -184,6 +184,8 @@
     <ClInclude Include="render\occlusion\CameraOcclusionManager.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
     <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
+    <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
+    <ClInclude Include="render\shadow\PointShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\ShadowAtlasManager.hpp" />
     <ClInclude Include="render\shadow\ShadowCubeMap.hpp" />
     <ClInclude Include="render\shadow\ShadowDepthArray.hpp" />
@@ -192,6 +194,7 @@
     <ClInclude Include="render\shadow\ShadowSamplers.hpp" />
     <ClInclude Include="render\shadow\ShadowSystem.hpp" />
     <ClInclude Include="render\shadow\ShadowTypes.hpp" />
+    <ClInclude Include="render\shadow\SpotShadowCalculator.hpp" />
     <ClInclude Include="render\tools\AABBDebugRenderer.hpp" />
     <ClInclude Include="render\tools\AudioSphereDebugRenderer.hpp" />
     <ClInclude Include="render\tools\ClusterDebugRenderer.hpp" />
@@ -284,6 +287,8 @@
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
     <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
+    <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
+    <ClCompile Include="render\shadow\PointShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\ShadowAtlasManager.cpp" />
     <ClCompile Include="render\shadow\ShadowCubeMap.cpp" />
     <ClCompile Include="render\shadow\ShadowDepthArray.cpp" />
@@ -291,6 +296,7 @@
     <ClCompile Include="render\shadow\ShadowResourcePool.cpp" />
     <ClCompile Include="render\shadow\ShadowSamplers.cpp" />
     <ClCompile Include="render\shadow\ShadowSystem.cpp" />
+    <ClCompile Include="render\shadow\SpotShadowCalculator.cpp" />
     <ClCompile Include="render\tools\AABBDebugRenderer.cpp" />
     <ClCompile Include="render\tools\AudioSphereDebugRenderer.cpp" />
     <ClCompile Include="render\tools\ClusterDebugRenderer.cpp" />
