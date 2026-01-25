@@ -9,6 +9,57 @@
 
 namespace render::occlusion
 {
+    // RAII wrapper for mapped Vulkan memory to ensure exception safety
+    class MappedMemoryGuard
+    {
+    public:
+        MappedMemoryGuard(vk::Device device, vk::DeviceMemory memory, vk::DeviceSize offset, vk::DeviceSize size)
+            : device(device), memory(memory)
+        {
+            mappedData = device.mapMemory(memory, offset, size);
+        }
+
+        ~MappedMemoryGuard()
+        {
+            if (mappedData)
+            {
+                device.unmapMemory(memory);
+            }
+        }
+
+        MappedMemoryGuard(const MappedMemoryGuard&) = delete;
+        MappedMemoryGuard& operator=(const MappedMemoryGuard&) = delete;
+
+        MappedMemoryGuard(MappedMemoryGuard&& other) noexcept
+            : device(other.device), memory(other.memory), mappedData(other.mappedData)
+        {
+            other.mappedData = nullptr;
+        }
+
+        MappedMemoryGuard& operator=(MappedMemoryGuard&& other) noexcept
+        {
+            if (this != &other)
+            {
+                if (mappedData)
+                {
+                    device.unmapMemory(memory);
+                }
+                device = other.device;
+                memory = other.memory;
+                mappedData = other.mappedData;
+                other.mappedData = nullptr;
+            }
+            return *this;
+        }
+
+        void* data() const { return mappedData; }
+
+    private:
+        vk::Device device;
+        vk::DeviceMemory memory;
+        void* mappedData = nullptr;
+    };
+
     LightOcclusionCulling::LightOcclusionCulling(core::Device& device, core::SwapChain& swapChain)
         : device(device), swapChain(swapChain)
     {
@@ -74,6 +125,19 @@ namespace render::occlusion
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
         core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+
+        // Persistent staging buffer for light data upload (avoids per-frame allocation)
+        core::BufferInfoRequest uploadStagingRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            sizeof(GPULightBounds) * maxLights,
+            vk::BufferUsageFlagBits::eTransferSrc,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+        core::BufferUtilities::createBuffer(uploadStagingRequest, uploadStagingBuffer, uploadStagingMemory);
+
+        // Persistently map the upload staging buffer for efficient CPU writes
+        uploadStagingMapped = device.getLogicalDevice().mapMemory(uploadStagingMemory, 0, sizeof(GPULightBounds) * maxLights);
 
         cachedVisibility.resize(maxLights, 0);
         needsDescriptorUpdate = true;
@@ -172,6 +236,15 @@ namespace render::occlusion
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingMemory);
 
+        // Clean up upload staging buffer (unmap before destroy)
+        if (uploadStagingMapped)
+        {
+            device.getLogicalDevice().unmapMemory(uploadStagingMemory);
+            uploadStagingMapped = nullptr;
+        }
+        device.getLogicalDevice().destroyBuffer(uploadStagingBuffer);
+        device.getLogicalDevice().freeMemory(uploadStagingMemory);
+
         createBuffers(newMaxLights);
 
         loggerInfo("Light occlusion culling buffers resized to {} lights", newMaxLights);
@@ -180,6 +253,7 @@ namespace render::occlusion
     void LightOcclusionCulling::updateLights(const std::vector<GPULightBounds>& lights)
     {
         resultsCached = false;  // Invalidate cached results
+        readbackState = ReadbackState::Idle;  // Reset synchronization state
         visibleLightIds.clear();
         occludedLightIds.clear();
 
@@ -187,6 +261,7 @@ namespace render::occlusion
         {
             currentLightCount = 0;
             lightEntityIds.clear();
+            uploadPending = false;
             return;
         }
 
@@ -204,50 +279,46 @@ namespace render::occlusion
             lightEntityIds[i] = lights[i].entityId;
         }
 
-        // Create temporary staging buffer for upload
-        vk::Buffer uploadStaging;
-        vk::DeviceMemory uploadStagingMemory;
-        vk::DeviceSize uploadSize = sizeof(GPULightBounds) * lights.size();
+        // Copy light data to persistently mapped staging buffer (CPU-side only, no GPU work)
+        pendingUploadSize = sizeof(GPULightBounds) * lights.size();
+        std::memcpy(uploadStagingMapped, lights.data(), pendingUploadSize);
 
-        core::BufferInfoRequest uploadRequest(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            uploadSize,
-            vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-        );
-        core::BufferUtilities::createBuffer(uploadRequest, uploadStaging, uploadStagingMemory);
+        // Mark upload as pending - caller must call recordLightUpload() before cull()
+        uploadPending = true;
+    }
 
-        void* data = device.getLogicalDevice().mapMemory(uploadStagingMemory, 0, uploadSize);
-        std::memcpy(data, lights.data(), uploadSize);
-        device.getLogicalDevice().unmapMemory(uploadStagingMemory);
+    bool LightOcclusionCulling::recordLightUpload(vk::CommandBuffer cmd)
+    {
+        if (!uploadPending || currentLightCount == 0)
+        {
+            return false;
+        }
 
-        // Copy to GPU
-        vk::CommandBufferAllocateInfo cmdAllocInfo{};
-        cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
-        cmdAllocInfo.commandPool = device.getStagingCommandPool();
-        cmdAllocInfo.commandBufferCount = 1;
-        vk::CommandBuffer cmd = device.getLogicalDevice().allocateCommandBuffers(cmdAllocInfo)[0];
-
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd.begin(beginInfo);
-
+        // Record copy from staging to GPU buffer
         vk::BufferCopy copyRegion{};
-        copyRegion.size = uploadSize;
-        cmd.copyBuffer(uploadStaging, lightBoundsBuffer, copyRegion);
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = 0;
+        copyRegion.size = pendingUploadSize;
+        cmd.copyBuffer(uploadStagingBuffer, lightBoundsBuffer, copyRegion);
 
-        cmd.end();
+        // Barrier to ensure upload completes before compute shader reads
+        vk::BufferMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = lightBoundsBuffer;
+        barrier.offset = 0;
+        barrier.size = pendingUploadSize;
 
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {}, {}, barrier, {}
+        );
 
-        device.getLogicalDevice().freeCommandBuffers(device.getStagingCommandPool(), 1, &cmd);
-        device.getLogicalDevice().destroyBuffer(uploadStaging);
-        device.getLogicalDevice().freeMemory(uploadStagingMemory);
+        uploadPending = false;
+        return true;
     }
 
     void LightOcclusionCulling::updateCamera(const glm::mat4& viewProj, const glm::vec3& cameraPos, float nearPlane)
@@ -265,9 +336,8 @@ namespace render::occlusion
         cameraData.padding0 = 0;
         cameraData.padding1 = 0;
 
-        void* data = device.getLogicalDevice().mapMemory(cameraMemory, 0, sizeof(LightCullCameraData));
-        std::memcpy(data, &cameraData, sizeof(LightCullCameraData));
-        device.getLogicalDevice().unmapMemory(cameraMemory);
+        MappedMemoryGuard mapped(device.getLogicalDevice(), cameraMemory, 0, sizeof(LightCullCameraData));
+        std::memcpy(mapped.data(), &cameraData, sizeof(LightCullCameraData));
     }
 
     void LightOcclusionCulling::cull(vk::CommandBuffer cmd)
@@ -382,6 +452,17 @@ namespace render::occlusion
             vk::PipelineStageFlagBits::eHost,
             {}, {}, barrier, {}
         );
+
+        // Mark that GPU work is pending - caller must call markResultsReady() after GPU sync
+        readbackState = ReadbackState::Pending;
+    }
+
+    void LightOcclusionCulling::markResultsReady()
+    {
+        if (readbackState == ReadbackState::Pending)
+        {
+            readbackState = ReadbackState::Ready;
+        }
     }
 
     const std::unordered_set<uint32_t>& LightOcclusionCulling::getVisibleLightIds()
@@ -397,13 +478,24 @@ namespace render::occlusion
         if (currentLightCount == 0 || lightEntityIds.empty())
         {
             resultsCached = true;
+            readbackState = ReadbackState::Idle;
+            return visibleLightIds;
+        }
+
+        // Check synchronization state - reading while GPU work is pending is undefined behavior
+        if (readbackState == ReadbackState::Pending)
+        {
+            loggerWarning("LightOcclusionCulling::getVisibleLightIds() called while GPU readback is pending. "
+                          "Call markResultsReady() after GPU sync (vkQueueWaitIdle/fence) before reading results. "
+                          "Returning empty set to avoid undefined behavior.");
             return visibleLightIds;
         }
 
         // Read back visibility results from staging buffer
-        void* data = device.getLogicalDevice().mapMemory(stagingMemory, 0, sizeof(uint32_t) * currentLightCount);
-        std::memcpy(cachedVisibility.data(), data, sizeof(uint32_t) * currentLightCount);
-        device.getLogicalDevice().unmapMemory(stagingMemory);
+        {
+            MappedMemoryGuard mapped(device.getLogicalDevice(), stagingMemory, 0, sizeof(uint32_t) * currentLightCount);
+            std::memcpy(cachedVisibility.data(), mapped.data(), sizeof(uint32_t) * currentLightCount);
+        }
 
         // Map visibility results to entity IDs
         for (uint32_t i = 0; i < currentLightCount; ++i)
@@ -420,6 +512,7 @@ namespace render::occlusion
         }
 
         resultsCached = true;
+        readbackState = ReadbackState::Idle;
         return visibleLightIds;
     }
 
@@ -450,6 +543,15 @@ namespace render::occlusion
         logicalDevice.freeMemory(cameraMemory);
         logicalDevice.destroyBuffer(stagingBuffer);
         logicalDevice.freeMemory(stagingMemory);
+
+        // Clean up upload staging buffer (unmap before destroy)
+        if (uploadStagingMapped)
+        {
+            logicalDevice.unmapMemory(uploadStagingMemory);
+            uploadStagingMapped = nullptr;
+        }
+        logicalDevice.destroyBuffer(uploadStagingBuffer);
+        logicalDevice.freeMemory(uploadStagingMemory);
 
         shader.reset();
         initialized = false;
