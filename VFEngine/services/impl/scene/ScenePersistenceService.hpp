@@ -2,6 +2,7 @@
 #include "../../data/EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
 #include "types/AudioTypes.hpp"
+#include "types/RenderSettings.hpp"
 #include <memory>
 #include <optional>
 #include <string>
@@ -46,5 +47,9 @@ namespace services
         // Audio settings (stored at scene level)
         types::AudioSettings getAudioSettings() const;
         bool setAudioSettings(const types::AudioSettings& settings);
+
+        // Render settings (stored at scene level)
+        types::RenderSettings getRenderSettings() const;
+        bool setRenderSettings(const types::RenderSettings& settings);
     };
 }

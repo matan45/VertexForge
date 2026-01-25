@@ -81,6 +81,18 @@ namespace services
             {
                 return setAudioSettings(cmd.settings);
             });
+
+        dispatcher.registerQueryHandler<events::scene::GetRenderSettingsQuery>(
+            [this](const events::scene::GetRenderSettingsQuery&)
+            {
+                return getRenderSettings();
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetRenderSettingsCommand>(
+            [this](const events::scene::SetRenderSettingsCommand& cmd)
+            {
+                return setRenderSettings(cmd.settings);
+            });
     }
 
     bool ScenePersistenceService::newScene()
@@ -109,6 +121,9 @@ namespace services
         events::audio::ApplyAudioSettingsCommand audioCmd;
         audioCmd.settings = sceneGraph->getAudioSettings();
         dispatcher.execute(audioCmd);
+
+        // Reset render settings to defaults for new scene
+        sceneGraph->setRenderSettings(types::RenderSettings::createDefault());
 
         if (entityStateService)
         {
@@ -350,6 +365,25 @@ namespace services
             return false;
         }
         sceneGraph->setAudioSettings(settings);
+        return true;
+    }
+
+    types::RenderSettings ScenePersistenceService::getRenderSettings() const
+    {
+        if (!sceneGraph)
+        {
+            return types::RenderSettings::createDefault();
+        }
+        return sceneGraph->getRenderSettings();
+    }
+
+    bool ScenePersistenceService::setRenderSettings(const types::RenderSettings& settings)
+    {
+        if (!sceneGraph)
+        {
+            return false;
+        }
+        sceneGraph->setRenderSettings(settings);
         return true;
     }
 }
