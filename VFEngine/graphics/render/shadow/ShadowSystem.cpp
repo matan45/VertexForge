@@ -1656,4 +1656,98 @@ namespace render::shadow
     {
         return atlasManager ? atlasManager->getAtlasUtilization() : 0.0f;
     }
+
+    std::vector<ShadowDebugInfo> ShadowSystem::getShadowDebugInfo() const
+    {
+        std::vector<ShadowDebugInfo> debugInfos;
+
+        if (!shadowsEnabled)
+            return debugInfos;
+
+        // Reserve approximate capacity
+        debugInfos.reserve(
+            directionalShadowViews.size() +
+            pointShadowViews.size() +
+            spotShadowViews.size()
+        );
+
+        // Collect directional shadow debug info (CSM cascades)
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            if (data.type == ShadowMapType::DirectionalCSM || data.type == ShadowMapType::Directional2D)
+            {
+                for (size_t i = 0; i < data.views.size(); ++i)
+                {
+                    const auto& view = data.views[i];
+                    ShadowDebugInfo info;
+                    info.type = data.type;
+                    info.cascadeIndex = static_cast<uint32_t>(i);
+                    info.entityId = entityId;
+                    info.viewProjectionMatrix = view.viewProjectionMatrix;
+                    info.lightPosition = glm::vec3(view.lightPosition);
+                    info.lightDirection = glm::vec3(view.lightDirection);
+                    info.nearPlane = view.nearPlane;
+                    info.farPlane = view.farPlane;
+                    debugInfos.push_back(info);
+                }
+            }
+        }
+
+        // Collect point light shadow debug info (spheres)
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            if (data.type == ShadowMapType::PointCube)
+            {
+                // Point lights use cube maps - we just need one debug info per light
+                // showing the sphere radius (farPlane)
+                if (!data.views.empty())
+                {
+                    const auto& view = data.views[0];
+                    ShadowDebugInfo info;
+                    info.type = data.type;
+                    info.cascadeIndex = 0;
+                    info.entityId = entityId;
+                    info.viewProjectionMatrix = view.viewProjectionMatrix;
+                    info.lightPosition = glm::vec3(view.lightPosition);
+                    info.lightDirection = glm::vec3(0.0f, -1.0f, 0.0f);  // Not applicable for point
+                    info.nearPlane = view.nearPlane;
+                    info.farPlane = view.farPlane;  // This is the sphere radius
+                    debugInfos.push_back(info);
+                }
+            }
+        }
+
+        // Collect spot light shadow debug info (frustums)
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            if (data.type == ShadowMapType::Spot2D)
+            {
+                if (!data.views.empty())
+                {
+                    const auto& view = data.views[0];
+                    ShadowDebugInfo info;
+                    info.type = data.type;
+                    info.cascadeIndex = 0;
+                    info.entityId = entityId;
+                    info.viewProjectionMatrix = view.viewProjectionMatrix;
+                    info.lightPosition = glm::vec3(view.lightPosition);
+                    info.lightDirection = glm::vec3(view.lightDirection);
+                    info.nearPlane = view.nearPlane;
+                    info.farPlane = view.farPlane;
+                    debugInfos.push_back(info);
+                }
+            }
+        }
+
+        return debugInfos;
+    }
 }

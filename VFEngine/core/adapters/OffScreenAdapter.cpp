@@ -246,6 +246,22 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setShowShadowDebug(bool show) {
+        if (offScreen) {
+            offScreen->setShowShadowDebug(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowShadowDebug() const {
+        return offScreen ? offScreen->getShowShadowDebug() : false;
+    }
+
+    void OffScreenAdapter::prepareFrameShadowDebug() {
+        if (offScreen) {
+            offScreen->prepareFrameShadowDebug();
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);

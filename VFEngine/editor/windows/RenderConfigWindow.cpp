@@ -147,6 +147,28 @@ namespace windows
                 }
             }
 
+            // Shadow Debug Visualization (visible regardless of shadow state)
+            ImGui::Separator();
+            ImGui::Text("Debug Visualization");
+            ImGui::Spacing();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            bool showShadowDebug = dispatcher.query(events::render::GetShowShadowDebugQuery{});
+
+            if (ImGui::Checkbox("Show Shadow Frustums", &showShadowDebug))
+            {
+                events::render::SetShowShadowDebugCommand cmd;
+                cmd.show = showShadowDebug;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Visualize shadow map frustums:\n"
+                                  "- Directional: Cascade boxes (red->green)\n"
+                                  "- Spot: Perspective frustum (cyan)\n"
+                                  "- Point: Sphere radius (magenta)");
+            }
+
             ImGui::Unindent(10.0f);
         }
     }

@@ -45,6 +45,7 @@ namespace services
         prepareFrameLightGizmos();
         prepareFramePhysicsColliders();
         prepareFrameClusterDebug();
+        prepareFrameShadowDebug();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -417,6 +418,21 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowClusterDebug() : false;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShowShadowDebugCommand>(
+            [this](const events::render::SetShowShadowDebugCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowShadowDebug(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowShadowDebugQuery>(
+            [this](const events::render::GetShowShadowDebugQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowShadowDebug() : false;
+            });
+
         dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
             [this](const events::render::GetCullingStatsQuery&)
             {
@@ -600,5 +616,15 @@ namespace services
         }
 
         offScreenProvider->prepareFrameClusterDebug();
+    }
+
+    void EditorRenderServiceImpl::prepareFrameShadowDebug()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameShadowDebug();
     }
 }

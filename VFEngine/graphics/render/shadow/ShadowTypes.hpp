@@ -305,6 +305,21 @@ namespace render::shadow
     static_assert(sizeof(GPUShadowCounts) == 16, "GPUShadowCounts must be 16 bytes");
 
     // ============================================
+    // Debug visualization info
+    // ============================================
+    struct ShadowDebugInfo
+    {
+        ShadowMapType type = ShadowMapType::None;
+        uint32_t cascadeIndex = 0;           // For CSM: cascade level (0-3)
+        uint32_t entityId = 0;               // Light entity ID
+        glm::mat4 viewProjectionMatrix{1.0f};// For frustum reconstruction (inverse for rendering)
+        glm::vec3 lightPosition{0.0f};       // Light position in world space
+        glm::vec3 lightDirection{0.0f, -1.0f, 0.0f}; // Light direction (for spot/directional)
+        float nearPlane = 0.1f;
+        float farPlane = 100.0f;             // For point lights, this is the radius
+    };
+
+    // ============================================
     // Atlas tile allocation info
     // ============================================
     struct ShadowAtlasTile

@@ -214,6 +214,9 @@ namespace render
             [[nodiscard]] const std::vector<ShadowView>& getPointShadowViews() const { return pointShadowViews; }
             [[nodiscard]] const std::vector<ShadowView>& getSpotShadowViews() const { return spotShadowViews; }
 
+            // Get debug visualization info for all active shadow casters
+            [[nodiscard]] std::vector<ShadowDebugInfo> getShadowDebugInfo() const;
+
         private:
             void createShadowDataBuffer();
             void destroyShadowDataBuffer();

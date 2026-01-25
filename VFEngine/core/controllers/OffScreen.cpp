@@ -240,6 +240,21 @@ namespace controllers {
 		offScreenController->prepareFrameClusterDebug();
 	}
 
+	void OffScreen::setShowShadowDebug(bool show)
+	{
+		offScreenController->setShowShadowDebug(show);
+	}
+
+	bool OffScreen::getShowShadowDebug() const
+	{
+		return offScreenController->getShowShadowDebug();
+	}
+
+	void OffScreen::prepareFrameShadowDebug()
+	{
+		offScreenController->prepareFrameShadowDebug();
+	}
+
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
 	{
 		offScreenController->setVFXRuntimeProvider(provider);

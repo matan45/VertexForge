@@ -189,6 +189,11 @@ namespace services {
         virtual bool getShowClusterDebug() const = 0;
         virtual void prepareFrameClusterDebug() = 0;
 
+        // Shadow Debug API
+        virtual void setShowShadowDebug(bool show) = 0;
+        virtual bool getShowShadowDebug() const = 0;
+        virtual void prepareFrameShadowDebug() = 0;
+
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;
     };

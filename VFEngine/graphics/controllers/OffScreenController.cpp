@@ -6,6 +6,7 @@
 #include "../render/DebugRenderer.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/shadow/ShadowSystem.hpp"
+#include "../render/tools/ShadowDebugRenderer.hpp"
 #include "offscreen/IBLController.hpp"
 #include "offscreen/MeshAssetManager.hpp"
 #include "offscreen/CameraController.hpp"
@@ -398,6 +399,82 @@ namespace controllers
         ctx.showClusterDebug = showClusterDebug;
 
         framePreparation->prepareClusterDebug(ctx);
+    }
+
+    void OffScreenController::prepareFrameShadowDebug()
+    {
+        if (!showShadowDebug || playModeActive)
+            return;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return;
+
+        // Ensure debug renderer is initialized
+        if (!renderHandler->isDebugRendererInitialized())
+        {
+            if (renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+            else
+            {
+                return;
+            }
+        }
+
+        auto* debugRenderer = renderHandler->getDebugRenderer();
+        if (!debugRenderer)
+            return;
+
+        // Get shadow system
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (!gpuDriven)
+            return;
+
+        auto* shadowSystem = gpuDriven->getShadowSystem();
+        if (!shadowSystem || !shadowSystem->isInitialized())
+            return;
+
+        // Collect shadow debug info and convert to render data
+        auto shadowInfos = shadowSystem->getShadowDebugInfo();
+        std::vector<render::mesh::ShadowFrustumRenderData> shadowDrawList;
+        shadowDrawList.reserve(shadowInfos.size());
+
+        for (const auto& info : shadowInfos)
+        {
+            render::mesh::ShadowFrustumRenderData renderData;
+
+            switch (info.type)
+            {
+                case render::shadow::ShadowMapType::DirectionalCSM:
+                case render::shadow::ShadowMapType::Directional2D:
+                    renderData.type = render::mesh::ShadowFrustumType::DirectionalCascade;
+                    renderData.cascadeIndex = info.cascadeIndex;
+                    renderData.inverseViewProjection = glm::inverse(info.viewProjectionMatrix);
+                    break;
+
+                case render::shadow::ShadowMapType::Spot2D:
+                    renderData.type = render::mesh::ShadowFrustumType::SpotFrustum;
+                    renderData.inverseViewProjection = glm::inverse(info.viewProjectionMatrix);
+                    break;
+
+                case render::shadow::ShadowMapType::PointCube:
+                    renderData.type = render::mesh::ShadowFrustumType::PointSphere;
+                    renderData.lightPosition = info.lightPosition;
+                    renderData.radius = info.farPlane;  // farPlane is the sphere radius for point lights
+                    break;
+
+                default:
+                    continue;
+            }
+
+            shadowDrawList.push_back(renderData);
+        }
+
+        // Set the draw list and enable shadow debug
+        debugRenderer->setShadowFrustumDrawList(std::move(shadowDrawList));
+        debugRenderer->setShowShadowDebug(showShadowDebug);
     }
 
     void OffScreenController::setPlayMode(bool playMode)
