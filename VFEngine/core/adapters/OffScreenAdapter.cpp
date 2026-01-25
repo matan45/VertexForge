@@ -157,6 +157,16 @@ namespace core {
         return offScreen ? offScreen->getCullingStats() : services::CullingDebugStats{};
     }
 
+    void OffScreenAdapter::applyShadowSettings(const types::RenderSettings& settings) {
+        if (offScreen) {
+            offScreen->applyShadowSettings(settings);
+        }
+    }
+
+    services::ShadowStats OffScreenAdapter::getShadowStats() const {
+        return offScreen ? offScreen->getShadowStats() : services::ShadowStats{};
+    }
+
     void OffScreenAdapter::setPlayMode(bool playMode) {
         playModeActive = playMode;
         if (offScreen) {

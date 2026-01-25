@@ -423,6 +423,22 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
             });
 
+        // Shadow settings
+        dispatcher.registerCommandHandler<events::render::ApplyShadowSettingsCommand>(
+            [this](const events::render::ApplyShadowSettingsCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->applyShadowSettings(cmd.settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShadowStatsQuery>(
+            [this](const events::render::GetShadowStatsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShadowStats() : services::ShadowStats{};
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {

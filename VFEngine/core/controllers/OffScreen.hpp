@@ -74,6 +74,10 @@ namespace controllers {
 		// Debug/Stats API
 		services::CullingDebugStats getCullingStats() const;
 
+		// Shadow Settings API
+		void applyShadowSettings(const types::RenderSettings& settings);
+		services::ShadowStats getShadowStats() const;
+
 		// Editor Mode API
 		void setPlayMode(bool playMode);
 		bool isPlayMode() const;

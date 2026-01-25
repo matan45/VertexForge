@@ -19,6 +19,61 @@ namespace types
         Practical
     };
 
+    /**
+     * Shadow atlas configuration.
+     * Controls atlas size and per-light-type resolutions.
+     */
+    struct ShadowAtlasConfig
+    {
+        uint32_t atlasSize = 4096;              // Total atlas size (width and height)
+        uint32_t directionalResolution = 2048;  // Per cascade resolution
+        uint32_t spotResolution = 1024;         // Per spot light resolution
+        uint32_t pointResolution = 512;         // Per cube face resolution
+        bool dynamicReallocation = true;        // Allow runtime resize
+
+        /**
+         * Get atlas configuration based on shadow quality level.
+         */
+        static ShadowAtlasConfig fromQuality(ShadowQuality quality)
+        {
+            ShadowAtlasConfig config;
+            switch (quality)
+            {
+                case ShadowQuality::Off:
+                    config.atlasSize = 0;
+                    config.directionalResolution = 0;
+                    config.spotResolution = 0;
+                    config.pointResolution = 0;
+                    break;
+                case ShadowQuality::Low:
+                    config.atlasSize = 2048;
+                    config.directionalResolution = 512;
+                    config.spotResolution = 256;
+                    config.pointResolution = 256;
+                    break;
+                case ShadowQuality::Medium:
+                    config.atlasSize = 4096;
+                    config.directionalResolution = 1024;
+                    config.spotResolution = 512;
+                    config.pointResolution = 512;
+                    break;
+                case ShadowQuality::High:
+                    config.atlasSize = 4096;
+                    config.directionalResolution = 2048;
+                    config.spotResolution = 1024;
+                    config.pointResolution = 512;
+                    break;
+                case ShadowQuality::Ultra:
+                    config.atlasSize = 8192;
+                    config.directionalResolution = 4096;
+                    config.spotResolution = 2048;
+                    config.pointResolution = 1024;
+                    break;
+            }
+            return config;
+        }
+    };
+
     struct ShadowSettings
     {
         bool enabled = true;
@@ -31,6 +86,9 @@ namespace types
         // Global bias settings
         float shadowBias = 0.005f;
         float normalBias = 0.02f;
+
+        // Atlas configuration
+        ShadowAtlasConfig atlas;
     };
 
     struct RenderSettings

@@ -7,6 +7,7 @@
 #include "CascadeShadowCalculator.hpp"
 #include "PointShadowCalculator.hpp"
 #include "SpotShadowCalculator.hpp"
+#include "types/RenderSettings.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -169,6 +170,9 @@ namespace render
 
             void setGlobalQuality(ShadowQuality quality);
             [[nodiscard]] ShadowQuality getGlobalQuality() const { return globalQuality; }
+
+            // Apply render settings (may trigger atlas resize and reallocation)
+            void applyRenderSettings(const types::RenderSettings& settings);
 
             // ===== Statistics =====
 

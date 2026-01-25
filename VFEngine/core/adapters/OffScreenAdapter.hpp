@@ -59,6 +59,10 @@ namespace core
         // Debug/Stats API
         services::CullingDebugStats getCullingStats() const override;
 
+        // Shadow Settings API
+        void applyShadowSettings(const types::RenderSettings& settings) override;
+        services::ShadowStats getShadowStats() const override;
+
         // Editor Mode API
         void setPlayMode(bool playMode) override;
         bool isPlayMode() const override;

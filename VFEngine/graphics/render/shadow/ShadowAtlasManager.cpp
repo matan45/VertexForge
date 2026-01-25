@@ -474,4 +474,181 @@ namespace render::shadow
         }
         return -1;
     }
+
+    std::vector<ShadowMapHandle> ShadowAtlasManager::allocateCascades(
+        uint32_t resolution, uint32_t cascadeCount, uint32_t lightEntityId)
+    {
+        std::vector<ShadowMapHandle> handles;
+        handles.reserve(cascadeCount);
+
+        for (uint32_t i = 0; i < cascadeCount; ++i)
+        {
+            ShadowMapHandle handle = allocate(resolution, resolution, ShadowMapType::DirectionalCSM, i);
+            if (!handle.isValid())
+            {
+                // Rollback all previous allocations
+                for (const auto& h : handles)
+                {
+                    free(h);
+                }
+                handles.clear();
+                spdlog::error("ShadowAtlasManager: Failed to allocate cascade {} for entity {}", i, lightEntityId);
+                return handles;
+            }
+
+            handle.cascadeIndex = static_cast<uint16_t>(i);
+            handles.push_back(handle);
+
+            // Track this handle for the entity
+            trackHandleForEntity(lightEntityId, handle.atlasIndex);
+        }
+
+        spdlog::debug("ShadowAtlasManager: Allocated {} cascades for entity {}", cascadeCount, lightEntityId);
+        return handles;
+    }
+
+    void ShadowAtlasManager::trackHandleForEntity(uint32_t entityId, uint32_t atlasIndex)
+    {
+        entityToHandles[entityId].push_back(atlasIndex);
+    }
+
+    void ShadowAtlasManager::freeAllForEntity(uint32_t entityId)
+    {
+        auto it = entityToHandles.find(entityId);
+        if (it == entityToHandles.end())
+            return;
+
+        for (uint32_t atlasIndex : it->second)
+        {
+            auto tileIt = handleToTileIndex.find(atlasIndex);
+            if (tileIt != handleToTileIndex.end())
+            {
+                uint32_t tileIndex = tileIt->second;
+                if (tileIndex < tiles.size())
+                {
+                    tiles[tileIndex].allocated = false;
+                    tiles[tileIndex].owner.invalidate();
+                }
+                handleToTileIndex.erase(tileIt);
+            }
+        }
+
+        spdlog::debug("ShadowAtlasManager: Freed {} tiles for entity {}", it->second.size(), entityId);
+        entityToHandles.erase(it);
+    }
+
+    void ShadowAtlasManager::resize(uint32_t newWidth, uint32_t newHeight)
+    {
+        if (!initialized)
+        {
+            spdlog::warn("ShadowAtlasManager::resize() called when not initialized");
+            return;
+        }
+
+        if (newWidth == atlasWidth && newHeight == atlasHeight)
+        {
+            spdlog::debug("ShadowAtlasManager: Resize skipped - same dimensions");
+            return;
+        }
+
+        spdlog::info("ShadowAtlasManager: Resizing atlas from {}x{} to {}x{}",
+                     atlasWidth, atlasHeight, newWidth, newHeight);
+
+        const auto& logicalDevice = device.getLogicalDevice();
+
+        // Wait for GPU to finish using current resources
+        logicalDevice.waitIdle();
+
+        // Store current allocation info for reallocation
+        struct AllocationInfo
+        {
+            uint32_t width;
+            uint32_t height;
+            ShadowMapType type;
+            uint32_t layer;
+            uint32_t atlasIndex;
+        };
+        std::vector<AllocationInfo> allocations;
+
+        for (const auto& tile : tiles)
+        {
+            if (tile.allocated)
+            {
+                allocations.push_back({
+                    tile.width,
+                    tile.height,
+                    tile.owner.type,
+                    tile.layer,
+                    tile.owner.atlasIndex
+                });
+            }
+        }
+
+        // Cleanup existing image resources (but not descriptor layout/pool)
+        if (atlasImageView)
+        {
+            logicalDevice.destroyImageView(atlasImageView);
+            atlasImageView = nullptr;
+        }
+        if (atlasImage)
+        {
+            logicalDevice.destroyImage(atlasImage);
+            atlasImage = nullptr;
+        }
+        if (atlasMemory)
+        {
+            logicalDevice.freeMemory(atlasMemory);
+            atlasMemory = nullptr;
+        }
+
+        // Clear allocation data
+        tiles.clear();
+        handleToTileIndex.clear();
+        // Note: entityToHandles is cleared - caller must re-track if needed
+        entityToHandles.clear();
+        nextAtlasIndex = 0;
+
+        // Update dimensions
+        atlasWidth = newWidth;
+        atlasHeight = newHeight;
+
+        // Recreate image with new size
+        createAtlasImage();
+
+        // Update descriptor set with new image view
+        updateDescriptorSet();
+
+        // Reallocate previous tiles (may fail if new size is smaller)
+        uint32_t reallocated = 0;
+        for (const auto& info : allocations)
+        {
+            ShadowMapHandle handle = allocate(info.width, info.height, info.type, info.layer);
+            if (handle.isValid())
+            {
+                ++reallocated;
+            }
+            else
+            {
+                spdlog::warn("ShadowAtlasManager: Failed to reallocate tile {}x{} after resize",
+                             info.width, info.height);
+            }
+        }
+
+        spdlog::info("ShadowAtlasManager: Resize complete - reallocated {}/{} tiles",
+                     reallocated, allocations.size());
+    }
+
+    void ShadowAtlasManager::applyQualitySettings(const types::ShadowAtlasConfig& config)
+    {
+        if (config.atlasSize == 0)
+        {
+            spdlog::debug("ShadowAtlasManager: Quality Off - atlas disabled");
+            return;
+        }
+
+        if (config.atlasSize != atlasWidth || config.atlasSize != atlasHeight)
+        {
+            resize(config.atlasSize, config.atlasSize);
+        }
+    }
 }
