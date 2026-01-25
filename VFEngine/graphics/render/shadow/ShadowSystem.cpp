@@ -53,6 +53,13 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         logicalDevice.waitIdle();
 
+        // Cleanup shadow pass pipeline
+        if (shadowPassPipeline)
+        {
+            shadowPassPipeline->cleanup();
+            shadowPassPipeline.reset();
+        }
+
         // Cleanup descriptor resources
         if (shadowDataPool)
         {
@@ -90,6 +97,7 @@ namespace render::shadow
         }
 
         initialized = false;
+        atlasFirstUse = true;  // Reset so next use transitions from eUndefined
         spdlog::info("ShadowSystem cleaned up");
     }
 
@@ -97,6 +105,37 @@ namespace render::shadow
     {
         cleanup();
         init();
+    }
+
+    void ShadowSystem::initShadowPass(vk::DescriptorSetLayout perDrawLayout,
+                                       vk::DescriptorSetLayout meshletDataLayout,
+                                       vk::DescriptorSetLayout vertexDataLayout,
+                                       vk::DescriptorSetLayout boneMatrixLayout)
+    {
+        if (!initialized)
+        {
+            spdlog::error("ShadowSystem::initShadowPass() called before init()");
+            return;
+        }
+
+        if (shadowPassPipeline)
+        {
+            spdlog::warn("ShadowSystem::initShadowPass() called when already initialized");
+            return;
+        }
+
+        shadowPassPipeline = std::make_unique<ShadowPassPipeline>(device, swapChain);
+        shadowPassPipeline->init(perDrawLayout, meshletDataLayout, vertexDataLayout, boneMatrixLayout,
+                                  atlasManager->getDepthFormat());
+
+        // Create framebuffer for atlas rendering
+        shadowPassPipeline->createFramebuffer(
+            atlasManager->getAtlasImageView(),
+            atlasManager->getAtlasWidth(),
+            atlasManager->getAtlasHeight()
+        );
+
+        spdlog::info("ShadowSystem: Shadow pass pipeline initialized");
     }
 
     void ShadowSystem::createShadowDataBuffer()
@@ -413,17 +452,23 @@ namespace render::shadow
                 if (!view.handle.isValid())
                     continue;
 
+                // Copy view and apply per-light bias settings
+                ShadowView viewCopy = view;
+                viewCopy.depthBias = data.settings.depthBias;
+                viewCopy.slopeBias = data.settings.slopeBias;
+                viewCopy.normalBias = data.settings.normalBias;
+
                 switch (data.type)
                 {
                     case ShadowMapType::Directional2D:
                     case ShadowMapType::DirectionalCSM:
-                        directionalShadowViews.push_back(view);
+                        directionalShadowViews.push_back(viewCopy);
                         break;
                     case ShadowMapType::PointCube:
-                        pointShadowViews.push_back(view);
+                        pointShadowViews.push_back(viewCopy);
                         break;
                     case ShadowMapType::Spot2D:
-                        spotShadowViews.push_back(view);
+                        spotShadowViews.push_back(viewCopy);
                         break;
                     default:
                         break;
@@ -525,17 +570,204 @@ namespace render::shadow
         needsUpdate = false;
     }
 
-    void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd)
+    void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd, const ShadowPassParams& params)
     {
-        // Placeholder - actual shadow pass rendering will be implemented in VK-247
-        // This method will:
-        // 1. Transition atlas to depth attachment layout
-        // 2. For each shadow view:
-        //    a. Set viewport/scissor for the tile
-        //    b. Begin render pass
-        //    c. Draw shadow casters
-        //    d. End render pass
-        // 3. Transition atlas to shader read layout
+        if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized())
+            return;
+
+        // Collect all shadow views
+        std::vector<const ShadowView*> allViews;
+        for (const auto& view : spotShadowViews)
+            allViews.push_back(&view);
+        for (const auto& view : directionalShadowViews)
+            allViews.push_back(&view);
+        // Note: point shadow views will use cube maps, handled separately in future
+
+        if (allViews.empty())
+            return;
+
+        // Validate batch parameters to prevent out-of-bounds access
+        if (params.batchCount == 0 || params.commandsPerSection == 0)
+            return;
+
+        if (!params.drawCommandBuffer || !params.drawCountBuffer)
+        {
+            spdlog::warn("ShadowSystem::recordShadowPass: Invalid draw buffers");
+            return;
+        }
+
+#ifndef NDEBUG
+        // Debug validation for descriptor sets
+        if (!params.perDrawDataDescSet || !params.meshletDataDescSet ||
+            !params.vertexDataDescSet || !params.boneMatrixDescSet)
+        {
+            spdlog::error("ShadowSystem::recordShadowPass: Invalid descriptor set(s) - "
+                          "perDraw={}, meshlet={}, vertex={}, bone={}",
+                          static_cast<bool>(params.perDrawDataDescSet),
+                          static_cast<bool>(params.meshletDataDescSet),
+                          static_cast<bool>(params.vertexDataDescSet),
+                          static_cast<bool>(params.boneMatrixDescSet));
+            return;
+        }
+#endif
+
+        // 1. Transition atlas to depth attachment
+        // On first use, image is in eUndefined; after that it's in eShaderReadOnlyOptimal
+        {
+            vk::ImageMemoryBarrier barrier{};
+            barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+            barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = atlasManager->getAtlasImage();
+            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = 1;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = 1;
+
+            vk::PipelineStageFlags srcStage;
+            if (atlasFirstUse)
+            {
+                // First frame: image is in undefined layout, no prior access to wait for
+                barrier.srcAccessMask = {};
+                barrier.oldLayout = vk::ImageLayout::eUndefined;
+                srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            }
+            else
+            {
+                // Subsequent frames: image was used for shader reading
+                barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                srcStage = vk::PipelineStageFlagBits::eFragmentShader;
+            }
+
+            cmd.pipelineBarrier(
+                srcStage,
+                vk::PipelineStageFlagBits::eEarlyFragmentTests,
+                {},
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+        }
+
+        // 2. Begin render pass (entire atlas, clear once)
+        vk::ClearValue clearValue{};
+        clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = shadowPassPipeline->getRenderPass();
+        renderPassInfo.framebuffer = shadowPassPipeline->getFramebuffer();
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = vk::Extent2D{atlasManager->getAtlasWidth(), atlasManager->getAtlasHeight()};
+        renderPassInfo.clearValueCount = 1;
+        renderPassInfo.pClearValues = &clearValue;
+
+        cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+        // 3. Bind shadow pipeline
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
+
+        // 4. Bind descriptor sets (same for all shadow views)
+        std::array<vk::DescriptorSet, 4> descriptorSets = {
+            params.perDrawDataDescSet,   // Set 0: Per-draw data
+            params.meshletDataDescSet,   // Set 1: Meshlet data
+            params.vertexDataDescSet,    // Set 2: Vertex data
+            params.boneMatrixDescSet     // Set 3: Bone matrices
+        };
+        cmd.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
+            shadowPassPipeline->getPipelineLayout(),
+            0,
+            static_cast<uint32_t>(descriptorSets.size()),
+            descriptorSets.data(),
+            0, nullptr
+        );
+
+        // 5. Render each shadow view
+        for (const auto* view : allViews)
+        {
+            if (!view->handle.isValid())
+                continue;
+
+            // Set dynamic viewport and scissor for this tile
+            vk::Viewport viewport = atlasManager->getPixelViewport(view->handle);
+            cmd.setViewport(0, 1, &viewport);
+
+            vk::Rect2D scissor = atlasManager->getScissorRect(view->handle);
+            cmd.setScissor(0, 1, &scissor);
+
+            // Set dynamic depth bias using per-light settings
+            cmd.setDepthBias(view->depthBias, 0.0f, view->slopeBias);
+
+            // Push constants with light view-projection matrix and per-light bias
+            ShadowPushConstants pc{};
+            pc.lightViewProjection = view->viewProjectionMatrix;
+            pc.baseDrawIndex = 0;  // Will iterate through batches
+            pc.depthBias = view->depthBias;
+            pc.slopeBias = view->slopeBias;
+            pc.normalBias = view->normalBias;
+
+            // Render all batches for this shadow view
+            for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+            {
+                pc.baseDrawIndex = batch * params.commandsPerSection;
+
+                cmd.pushConstants(
+                    shadowPassPipeline->getPipelineLayout(),
+                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                    0,
+                    sizeof(ShadowPushConstants),
+                    &pc
+                );
+
+                // Calculate offset into draw command and count buffers
+                vk::DeviceSize commandOffset = batch * params.commandsPerSection * sizeof(vk::DrawMeshTasksIndirectCommandEXT);
+                vk::DeviceSize countOffset = batch * sizeof(uint32_t);
+
+                cmd.drawMeshTasksIndirectCountEXT(
+                    params.drawCommandBuffer,
+                    commandOffset,
+                    params.drawCountBuffer,
+                    countOffset,
+                    params.commandsPerSection,
+                    sizeof(vk::DrawMeshTasksIndirectCommandEXT)
+                );
+            }
+        }
+
+        // 6. End render pass
+        cmd.endRenderPass();
+
+        // 7. Transition atlas back to shader read for sampling in forward pass
+        {
+            vk::ImageMemoryBarrier barrier{};
+            barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            barrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = atlasManager->getAtlasImage();
+            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = 1;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = 1;
+
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eLateFragmentTests,
+                vk::PipelineStageFlagBits::eFragmentShader,
+                {},
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+        }
+
+        // Mark atlas as initialized for subsequent frames
+        atlasFirstUse = false;
     }
 
     vk::DescriptorSetLayout ShadowSystem::getAtlasDescriptorLayout() const

@@ -125,6 +125,11 @@ namespace render::gpudriven
         vk::DescriptorSet getClusterGridDescriptorSet() const { return clusterGridDescriptorSet; }
         vk::DescriptorSet getCullingOutputDescriptorSet() const { return cullingOutputDescriptorSet; }
 
+        // Layout accessors (for shadow pass pipeline initialization)
+        vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
+        vk::DescriptorSetLayout getMeshletDataLayout() const { return meshletDataLayout; }
+        vk::DescriptorSetLayout getVertexDataLayout() const { return vertexDataLayout; }
+
         void resetStats(vk::CommandBuffer cmd);
         MeshletCullingStats readStats();
 
