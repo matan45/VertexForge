@@ -4,6 +4,9 @@
 #include "ShadowAtlasManager.hpp"
 #include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
+#include "CascadeShadowCalculator.hpp"
+#include "PointShadowCalculator.hpp"
+#include "SpotShadowCalculator.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
