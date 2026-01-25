@@ -10,6 +10,11 @@ namespace core
     class Device;
 }
 
+namespace render::shadow
+{
+    class ShadowSystem;
+}
+
 namespace render::lighting
 {
     class GPULightBufferManager
@@ -75,6 +80,9 @@ namespace render::lighting
         bool warnedPointLimit = false;
         bool warnedSpotLimit = false;
 
+        // Shadow system reference for shadow index lookup (optional)
+        shadow::ShadowSystem* shadowSystem = nullptr;
+
     public:
         explicit GPULightBufferManager(core::Device& device);
         ~GPULightBufferManager();
@@ -106,6 +114,9 @@ namespace render::lighting
 
         vk::Buffer getPointBuffer() const { return pointBuffer; }
         vk::Buffer getSpotBuffer() const { return spotBuffer; }
+
+        // Set shadow system reference for shadow index population
+        void setShadowSystem(shadow::ShadowSystem* system) { shadowSystem = system; }
 
     private:
         void createBuffers();

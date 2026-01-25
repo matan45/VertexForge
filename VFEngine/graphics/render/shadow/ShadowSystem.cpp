@@ -41,6 +41,9 @@ namespace render::shadow
         createDescriptorResources();
         updateDescriptorSet();
 
+        // Create shadow texture descriptor for forward pass
+        createShadowTextureDescriptor();
+
         // Reserve space for shadow data
         gpuShadowData.reserve(ShadowConstants::MAX_TOTAL_SHADOW_VIEWS);
 
@@ -64,6 +67,8 @@ namespace render::shadow
         }
 
         // Cleanup descriptor resources
+        destroyShadowTextureDescriptor();
+
         if (shadowDataPool)
         {
             logicalDevice.destroyDescriptorPool(shadowDataPool);
@@ -267,6 +272,199 @@ namespace render::shadow
         logicalDevice.updateDescriptorSets(1, &write, 0, nullptr);
     }
 
+    void ShadowSystem::createShadowTextureDescriptor()
+    {
+        const auto& logicalDevice = device.getLogicalDevice();
+
+        // Create descriptor set layout for shadow textures:
+        // Binding 0: Spot light atlas (sampler2DShadow)
+        // Binding 1: CSM cascades array (sampler2DArrayShadow)
+        // Binding 2: Point light cube maps array (samplerCubeShadow[])
+        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+
+        // Binding 0: Spot atlas with comparison sampler
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        // Binding 1: CSM cascade array with comparison sampler
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        // Binding 2: Point light cube maps (array of cube samplers)
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[2].descriptorCount = ShadowConstants::MAX_POINT_SHADOW_CASTERS;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+
+        // Use partially bound flag for the cube map array since not all slots may be used
+        std::array<vk::DescriptorBindingFlags, 3> bindingFlags{};
+        bindingFlags[0] = {};
+        bindingFlags[1] = {};
+        bindingFlags[2] = vk::DescriptorBindingFlagBits::ePartiallyBound;
+
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
+        bindingFlagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+        bindingFlagsInfo.pBindingFlags = bindingFlags.data();
+        layoutInfo.pNext = &bindingFlagsInfo;
+
+        shadowTextureLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
+
+        // Create descriptor pool
+        std::array<vk::DescriptorPoolSize, 1> poolSizes{};
+        poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[0].descriptorCount = 2 + ShadowConstants::MAX_POINT_SHADOW_CASTERS;
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.maxSets = 1;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+
+        shadowTexturePool = logicalDevice.createDescriptorPool(poolInfo);
+
+        // Allocate descriptor set
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = shadowTexturePool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &shadowTextureLayout;
+
+        shadowTextureDescSet = logicalDevice.allocateDescriptorSets(allocInfo)[0];
+
+        // Initial update with placeholder/null bindings will happen in updateShadowTextureDescriptor
+    }
+
+    void ShadowSystem::updateShadowTextureDescriptor()
+    {
+        if (!atlasManager || !resourcePool)
+            return;
+
+        const auto& logicalDevice = device.getLogicalDevice();
+        std::vector<vk::WriteDescriptorSet> writes;
+
+        // We need separate vectors for image infos to ensure stable pointers
+        std::vector<vk::DescriptorImageInfo> atlasInfos(1);
+        std::vector<vk::DescriptorImageInfo> csmInfos(1);
+        std::vector<vk::DescriptorImageInfo> cubeInfos;
+        cubeInfos.reserve(ShadowConstants::MAX_POINT_SHADOW_CASTERS);
+
+        // Binding 0: Spot light atlas (sampler2DShadow)
+        atlasInfos[0].sampler = atlasManager->getComparisonSampler();
+        atlasInfos[0].imageView = atlasManager->getAtlasImageView();
+        atlasInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet atlasWrite{};
+        atlasWrite.dstSet = shadowTextureDescSet;
+        atlasWrite.dstBinding = 0;
+        atlasWrite.dstArrayElement = 0;
+        atlasWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        atlasWrite.descriptorCount = 1;
+        atlasWrite.pImageInfo = atlasInfos.data();
+        writes.push_back(atlasWrite);
+
+        // Binding 1: CSM cascade array (sampler2DArrayShadow)
+        // Find first active CSM light and bind its texture array
+        vk::ImageView csmArrayView = atlasManager->getAtlasImageView();  // Fallback placeholder
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (data.type == ShadowMapType::DirectionalCSM &&
+                data.settings.enabled && data.settings.castShadows &&
+                data.resourceHandle.isValid())
+            {
+                ShadowDepthArray* array = resourcePool->getArray(data.resourceHandle);
+                if (array && array->isInitialized())
+                {
+                    csmArrayView = array->getArrayView();
+                    break;  // Use first valid CSM array
+                }
+            }
+        }
+
+        csmInfos[0].sampler = resourcePool->getComparisonSampler();
+        csmInfos[0].imageView = csmArrayView;
+        csmInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet csmWrite{};
+        csmWrite.dstSet = shadowTextureDescSet;
+        csmWrite.dstBinding = 1;
+        csmWrite.dstArrayElement = 0;
+        csmWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        csmWrite.descriptorCount = 1;
+        csmWrite.pImageInfo = csmInfos.data();
+        writes.push_back(csmWrite);
+
+        // Binding 2: Point light cube maps (samplerCubeShadow[])
+        // Bind cube maps for each point light in order of their shadow index
+        // The shadow index for a point light corresponds to its position in pointShadowViews,
+        // which determines its slot in the cube array binding
+        uint32_t cubeIndex = 0;
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (data.type != ShadowMapType::PointCube ||
+                !data.settings.enabled || !data.settings.castShadows ||
+                !data.resourceHandle.isValid())
+                continue;
+
+            ShadowCubeMap* cube = resourcePool->getCube(data.resourceHandle);
+            if (!cube || !cube->isInitialized())
+                continue;
+
+            if (cubeIndex >= ShadowConstants::MAX_POINT_SHADOW_CASTERS)
+            {
+                spdlog::warn("ShadowSystem: Exceeded max point shadow casters ({}), skipping light {}",
+                             ShadowConstants::MAX_POINT_SHADOW_CASTERS, entityId);
+                break;
+            }
+
+            vk::DescriptorImageInfo cubeInfo{};
+            cubeInfo.sampler = resourcePool->getCubeComparisonSampler();
+            cubeInfo.imageView = cube->getCubeView();
+            cubeInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            cubeInfos.push_back(cubeInfo);
+            ++cubeIndex;
+        }
+
+        // Only write cube descriptors if we have any point lights with shadows
+        if (!cubeInfos.empty())
+        {
+            vk::WriteDescriptorSet cubeWrite{};
+            cubeWrite.dstSet = shadowTextureDescSet;
+            cubeWrite.dstBinding = 2;
+            cubeWrite.dstArrayElement = 0;
+            cubeWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            cubeWrite.descriptorCount = static_cast<uint32_t>(cubeInfos.size());
+            cubeWrite.pImageInfo = cubeInfos.data();
+            writes.push_back(cubeWrite);
+        }
+
+        if (!writes.empty())
+        {
+            logicalDevice.updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+        }
+    }
+
+    void ShadowSystem::destroyShadowTextureDescriptor()
+    {
+        const auto& logicalDevice = device.getLogicalDevice();
+
+        if (shadowTexturePool)
+        {
+            logicalDevice.destroyDescriptorPool(shadowTexturePool);
+            shadowTexturePool = nullptr;
+        }
+        if (shadowTextureLayout)
+        {
+            logicalDevice.destroyDescriptorSetLayout(shadowTextureLayout);
+            shadowTextureLayout = nullptr;
+        }
+    }
+
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
     {
         if (lightShadowData.contains(entityId))
@@ -384,53 +582,146 @@ namespace render::shadow
         return (it != lightShadowData.end()) ? &it->second : nullptr;
     }
 
+    int32_t ShadowSystem::getShadowViewIndex(uint32_t entityId) const
+    {
+        if (!shadowsEnabled)
+            return -1;
+
+        auto it = entityToShadowIndex.find(entityId);
+        if (it != entityToShadowIndex.end())
+            return it->second;
+
+        return -1;
+    }
+
     bool ShadowSystem::allocateShadowMaps(LightShadowData& data)
     {
-        if (!atlasManager || !atlasManager->isInitialized())
-            return false;
-
         uint32_t resolution = data.settings.resolution;
 
-        for (size_t i = 0; i < data.views.size(); ++i)
+        switch (data.type)
         {
-            auto& view = data.views[i];
-
-            ShadowMapHandle handle = atlasManager->allocate(
-                resolution, resolution,
-                data.type,
-                static_cast<uint32_t>(i)
-            );
-
-            if (!handle.isValid())
+            case ShadowMapType::Spot2D:
+            case ShadowMapType::Directional2D:
             {
-                // Rollback previous allocations
-                for (size_t j = 0; j < i; ++j)
+                // Use atlas for 2D shadow maps
+                if (!atlasManager || !atlasManager->isInitialized())
+                    return false;
+
+                for (size_t i = 0; i < data.views.size(); ++i)
                 {
-                    atlasManager->free(data.views[j].handle);
-                    data.views[j].handle.invalidate();
+                    auto& view = data.views[i];
+
+                    ShadowMapHandle handle = atlasManager->allocate(
+                        resolution, resolution,
+                        data.type,
+                        static_cast<uint32_t>(i)
+                    );
+
+                    if (!handle.isValid())
+                    {
+                        // Rollback previous allocations
+                        for (size_t j = 0; j < i; ++j)
+                        {
+                            atlasManager->free(data.views[j].handle);
+                            data.views[j].handle.invalidate();
+                        }
+                        return false;
+                    }
+
+                    view.handle = handle;
+                    view.handle.cascadeIndex = static_cast<uint16_t>(i);
+                    view.atlasViewport = atlasManager->getNormalizedViewport(handle);
                 }
-                return false;
+                return true;
             }
 
-            view.handle = handle;
-            view.handle.cascadeIndex = static_cast<uint16_t>(i);
-            view.atlasViewport = atlasManager->getNormalizedViewport(handle);
-        }
+            case ShadowMapType::DirectionalCSM:
+            {
+                // Use resource pool for CSM texture array
+                if (!resourcePool || !resourcePool->isInitialized())
+                    return false;
 
-        return true;
+                uint32_t cascadeCount = static_cast<uint32_t>(data.views.size());
+                ShadowResourceHandle handle = resourcePool->allocateArray(resolution, resolution, cascadeCount);
+
+                if (!handle.isValid())
+                {
+                    spdlog::error("ShadowSystem: Failed to allocate CSM array {}x{} with {} cascades",
+                                  resolution, resolution, cascadeCount);
+                    return false;
+                }
+
+                data.resourceHandle = handle;
+
+                // Set up view metadata (atlas viewport not used for CSM, repurpose for cascade info)
+                for (size_t i = 0; i < data.views.size(); ++i)
+                {
+                    auto& view = data.views[i];
+                    view.handle.type = ShadowMapType::DirectionalCSM;
+                    view.handle.cascadeIndex = static_cast<uint16_t>(i);
+                    // For CSM: atlasViewport.z = cascadeCount, atlasViewport.w = layer/cascade index
+                    view.atlasViewport = glm::vec4(0.0f, 0.0f, static_cast<float>(cascadeCount), static_cast<float>(i));
+                }
+
+                spdlog::debug("ShadowSystem: Allocated CSM array {}x{} with {} cascades",
+                              resolution, resolution, cascadeCount);
+                return true;
+            }
+
+            case ShadowMapType::PointCube:
+            {
+                // Use resource pool for cube map
+                if (!resourcePool || !resourcePool->isInitialized())
+                    return false;
+
+                ShadowResourceHandle handle = resourcePool->allocateCube(resolution);
+
+                if (!handle.isValid())
+                {
+                    spdlog::error("ShadowSystem: Failed to allocate point cube map {}x{}", resolution, resolution);
+                    return false;
+                }
+
+                data.resourceHandle = handle;
+
+                // Set up view metadata for each cube face
+                for (size_t i = 0; i < data.views.size(); ++i)
+                {
+                    auto& view = data.views[i];
+                    view.handle.type = ShadowMapType::PointCube;
+                    view.handle.layer = static_cast<uint32_t>(i);  // Cube face index
+                    // For cubes, atlasViewport.w stores the face index
+                    view.atlasViewport = glm::vec4(0.0f, 0.0f, 1.0f, static_cast<float>(i));
+                }
+
+                spdlog::debug("ShadowSystem: Allocated point cube map {}x{}", resolution, resolution);
+                return true;
+            }
+
+            default:
+                return false;
+        }
     }
 
     void ShadowSystem::freeShadowMaps(LightShadowData& data)
     {
-        if (!atlasManager)
-            return;
-
-        for (auto& view : data.views)
+        // Free dedicated resource (CSM array or cube map)
+        if (data.resourceHandle.isValid() && resourcePool)
         {
-            if (view.handle.isValid())
+            resourcePool->free(data.resourceHandle);
+            data.resourceHandle.invalidate();
+        }
+
+        // Free atlas tiles (for Spot2D and Directional2D)
+        if (atlasManager)
+        {
+            for (auto& view : data.views)
             {
-                atlasManager->free(view.handle);
-                view.handle.invalidate();
+                if (view.handle.isValid() && data.usesAtlas())
+                {
+                    atlasManager->free(view.handle);
+                    view.handle.invalidate();
+                }
             }
         }
     }
@@ -440,10 +731,16 @@ namespace render::shadow
         if (!shadowsEnabled)
             return;
 
-        // Clear previous frame's view lists
+        // Clear previous frame's data
         directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
+        entityToShadowIndex.clear();
+
+        // Temporary maps to track per-type indices for each entity
+        std::unordered_map<uint32_t, int32_t> directionalIndices;
+        std::unordered_map<uint32_t, int32_t> pointIndices;
+        std::unordered_map<uint32_t, int32_t> spotIndices;
 
         // Collect active shadow views from registered lights
         for (auto& [entityId, data] : lightShadowData)
@@ -451,34 +748,117 @@ namespace render::shadow
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
-            for (const auto& view : data.views)
+            switch (data.type)
             {
-                if (!view.handle.isValid())
-                    continue;
-
-                // Copy view and apply per-light bias settings
-                ShadowView viewCopy = view;
-                viewCopy.depthBias = data.settings.depthBias;
-                viewCopy.slopeBias = data.settings.slopeBias;
-                viewCopy.normalBias = data.settings.normalBias;
-
-                switch (data.type)
+                case ShadowMapType::Directional2D:
                 {
-                    case ShadowMapType::Directional2D:
-                    case ShadowMapType::DirectionalCSM:
+                    // Atlas-based: each view has its own atlas tile
+                    float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
+                    for (const auto& view : data.views)
+                    {
+                        if (!view.handle.isValid())
+                            continue;
+
+                        ShadowView viewCopy = view;
+                        viewCopy.depthBias = data.settings.depthBias;
+                        viewCopy.slopeBias = data.settings.slopeBias;
+                        viewCopy.normalBias = data.settings.normalBias;
+                        viewCopy.texelSize = texelSize;
+
+                        if (!directionalIndices.contains(entityId))
+                            directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
                         directionalShadowViews.push_back(viewCopy);
-                        break;
-                    case ShadowMapType::PointCube:
-                        pointShadowViews.push_back(viewCopy);
-                        break;
-                    case ShadowMapType::Spot2D:
-                        spotShadowViews.push_back(viewCopy);
-                        break;
-                    default:
-                        break;
+                    }
+                    break;
                 }
+
+                case ShadowMapType::DirectionalCSM:
+                {
+                    // CSM: uses dedicated texture array, all cascades share one resource handle
+                    if (!data.resourceHandle.isValid())
+                        continue;
+
+                    float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
+
+                    // Add all cascade views (each becomes an entry in shadow data buffer)
+                    for (size_t i = 0; i < data.views.size(); ++i)
+                    {
+                        const auto& view = data.views[i];
+                        ShadowView viewCopy = view;
+                        viewCopy.depthBias = data.settings.depthBias;
+                        viewCopy.slopeBias = data.settings.slopeBias;
+                        viewCopy.normalBias = data.settings.normalBias;
+                        viewCopy.texelSize = texelSize;
+
+                        if (i == 0)
+                            directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
+                        directionalShadowViews.push_back(viewCopy);
+                    }
+                    break;
+                }
+
+                case ShadowMapType::Spot2D:
+                {
+                    // Atlas-based: single view per spot light
+                    float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
+                    for (const auto& view : data.views)
+                    {
+                        if (!view.handle.isValid())
+                            continue;
+
+                        ShadowView viewCopy = view;
+                        viewCopy.depthBias = data.settings.depthBias;
+                        viewCopy.slopeBias = data.settings.slopeBias;
+                        viewCopy.normalBias = data.settings.normalBias;
+                        viewCopy.texelSize = texelSize;
+
+                        if (!spotIndices.contains(entityId))
+                            spotIndices[entityId] = static_cast<int32_t>(spotShadowViews.size());
+                        spotShadowViews.push_back(viewCopy);
+                    }
+                    break;
+                }
+
+                case ShadowMapType::PointCube:
+                {
+                    // Point cube: uses dedicated cube map, add ONE entry per light
+                    // The shader samples using direction vector, so we only need one shadow data entry
+                    // containing near/far/bias params (cube faces are implicit in direction sampling)
+                    if (!data.resourceHandle.isValid() || data.views.empty())
+                        continue;
+
+                    float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
+
+                    // Use first view's data (all faces share same near/far/bias)
+                    const auto& view = data.views[0];
+                    ShadowView viewCopy = view;
+                    viewCopy.depthBias = data.settings.depthBias;
+                    viewCopy.slopeBias = data.settings.slopeBias;
+                    viewCopy.normalBias = data.settings.normalBias;
+                    viewCopy.texelSize = texelSize;
+
+                    pointIndices[entityId] = static_cast<int32_t>(pointShadowViews.size());
+                    pointShadowViews.push_back(viewCopy);
+                    break;
+                }
+
+                default:
+                    break;
             }
         }
+
+        // Compute final GPU shadow data indices
+        // Layout: [directional views] [point views] [spot views]
+        const int32_t directionalOffset = 0;
+        const int32_t pointOffset = static_cast<int32_t>(directionalShadowViews.size());
+        const int32_t spotOffset = pointOffset + static_cast<int32_t>(pointShadowViews.size());
+
+        for (const auto& [entityId, localIdx] : directionalIndices)
+            entityToShadowIndex[entityId] = directionalOffset + localIdx;
+        for (const auto& [entityId, localIdx] : pointIndices)
+            entityToShadowIndex[entityId] = pointOffset + localIdx;
+        for (const auto& [entityId, localIdx] : spotIndices)
+            entityToShadowIndex[entityId] = spotOffset + localIdx;
     }
 
     void ShadowSystem::updateLightShadowMatrices(uint32_t entityId,
@@ -724,11 +1104,12 @@ namespace render::shadow
                 gpu.atlasViewport = view.atlasViewport;
 
                 // Use bias values from the view (set by updateLightShadowMatrices)
+                // biasParams.w stores texelSize (1.0/resolution) for PCF filtering
                 gpu.biasParams = glm::vec4(
                     view.depthBias,
                     view.slopeBias,
                     view.normalBias,
-                    1.0f    // softness (reserved for future use)
+                    view.texelSize
                 );
 
                 // Range params: near, far, inverse range, cascade index
@@ -791,6 +1172,9 @@ namespace render::shadow
             1, &barrier,
             0, nullptr
         );
+
+        // Update shadow texture descriptor with current shadow resources
+        updateShadowTextureDescriptor();
 
         needsUpdate = false;
     }

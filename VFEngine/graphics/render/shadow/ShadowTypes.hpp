@@ -207,6 +207,9 @@ namespace render::shadow
         float slopeBias = ShadowConstants::DEFAULT_SLOPE_BIAS;
         float normalBias = ShadowConstants::DEFAULT_NORMAL_BIAS;
 
+        // Texel size for PCF filtering (1.0 / resolution)
+        float texelSize = 1.0f / static_cast<float>(ShadowConstants::RESOLUTION_HIGH);
+
         ShadowMapHandle handle;
 
         void updateViewProjection()
@@ -224,7 +227,14 @@ namespace render::shadow
         ShadowMapType type = ShadowMapType::None;
 
         // Shadow views (1 for spot, 6 for point, 1-4 for CSM)
+        // For atlas-based shadows (Spot2D, Directional2D): views[i].handle contains atlas tile info
+        // For dedicated resources (DirectionalCSM, PointCube): views store matrices, resourceHandle stores texture
         std::vector<ShadowView> views;
+
+        // Dedicated resource handle for CSM arrays and point cube maps
+        // Only valid when type is DirectionalCSM or PointCube
+        // For Spot2D/Directional2D, this is unused (atlas tiles are in views[i].handle)
+        ShadowResourceHandle resourceHandle;
 
         // Entity ID of the light this shadow data belongs to
         uint32_t lightEntityId = 0;
@@ -239,12 +249,23 @@ namespace render::shadow
             {
                 view.handle.invalidate();
             }
+            resourceHandle.invalidate();
             matricesDirty = true;
         }
 
         [[nodiscard]] uint32_t getViewCount() const
         {
             return static_cast<uint32_t>(views.size());
+        }
+
+        [[nodiscard]] bool usesAtlas() const
+        {
+            return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D;
+        }
+
+        [[nodiscard]] bool usesDedicatedResource() const
+        {
+            return type == ShadowMapType::DirectionalCSM || type == ShadowMapType::PointCube;
         }
     };
 
@@ -255,7 +276,7 @@ namespace render::shadow
     {
         glm::mat4 viewProjection;         // 64 bytes - light space transform
         glm::vec4 atlasViewport;          // 16 bytes - xy=offset, zw=size (normalized 0-1)
-        glm::vec4 biasParams;             // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=softness
+        glm::vec4 biasParams;             // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=texelSize
         glm::vec4 rangeParams;            // 16 bytes - x=near, y=far, z=1/(far-near), w=cascadeIndex
     };
     static_assert(sizeof(GPUShadowData) == 112, "GPUShadowData must be 112 bytes");

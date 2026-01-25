@@ -28,18 +28,23 @@ namespace render::gpudriven
                                   vk::DescriptorSetLayout lightDataLayout,
                                   vk::DescriptorSetLayout clusterGridLayout,
                                   vk::DescriptorSetLayout cullingOutputLayout,
+                                  vk::DescriptorSetLayout shadowDataLayout,
+                                  vk::DescriptorSetLayout shadowTextureLayout,
                                   vk::RenderPass renderPass)
     {
         cachedLightDataLayout = lightDataLayout;
         cachedClusterGridLayout = clusterGridLayout;
         cachedCullingOutputLayout = cullingOutputLayout;
+        cachedShadowDataLayout = shadowDataLayout;
+        cachedShadowTextureLayout = shadowTextureLayout;
 
         createStatsBuffer();
         createPerDrawDataDescriptor();
         createMeshletDataDescriptor();
         createVertexDataDescriptor();
         createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
-                                         lightDataLayout, clusterGridLayout, cullingOutputLayout, renderPass);
+                                         lightDataLayout, clusterGridLayout, cullingOutputLayout,
+                                         shadowDataLayout, shadowTextureLayout, renderPass);
     }
 
     void MeshShaderPipeline::createStatsBuffer()
@@ -124,6 +129,8 @@ namespace render::gpudriven
                                       vk::DescriptorSetLayout lightDataLayout,
                                       vk::DescriptorSetLayout clusterGridLayout,
                                       vk::DescriptorSetLayout cullingOutputLayout,
+                                      vk::DescriptorSetLayout shadowDataLayout,
+                                      vk::DescriptorSetLayout shadowTextureLayout,
                                       vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -132,6 +139,8 @@ namespace render::gpudriven
         cachedLightDataLayout = lightDataLayout;
         cachedClusterGridLayout = clusterGridLayout;
         cachedCullingOutputLayout = cullingOutputLayout;
+        cachedShadowDataLayout = shadowDataLayout;
+        cachedShadowTextureLayout = shadowTextureLayout;
 
         if (graphicsPipeline)
         {
@@ -151,7 +160,8 @@ namespace render::gpudriven
         }
 
         createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
-                                         lightDataLayout, clusterGridLayout, cullingOutputLayout, renderPass);
+                                         lightDataLayout, clusterGridLayout, cullingOutputLayout,
+                                         shadowDataLayout, shadowTextureLayout, renderPass);
     }
 
     void MeshShaderPipeline::updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer)
@@ -230,6 +240,18 @@ namespace render::gpudriven
         lightDataDescriptorSet = lightDataDescSet;
         clusterGridDescriptorSet = clusterGridDescSet;
         cullingOutputDescriptorSet = cullingOutputDescSet;
+    }
+
+    void MeshShaderPipeline::updateShadowDescriptors(vk::DescriptorSet shadowDataDescSet,
+                                                     vk::DescriptorSet shadowTextureDescSet)
+    {
+        if (!shadowDataDescSet || !shadowTextureDescSet)
+        {
+            loggerWarning("Invalid shadow descriptor sets provided");
+            return;
+        }
+        shadowDataDescriptorSet = shadowDataDescSet;
+        shadowTextureDescriptorSet = shadowTextureDescSet;
     }
 
     void MeshShaderPipeline::createPerDrawDataDescriptor()
@@ -395,6 +417,8 @@ namespace render::gpudriven
                                                               vk::DescriptorSetLayout lightDataLayout,
                                                               vk::DescriptorSetLayout clusterGridLayout,
                                                               vk::DescriptorSetLayout cullingOutputLayout,
+                                                              vk::DescriptorSetLayout shadowDataLayout,
+                                                              vk::DescriptorSetLayout shadowTextureLayout,
                                                               vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -426,7 +450,7 @@ namespace render::gpudriven
             return;
         }
 
-        std::array<vk::DescriptorSetLayout, 9> setLayouts = {
+        std::array<vk::DescriptorSetLayout, 11> setLayouts = {
             iblLayout,             // Set 0: Camera/IBL
             perDrawDataLayout,     // Set 1: Per-draw data
             bindlessTextureLayout, // Set 2: Bindless textures
@@ -435,7 +459,9 @@ namespace render::gpudriven
             boneMatrixLayout,      // Set 5: Bone matrices for skeletal animation
             lightDataLayout,       // Set 6: Light buffers (directional, point, spot + counts)
             clusterGridLayout,     // Set 7: Cluster grid parameters
-            cullingOutputLayout    // Set 8: Light culling output (cluster light grid + index list)
+            cullingOutputLayout,   // Set 8: Light culling output (cluster light grid + index list)
+            shadowDataLayout,      // Set 9: Shadow data SSBO (view-projection matrices, bias, etc.)
+            shadowTextureLayout    // Set 10: Shadow textures (atlas, CSM array, point cubes)
         };
 
         vk::PushConstantRange pushConstantRange{};

@@ -1,6 +1,7 @@
 #include "GPULightBufferManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../shadow/ShadowSystem.hpp"
 #include "print/Logger.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -407,7 +408,13 @@ namespace render::lighting
             gpuLight.direction = direction;
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
-            gpuLight.padding = 0;
+
+            // Query shadow index from shadow system
+            gpuLight.shadowIndex = -1;  // Default: no shadow
+            if (shadowSystem)
+            {
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(static_cast<uint32_t>(entity));
+            }
 
             ++directionalCount;
         }
@@ -456,6 +463,16 @@ namespace render::lighting
             gpuLight.radius = light.radius;
             gpuLight.color = light.color;
             gpuLight.intensity = light.intensity;
+
+            // Query shadow index from shadow system
+            gpuLight.shadowIndex = -1;  // Default: no shadow
+            if (shadowSystem)
+            {
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(static_cast<uint32_t>(entity));
+            }
+            gpuLight.padding[0] = 0;
+            gpuLight.padding[1] = 0;
+            gpuLight.padding[2] = 0;
 
             ++pointCount;
         }
@@ -511,9 +528,15 @@ namespace render::lighting
             gpuLight.color = light.color;
             gpuLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
             gpuLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
-            gpuLight.padding[0] = 0.0f;
-            gpuLight.padding[1] = 0.0f;
-            gpuLight.padding[2] = 0.0f;
+
+            // Query shadow index from shadow system
+            gpuLight.shadowIndex = -1;  // Default: no shadow
+            if (shadowSystem)
+            {
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(static_cast<uint32_t>(entity));
+            }
+            gpuLight.padding[0] = 0;
+            gpuLight.padding[1] = 0;
 
             ++spotCount;
         }
