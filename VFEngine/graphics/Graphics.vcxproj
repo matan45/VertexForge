@@ -187,6 +187,7 @@
     <ClInclude Include="render\shadow\ShadowAtlasManager.hpp" />
     <ClInclude Include="render\shadow\ShadowCubeMap.hpp" />
     <ClInclude Include="render\shadow\ShadowDepthArray.hpp" />
+    <ClInclude Include="render\shadow\ShadowPassPipeline.hpp" />
     <ClInclude Include="render\shadow\ShadowResourcePool.hpp" />
     <ClInclude Include="render\shadow\ShadowSamplers.hpp" />
     <ClInclude Include="render\shadow\ShadowSystem.hpp" />
@@ -286,6 +287,7 @@
     <ClCompile Include="render\shadow\ShadowAtlasManager.cpp" />
     <ClCompile Include="render\shadow\ShadowCubeMap.cpp" />
     <ClCompile Include="render\shadow\ShadowDepthArray.cpp" />
+    <ClCompile Include="render\shadow\ShadowPassPipeline.cpp" />
     <ClCompile Include="render\shadow\ShadowResourcePool.cpp" />
     <ClCompile Include="render\shadow\ShadowSamplers.cpp" />
     <ClCompile Include="render\shadow\ShadowSystem.cpp" />
@@ -321,6 +323,7 @@
     <None Include="..\..\resources\shaders\material\material_vertex.glsl" />
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
     <None Include="..\..\resources\shaders\mesh\skinned_mesh.glsl" />
+    <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\clusterWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />

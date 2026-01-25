@@ -3,6 +3,7 @@
 #include "ShadowTypes.hpp"
 #include "ShadowAtlasManager.hpp"
 #include "ShadowResourcePool.hpp"
+#include "ShadowPassPipeline.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -44,6 +45,7 @@ namespace render
             // Sub-systems
             std::unique_ptr<ShadowAtlasManager> atlasManager;
             std::unique_ptr<ShadowResourcePool> resourcePool;
+            std::unique_ptr<ShadowPassPipeline> shadowPassPipeline;
 
             // Per-light shadow data (entityId -> shadow data)
             std::unordered_map<uint32_t, LightShadowData> lightShadowData;
@@ -92,6 +94,12 @@ namespace render
             void cleanup();
             void recreate();
 
+            // Initialize shadow pass pipeline (call after init)
+            void initShadowPass(vk::DescriptorSetLayout perDrawLayout,
+                                vk::DescriptorSetLayout meshletDataLayout,
+                                vk::DescriptorSetLayout vertexDataLayout,
+                                vk::DescriptorSetLayout boneMatrixLayout);
+
             // ===== Light Shadow Registration =====
 
             // Register a light for shadow casting
@@ -121,10 +129,23 @@ namespace render
             // Finalize and upload shadow data to GPU
             void uploadToGPU(vk::CommandBuffer cmd);
 
-            // ===== Shadow Pass Recording (placeholder) =====
+            // ===== Shadow Pass Recording =====
 
-            // Record shadow pass commands (to be implemented in VK-247)
-            void recordShadowPass(vk::CommandBuffer cmd);
+            // Parameters for shadow pass rendering
+            struct ShadowPassParams
+            {
+                vk::DescriptorSet perDrawDataDescSet;
+                vk::DescriptorSet meshletDataDescSet;
+                vk::DescriptorSet vertexDataDescSet;
+                vk::DescriptorSet boneMatrixDescSet;
+                vk::Buffer drawCommandBuffer;
+                vk::Buffer drawCountBuffer;
+                uint32_t batchCount;
+                uint32_t commandsPerSection;
+            };
+
+            // Record shadow pass commands
+            void recordShadowPass(vk::CommandBuffer cmd, const ShadowPassParams& params);
 
             // ===== Descriptor Access =====
 

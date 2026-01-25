@@ -126,6 +126,14 @@ namespace render::gpudriven
                                      lightCullingPipeline->getDescriptorSetLayout(),
                                      renderPass);
 
+            // Initialize shadow pass pipeline with descriptor layouts from mesh shader pipeline
+            shadowSystem->initShadowPass(
+                meshShaderPipeline->getPerDrawDataLayout(),
+                meshShaderPipeline->getMeshletDataLayout(),
+                meshShaderPipeline->getVertexDataLayout(),
+                boneMatrixManager->getDescriptorSetLayout()
+            );
+
             if (meshStreamManager)
             {
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());
@@ -519,6 +527,29 @@ namespace render::gpudriven
 
         cullPipeline->dispatch(cmd, stats.totalObjects);
         batchManager->insertBarriersAfterCompute(cmd);
+
+        // Shadow pass - render depth maps for all active shadow views
+        if (shadowSystem && shadowSystem->isShadowsEnabled() && meshShaderPipeline)
+        {
+            // Collect active shadow views from registered lights
+            shadowSystem->beginFrame();
+
+            // Upload shadow data to GPU
+            shadowSystem->uploadToGPU(cmd);
+
+            // Record shadow pass with all required descriptor sets and buffers
+            shadow::ShadowSystem::ShadowPassParams shadowParams{};
+            shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
+            shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
+            shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
+            shadowParams.boneMatrixDescSet = boneMatrixManager->getDescriptorSet();
+            shadowParams.drawCommandBuffer = batchManager->getCombinedDrawCommandBuffer();
+            shadowParams.drawCountBuffer = batchManager->getCombinedDrawCountBuffer();
+            shadowParams.batchCount = batchManager->getBatchCount();
+            shadowParams.commandsPerSection = batchManager->getCommandsPerSection();
+
+            shadowSystem->recordShadowPass(cmd, shadowParams);
+        }
     }
 
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
