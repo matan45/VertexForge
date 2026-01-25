@@ -134,11 +134,9 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (descriptorPool)
-        {
-            logicalDevice.destroyDescriptorPool(descriptorPool);
-            descriptorPool = nullptr;
-        }
+        // Note: We only provide layouts. Descriptor sets are allocated by the
+        // rendering code (e.g., ShadowSystem or forward shading pipeline) using
+        // their own pools for proper lifetime management.
         if (cubeDescriptorLayout)
         {
             logicalDevice.destroyDescriptorSetLayout(cubeDescriptorLayout);
@@ -161,22 +159,29 @@ namespace render::shadow
         auto depthArray = std::make_unique<ShadowDepthArray>(device);
         depthArray->init(width, height, layers);
 
-        // Store in pool
-        uint32_t index = nextArrayIndex++;
-        handle.resourceIndex = index;
-
-        ArrayEntry entry;
-        entry.resource = std::move(depthArray);
-        entry.allocated = true;
-
-        if (index < depthArrays.size())
+        // Try to reuse a freed index first
+        uint32_t index;
+        if (!freeArrayIndices.empty())
         {
-            depthArrays[index] = std::move(entry);
+            index = freeArrayIndices.back();
+            freeArrayIndices.pop_back();
+
+            // Reuse existing slot
+            depthArrays[index].resource = std::move(depthArray);
+            depthArrays[index].allocated = true;
         }
         else
         {
+            // Allocate new slot
+            index = static_cast<uint32_t>(depthArrays.size());
+
+            ArrayEntry entry;
+            entry.resource = std::move(depthArray);
+            entry.allocated = true;
             depthArrays.push_back(std::move(entry));
         }
+
+        handle.resourceIndex = index;
 
         spdlog::debug("ShadowResourcePool: Allocated depth array {} ({}x{} x {} layers)",
                       index, width, height, layers);
@@ -194,22 +199,29 @@ namespace render::shadow
         auto cubeMap = std::make_unique<ShadowCubeMap>(device);
         cubeMap->init(size);
 
-        // Store in pool
-        uint32_t index = nextCubeIndex++;
-        handle.resourceIndex = index;
-
-        CubeEntry entry;
-        entry.resource = std::move(cubeMap);
-        entry.allocated = true;
-
-        if (index < cubeMaps.size())
+        // Try to reuse a freed index first
+        uint32_t index;
+        if (!freeCubeIndices.empty())
         {
-            cubeMaps[index] = std::move(entry);
+            index = freeCubeIndices.back();
+            freeCubeIndices.pop_back();
+
+            // Reuse existing slot
+            cubeMaps[index].resource = std::move(cubeMap);
+            cubeMaps[index].allocated = true;
         }
         else
         {
+            // Allocate new slot
+            index = static_cast<uint32_t>(cubeMaps.size());
+
+            CubeEntry entry;
+            entry.resource = std::move(cubeMap);
+            entry.allocated = true;
             cubeMaps.push_back(std::move(entry));
         }
+
+        handle.resourceIndex = index;
 
         spdlog::debug("ShadowResourcePool: Allocated cube map {} ({}x{} x 6 faces)",
                       index, size, size);
@@ -222,6 +234,11 @@ namespace render::shadow
         if (!handle.isValid())
             return;
 
+        // TODO: Implement deferred destruction for better performance.
+        // Current implementation assumes caller ensures GPU is not using this resource.
+        // Ideal pattern: add to per-frame deletion queue, destroy after N frames.
+        // For now, this is safe when called during frame boundaries or after waitIdle.
+
         if (handle.isArray())
         {
             if (handle.resourceIndex < depthArrays.size() && depthArrays[handle.resourceIndex].allocated)
@@ -229,6 +246,10 @@ namespace render::shadow
                 depthArrays[handle.resourceIndex].resource->cleanup();
                 depthArrays[handle.resourceIndex].resource.reset();
                 depthArrays[handle.resourceIndex].allocated = false;
+
+                // Add index to free list for recycling
+                freeArrayIndices.push_back(handle.resourceIndex);
+
                 spdlog::debug("ShadowResourcePool: Freed depth array {}", handle.resourceIndex);
             }
         }
@@ -239,6 +260,10 @@ namespace render::shadow
                 cubeMaps[handle.resourceIndex].resource->cleanup();
                 cubeMaps[handle.resourceIndex].resource.reset();
                 cubeMaps[handle.resourceIndex].allocated = false;
+
+                // Add index to free list for recycling
+                freeCubeIndices.push_back(handle.resourceIndex);
+
                 spdlog::debug("ShadowResourcePool: Freed cube map {}", handle.resourceIndex);
             }
         }
@@ -256,7 +281,7 @@ namespace render::shadow
             }
         }
         depthArrays.clear();
-        nextArrayIndex = 0;
+        freeArrayIndices.clear();
 
         for (auto& entry : cubeMaps)
         {
@@ -268,7 +293,7 @@ namespace render::shadow
             }
         }
         cubeMaps.clear();
-        nextCubeIndex = 0;
+        freeCubeIndices.clear();
 
         spdlog::debug("ShadowResourcePool: Freed all resources");
     }

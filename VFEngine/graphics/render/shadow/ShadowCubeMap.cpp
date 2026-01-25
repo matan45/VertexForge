@@ -83,8 +83,10 @@ namespace render::shadow
         if (!initialized)
             return;
 
+        // NOTE: Caller must ensure this resource is not in use by the GPU.
+        // ShadowResourcePool handles synchronization at the pool level.
+        // Do NOT add waitIdle() here - it causes frame stalls.
         const auto& logicalDevice = device.getLogicalDevice();
-        logicalDevice.waitIdle();
 
         // Cleanup per-face views
         for (auto& view : faceViews)
@@ -207,24 +209,34 @@ namespace render::shadow
         currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
     }
 
-    void ShadowCubeMap::transitionFaceToDepthAttachment(vk::CommandBuffer cmd, uint32_t face)
+    void ShadowCubeMap::transitionFaceToDepthAttachment(vk::CommandBuffer cmd, uint32_t face,
+                                                         vk::ImageLayout assumedCurrentLayout)
     {
         if (face >= FACE_COUNT)
         {
             spdlog::error("ShadowCubeMap::transitionFaceToDepthAttachment() - face {} out of range", face);
             return;
         }
-        transitionFaces(cmd, face, 1, currentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+        // Mark global layout as undefined since we're doing per-face transitions
+        currentLayout = vk::ImageLayout::eUndefined;
+
+        transitionFaces(cmd, face, 1, assumedCurrentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
     }
 
-    void ShadowCubeMap::transitionFaceToShaderRead(vk::CommandBuffer cmd, uint32_t face)
+    void ShadowCubeMap::transitionFaceToShaderRead(vk::CommandBuffer cmd, uint32_t face,
+                                                    vk::ImageLayout assumedCurrentLayout)
     {
         if (face >= FACE_COUNT)
         {
             spdlog::error("ShadowCubeMap::transitionFaceToShaderRead() - face {} out of range", face);
             return;
         }
-        transitionFaces(cmd, face, 1, currentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        // Mark global layout as undefined since we're doing per-face transitions
+        currentLayout = vk::ImageLayout::eUndefined;
+
+        transitionFaces(cmd, face, 1, assumedCurrentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
     }
 
     void ShadowCubeMap::transitionFaces(vk::CommandBuffer cmd, uint32_t baseFace, uint32_t count,

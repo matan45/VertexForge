@@ -69,14 +69,26 @@ namespace render::shadow
 
         /**
          * Transition a single layer to depth attachment.
-         * Useful for rendering cascades individually.
+         *
+         * WARNING: Per-layer transitions do NOT update currentLayout tracking.
+         * After using per-layer transitions, the global layout state becomes undefined.
+         * You must either:
+         * - Use only per-layer transitions and manage synchronization manually
+         * - Call transitionToDepthAttachment/transitionToShaderRead to reset to a known state
+         *
+         * @param cmd Command buffer to record transition
+         * @param layer Layer index to transition
+         * @param assumedCurrentLayout The layout to transition FROM (caller must track this)
          */
-        void transitionLayerToDepthAttachment(vk::CommandBuffer cmd, uint32_t layer);
+        void transitionLayerToDepthAttachment(vk::CommandBuffer cmd, uint32_t layer,
+                                               vk::ImageLayout assumedCurrentLayout);
 
         /**
          * Transition a single layer to shader read.
+         * See transitionLayerToDepthAttachment for warnings about per-layer transitions.
          */
-        void transitionLayerToShaderRead(vk::CommandBuffer cmd, uint32_t layer);
+        void transitionLayerToShaderRead(vk::CommandBuffer cmd, uint32_t layer,
+                                          vk::ImageLayout assumedCurrentLayout);
 
         // Accessors
         [[nodiscard]] vk::Image getImage() const { return image; }

@@ -71,14 +71,26 @@ namespace render::shadow
 
         /**
          * Transition a single face to depth attachment.
-         * Useful for rendering faces individually.
+         *
+         * WARNING: Per-face transitions do NOT update currentLayout tracking.
+         * After using per-face transitions, the global layout state becomes undefined.
+         * You must either:
+         * - Use only per-face transitions and manage synchronization manually
+         * - Call transitionToDepthAttachment/transitionToShaderRead to reset to a known state
+         *
+         * @param cmd Command buffer to record transition
+         * @param face Face index to transition (0-5)
+         * @param assumedCurrentLayout The layout to transition FROM (caller must track this)
          */
-        void transitionFaceToDepthAttachment(vk::CommandBuffer cmd, uint32_t face);
+        void transitionFaceToDepthAttachment(vk::CommandBuffer cmd, uint32_t face,
+                                              vk::ImageLayout assumedCurrentLayout);
 
         /**
          * Transition a single face to shader read.
+         * See transitionFaceToDepthAttachment for warnings about per-face transitions.
          */
-        void transitionFaceToShaderRead(vk::CommandBuffer cmd, uint32_t face);
+        void transitionFaceToShaderRead(vk::CommandBuffer cmd, uint32_t face,
+                                         vk::ImageLayout assumedCurrentLayout);
 
         // Accessors
         [[nodiscard]] vk::Image getImage() const { return image; }

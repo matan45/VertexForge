@@ -92,8 +92,10 @@ namespace render::shadow
         if (!initialized)
             return;
 
+        // NOTE: Caller must ensure this resource is not in use by the GPU.
+        // ShadowResourcePool handles synchronization at the pool level.
+        // Do NOT add waitIdle() here - it causes frame stalls.
         const auto& logicalDevice = device.getLogicalDevice();
-        logicalDevice.waitIdle();
 
         // Cleanup per-layer views
         for (auto& view : layerViews)
@@ -217,26 +219,34 @@ namespace render::shadow
         currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
     }
 
-    void ShadowDepthArray::transitionLayerToDepthAttachment(vk::CommandBuffer cmd, uint32_t layer)
+    void ShadowDepthArray::transitionLayerToDepthAttachment(vk::CommandBuffer cmd, uint32_t layer,
+                                                              vk::ImageLayout assumedCurrentLayout)
     {
         if (layer >= layerCount)
         {
             spdlog::error("ShadowDepthArray::transitionLayerToDepthAttachment() - layer {} out of range", layer);
             return;
         }
-        transitionLayers(cmd, layer, 1, currentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-        // Note: per-layer transitions don't update global currentLayout tracking
-        // The caller is responsible for proper synchronization
+
+        // Mark global layout as undefined since we're doing per-layer transitions
+        currentLayout = vk::ImageLayout::eUndefined;
+
+        transitionLayers(cmd, layer, 1, assumedCurrentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
     }
 
-    void ShadowDepthArray::transitionLayerToShaderRead(vk::CommandBuffer cmd, uint32_t layer)
+    void ShadowDepthArray::transitionLayerToShaderRead(vk::CommandBuffer cmd, uint32_t layer,
+                                                        vk::ImageLayout assumedCurrentLayout)
     {
         if (layer >= layerCount)
         {
             spdlog::error("ShadowDepthArray::transitionLayerToShaderRead() - layer {} out of range", layer);
             return;
         }
-        transitionLayers(cmd, layer, 1, currentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        // Mark global layout as undefined since we're doing per-layer transitions
+        currentLayout = vk::ImageLayout::eUndefined;
+
+        transitionLayers(cmd, layer, 1, assumedCurrentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
     }
 
     void ShadowDepthArray::transitionLayers(vk::CommandBuffer cmd, uint32_t baseLayer, uint32_t count,

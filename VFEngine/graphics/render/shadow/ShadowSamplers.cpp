@@ -18,7 +18,11 @@ namespace render::shadow
         samplerInfo.compareOp = vk::CompareOp::eNever;
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 0.0f;
-        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;  // White = max depth = no shadow
+        // Border color for standard depth (0=near, 1=far):
+        // - White (1.0) = max depth = fragments outside shadow map are never in shadow
+        // - Shadow comparison uses LessOrEqual: fragmentDepth <= 1.0 always passes
+        // NOTE: If engine switches to reverse-Z (1=near, 0=far), change to eFloatOpaqueBlack
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         return samplerInfo;
     }

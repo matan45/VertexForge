@@ -60,6 +60,11 @@ namespace render::shadow
 
         /**
          * Free a previously allocated resource.
+         *
+         * SYNCHRONIZATION: Caller must ensure the resource is not in use by the GPU.
+         * Safe to call at frame boundaries or after device idle.
+         * TODO: Future optimization - implement deferred destruction queue.
+         *
          * @param handle Handle returned from allocateArray or allocateCube
          */
         void free(const ShadowResourceHandle& handle);
@@ -112,16 +117,21 @@ namespace render::shadow
         // ========================================
         // Descriptor Access
         // ========================================
+        // Note: This class provides layouts only. Descriptor sets should be
+        // allocated by the rendering code using their own pools for proper
+        // lifetime management (e.g., per-frame or per-pipeline pools).
 
         /**
          * Get descriptor set layout for binding depth arrays to shaders.
          * Binding 0: sampler2DArrayShadow (CSM cascades)
+         * Use with comparison sampler from getComparisonSampler().
          */
         [[nodiscard]] vk::DescriptorSetLayout getArrayDescriptorLayout() const { return arrayDescriptorLayout; }
 
         /**
          * Get descriptor set layout for binding cube maps to shaders.
          * Binding 0: samplerCubeShadow (point light shadows)
+         * Use with comparison sampler from getCubeComparisonSampler().
          */
         [[nodiscard]] vk::DescriptorSetLayout getCubeDescriptorLayout() const { return cubeDescriptorLayout; }
 
@@ -136,14 +146,14 @@ namespace render::shadow
     private:
         core::Device& device;
 
-        // Resource pools
+        // Resource pools with free-list for index recycling
         struct ArrayEntry
         {
             std::unique_ptr<ShadowDepthArray> resource;
             bool allocated = false;
         };
         std::vector<ArrayEntry> depthArrays;
-        uint32_t nextArrayIndex = 0;
+        std::vector<uint32_t> freeArrayIndices;  // Recycled indices
 
         struct CubeEntry
         {
@@ -151,17 +161,16 @@ namespace render::shadow
             bool allocated = false;
         };
         std::vector<CubeEntry> cubeMaps;
-        uint32_t nextCubeIndex = 0;
+        std::vector<uint32_t> freeCubeIndices;  // Recycled indices
 
         // Shared samplers
         vk::Sampler standardSampler;
         vk::Sampler comparisonSampler;
         vk::Sampler cubeComparisonSampler;
 
-        // Descriptor resources
+        // Descriptor layouts (caller allocates descriptor sets using these layouts)
         vk::DescriptorSetLayout arrayDescriptorLayout;
         vk::DescriptorSetLayout cubeDescriptorLayout;
-        vk::DescriptorPool descriptorPool;
 
         bool initialized = false;
 
