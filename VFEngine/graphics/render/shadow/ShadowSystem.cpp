@@ -97,6 +97,7 @@ namespace render::shadow
         }
 
         initialized = false;
+        atlasFirstUse = true;  // Reset so next use transitions from eUndefined
         spdlog::info("ShadowSystem cleaned up");
     }
 
@@ -451,17 +452,23 @@ namespace render::shadow
                 if (!view.handle.isValid())
                     continue;
 
+                // Copy view and apply per-light bias settings
+                ShadowView viewCopy = view;
+                viewCopy.depthBias = data.settings.depthBias;
+                viewCopy.slopeBias = data.settings.slopeBias;
+                viewCopy.normalBias = data.settings.normalBias;
+
                 switch (data.type)
                 {
                     case ShadowMapType::Directional2D:
                     case ShadowMapType::DirectionalCSM:
-                        directionalShadowViews.push_back(view);
+                        directionalShadowViews.push_back(viewCopy);
                         break;
                     case ShadowMapType::PointCube:
-                        pointShadowViews.push_back(view);
+                        pointShadowViews.push_back(viewCopy);
                         break;
                     case ShadowMapType::Spot2D:
-                        spotShadowViews.push_back(view);
+                        spotShadowViews.push_back(viewCopy);
                         break;
                     default:
                         break;
@@ -579,12 +586,36 @@ namespace render::shadow
         if (allViews.empty())
             return;
 
-        // 1. Transition atlas from shader read to depth attachment
+        // Validate batch parameters to prevent out-of-bounds access
+        if (params.batchCount == 0 || params.commandsPerSection == 0)
+            return;
+
+        if (!params.drawCommandBuffer || !params.drawCountBuffer)
+        {
+            spdlog::warn("ShadowSystem::recordShadowPass: Invalid draw buffers");
+            return;
+        }
+
+#ifndef NDEBUG
+        // Debug validation for descriptor sets
+        if (!params.perDrawDataDescSet || !params.meshletDataDescSet ||
+            !params.vertexDataDescSet || !params.boneMatrixDescSet)
+        {
+            spdlog::error("ShadowSystem::recordShadowPass: Invalid descriptor set(s) - "
+                          "perDraw={}, meshlet={}, vertex={}, bone={}",
+                          static_cast<bool>(params.perDrawDataDescSet),
+                          static_cast<bool>(params.meshletDataDescSet),
+                          static_cast<bool>(params.vertexDataDescSet),
+                          static_cast<bool>(params.boneMatrixDescSet));
+            return;
+        }
+#endif
+
+        // 1. Transition atlas to depth attachment
+        // On first use, image is in eUndefined; after that it's in eShaderReadOnlyOptimal
         {
             vk::ImageMemoryBarrier barrier{};
-            barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
             barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-            barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
             barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -595,8 +626,24 @@ namespace render::shadow
             barrier.subresourceRange.baseArrayLayer = 0;
             barrier.subresourceRange.layerCount = 1;
 
+            vk::PipelineStageFlags srcStage;
+            if (atlasFirstUse)
+            {
+                // First frame: image is in undefined layout, no prior access to wait for
+                barrier.srcAccessMask = {};
+                barrier.oldLayout = vk::ImageLayout::eUndefined;
+                srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            }
+            else
+            {
+                // Subsequent frames: image was used for shader reading
+                barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                srcStage = vk::PipelineStageFlagBits::eFragmentShader;
+            }
+
             cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eFragmentShader,
+                srcStage,
                 vk::PipelineStageFlagBits::eEarlyFragmentTests,
                 {},
                 0, nullptr,
@@ -651,19 +698,16 @@ namespace render::shadow
             vk::Rect2D scissor = atlasManager->getScissorRect(view->handle);
             cmd.setScissor(0, 1, &scissor);
 
-            // Set dynamic depth bias
-            // Get bias from light shadow data if available
-            float depthBias = ShadowConstants::DEFAULT_DEPTH_BIAS;
-            float slopeBias = ShadowConstants::DEFAULT_SLOPE_BIAS;
-            cmd.setDepthBias(depthBias, 0.0f, slopeBias);
+            // Set dynamic depth bias using per-light settings
+            cmd.setDepthBias(view->depthBias, 0.0f, view->slopeBias);
 
-            // Push constants with light view-projection matrix
+            // Push constants with light view-projection matrix and per-light bias
             ShadowPushConstants pc{};
             pc.lightViewProjection = view->viewProjectionMatrix;
             pc.baseDrawIndex = 0;  // Will iterate through batches
-            pc.depthBias = depthBias;
-            pc.slopeBias = slopeBias;
-            pc.normalBias = ShadowConstants::DEFAULT_NORMAL_BIAS;
+            pc.depthBias = view->depthBias;
+            pc.slopeBias = view->slopeBias;
+            pc.normalBias = view->normalBias;
 
             // Render all batches for this shadow view
             for (uint32_t batch = 0; batch < params.batchCount; ++batch)
@@ -721,6 +765,9 @@ namespace render::shadow
                 1, &barrier
             );
         }
+
+        // Mark atlas as initialized for subsequent frames
+        atlasFirstUse = false;
     }
 
     vk::DescriptorSetLayout ShadowSystem::getAtlasDescriptorLayout() const

@@ -71,6 +71,7 @@ taskPayloadSharedEXT MeshletPayload payload;
 
 shared uint sharedVisibleCount;
 shared uint sharedMeshletIndices[TASK_WORKGROUP_SIZE];
+shared vec4 sharedFrustumPlanes[6];  // Extracted once, shared across workgroup
 
 vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
@@ -127,9 +128,10 @@ void extractFrustumPlanes(mat4 vp, out vec4 planes[6]) {
         vp[3][3] - vp[3][2]
     );
 
-    // Normalize planes
+    // Normalize planes (with epsilon to prevent division by zero)
+    const float PLANE_NORMALIZE_EPSILON = 0.0001;
     for (int i = 0; i < 6; i++) {
-        float len = length(planes[i].xyz);
+        float len = max(length(planes[i].xyz), PLANE_NORMALIZE_EPSILON);
         planes[i] /= len;
     }
 }
@@ -152,8 +154,25 @@ void main() {
     uint workgroupMeshletBase = gl_WorkGroupID.x * TASK_WORKGROUP_SIZE;
     uint meshletIndex = workgroupMeshletBase + localMeshletIndex;
 
+    // Extract frustum planes once in invocation 0, share via shared memory
     if (gl_LocalInvocationID.x == 0) {
         sharedVisibleCount = 0;
+
+        // Extract and normalize frustum planes from light view-projection matrix
+        mat4 vp = pc.lightViewProjection;
+        sharedFrustumPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]); // Left
+        sharedFrustumPlanes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]); // Right
+        sharedFrustumPlanes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]); // Bottom
+        sharedFrustumPlanes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]); // Top
+        sharedFrustumPlanes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]); // Near
+        sharedFrustumPlanes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]); // Far
+
+        // Normalize planes (with epsilon to prevent division by zero for degenerate matrices)
+        const float PLANE_NORMALIZE_EPSILON = 0.0001;
+        for (int i = 0; i < 6; i++) {
+            float len = max(length(sharedFrustumPlanes[i].xyz), PLANE_NORMALIZE_EPSILON);
+            sharedFrustumPlanes[i] /= len;
+        }
     }
     barrier();
 
@@ -165,11 +184,8 @@ void main() {
         GPUMeshlet meshlet = meshlets[globalMeshletIndex];
         vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
 
-        // Frustum culling against light frustum
-        vec4 lightFrustumPlanes[6];
-        extractFrustumPlanes(pc.lightViewProjection, lightFrustumPlanes);
-
-        isVisible = sphereInFrustum(worldSphere, lightFrustumPlanes);
+        // Frustum culling using shared planes (extracted once by invocation 0)
+        isVisible = sphereInFrustum(worldSphere, sharedFrustumPlanes);
 
         if (isVisible) {
             uint slot = atomicAdd(sharedVisibleCount, 1);

@@ -202,6 +202,11 @@ namespace render::shadow
         float nearPlane = 0.1f;
         float farPlane = 100.0f;
 
+        // Per-light bias settings (copied from LightShadowData::settings)
+        float depthBias = ShadowConstants::DEFAULT_DEPTH_BIAS;
+        float slopeBias = ShadowConstants::DEFAULT_SLOPE_BIAS;
+        float normalBias = ShadowConstants::DEFAULT_NORMAL_BIAS;
+
         ShadowMapHandle handle;
 
         void updateViewProjection()

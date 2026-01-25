@@ -529,7 +529,8 @@ namespace render::gpudriven
         batchManager->insertBarriersAfterCompute(cmd);
 
         // Shadow pass - render depth maps for all active shadow views
-        if (shadowSystem && shadowSystem->isShadowsEnabled() && meshShaderPipeline)
+        if (shadowSystem && shadowSystem->isShadowsEnabled() &&
+            meshShaderPipeline && boneMatrixManager && batchManager)
         {
             // Collect active shadow views from registered lights
             shadowSystem->beginFrame();
