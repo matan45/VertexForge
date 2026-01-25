@@ -67,6 +67,7 @@ namespace controllers
         bool showGrid = true;
         bool showPhysicsDebug = false;
         bool showClusterDebug = false;
+        bool showShadowDebug = false;
         bool playModeActive = false;
 
     public:
@@ -155,6 +156,11 @@ namespace controllers
         void setShowClusterDebug(bool show) { showClusterDebug = show; }
         bool getShowClusterDebug() const { return showClusterDebug; }
         void prepareFrameClusterDebug();
+
+        // Shadow Debug API
+        void setShowShadowDebug(bool show) { showShadowDebug = show; }
+        bool getShowShadowDebug() const { return showShadowDebug; }
+        void prepareFrameShadowDebug();
 
         // VFX Runtime API
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);

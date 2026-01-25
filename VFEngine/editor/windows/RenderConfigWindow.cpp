@@ -118,6 +118,55 @@ namespace windows
                 {
                     isDirty = true;
                 }
+
+                ImGui::Separator();
+                ImGui::Text("Shadow Filtering");
+                ImGui::Spacing();
+
+                // PCF Kernel Size
+                const char* kernelItems[] = {"None (Hard)", "3x3", "5x5", "7x7"};
+                int kernelIdx = static_cast<int>(settings.shadows.pcfKernelSize);
+                if (ImGui::Combo("PCF Kernel", &kernelIdx, kernelItems, 4))
+                {
+                    settings.shadows.pcfKernelSize = static_cast<types::PCFKernelSize>(kernelIdx);
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("PCF kernel size for soft shadow edges.\nLarger = softer but slower.");
+                }
+
+                // Soft Shadows Toggle
+                if (ImGui::Checkbox("Soft Shadows", &settings.shadows.softShadowsEnabled))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Enable/disable PCF shadow filtering globally.");
+                }
+            }
+
+            // Shadow Debug Visualization (visible regardless of shadow state)
+            ImGui::Separator();
+            ImGui::Text("Debug Visualization");
+            ImGui::Spacing();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            bool showShadowDebug = dispatcher.query(events::render::GetShowShadowDebugQuery{});
+
+            if (ImGui::Checkbox("Show Shadow Frustums", &showShadowDebug))
+            {
+                events::render::SetShowShadowDebugCommand cmd;
+                cmd.show = showShadowDebug;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Visualize shadow map frustums:\n"
+                                  "- Directional: Cascade boxes (red->green)\n"
+                                  "- Spot: Perspective frustum (cyan)\n"
+                                  "- Point: Sphere radius (magenta)");
             }
 
             ImGui::Unindent(10.0f);

@@ -390,12 +390,13 @@ layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer
 };
 
 // Set 9: Shadow Data SSBO
-// Matches GPUShadowData in ShadowTypes.hpp (112 bytes)
+// Matches GPUShadowData in ShadowTypes.hpp (128 bytes)
 struct ShadowData {
     mat4 viewProjection;      // 64 bytes - light space transform
-    vec4 atlasViewport;       // 16 bytes - xy=offset, zw=size (normalized 0-1)
-    vec4 biasParams;          // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=softness
+    vec4 atlasViewport;       // 16 bytes - xy=offset, zw=size (CSM: z=cascadeCount)
+    vec4 biasParams;          // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=texelSize
     vec4 rangeParams;         // 16 bytes - x=near, y=far, z=1/(far-near), w=cascadeIndex
+    vec4 pcfParams;           // 16 bytes - x=kernelRadius (0-3), y=softness, z=filterEnabled, w=reserved
 };
 
 layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
@@ -509,16 +510,30 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
     if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
     if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
 
-    // PCF 3x3 filtering (texelSize precomputed on CPU, stored in biasParams.w)
+    // Check if PCF filtering is enabled
+    bool filterEnabled = sd.pcfParams.z > 0.5;
+    int kernelRadius = int(sd.pcfParams.x);
+
+    if (!filterEnabled || kernelRadius == 0) {
+        // Hard shadows - single sample
+        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
+    }
+
+    // PCF filtering with configurable kernel size
     float shadow = 0.0;
     float texelSize = sd.biasParams.w;
-    for (int x = -1; x <= 1; ++x) {
-        for (int y = -1; y <= 1; ++y) {
-            vec2 offset = vec2(float(x), float(y)) * texelSize;
+    float softness = sd.pcfParams.y;
+    float spread = texelSize * softness;
+    int sampleCount = 0;
+
+    for (int x = -kernelRadius; x <= kernelRadius; ++x) {
+        for (int y = -kernelRadius; y <= kernelRadius; ++y) {
+            vec2 offset = vec2(float(x), float(y)) * spread;
             shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
+            sampleCount++;
         }
     }
-    return shadow / 9.0;
+    return shadow / float(sampleCount);
 }
 
 // Directional light shadow (CSM with cascade selection)
@@ -558,20 +573,34 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
     // Out of range check
     if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
 
-    // PCF 3x3 filtering on cascade array texture (texelSize precomputed on CPU, stored in biasParams.w)
+    // Check if PCF filtering is enabled
+    bool filterEnabled = sd.pcfParams.z > 0.5;
+    int kernelRadius = int(sd.pcfParams.x);
+
+    if (!filterEnabled || kernelRadius == 0) {
+        // Hard shadows - single sample
+        return texture(shadowCascades, vec4(projCoords.xy, float(cascadeIdx), projCoords.z));
+    }
+
+    // PCF filtering with configurable kernel size
     float shadow = 0.0;
     float texelSize = sd.biasParams.w;
-    for (int x = -1; x <= 1; ++x) {
-        for (int y = -1; y <= 1; ++y) {
-            vec2 offset = vec2(float(x), float(y)) * texelSize;
+    float softness = sd.pcfParams.y;
+    float spread = texelSize * softness;
+    int sampleCount = 0;
+
+    for (int x = -kernelRadius; x <= kernelRadius; ++x) {
+        for (int y = -kernelRadius; y <= kernelRadius; ++y) {
+            vec2 offset = vec2(float(x), float(y)) * spread;
             // vec4: xy = texcoord, z = array layer, w = depth compare
             shadow += texture(shadowCascades, vec4(projCoords.xy + offset, float(cascadeIdx), projCoords.z));
+            sampleCount++;
         }
     }
-    return shadow / 9.0;
+    return shadow / float(sampleCount);
 }
 
-// Point light shadow (cube map sampling)
+// Point light shadow (cube map sampling with optional PCF)
 float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lightRadius) {
     if (shadowIndex < 0) return 1.0;
 
@@ -590,8 +619,36 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lig
     // Apply depth bias
     normalizedDepth -= sd.biasParams.x;
 
-    // Use comparison sampler on cube map
-    return texture(shadowCubes[nonuniformEXT(shadowIndex)], vec4(sampleDir, normalizedDepth));
+    // Check if PCF filtering is enabled
+    bool filterEnabled = sd.pcfParams.z > 0.5;
+    int kernelRadius = int(sd.pcfParams.x);
+
+    if (!filterEnabled || kernelRadius == 0) {
+        // Hard shadows - single sample
+        return texture(shadowCubes[nonuniformEXT(shadowIndex)], vec4(sampleDir, normalizedDepth));
+    }
+
+    // PCF for cube maps - sample with direction offsets along tangent basis
+    float softness = sd.pcfParams.y;
+    float spread = softness * 0.01;  // Smaller spread for cube maps
+
+    // Build tangent basis from sample direction
+    vec3 tangent = abs(sampleDir.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+    vec3 bitangent = normalize(cross(sampleDir, tangent));
+    tangent = normalize(cross(bitangent, sampleDir));
+
+    float shadow = 0.0;
+    int sampleCount = 0;
+
+    for (int x = -kernelRadius; x <= kernelRadius; ++x) {
+        for (int y = -kernelRadius; y <= kernelRadius; ++y) {
+            vec3 offset = tangent * float(x) * spread + bitangent * float(y) * spread;
+            vec3 offsetDir = normalize(sampleDir + offset);
+            shadow += texture(shadowCubes[nonuniformEXT(shadowIndex)], vec4(offsetDir, normalizedDepth));
+            sampleCount++;
+        }
+    }
+    return shadow / float(sampleCount);
 }
 
 // GGX/Trowbridge-Reitz Normal Distribution Function

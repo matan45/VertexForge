@@ -163,6 +163,16 @@ namespace events::render {
         std::string_view getName() const override { return "GetShowClusterDebug"; }
     };
 
+    struct SetShowShadowDebugCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowShadowDebug"; }
+    };
+
+    struct GetShowShadowDebugQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowShadowDebug"; }
+    };
+
     struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {
         std::string_view getName() const override { return "GetCullingStats"; }
     };

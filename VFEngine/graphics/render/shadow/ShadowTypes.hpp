@@ -210,6 +210,11 @@ namespace render::shadow
         // Texel size for PCF filtering (1.0 / resolution)
         float texelSize = 1.0f / static_cast<float>(ShadowConstants::RESOLUTION_HIGH);
 
+        // PCF filtering params (set during beginFrame from global/per-light settings)
+        uint8_t pcfKernelRadius = 1;  // 0=none (hard), 1=3x3, 2=5x5, 3=7x7
+        float pcfSoftness = 1.0f;     // Kernel spread multiplier
+        bool filterEnabled = true;    // Soft shadows toggle
+
         ShadowMapHandle handle;
 
         void updateViewProjection()
@@ -278,12 +283,14 @@ namespace render::shadow
         glm::vec4 atlasViewport;          // 16 bytes - xy=offset, zw=size (normalized 0-1)
         glm::vec4 biasParams;             // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=texelSize
         glm::vec4 rangeParams;            // 16 bytes - x=near, y=far, z=1/(far-near), w=cascadeIndex
+        glm::vec4 pcfParams;              // 16 bytes - x=kernelRadius (0-3), y=softness, z=filterEnabled, w=reserved
     };
-    static_assert(sizeof(GPUShadowData) == 112, "GPUShadowData must be 112 bytes");
+    static_assert(sizeof(GPUShadowData) == 128, "GPUShadowData must be 128 bytes");
     static_assert(offsetof(GPUShadowData, viewProjection) == 0, "GPUShadowData::viewProjection offset mismatch");
     static_assert(offsetof(GPUShadowData, atlasViewport) == 64, "GPUShadowData::atlasViewport offset mismatch");
     static_assert(offsetof(GPUShadowData, biasParams) == 80, "GPUShadowData::biasParams offset mismatch");
     static_assert(offsetof(GPUShadowData, rangeParams) == 96, "GPUShadowData::rangeParams offset mismatch");
+    static_assert(offsetof(GPUShadowData, pcfParams) == 112, "GPUShadowData::pcfParams offset mismatch");
 
     // ============================================
     // Shadow counts for shader
@@ -296,6 +303,21 @@ namespace render::shadow
         uint32_t totalCount;              // Total shadow views
     };
     static_assert(sizeof(GPUShadowCounts) == 16, "GPUShadowCounts must be 16 bytes");
+
+    // ============================================
+    // Debug visualization info
+    // ============================================
+    struct ShadowDebugInfo
+    {
+        ShadowMapType type = ShadowMapType::None;
+        uint32_t cascadeIndex = 0;           // For CSM: cascade level (0-3)
+        uint32_t entityId = 0;               // Light entity ID
+        glm::mat4 viewProjectionMatrix{1.0f};// For frustum reconstruction (inverse for rendering)
+        glm::vec3 lightPosition{0.0f};       // Light position in world space
+        glm::vec3 lightDirection{0.0f, -1.0f, 0.0f}; // Light direction (for spot/directional)
+        float nearPlane = 0.1f;
+        float farPlane = 100.0f;             // For point lights, this is the radius
+    };
 
     // ============================================
     // Atlas tile allocation info

@@ -105,6 +105,11 @@ namespace controllers {
 		bool getShowClusterDebug() const;
 		void prepareFrameClusterDebug();
 
+		// Shadow Debug API
+		void setShowShadowDebug(bool show);
+		bool getShowShadowDebug() const;
+		void prepareFrameShadowDebug();
+
 		// VFX Runtime API
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 	};

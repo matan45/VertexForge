@@ -183,6 +183,7 @@
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
     <ClInclude Include="render\occlusion\CameraOcclusionManager.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
+    <ClInclude Include="render\occlusion\LightOcclusionCulling.hpp" />
     <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\PointShadowCalculator.hpp" />
@@ -202,6 +203,7 @@
     <ClInclude Include="render\tools\GridRenderer.hpp" />
     <ClInclude Include="render\tools\LightGizmoDebugRenderer.hpp" />
     <ClInclude Include="render\tools\PhysicsDebugRenderer.hpp" />
+    <ClInclude Include="render\tools\ShadowDebugRenderer.hpp" />
     <ClInclude Include="render\vfx\GPUVFXBufferManager.hpp" />
     <ClInclude Include="render\vfx\GPUVFXComputePipeline.hpp" />
     <ClInclude Include="render\vfx\GPUVFXTypes.hpp" />
@@ -286,6 +288,7 @@
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
+    <ClCompile Include="render\occlusion\LightOcclusionCulling.cpp" />
     <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\PointShadowCalculator.cpp" />
@@ -304,6 +307,7 @@
     <ClCompile Include="render\tools\GridRenderer.cpp" />
     <ClCompile Include="render\tools\LightGizmoDebugRenderer.cpp" />
     <ClCompile Include="render\tools\PhysicsDebugRenderer.cpp" />
+    <ClCompile Include="render\tools\ShadowDebugRenderer.cpp" />
     <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
     <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
     <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
@@ -318,6 +322,7 @@
     <None Include="..\..\resources\shaders\gpudriven\task_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_cull.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_generate.glsl" />
+    <None Include="..\..\resources\shaders\hiz\light_occlusion_cull.glsl" />
     <None Include="..\..\resources\shaders\ibl\brdf.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_convolution.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_to_cubemap.glsl" />

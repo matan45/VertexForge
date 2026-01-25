@@ -726,7 +726,7 @@ namespace render::shadow
         }
     }
 
-    void ShadowSystem::beginFrame()
+    void ShadowSystem::beginFrame(const std::unordered_set<uint32_t>* visibleLightIds)
     {
         if (!shadowsEnabled)
             return;
@@ -748,6 +748,12 @@ namespace render::shadow
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
+            // Skip culled lights (but always include directional lights - they're global)
+            bool isDirectional = (data.type == ShadowMapType::DirectionalCSM ||
+                                  data.type == ShadowMapType::Directional2D);
+            if (visibleLightIds && !isDirectional && !visibleLightIds->contains(entityId))
+                continue;
+
             switch (data.type)
             {
                 case ShadowMapType::Directional2D:
@@ -764,6 +770,9 @@ namespace render::shadow
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
+                        viewCopy.pcfKernelRadius = globalPcfKernel;
+                        viewCopy.pcfSoftness = data.settings.softness;
+                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
 
                         if (!directionalIndices.contains(entityId))
                             directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
@@ -789,6 +798,9 @@ namespace render::shadow
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
+                        viewCopy.pcfKernelRadius = globalPcfKernel;
+                        viewCopy.pcfSoftness = data.settings.softness;
+                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
 
                         if (i == 0)
                             directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
@@ -811,6 +823,9 @@ namespace render::shadow
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
+                        viewCopy.pcfKernelRadius = globalPcfKernel;
+                        viewCopy.pcfSoftness = data.settings.softness;
+                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
 
                         if (!spotIndices.contains(entityId))
                             spotIndices[entityId] = static_cast<int32_t>(spotShadowViews.size());
@@ -836,6 +851,9 @@ namespace render::shadow
                     viewCopy.slopeBias = data.settings.slopeBias;
                     viewCopy.normalBias = data.settings.normalBias;
                     viewCopy.texelSize = texelSize;
+                    viewCopy.pcfKernelRadius = globalPcfKernel;
+                    viewCopy.pcfSoftness = data.settings.softness;
+                    viewCopy.filterEnabled = globalSoftShadowsEnabled;
 
                     pointIndices[entityId] = static_cast<int32_t>(pointShadowViews.size());
                     pointShadowViews.push_back(viewCopy);
@@ -1120,6 +1138,14 @@ namespace render::shadow
                     view.farPlane,
                     invRange,
                     static_cast<float>(view.handle.cascadeIndex)
+                );
+
+                // PCF params: kernel radius, softness, filter enabled, reserved
+                gpu.pcfParams = glm::vec4(
+                    static_cast<float>(view.pcfKernelRadius),
+                    view.pcfSoftness,
+                    view.filterEnabled ? 1.0f : 0.0f,
+                    0.0f  // reserved
                 );
 
                 gpuShadowData.push_back(gpu);
@@ -1596,6 +1622,13 @@ namespace render::shadow
         atlasFirstUse = true;
         needsUpdate = true;
 
+        // Apply PCF filtering settings
+        globalPcfKernel = static_cast<uint8_t>(shadowSettings.pcfKernelSize);
+        globalSoftShadowsEnabled = shadowSettings.softShadowsEnabled;
+
+        spdlog::debug("ShadowSystem: PCF settings - kernel={}, softShadows={}",
+                      globalPcfKernel, globalSoftShadowsEnabled);
+
         spdlog::info("ShadowSystem: Render settings applied successfully");
     }
 
@@ -1622,5 +1655,99 @@ namespace render::shadow
     float ShadowSystem::getAtlasUtilization() const
     {
         return atlasManager ? atlasManager->getAtlasUtilization() : 0.0f;
+    }
+
+    std::vector<ShadowDebugInfo> ShadowSystem::getShadowDebugInfo() const
+    {
+        std::vector<ShadowDebugInfo> debugInfos;
+
+        if (!shadowsEnabled)
+            return debugInfos;
+
+        // Reserve approximate capacity
+        debugInfos.reserve(
+            directionalShadowViews.size() +
+            pointShadowViews.size() +
+            spotShadowViews.size()
+        );
+
+        // Collect directional shadow debug info (CSM cascades)
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            if (data.type == ShadowMapType::DirectionalCSM || data.type == ShadowMapType::Directional2D)
+            {
+                for (size_t i = 0; i < data.views.size(); ++i)
+                {
+                    const auto& view = data.views[i];
+                    ShadowDebugInfo info;
+                    info.type = data.type;
+                    info.cascadeIndex = static_cast<uint32_t>(i);
+                    info.entityId = entityId;
+                    info.viewProjectionMatrix = view.viewProjectionMatrix;
+                    info.lightPosition = glm::vec3(view.lightPosition);
+                    info.lightDirection = glm::vec3(view.lightDirection);
+                    info.nearPlane = view.nearPlane;
+                    info.farPlane = view.farPlane;
+                    debugInfos.push_back(info);
+                }
+            }
+        }
+
+        // Collect point light shadow debug info (spheres)
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            if (data.type == ShadowMapType::PointCube)
+            {
+                // Point lights use cube maps - we just need one debug info per light
+                // showing the sphere radius (farPlane)
+                if (!data.views.empty())
+                {
+                    const auto& view = data.views[0];
+                    ShadowDebugInfo info;
+                    info.type = data.type;
+                    info.cascadeIndex = 0;
+                    info.entityId = entityId;
+                    info.viewProjectionMatrix = view.viewProjectionMatrix;
+                    info.lightPosition = glm::vec3(view.lightPosition);
+                    info.lightDirection = glm::vec3(0.0f, -1.0f, 0.0f);  // Not applicable for point
+                    info.nearPlane = view.nearPlane;
+                    info.farPlane = view.farPlane;  // This is the sphere radius
+                    debugInfos.push_back(info);
+                }
+            }
+        }
+
+        // Collect spot light shadow debug info (frustums)
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            if (data.type == ShadowMapType::Spot2D)
+            {
+                if (!data.views.empty())
+                {
+                    const auto& view = data.views[0];
+                    ShadowDebugInfo info;
+                    info.type = data.type;
+                    info.cascadeIndex = 0;
+                    info.entityId = entityId;
+                    info.viewProjectionMatrix = view.viewProjectionMatrix;
+                    info.lightPosition = glm::vec3(view.lightPosition);
+                    info.lightDirection = glm::vec3(view.lightDirection);
+                    info.nearPlane = view.nearPlane;
+                    info.farPlane = view.farPlane;
+                    debugInfos.push_back(info);
+                }
+            }
+        }
+
+        return debugInfos;
     }
 }

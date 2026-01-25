@@ -90,6 +90,11 @@ namespace core
         bool getShowClusterDebug() const override;
         void prepareFrameClusterDebug() override;
 
+        // Shadow Debug API
+        void setShowShadowDebug(bool show) override;
+        bool getShowShadowDebug() const override;
+        void prepareFrameShadowDebug() override;
+
         // VFX Runtime API
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;
 
