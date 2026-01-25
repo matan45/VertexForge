@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../mesh/MeshStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
@@ -173,6 +174,7 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
+        if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (shadowSystem) shadowSystem->cleanup();
         if (lightCullingPipeline) lightCullingPipeline->cleanup();
@@ -187,6 +189,7 @@ namespace render::gpudriven
         if (mergedBuffer) mergedBuffer->cleanup();
 
         meshStreamManager.reset();
+        lightOcclusionCulling.reset();
         meshShaderPipeline.reset();
         shadowSystem.reset();
         lightCullingPipeline.reset();
@@ -516,6 +519,77 @@ namespace render::gpudriven
             lightBufferManager->uploadToGPU(cmd);
         }
 
+        // Light occlusion culling - test visible lights against HiZ buffer
+        // This runs AFTER light buffer upload but BEFORE shadow pass
+        // Results are used to skip shadow rendering for occluded lights
+        if (useLightOcclusionCulling && lightOcclusionCulling && lightOcclusionCulling->isInitialized())
+        {
+            // Build light bounds from the lights we're about to process
+            std::vector<occlusion::GPULightBounds> lightBounds;
+            auto& registry = scene::EntityRegistry::getRegistry();
+
+            // Collect point lights
+            auto pointView = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
+            for (auto entity : pointView)
+            {
+                uint32_t entityId = static_cast<uint32_t>(entity);
+                // Skip if BVH culling is active and this light was culled
+                if (useBVHLightCulling && !visibleLightIds.empty() && !visibleLightIds.contains(entityId))
+                    continue;
+
+                const auto& light = pointView.get<components::PointLightComponent>(entity);
+                const auto& transform = pointView.get<components::WorldTransformComponent>(entity);
+
+                // Extract position from world matrix column 3
+                glm::vec3 position = glm::vec3(transform.worldMatrix[3]);
+
+                occlusion::GPULightBounds bounds{};
+                bounds.positionRadius = glm::vec4(position, light.radius);
+                bounds.direction = glm::vec4(0.0f);
+                bounds.entityId = entityId;
+                bounds.lightType = static_cast<uint32_t>(occlusion::LightOcclusionType::Point);
+                lightBounds.push_back(bounds);
+            }
+
+            // Collect spot lights
+            auto spotView = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
+            for (auto entity : spotView)
+            {
+                uint32_t entityId = static_cast<uint32_t>(entity);
+                if (useBVHLightCulling && !visibleLightIds.empty() && !visibleLightIds.contains(entityId))
+                    continue;
+
+                const auto& light = spotView.get<components::SpotLightComponent>(entity);
+                const auto& transform = spotView.get<components::WorldTransformComponent>(entity);
+
+                // Extract position from world matrix column 3
+                glm::vec3 position = glm::vec3(transform.worldMatrix[3]);
+                // Extract forward direction (local -Z transformed to world)
+                glm::vec3 forward = glm::normalize(glm::vec3(transform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+
+                occlusion::GPULightBounds bounds{};
+                bounds.positionRadius = glm::vec4(position, light.range);
+                bounds.direction = glm::vec4(forward, light.outerAngle);
+                bounds.entityId = entityId;
+                bounds.lightType = static_cast<uint32_t>(occlusion::LightOcclusionType::Spot);
+                lightBounds.push_back(bounds);
+            }
+
+            if (!lightBounds.empty())
+            {
+                // Update and dispatch light occlusion culling
+                lightOcclusionCulling->updateLights(lightBounds);
+
+                const auto& camData = cameraBuffer->getData();
+                glm::mat4 viewProj = camData.projection * camData.view;
+                // cameraPosition is vec4: xyz = position, w = nearPlane
+                lightOcclusionCulling->updateCamera(viewProj, glm::vec3(camData.cameraPosition), camData.cameraPosition.w);
+
+                lightOcclusionCulling->cull(cmd);
+                lightOcclusionCulling->copyResultsToStaging(cmd);
+            }
+        }
+
         if (clusterGridManager)
         {
             clusterGridManager->uploadToGPU(cmd);
@@ -551,8 +625,69 @@ namespace render::gpudriven
         if (shadowSystem && shadowSystem->isShadowsEnabled() &&
             meshShaderPipeline && boneMatrixManager && batchManager)
         {
-            // Collect active shadow views from registered lights
-            shadowSystem->beginFrame();
+            // Build the set of lights to render shadows for
+            // Combine BVH frustum culling with HiZ occlusion culling (Frame N-1)
+            std::unordered_set<uint32_t> shadowVisibleLights;
+            bool hasShadowFilter = false;
+
+            // Start with BVH-visible lights if enabled
+            if (useBVHLightCulling && !visibleLightIds.empty())
+            {
+                shadowVisibleLights = visibleLightIds;
+                hasShadowFilter = true;
+            }
+
+            // Filter by HiZ occlusion results from previous frame
+            if (useLightOcclusionCulling && hasPrevFrameOcclusionData && !prevFrameOccludedLights.empty())
+            {
+                if (hasShadowFilter)
+                {
+                    // Remove occluded lights from the BVH-visible set
+                    for (uint32_t occludedId : prevFrameOccludedLights)
+                    {
+                        shadowVisibleLights.erase(occludedId);
+                    }
+                }
+                else
+                {
+                    // No BVH filter - build visible set by iterating all lights and excluding occluded
+                    auto& registry = scene::EntityRegistry::getRegistry();
+
+                    // Collect point lights that are not occluded
+                    auto pointView = registry.view<components::PointLightComponent>();
+                    for (auto entity : pointView)
+                    {
+                        uint32_t entityId = static_cast<uint32_t>(entity);
+                        if (!prevFrameOccludedLights.contains(entityId))
+                        {
+                            shadowVisibleLights.insert(entityId);
+                        }
+                    }
+
+                    // Collect spot lights that are not occluded
+                    auto spotView = registry.view<components::SpotLightComponent>();
+                    for (auto entity : spotView)
+                    {
+                        uint32_t entityId = static_cast<uint32_t>(entity);
+                        if (!prevFrameOccludedLights.contains(entityId))
+                        {
+                            shadowVisibleLights.insert(entityId);
+                        }
+                    }
+
+                    hasShadowFilter = true;
+                }
+            }
+
+            // Pass visible light IDs to skip shadow rendering for culled/occluded lights
+            if (hasShadowFilter && !shadowVisibleLights.empty())
+            {
+                shadowSystem->beginFrame(&shadowVisibleLights);
+            }
+            else
+            {
+                shadowSystem->beginFrame();
+            }
 
             // Upload shadow data to GPU
             shadowSystem->uploadToGPU(cmd);
@@ -845,6 +980,36 @@ namespace render::gpudriven
     {
         visibleLightIds.clear();
         useBVHLightCulling = false;
+    }
+
+    void GPUDrivenRenderer::initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer)
+    {
+        if (!hiZBuffer)
+        {
+            loggerWarning("GPUDrivenRenderer: Cannot init light occlusion culling - HiZBuffer is null");
+            return;
+        }
+
+        lightOcclusionCulling = std::make_unique<occlusion::LightOcclusionCulling>(device, swapChain);
+        lightOcclusionCulling->init(hiZBuffer);
+        useLightOcclusionCulling = true;
+
+        loggerInfo("GPUDrivenRenderer: Light occlusion culling initialized");
+    }
+
+    void GPUDrivenRenderer::readBackLightOcclusionResults()
+    {
+        if (!useLightOcclusionCulling || !lightOcclusionCulling || !lightOcclusionCulling->isInitialized())
+        {
+            return;
+        }
+
+        // Read back visibility results from GPU (this is the staging buffer read)
+        lightOcclusionCulling->getVisibleLightIds();
+
+        // Store occluded lights for next frame's shadow filtering
+        prevFrameOccludedLights = lightOcclusionCulling->getOccludedLightIds();
+        hasPrevFrameOcclusionData = true;
     }
 
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)

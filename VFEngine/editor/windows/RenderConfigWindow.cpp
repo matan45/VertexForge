@@ -118,6 +118,33 @@ namespace windows
                 {
                     isDirty = true;
                 }
+
+                ImGui::Separator();
+                ImGui::Text("Shadow Filtering");
+                ImGui::Spacing();
+
+                // PCF Kernel Size
+                const char* kernelItems[] = {"None (Hard)", "3x3", "5x5", "7x7"};
+                int kernelIdx = static_cast<int>(settings.shadows.pcfKernelSize);
+                if (ImGui::Combo("PCF Kernel", &kernelIdx, kernelItems, 4))
+                {
+                    settings.shadows.pcfKernelSize = static_cast<types::PCFKernelSize>(kernelIdx);
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("PCF kernel size for soft shadow edges.\nLarger = softer but slower.");
+                }
+
+                // Soft Shadows Toggle
+                if (ImGui::Checkbox("Soft Shadows", &settings.shadows.softShadowsEnabled))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Enable/disable PCF shadow filtering globally.");
+                }
             }
 
             ImGui::Unindent(10.0f);

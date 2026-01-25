@@ -20,6 +20,18 @@ namespace types
     };
 
     /**
+     * PCF kernel size for shadow filtering.
+     * Controls shadow softness vs performance tradeoff.
+     */
+    enum class PCFKernelSize : uint8_t
+    {
+        None = 0,    // 1x1 - Hard shadows (no filtering)
+        Small = 1,   // 3x3 - 9 samples
+        Medium = 2,  // 5x5 - 25 samples
+        Large = 3    // 7x7 - 49 samples
+    };
+
+    /**
      * Shadow atlas configuration.
      * Controls atlas size and per-light-type resolutions.
      */
@@ -86,6 +98,10 @@ namespace types
         // Global bias settings
         float shadowBias = 0.005f;
         float normalBias = 0.02f;
+
+        // PCF filtering settings
+        PCFKernelSize pcfKernelSize = PCFKernelSize::Small;  // Default 3x3
+        bool softShadowsEnabled = true;                       // Global soft shadow toggle
 
         // Atlas configuration
         ShadowAtlasConfig atlas;

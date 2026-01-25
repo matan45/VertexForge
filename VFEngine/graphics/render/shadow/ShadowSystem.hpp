@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace core
 {
@@ -87,6 +88,8 @@ namespace render
             bool shadowsEnabled = true;
             ShadowFilterMode globalFilterMode = ShadowFilterMode::PCF;
             ShadowQuality globalQuality = ShadowQuality::High;
+            uint8_t globalPcfKernel = 1;           // PCF kernel radius (0=none, 1=3x3, 2=5x5, 3=7x7)
+            bool globalSoftShadowsEnabled = true;  // Global soft shadows toggle
 
             // State
             bool initialized = false;
@@ -135,7 +138,9 @@ namespace render
 
             // Call each frame before shadow pass recording
             // Collects active shadow casters and updates matrices
-            void beginFrame();
+            // If visibleLightIds is provided, only collects shadows for visible lights
+            // (directional lights are always included as they're global)
+            void beginFrame(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
 
             // Update shadow view matrices for a specific light
             // Called when light transform or camera changes

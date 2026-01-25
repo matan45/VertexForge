@@ -13,6 +13,7 @@
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
+#include "../occlusion/LightOcclusionCulling.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -38,6 +39,11 @@ namespace render::mesh
     struct MeshRenderData;
 }
 
+namespace render::occlusion
+{
+    class HiZBuffer;
+}
+
 namespace render::gpudriven
 {
     class GPUDrivenRenderer
@@ -58,6 +64,7 @@ namespace render::gpudriven
         std::unique_ptr<lighting::ClusterGridManager> clusterGridManager;
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
+        std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
 
         bool initialized = false;
         bool enabled = false;
@@ -89,6 +96,11 @@ namespace render::gpudriven
         // BVH-culled visible light entity IDs (set per-frame before dispatchCompute)
         std::unordered_set<uint32_t> visibleLightIds;
         bool useBVHLightCulling = false;
+        bool useLightOcclusionCulling = false;
+
+        // Frame N-1 light occlusion results (used to avoid GPU stalls)
+        std::unordered_set<uint32_t> prevFrameOccludedLights;
+        bool hasPrevFrameOcclusionData = false;
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -174,6 +186,16 @@ namespace render::gpudriven
 
         void clearVisibleLights();
         bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
+
+        // Light occlusion culling (Hi-Z based)
+        void initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer);
+        void setLightOcclusionCullingEnabled(bool enabled) { useLightOcclusionCulling = enabled; }
+        bool isLightOcclusionCullingEnabled() const { return useLightOcclusionCulling; }
+        occlusion::LightOcclusionCulling* getLightOcclusionCulling() const { return lightOcclusionCulling.get(); }
+
+        // Call at end of frame (after GPU work completes) to read back occlusion results
+        // Results will be used for next frame's shadow filtering (Frame N-1 approach)
+        void readBackLightOcclusionResults();
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);

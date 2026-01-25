@@ -183,6 +183,7 @@
     <ClInclude Include="render\mesh\StaticMeshPipeline.hpp" />
     <ClInclude Include="render\occlusion\CameraOcclusionManager.hpp" />
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
+    <ClInclude Include="render\occlusion\LightOcclusionCulling.hpp" />
     <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\PointShadowCalculator.hpp" />
@@ -286,6 +287,7 @@
     <ClCompile Include="render\mesh\StaticMeshPipeline.cpp" />
     <ClCompile Include="render\occlusion\CameraOcclusionManager.cpp" />
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
+    <ClCompile Include="render\occlusion\LightOcclusionCulling.cpp" />
     <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\PointShadowCalculator.cpp" />
@@ -318,6 +320,7 @@
     <None Include="..\..\resources\shaders\gpudriven\task_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_cull.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_generate.glsl" />
+    <None Include="..\..\resources\shaders\hiz\light_occlusion_cull.glsl" />
     <None Include="..\..\resources\shaders\ibl\brdf.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_convolution.glsl" />
     <None Include="..\..\resources\shaders\ibl\equirectangular_to_cubemap.glsl" />
