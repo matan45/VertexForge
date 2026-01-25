@@ -13,6 +13,9 @@
 #include "details/ColliderDrawer.hpp"
 #include "details/RigidBodyDrawer.hpp"
 #include "details/VFXDrawer.hpp"
+#include "details/DirectionalLightDrawer.hpp"
+#include "details/PointLightDrawer.hpp"
+#include "details/SpotLightDrawer.hpp"
 #include "details/AddComponentPopup.hpp"
 
 namespace windows
@@ -34,6 +37,9 @@ namespace windows
         details::ColliderDrawer colliderDrawer;
         details::RigidBodyDrawer rigidBodyDrawer;
         details::VFXDrawer vfxDrawer;
+        details::DirectionalLightDrawer directionalLightDrawer;
+        details::PointLightDrawer pointLightDrawer;
+        details::SpotLightDrawer spotLightDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

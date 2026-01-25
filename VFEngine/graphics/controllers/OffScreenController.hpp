@@ -35,6 +35,7 @@ namespace controllers::offscreen
     class MeshAssetManager;
     class CameraController;
     class SceneBVHManager;
+    class LightBVHManager;
     class FramePreparationSystem;
     class CullingStatsCollector;
 }
@@ -53,6 +54,7 @@ namespace controllers
         std::unique_ptr<offscreen::MeshAssetManager> meshAssetManager;
         std::unique_ptr<offscreen::CameraController> cameraController;
         std::unique_ptr<offscreen::SceneBVHManager> bvhManager;
+        std::unique_ptr<offscreen::LightBVHManager> lightBvhManager;
         std::unique_ptr<offscreen::FramePreparationSystem> framePreparation;
         std::unique_ptr<offscreen::CullingStatsCollector> statsCollector;
 
@@ -64,6 +66,7 @@ namespace controllers
         bool showDebugRendering = true;
         bool showGrid = true;
         bool showPhysicsDebug = false;
+        bool showClusterDebug = false;
         bool playModeActive = false;
 
     public:
@@ -95,6 +98,7 @@ namespace controllers
         void prepareFrameBillboards();
         void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();
+        void prepareFrameLightGizmos();
 
         // Billboard visibility toggle
         void setShowBillboardIcons(bool show) { showBillboardIcons = show; }
@@ -142,6 +146,11 @@ namespace controllers
         // View Mode API
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;
+
+        // Cluster Debug API
+        void setShowClusterDebug(bool show) { showClusterDebug = show; }
+        bool getShowClusterDebug() const { return showClusterDebug; }
+        void prepareFrameClusterDebug();
 
         // VFX Runtime API
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);

@@ -20,11 +20,15 @@ namespace render::mesh
     class AudioSphereDebugRenderer;
     class GridRenderer;
     class PhysicsDebugRenderer;
+    class LightGizmoDebugRenderer;
+    class ClusterDebugRenderer;
     struct MeshRenderData;
     struct MeshGPUData;
     struct CameraFrustumRenderData;
     struct AudioSphereRenderData;
     struct PhysicsColliderRenderData;
+    struct LightGizmoRenderData;
+    struct ClusterDebugRenderData;
 }
 
 namespace render
@@ -40,16 +44,23 @@ namespace render
         std::unique_ptr<mesh::AudioSphereDebugRenderer> audioSphereRenderer;
         std::unique_ptr<mesh::GridRenderer> gridRenderer;
         std::unique_ptr<mesh::PhysicsDebugRenderer> physicsDebugRenderer;
-        
+        std::unique_ptr<mesh::LightGizmoDebugRenderer> lightGizmoRenderer;
+        std::unique_ptr<mesh::ClusterDebugRenderer> clusterDebugRenderer;
+
         std::vector<mesh::CameraFrustumRenderData> cameraFrustumDrawList;
-        
+
         std::vector<mesh::AudioSphereRenderData> audioSphereDrawList;
-        
+
         std::vector<mesh::PhysicsColliderRenderData> physicsColliderDrawList;
+
+        std::vector<mesh::LightGizmoRenderData> lightGizmoDrawList;
+
+        std::unique_ptr<mesh::ClusterDebugRenderData> clusterDebugData;
 
         bool initialized = false;
         bool showGrid = true;
         bool showPhysicsDebug = false;
+        bool showClusterDebug = false;
         bool hasBoundingBoxesToRender = false;
 
     public:
@@ -68,6 +79,12 @@ namespace render
         void setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders);
         void setShowPhysicsDebug(bool show) { showPhysicsDebug = show; }
         bool getShowPhysicsDebug() const { return showPhysicsDebug; }
+
+        void setLightGizmoDrawList(std::vector<mesh::LightGizmoRenderData>&& gizmos);
+
+        void setClusterDebugData(mesh::ClusterDebugRenderData&& data);
+        void setShowClusterDebug(bool show);
+        bool getShowClusterDebug() const { return showClusterDebug; }
 
         void render(const vk::CommandBuffer& commandBuffer,
                     const std::vector<mesh::MeshRenderData>& meshDrawList,

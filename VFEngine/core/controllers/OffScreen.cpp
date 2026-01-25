@@ -125,6 +125,11 @@ namespace controllers {
 		offScreenController->prepareFrameAudioSpheres();
 	}
 
+	void OffScreen::prepareFrameLightGizmos()
+	{
+		offScreenController->prepareFrameLightGizmos();
+	}
+
 	void OffScreen::prepareFrameBillboards()
 	{
 		offScreenController->prepareFrameBillboards();
@@ -208,6 +213,21 @@ namespace controllers {
 	uint32_t OffScreen::getViewMode() const
 	{
 		return offScreenController->getViewMode();
+	}
+
+	void OffScreen::setShowClusterDebug(bool show)
+	{
+		offScreenController->setShowClusterDebug(show);
+	}
+
+	bool OffScreen::getShowClusterDebug() const
+	{
+		return offScreenController->getShowClusterDebug();
+	}
+
+	void OffScreen::prepareFrameClusterDebug()
+	{
+		offScreenController->prepareFrameClusterDebug();
 	}
 
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)

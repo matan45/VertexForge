@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
-#include "../../utilities/types/CameraTypes.hpp"
+#include "types/CameraTypes.hpp"
 
 namespace services {
 
@@ -83,11 +83,17 @@ namespace services {
         std::vector<CameraCullingStats> cameraStats;
         CameraId activeCameraId = 0;
 
-        // BVH statistics
+        // Mesh BVH statistics
         size_t staticBvhEntityCount = 0;
         size_t dynamicBvhEntityCount = 0;
         size_t staticBvhNodeCount = 0;
         size_t dynamicBvhNodeCount = 0;
+
+        // Light BVH statistics
+        size_t staticLightBvhCount = 0;
+        size_t dynamicLightBvhCount = 0;
+        size_t staticLightBvhNodeCount = 0;
+        size_t dynamicLightBvhNodeCount = 0;
 
         // GPU-driven rendering statistics
         GPUDrivenDebugStats gpuDriven;
@@ -129,6 +135,7 @@ namespace services {
         virtual CameraId getActiveCameraId() const = 0;
         virtual void prepareFrameCameraFrustums() = 0;
         virtual void prepareFrameAudioSpheres() = 0;
+        virtual void prepareFrameLightGizmos() = 0;
 
         // Billboard API
         virtual void prepareFrameBillboards() = 0;
@@ -160,6 +167,11 @@ namespace services {
         // View Mode API
         virtual void setViewMode(uint32_t mode) = 0;
         virtual uint32_t getViewMode() const = 0;
+
+        // Cluster Debug API
+        virtual void setShowClusterDebug(bool show) = 0;
+        virtual bool getShowClusterDebug() const = 0;
+        virtual void prepareFrameClusterDebug() = 0;
 
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;

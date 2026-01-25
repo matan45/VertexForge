@@ -93,6 +93,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::prepareFrameLightGizmos() {
+        if (offScreen) {
+            offScreen->prepareFrameLightGizmos();
+        }
+    }
+
     void OffScreenAdapter::prepareFrameBillboards() {
         if (offScreen) {
             offScreen->prepareFrameBillboards();
@@ -212,6 +218,22 @@ namespace core {
 
     uint32_t OffScreenAdapter::getViewMode() const {
         return offScreen ? offScreen->getViewMode() : 0;
+    }
+
+    void OffScreenAdapter::setShowClusterDebug(bool show) {
+        if (offScreen) {
+            offScreen->setShowClusterDebug(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowClusterDebug() const {
+        return offScreen ? offScreen->getShowClusterDebug() : false;
+    }
+
+    void OffScreenAdapter::prepareFrameClusterDebug() {
+        if (offScreen) {
+            offScreen->prepareFrameClusterDebug();
+        }
     }
 
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {

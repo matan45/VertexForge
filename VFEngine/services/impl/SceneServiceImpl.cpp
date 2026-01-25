@@ -7,6 +7,7 @@
 #include "components/PhysicsComponentService.hpp"
 #include "components/AnimatorComponentService.hpp"
 #include "components/VFXComponentService.hpp"
+#include "components/LightComponentService.hpp"
 #include "scene/HierarchyService.hpp"
 #include "scene/EntityQueryService.hpp"
 #include "scene/TransformComponentService.hpp"
@@ -29,6 +30,7 @@ namespace services
         , physicsService(std::make_unique<PhysicsComponentService>(sceneGraph))
         , animatorService(std::make_unique<AnimatorComponentService>(animatorProvider))
         , vfxService(std::make_unique<VFXComponentService>(sceneGraph))
+        , lightService(std::make_unique<LightComponentService>())
         // New extracted services
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))
@@ -53,6 +55,7 @@ namespace services
         physicsService->registerEventHandlers(dispatcher);
         animatorService->registerEventHandlers(dispatcher);
         vfxService->registerEventHandlers(dispatcher);
+        lightService->registerEventHandlers(dispatcher);
 
         // New extracted services
         hierarchyService->registerEventHandlers(dispatcher);

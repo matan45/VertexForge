@@ -48,6 +48,7 @@ namespace core
         services::CameraId getActiveCameraId() const override;
         void prepareFrameCameraFrustums() override;
         void prepareFrameAudioSpheres() override;
+        void prepareFrameLightGizmos() override;
 
         // Billboard API
         void prepareFrameBillboards() override;
@@ -79,6 +80,11 @@ namespace core
         // View Mode API
         void setViewMode(uint32_t mode) override;
         uint32_t getViewMode() const override;
+
+        // Cluster Debug API
+        void setShowClusterDebug(bool show) override;
+        bool getShowClusterDebug() const override;
+        void prepareFrameClusterDebug() override;
 
         // VFX Runtime API
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;

@@ -10,10 +10,6 @@
 
 namespace events::render {
 
-    // ============================================
-    // COMMANDS - Operations that modify render state
-    // ============================================
-
     struct SetIBLCommand : ICommand<bool> {
         std::string hdrPath;
 
@@ -103,9 +99,15 @@ namespace events::render {
     };
 
     struct SetViewModeCommand : ICommand<> {
-        uint32_t mode;  // 0=Color, 1=Meshlet, 2=LOD
+        uint32_t mode;  // 0=Color, 1=Meshlet, 2=LOD, 3=Mipmap, 4=Cluster
 
         std::string_view getName() const override { return "SetViewMode"; }
+    };
+
+    struct SetShowClusterDebugCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowClusterDebug"; }
     };
 
     struct LoadBillboardAtlasCommand : ICommand<bool> {
@@ -113,10 +115,6 @@ namespace events::render {
 
         std::string_view getName() const override { return "LoadBillboardAtlas"; }
     };
-
-    // ============================================
-    // QUERIES - Read-only operations
-    // ============================================
 
     struct GetTextureLoadingProgressQuery : IQuery<services::TextureLoadingProgress> {
         void* instanceId;
@@ -158,6 +156,10 @@ namespace events::render {
 
     struct GetViewModeQuery : IQuery<uint32_t> {
         std::string_view getName() const override { return "GetViewMode"; }
+    };
+
+    struct GetShowClusterDebugQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowClusterDebug"; }
     };
 
     struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {

@@ -61,7 +61,9 @@ namespace services
         void prepareFrameBillboards();
         void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();
+        void prepareFrameLightGizmos();
         void prepareFramePhysicsColliders();
+        void prepareFrameClusterDebug();
         void prepareGrid();
     };
 }

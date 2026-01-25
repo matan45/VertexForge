@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EventTypes.hpp"
-#include "../../utilities/types/PhysicsTypes.hpp"
+#include "types/PhysicsTypes.hpp"
 #include <string>
 #include <vector>
 

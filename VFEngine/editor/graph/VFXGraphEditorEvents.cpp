@@ -383,14 +383,14 @@ namespace editor::graph {
                 };
                 break;
 
-            case vfx::ShapeType::Circle:
-                node.properties["radius"] = vfx::VFXProperty{
-                    "radius", vfx::VFXPropertyType::Float,
-                    vfx::ShapeDefaults::CIRCLE_RADIUS, 0.01f, 100.0f
+            case vfx::ShapeType::Torus:
+                node.properties["majorRadius"] = vfx::VFXProperty{
+                    "majorRadius", vfx::VFXPropertyType::Float,
+                    vfx::ShapeDefaults::TORUS_MAJOR_RADIUS, 0.01f, 100.0f
                 };
-                node.properties["arc"] = vfx::VFXProperty{
-                    "arc", vfx::VFXPropertyType::Float,
-                    vfx::ShapeDefaults::CIRCLE_ARC, 0.0f, 6.28318530718f  // 0 to 2*PI
+                node.properties["minorRadius"] = vfx::VFXProperty{
+                    "minorRadius", vfx::VFXPropertyType::Float,
+                    vfx::ShapeDefaults::TORUS_MINOR_RADIUS, 0.01f, 50.0f
                 };
                 break;
 
@@ -539,13 +539,13 @@ namespace editor::graph {
                     currentGraph->nodes.push_back(std::move(newNode));
                     if (onGraphChanged) onGraphChanged();
                 }
-                if (ImGui::MenuItem("Circle")) {
+                if (ImGui::MenuItem("Torus")) {
                     vfx::VFXNode newNode;
                     newNode.id = currentGraph->nextNodeId++;
                     newNode.type = vfx::VFXNodeType::Shape;
-                    newNode.name = "Circle";
+                    newNode.name = "Torus";
                     newNode.position = glm::vec2(contextMenuPosition.x, contextMenuPosition.y);
-                    initializeShapeProperties(newNode, vfx::ShapeType::Circle);
+                    initializeShapeProperties(newNode, vfx::ShapeType::Torus);
                     currentGraph->nodes.push_back(std::move(newNode));
                     if (onGraphChanged) onGraphChanged();
                 }

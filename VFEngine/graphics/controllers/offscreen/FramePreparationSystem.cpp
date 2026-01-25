@@ -1,5 +1,6 @@
 #include "FramePreparationSystem.hpp"
 #include "SceneBVHManager.hpp"
+#include "LightBVHManager.hpp"
 #include "CameraController.hpp"
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/mesh/StaticMeshPipeline.hpp"
@@ -10,7 +11,10 @@
 #include "../../render/tools/FrustumDebugRenderer.hpp"
 #include "../../render/tools/AudioSphereDebugRenderer.hpp"
 #include "../../render/tools/PhysicsDebugRenderer.hpp"
+#include "../../render/tools/LightGizmoDebugRenderer.hpp"
+#include "../../render/tools/ClusterDebugRenderer.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
+#include "../../render/lighting/ClusterGridManager.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -75,7 +79,6 @@ namespace controllers::offscreen
             return;
         }
 
-        // Update runtime animators during play mode
         if (ctx.playModeActive)
         {
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
@@ -265,6 +268,19 @@ namespace controllers::offscreen
 
                 meshDrawList.push_back(buildRenderData(entity, meshComp, worldTransform));
             }
+        }
+
+        if (useGPUDrivenCulling && ctx.lightBvhManager && frustumReady)
+        {
+            ctx.lightBvhManager->update();
+
+            std::vector<uint32_t> visibleLights;
+            ctx.lightBvhManager->queryFrustum(*activeFrustum, visibleLights);
+            renderHandler->setVisibleLightsFromBVH(visibleLights);
+        }
+        else if (useGPUDrivenCulling)
+        {
+            renderHandler->clearVisibleLights();
         }
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
@@ -489,7 +505,6 @@ namespace controllers::offscreen
 
             render::mesh::PhysicsColliderRenderData renderData;
 
-            // Size is passed separately to PhysicsDebugRenderer which scales unit geometry
             glm::mat4 offsetMatrix = glm::translate(glm::mat4(1.0f), colliderComp.offset);
             renderData.worldMatrix = worldTransform.worldMatrix * offsetMatrix;
 
@@ -539,5 +554,246 @@ namespace controllers::offscreen
         }
 
         renderHandler->setPhysicsColliderDrawList(std::move(colliderDrawList));
+    }
+
+    void FramePreparationSystem::collectDirectionalLightGizmos(
+        std::vector<render::mesh::LightGizmoRenderData>& drawList)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::DirectionalLightComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& lightComp = view.get<components::DirectionalLightComponent>(entity);
+            if (!lightComp.showGizmo)
+            {
+                continue;
+            }
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::LightGizmoRenderData renderData;
+            renderData.type = render::mesh::LightGizmoType::Directional;
+            renderData.worldMatrix = worldTransform.worldMatrix;
+            renderData.color = lightComp.color;
+
+            drawList.push_back(renderData);
+        }
+    }
+
+    void FramePreparationSystem::collectPointLightGizmos(
+        std::vector<render::mesh::LightGizmoRenderData>& drawList)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& lightComp = view.get<components::PointLightComponent>(entity);
+            if (!lightComp.showGizmo)
+            {
+                continue;
+            }
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::LightGizmoRenderData renderData;
+            renderData.type = render::mesh::LightGizmoType::Point;
+            renderData.worldMatrix = worldTransform.worldMatrix;
+            renderData.color = lightComp.color;
+            renderData.radius = lightComp.radius;
+
+            drawList.push_back(renderData);
+        }
+    }
+
+    void FramePreparationSystem::collectSpotLightGizmos(
+        std::vector<render::mesh::LightGizmoRenderData>& drawList)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive)
+                {
+                    continue;
+                }
+            }
+
+            const auto& lightComp = view.get<components::SpotLightComponent>(entity);
+            if (!lightComp.showGizmo)
+            {
+                continue;
+            }
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+
+            render::mesh::LightGizmoRenderData renderData;
+            renderData.type = render::mesh::LightGizmoType::Spot;
+            renderData.worldMatrix = worldTransform.worldMatrix;
+            renderData.color = lightComp.color;
+            renderData.innerAngle = lightComp.innerAngle;
+            renderData.outerAngle = lightComp.outerAngle;
+            renderData.range = lightComp.range;
+
+            drawList.push_back(renderData);
+        }
+    }
+
+    void FramePreparationSystem::prepareLightGizmos(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+
+        if (ctx.lightBvhManager)
+        {
+            ctx.lightBvhManager->update();
+        }
+
+        if (ctx.playModeActive || !ctx.showDebugRendering)
+        {
+            renderHandler->setLightGizmoDrawList({});
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        size_t estimatedCount =
+            registry.view<components::DirectionalLightComponent>().size() +
+            registry.view<components::PointLightComponent>().size() +
+            registry.view<components::SpotLightComponent>().size();
+
+        std::vector<render::mesh::LightGizmoRenderData> lightGizmoDrawList;
+        lightGizmoDrawList.reserve(estimatedCount);
+
+        collectDirectionalLightGizmos(lightGizmoDrawList);
+        collectPointLightGizmos(lightGizmoDrawList);
+        collectSpotLightGizmos(lightGizmoDrawList);
+
+        if (!lightGizmoDrawList.empty())
+        {
+            if (!renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initMeshPipeline();
+            }
+            if (!renderHandler->isDebugRendererInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+        }
+
+        renderHandler->setLightGizmoDrawList(std::move(lightGizmoDrawList));
+    }
+
+    void FramePreparationSystem::prepareClusterDebug(const FrameContext& ctx)
+    {
+        auto* renderHandler = ctx.renderHandler;
+        if (!renderHandler)
+        {
+            return;
+        }
+
+        if (ctx.playModeActive || !ctx.showDebugRendering || !ctx.showClusterDebug)
+        {
+            renderHandler->setShowClusterDebug(false);
+            return;
+        }
+
+        if (!ctx.cameraController)
+        {
+            renderHandler->setShowClusterDebug(false);
+            return;
+        }
+
+        renderHandler->setShowClusterDebug(true);
+
+        auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
+        if (!gpuRenderer)
+        {
+            return;
+        }
+
+        auto* clusterGridManager = gpuRenderer->getClusterGridManager();
+        if (!clusterGridManager || !clusterGridManager->isInitialized())
+        {
+            return;
+        }
+
+        glm::mat4 viewMatrix = ctx.cameraController->getCurrentViewMatrix();
+
+        render::mesh::ClusterDebugRenderData debugData;
+        debugData.clusterAABBs = clusterGridManager->getClusterAABBs();
+        debugData.invViewMatrix = glm::inverse(viewMatrix);
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        auto pointView = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
+        for (auto entity : pointView)
+        {
+            const auto& lightComp = pointView.get<components::PointLightComponent>(entity);
+
+            if (lightComp.showGizmo)
+            {
+                const auto& worldTransform = pointView.get<components::WorldTransformComponent>(entity);
+                glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+                glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
+
+                auto affectedClusters = clusterGridManager->getClusterIndicesForPointLight(viewPos, lightComp.radius);
+                debugData.highlightedClusterIndices.insert(
+                    debugData.highlightedClusterIndices.end(),
+                    affectedClusters.begin(),
+                    affectedClusters.end()
+                );
+            }
+        }
+
+        auto spotView = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
+        for (auto entity : spotView)
+        {
+            const auto& lightComp = spotView.get<components::SpotLightComponent>(entity);
+
+            if (lightComp.showGizmo)
+            {
+                const auto& worldTransform = spotView.get<components::WorldTransformComponent>(entity);
+                glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
+                glm::vec3 worldDir = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+
+                glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
+                glm::vec3 viewDir = glm::normalize(glm::vec3(viewMatrix * glm::vec4(worldDir, 0.0f)));
+
+                float outerAngleCos = std::cos(glm::radians(lightComp.outerAngle));
+                auto affectedClusters = clusterGridManager->getClusterIndicesForSpotLight(
+                    viewPos, viewDir, lightComp.range, outerAngleCos);
+                debugData.highlightedClusterIndices.insert(
+                    debugData.highlightedClusterIndices.end(),
+                    affectedClusters.begin(),
+                    affectedClusters.end()
+                );
+            }
+        }
+
+        debugData.showAllClusters = debugData.highlightedClusterIndices.empty();
+
+        renderHandler->setClusterDebugData(std::move(debugData));
     }
 }

@@ -50,7 +50,7 @@ namespace render::vfx
         inline constexpr uint32_t ShapeSphere = 1 << 8;
         inline constexpr uint32_t ShapeCone = 1 << 9;
         inline constexpr uint32_t ShapeBox = 1 << 10;
-        inline constexpr uint32_t ShapeCircle = 1 << 11;
+        inline constexpr uint32_t ShapeTorus = 1 << 11;
         inline constexpr uint32_t EmitFromSurface = 1 << 12;
         inline constexpr uint32_t RandomDirection = 1 << 13;
     }

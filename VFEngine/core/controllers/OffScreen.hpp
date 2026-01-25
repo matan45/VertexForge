@@ -63,6 +63,7 @@ namespace controllers {
 		CameraId getActiveCameraId() const;
 		void prepareFrameCameraFrustums();
 		void prepareFrameAudioSpheres();
+		void prepareFrameLightGizmos();
 
 		// Billboard API
 		void prepareFrameBillboards();
@@ -94,6 +95,11 @@ namespace controllers {
 		// View Mode API
 		void setViewMode(uint32_t mode);
 		uint32_t getViewMode() const;
+
+		// Cluster Debug API
+		void setShowClusterDebug(bool show);
+		bool getShowClusterDebug() const;
+		void prepareFrameClusterDebug();
 
 		// VFX Runtime API
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);

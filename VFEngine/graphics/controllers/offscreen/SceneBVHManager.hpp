@@ -14,8 +14,6 @@ namespace render
 
 namespace controllers::offscreen
 {
-    class CameraController;
-
     class SceneBVHManager
     {
     private:
@@ -23,17 +21,21 @@ namespace controllers::offscreen
         std::unique_ptr<events::SubscriptionToken> meshDataChangedSubscription;
         std::unique_ptr<events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<events::SubscriptionToken> entityStaticChangedSubscription;
+        std::unique_ptr<events::SubscriptionToken> sceneLoadedSubscription;
+        std::unique_ptr<events::SubscriptionToken> sceneClearedSubscription;
+        std::unique_ptr<events::SubscriptionToken> prefabInstantiatedSubscription;
+        std::unique_ptr<events::SubscriptionToken> entityDuplicatedSubscription;
+
+        void cleanUp();
+
     public:
         explicit SceneBVHManager();
         ~SceneBVHManager();
 
         void init(render::RenderPassHandler* renderHandler);
-        void cleanUp();
 
         void rebuild();
         void markDirty();
-        void markStaticDirty() { sceneBVH.markStaticDirty(); }
-        void markDynamicDirty() { sceneBVH.markDynamicDirty(); }
 
         void updateOcclusionCullingData(render::RenderPassHandler* renderHandler);
 
@@ -51,12 +53,9 @@ namespace controllers::offscreen
         void updateDynamicBVH() { sceneBVH.updateDynamicBVH(); }
         void markDynamicEntityDirty(uint32_t entityId) { sceneBVH.markDynamicEntityDirty(entityId); }
 
-        bool isStaticEntity(uint32_t entityId) const { return sceneBVH.isStaticEntity(entityId); }
-
         size_t getStaticEntityCount() const { return sceneBVH.getStaticEntityCount(); }
         size_t getDynamicEntityCount() const { return sceneBVH.getDynamicEntityCount(); }
         size_t getStaticNodeCount() const { return sceneBVH.getStaticNodeCount(); }
         size_t getDynamicNodeCount() const { return sceneBVH.getDynamicNodeCount(); }
-        
     };
 }

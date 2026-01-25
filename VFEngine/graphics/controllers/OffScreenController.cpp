@@ -8,6 +8,7 @@
 #include "offscreen/MeshAssetManager.hpp"
 #include "offscreen/CameraController.hpp"
 #include "offscreen/SceneBVHManager.hpp"
+#include "offscreen/LightBVHManager.hpp"
 #include "offscreen/FramePreparationSystem.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "../../services/events/EventDispatcher.hpp"
@@ -42,11 +43,13 @@ namespace controllers
         meshAssetManager = std::make_unique<offscreen::MeshAssetManager>(*renderHandler);
         cameraController = std::make_unique<offscreen::CameraController>(*renderHandler);
         bvhManager = std::make_unique<offscreen::SceneBVHManager>();
+        lightBvhManager = std::make_unique<offscreen::LightBVHManager>();
         framePreparation = std::make_unique<offscreen::FramePreparationSystem>();
         statsCollector = std::make_unique<offscreen::CullingStatsCollector>();
 
-        // Initialize BVH manager with render handler
+        // Initialize BVH managers
         bvhManager->init(renderHandler);
+        lightBvhManager->init();
 
         // Subscribe to material saved notifications for cache invalidation
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
@@ -124,6 +127,7 @@ namespace controllers
         offscreen::FrameContext ctx;
         ctx.renderHandler = offScreen->getRenderPassHandler();
         ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
         ctx.cameraController = cameraController.get();
         ctx.playModeActive = playModeActive;
         ctx.showDebugRendering = showDebugRendering;
@@ -139,6 +143,7 @@ namespace controllers
         offscreen::FrameContext ctx;
         ctx.renderHandler = offScreen->getRenderPassHandler();
         ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
         ctx.cameraController = cameraController.get();
         ctx.playModeActive = playModeActive;
         ctx.showDebugRendering = showDebugRendering;
@@ -153,6 +158,7 @@ namespace controllers
         offscreen::FrameContext ctx;
         ctx.renderHandler = offScreen->getRenderPassHandler();
         ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
         ctx.cameraController = cameraController.get();
         ctx.playModeActive = playModeActive;
         ctx.showDebugRendering = showDebugRendering;
@@ -167,6 +173,7 @@ namespace controllers
         offscreen::FrameContext ctx;
         ctx.renderHandler = offScreen->getRenderPassHandler();
         ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
         ctx.cameraController = cameraController.get();
         ctx.playModeActive = playModeActive;
         ctx.showDebugRendering = showDebugRendering;
@@ -176,11 +183,27 @@ namespace controllers
         framePreparation->prepareAudioSpheres(ctx);
     }
 
+    void OffScreenController::prepareFrameLightGizmos()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.showDebugRendering = showDebugRendering;
+        ctx.showBillboardIcons = showBillboardIcons;
+        ctx.showGrid = showGrid;
+
+        framePreparation->prepareLightGizmos(ctx);
+    }
+
     void OffScreenController::prepareGrid()
     {
         offscreen::FrameContext ctx;
         ctx.renderHandler = offScreen->getRenderPassHandler();
         ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
         ctx.cameraController = cameraController.get();
         ctx.playModeActive = playModeActive;
         ctx.showDebugRendering = showDebugRendering;
@@ -251,7 +274,7 @@ namespace controllers
 
     services::CullingDebugStats OffScreenController::getCullingStats() const
     {
-        return statsCollector->collect(offScreen->getRenderPassHandler(), bvhManager.get());
+        return statsCollector->collect(offScreen->getRenderPassHandler(), bvhManager.get(), lightBvhManager.get());
     }
 
     void OffScreenController::setShowGrid(bool show)
@@ -295,6 +318,7 @@ namespace controllers
         offscreen::FrameContext ctx;
         ctx.renderHandler = offScreen->getRenderPassHandler();
         ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
         ctx.cameraController = cameraController.get();
         ctx.playModeActive = playModeActive;
         ctx.showDebugRendering = showDebugRendering;
@@ -303,6 +327,23 @@ namespace controllers
         ctx.showPhysicsDebug = showPhysicsDebug;
 
         framePreparation->preparePhysicsColliders(ctx);
+    }
+
+    void OffScreenController::prepareFrameClusterDebug()
+    {
+        offscreen::FrameContext ctx;
+        ctx.renderHandler = offScreen->getRenderPassHandler();
+        ctx.bvhManager = bvhManager.get();
+        ctx.lightBvhManager = lightBvhManager.get();
+        ctx.cameraController = cameraController.get();
+        ctx.playModeActive = playModeActive;
+        ctx.showDebugRendering = showDebugRendering;
+        ctx.showBillboardIcons = showBillboardIcons;
+        ctx.showGrid = showGrid;
+        ctx.showPhysicsDebug = showPhysicsDebug;
+        ctx.showClusterDebug = showClusterDebug;
+
+        framePreparation->prepareClusterDebug(ctx);
     }
 
     void OffScreenController::setPlayMode(bool playMode)

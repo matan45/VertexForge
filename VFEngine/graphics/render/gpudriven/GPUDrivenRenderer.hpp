@@ -9,10 +9,14 @@
 #include "MeshShaderPipeline.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
+#include "../lighting/GPULightBufferManager.hpp"
+#include "../lighting/ClusterGridManager.hpp"
+#include "../lighting/LightCullingPipeline.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
 #include <unordered_set>
+#include <cstdint>
 
 namespace core
 {
@@ -49,6 +53,9 @@ namespace render::gpudriven
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
         std::unique_ptr<MeshletBuffer> meshletBuffer;
         std::unique_ptr<BoneMatrixManager> boneMatrixManager;
+        std::unique_ptr<lighting::GPULightBufferManager> lightBufferManager;
+        std::unique_ptr<lighting::ClusterGridManager> clusterGridManager;
+        std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
 
         bool initialized = false;
         bool enabled = false;
@@ -76,6 +83,10 @@ namespace render::gpudriven
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
+
+        // BVH-culled visible light entity IDs (set per-frame before dispatchCompute)
+        std::unordered_set<uint32_t> visibleLightIds;
+        bool useBVHLightCulling = false;
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -150,7 +161,26 @@ namespace render::gpudriven
         uint64_t getPerDrawDataBufferSize() const;
         uint64_t getTotalMemoryUsage() const;
 
+        lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
+        lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
+        lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
+
+        // Set visible lights from BVH frustum query (pre-culling before GPU upload)
+        // Pass the result of LightBVH::queryFrustum() to only upload visible lights
+        void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
+
+        void clearVisibleLights();
+        bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
+
     private:
         bool registerMaterialTextures(const std::string& materialPath);
+
+        void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
+                                 const glm::vec3& cameraPosition);
+        void registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
+        TextureIndexResolver createTextureResolver();
+        BoneOffsetResolver updateAnimationBones();
+        void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
+        void updatePipelineDescriptors();
     };
 }

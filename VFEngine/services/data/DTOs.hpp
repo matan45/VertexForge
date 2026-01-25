@@ -199,4 +199,26 @@ namespace services
         bool autoPlay = true;     // Auto-start when play mode begins
         bool loop = true;         // Loop the VFX effect
     };
+
+    struct DirectionalLightData {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity = 1.0f;
+        bool showGizmo = false;
+    };
+
+    struct PointLightData {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity = 1.0f;
+        float radius = 10.0f;
+        bool showGizmo = false;
+    };
+
+    struct SpotLightData {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity = 1.0f;
+        float innerAngle = 30.0f;
+        float outerAngle = 45.0f;
+        float range = 20.0f;
+        bool showGizmo = false;
+    };
 }

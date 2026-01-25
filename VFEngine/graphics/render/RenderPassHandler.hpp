@@ -42,6 +42,8 @@ namespace render
         struct CameraFrustumRenderData;
         struct AudioSphereRenderData;
         struct PhysicsColliderRenderData;
+        struct LightGizmoRenderData;
+        struct ClusterDebugRenderData;
     }
 
     namespace billboard
@@ -120,8 +122,12 @@ namespace render
         void setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums);
         void setAudioSphereDrawList(std::vector<mesh::AudioSphereRenderData>&& spheres);
         void setPhysicsColliderDrawList(std::vector<mesh::PhysicsColliderRenderData>&& colliders);
+        void setLightGizmoDrawList(std::vector<mesh::LightGizmoRenderData>&& gizmos);
         void setShowPhysicsDebug(bool show);
         bool getShowPhysicsDebug() const;
+        void setShowClusterDebug(bool show);
+        bool getShowClusterDebug() const;
+        void setClusterDebugData(mesh::ClusterDebugRenderData&& data);
         void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
         DebugRenderer* getDebugRenderer() const { return debugRenderer.get(); }
@@ -131,6 +137,10 @@ namespace render
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
+
+        // BVH light culling: set visible lights from frustum query
+        void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
+        void clearVisibleLights();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         services::IVFXRuntimeProvider* getVFXRuntimeProvider() const { return vfxRuntimeProvider; }

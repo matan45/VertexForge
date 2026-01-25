@@ -83,8 +83,13 @@ namespace windows
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
         bool hasVFX = vfxDrawer.draw(handle);
 
+        bool hasDirectionalLight = directionalLightDrawer.draw(handle);
+        bool hasPointLight = pointLightDrawer.draw(handle);
+        bool hasSpotLight = spotLightDrawer.draw(handle);
+
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
-                               hasCollider, hasRigidBody, hasVFX);
+                               hasCollider, hasRigidBody, hasVFX,
+                               hasDirectionalLight, hasPointLight, hasSpotLight);
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

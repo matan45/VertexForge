@@ -8,7 +8,8 @@ namespace windows::details
 {
     void AddComponentPopup::draw(services::EntityHandle handle, bool hasCamera, bool hasMesh,
                                  bool hasAudio2D, bool hasAudio3D, bool hasScript,
-                                 bool hasCollider, bool hasRigidBody, bool hasVFX)
+                                 bool hasCollider, bool hasRigidBody, bool hasVFX,
+                                 bool hasDirectionalLight, bool hasPointLight, bool hasSpotLight)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -153,8 +154,56 @@ namespace windows::details
                 }
             }
 
+            // Lighting components section
+            ImGui::Spacing();
+            ImGui::TextDisabled("Lighting");
+            ImGui::Separator();
+
+            if (!hasDirectionalLight)
+            {
+                if (ImGui::Selectable("  Directional Light"))
+                {
+                    events::scene::AddDirectionalLightComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Infinite distance light (sun, moon)");
+                }
+            }
+
+            if (!hasPointLight)
+            {
+                if (ImGui::Selectable("  Point Light"))
+                {
+                    events::scene::AddPointLightComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Omnidirectional light with range attenuation");
+                }
+            }
+
+            if (!hasSpotLight)
+            {
+                if (ImGui::Selectable("  Spot Light"))
+                {
+                    events::scene::AddSpotLightComponentCommand cmd;
+                    cmd.entity = handle;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Cone-shaped light with inner/outer angles");
+                }
+            }
+
             bool allAdded = hasCamera && hasMesh && hasAudio2D && hasAudio3D && hasScript &&
-                           hasCollider && hasRigidBody && hasVFX;
+                           hasCollider && hasRigidBody && hasVFX &&
+                           hasDirectionalLight && hasPointLight && hasSpotLight;
             if (allAdded)
             {
                 ImGui::Spacing();

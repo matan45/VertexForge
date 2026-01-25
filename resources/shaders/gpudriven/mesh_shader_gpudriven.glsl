@@ -36,8 +36,8 @@ struct PerDrawData {
     uint meshletCount;
 
     uint baseVertexOffset;
-    uint boneMatrixOffset; // Offset into bone SSBO, 0xFFFFFFFF if static
-    uint boneCount;        // Number of bones for this object
+    uint boneMatrixOffset; // 0xFFFFFFFF if static mesh
+    uint boneCount;
     uint padding3;
 };
 
@@ -85,7 +85,6 @@ layout(std430, set = 4, binding = 0) readonly buffer VertexBuffer {
     float vertexData[];
 };
 
-// Global bone matrix SSBO for skinning
 layout(std430, set = 5, binding = 0) readonly buffer BoneMatrices {
     mat4 boneMatrices[];
 };
@@ -150,9 +149,8 @@ void main() {
         if (localVertexIndex < vertexCount) {
             uint meshletLocalVertexIdx = meshletVertices[meshlet.vertexOffset + localVertexIndex];
             uint globalVertexIndex = meshlet.globalVertexOffset + meshletLocalVertexIdx;
-            uint baseIdx = globalVertexIndex * 16; // 16 floats per vertex (with bone data)
+            uint baseIdx = globalVertexIndex * 16;
 
-            // Read vertex position and normal
             vec3 position = vec3(
                 vertexData[baseIdx + 0],
                 vertexData[baseIdx + 1],
@@ -173,7 +171,6 @@ void main() {
                     floatBitsToInt(vertexData[baseIdx + 10]),
                     floatBitsToInt(vertexData[baseIdx + 11])
                 );
-                // Read bone weights
                 vec4 boneWeights = vec4(
                     vertexData[baseIdx + 12],
                     vertexData[baseIdx + 13],
@@ -181,7 +178,6 @@ void main() {
                     vertexData[baseIdx + 15]
                 );
 
-                // Compute skin matrix from weighted bone transforms
                 mat4 skinMatrix = mat4(0.0);
                 float totalWeight = 0.0;
                 for (int i = 0; i < 4; ++i) {
@@ -288,8 +284,8 @@ struct PerDrawData {
     uint meshletCount;
 
     uint baseVertexOffset;
-    uint boneMatrixOffset; // Offset into bone SSBO, 0xFFFFFFFF if static
-    uint boneCount;        // Number of bones for this object
+    uint boneMatrixOffset; // 0xFFFFFFFF if static mesh
+    uint boneCount;
     uint padding3;
 };
 
@@ -305,6 +301,295 @@ layout(push_constant) uniform PushConstants {
     float screenWidth;
     float screenHeight;
 } pc;
+
+// Set 6: Light Data
+
+struct DirectionalLight {
+    vec3 direction;
+    float intensity;
+    vec3 color;
+    uint padding;
+};
+
+layout(std430, set = 6, binding = 0) readonly buffer DirectionalLightBuffer {
+    DirectionalLight directionalLights[];
+};
+
+struct PointLight {
+    vec3 position;
+    float radius;
+    vec3 color;
+    float intensity;
+};
+
+layout(std430, set = 6, binding = 1) readonly buffer PointLightBuffer {
+    PointLight pointLights[];
+};
+
+struct SpotLight {
+    vec3 position;
+    float range;
+    vec3 direction;
+    float intensity;
+    vec3 color;
+    float cosInnerAngle;
+    float cosOuterAngle;
+    float padding0;
+    float padding1;
+    float padding2;
+};
+
+layout(std430, set = 6, binding = 2) readonly buffer SpotLightBuffer {
+    SpotLight spotLights[];
+};
+
+struct LightCounts {
+    uint directionalCount;
+    uint pointCount;
+    uint spotCount;
+    uint padding;
+};
+
+layout(std140, set = 6, binding = 3) uniform LightCountsUBO {
+    LightCounts lightCounts;
+};
+
+// Set 7: Cluster Grid Params
+struct ClusterGridParams {
+    uvec4 gridDimensions;  // xyz = tilesX, tilesY, slicesZ, w = totalClusters
+    vec4 screenParams;     // xy = screenSize, zw = tileSizePixels
+    vec4 depthParams;      // x = near, y = far, z = log(far/near), w = slicesZ/log(far/near)
+    mat4 invProjection;
+    vec4 clusterScale;
+    vec4 clusterBias;
+};
+
+layout(std140, set = 7, binding = 0) uniform ClusterParamsUBO {
+    ClusterGridParams clusterParams;
+};
+
+// Set 8: Light Culling Output
+struct ClusterLightData {
+    uint offset;
+    uint counts;   // lower 16 bits = point count, upper 16 bits = spot count
+};
+
+layout(std430, set = 8, binding = 0) readonly buffer ClusterLightGridBuffer {
+    ClusterLightData clusterLightGrid[];
+};
+
+layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer {
+    uint lightIndexList[];
+};
+
+const float LIGHTING_PI = 3.14159265359;
+
+// Light index packing scheme for the cluster light index list:
+// - Point light indices are stored as-is (bits 0-30 = index)
+// - Spot light indices have the high bit (bit 31) set to distinguish them
+// This allows both light types to share the same index list while being identifiable
+const uint SPOT_LIGHT_FLAG = 0x80000000u;  // High bit flag for spot lights
+const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu; // Mask to extract the actual light index
+
+// Convert window-space depth to linear view-space depth
+// Assumes Vulkan's standard [0, 1] depth range with default viewport settings
+// where gl_FragCoord.z maps directly to [0, 1] (near to far)
+// Formula derivation: z_view = near * far / (far - z_ndc * (far - near))
+float linearizeDepth(float windowZ) {
+    float near = clusterParams.depthParams.x;
+    float far = clusterParams.depthParams.y;
+    // Guard against division by zero (occurs if windowZ > 1, which shouldn't happen)
+    float denominator = max(far - windowZ * (far - near), 0.0001);
+    return near * far / denominator;
+}
+
+// Calculate cluster index from fragment position
+uint getClusterIndex(vec2 fragCoord, float viewZ) {
+    // Clamp viewZ to near plane to prevent undefined log() behavior
+    // This handles fragments at or behind the camera
+    float clampedZ = max(viewZ, clusterParams.depthParams.x);
+
+    // Tile coordinates from screen position
+    uint tileX = uint(fragCoord.x / clusterParams.screenParams.z);
+    uint tileY = uint(fragCoord.y / clusterParams.screenParams.w);
+
+    // Slice from logarithmic depth
+    float logRatio = log(clampedZ / clusterParams.depthParams.x);
+    uint slice = uint(logRatio * clusterParams.depthParams.w);
+
+    // Clamp to valid range
+    tileX = min(tileX, clusterParams.gridDimensions.x - 1u);
+    tileY = min(tileY, clusterParams.gridDimensions.y - 1u);
+    slice = min(slice, clusterParams.gridDimensions.z - 1u);
+
+    // Linear index: x + y * tilesX + z * tilesX * tilesY
+    return tileX + tileY * clusterParams.gridDimensions.x +
+           slice * clusterParams.gridDimensions.x * clusterParams.gridDimensions.y;
+}
+
+// Smooth distance attenuation with range falloff
+float smoothDistanceAttenuation(float distance, float range) {
+    float distRatio = distance / range;
+    float attenuation = clamp(1.0 - distRatio * distRatio, 0.0, 1.0);
+    return attenuation * attenuation;
+}
+
+// Physical distance attenuation (inverse square with smooth cutoff)
+// Intensity scale: makes intensity=1 equivalent to a bright light at 1 meter distance
+// Without this, you'd need intensity=10000+ to see anything at typical distances
+const float LIGHT_INTENSITY_SCALE = 100.0;
+
+float physicalAttenuation(float distance, float range) {
+    float windowFn = smoothDistanceAttenuation(distance, range);
+    float distAtt = LIGHT_INTENSITY_SCALE / max(distance * distance, 0.0001);
+    return distAtt * windowFn;
+}
+
+float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float cosOuter) {
+    float cosAngle = dot(-lightDir, spotDir);
+
+    // Handle degenerate case: hard-edged spotlight with no falloff zone
+    if (cosInner <= cosOuter) {
+        return cosAngle >= cosOuter ? 1.0 : 0.0;
+    }
+
+    return clamp((cosAngle - cosOuter) / (cosInner - cosOuter), 0.0, 1.0);
+}
+
+// GGX/Trowbridge-Reitz Normal Distribution Function
+float distributionGGX(float NdotH, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH2 = NdotH * NdotH;
+    float denom = NdotH2 * (a2 - 1.0) + 1.0;
+    return a2 / (LIGHTING_PI * denom * denom);
+}
+
+// Schlick-GGX Geometry function
+float geometrySchlickGGX(float NdotV, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+// Smith's combined geometry term
+float geometrySmith(float NdotV, float NdotL, float roughness) {
+    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+}
+
+// Fresnel-Schlick approximation
+vec3 fresnelSchlickDirect(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// Evaluate point light PBR contribution
+vec3 evaluatePointLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
+                        float metallic, float roughness, vec3 F0,
+                        PointLight light) {
+    vec3 L = light.position - worldPos;
+    float distance = length(L);
+
+    if (distance > light.radius) return vec3(0.0);
+
+    L = normalize(L);
+
+    // Early exit if surface faces away from light (avoids expensive BRDF calculations)
+    float NdotL = dot(N, L);
+    if (NdotL <= 0.0) return vec3(0.0);
+
+    vec3 H = normalize(V + L);
+
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotH = max(dot(N, H), 0.0);
+    float HdotV = max(dot(H, V), 0.0);
+
+    float attenuation = physicalAttenuation(distance, light.radius);
+    vec3 radiance = light.color * light.intensity * attenuation;
+
+    // Cook-Torrance BRDF
+    float D = distributionGGX(NdotH, roughness);
+    float G = geometrySmith(NdotV, NdotL, roughness);
+    vec3 F = fresnelSchlickDirect(HdotV, F0);
+
+    vec3 numerator = D * G * F;
+    float denominator = 4.0 * NdotV * NdotL + 0.0001;
+    vec3 specularBRDF = numerator / denominator;
+
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
+}
+
+vec3 evaluateSpotLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
+                       float metallic, float roughness, vec3 F0,
+                       SpotLight light) {
+    vec3 L = light.position - worldPos;
+    float distance = length(L);
+
+    if (distance > light.range) return vec3(0.0);
+
+    L = normalize(L);
+
+    float spotAtt = spotAngleAttenuation(L, light.direction, light.cosInnerAngle, light.cosOuterAngle);
+    if (spotAtt <= 0.0) return vec3(0.0);
+
+    // Early exit if surface faces away from light (avoids expensive BRDF calculations)
+    float NdotL = dot(N, L);
+    if (NdotL <= 0.0) return vec3(0.0);
+
+    vec3 H = normalize(V + L);
+
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotH = max(dot(N, H), 0.0);
+    float HdotV = max(dot(H, V), 0.0);
+
+    float distAtt = physicalAttenuation(distance, light.range);
+    vec3 radiance = light.color * light.intensity * distAtt * spotAtt;
+
+    // Cook-Torrance BRDF
+    float D = distributionGGX(NdotH, roughness);
+    float G = geometrySmith(NdotV, NdotL, roughness);
+    vec3 F = fresnelSchlickDirect(HdotV, F0);
+
+    vec3 numerator = D * G * F;
+    float denominator = 4.0 * NdotV * NdotL + 0.0001;
+    vec3 specularBRDF = numerator / denominator;
+
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
+}
+
+vec3 evaluateDirectionalLight(vec3 N, vec3 V, vec3 albedo,
+                              float metallic, float roughness, vec3 F0,
+                              DirectionalLight light) {
+    vec3 L = -normalize(light.direction);
+
+    // Early exit if surface faces away from light (avoids expensive BRDF calculations)
+    float NdotL = dot(N, L);
+    if (NdotL <= 0.0) return vec3(0.0);
+
+    vec3 H = normalize(V + L);
+
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotH = max(dot(N, H), 0.0);
+    float HdotV = max(dot(H, V), 0.0);
+
+    vec3 radiance = light.color * light.intensity;
+
+    // Cook-Torrance BRDF
+    float D = distributionGGX(NdotH, roughness);
+    float G = geometrySmith(NdotV, NdotL, roughness);
+    vec3 F = fresnelSchlickDirect(HdotV, F0);
+
+    vec3 numerator = D * G * F;
+    float denominator = 4.0 * NdotV * NdotL + 0.0001;
+    vec3 specularBRDF = numerator / denominator;
+
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
+}
 
 const float ALPHA_CUTOFF = 0.5;
 const float MAX_REFLECTION_LOD = 4.0;
@@ -414,6 +699,37 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
+    vec3 directLighting = vec3(0.0);
+
+    // Skip cluster lookup if no local lights exist (uniform branch, no divergence)
+    if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
+        float linearZ = linearizeDepth(gl_FragCoord.z);
+        uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
+
+        ClusterLightData clusterData = clusterLightGrid[clusterIdx];
+        uint clusterPointCount = clusterData.counts & 0xFFFFu;
+        uint clusterSpotCount = clusterData.counts >> 16u;
+        uint lightOffset = clusterData.offset;
+
+        for (uint i = 0u; i < clusterPointCount; ++i) {
+            uint lightIdx = lightIndexList[lightOffset + i];
+            PointLight light = pointLights[lightIdx];
+            directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
+        }
+
+        for (uint i = 0u; i < clusterSpotCount; ++i) {
+            uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
+            uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
+            SpotLight light = spotLights[lightIdx];
+            directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
+        }
+    }
+
+    for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
+        DirectionalLight light = directionalLights[i];
+        directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light);
+    }
+
     float emissionMultiplier = emission;
     if (drawData.shaderGroupIndex == 2u) {
         emissionMultiplier *= cos(camera.time);
@@ -426,13 +742,12 @@ void main() {
         emissive = albedo * emissionMultiplier;
     }
 
-    vec3 color = ambient + emissive;
+    vec3 color = ambient + directLighting + emissive;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
     uint viewModeValue = pc.viewMode & 0xFFu;
 
-    // Meshlet view mode
     if (viewModeValue == 1u) {
         uint h = fragMeshletIndex;
         h = ((h >> 16) ^ h) * 0x45d9f3b;
@@ -448,7 +763,6 @@ void main() {
         color = meshletColor;
     }
 
-    // LOD view mode
     if (viewModeValue == 2u) {
         vec3 lodColors[4] = vec3[4](
             vec3(0.0, 1.0, 0.0),
@@ -460,7 +774,6 @@ void main() {
         color = mix(color, lodColors[lod], 0.5);
     }
 
-    // Mipmap view mode
     if (viewModeValue == 3u) {
         float dx = max(length(texDx), length(texDy));
         float mipLevel = log2(max(dx * 1024.0, 1.0));
@@ -478,6 +791,24 @@ void main() {
         int idx = clamp(int(floor(t)), 0, 3);
         vec3 mipColor = mix(mipColors[idx], mipColors[idx + 1], fract(t));
         color = mipColor;
+    }
+
+    if (viewModeValue == 4u) {
+        float linearZ = linearizeDepth(gl_FragCoord.z);
+        uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
+
+        uint h = clusterIdx;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = (h >> 16) ^ h;
+
+        vec3 clusterColor = vec3(
+            float((h >> 0) & 0xFFu) / 255.0,
+            float((h >> 8) & 0xFFu) / 255.0,
+            float((h >> 16) & 0xFFu) / 255.0
+        );
+        clusterColor = normalize(clusterColor + 0.1) * 0.8;
+        color = clusterColor;
     }
 
     outColor = vec4(color, alpha);

@@ -23,11 +23,14 @@ namespace components
     struct RigidBodyComponent;
     struct AnimatorComponent;
     struct VFXComponent;
+    struct DirectionalLightComponent;
+    struct PointLightComponent;
+    struct SpotLightComponent;
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
                                                ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
-                                               VFXComponent>;
+                                               VFXComponent, DirectionalLightComponent, PointLightComponent, SpotLightComponent>;
 
     struct WorldTransformComponent
     {
@@ -79,7 +82,6 @@ namespace components
         glm::vec3 scale{1.0f};
         bool isDirty = true;
         bool isStatic = true;
-
 
         void setPosition(const glm::vec3& newPos)
         {
@@ -172,7 +174,6 @@ namespace components
             projectionMatrix[1][1] *= -1;
         }
 
-
         void updateViewMatrix(const glm::vec3& position, const glm::vec3& rotation)
         {
             glm::mat4 model = glm::mat4(1.0f);
@@ -244,21 +245,22 @@ namespace components
         }
     };
 
-
     enum class BillboardSizeMode : uint8_t
     {
         ScreenSpace,
         WorldSpace
     };
 
-
     enum class BillboardIconType : uint8_t
     {
-        Light = 0,
+        DirectionalLight = 0,
+        PointLight,
+        SpotLight,
         Camera,
-        AudioSource,
+        Audio2D,
+        Audio3D,
         Particle,
-        Custom,
+        Custom
     };
 
     struct BillboardComponent
@@ -269,8 +271,7 @@ namespace components
         BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
         glm::vec2 size{64.0f, 64.0f}; // Pixels (screen-space) or world units
 
-        glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f}; // RGBA
-
+        glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
 
         bool editorOnly = true;
         bool selectable = true;
@@ -284,15 +285,17 @@ namespace components
 
             switch (iconType)
             {
-            case BillboardIconType::Light: return 0;
-            case BillboardIconType::Camera: return 1;
-            case BillboardIconType::AudioSource: return 2;
-            case BillboardIconType::Particle: return 3;
+            case BillboardIconType::DirectionalLight: return 0;
+            case BillboardIconType::PointLight: return 1;
+            case BillboardIconType::SpotLight: return 2;
+            case BillboardIconType::Camera: return 3;
+            case BillboardIconType::Audio2D: return 4;
+            case BillboardIconType::Audio3D: return 5;
+            case BillboardIconType::Particle: return 6;
             default: return atlasIndex;
             }
         }
     };
-
 
     struct AudioSource2DComponent
     {
@@ -304,7 +307,6 @@ namespace components
         uint64_t activeHandle = 0;
         bool isPlaying = false;
     };
-
 
     struct AudioSource3DComponent
     {
@@ -319,7 +321,6 @@ namespace components
         uint64_t activeHandle = 0;
         bool isPlaying = false;
     };
-
 
     struct ScriptEntry
     {
@@ -471,5 +472,30 @@ namespace components
         // Runtime state (managed by VFXSceneRenderer, not serialized)
         uint32_t runtimeInstanceId = 0;   // Internal ID for VFXSceneRenderer
         bool isPlaying = false;           // Current playback state
+    };
+
+    struct DirectionalLightComponent
+    {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity{1.0f};
+        bool showGizmo = false;
+    };
+
+    struct PointLightComponent
+    {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity{1.0f};
+        float radius{10.0f};
+        bool showGizmo = false;
+    };
+
+    struct SpotLightComponent
+    {
+        glm::vec3 color{1.0f, 1.0f, 1.0f};
+        float intensity{1.0f};
+        float innerAngle{30.0f};  // degrees
+        float outerAngle{45.0f};  // degrees
+        float range{20.0f};
+        bool showGizmo = false;
     };
 }

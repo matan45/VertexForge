@@ -12,6 +12,8 @@
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "tools/AudioSphereDebugRenderer.hpp"
 #include "tools/PhysicsDebugRenderer.hpp"
+#include "tools/LightGizmoDebugRenderer.hpp"
+#include "tools/ClusterDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
@@ -50,9 +52,6 @@ namespace render
     {
         clearColor->init();
 
-        // Register callback to invalidate custom shader cache when materials change
-        // Done in init() rather than constructor for exception safety - if init() fails,
-        // destructor will still be called and properly unregister the callback
         if (!materialChangeCallbackId) {
             materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
                 [this](const std::string& materialPath) {
@@ -329,6 +328,22 @@ namespace render
         currentTime = time;
     }
 
+    void RenderPassHandler::setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights)
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->setVisibleLightsFromBVH(visibleLights);
+        }
+    }
+
+    void RenderPassHandler::clearVisibleLights()
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->clearVisibleLights();
+        }
+    }
+
     void RenderPassHandler::setViewMode(uint32_t mode)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
@@ -396,6 +411,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setLightGizmoDrawList(std::vector<mesh::LightGizmoRenderData>&& gizmos)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setLightGizmoDrawList(std::move(gizmos));
+        }
+    }
+
     void RenderPassHandler::setShowPhysicsDebug(bool show)
     {
         if (debugRenderer)
@@ -411,6 +434,31 @@ namespace render
             return debugRenderer->getShowPhysicsDebug();
         }
         return false;
+    }
+
+    void RenderPassHandler::setShowClusterDebug(bool show)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setShowClusterDebug(show);
+        }
+    }
+
+    bool RenderPassHandler::getShowClusterDebug() const
+    {
+        if (debugRenderer)
+        {
+            return debugRenderer->getShowClusterDebug();
+        }
+        return false;
+    }
+
+    void RenderPassHandler::setClusterDebugData(mesh::ClusterDebugRenderData&& data)
+    {
+        if (debugRenderer)
+        {
+            debugRenderer->setClusterDebugData(std::move(data));
+        }
     }
 
     void RenderPassHandler::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
