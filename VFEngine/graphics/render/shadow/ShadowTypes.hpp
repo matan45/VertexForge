@@ -1,0 +1,260 @@
+#pragma once
+
+#include <glm/glm.hpp>
+#include <vulkan/vulkan.hpp>
+#include <cstdint>
+#include <cstddef>
+#include <limits>
+#include <vector>
+
+namespace render::shadow
+{
+    // ============================================
+    // Shadow System Constants
+    // ============================================
+    namespace ShadowConstants
+    {
+        // Default shadow atlas dimensions (4K x 4K)
+        inline constexpr uint32_t DEFAULT_ATLAS_SIZE = 4096;
+
+        // Maximum supported shadow maps per type
+        inline constexpr uint32_t MAX_DIRECTIONAL_SHADOW_CASTERS = 4;   // Usually 1-2, CSM uses single light
+        inline constexpr uint32_t MAX_POINT_SHADOW_CASTERS = 32;        // Cube maps (6 faces each)
+        inline constexpr uint32_t MAX_SPOT_SHADOW_CASTERS = 64;         // 2D shadow maps
+
+        // CSM (Cascaded Shadow Map) settings
+        inline constexpr uint32_t MAX_CSM_CASCADES = 4;
+        inline constexpr uint32_t DEFAULT_CSM_CASCADES = 4;
+
+        // Default shadow map resolutions
+        inline constexpr uint32_t RESOLUTION_LOW = 512;
+        inline constexpr uint32_t RESOLUTION_MEDIUM = 1024;
+        inline constexpr uint32_t RESOLUTION_HIGH = 2048;
+        inline constexpr uint32_t RESOLUTION_ULTRA = 4096;
+
+        inline constexpr uint32_t DEFAULT_DIRECTIONAL_RESOLUTION = RESOLUTION_HIGH; // Per cascade
+        inline constexpr uint32_t DEFAULT_POINT_RESOLUTION = RESOLUTION_LOW;         // Per cube face
+        inline constexpr uint32_t DEFAULT_SPOT_RESOLUTION = RESOLUTION_MEDIUM;
+
+        // Shadow bias defaults
+        inline constexpr float DEFAULT_DEPTH_BIAS = 0.005f;
+        inline constexpr float DEFAULT_SLOPE_BIAS = 1.5f;
+        inline constexpr float DEFAULT_NORMAL_BIAS = 0.02f;
+
+        // Maximum total shadow views (for buffer allocation)
+        // Directional: 4 casters * 4 cascades = 16
+        // Point: 32 casters * 6 faces = 192
+        // Spot: 64 casters * 1 = 64
+        // Total: 272
+        inline constexpr uint32_t MAX_TOTAL_SHADOW_VIEWS = 272;
+    }
+
+    // ============================================
+    // Enums
+    // ============================================
+    enum class ShadowMapType : uint8_t
+    {
+        None = 0,
+        Directional2D,      // Single 2D shadow map (simple directional)
+        DirectionalCSM,     // Cascaded Shadow Maps
+        PointCube,          // Omnidirectional cube map (6 faces)
+        Spot2D              // Perspective 2D shadow map
+    };
+
+    enum class ShadowFilterMode : uint8_t
+    {
+        None = 0,           // Hard shadows (no filtering)
+        PCF,                // Percentage Closer Filtering
+        PCSS,               // Percentage Closer Soft Shadows (future)
+        VSM                 // Variance Shadow Maps (future)
+    };
+
+    enum class ShadowQuality : uint8_t
+    {
+        Low = 0,            // 512px
+        Medium,             // 1024px
+        High,               // 2048px
+        Ultra               // 4096px
+    };
+
+    // ============================================
+    // Handle for referencing shadow maps in atlas
+    // ============================================
+    struct ShadowMapHandle
+    {
+        uint32_t atlasIndex = std::numeric_limits<uint32_t>::max();  // Tile index in atlas
+        uint32_t layer = 0;              // For cube maps: face index (0-5)
+        uint16_t cascadeIndex = 0;       // For CSM: cascade level (0-3)
+        ShadowMapType type = ShadowMapType::None;
+
+        [[nodiscard]] bool isValid() const
+        {
+            return atlasIndex != std::numeric_limits<uint32_t>::max() &&
+                   type != ShadowMapType::None;
+        }
+
+        void invalidate()
+        {
+            atlasIndex = std::numeric_limits<uint32_t>::max();
+            layer = 0;
+            cascadeIndex = 0;
+            type = ShadowMapType::None;
+        }
+    };
+
+    // ============================================
+    // Per-light shadow configuration
+    // ============================================
+    struct ShadowSettings
+    {
+        // Quality settings
+        uint32_t resolution = ShadowConstants::DEFAULT_SPOT_RESOLUTION;
+        ShadowFilterMode filterMode = ShadowFilterMode::PCF;
+        ShadowQuality quality = ShadowQuality::High;
+
+        // Bias settings to prevent shadow acne
+        float depthBias = ShadowConstants::DEFAULT_DEPTH_BIAS;
+        float slopeBias = ShadowConstants::DEFAULT_SLOPE_BIAS;
+        float normalBias = ShadowConstants::DEFAULT_NORMAL_BIAS;
+
+        // Range settings
+        float nearPlane = 0.1f;
+        float farPlane = 100.0f;          // For point/spot lights
+
+        // CSM-specific (for directional lights)
+        uint32_t cascadeCount = ShadowConstants::DEFAULT_CSM_CASCADES;
+        float cascadeSplitLambda = 0.75f;  // Logarithmic vs linear split blend
+
+        // Soft shadow settings
+        float softness = 1.0f;             // For PCF/PCSS kernel size
+        uint32_t sampleCount = 16;         // PCF tap count
+
+        bool enabled = true;
+        bool castShadows = true;
+
+        // Get resolution from quality level
+        [[nodiscard]] static uint32_t getResolutionForQuality(ShadowQuality q)
+        {
+            switch (q)
+            {
+                case ShadowQuality::Low:    return ShadowConstants::RESOLUTION_LOW;
+                case ShadowQuality::Medium: return ShadowConstants::RESOLUTION_MEDIUM;
+                case ShadowQuality::High:   return ShadowConstants::RESOLUTION_HIGH;
+                case ShadowQuality::Ultra:  return ShadowConstants::RESOLUTION_ULTRA;
+                default: return ShadowConstants::RESOLUTION_HIGH;
+            }
+        }
+    };
+
+    // ============================================
+    // View matrix and projection for shadow rendering
+    // ============================================
+    struct ShadowView
+    {
+        glm::mat4 viewMatrix{1.0f};
+        glm::mat4 projectionMatrix{1.0f};
+        glm::mat4 viewProjectionMatrix{1.0f};
+
+        // Viewport in atlas (normalized 0-1)
+        glm::vec4 atlasViewport{0.0f, 0.0f, 1.0f, 1.0f};  // x, y, width, height
+
+        // For shader use
+        glm::vec4 lightDirection{0.0f, -1.0f, 0.0f, 0.0f};  // Directional/spot
+        glm::vec4 lightPosition{0.0f, 0.0f, 0.0f, 1.0f};    // Point/spot
+
+        float nearPlane = 0.1f;
+        float farPlane = 100.0f;
+
+        ShadowMapHandle handle;
+
+        void updateViewProjection()
+        {
+            viewProjectionMatrix = projectionMatrix * viewMatrix;
+        }
+    };
+
+    // ============================================
+    // Per-light shadow metadata (stored per entity)
+    // ============================================
+    struct LightShadowData
+    {
+        ShadowSettings settings;
+        ShadowMapType type = ShadowMapType::None;
+
+        // Shadow views (1 for spot, 6 for point, 1-4 for CSM)
+        std::vector<ShadowView> views;
+
+        // Entity ID of the light this shadow data belongs to
+        uint32_t lightEntityId = 0;
+
+        // Dirty flags for optimization
+        bool matricesDirty = true;
+        bool settingsDirty = true;
+
+        void invalidate()
+        {
+            for (auto& view : views)
+            {
+                view.handle.invalidate();
+            }
+            matricesDirty = true;
+        }
+
+        [[nodiscard]] uint32_t getViewCount() const
+        {
+            return static_cast<uint32_t>(views.size());
+        }
+    };
+
+    // ============================================
+    // GPU-aligned shadow data for shader consumption
+    // ============================================
+    struct alignas(16) GPUShadowData
+    {
+        glm::mat4 viewProjection;         // 64 bytes - light space transform
+        glm::vec4 atlasViewport;          // 16 bytes - xy=offset, zw=size (normalized 0-1)
+        glm::vec4 biasParams;             // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=softness
+        glm::vec4 rangeParams;            // 16 bytes - x=near, y=far, z=1/(far-near), w=cascadeIndex
+    };
+    static_assert(sizeof(GPUShadowData) == 112, "GPUShadowData must be 112 bytes");
+    static_assert(offsetof(GPUShadowData, viewProjection) == 0, "GPUShadowData::viewProjection offset mismatch");
+    static_assert(offsetof(GPUShadowData, atlasViewport) == 64, "GPUShadowData::atlasViewport offset mismatch");
+    static_assert(offsetof(GPUShadowData, biasParams) == 80, "GPUShadowData::biasParams offset mismatch");
+    static_assert(offsetof(GPUShadowData, rangeParams) == 96, "GPUShadowData::rangeParams offset mismatch");
+
+    // ============================================
+    // Shadow counts for shader
+    // ============================================
+    struct alignas(16) GPUShadowCounts
+    {
+        uint32_t directionalCount;        // Number of directional shadow views
+        uint32_t pointCount;              // Number of point shadow views (x6 for cube faces)
+        uint32_t spotCount;               // Number of spot shadow views
+        uint32_t totalCount;              // Total shadow views
+    };
+    static_assert(sizeof(GPUShadowCounts) == 16, "GPUShadowCounts must be 16 bytes");
+
+    // ============================================
+    // Atlas tile allocation info
+    // ============================================
+    struct ShadowAtlasTile
+    {
+        uint32_t x = 0;                   // Pixel offset in atlas
+        uint32_t y = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint32_t layer = 0;               // Array layer (for cube map atlas)
+        bool allocated = false;
+        ShadowMapHandle owner;            // Which shadow map owns this tile
+
+        [[nodiscard]] glm::vec4 getNormalizedViewport(uint32_t atlasWidth, uint32_t atlasHeight) const
+        {
+            return glm::vec4(
+                static_cast<float>(x) / static_cast<float>(atlasWidth),
+                static_cast<float>(y) / static_cast<float>(atlasHeight),
+                static_cast<float>(width) / static_cast<float>(atlasWidth),
+                static_cast<float>(height) / static_cast<float>(atlasHeight)
+            );
+        }
+    };
+}

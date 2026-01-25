@@ -12,6 +12,7 @@
 #include "../lighting/GPULightBufferManager.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
+#include "../shadow/ShadowSystem.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -56,6 +57,7 @@ namespace render::gpudriven
         std::unique_ptr<lighting::GPULightBufferManager> lightBufferManager;
         std::unique_ptr<lighting::ClusterGridManager> clusterGridManager;
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
+        std::unique_ptr<shadow::ShadowSystem> shadowSystem;
 
         bool initialized = false;
         bool enabled = false;
@@ -164,6 +166,7 @@ namespace render::gpudriven
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
         lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
+        shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
         // Set visible lights from BVH frustum query (pre-culling before GPU upload)
         // Pass the result of LightBVH::queryFrustum() to only upload visible lights

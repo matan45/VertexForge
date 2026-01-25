@@ -113,6 +113,10 @@ namespace render::gpudriven
                 lightBufferManager->getDescriptorSetLayout()
             );
 
+            shadowSystem = std::make_unique<shadow::ShadowSystem>(device, swapChain);
+            shadowSystem->init();
+            shadowSystem->setLightBufferManager(lightBufferManager.get());
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             meshShaderPipeline->init(iblDescriptorSetLayout,
                                      bindlessTextures->getDescriptorSetLayout(),
@@ -151,6 +155,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (shadowSystem) shadowSystem->cleanup();
         if (lightCullingPipeline) lightCullingPipeline->cleanup();
         if (clusterGridManager) clusterGridManager->cleanup();
         if (lightBufferManager) lightBufferManager->cleanup();
@@ -164,6 +169,7 @@ namespace render::gpudriven
 
         meshStreamManager.reset();
         meshShaderPipeline.reset();
+        shadowSystem.reset();
         lightCullingPipeline.reset();
         clusterGridManager.reset();
         lightBufferManager.reset();
