@@ -104,7 +104,6 @@ namespace render::lighting
         uint32_t getPointLightCount() const { return pointCount; }
         uint32_t getSpotLightCount() const { return spotCount; }
 
-        // Buffer accessors for light culling pipeline
         vk::Buffer getPointBuffer() const { return pointBuffer; }
         vk::Buffer getSpotBuffer() const { return spotBuffer; }
 

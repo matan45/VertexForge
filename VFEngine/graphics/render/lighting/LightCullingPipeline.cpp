@@ -280,7 +280,7 @@ namespace render::lighting
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 3; // ClusterLightGrid, LightIndexList, Globals
+        poolSize.descriptorCount = 3;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -326,7 +326,6 @@ namespace render::lighting
 
         std::array<vk::WriteDescriptorSet, 3> descriptorWrites{};
 
-        // Binding 0: ClusterLightGrid
         descriptorWrites[0].dstSet = descriptorSet;
         descriptorWrites[0].dstBinding = 0;
         descriptorWrites[0].dstArrayElement = 0;
@@ -334,7 +333,6 @@ namespace render::lighting
         descriptorWrites[0].descriptorCount = 1;
         descriptorWrites[0].pBufferInfo = &bufferInfos[0];
 
-        // Binding 1: ClusterLightIndexList
         descriptorWrites[1].dstSet = descriptorSet;
         descriptorWrites[1].dstBinding = 1;
         descriptorWrites[1].dstArrayElement = 0;
@@ -342,7 +340,6 @@ namespace render::lighting
         descriptorWrites[1].descriptorCount = 1;
         descriptorWrites[1].pBufferInfo = &bufferInfos[1];
 
-        // Binding 2: Globals
         descriptorWrites[2].dstSet = descriptorSet;
         descriptorWrites[2].dstBinding = 2;
         descriptorWrites[2].dstArrayElement = 0;
@@ -364,7 +361,6 @@ namespace render::lighting
             return;
         }
 
-        // Cache the descriptor sets for binding during dispatch
         cachedClusterGridDescSet = clusterGridDescSet;
         cachedLightBufferDescSet = lightBufferDescSet;
         descriptorsNeedUpdate = false;
@@ -381,31 +377,26 @@ namespace render::lighting
             return;
         }
 
-        // Validate external descriptor sets are bound
         if (!cachedClusterGridDescSet || !cachedLightBufferDescSet)
         {
             loggerWarning("LightCullingPipeline: External descriptor sets not set, skipping dispatch");
             return;
         }
 
-        // Bind pipeline once at the start
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
 
-        // Bind all 3 descriptor sets
         std::array<vk::DescriptorSet, 3> descSets = {
-            cachedClusterGridDescSet,  // Set 0: Cluster grid
-            cachedLightBufferDescSet,  // Set 1: Light buffers
-            descriptorSet              // Set 2: Output buffers
+            cachedClusterGridDescSet,
+            cachedLightBufferDescSet,
+            descriptorSet
         };
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
                                static_cast<uint32_t>(descSets.size()), descSets.data(),
                                0, nullptr);
 
-        // Phase 1: Reset cluster light data and globals
         dispatchReset(cmd);
         insertBarrier(cmd);
 
-        // Phase 2: Cluster-centric light culling (skip if no lights)
         if (pointLightCount > 0 || spotLightCount > 0)
         {
             dispatchLightCulling(cmd, viewMatrix, pointLightCount, spotLightCount);
@@ -415,9 +406,6 @@ namespace render::lighting
 
     void LightCullingPipeline::dispatchReset(vk::CommandBuffer cmd)
     {
-        // Pipeline and descriptor sets are already bound by dispatch()
-        // Zero-initialize push constants - viewMatrix/lightCounts unused in reset phase
-        // but we must push the full struct (Vulkan push constant range is fixed at pipeline creation)
         LightCullingPushConstants pushConstants{};
         pushConstants.totalClusters = totalClusters;
         pushConstants.phase = LightCullingConstants::PHASE_RESET;
@@ -439,8 +427,6 @@ namespace render::lighting
         uint32_t pointLightCount,
         uint32_t spotLightCount)
     {
-        // Cluster-centric approach: one thread per cluster
-        // Each thread tests its cluster against ALL lights (loaded via shared memory tiling)
         LightCullingPushConstants pushConstants{};
         pushConstants.viewMatrix = viewMatrix;
         pushConstants.pointLightCount = pointLightCount;
@@ -454,7 +440,6 @@ namespace render::lighting
             0,
             pushConstants);
 
-        // Dispatch one workgroup per 64 clusters
         uint32_t groupCount = (totalClusters + LightCullingConstants::LIGHT_CULL_WORKGROUP_SIZE - 1)
                             / LightCullingConstants::LIGHT_CULL_WORKGROUP_SIZE;
         cmd.dispatch(groupCount, 1, 1);

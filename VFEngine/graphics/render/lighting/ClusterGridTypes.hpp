@@ -6,7 +6,6 @@
 
 namespace render::lighting
 {
-    // Cluster grid configuration constants
     // Memory budget: ~288KB total for default configuration
     //   - Params UBO: 144 bytes
     //   - AABBs SSBO (device): 16x9x32 x 32 bytes = ~144KB
@@ -54,7 +53,6 @@ namespace render::lighting
     static_assert(offsetof(GPUClusterAABB, minPoint) == 0, "GPUClusterAABB::minPoint offset mismatch");
     static_assert(offsetof(GPUClusterAABB, maxPoint) == 16, "GPUClusterAABB::maxPoint offset mismatch");
 
-    // CPU-side cluster grid configuration
     struct ClusterGridConfig
     {
         uint32_t tilesX = ClusterConstants::DEFAULT_TILES_X;

@@ -111,7 +111,6 @@ namespace render::mesh
 
     void ClusterDebugRenderer::createDescriptorSetLayout()
     {
-        // Storage buffer for instance data
         vk::DescriptorSetLayoutBinding instanceBufferBinding{};
         instanceBufferBinding.binding = 0;
         instanceBufferBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -127,13 +126,11 @@ namespace render::mesh
 
     void ClusterDebugRenderer::createPipeline(vk::RenderPass renderPass)
     {
-        // Push constant range for matrices
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex;
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(ClusterPushConstants);
 
-        // Pipeline layout with descriptor set and push constants
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
@@ -142,7 +139,6 @@ namespace render::mesh
 
         wireframePipelineLayout = device.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
 
-        // Vertex input - just position from unit cube
         vk::VertexInputBindingDescription bindingDescription{};
         bindingDescription.binding = 0;
         bindingDescription.stride = sizeof(glm::vec3);
@@ -160,12 +156,10 @@ namespace render::mesh
         vertexInputInfo.vertexAttributeDescriptionCount = 1;
         vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
 
-        // Input assembly - line list for wireframe
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.topology = vk::PrimitiveTopology::eLineList;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-        // Viewport and scissor
         auto extent = swapChain.getSwapchainExtent();
         vk::Viewport viewport{};
         viewport.x = 0.0f;
@@ -185,7 +179,6 @@ namespace render::mesh
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
 
-        // Rasterization - use eFill since we're rendering line primitives (LineList topology)
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -195,12 +188,10 @@ namespace render::mesh
         rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
         rasterizer.depthBiasEnable = VK_FALSE;
 
-        // Multisampling
         vk::PipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-        // Depth stencil - enable depth test but disable write for overlay
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_TRUE;
         depthStencil.depthWriteEnable = VK_FALSE;
@@ -208,7 +199,6 @@ namespace render::mesh
         depthStencil.depthBoundsTestEnable = VK_FALSE;
         depthStencil.stencilTestEnable = VK_FALSE;
 
-        // Color blending with alpha
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
                                                vk::ColorComponentFlagBits::eG |
@@ -227,7 +217,6 @@ namespace render::mesh
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        // Dynamic state
         std::array<vk::DynamicState, 2> dynamicStates = {
             vk::DynamicState::eViewport,
             vk::DynamicState::eScissor
@@ -237,7 +226,6 @@ namespace render::mesh
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicState.pDynamicStates = dynamicStates.data();
 
-        // Create pipeline
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(wireframeShader->getShaderStages().size());
         pipelineInfo.pStages = wireframeShader->getShaderStages().data();
@@ -263,7 +251,6 @@ namespace render::mesh
 
     void ClusterDebugRenderer::createBuffers()
     {
-        // Create vertex buffer using shared unit cube vertices
         vk::DeviceSize vertexBufferSize = sizeof(glm::vec3) * kUnitCubeVertices.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
@@ -281,7 +268,6 @@ namespace render::mesh
             vertexBufferSize
         );
 
-        // Create index buffer using shared unit cube line indices
         vk::DeviceSize indexBufferSize = sizeof(uint32_t) * kUnitCubeLineIndices.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
@@ -299,7 +285,6 @@ namespace render::mesh
             indexBufferSize
         );
 
-        // Create instance buffer (host-visible for fast updates)
         vk::DeviceSize instanceBufferSize = sizeof(ClusterInstance) * MAX_INSTANCES;
         core::BufferInfoRequest instanceRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         instanceRequest.size = instanceBufferSize;
@@ -308,7 +293,6 @@ namespace render::mesh
                                      vk::MemoryPropertyFlagBits::eHostCoherent;
         core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferMemory);
 
-        // Map the instance buffer persistently
         instanceBufferMapped = device.getLogicalDevice().mapMemory(instanceBufferMemory, 0, instanceBufferSize);
     }
 
@@ -335,7 +319,6 @@ namespace render::mesh
 
         descriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
 
-        // Update descriptor with instance buffer
         vk::DescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = instanceBuffer;
         bufferInfo.offset = 0;
@@ -361,11 +344,9 @@ namespace render::mesh
 
         auto* instances = static_cast<ClusterInstance*>(instanceBufferMapped);
 
-        // Colors for visualization
-        constexpr glm::vec4 highlightColor{1.0f, 1.0f, 0.0f, 1.0f};  // Yellow for highlighted
-        constexpr glm::vec4 normalColor{0.2f, 0.6f, 1.0f, 0.4f};     // Cyan with transparency
+        constexpr glm::vec4 highlightColor{1.0f, 1.0f, 0.0f, 1.0f};
+        constexpr glm::vec4 normalColor{0.2f, 0.6f, 1.0f, 0.4f};
 
-        // Build set of highlighted indices for fast lookup
         std::unordered_set<uint32_t> highlightedSet(
             data.highlightedClusterIndices.begin(),
             data.highlightedClusterIndices.end()
@@ -375,7 +356,6 @@ namespace render::mesh
 
         if (data.showAllClusters)
         {
-            // Upload all clusters
             uint32_t count = std::min(static_cast<uint32_t>(data.clusterAABBs.size()), MAX_INSTANCES);
             for (uint32_t i = 0; i < count; ++i)
             {
@@ -390,7 +370,6 @@ namespace render::mesh
         }
         else
         {
-            // Upload only highlighted clusters
             for (uint32_t idx : data.highlightedClusterIndices)
             {
                 if (idx < data.clusterAABBs.size() && instanceCount < MAX_INSTANCES)
@@ -417,23 +396,19 @@ namespace render::mesh
             return;
         }
 
-        // Skip if no clusters to render
         if (data.highlightedClusterIndices.empty() && !data.showAllClusters)
         {
             return;
         }
 
-        // Upload instance data and get count
         uint32_t instanceCount = uploadInstanceData(data);
         if (instanceCount == 0)
         {
             return;
         }
 
-        // Bind pipeline
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, wireframePipeline);
 
-        // Set dynamic viewport and scissor
         auto extent = swapChain.getSwapchainExtent();
         vk::Viewport viewport{};
         viewport.x = 0.0f;
@@ -449,17 +424,14 @@ namespace render::mesh
         scissor.extent = extent;
         commandBuffer.setScissor(0, 1, &scissor);
 
-        // Bind descriptor set
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, wireframePipelineLayout,
                                          0, 1, &descriptorSet, 0, nullptr);
 
-        // Bind geometry buffers
         vk::Buffer vertexBuffers[] = {vertexBuffer};
         vk::DeviceSize offsets[] = {0};
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
         commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint32);
 
-        // Push constants
         ClusterPushConstants pushConstants{};
         pushConstants.viewProjection = projection * view;
         pushConstants.invViewMatrix = data.invViewMatrix;
@@ -468,7 +440,6 @@ namespace render::mesh
             vk::ShaderStageFlagBits::eVertex,
             0, sizeof(ClusterPushConstants), &pushConstants);
 
-        // Single instanced draw call for all clusters
         commandBuffer.drawIndexed(
             static_cast<uint32_t>(kUnitCubeLineIndices.size()),
             instanceCount,

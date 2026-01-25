@@ -6,7 +6,6 @@
 
 namespace render::lighting
 {
-    // Light culling constants
     // Uses FIXED ALLOCATION strategy: each cluster gets MAX_LIGHTS_PER_CLUSTER slots
     // This eliminates the need for a prefix-sum pass to compute offsets
     // Memory budget for 3456 clusters (16x9x24):
@@ -20,12 +19,9 @@ namespace render::lighting
         // 64 lights/cluster allows for complex lighting while keeping memory reasonable
         inline constexpr uint32_t MAX_LIGHTS_PER_CLUSTER = 64;
 
-        // Workgroup size for light culling compute shader
         // 64 is optimal for most GPUs (matches wave/warp size)
         inline constexpr uint32_t LIGHT_CULL_WORKGROUP_SIZE = 64;
 
-        // Phase constants for compute shader dispatch
-        // Using cluster-centric approach: single culling phase for all light types
         inline constexpr uint32_t PHASE_RESET = 0;
         inline constexpr uint32_t PHASE_CULL_LIGHTS = 1;
     }
@@ -80,16 +76,4 @@ namespace render::lighting
     static_assert(offsetof(LightCullingGlobals, overflowFlag) == 4, "LightCullingGlobals::overflowFlag offset mismatch");
     static_assert(offsetof(LightCullingGlobals, totalPointLightsAssigned) == 8, "LightCullingGlobals::totalPointLightsAssigned offset mismatch");
     static_assert(offsetof(LightCullingGlobals, totalSpotLightsAssigned) == 12, "LightCullingGlobals::totalSpotLightsAssigned offset mismatch");
-
-    // Helper functions for packing/unpacking light counts
-    inline uint32_t packLightCounts(uint32_t pointCount, uint32_t spotCount)
-    {
-        return (spotCount << 16) | (pointCount & 0xFFFF);
-    }
-
-    inline void unpackLightCounts(uint32_t packed, uint32_t& pointCount, uint32_t& spotCount)
-    {
-        pointCount = packed & 0xFFFF;
-        spotCount = packed >> 16;
-    }
 }

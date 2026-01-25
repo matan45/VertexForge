@@ -121,8 +121,6 @@ namespace render::gpudriven
         vk::DescriptorSet getPerDrawDataDescriptorSet() const { return perDrawDataDescriptorSet; }
         vk::DescriptorSet getMeshletDataDescriptorSet() const { return meshletDataDescriptorSet; }
         vk::DescriptorSet getVertexDataDescriptorSet() const { return vertexDataDescriptorSet; }
-
-        // Lighting descriptor set getters
         vk::DescriptorSet getLightDataDescriptorSet() const { return lightDataDescriptorSet; }
         vk::DescriptorSet getClusterGridDescriptorSet() const { return clusterGridDescriptorSet; }
         vk::DescriptorSet getCullingOutputDescriptorSet() const { return cullingOutputDescriptorSet; }

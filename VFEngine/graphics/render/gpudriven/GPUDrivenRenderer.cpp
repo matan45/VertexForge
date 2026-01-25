@@ -203,139 +203,12 @@ namespace render::gpudriven
             return;
         }
 
-        if (meshStreamManager)
-        {
-            for (const auto& meshRender : opaqueObjects)
-            {
-                meshStreamManager->requestMesh(meshRender.meshPath);
-            }
+        updateMeshStreaming(opaqueObjects, cameraPosition);
+        registerSceneMaterialTextures(opaqueObjects);
 
-            meshStreamManager->update(cameraPosition);
-        }
-
-        if (materialTextureCache && bindlessTextures)
-        {
-            for (const auto& meshRender : opaqueObjects)
-            {
-                if (!meshRender.defaultMaterialPath.empty())
-                {
-                    registerMaterialTextures(meshRender.defaultMaterialPath);
-                }
-
-                for (const auto& [submeshName, subMat] : meshRender.submeshMaterials)
-                {
-                    if (!subMat.materialPath.empty())
-                    {
-                        registerMaterialTextures(subMat.materialPath);
-                    }
-                }
-            }
-        }
-
-        TextureIndexResolver textureResolver = nullptr;
-        if (bindlessTextures)
-        {
-            auto pbrCache = std::make_shared<std::unordered_map<std::string, mesh::ExtractedPBRValues>>();
-
-            textureResolver = [this, pbrCache](const std::string& materialPath, TextureSlotType slot) -> uint32_t
-            {
-                if (materialPath.empty())
-                {
-                    return INVALID_TEXTURE_INDEX;
-                }
-
-                auto it = pbrCache->find(materialPath);
-                if (it == pbrCache->end())
-                {
-                    it = pbrCache->emplace(materialPath,
-                                           mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
-                }
-
-                const auto& pbrValues = it->second;
-
-                std::string texPath;
-                switch (slot)
-                {
-                case TextureSlotType::Albedo: texPath = pbrValues.albedoTexturePath;
-                    break;
-                case TextureSlotType::Normal: texPath = pbrValues.normalTexturePath;
-                    break;
-                case TextureSlotType::ORM: texPath = pbrValues.ormTexturePath;
-                    break;
-                case TextureSlotType::Metallic: texPath = pbrValues.metallicTexturePath;
-                    break;
-                case TextureSlotType::Roughness: texPath = pbrValues.roughnessTexturePath;
-                    break;
-                case TextureSlotType::AO: texPath = pbrValues.aoTexturePath;
-                    break;
-                case TextureSlotType::Emission: texPath = pbrValues.emissionTexturePath;
-                    break;
-                case TextureSlotType::Height: texPath = pbrValues.heightTexturePath;
-                    break;
-                default: return INVALID_TEXTURE_INDEX;
-                }
-
-                if (texPath.empty())
-                {
-                    return INVALID_TEXTURE_INDEX;
-                }
-
-                return bindlessTextures->getTextureIndex(texPath);
-            };
-        }
-
-        ShaderGroupResolver shaderGroupResolver = [](const std::string& /*materialPath*/) -> uint32_t
-        {
-            return 0;
-        };
-
-        BoneOffsetResolver boneOffsetResolver = nullptr;
-        if (boneMatrixManager)
-        {
-            auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
-            auto& registry = scene::EntityRegistry::getRegistry();
-
-            auto view = registry.view<components::MeshComponent>();
-            for (auto entity : view)
-            {
-                const auto& meshComp = view.get<components::MeshComponent>(entity);
-
-                if (meshComp.animatorPath.empty())
-                {
-                    continue;
-                }
-
-                animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(entity);
-                if (!animator)
-                {
-                    animatorSystem.initializeEntityAnimator(entity, meshComp.animatorPath);
-                    animator = animatorSystem.getAnimator(entity);
-                    if (!animator)
-                    {
-                        continue;
-                    }
-                }
-
-                const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
-                if (boneMatrices.empty())
-                {
-                    continue;
-                }
-
-                uint32_t boneCount = static_cast<uint32_t>(boneMatrices.size());
-                uint32_t boneOffset = boneMatrixManager->allocate(entity, boneCount);
-
-                if (boneOffset != INVALID_BONE_OFFSET)
-                {
-                    boneMatrixManager->updateBoneMatrices(entity, boneMatrices);
-                }
-            }
-
-            boneOffsetResolver = [this](entt::entity entity) -> uint32_t
-            {
-                return boneMatrixManager->getBoneOffset(entity);
-            };
-        }
+        TextureIndexResolver textureResolver = createTextureResolver();
+        ShaderGroupResolver shaderGroupResolver = [](const std::string&) -> uint32_t { return 0; };
+        BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
         mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
 
@@ -355,24 +228,182 @@ namespace render::gpudriven
         };
         cameraBuffer->update(cameraParams);
 
-        // Update cluster grid for clustered lighting
-        if (clusterGridManager)
+        updateClusterGrid(projection, nearPlane, farPlane);
+        updatePipelineDescriptors();
+
+        stats.totalObjects = mergedBuffer->getObjectCount();
+    }
+
+    void GPUDrivenRenderer::updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
+                                                 const glm::vec3& cameraPosition)
+    {
+        if (!meshStreamManager)
         {
-            auto extent = swapChain.getSwapchainExtent();
-            lighting::ClusterCameraParams clusterCameraParams{};
-            clusterCameraParams.nearPlane = nearPlane;
-            clusterCameraParams.farPlane = farPlane;
-            clusterCameraParams.aspectRatio = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-            clusterCameraParams.screenWidth = extent.width;
-            clusterCameraParams.screenHeight = extent.height;
-            clusterCameraParams.projection = projection;
-            clusterCameraParams.invProjection = glm::inverse(projection);
-            // Extract vertical FOV from projection matrix
-            clusterCameraParams.fovY = 2.0f * glm::degrees(std::atan(1.0f / projection[1][1]));
-            clusterGridManager->updateFromCamera(clusterCameraParams);
+            return;
         }
 
-        // Update light culling pipeline's external descriptor sets
+        for (const auto& meshRender : opaqueObjects)
+        {
+            meshStreamManager->requestMesh(meshRender.meshPath);
+        }
+
+        meshStreamManager->update(cameraPosition);
+    }
+
+    void GPUDrivenRenderer::registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
+    {
+        if (!materialTextureCache || !bindlessTextures)
+        {
+            return;
+        }
+
+        for (const auto& meshRender : opaqueObjects)
+        {
+            if (!meshRender.defaultMaterialPath.empty())
+            {
+                registerMaterialTextures(meshRender.defaultMaterialPath);
+            }
+
+            for (const auto& [submeshName, subMat] : meshRender.submeshMaterials)
+            {
+                if (!subMat.materialPath.empty())
+                {
+                    registerMaterialTextures(subMat.materialPath);
+                }
+            }
+        }
+    }
+
+    TextureIndexResolver GPUDrivenRenderer::createTextureResolver()
+    {
+        if (!bindlessTextures)
+        {
+            return nullptr;
+        }
+
+        auto pbrCache = std::make_shared<std::unordered_map<std::string, mesh::ExtractedPBRValues>>();
+
+        return [this, pbrCache](const std::string& materialPath, TextureSlotType slot) -> uint32_t
+        {
+            if (materialPath.empty())
+            {
+                return INVALID_TEXTURE_INDEX;
+            }
+
+            auto it = pbrCache->find(materialPath);
+            if (it == pbrCache->end())
+            {
+                it = pbrCache->emplace(materialPath,
+                                       mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
+            }
+
+            const auto& pbrValues = it->second;
+
+            std::string texPath;
+            switch (slot)
+            {
+            case TextureSlotType::Albedo: texPath = pbrValues.albedoTexturePath;
+                break;
+            case TextureSlotType::Normal: texPath = pbrValues.normalTexturePath;
+                break;
+            case TextureSlotType::ORM: texPath = pbrValues.ormTexturePath;
+                break;
+            case TextureSlotType::Metallic: texPath = pbrValues.metallicTexturePath;
+                break;
+            case TextureSlotType::Roughness: texPath = pbrValues.roughnessTexturePath;
+                break;
+            case TextureSlotType::AO: texPath = pbrValues.aoTexturePath;
+                break;
+            case TextureSlotType::Emission: texPath = pbrValues.emissionTexturePath;
+                break;
+            case TextureSlotType::Height: texPath = pbrValues.heightTexturePath;
+                break;
+            default: return INVALID_TEXTURE_INDEX;
+            }
+
+            if (texPath.empty())
+            {
+                return INVALID_TEXTURE_INDEX;
+            }
+
+            return bindlessTextures->getTextureIndex(texPath);
+        };
+    }
+
+    BoneOffsetResolver GPUDrivenRenderer::updateAnimationBones()
+    {
+        if (!boneMatrixManager)
+        {
+            return nullptr;
+        }
+
+        auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        auto entityView = registry.view<components::MeshComponent>();
+        for (auto entity : entityView)
+        {
+            const auto& meshComp = entityView.get<components::MeshComponent>(entity);
+
+            if (meshComp.animatorPath.empty())
+            {
+                continue;
+            }
+
+            animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(entity);
+            if (!animator)
+            {
+                animatorSystem.initializeEntityAnimator(entity, meshComp.animatorPath);
+                animator = animatorSystem.getAnimator(entity);
+                if (!animator)
+                {
+                    continue;
+                }
+            }
+
+            const std::vector<glm::mat4>& boneMatrices = animator->getBoneMatrices();
+            if (boneMatrices.empty())
+            {
+                continue;
+            }
+
+            uint32_t boneCount = static_cast<uint32_t>(boneMatrices.size());
+            uint32_t boneOffset = boneMatrixManager->allocate(entity, boneCount);
+
+            if (boneOffset != INVALID_BONE_OFFSET)
+            {
+                boneMatrixManager->updateBoneMatrices(entity, boneMatrices);
+            }
+        }
+
+        return [this](entt::entity entity) -> uint32_t
+        {
+            return boneMatrixManager->getBoneOffset(entity);
+        };
+    }
+
+    void GPUDrivenRenderer::updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane)
+    {
+        if (!clusterGridManager)
+        {
+            return;
+        }
+
+        auto extent = swapChain.getSwapchainExtent();
+        lighting::ClusterCameraParams clusterCameraParams{};
+        clusterCameraParams.nearPlane = nearPlane;
+        clusterCameraParams.farPlane = farPlane;
+        clusterCameraParams.aspectRatio = static_cast<float>(extent.width) / static_cast<float>(extent.height);
+        clusterCameraParams.screenWidth = extent.width;
+        clusterCameraParams.screenHeight = extent.height;
+        clusterCameraParams.projection = projection;
+        clusterCameraParams.invProjection = glm::inverse(projection);
+        clusterCameraParams.fovY = 2.0f * glm::degrees(std::atan(1.0f / projection[1][1]));
+        clusterGridManager->updateFromCamera(clusterCameraParams);
+    }
+
+    void GPUDrivenRenderer::updatePipelineDescriptors()
+    {
         if (lightCullingPipeline && clusterGridManager && lightBufferManager)
         {
             lightCullingPipeline->updateExternalDescriptors(
@@ -395,8 +426,7 @@ namespace render::gpudriven
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
 
-            // Update lighting descriptor sets for clustered forward shading
-            if (meshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
+            if (lightBufferManager && clusterGridManager && lightCullingPipeline)
             {
                 meshShaderPipeline->updateLightingDescriptors(
                     lightBufferManager->getDescriptorSet(),
@@ -404,8 +434,6 @@ namespace render::gpudriven
                     lightCullingPipeline->getDescriptorSet());
             }
         }
-
-        stats.totalObjects = mergedBuffer->getObjectCount();
     }
 
     void GPUDrivenRenderer::dispatchCompute(vk::CommandBuffer cmd)
@@ -473,7 +501,6 @@ namespace render::gpudriven
             0, nullptr,
             0, nullptr);
 
-        // Dispatch light culling compute shader
         if (lightCullingPipeline && lightBufferManager)
         {
             lightCullingPipeline->dispatch(

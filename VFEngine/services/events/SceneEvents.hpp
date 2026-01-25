@@ -246,7 +246,6 @@ namespace events::scene {
         std::string_view getName() const override { return "SetVFXData"; }
     };
 
-    // Directional Light Component
     struct AddDirectionalLightComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -266,7 +265,6 @@ namespace events::scene {
         std::string_view getName() const override { return "SetDirectionalLightData"; }
     };
 
-    // Point Light Component
     struct AddPointLightComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -286,7 +284,6 @@ namespace events::scene {
         std::string_view getName() const override { return "SetPointLightData"; }
     };
 
-    // Spot Light Component
     struct AddSpotLightComponentCommand : ICommand<bool> {
         services::EntityHandle entity;
 
@@ -454,7 +451,6 @@ namespace events::scene {
         std::string_view getName() const override { return "GetVFXData"; }
     };
 
-    // Directional Light Queries
     struct HasDirectionalLightComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
@@ -467,7 +463,6 @@ namespace events::scene {
         std::string_view getName() const override { return "GetDirectionalLightData"; }
     };
 
-    // Point Light Queries
     struct HasPointLightComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 
@@ -480,7 +475,6 @@ namespace events::scene {
         std::string_view getName() const override { return "GetPointLightData"; }
     };
 
-    // Spot Light Queries
     struct HasSpotLightComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 

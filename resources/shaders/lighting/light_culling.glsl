@@ -7,9 +7,6 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-// ============================================================
-// Constants
-// ============================================================
 const uint MAX_LIGHTS_PER_CLUSTER = 64;
 const uint LIGHTS_PER_BATCH = 64;  // Match workgroup size for optimal loading
 const uint PHASE_RESET = 0;
@@ -21,9 +18,6 @@ const uint PHASE_CULL_LIGHTS = 1;  // Single phase for all light types
 // This allows both types to share the same index list
 const uint SPOT_LIGHT_FLAG = 0x80000000u;
 
-// ============================================================
-// Push Constants
-// ============================================================
 layout(push_constant) uniform PushConstants {
     mat4 viewMatrix;
     uint pointLightCount;
@@ -32,10 +26,7 @@ layout(push_constant) uniform PushConstants {
     uint phase;
 } pc;
 
-// ============================================================
-// Cluster Grid Data (Set 0 - from ClusterGridManager)
-// ============================================================
-
+// Set 0: Cluster Grid Data
 struct ClusterGridParams {
     uvec4 gridDimensions;
     vec4 screenParams;
@@ -58,21 +49,7 @@ layout(std430, set = 0, binding = 1) readonly buffer ClusterAABBBuffer {
     ClusterAABB clusterAABBs[];
 };
 
-// ============================================================
-// Light Data (Set 1 - from GPULightBufferManager)
-// ============================================================
-
-struct DirectionalLight {
-    vec3 direction;
-    float intensity;
-    vec3 color;
-    uint padding;
-};
-
-layout(std430, set = 1, binding = 0) readonly buffer DirectionalLightBuffer {
-    DirectionalLight directionalLights[];
-};
-
+// Set 1: Light Data (binding 0 = DirectionalLights unused - they don't need culling)
 struct PointLight {
     vec3 position;
     float radius;
@@ -112,10 +89,7 @@ layout(std140, set = 1, binding = 3) uniform LightCountsUBO {
     LightCounts lightCounts;
 };
 
-// ============================================================
-// Light Culling Output (Set 2)
-// ============================================================
-
+// Set 2: Light Culling Output
 struct ClusterLightData {
     uint offset;
     uint counts;
@@ -140,17 +114,13 @@ layout(std430, set = 2, binding = 2) buffer GlobalsBuffer {
     LightCullingGlobals globals;
 };
 
-// ============================================================
-// Shared Memory for Light Tiling
-// ============================================================
-
-// Cached point light data in view space (reduced from 32 bytes to 16 bytes)
+// Cached point light data in view space (16 bytes)
 struct CachedPointLight {
     vec3 viewPos;
     float radius;
 };
 
-// Cached spot light data in view space (reduced from 64 bytes to 32 bytes)
+// Cached spot light data in view space (32 bytes)
 struct CachedSpotLight {
     vec3 viewPos;
     float range;
@@ -160,10 +130,6 @@ struct CachedSpotLight {
 
 shared CachedPointLight sharedPointLights[LIGHTS_PER_BATCH];
 shared CachedSpotLight sharedSpotLights[LIGHTS_PER_BATCH];
-
-// ============================================================
-// Intersection Tests
-// ============================================================
 
 bool sphereIntersectsAABB(vec3 center, float radius, vec3 aabbMin, vec3 aabbMax) {
     vec3 closestPoint = clamp(center, aabbMin, aabbMax);
@@ -180,16 +146,10 @@ bool coneIntersectsAABB(vec3 apex, vec3 direction, float range, float cosOuterAn
     return sphereIntersectsAABB(sphereCenter, sphereRadius, aabbMin, aabbMax);
 }
 
-// ============================================================
-// Main Entry Point
-// ============================================================
 void main() {
     uint localIdx = gl_LocalInvocationID.x;
     uint clusterIdx = gl_GlobalInvocationID.x;
 
-    // ========================================
-    // PHASE 0: Reset
-    // ========================================
     if (pc.phase == PHASE_RESET) {
         if (clusterIdx < pc.totalClusters) {
             clusterLightGrid[clusterIdx].offset = clusterIdx * MAX_LIGHTS_PER_CLUSTER;
@@ -205,14 +165,9 @@ void main() {
         return;
     }
 
-    // ========================================
-    // PHASE 1: Cluster-Centric Light Culling
-    // ========================================
     if (pc.phase == PHASE_CULL_LIGHTS) {
-        // Each thread handles one cluster
         bool validCluster = (clusterIdx < pc.totalClusters);
 
-        // Load cluster AABB (only if valid)
         vec3 aabbMin, aabbMax;
         uint clusterOffset = 0;
         if (validCluster) {
@@ -225,13 +180,10 @@ void main() {
         uint pointCount = 0;
         uint spotCount = 0;
 
-        // ----------------------------------------
-        // Process Point Lights in Batches
-        // ----------------------------------------
         uint numPointBatches = (pc.pointLightCount + LIGHTS_PER_BATCH - 1) / LIGHTS_PER_BATCH;
 
+        // Cooperative loading: each thread loads one light into shared memory per batch
         for (uint batch = 0; batch < numPointBatches; ++batch) {
-            // Cooperative loading: each thread loads one light into shared memory
             uint lightToLoad = batch * LIGHTS_PER_BATCH + localIdx;
             if (lightToLoad < pc.pointLightCount) {
                 PointLight light = pointLights[lightToLoad];
@@ -239,10 +191,8 @@ void main() {
                 sharedPointLights[localIdx].radius = light.radius;
             }
 
-            // Synchronize: ensure all lights are loaded before testing
             barrier();
 
-            // Each thread tests its cluster against all lights in this batch
             if (validCluster) {
                 uint batchEnd = min(LIGHTS_PER_BATCH, pc.pointLightCount - batch * LIGHTS_PER_BATCH);
 
@@ -259,17 +209,12 @@ void main() {
                 }
             }
 
-            // Synchronize before loading next batch
             barrier();
         }
 
-        // ----------------------------------------
-        // Process Spot Lights in Batches
-        // ----------------------------------------
         uint numSpotBatches = (pc.spotLightCount + LIGHTS_PER_BATCH - 1) / LIGHTS_PER_BATCH;
 
         for (uint batch = 0; batch < numSpotBatches; ++batch) {
-            // Cooperative loading: each thread loads one light into shared memory
             uint lightToLoad = batch * LIGHTS_PER_BATCH + localIdx;
             if (lightToLoad < pc.spotLightCount) {
                 SpotLight light = spotLights[lightToLoad];
@@ -279,10 +224,8 @@ void main() {
                 sharedSpotLights[localIdx].cosOuterAngle = light.cosOuterAngle;
             }
 
-            // Synchronize: ensure all lights are loaded before testing
             barrier();
 
-            // Each thread tests its cluster against all lights in this batch
             if (validCluster) {
                 uint batchEnd = min(LIGHTS_PER_BATCH, pc.spotLightCount - batch * LIGHTS_PER_BATCH);
 
@@ -301,17 +244,12 @@ void main() {
                 }
             }
 
-            // Synchronize before loading next batch
             barrier();
         }
 
-        // ----------------------------------------
-        // Write final counts (no atomics needed)
-        // ----------------------------------------
         if (validCluster) {
             clusterLightGrid[clusterIdx].counts = (spotCount << 16) | pointCount;
 
-            // Update global stats (atomics only for stats, not for correctness)
             if (pointCount > 0) atomicAdd(globals.totalPointLightsAssigned, pointCount);
             if (spotCount > 0) atomicAdd(globals.totalSpotLightsAssigned, spotCount);
         }

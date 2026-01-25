@@ -11,7 +11,6 @@ namespace core::api
 {
     namespace
     {
-        // Helper to extract and validate entity from args
         template<typename Component>
         std::optional<entt::entity> getValidEntity(const std::vector<value::Value>& args)
         {
@@ -36,7 +35,6 @@ namespace core::api
             return entity;
         }
 
-        // Template helper to get color from any light component with a 'color' field
         template<typename Component>
         value::Value getColor(const std::vector<value::Value>& args)
         {
@@ -55,7 +53,6 @@ namespace core::api
             return value::Value(arr);
         }
 
-        // Template helper to set color on any light component with a 'color' field
         template<typename Component>
         value::Value setColor(const std::vector<value::Value>& args, const char* context)
         {
@@ -81,7 +78,6 @@ namespace core::api
             return value::Value(std::monostate{});
         }
 
-        // Template helper to get a float property from any component
         template<typename Component, auto MemberPtr>
         value::Value getFloatProperty(const std::vector<value::Value>& args)
         {
@@ -96,7 +92,6 @@ namespace core::api
             return value::Value(comp.*MemberPtr);
         }
 
-        // Template helper to set a float property on any component
         template<typename Component, auto MemberPtr>
         value::Value setFloatProperty(const std::vector<value::Value>& args, const char* context)
         {
@@ -127,10 +122,6 @@ namespace core::api
         using PtLight = components::PointLightComponent;
         using SpLight = components::SpotLightComponent;
 
-        // ============================================
-        // Directional Light API
-        // ============================================
-
         interpreter->registerNativeFunction("_native_directionalLight_getColor",
             [](const std::vector<value::Value>& args) { return getColor<DirLight>(args); });
 
@@ -142,10 +133,6 @@ namespace core::api
 
         interpreter->registerNativeFunction("_native_directionalLight_setIntensity",
             [](const std::vector<value::Value>& args) { return setFloatProperty<DirLight, &DirLight::intensity>(args, "DirectionalLight.setIntensity"); });
-
-        // ============================================
-        // Point Light API
-        // ============================================
 
         interpreter->registerNativeFunction("_native_pointLight_getColor",
             [](const std::vector<value::Value>& args) { return getColor<PtLight>(args); });
@@ -164,10 +151,6 @@ namespace core::api
 
         interpreter->registerNativeFunction("_native_pointLight_setRadius",
             [](const std::vector<value::Value>& args) { return setFloatProperty<PtLight, &PtLight::radius>(args, "PointLight.setRadius"); });
-
-        // ============================================
-        // Spot Light API
-        // ============================================
 
         interpreter->registerNativeFunction("_native_spotLight_getColor",
             [](const std::vector<value::Value>& args) { return getColor<SpLight>(args); });

@@ -10,10 +10,6 @@
 
 namespace events::render {
 
-    // ============================================
-    // COMMANDS - Operations that modify render state
-    // ============================================
-
     struct SetIBLCommand : ICommand<bool> {
         std::string hdrPath;
 
@@ -119,10 +115,6 @@ namespace events::render {
 
         std::string_view getName() const override { return "LoadBillboardAtlas"; }
     };
-
-    // ============================================
-    // QUERIES - Read-only operations
-    // ============================================
 
     struct GetTextureLoadingProgressQuery : IQuery<services::TextureLoadingProgress> {
         void* instanceId;

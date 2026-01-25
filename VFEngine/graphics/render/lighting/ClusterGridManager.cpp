@@ -99,7 +99,6 @@ namespace render::lighting
 
         uint32_t totalClusters = config.getTotalClusters();
 
-        // Params UBO (HOST_VISIBLE for direct updates)
         {
             vk::DeviceSize bufferSize = sizeof(GPUClusterGridParams);
 
@@ -110,12 +109,9 @@ namespace render::lighting
             core::BufferUtilities::createBuffer(request, paramsBuffer, paramsMemory);
 
             paramsMapped = logicalDevice.mapMemory(paramsMemory, 0, bufferSize, vk::MemoryMapFlags{});
-
-            // Initialize to zero
             std::memset(paramsMapped, 0, sizeof(GPUClusterGridParams));
         }
 
-        // Cluster AABBs SSBO (DEVICE_LOCAL, updated via staging)
         {
             vk::DeviceSize bufferSize = totalClusters * sizeof(GPUClusterAABB);
 
@@ -194,9 +190,9 @@ namespace render::lighting
 
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[0].descriptorCount = 1; // 1 UBO
+        poolSizes[0].descriptorCount = 1;
         poolSizes[1].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[1].descriptorCount = 1; // 1 SSBO
+        poolSizes[1].descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -320,7 +316,6 @@ namespace render::lighting
                     float ndcMinY = -1.0f + 2.0f * static_cast<float>(y) / static_cast<float>(config.tilesY);
                     float ndcMaxY = -1.0f + 2.0f * static_cast<float>(y + 1) / static_cast<float>(config.tilesY);
 
-                    // Unproject 8 corners (4 at sliceNear, 4 at sliceFar) to view-space
                     glm::vec3 corners[8];
                     corners[0] = unprojectToViewSpace(ndcMinX, ndcMinY, sliceNear);
                     corners[1] = unprojectToViewSpace(ndcMaxX, ndcMinY, sliceNear);
@@ -331,7 +326,6 @@ namespace render::lighting
                     corners[6] = unprojectToViewSpace(ndcMinX, ndcMaxY, sliceFar);
                     corners[7] = unprojectToViewSpace(ndcMaxX, ndcMaxY, sliceFar);
 
-                    // Compute AABB from all 8 corners
                     glm::vec3 aabbMin = corners[0];
                     glm::vec3 aabbMax = corners[0];
                     for (int i = 1; i < 8; ++i)
@@ -446,7 +440,6 @@ namespace render::lighting
 
         uint32_t totalClusters = config.getTotalClusters();
 
-        // Validate AABB count matches expected cluster count
         if (cpuClusterAABBs.size() != totalClusters)
         {
             loggerError("ClusterGridManager: AABB count mismatch ({} vs expected {})",
@@ -455,8 +448,6 @@ namespace render::lighting
         }
 
         size_t copySize = totalClusters * sizeof(GPUClusterAABB);
-
-        // Copy AABBs to staging buffer
         std::memcpy(clusterAABBStagingMapped, cpuClusterAABBs.data(), copySize);
 
         // Barrier: Wait for previous frame's shader reads to complete before writing
@@ -480,7 +471,6 @@ namespace render::lighting
             {}
         );
 
-        // Copy from staging to device-local buffer
         vk::BufferCopy region{};
         region.srcOffset = 0;
         region.dstOffset = 0;
@@ -511,14 +501,10 @@ namespace render::lighting
         needsUpload = false;
     }
 
-    // Helper: Sphere-AABB intersection test
     static bool sphereIntersectsAABB(const glm::vec3& center, float radius,
                                       const glm::vec3& aabbMin, const glm::vec3& aabbMax)
     {
-        // Find the closest point on the AABB to the sphere center
         glm::vec3 closestPoint = glm::clamp(center, aabbMin, aabbMax);
-
-        // Check if the distance to the closest point is within the radius
         float distSq = glm::dot(closestPoint - center, closestPoint - center);
         return distSq <= radius * radius;
     }
@@ -551,7 +537,6 @@ namespace render::lighting
         return result;
     }
 
-    // Helper: Check if a point is inside the cone (within range and angle)
     static bool pointInCone(const glm::vec3& point, const glm::vec3& apex,
                             const glm::vec3& dir, float range, float cosAngle)
     {
@@ -560,7 +545,7 @@ namespace render::lighting
 
         if (dist < 0.0001f)
         {
-            return true; // Point at apex is inside
+            return true;
         }
         if (dist > range)
         {
@@ -571,19 +556,16 @@ namespace render::lighting
         return pointCosAngle >= cosAngle;
     }
 
-    // Helper: Get closest point on AABB to a given point
     static glm::vec3 closestPointOnAABB(const glm::vec3& point,
                                          const glm::vec3& aabbMin, const glm::vec3& aabbMax)
     {
         return glm::clamp(point, aabbMin, aabbMax);
     }
 
-    // Helper: Check if cone axis intersects AABB
     static bool coneAxisIntersectsAABB(const glm::vec3& apex, const glm::vec3& dir,
                                         float range, const glm::vec3& aabbMin, const glm::vec3& aabbMax)
     {
-        // Ray-AABB intersection using slab method
-        glm::vec3 invDir = 1.0f / (dir + glm::vec3(0.0001f)); // Avoid division by zero
+        glm::vec3 invDir = 1.0f / (dir + glm::vec3(0.0001f));
 
         glm::vec3 t1 = (aabbMin - apex) * invDir;
         glm::vec3 t2 = (aabbMax - apex) * invDir;
@@ -594,7 +576,6 @@ namespace render::lighting
         float tNear = glm::max(glm::max(tMin.x, tMin.y), tMin.z);
         float tFar = glm::min(glm::min(tMax.x, tMax.y), tMax.z);
 
-        // Check if ray intersects AABB within cone range
         return tNear <= tFar && tFar >= 0.0f && tNear <= range;
     }
 

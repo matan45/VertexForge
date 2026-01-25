@@ -36,8 +36,8 @@ struct PerDrawData {
     uint meshletCount;
 
     uint baseVertexOffset;
-    uint boneMatrixOffset; // Offset into bone SSBO, 0xFFFFFFFF if static
-    uint boneCount;        // Number of bones for this object
+    uint boneMatrixOffset; // 0xFFFFFFFF if static mesh
+    uint boneCount;
     uint padding3;
 };
 
@@ -85,7 +85,6 @@ layout(std430, set = 4, binding = 0) readonly buffer VertexBuffer {
     float vertexData[];
 };
 
-// Global bone matrix SSBO for skinning
 layout(std430, set = 5, binding = 0) readonly buffer BoneMatrices {
     mat4 boneMatrices[];
 };
@@ -150,9 +149,8 @@ void main() {
         if (localVertexIndex < vertexCount) {
             uint meshletLocalVertexIdx = meshletVertices[meshlet.vertexOffset + localVertexIndex];
             uint globalVertexIndex = meshlet.globalVertexOffset + meshletLocalVertexIdx;
-            uint baseIdx = globalVertexIndex * 16; // 16 floats per vertex (with bone data)
+            uint baseIdx = globalVertexIndex * 16;
 
-            // Read vertex position and normal
             vec3 position = vec3(
                 vertexData[baseIdx + 0],
                 vertexData[baseIdx + 1],
@@ -173,7 +171,6 @@ void main() {
                     floatBitsToInt(vertexData[baseIdx + 10]),
                     floatBitsToInt(vertexData[baseIdx + 11])
                 );
-                // Read bone weights
                 vec4 boneWeights = vec4(
                     vertexData[baseIdx + 12],
                     vertexData[baseIdx + 13],
@@ -181,7 +178,6 @@ void main() {
                     vertexData[baseIdx + 15]
                 );
 
-                // Compute skin matrix from weighted bone transforms
                 mat4 skinMatrix = mat4(0.0);
                 float totalWeight = 0.0;
                 for (int i = 0; i < 4; ++i) {
@@ -288,8 +284,8 @@ struct PerDrawData {
     uint meshletCount;
 
     uint baseVertexOffset;
-    uint boneMatrixOffset; // Offset into bone SSBO, 0xFFFFFFFF if static
-    uint boneCount;        // Number of bones for this object
+    uint boneMatrixOffset; // 0xFFFFFFFF if static mesh
+    uint boneCount;
     uint padding3;
 };
 
@@ -306,9 +302,7 @@ layout(push_constant) uniform PushConstants {
     float screenHeight;
 } pc;
 
-// ============================================================
-// Set 6: Light Data (from GPULightBufferManager)
-// ============================================================
+// Set 6: Light Data
 
 struct DirectionalLight {
     vec3 direction;
@@ -360,29 +354,23 @@ layout(std140, set = 6, binding = 3) uniform LightCountsUBO {
     LightCounts lightCounts;
 };
 
-// ============================================================
-// Set 7: Cluster Grid Params (from ClusterGridManager)
-// ============================================================
-
+// Set 7: Cluster Grid Params
 struct ClusterGridParams {
     uvec4 gridDimensions;  // xyz = tilesX, tilesY, slicesZ, w = totalClusters
     vec4 screenParams;     // xy = screenSize, zw = tileSizePixels
     vec4 depthParams;      // x = near, y = far, z = log(far/near), w = slicesZ/log(far/near)
     mat4 invProjection;
-    vec4 clusterScale;     // xyz = scale factors for cluster index
-    vec4 clusterBias;      // xyz = bias factors for cluster index
+    vec4 clusterScale;
+    vec4 clusterBias;
 };
 
 layout(std140, set = 7, binding = 0) uniform ClusterParamsUBO {
     ClusterGridParams clusterParams;
 };
 
-// ============================================================
-// Set 8: Light Culling Output (from LightCullingPipeline)
-// ============================================================
-
+// Set 8: Light Culling Output
 struct ClusterLightData {
-    uint offset;   // Offset into lightIndexList
+    uint offset;
     uint counts;   // lower 16 bits = point count, upper 16 bits = spot count
 };
 
@@ -393,10 +381,6 @@ layout(std430, set = 8, binding = 0) readonly buffer ClusterLightGridBuffer {
 layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer {
     uint lightIndexList[];
 };
-
-// ============================================================
-// Clustered Lighting Constants and Functions
-// ============================================================
 
 const float LIGHTING_PI = 3.14159265359;
 
@@ -461,7 +445,6 @@ float physicalAttenuation(float distance, float range) {
     return distAtt * windowFn;
 }
 
-// Spot light angular attenuation
 float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float cosOuter) {
     float cosAngle = dot(-lightDir, spotDir);
 
@@ -520,7 +503,6 @@ vec3 evaluatePointLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
     float NdotH = max(dot(N, H), 0.0);
     float HdotV = max(dot(H, V), 0.0);
 
-    // Attenuation
     float attenuation = physicalAttenuation(distance, light.radius);
     vec3 radiance = light.color * light.intensity * attenuation;
 
@@ -538,7 +520,6 @@ vec3 evaluatePointLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
     return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
 }
 
-// Evaluate spot light PBR contribution
 vec3 evaluateSpotLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
                        float metallic, float roughness, vec3 F0,
                        SpotLight light) {
@@ -549,7 +530,6 @@ vec3 evaluateSpotLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
 
     L = normalize(L);
 
-    // Angular attenuation
     float spotAtt = spotAngleAttenuation(L, light.direction, light.cosInnerAngle, light.cosOuterAngle);
     if (spotAtt <= 0.0) return vec3(0.0);
 
@@ -563,7 +543,6 @@ vec3 evaluateSpotLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
     float NdotH = max(dot(N, H), 0.0);
     float HdotV = max(dot(H, V), 0.0);
 
-    // Combined attenuation
     float distAtt = physicalAttenuation(distance, light.range);
     vec3 radiance = light.color * light.intensity * distAtt * spotAtt;
 
@@ -581,7 +560,6 @@ vec3 evaluateSpotLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
     return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
 }
 
-// Evaluate directional light PBR contribution
 vec3 evaluateDirectionalLight(vec3 N, vec3 V, vec3 albedo,
                               float metallic, float roughness, vec3 F0,
                               DirectionalLight light) {
@@ -721,32 +699,24 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    // ========================================
-    // Direct Lighting from Clustered Lights
-    // ========================================
     vec3 directLighting = vec3(0.0);
 
-    // Only perform cluster lookup if there are local lights in the scene
-    // This is a uniform branch (no divergence) that skips cluster fetch when no lights exist
+    // Skip cluster lookup if no local lights exist (uniform branch, no divergence)
     if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
-        // Calculate cluster index for this fragment
         float linearZ = linearizeDepth(gl_FragCoord.z);
         uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
 
-        // Fetch cluster light data
         ClusterLightData clusterData = clusterLightGrid[clusterIdx];
         uint clusterPointCount = clusterData.counts & 0xFFFFu;
         uint clusterSpotCount = clusterData.counts >> 16u;
         uint lightOffset = clusterData.offset;
 
-        // Evaluate point lights from cluster
         for (uint i = 0u; i < clusterPointCount; ++i) {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
             directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
         }
 
-        // Evaluate spot lights from cluster (indices have SPOT_LIGHT_FLAG set)
         for (uint i = 0u; i < clusterSpotCount; ++i) {
             uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
             uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
@@ -755,7 +725,6 @@ void main() {
         }
     }
 
-    // Evaluate directional lights (global, not clustered)
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
         directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light);
@@ -773,14 +742,12 @@ void main() {
         emissive = albedo * emissionMultiplier;
     }
 
-    // Combine ambient (IBL) + direct lighting + emissive
     vec3 color = ambient + directLighting + emissive;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
     uint viewModeValue = pc.viewMode & 0xFFu;
 
-    // Meshlet view mode
     if (viewModeValue == 1u) {
         uint h = fragMeshletIndex;
         h = ((h >> 16) ^ h) * 0x45d9f3b;
@@ -796,7 +763,6 @@ void main() {
         color = meshletColor;
     }
 
-    // LOD view mode
     if (viewModeValue == 2u) {
         vec3 lodColors[4] = vec3[4](
             vec3(0.0, 1.0, 0.0),
@@ -808,7 +774,6 @@ void main() {
         color = mix(color, lodColors[lod], 0.5);
     }
 
-    // Mipmap view mode
     if (viewModeValue == 3u) {
         float dx = max(length(texDx), length(texDy));
         float mipLevel = log2(max(dx * 1024.0, 1.0));
@@ -828,7 +793,6 @@ void main() {
         color = mipColor;
     }
 
-    // Cluster view mode - color by cluster index
     if (viewModeValue == 4u) {
         float linearZ = linearizeDepth(gl_FragCoord.z);
         uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);

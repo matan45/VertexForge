@@ -60,16 +60,13 @@ namespace windows::details {
 
             if (changed)
             {
-                // Clamp values to valid ranges
                 light.color = glm::clamp(light.color, glm::vec3(0.0f), glm::vec3(1.0f));
                 light.intensity = std::max(0.0f, light.intensity);
                 light.range = std::max(0.1f, light.range);
 
-                // Ensure angles are in valid range
                 light.innerAngle = std::clamp(light.innerAngle, 0.0f, 89.0f);
                 light.outerAngle = std::clamp(light.outerAngle, 1.0f, 90.0f);
 
-                // Ensure inner < outer (with minimum 1 degree gap)
                 if (light.innerAngle >= light.outerAngle)
                 {
                     light.outerAngle = std::min(light.innerAngle + 1.0f, 90.0f);

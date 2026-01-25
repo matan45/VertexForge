@@ -161,26 +161,26 @@ namespace render::gpudriven
         uint64_t getPerDrawDataBufferSize() const;
         uint64_t getTotalMemoryUsage() const;
 
-        // Light buffer accessors (for future shader integration in VK-140)
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
-
-        // Cluster grid accessors (for VK-139 light culling)
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
-
-        // Light culling accessors (for VK-140 shader integration)
         lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
 
         // Set visible lights from BVH frustum query (pre-culling before GPU upload)
         // Pass the result of LightBVH::queryFrustum() to only upload visible lights
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
 
-        // Clear BVH light culling (revert to uploading all lights)
         void clearVisibleLights();
-
-        // Check if BVH light culling is enabled
         bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);
+
+        void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
+                                 const glm::vec3& cameraPosition);
+        void registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
+        TextureIndexResolver createTextureResolver();
+        BoneOffsetResolver updateAnimationBones();
+        void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
+        void updatePipelineDescriptors();
     };
 }

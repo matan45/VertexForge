@@ -54,7 +54,6 @@ namespace render::lighting
         explicit LightCullingPipeline(core::Device& device);
         ~LightCullingPipeline();
 
-        // Non-copyable
         LightCullingPipeline(const LightCullingPipeline&) = delete;
         LightCullingPipeline& operator=(const LightCullingPipeline&) = delete;
 
@@ -77,7 +76,6 @@ namespace render::lighting
             uint32_t spotLightCount
         );
 
-        // Accessors for rendering (VK-140 shader integration)
         [[nodiscard]] vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         [[nodiscard]] vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
         [[nodiscard]] vk::Buffer getClusterLightGridBuffer() const { return clusterLightGridBuffer; }

@@ -82,7 +82,6 @@ namespace render::lighting
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
-        // Directional light buffers
         {
             vk::DeviceSize bufferSize = LightConstants::MAX_DIRECTIONAL_LIGHTS * sizeof(GPUDirectionalLight);
 
@@ -99,7 +98,6 @@ namespace render::lighting
             directionalStagingMapped = logicalDevice.mapMemory(directionalStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 
-        // Point light buffers
         {
             vk::DeviceSize bufferSize = LightConstants::MAX_POINT_LIGHTS * sizeof(GPUPointLight);
 
@@ -116,7 +114,6 @@ namespace render::lighting
             pointStagingMapped = logicalDevice.mapMemory(pointStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 
-        // Spot light buffers
         {
             vk::DeviceSize bufferSize = LightConstants::MAX_SPOT_LIGHTS * sizeof(GPUSpotLight);
 
@@ -133,7 +130,6 @@ namespace render::lighting
             spotStagingMapped = logicalDevice.mapMemory(spotStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 
-        // Light counts UBO (HOST_VISIBLE for direct updates)
         {
             vk::DeviceSize bufferSize = sizeof(GPULightCounts);
 
@@ -145,7 +141,6 @@ namespace render::lighting
 
             countsMapped = logicalDevice.mapMemory(countsMemory, 0, bufferSize, vk::MemoryMapFlags{});
 
-            // Initialize to zero
             GPULightCounts counts{0, 0, 0, 0};
             std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
         }
@@ -243,9 +238,9 @@ namespace render::lighting
 
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 3; // 3 SSBOs
+        poolSizes[0].descriptorCount = 3;
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[1].descriptorCount = 1; // 1 UBO
+        poolSizes[1].descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -373,7 +368,6 @@ namespace render::lighting
         collectPointLights(filterPtr);
         collectSpotLights(filterPtr);
 
-        // Only upload if light data actually changed
         if (detectChanges())
         {
             updateCountsBuffer();
@@ -391,7 +385,6 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            // Skip if filtering is enabled and this light is not visible
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -442,7 +435,6 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            // Skip if filtering is enabled and this light is not visible
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -457,7 +449,6 @@ namespace render::lighting
             const auto& light = view.get<components::PointLightComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Extract position from world matrix
             glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
 
             GPUPointLight& gpuLight = cpuPointLights[pointCount];
@@ -492,7 +483,6 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            // Skip if filtering is enabled and this light is not visible
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -507,7 +497,6 @@ namespace render::lighting
             const auto& light = view.get<components::SpotLightComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Extract position from world matrix
             glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
 
             // Extract forward direction from world matrix (handles parented entities correctly)
@@ -604,7 +593,6 @@ namespace render::lighting
             {}
         );
 
-        // Copy directional lights to staging buffer and record copy command
         if (directionalCount > 0)
         {
             size_t copySize = directionalCount * sizeof(GPUDirectionalLight);
@@ -617,7 +605,6 @@ namespace render::lighting
             cmd.copyBuffer(directionalStagingBuffer, directionalBuffer, region);
         }
 
-        // Copy point lights to staging buffer and record copy command
         if (pointCount > 0)
         {
             size_t copySize = pointCount * sizeof(GPUPointLight);
@@ -630,7 +617,6 @@ namespace render::lighting
             cmd.copyBuffer(pointStagingBuffer, pointBuffer, region);
         }
 
-        // Copy spot lights to staging buffer and record copy command
         if (spotCount > 0)
         {
             size_t copySize = spotCount * sizeof(GPUSpotLight);
@@ -643,7 +629,6 @@ namespace render::lighting
             cmd.copyBuffer(spotStagingBuffer, spotBuffer, region);
         }
 
-        // Memory barrier to ensure transfers complete before shader reads
         std::array<vk::BufferMemoryBarrier, 3> barriers{};
 
         barriers[0].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -681,7 +666,6 @@ namespace render::lighting
             {}
         );
 
-        // Save current state as previous for next frame's dirty detection
         prevDirectionalCount = directionalCount;
         prevPointCount = pointCount;
         prevSpotCount = spotCount;
@@ -698,7 +682,6 @@ namespace render::lighting
 
     bool GPULightBufferManager::detectChanges()
     {
-        // Check if counts changed
         if (directionalCount != prevDirectionalCount ||
             pointCount != prevPointCount ||
             spotCount != prevSpotCount)
@@ -706,7 +689,6 @@ namespace render::lighting
             return true;
         }
 
-        // Compare directional light data
         if (directionalCount > 0)
         {
             if (std::memcmp(cpuDirectionalLights.data(), prevDirectionalLights.data(),
@@ -716,7 +698,6 @@ namespace render::lighting
             }
         }
 
-        // Compare point light data
         if (pointCount > 0)
         {
             if (std::memcmp(cpuPointLights.data(), prevPointLights.data(),
@@ -726,7 +707,6 @@ namespace render::lighting
             }
         }
 
-        // Compare spot light data
         if (spotCount > 0)
         {
             if (std::memcmp(cpuSpotLights.data(), prevSpotLights.data(),

@@ -14,24 +14,21 @@ namespace core
 
 namespace render::mesh
 {
-    // Render data for cluster debug visualization
     struct ClusterDebugRenderData
     {
-        std::vector<lighting::GPUClusterAABB> clusterAABBs;  // View-space AABBs
-        glm::mat4 invViewMatrix{1.0f};                       // To transform view-space to world-space
-        std::vector<uint32_t> highlightedClusterIndices;     // Clusters affected by selected light
-        bool showAllClusters = false;                        // Show all clusters vs only highlighted
+        std::vector<lighting::GPUClusterAABB> clusterAABBs;
+        glm::mat4 invViewMatrix{1.0f};
+        std::vector<uint32_t> highlightedClusterIndices;
+        bool showAllClusters = false;
     };
 
-    // GPU instance data for instanced rendering
     struct ClusterInstance
     {
-        glm::vec4 minPoint;   // xyz = view-space min, w = unused
-        glm::vec4 maxPoint;   // xyz = view-space max, w = highlighted flag
-        glm::vec4 color;      // RGBA color
+        glm::vec4 minPoint;
+        glm::vec4 maxPoint;
+        glm::vec4 color;
     };
 
-    // Push constants for cluster wireframe shader
     struct ClusterPushConstants
     {
         glm::mat4 viewProjection;

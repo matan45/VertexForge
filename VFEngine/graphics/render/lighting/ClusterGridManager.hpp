@@ -62,21 +62,15 @@ namespace render::lighting
         // Upload to GPU (call within command buffer recording)
         void uploadToGPU(vk::CommandBuffer cmd);
 
-        // Accessors for VK-139 light culling
         [[nodiscard]] vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         [[nodiscard]] vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
         [[nodiscard]] vk::Buffer getParamsBuffer() const { return paramsBuffer; }
         [[nodiscard]] vk::Buffer getClusterAABBBuffer() const { return clusterAABBBuffer; }
-
         [[nodiscard]] const ClusterGridConfig& getConfig() const { return config; }
         [[nodiscard]] uint32_t getTotalClusters() const { return config.getTotalClusters(); }
-
         [[nodiscard]] bool isInitialized() const { return initialized; }
-
-        // Access CPU-side cluster AABBs (for debug rendering)
         [[nodiscard]] const std::vector<GPUClusterAABB>& getClusterAABBs() const { return cpuClusterAABBs; }
 
-        // Light-cluster intersection queries (for debug visualization)
         [[nodiscard]] std::vector<uint32_t> getClusterIndicesForPointLight(
             const glm::vec3& lightPosViewSpace,
             float radius) const;

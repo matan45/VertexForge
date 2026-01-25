@@ -57,7 +57,6 @@ namespace windows::details {
 
             if (changed)
             {
-                // Clamp values to valid ranges
                 light.color = glm::clamp(light.color, glm::vec3(0.0f), glm::vec3(1.0f));
                 light.intensity = std::max(0.0f, light.intensity);
 

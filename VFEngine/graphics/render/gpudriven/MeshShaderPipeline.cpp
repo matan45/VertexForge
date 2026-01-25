@@ -30,7 +30,6 @@ namespace render::gpudriven
                                   vk::DescriptorSetLayout cullingOutputLayout,
                                   vk::RenderPass renderPass)
     {
-        // Cache lighting layouts for potential pipeline recreation
         cachedLightDataLayout = lightDataLayout;
         cachedClusterGridLayout = clusterGridLayout;
         cachedCullingOutputLayout = cullingOutputLayout;
@@ -54,7 +53,6 @@ namespace render::gpudriven
 
         core::BufferUtilities::createBuffer(request, statsBuffer, statsBufferMemory);
 
-        // Initialize to zero
         void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(MeshletCullingStats));
         std::memset(data, 0, sizeof(MeshletCullingStats));
         vkDevice.unmapMemory(statsBufferMemory);
@@ -84,7 +82,6 @@ namespace render::gpudriven
             pipelineLayout = nullptr;
         }
 
-        // Stats buffer
         core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
 
         if (perDrawDataPool)
@@ -132,7 +129,6 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        // Update cached lighting layouts
         cachedLightDataLayout = lightDataLayout;
         cachedClusterGridLayout = clusterGridLayout;
         cachedCullingOutputLayout = cullingOutputLayout;
@@ -211,8 +207,6 @@ namespace render::gpudriven
 
     void MeshShaderPipeline::updateVertexDescriptors(MergedMeshBuffer& mergedBuffer)
     {
-        // For now, use the single interleaved vertex buffer
-        // The mesh shader will unpack position/normal/texcoord from the interleaved format
         vk::DescriptorBufferInfo vertexInfo{};
         vertexInfo.buffer = mergedBuffer.getVertexBuffer();
         vertexInfo.offset = 0;
@@ -233,8 +227,6 @@ namespace render::gpudriven
                                                        vk::DescriptorSet clusterGridDescSet,
                                                        vk::DescriptorSet cullingOutputDescSet)
     {
-        // Cache external descriptor sets for binding during rendering
-        // These are managed by GPULightBufferManager, ClusterGridManager, and LightCullingPipeline
         lightDataDescriptorSet = lightDataDescSet;
         clusterGridDescriptorSet = clusterGridDescSet;
         cullingOutputDescriptorSet = cullingOutputDescSet;

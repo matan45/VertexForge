@@ -79,7 +79,6 @@ namespace controllers::offscreen
             return;
         }
 
-        // Update runtime animators during play mode
         if (ctx.playModeActive)
         {
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
@@ -271,20 +270,16 @@ namespace controllers::offscreen
             }
         }
 
-        // Query light BVH for visible lights and pass to GPU-driven renderer
         if (useGPUDrivenCulling && ctx.lightBvhManager && frustumReady)
         {
-            // Update light BVH if dirty
             ctx.lightBvhManager->update();
 
-            // Query visible lights from BVH
             std::vector<uint32_t> visibleLights;
             ctx.lightBvhManager->queryFrustum(*activeFrustum, visibleLights);
             renderHandler->setVisibleLightsFromBVH(visibleLights);
         }
         else if (useGPUDrivenCulling)
         {
-            // No frustum or BVH - clear BVH culling to upload all lights
             renderHandler->clearVisibleLights();
         }
 
@@ -510,7 +505,6 @@ namespace controllers::offscreen
 
             render::mesh::PhysicsColliderRenderData renderData;
 
-            // Size is passed separately to PhysicsDebugRenderer which scales unit geometry
             glm::mat4 offsetMatrix = glm::translate(glm::mat4(1.0f), colliderComp.offset);
             renderData.worldMatrix = worldTransform.worldMatrix * offsetMatrix;
 
@@ -672,7 +666,6 @@ namespace controllers::offscreen
     {
         auto* renderHandler = ctx.renderHandler;
 
-        // Update light BVH (rebuild or refit as needed)
         if (ctx.lightBvhManager)
         {
             ctx.lightBvhManager->update();
@@ -720,14 +713,12 @@ namespace controllers::offscreen
             return;
         }
 
-        // Only render cluster debug in editor mode when enabled
         if (ctx.playModeActive || !ctx.showDebugRendering || !ctx.showClusterDebug)
         {
             renderHandler->setShowClusterDebug(false);
             return;
         }
 
-        // Camera controller is required for view matrix transformations
         if (!ctx.cameraController)
         {
             renderHandler->setShowClusterDebug(false);
@@ -736,7 +727,6 @@ namespace controllers::offscreen
 
         renderHandler->setShowClusterDebug(true);
 
-        // Get the cluster grid manager from GPU-driven renderer
         auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
         if (!gpuRenderer)
         {
@@ -749,34 +739,25 @@ namespace controllers::offscreen
             return;
         }
 
-        // Get view matrix once for all transformations
         glm::mat4 viewMatrix = ctx.cameraController->getCurrentViewMatrix();
 
-        // Prepare cluster debug render data
         render::mesh::ClusterDebugRenderData debugData;
         debugData.clusterAABBs = clusterGridManager->getClusterAABBs();
         debugData.invViewMatrix = glm::inverse(viewMatrix);
 
-        // Check if a light entity is selected and compute affected clusters
         auto& registry = scene::EntityRegistry::getRegistry();
 
-        // Query selected entity (we need to check all light types)
-        // For now, find any selected light and highlight its clusters
         auto pointView = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
         for (auto entity : pointView)
         {
             const auto& lightComp = pointView.get<components::PointLightComponent>(entity);
 
-            // Check if this light has showGizmo enabled (use as proxy for "selected")
             if (lightComp.showGizmo)
             {
                 const auto& worldTransform = pointView.get<components::WorldTransformComponent>(entity);
                 glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
-
-                // Transform to view space
                 glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
 
-                // Get affected clusters
                 auto affectedClusters = clusterGridManager->getClusterIndicesForPointLight(viewPos, lightComp.radius);
                 debugData.highlightedClusterIndices.insert(
                     debugData.highlightedClusterIndices.end(),
@@ -795,15 +776,11 @@ namespace controllers::offscreen
             {
                 const auto& worldTransform = spotView.get<components::WorldTransformComponent>(entity);
                 glm::vec3 worldPos = glm::vec3(worldTransform.worldMatrix[3]);
-
-                // Get direction from transform (forward is -Z in local space)
                 glm::vec3 worldDir = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
-                // Transform to view space
                 glm::vec3 viewPos = glm::vec3(viewMatrix * glm::vec4(worldPos, 1.0f));
                 glm::vec3 viewDir = glm::normalize(glm::vec3(viewMatrix * glm::vec4(worldDir, 0.0f)));
 
-                // Get affected clusters
                 float outerAngleCos = std::cos(glm::radians(lightComp.outerAngle));
                 auto affectedClusters = clusterGridManager->getClusterIndicesForSpotLight(
                     viewPos, viewDir, lightComp.range, outerAngleCos);
@@ -815,7 +792,6 @@ namespace controllers::offscreen
             }
         }
 
-        // Set whether to show all clusters or just highlighted ones
         debugData.showAllClusters = debugData.highlightedClusterIndices.empty();
 
         renderHandler->setClusterDebugData(std::move(debugData));

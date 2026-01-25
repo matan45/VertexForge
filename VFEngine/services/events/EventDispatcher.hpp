@@ -10,7 +10,6 @@
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
-#include <future>
 
 namespace events {
 
@@ -18,7 +17,6 @@ namespace events {
     public:
         static EventDispatcher& instance();
 
-        // Prevent copying
         EventDispatcher(const EventDispatcher&) = delete;
         EventDispatcher& operator=(const EventDispatcher&) = delete;
 
@@ -30,19 +28,13 @@ namespace events {
         template<typename TQuery>
         typename TQuery::ResultType query(const TQuery& queryObj);
 
-        // Async command execution - returns future
-        template<typename TCommand>
-        std::future<typename TCommand::ResultType> executeAsync(const TCommand& command);
-
         // Notification publishing - fire and forget (synchronous broadcast)
         template<typename TNotification>
         void publish(const TNotification& notification);
 
-        // Command handler registration
         template<typename TCommand>
         void registerCommandHandler(std::function<typename TCommand::ResultType(const TCommand&)> handler);
 
-        // Query handler registration
         template<typename TQuery>
         void registerQueryHandler(std::function<typename TQuery::ResultType(const TQuery&)> handler);
 
@@ -50,7 +42,6 @@ namespace events {
         template<typename TNotification>
         SubscriptionToken subscribe(std::function<void(const TNotification&)> handler);
 
-        // Unsubscribe from notifications
         void unsubscribe(SubscriptionToken token);
 
         // Clear all handlers (useful for testing or shutdown)
@@ -73,8 +64,6 @@ namespace events {
         std::atomic<uint64_t> nextToken{ 1 };
         mutable std::shared_mutex mutex;
     };
-
-    // Template implementations
 
     template<typename TCommand>
     typename TCommand::ResultType EventDispatcher::execute(const TCommand& command) {
@@ -104,20 +93,13 @@ namespace events {
         return handler(queryObj);
     }
 
-    template<typename TCommand>
-    std::future<typename TCommand::ResultType> EventDispatcher::executeAsync(const TCommand& command) {
-        return std::async(std::launch::async, [this, command]() {
-            return this->execute(command);
-        });
-    }
-
     template<typename TNotification>
     void EventDispatcher::publish(const TNotification& notification) {
         std::shared_lock lock(mutex);
 
         auto it = notificationSubscribers.find(std::type_index(typeid(TNotification)));
         if (it == notificationSubscribers.end()) {
-            return; // No subscribers, that's fine
+            return;
         }
 
         using HandlerType = std::function<void(const TNotification&)>;
@@ -176,14 +158,13 @@ namespace events {
         {
         }
 
-        // Move-only (no copying)
         ScopedSubscription(const ScopedSubscription&) = delete;
         ScopedSubscription& operator=(const ScopedSubscription&) = delete;
 
         ScopedSubscription(ScopedSubscription&& other) noexcept
             : token(other.token)
         {
-            other.token = {};  // Invalidate moved-from token
+            other.token = {};
         }
 
         ScopedSubscription& operator=(ScopedSubscription&& other) noexcept
@@ -212,7 +193,6 @@ namespace events {
             }
         }
 
-        // Check if subscription is active
         bool isValid() const { return token.isValid(); }
 
         // Release ownership without unsubscribing (use with caution)

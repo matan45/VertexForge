@@ -52,9 +52,6 @@ namespace render
     {
         clearColor->init();
 
-        // Register callback to invalidate custom shader cache when materials change
-        // Done in init() rather than constructor for exception safety - if init() fails,
-        // destructor will still be called and properly unregister the callback
         if (!materialChangeCallbackId) {
             materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
                 [this](const std::string& materialPath) {
