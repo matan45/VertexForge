@@ -15,6 +15,7 @@ namespace windows
         void loadFromScene();
         void saveToScene();
         void resetToDefaults();
+        void applySettings();
 
     public:
         void draw();

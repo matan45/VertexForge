@@ -39,6 +39,10 @@ namespace windows
         isDirty = true;
     }
 
+    void RenderConfigWindow::applySettings()
+    {
+    }
+
     void RenderConfigWindow::drawShadowSection()
     {
         if (ImGui::CollapsingHeader("Shadows", ImGuiTreeNodeFlags_DefaultOpen))
@@ -120,6 +124,11 @@ namespace windows
 
         if (ImGui::Begin(title.c_str(), &visible))
         {
+            // Shadow settings section
+            drawShadowSection();
+            ImGui::Separator();
+            ImGui::Spacing();
+            
             // Action buttons
             if (ImGui::Button("Save to Scene"))
             {
@@ -131,16 +140,15 @@ namespace windows
                 loadFromScene();
             }
             ImGui::SameLine();
+            if (ImGui::Button("Apply"))
+            {
+                applySettings();
+            }
+            ImGui::SameLine();
             if (ImGui::Button("Reset Defaults"))
             {
                 resetToDefaults();
             }
-
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            // Shadow settings section
-            drawShadowSection();
         }
         ImGui::End();
     }

@@ -76,6 +76,16 @@
       "timeToSleep": 0.5
     }
   },
+  "renderSettings": {
+    "shadows": {
+      "cascadeCount": 4,
+      "cascadeSplitMode": "practical",
+      "enabled": true,
+      "normalBias": 0.019999999552965164,
+      "quality": "high",
+      "shadowBias": 0.004999999888241291
+    }
+  },
   "root": {
     "children": [],
     "components": {},
@@ -98,7 +108,7 @@
         1.0
       ]
     },
-    "uuid": 7973332712731998442
+    "uuid": 17516301760157937024
   },
   "version": "1.1"
 }
