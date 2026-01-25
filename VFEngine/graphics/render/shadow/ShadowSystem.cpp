@@ -5,6 +5,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include <spdlog/spdlog.h>
+#include <chrono>
 
 namespace render::shadow
 {
@@ -266,13 +267,13 @@ namespace render::shadow
         logicalDevice.updateDescriptorSets(1, &write, 0, nullptr);
     }
 
-    void ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
+    bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
     {
         if (lightShadowData.contains(entityId))
         {
             spdlog::warn("ShadowSystem: Light {} already registered, updating settings", entityId);
             updateLightSettings(entityId, settings);
-            return;
+            return true;  // Already registered is considered success
         }
 
         LightShadowData data;
@@ -306,13 +307,14 @@ namespace render::shadow
         if (!allocateShadowMaps(data))
         {
             spdlog::error("ShadowSystem: Failed to allocate shadow maps for light {}", entityId);
-            return;
+            return false;
         }
 
         lightShadowData[entityId] = std::move(data);
         needsUpdate = true;
 
         spdlog::debug("ShadowSystem: Registered light {} with {} shadow views", entityId, viewCount);
+        return true;
     }
 
     void ShadowSystem::unregisterLight(uint32_t entityId)
@@ -1019,6 +1021,198 @@ namespace render::shadow
         }
 
         needsUpdate = true;
+    }
+
+    // Frame time budget threshold for warning about expensive operations (16ms = 60fps frame)
+    static constexpr float FRAME_BUDGET_WARNING_MS = 16.0f;
+
+    void ShadowSystem::applyRenderSettings(const types::RenderSettings& settings)
+    {
+        if (!initialized)
+        {
+            spdlog::warn("ShadowSystem::applyRenderSettings() called when not initialized");
+            return;
+        }
+
+        const auto& shadowSettings = settings.shadows;
+
+        // Update enabled state
+        setShadowsEnabled(shadowSettings.enabled);
+
+        if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
+        {
+            spdlog::info("ShadowSystem: Shadows disabled via RenderSettings");
+            return;
+        }
+
+        // Get atlas config from quality or use direct config
+        types::ShadowAtlasConfig atlasConfig = shadowSettings.atlas;
+        if (atlasConfig.atlasSize == 0)
+        {
+            // If no explicit config, derive from quality
+            atlasConfig = types::ShadowAtlasConfig::fromQuality(shadowSettings.quality);
+        }
+
+        spdlog::debug("ShadowSystem: Applying render settings - quality={}, atlasSize={}",
+                      static_cast<int>(shadowSettings.quality), atlasConfig.atlasSize);
+
+        // Check if atlas resize is needed
+        bool needsResize = atlasManager &&
+                           (atlasManager->getAtlasWidth() != atlasConfig.atlasSize ||
+                            atlasManager->getAtlasHeight() != atlasConfig.atlasSize);
+
+        if (needsResize)
+        {
+            auto resizeStartTime = std::chrono::high_resolution_clock::now();
+
+            spdlog::info("ShadowSystem: Atlas resize required - {} -> {}",
+                         atlasManager->getAtlasWidth(), atlasConfig.atlasSize);
+
+            // Store existing light registrations
+            struct LightRegInfo
+            {
+                uint32_t entityId;
+                ShadowMapType type;
+                ShadowSettings settings;
+            };
+            std::vector<LightRegInfo> existingLights;
+
+            for (const auto& [entityId, data] : lightShadowData)
+            {
+                existingLights.push_back({entityId, data.type, data.settings});
+            }
+
+            // Free all shadow maps (but keep registration data)
+            for (auto& [entityId, data] : lightShadowData)
+            {
+                freeShadowMaps(data);
+            }
+
+            // Clear tracked handles in atlas
+            lightShadowData.clear();
+
+            // Resize atlas
+            auto resizeResult = atlasManager->applyQualitySettings(atlasConfig);
+            if (!resizeResult.success)
+            {
+                spdlog::error("ShadowSystem: Atlas resize failed");
+                return;
+            }
+
+            // Recreate framebuffer if shadow pass pipeline exists
+            if (shadowPassPipeline && shadowPassPipeline->isInitialized())
+            {
+                shadowPassPipeline->createFramebuffer(
+                    atlasManager->getAtlasImageView(),
+                    atlasManager->getAtlasWidth(),
+                    atlasManager->getAtlasHeight()
+                );
+            }
+
+            // Re-register lights with new resolutions
+            uint32_t registeredCount = 0;
+            uint32_t failedCount = 0;
+
+            for (const auto& info : existingLights)
+            {
+                ShadowSettings newSettings = info.settings;
+
+                // Update resolution based on light type and new quality config
+                switch (info.type)
+                {
+                    case ShadowMapType::DirectionalCSM:
+                    case ShadowMapType::Directional2D:
+                        newSettings.resolution = atlasConfig.directionalResolution;
+                        break;
+                    case ShadowMapType::Spot2D:
+                        newSettings.resolution = atlasConfig.spotResolution;
+                        break;
+                    case ShadowMapType::PointCube:
+                        newSettings.resolution = atlasConfig.pointResolution;
+                        break;
+                    default:
+                        break;
+                }
+
+                // Update cascade count from render settings
+                newSettings.cascadeCount = shadowSettings.cascadeCount;
+
+                if (registerLight(info.entityId, info.type, newSettings))
+                {
+                    ++registeredCount;
+                }
+                else
+                {
+                    ++failedCount;
+                    spdlog::warn("ShadowSystem: Failed to re-register light {} after resize", info.entityId);
+                }
+            }
+
+            if (failedCount > 0)
+            {
+                spdlog::warn("ShadowSystem: Re-registered {}/{} lights after atlas resize ({} failed)",
+                             registeredCount, existingLights.size(), failedCount);
+            }
+            else
+            {
+                spdlog::info("ShadowSystem: Re-registered all {} lights after atlas resize",
+                             existingLights.size());
+            }
+
+            // Measure and warn about expensive resize operations
+            auto resizeEndTime = std::chrono::high_resolution_clock::now();
+            float resizeMs = std::chrono::duration<float, std::milli>(resizeEndTime - resizeStartTime).count();
+            if (resizeMs > FRAME_BUDGET_WARNING_MS)
+            {
+                spdlog::warn("ShadowSystem: Atlas resize took {:.1f}ms (exceeds {:.0f}ms frame budget)",
+                             resizeMs, FRAME_BUDGET_WARNING_MS);
+            }
+            else
+            {
+                spdlog::debug("ShadowSystem: Atlas resize completed in {:.1f}ms", resizeMs);
+            }
+        }
+        else
+        {
+            // No resize needed, just update quality and bias settings
+            globalQuality = static_cast<ShadowQuality>(shadowSettings.quality);
+
+            for (auto& [entityId, data] : lightShadowData)
+            {
+                // Update bias settings
+                data.settings.depthBias = shadowSettings.shadowBias;
+                data.settings.normalBias = shadowSettings.normalBias;
+
+                // Update cascade count if changed (requires reallocation for CSM)
+                // NOTE: This is an expensive operation that reallocates shadow maps
+                if (data.type == ShadowMapType::DirectionalCSM &&
+                    data.settings.cascadeCount != shadowSettings.cascadeCount)
+                {
+                    auto cascadeStartTime = std::chrono::high_resolution_clock::now();
+
+                    freeShadowMaps(data);
+                    data.settings.cascadeCount = shadowSettings.cascadeCount;
+                    data.views.resize(shadowSettings.cascadeCount);
+                    allocateShadowMaps(data);
+
+                    auto cascadeEndTime = std::chrono::high_resolution_clock::now();
+                    float cascadeMs = std::chrono::duration<float, std::milli>(cascadeEndTime - cascadeStartTime).count();
+                    if (cascadeMs > FRAME_BUDGET_WARNING_MS)
+                    {
+                        spdlog::warn("ShadowSystem: Cascade reallocation for light {} took {:.1f}ms (exceeds frame budget)",
+                                     entityId, cascadeMs);
+                    }
+                }
+
+                data.settingsDirty = true;
+            }
+        }
+
+        // Reset atlas first use flag to ensure proper layout transitions
+        atlasFirstUse = true;
+        needsUpdate = true;
+
+        spdlog::info("ShadowSystem: Render settings applied successfully");
     }
 
     uint32_t ShadowSystem::getActiveShadowCasterCount() const

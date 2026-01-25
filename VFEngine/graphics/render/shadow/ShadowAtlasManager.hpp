@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShadowTypes.hpp"
+#include "types/RenderSettings.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <unordered_map>
@@ -46,6 +47,9 @@ namespace render::shadow
         std::vector<ShadowAtlasTile> tiles;
         std::unordered_map<uint32_t, uint32_t> handleToTileIndex;  // atlasIndex -> tiles vector index
 
+        // Entity-to-handles tracking for bulk operations
+        std::unordered_map<uint32_t, std::vector<uint32_t>> entityToHandles;  // entityId -> atlasIndex list
+
         // State
         bool initialized = false;
         uint32_t nextAtlasIndex = 0;
@@ -70,6 +74,31 @@ namespace render::shadow
                                                ShadowMapType type, uint32_t layer = 0);
         void free(const ShadowMapHandle& handle);
         void freeAll();
+
+        // Batch allocation for cascades (atomic success/rollback)
+        [[nodiscard]] std::vector<ShadowMapHandle> allocateCascades(
+            uint32_t resolution, uint32_t cascadeCount, uint32_t lightEntityId);
+
+        // Entity-based bulk operations
+        void freeAllForEntity(uint32_t entityId);
+        void trackHandleForEntity(uint32_t entityId, uint32_t atlasIndex);
+
+        // Result of resize operation
+        struct ResizeResult
+        {
+            bool success = false;           // True if resize completed (may have partial reallocation)
+            uint32_t requestedCount = 0;    // Number of allocations that existed before resize
+            uint32_t reallocatedCount = 0;  // Number successfully reallocated after resize
+            bool allReallocated() const { return requestedCount == reallocatedCount; }
+        };
+
+        // Dynamic resize (waits for GPU idle, reallocates existing tiles)
+        // Returns statistics about reallocation success for caller to handle partial failures
+        [[nodiscard]] ResizeResult resize(uint32_t newWidth, uint32_t newHeight);
+
+        // Apply quality settings (may trigger resize)
+        // Returns resize result if resize occurred, or success with zero counts if no resize needed
+        [[nodiscard]] ResizeResult applyQualitySettings(const types::ShadowAtlasConfig& config);
 
         // Query allocated region
         [[nodiscard]] ShadowAtlasTile getTile(const ShadowMapHandle& handle) const;

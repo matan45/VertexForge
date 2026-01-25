@@ -7,6 +7,7 @@
 #include "CascadeShadowCalculator.hpp"
 #include "PointShadowCalculator.hpp"
 #include "SpotShadowCalculator.hpp"
+#include "types/RenderSettings.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -107,7 +108,8 @@ namespace render
             // ===== Light Shadow Registration =====
 
             // Register a light for shadow casting
-            void registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings = {});
+            // Returns true if registration succeeded, false if allocation failed
+            [[nodiscard]] bool registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings = {});
             void unregisterLight(uint32_t entityId);
             void updateLightSettings(uint32_t entityId, const ShadowSettings& settings);
 
@@ -169,6 +171,9 @@ namespace render
 
             void setGlobalQuality(ShadowQuality quality);
             [[nodiscard]] ShadowQuality getGlobalQuality() const { return globalQuality; }
+
+            // Apply render settings (may trigger atlas resize and reallocation)
+            void applyRenderSettings(const types::RenderSettings& settings);
 
             // ===== Statistics =====
 

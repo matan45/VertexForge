@@ -155,6 +155,16 @@ namespace controllers {
 		return offScreenController->getCullingStats();
 	}
 
+	void OffScreen::applyShadowSettings(const types::RenderSettings& settings)
+	{
+		offScreenController->applyShadowSettings(settings);
+	}
+
+	services::ShadowStats OffScreen::getShadowStats() const
+	{
+		return offScreenController->getShadowStats();
+	}
+
 	void OffScreen::setPlayMode(bool playMode)
 	{
 		offScreenController->setPlayMode(playMode);

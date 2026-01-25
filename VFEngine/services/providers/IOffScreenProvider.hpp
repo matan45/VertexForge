@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <optional>
 #include "types/CameraTypes.hpp"
+#include "types/RenderSettings.hpp"
 
 namespace services {
 
@@ -99,6 +100,17 @@ namespace services {
         GPUDrivenDebugStats gpuDriven;
     };
 
+    struct ShadowStats {
+        uint32_t atlasWidth = 0;
+        uint32_t atlasHeight = 0;
+        float atlasUtilization = 0.0f;
+        uint32_t activeShadowCasters = 0;
+        uint32_t activeShadowViews = 0;
+        uint32_t directionalLightCount = 0;
+        uint32_t pointLightCount = 0;
+        uint32_t spotLightCount = 0;
+    };
+
     class IOffScreenProvider {
     public:
         virtual ~IOffScreenProvider() = default;
@@ -145,6 +157,10 @@ namespace services {
 
         // Debug/Stats API
         virtual CullingDebugStats getCullingStats() const = 0;
+
+        // Shadow Settings API
+        virtual void applyShadowSettings(const types::RenderSettings& settings) = 0;
+        virtual ShadowStats getShadowStats() const = 0;
 
         // Editor Mode API
         virtual void setPlayMode(bool playMode) = 0;

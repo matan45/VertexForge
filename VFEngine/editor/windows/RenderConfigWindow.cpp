@@ -1,6 +1,7 @@
 #include "RenderConfigWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/RenderEvents.hpp"
 #include <imgui.h>
 #include <algorithm>
 
@@ -42,9 +43,16 @@ namespace windows
     void RenderConfigWindow::applySettings()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        events::scene::SetRenderSettingsCommand cmd;
-        cmd.settings = settings;
-        dispatcher.execute(cmd);
+
+        // Save settings to scene
+        events::scene::SetRenderSettingsCommand sceneCmd;
+        sceneCmd.settings = settings;
+        dispatcher.execute(sceneCmd);
+
+        // Apply shadow settings to the shadow system
+        events::render::ApplyShadowSettingsCommand shadowCmd;
+        shadowCmd.settings = settings;
+        dispatcher.execute(shadowCmd);
     }
 
     void RenderConfigWindow::drawShadowSection()
@@ -68,7 +76,13 @@ namespace windows
                 if (ImGui::Combo("Quality", &currentQuality, qualityItems, 5))
                 {
                     settings.shadows.quality = static_cast<types::ShadowQuality>(currentQuality);
+                    // Update atlas config from quality
+                    settings.shadows.atlas = types::ShadowAtlasConfig::fromQuality(settings.shadows.quality);
                     isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Click 'Apply' to change quality.\nThis may cause a brief stutter while the shadow atlas is resized.");
                 }
 
                 ImGui::Separator();

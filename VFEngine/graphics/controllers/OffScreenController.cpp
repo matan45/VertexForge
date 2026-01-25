@@ -4,6 +4,8 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
 #include "../render/DebugRenderer.hpp"
+#include "../render/gpudriven/GPUDrivenRenderer.hpp"
+#include "../render/shadow/ShadowSystem.hpp"
 #include "offscreen/IBLController.hpp"
 #include "offscreen/MeshAssetManager.hpp"
 #include "offscreen/CameraController.hpp"
@@ -275,6 +277,58 @@ namespace controllers
     services::CullingDebugStats OffScreenController::getCullingStats() const
     {
         return statsCollector->collect(offScreen->getRenderPassHandler(), bvhManager.get(), lightBvhManager.get());
+    }
+
+    void OffScreenController::applyShadowSettings(const types::RenderSettings& settings)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (!gpuDriven)
+            return;
+
+        auto* shadowSystem = gpuDriven->getShadowSystem();
+        if (shadowSystem)
+        {
+            shadowSystem->applyRenderSettings(settings);
+        }
+    }
+
+    services::ShadowStats OffScreenController::getShadowStats() const
+    {
+        services::ShadowStats stats{};
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return stats;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (!gpuDriven)
+            return stats;
+
+        auto* shadowSystem = gpuDriven->getShadowSystem();
+        if (!shadowSystem)
+            return stats;
+
+        auto* atlasManager = shadowSystem->getAtlasManager();
+        if (atlasManager)
+        {
+            stats.atlasWidth = atlasManager->getAtlasWidth();
+            stats.atlasHeight = atlasManager->getAtlasHeight();
+            stats.atlasUtilization = atlasManager->getAtlasUtilization();
+        }
+
+        stats.activeShadowCasters = shadowSystem->getActiveShadowCasterCount();
+        stats.activeShadowViews = shadowSystem->getActiveShadowViewCount();
+
+        // Count light types from shadow views
+        stats.directionalLightCount = static_cast<uint32_t>(shadowSystem->getDirectionalShadowViews().size());
+        stats.pointLightCount = static_cast<uint32_t>(shadowSystem->getPointShadowViews().size());
+        stats.spotLightCount = static_cast<uint32_t>(shadowSystem->getSpotShadowViews().size());
+
+        return stats;
     }
 
     void OffScreenController::setShowGrid(bool show)
