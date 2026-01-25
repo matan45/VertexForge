@@ -66,6 +66,11 @@ namespace render
             vk::DescriptorPool shadowDataPool;
             vk::DescriptorSet shadowDataDescSet;
 
+            // Descriptor resources for shadow textures (atlas + CSM array + point cubes)
+            vk::DescriptorSetLayout shadowTextureLayout;
+            vk::DescriptorPool shadowTexturePool;
+            vk::DescriptorSet shadowTextureDescSet;
+
             // Collected shadow views for current frame (sorted by type for batching)
             std::vector<ShadowView> directionalShadowViews;
             std::vector<ShadowView> pointShadowViews;
@@ -73,6 +78,10 @@ namespace render
 
             // GPU shadow data array (for upload)
             std::vector<GPUShadowData> gpuShadowData;
+
+            // Entity to shadow index mapping (updated each frame in buildGPUShadowData)
+            // Maps entityId -> base index in gpuShadowData for that light's first view
+            std::unordered_map<uint32_t, int32_t> entityToShadowIndex;
 
             // Global settings
             bool shadowsEnabled = true;
@@ -118,6 +127,10 @@ namespace render
             [[nodiscard]] const LightShadowData* getLightShadowData(uint32_t entityId) const;
             [[nodiscard]] LightShadowData* getLightShadowData(uint32_t entityId);
 
+            // Get the base shadow view index for a light in the GPU shadow data buffer
+            // Returns -1 if the light has no shadow or shadows are disabled
+            [[nodiscard]] int32_t getShadowViewIndex(uint32_t entityId) const;
+
             // ===== Frame Update =====
 
             // Call each frame before shadow pass recording
@@ -160,6 +173,8 @@ namespace render
             [[nodiscard]] vk::DescriptorSet getAtlasDescriptorSet() const;
             [[nodiscard]] vk::DescriptorSetLayout getShadowDataLayout() const { return shadowDataLayout; }
             [[nodiscard]] vk::DescriptorSet getShadowDataDescSet() const { return shadowDataDescSet; }
+            [[nodiscard]] vk::DescriptorSetLayout getShadowTextureLayout() const { return shadowTextureLayout; }
+            [[nodiscard]] vk::DescriptorSet getShadowTextureDescSet() const { return shadowTextureDescSet; }
 
             // ===== Global Settings =====
 
@@ -199,6 +214,9 @@ namespace render
             void destroyShadowDataBuffer();
             void createDescriptorResources();
             void updateDescriptorSet();
+            void createShadowTextureDescriptor();
+            void updateShadowTextureDescriptor();
+            void destroyShadowTextureDescriptor();
 
             // Allocate shadow map tiles in atlas for a light
             bool allocateShadowMaps(LightShadowData& data);

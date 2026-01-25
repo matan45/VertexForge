@@ -7,9 +7,9 @@
 namespace render::lighting
 {
     // Light buffer capacity limits
-    // Memory budget: ~66KB device + ~66KB staging = ~132KB total
+    // Memory budget: ~82KB device + ~82KB staging = ~164KB total
     //   - 64 directional × 32 bytes = 2KB
-    //   - 1024 point × 32 bytes = 32KB
+    //   - 1024 point × 48 bytes = 48KB (includes shadowIndex)
     //   - 512 spot × 64 bytes = 32KB
     //
     // These limits support typical game scenes. For larger scenes with many lights,
@@ -27,13 +27,13 @@ namespace render::lighting
         glm::vec3 direction;      // 12 bytes - normalized direction vector
         float intensity;          // 4 bytes
         glm::vec3 color;          // 12 bytes
-        uint32_t padding;         // 4 bytes
+        int32_t shadowIndex;      // 4 bytes - Index into shadow data SSBO, -1 = no shadow
     };
     static_assert(sizeof(GPUDirectionalLight) == 32, "GPUDirectionalLight must be 32 bytes");
     static_assert(offsetof(GPUDirectionalLight, direction) == 0, "GPUDirectionalLight::direction offset mismatch");
     static_assert(offsetof(GPUDirectionalLight, intensity) == 12, "GPUDirectionalLight::intensity offset mismatch");
     static_assert(offsetof(GPUDirectionalLight, color) == 16, "GPUDirectionalLight::color offset mismatch");
-    static_assert(offsetof(GPUDirectionalLight, padding) == 28, "GPUDirectionalLight::padding offset mismatch");
+    static_assert(offsetof(GPUDirectionalLight, shadowIndex) == 28, "GPUDirectionalLight::shadowIndex offset mismatch");
 
     struct alignas(16) GPUPointLight
     {
@@ -41,12 +41,16 @@ namespace render::lighting
         float radius;             // 4 bytes - light influence radius
         glm::vec3 color;          // 12 bytes
         float intensity;          // 4 bytes
+        int32_t shadowIndex;      // 4 bytes - Index to cube map in shadow data, -1 = no shadow
+        uint32_t padding[3];      // 12 bytes - align to 48 bytes
     };
-    static_assert(sizeof(GPUPointLight) == 32, "GPUPointLight must be 32 bytes");
+    static_assert(sizeof(GPUPointLight) == 48, "GPUPointLight must be 48 bytes");
     static_assert(offsetof(GPUPointLight, position) == 0, "GPUPointLight::position offset mismatch");
     static_assert(offsetof(GPUPointLight, radius) == 12, "GPUPointLight::radius offset mismatch");
     static_assert(offsetof(GPUPointLight, color) == 16, "GPUPointLight::color offset mismatch");
     static_assert(offsetof(GPUPointLight, intensity) == 28, "GPUPointLight::intensity offset mismatch");
+    static_assert(offsetof(GPUPointLight, shadowIndex) == 32, "GPUPointLight::shadowIndex offset mismatch");
+    static_assert(offsetof(GPUPointLight, padding) == 36, "GPUPointLight::padding offset mismatch");
 
     struct alignas(16) GPUSpotLight
     {
@@ -57,7 +61,8 @@ namespace render::lighting
         glm::vec3 color;          // 12 bytes
         float cosInnerAngle;      // 4 bytes - precomputed cos(innerAngle)
         float cosOuterAngle;      // 4 bytes - precomputed cos(outerAngle)
-        float padding[3];         // 12 bytes - align to 64 bytes
+        int32_t shadowIndex;      // 4 bytes - Index into shadow data SSBO, -1 = no shadow
+        uint32_t padding[2];      // 8 bytes - align to 64 bytes
     };
     static_assert(sizeof(GPUSpotLight) == 64, "GPUSpotLight must be 64 bytes");
     static_assert(offsetof(GPUSpotLight, position) == 0, "GPUSpotLight::position offset mismatch");
@@ -67,7 +72,8 @@ namespace render::lighting
     static_assert(offsetof(GPUSpotLight, color) == 32, "GPUSpotLight::color offset mismatch");
     static_assert(offsetof(GPUSpotLight, cosInnerAngle) == 44, "GPUSpotLight::cosInnerAngle offset mismatch");
     static_assert(offsetof(GPUSpotLight, cosOuterAngle) == 48, "GPUSpotLight::cosOuterAngle offset mismatch");
-    static_assert(offsetof(GPUSpotLight, padding) == 52, "GPUSpotLight::padding offset mismatch");
+    static_assert(offsetof(GPUSpotLight, shadowIndex) == 52, "GPUSpotLight::shadowIndex offset mismatch");
+    static_assert(offsetof(GPUSpotLight, padding) == 56, "GPUSpotLight::padding offset mismatch");
 
     struct alignas(16) GPULightCounts
     {

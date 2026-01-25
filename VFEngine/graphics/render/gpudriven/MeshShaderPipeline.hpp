@@ -76,10 +76,18 @@ namespace render::gpudriven
         vk::DescriptorSet clusterGridDescriptorSet;    // Set 7: Cluster params from ClusterGridManager
         vk::DescriptorSet cullingOutputDescriptorSet;  // Set 8: Culling output from LightCullingPipeline
 
+        // Set 9, 10: Shadow descriptor sets (external, not owned)
+        vk::DescriptorSet shadowDataDescriptorSet;     // Set 9: Shadow data SSBO from ShadowSystem
+        vk::DescriptorSet shadowTextureDescriptorSet;  // Set 10: Shadow textures from ShadowSystem
+
         // Cached lighting layouts for pipeline recreation
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
         vk::DescriptorSetLayout cachedCullingOutputLayout;
+
+        // Cached shadow layouts for pipeline recreation
+        vk::DescriptorSetLayout cachedShadowDataLayout;
+        vk::DescriptorSetLayout cachedShadowTextureLayout;
 
     public:
         explicit MeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -94,6 +102,8 @@ namespace render::gpudriven
                   vk::DescriptorSetLayout lightDataLayout,
                   vk::DescriptorSetLayout clusterGridLayout,
                   vk::DescriptorSetLayout cullingOutputLayout,
+                  vk::DescriptorSetLayout shadowDataLayout,
+                  vk::DescriptorSetLayout shadowTextureLayout,
                   vk::RenderPass renderPass);
 
         void cleanup();
@@ -104,6 +114,8 @@ namespace render::gpudriven
                       vk::DescriptorSetLayout lightDataLayout,
                       vk::DescriptorSetLayout clusterGridLayout,
                       vk::DescriptorSetLayout cullingOutputLayout,
+                      vk::DescriptorSetLayout shadowDataLayout,
+                      vk::DescriptorSetLayout shadowTextureLayout,
                       vk::RenderPass renderPass);
 
 
@@ -116,6 +128,10 @@ namespace render::gpudriven
                                        vk::DescriptorSet clusterGridDescSet,
                                        vk::DescriptorSet cullingOutputDescSet);
 
+        // Update shadow descriptor sets (called each frame from GPUDrivenRenderer)
+        void updateShadowDescriptors(vk::DescriptorSet shadowDataDescSet,
+                                     vk::DescriptorSet shadowTextureDescSet);
+
         vk::Pipeline getPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
         vk::DescriptorSet getPerDrawDataDescriptorSet() const { return perDrawDataDescriptorSet; }
@@ -124,6 +140,8 @@ namespace render::gpudriven
         vk::DescriptorSet getLightDataDescriptorSet() const { return lightDataDescriptorSet; }
         vk::DescriptorSet getClusterGridDescriptorSet() const { return clusterGridDescriptorSet; }
         vk::DescriptorSet getCullingOutputDescriptorSet() const { return cullingOutputDescriptorSet; }
+        vk::DescriptorSet getShadowDataDescriptorSet() const { return shadowDataDescriptorSet; }
+        vk::DescriptorSet getShadowTextureDescriptorSet() const { return shadowTextureDescriptorSet; }
 
         // Layout accessors (for shadow pass pipeline initialization)
         vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
@@ -144,6 +162,8 @@ namespace render::gpudriven
                                               vk::DescriptorSetLayout lightDataLayout,
                                               vk::DescriptorSetLayout clusterGridLayout,
                                               vk::DescriptorSetLayout cullingOutputLayout,
+                                              vk::DescriptorSetLayout shadowDataLayout,
+                                              vk::DescriptorSetLayout shadowTextureLayout,
                                               vk::RenderPass renderPass);
     };
 }

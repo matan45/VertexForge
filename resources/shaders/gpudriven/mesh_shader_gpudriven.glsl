@@ -304,28 +304,35 @@ layout(push_constant) uniform PushConstants {
 
 // Set 6: Light Data
 
+// Matches GPUDirectionalLight in GPULightTypes.hpp (32 bytes)
 struct DirectionalLight {
     vec3 direction;
     float intensity;
     vec3 color;
-    uint padding;
+    int shadowIndex;  // Index into shadow data SSBO, -1 = no shadow
 };
 
 layout(std430, set = 6, binding = 0) readonly buffer DirectionalLightBuffer {
     DirectionalLight directionalLights[];
 };
 
+// Matches GPUPointLight in GPULightTypes.hpp (48 bytes)
 struct PointLight {
     vec3 position;
     float radius;
     vec3 color;
     float intensity;
+    int shadowIndex;      // Index to cube map in shadow data, -1 = no shadow
+    uint padding0;
+    uint padding1;
+    uint padding2;
 };
 
 layout(std430, set = 6, binding = 1) readonly buffer PointLightBuffer {
     PointLight pointLights[];
 };
 
+// Matches GPUSpotLight in GPULightTypes.hpp (64 bytes)
 struct SpotLight {
     vec3 position;
     float range;
@@ -334,9 +341,9 @@ struct SpotLight {
     vec3 color;
     float cosInnerAngle;
     float cosOuterAngle;
-    float padding0;
-    float padding1;
-    float padding2;
+    int shadowIndex;      // Index into shadow data SSBO, -1 = no shadow
+    uint padding0;
+    uint padding1;
 };
 
 layout(std430, set = 6, binding = 2) readonly buffer SpotLightBuffer {
@@ -381,6 +388,24 @@ layout(std430, set = 8, binding = 0) readonly buffer ClusterLightGridBuffer {
 layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer {
     uint lightIndexList[];
 };
+
+// Set 9: Shadow Data SSBO
+// Matches GPUShadowData in ShadowTypes.hpp (112 bytes)
+struct ShadowData {
+    mat4 viewProjection;      // 64 bytes - light space transform
+    vec4 atlasViewport;       // 16 bytes - xy=offset, zw=size (normalized 0-1)
+    vec4 biasParams;          // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=softness
+    vec4 rangeParams;         // 16 bytes - x=near, y=far, z=1/(far-near), w=cascadeIndex
+};
+
+layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
+    ShadowData shadowData[];
+};
+
+// Set 10: Shadow Textures
+layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;         // Spot light atlas
+layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades; // CSM cascade array
+layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];     // Point light cube maps
 
 const float LIGHTING_PI = 3.14159265359;
 
@@ -454,6 +479,115 @@ float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float co
     }
 
     return clamp((cosAngle - cosOuter) / (cosInner - cosOuter), 0.0, 1.0);
+}
+
+// ============================================
+// Shadow Sampling Functions
+// ============================================
+
+// Spot light shadow (2D atlas with PCF 3x3)
+float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
+    if (shadowIndex < 0) return 1.0;
+
+    ShadowData sd = shadowData[shadowIndex];
+
+    // Transform world position to light space
+    vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+
+    // Transform from NDC [-1,1] to texture coords [0,1]
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+
+    // Apply atlas viewport transformation
+    projCoords.xy = sd.atlasViewport.xy + projCoords.xy * sd.atlasViewport.zw;
+
+    // Apply depth bias
+    float bias = sd.biasParams.x;
+    projCoords.z -= bias;
+
+    // Out of shadow map bounds check
+    if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
+    if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
+
+    // PCF 3x3 filtering
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowAtlas, 0));
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            vec2 offset = vec2(float(x), float(y)) * texelSize;
+            shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
+        }
+    }
+    return shadow / 9.0;
+}
+
+// Directional light shadow (CSM with cascade selection)
+float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
+    if (baseShadowIndex < 0) return 1.0;
+
+    // Select cascade based on view depth
+    // The rangeParams.y stores the far plane for each cascade
+    int cascadeIdx = 0;
+    for (int i = 0; i < 4; ++i) {
+        int idx = baseShadowIndex + i;
+        if (viewZ < shadowData[idx].rangeParams.y) {
+            cascadeIdx = i;
+            break;
+        }
+        cascadeIdx = i;  // Use furthest cascade if beyond all
+    }
+
+    int shadowIndex = baseShadowIndex + cascadeIdx;
+    ShadowData sd = shadowData[shadowIndex];
+
+    // Transform world position to light space
+    vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+
+    // Transform from NDC [-1,1] to texture coords [0,1]
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+
+    // Apply depth bias (varies per cascade)
+    float bias = sd.biasParams.x;
+    projCoords.z -= bias;
+
+    // Out of range check
+    if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
+
+    // PCF 3x3 filtering on cascade array texture
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowCascades, 0).xy);
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            vec2 offset = vec2(float(x), float(y)) * texelSize;
+            // vec4: xy = texcoord, z = array layer, w = depth compare
+            shadow += texture(shadowCascades, vec4(projCoords.xy + offset, float(cascadeIdx), projCoords.z));
+        }
+    }
+    return shadow / 9.0;
+}
+
+// Point light shadow (cube map sampling)
+float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lightRadius) {
+    if (shadowIndex < 0) return 1.0;
+
+    // Direction from light to fragment (used to sample cube map)
+    vec3 lightToFrag = worldPos - lightPos;
+    float currentDepth = length(lightToFrag);
+    vec3 sampleDir = normalize(lightToFrag);
+
+    ShadowData sd = shadowData[shadowIndex];
+
+    // Normalize depth to [0,1] based on light's near/far planes
+    float near = sd.rangeParams.x;
+    float far = sd.rangeParams.y;
+    float normalizedDepth = (currentDepth - near) / (far - near);
+
+    // Apply depth bias
+    normalizedDepth -= sd.biasParams.x;
+
+    // Use comparison sampler on cube map
+    return texture(shadowCubes[nonuniformEXT(shadowIndex)], vec4(sampleDir, normalizedDepth));
 }
 
 // GGX/Trowbridge-Reitz Normal Distribution Function
@@ -701,9 +835,11 @@ void main() {
 
     vec3 directLighting = vec3(0.0);
 
+    // Compute linear depth once for shadow cascade selection (also used for cluster lookup)
+    float linearZ = linearizeDepth(gl_FragCoord.z);
+
     // Skip cluster lookup if no local lights exist (uniform branch, no divergence)
     if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
-        float linearZ = linearizeDepth(gl_FragCoord.z);
         uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
 
         ClusterLightData clusterData = clusterLightGrid[clusterIdx];
@@ -711,23 +847,29 @@ void main() {
         uint clusterSpotCount = clusterData.counts >> 16u;
         uint lightOffset = clusterData.offset;
 
+        // Point lights with shadow
         for (uint i = 0u; i < clusterPointCount; ++i) {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
-            directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
+            float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, light.position, light.radius);
+            directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
         }
 
+        // Spot lights with shadow
         for (uint i = 0u; i < clusterSpotCount; ++i) {
             uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
             uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
             SpotLight light = spotLights[lightIdx];
-            directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light);
+            float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos);
+            directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
         }
     }
 
+    // Directional lights with shadow (CSM)
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
-        directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light);
+        float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, linearZ);
+        directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
     }
 
     float emissionMultiplier = emission;

@@ -117,6 +117,9 @@ namespace render::gpudriven
             shadowSystem->init();
             shadowSystem->setLightBufferManager(lightBufferManager.get());
 
+            // Set shadow system reference in light buffer manager for shadow index population
+            lightBufferManager->setShadowSystem(shadowSystem.get());
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             meshShaderPipeline->init(iblDescriptorSetLayout,
                                      bindlessTextures->getDescriptorSetLayout(),
@@ -124,6 +127,8 @@ namespace render::gpudriven
                                      lightBufferManager->getDescriptorSetLayout(),
                                      clusterGridManager->getDescriptorSetLayout(),
                                      lightCullingPipeline->getDescriptorSetLayout(),
+                                     shadowSystem->getShadowDataLayout(),
+                                     shadowSystem->getShadowTextureLayout(),
                                      renderPass);
 
             // Initialize shadow pass pipeline with descriptor layouts from mesh shader pipeline
@@ -447,6 +452,14 @@ namespace render::gpudriven
                     clusterGridManager->getDescriptorSet(),
                     lightCullingPipeline->getDescriptorSet());
             }
+
+            // Update shadow descriptors
+            if (shadowSystem && shadowSystem->isInitialized())
+            {
+                meshShaderPipeline->updateShadowDescriptors(
+                    shadowSystem->getShadowDataDescSet(),
+                    shadowSystem->getShadowTextureDescSet());
+            }
         }
     }
 
@@ -568,7 +581,7 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        std::array<vk::DescriptorSet, 9> descriptorSets = {
+        std::array<vk::DescriptorSet, 11> descriptorSets = {
             iblDescriptorSet,                                      // Set 0: Camera/IBL
             meshShaderPipeline->getPerDrawDataDescriptorSet(),     // Set 1: Per-draw data
             bindlessTextures->getDescriptorSet(),                  // Set 2: Bindless textures
@@ -577,7 +590,9 @@ namespace render::gpudriven
             boneMatrixManager->getDescriptorSet(),                 // Set 5: Bone matrices
             meshShaderPipeline->getLightDataDescriptorSet(),       // Set 6: Light buffers
             meshShaderPipeline->getClusterGridDescriptorSet(),     // Set 7: Cluster grid params
-            meshShaderPipeline->getCullingOutputDescriptorSet()    // Set 8: Light culling output
+            meshShaderPipeline->getCullingOutputDescriptorSet(),   // Set 8: Light culling output
+            meshShaderPipeline->getShadowDataDescriptorSet(),      // Set 9: Shadow data SSBO
+            meshShaderPipeline->getShadowTextureDescriptorSet()    // Set 10: Shadow textures
         };
 
         cmd.bindDescriptorSets(
@@ -877,7 +892,7 @@ namespace render::gpudriven
             canRecreate = false;
         }
 
-        if (canRecreate)
+        if (canRecreate && shadowSystem)
         {
             meshShaderPipeline->recreate(cachedIBLLayout,
                                          bindlessTextures->getDescriptorSetLayout(),
@@ -885,6 +900,8 @@ namespace render::gpudriven
                                          lightBufferManager->getDescriptorSetLayout(),
                                          clusterGridManager->getDescriptorSetLayout(),
                                          lightCullingPipeline->getDescriptorSetLayout(),
+                                         shadowSystem->getShadowDataLayout(),
+                                         shadowSystem->getShadowTextureLayout(),
                                          cachedRenderPass);
         }
         else
