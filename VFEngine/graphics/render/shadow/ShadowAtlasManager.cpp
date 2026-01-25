@@ -537,27 +537,39 @@ namespace render::shadow
         entityToHandles.erase(it);
     }
 
-    void ShadowAtlasManager::resize(uint32_t newWidth, uint32_t newHeight)
+    ShadowAtlasManager::ResizeResult ShadowAtlasManager::resize(uint32_t newWidth, uint32_t newHeight)
     {
+        ResizeResult result;
+
         if (!initialized)
         {
             spdlog::warn("ShadowAtlasManager::resize() called when not initialized");
-            return;
+            return result;  // success = false
         }
 
         if (newWidth == atlasWidth && newHeight == atlasHeight)
         {
             spdlog::debug("ShadowAtlasManager: Resize skipped - same dimensions");
-            return;
+            result.success = true;  // No-op is considered success
+            return result;
         }
 
         spdlog::info("ShadowAtlasManager: Resizing atlas from {}x{} to {}x{}",
                      atlasWidth, atlasHeight, newWidth, newHeight);
 
         const auto& logicalDevice = device.getLogicalDevice();
-
-        // Wait for GPU to finish using current resources
+        
         logicalDevice.waitIdle();
+
+        // Build reverse lookup: atlasIndex -> entityId (for restoring entity tracking)
+        std::unordered_map<uint32_t, uint32_t> atlasIndexToEntity;
+        for (const auto& [entityId, indices] : entityToHandles)
+        {
+            for (uint32_t atlasIndex : indices)
+            {
+                atlasIndexToEntity[atlasIndex] = entityId;
+            }
+        }
 
         // Store current allocation info for reallocation
         struct AllocationInfo
@@ -566,7 +578,8 @@ namespace render::shadow
             uint32_t height;
             ShadowMapType type;
             uint32_t layer;
-            uint32_t atlasIndex;
+            uint32_t oldAtlasIndex;  // Original index for entity lookup
+            uint32_t entityId;       // Entity that owns this allocation (0 if untracked)
         };
         std::vector<AllocationInfo> allocations;
 
@@ -574,12 +587,20 @@ namespace render::shadow
         {
             if (tile.allocated)
             {
+                uint32_t entityId = 0;
+                auto entityIt = atlasIndexToEntity.find(tile.owner.atlasIndex);
+                if (entityIt != atlasIndexToEntity.end())
+                {
+                    entityId = entityIt->second;
+                }
+
                 allocations.push_back({
                     tile.width,
                     tile.height,
                     tile.owner.type,
                     tile.layer,
-                    tile.owner.atlasIndex
+                    tile.owner.atlasIndex,
+                    entityId
                 });
             }
         }
@@ -604,7 +625,6 @@ namespace render::shadow
         // Clear allocation data
         tiles.clear();
         handleToTileIndex.clear();
-        // Note: entityToHandles is cleared - caller must re-track if needed
         entityToHandles.clear();
         nextAtlasIndex = 0;
 
@@ -619,13 +639,21 @@ namespace render::shadow
         updateDescriptorSet();
 
         // Reallocate previous tiles (may fail if new size is smaller)
-        uint32_t reallocated = 0;
+        result.requestedCount = static_cast<uint32_t>(allocations.size());
+        result.reallocatedCount = 0;
+
         for (const auto& info : allocations)
         {
             ShadowMapHandle handle = allocate(info.width, info.height, info.type, info.layer);
             if (handle.isValid())
             {
-                ++reallocated;
+                ++result.reallocatedCount;
+
+                // Restore entity tracking if this allocation was tracked
+                if (info.entityId != 0)
+                {
+                    trackHandleForEntity(info.entityId, handle.atlasIndex);
+                }
             }
             else
             {
@@ -634,21 +662,38 @@ namespace render::shadow
             }
         }
 
-        spdlog::info("ShadowAtlasManager: Resize complete - reallocated {}/{} tiles",
-                     reallocated, allocations.size());
+        result.success = true;
+
+        if (result.allReallocated())
+        {
+            spdlog::info("ShadowAtlasManager: Resize complete - all {}/{} tiles reallocated",
+                         result.reallocatedCount, result.requestedCount);
+        }
+        else
+        {
+            spdlog::warn("ShadowAtlasManager: Resize complete with partial failure - {}/{} tiles reallocated",
+                         result.reallocatedCount, result.requestedCount);
+        }
+
+        return result;
     }
 
-    void ShadowAtlasManager::applyQualitySettings(const types::ShadowAtlasConfig& config)
+    ShadowAtlasManager::ResizeResult ShadowAtlasManager::applyQualitySettings(const types::ShadowAtlasConfig& config)
     {
+        ResizeResult result;
+        result.success = true;  // Default to success for no-op cases
+
         if (config.atlasSize == 0)
         {
             spdlog::debug("ShadowAtlasManager: Quality Off - atlas disabled");
-            return;
+            return result;
         }
 
         if (config.atlasSize != atlasWidth || config.atlasSize != atlasHeight)
         {
-            resize(config.atlasSize, config.atlasSize);
+            return resize(config.atlasSize, config.atlasSize);
         }
+
+        return result;
     }
 }

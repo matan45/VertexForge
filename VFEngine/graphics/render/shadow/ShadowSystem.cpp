@@ -5,6 +5,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include <spdlog/spdlog.h>
+#include <chrono>
 
 namespace render::shadow
 {
@@ -266,13 +267,13 @@ namespace render::shadow
         logicalDevice.updateDescriptorSets(1, &write, 0, nullptr);
     }
 
-    void ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
+    bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
     {
         if (lightShadowData.contains(entityId))
         {
             spdlog::warn("ShadowSystem: Light {} already registered, updating settings", entityId);
             updateLightSettings(entityId, settings);
-            return;
+            return true;  // Already registered is considered success
         }
 
         LightShadowData data;
@@ -306,13 +307,14 @@ namespace render::shadow
         if (!allocateShadowMaps(data))
         {
             spdlog::error("ShadowSystem: Failed to allocate shadow maps for light {}", entityId);
-            return;
+            return false;
         }
 
         lightShadowData[entityId] = std::move(data);
         needsUpdate = true;
 
         spdlog::debug("ShadowSystem: Registered light {} with {} shadow views", entityId, viewCount);
+        return true;
     }
 
     void ShadowSystem::unregisterLight(uint32_t entityId)
@@ -1021,6 +1023,9 @@ namespace render::shadow
         needsUpdate = true;
     }
 
+    // Frame time budget threshold for warning about expensive operations (16ms = 60fps frame)
+    static constexpr float FRAME_BUDGET_WARNING_MS = 16.0f;
+
     void ShadowSystem::applyRenderSettings(const types::RenderSettings& settings)
     {
         if (!initialized)
@@ -1058,6 +1063,8 @@ namespace render::shadow
 
         if (needsResize)
         {
+            auto resizeStartTime = std::chrono::high_resolution_clock::now();
+
             spdlog::info("ShadowSystem: Atlas resize required - {} -> {}",
                          atlasManager->getAtlasWidth(), atlasConfig.atlasSize);
 
@@ -1085,7 +1092,12 @@ namespace render::shadow
             lightShadowData.clear();
 
             // Resize atlas
-            atlasManager->applyQualitySettings(atlasConfig);
+            auto resizeResult = atlasManager->applyQualitySettings(atlasConfig);
+            if (!resizeResult.success)
+            {
+                spdlog::error("ShadowSystem: Atlas resize failed");
+                return;
+            }
 
             // Recreate framebuffer if shadow pass pipeline exists
             if (shadowPassPipeline && shadowPassPipeline->isInitialized())
@@ -1098,6 +1110,9 @@ namespace render::shadow
             }
 
             // Re-register lights with new resolutions
+            uint32_t registeredCount = 0;
+            uint32_t failedCount = 0;
+
             for (const auto& info : existingLights)
             {
                 ShadowSettings newSettings = info.settings;
@@ -1122,11 +1137,40 @@ namespace render::shadow
                 // Update cascade count from render settings
                 newSettings.cascadeCount = shadowSettings.cascadeCount;
 
-                registerLight(info.entityId, info.type, newSettings);
+                if (registerLight(info.entityId, info.type, newSettings))
+                {
+                    ++registeredCount;
+                }
+                else
+                {
+                    ++failedCount;
+                    spdlog::warn("ShadowSystem: Failed to re-register light {} after resize", info.entityId);
+                }
             }
 
-            spdlog::info("ShadowSystem: Re-registered {} lights after atlas resize",
-                         existingLights.size());
+            if (failedCount > 0)
+            {
+                spdlog::warn("ShadowSystem: Re-registered {}/{} lights after atlas resize ({} failed)",
+                             registeredCount, existingLights.size(), failedCount);
+            }
+            else
+            {
+                spdlog::info("ShadowSystem: Re-registered all {} lights after atlas resize",
+                             existingLights.size());
+            }
+
+            // Measure and warn about expensive resize operations
+            auto resizeEndTime = std::chrono::high_resolution_clock::now();
+            float resizeMs = std::chrono::duration<float, std::milli>(resizeEndTime - resizeStartTime).count();
+            if (resizeMs > FRAME_BUDGET_WARNING_MS)
+            {
+                spdlog::warn("ShadowSystem: Atlas resize took {:.1f}ms (exceeds {:.0f}ms frame budget)",
+                             resizeMs, FRAME_BUDGET_WARNING_MS);
+            }
+            else
+            {
+                spdlog::debug("ShadowSystem: Atlas resize completed in {:.1f}ms", resizeMs);
+            }
         }
         else
         {
@@ -1140,13 +1184,24 @@ namespace render::shadow
                 data.settings.normalBias = shadowSettings.normalBias;
 
                 // Update cascade count if changed (requires reallocation for CSM)
+                // NOTE: This is an expensive operation that reallocates shadow maps
                 if (data.type == ShadowMapType::DirectionalCSM &&
                     data.settings.cascadeCount != shadowSettings.cascadeCount)
                 {
+                    auto cascadeStartTime = std::chrono::high_resolution_clock::now();
+
                     freeShadowMaps(data);
                     data.settings.cascadeCount = shadowSettings.cascadeCount;
                     data.views.resize(shadowSettings.cascadeCount);
                     allocateShadowMaps(data);
+
+                    auto cascadeEndTime = std::chrono::high_resolution_clock::now();
+                    float cascadeMs = std::chrono::duration<float, std::milli>(cascadeEndTime - cascadeStartTime).count();
+                    if (cascadeMs > FRAME_BUDGET_WARNING_MS)
+                    {
+                        spdlog::warn("ShadowSystem: Cascade reallocation for light {} took {:.1f}ms (exceeds frame budget)",
+                                     entityId, cascadeMs);
+                    }
                 }
 
                 data.settingsDirty = true;

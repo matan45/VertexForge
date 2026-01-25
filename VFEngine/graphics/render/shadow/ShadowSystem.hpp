@@ -108,7 +108,8 @@ namespace render
             // ===== Light Shadow Registration =====
 
             // Register a light for shadow casting
-            void registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings = {});
+            // Returns true if registration succeeded, false if allocation failed
+            [[nodiscard]] bool registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings = {});
             void unregisterLight(uint32_t entityId);
             void updateLightSettings(uint32_t entityId, const ShadowSettings& settings);
 

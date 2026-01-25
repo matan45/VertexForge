@@ -83,11 +83,22 @@ namespace render::shadow
         void freeAllForEntity(uint32_t entityId);
         void trackHandleForEntity(uint32_t entityId, uint32_t atlasIndex);
 
+        // Result of resize operation
+        struct ResizeResult
+        {
+            bool success = false;           // True if resize completed (may have partial reallocation)
+            uint32_t requestedCount = 0;    // Number of allocations that existed before resize
+            uint32_t reallocatedCount = 0;  // Number successfully reallocated after resize
+            bool allReallocated() const { return requestedCount == reallocatedCount; }
+        };
+
         // Dynamic resize (waits for GPU idle, reallocates existing tiles)
-        void resize(uint32_t newWidth, uint32_t newHeight);
+        // Returns statistics about reallocation success for caller to handle partial failures
+        [[nodiscard]] ResizeResult resize(uint32_t newWidth, uint32_t newHeight);
 
         // Apply quality settings (may trigger resize)
-        void applyQualitySettings(const types::ShadowAtlasConfig& config);
+        // Returns resize result if resize occurred, or success with zero counts if no resize needed
+        [[nodiscard]] ResizeResult applyQualitySettings(const types::ShadowAtlasConfig& config);
 
         // Query allocated region
         [[nodiscard]] ShadowAtlasTile getTile(const ShadowMapHandle& handle) const;

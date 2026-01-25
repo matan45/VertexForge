@@ -64,7 +64,6 @@ namespace windows
             if (ImGui::Checkbox("Enable Shadows", &settings.shadows.enabled))
             {
                 isDirty = true;
-                applySettings();  // Apply immediately
             }
 
             if (settings.shadows.enabled)
@@ -80,7 +79,10 @@ namespace windows
                     // Update atlas config from quality
                     settings.shadows.atlas = types::ShadowAtlasConfig::fromQuality(settings.shadows.quality);
                     isDirty = true;
-                    applySettings();  // Apply immediately for quality changes
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Click 'Apply' to change quality.\nThis may cause a brief stutter while the shadow atlas is resized.");
                 }
 
                 ImGui::Separator();
