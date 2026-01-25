@@ -245,6 +245,11 @@ namespace render::gpudriven
     void MeshShaderPipeline::updateShadowDescriptors(vk::DescriptorSet shadowDataDescSet,
                                                      vk::DescriptorSet shadowTextureDescSet)
     {
+        if (!shadowDataDescSet || !shadowTextureDescSet)
+        {
+            loggerWarning("Invalid shadow descriptor sets provided");
+            return;
+        }
         shadowDataDescriptorSet = shadowDataDescSet;
         shadowTextureDescriptorSet = shadowTextureDescSet;
     }

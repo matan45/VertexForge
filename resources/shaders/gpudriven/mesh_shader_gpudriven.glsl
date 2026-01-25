@@ -509,9 +509,9 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
     if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
     if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
 
-    // PCF 3x3 filtering
+    // PCF 3x3 filtering (texelSize precomputed on CPU, stored in biasParams.w)
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowAtlas, 0));
+    float texelSize = sd.biasParams.w;
     for (int x = -1; x <= 1; ++x) {
         for (int y = -1; y <= 1; ++y) {
             vec2 offset = vec2(float(x), float(y)) * texelSize;
@@ -525,10 +525,14 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
 float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
     if (baseShadowIndex < 0) return 1.0;
 
+    // Read cascade count from atlasViewport.z (stored during CPU-side allocation)
+    int cascadeCount = int(shadowData[baseShadowIndex].atlasViewport.z);
+    cascadeCount = clamp(cascadeCount, 1, 4);  // Safety clamp
+
     // Select cascade based on view depth
     // The rangeParams.y stores the far plane for each cascade
     int cascadeIdx = 0;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < cascadeCount; ++i) {
         int idx = baseShadowIndex + i;
         if (viewZ < shadowData[idx].rangeParams.y) {
             cascadeIdx = i;
@@ -554,9 +558,9 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
     // Out of range check
     if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
 
-    // PCF 3x3 filtering on cascade array texture
+    // PCF 3x3 filtering on cascade array texture (texelSize precomputed on CPU, stored in biasParams.w)
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowCascades, 0).xy);
+    float texelSize = sd.biasParams.w;
     for (int x = -1; x <= 1; ++x) {
         for (int y = -1; y <= 1; ++y) {
             vec2 offset = vec2(float(x), float(y)) * texelSize;

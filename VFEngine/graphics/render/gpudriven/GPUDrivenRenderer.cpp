@@ -117,6 +117,12 @@ namespace render::gpudriven
             shadowSystem->init();
             shadowSystem->setLightBufferManager(lightBufferManager.get());
 
+            if (!shadowSystem || !shadowSystem->isInitialized())
+            {
+                loggerError("GPUDrivenRenderer: Shadow system initialization failed");
+                return;
+            }
+
             // Set shadow system reference in light buffer manager for shadow index population
             lightBufferManager->setShadowSystem(shadowSystem.get());
 
