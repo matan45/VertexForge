@@ -77,6 +77,43 @@ namespace render::shadow
         Ultra               // 4096px
     };
 
+    /**
+     * Resource type for shadow textures.
+     * Determines which resource pool manages the shadow map.
+     */
+    enum class ShadowResourceType : uint8_t
+    {
+        Atlas = 0,          // Tile in shared 2D atlas (spot lights)
+        Array,              // Layer in dedicated texture array (CSM)
+        Cube                // Face in dedicated cube map (point lights)
+    };
+
+    // ============================================
+    // Handle for dedicated shadow resources (Array/Cube)
+    // ============================================
+    struct ShadowResourceHandle
+    {
+        ShadowResourceType resourceType = ShadowResourceType::Atlas;
+        uint32_t resourceIndex = std::numeric_limits<uint32_t>::max();  // Index in resource pool
+        uint32_t layerOrFace = 0;             // Array layer (0-3 for CSM) or cube face (0-5)
+
+        [[nodiscard]] bool isValid() const
+        {
+            return resourceIndex != std::numeric_limits<uint32_t>::max();
+        }
+
+        void invalidate()
+        {
+            resourceType = ShadowResourceType::Atlas;
+            resourceIndex = std::numeric_limits<uint32_t>::max();
+            layerOrFace = 0;
+        }
+
+        [[nodiscard]] bool isAtlas() const { return resourceType == ShadowResourceType::Atlas; }
+        [[nodiscard]] bool isArray() const { return resourceType == ShadowResourceType::Array; }
+        [[nodiscard]] bool isCube() const { return resourceType == ShadowResourceType::Cube; }
+    };
+
     // ============================================
     // Handle for referencing shadow maps in atlas
     // ============================================

@@ -25,9 +25,13 @@ namespace render::shadow
             return;
         }
 
-        // Initialize atlas manager
+        // Initialize atlas manager (for spot lights)
         atlasManager = std::make_unique<ShadowAtlasManager>(device, swapChain);
         atlasManager->init();
+
+        // Initialize resource pool (for CSM arrays and point light cube maps)
+        resourcePool = std::make_unique<ShadowResourcePool>(device);
+        resourcePool->init();
 
         // Create shadow data buffer for GPU
         createShadowDataBuffer();
@@ -70,6 +74,13 @@ namespace render::shadow
         pointShadowViews.clear();
         spotShadowViews.clear();
         gpuShadowData.clear();
+
+        // Cleanup resource pool
+        if (resourcePool)
+        {
+            resourcePool->cleanup();
+            resourcePool.reset();
+        }
 
         // Cleanup atlas manager
         if (atlasManager)
