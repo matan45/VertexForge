@@ -2,6 +2,7 @@
 
 #include "ShadowTypes.hpp"
 #include "ShadowAtlasManager.hpp"
+#include "ShadowResourcePool.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -42,6 +43,7 @@ namespace render
 
             // Sub-systems
             std::unique_ptr<ShadowAtlasManager> atlasManager;
+            std::unique_ptr<ShadowResourcePool> resourcePool;
 
             // Per-light shadow data (entityId -> shadow data)
             std::unordered_map<uint32_t, LightShadowData> lightShadowData;
@@ -152,6 +154,7 @@ namespace render
             // ===== Accessors =====
 
             [[nodiscard]] ShadowAtlasManager* getAtlasManager() const { return atlasManager.get(); }
+            [[nodiscard]] ShadowResourcePool* getResourcePool() const { return resourcePool.get(); }
             [[nodiscard]] bool isInitialized() const { return initialized; }
 
             void setLightBufferManager(lighting::GPULightBufferManager* manager) { lightBufferManager = manager; }

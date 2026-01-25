@@ -185,6 +185,10 @@
     <ClInclude Include="render\occlusion\HiZBuffer.hpp" />
     <ClInclude Include="render\occlusion\OcclusionCullingManager.hpp" />
     <ClInclude Include="render\shadow\ShadowAtlasManager.hpp" />
+    <ClInclude Include="render\shadow\ShadowCubeMap.hpp" />
+    <ClInclude Include="render\shadow\ShadowDepthArray.hpp" />
+    <ClInclude Include="render\shadow\ShadowResourcePool.hpp" />
+    <ClInclude Include="render\shadow\ShadowSamplers.hpp" />
     <ClInclude Include="render\shadow\ShadowSystem.hpp" />
     <ClInclude Include="render\shadow\ShadowTypes.hpp" />
     <ClInclude Include="render\tools\AABBDebugRenderer.hpp" />
@@ -280,6 +284,10 @@
     <ClCompile Include="render\occlusion\HiZBuffer.cpp" />
     <ClCompile Include="render\occlusion\OcclusionCullingManager.cpp" />
     <ClCompile Include="render\shadow\ShadowAtlasManager.cpp" />
+    <ClCompile Include="render\shadow\ShadowCubeMap.cpp" />
+    <ClCompile Include="render\shadow\ShadowDepthArray.cpp" />
+    <ClCompile Include="render\shadow\ShadowResourcePool.cpp" />
+    <ClCompile Include="render\shadow\ShadowSamplers.cpp" />
     <ClCompile Include="render\shadow\ShadowSystem.cpp" />
     <ClCompile Include="render\tools\AABBDebugRenderer.cpp" />
     <ClCompile Include="render\tools\AudioSphereDebugRenderer.cpp" />
