@@ -2,6 +2,7 @@
 #include "Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
 #include "../types/AudioTypes.hpp"
+#include "../types/RenderSettings.hpp"
 
 namespace scene {
 
@@ -11,6 +12,7 @@ namespace scene {
 		Entity root;
 		types::PhysicsSettings physicsSettings = types::PhysicsSettings::createDefault();
 		types::AudioSettings audioSettings = types::AudioSettings::createDefault();
+		types::RenderSettings renderSettings = types::RenderSettings::createDefault();
 	public:
 		explicit SceneGraphSystem();
 		~SceneGraphSystem() = default;
@@ -52,6 +54,18 @@ namespace scene {
 
 		void setAudioSettings(const types::AudioSettings& settings) {
 			audioSettings = settings;
+		}
+
+		types::RenderSettings& getRenderSettings() {
+			return renderSettings;
+		}
+
+		const types::RenderSettings& getRenderSettings() const {
+			return renderSettings;
+		}
+
+		void setRenderSettings(const types::RenderSettings& settings) {
+			renderSettings = settings;
 		}
 
 	private:

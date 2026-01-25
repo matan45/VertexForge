@@ -4,6 +4,7 @@
 #include "../components/Components.hpp"
 #include "../print/EditorLogger.hpp"
 #include <fstream>
+#include <algorithm>
 
 namespace serialization
 {
@@ -573,6 +574,48 @@ namespace serialization
         return components::ColliderShape::Box;
     }
 
+    std::string SceneSerialization::shadowQualityToString(types::ShadowQuality quality)
+    {
+        switch (quality)
+        {
+        case types::ShadowQuality::Off: return "off";
+        case types::ShadowQuality::Low: return "low";
+        case types::ShadowQuality::Medium: return "medium";
+        case types::ShadowQuality::High: return "high";
+        case types::ShadowQuality::Ultra: return "ultra";
+        default: return "high";
+        }
+    }
+
+    types::ShadowQuality SceneSerialization::stringToShadowQuality(const std::string& str)
+    {
+        if (str == "off") return types::ShadowQuality::Off;
+        if (str == "low") return types::ShadowQuality::Low;
+        if (str == "medium") return types::ShadowQuality::Medium;
+        if (str == "high") return types::ShadowQuality::High;
+        if (str == "ultra") return types::ShadowQuality::Ultra;
+        return types::ShadowQuality::High;
+    }
+
+    std::string SceneSerialization::cascadeSplitModeToString(types::CascadeSplitMode mode)
+    {
+        switch (mode)
+        {
+        case types::CascadeSplitMode::Linear: return "linear";
+        case types::CascadeSplitMode::Logarithmic: return "logarithmic";
+        case types::CascadeSplitMode::Practical: return "practical";
+        default: return "practical";
+        }
+    }
+
+    types::CascadeSplitMode SceneSerialization::stringToCascadeSplitMode(const std::string& str)
+    {
+        if (str == "linear") return types::CascadeSplitMode::Linear;
+        if (str == "logarithmic") return types::CascadeSplitMode::Logarithmic;
+        if (str == "practical") return types::CascadeSplitMode::Practical;
+        return types::CascadeSplitMode::Practical;
+    }
+
     json SceneSerialization::serializeCollider(const components::ColliderComponent& collider)
     {
         json j;
@@ -1027,6 +1070,47 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeRenderSettings(const types::RenderSettings& settings)
+    {
+        json j;
+
+        // Shadow settings
+        j["shadows"] = {
+            {"enabled", settings.shadows.enabled},
+            {"quality", shadowQualityToString(settings.shadows.quality)},
+            {"cascadeCount", settings.shadows.cascadeCount},
+            {"cascadeSplitMode", cascadeSplitModeToString(settings.shadows.cascadeSplitMode)},
+            {"shadowBias", settings.shadows.shadowBias},
+            {"normalBias", settings.shadows.normalBias}
+        };
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
+    {
+        // Shadow settings
+        if (j.contains("shadows") && j["shadows"].is_object())
+        {
+            const auto& shadows = j["shadows"];
+            if (shadows.contains("enabled") && shadows["enabled"].is_boolean())
+                settings.shadows.enabled = shadows["enabled"].get<bool>();
+            if (shadows.contains("quality") && shadows["quality"].is_string())
+                settings.shadows.quality = stringToShadowQuality(shadows["quality"].get<std::string>());
+            if (shadows.contains("cascadeCount") && shadows["cascadeCount"].is_number_unsigned())
+            {
+                uint8_t count = shadows["cascadeCount"].get<uint8_t>();
+                settings.shadows.cascadeCount = std::clamp(count, uint8_t(1), uint8_t(4));
+            }
+            if (shadows.contains("cascadeSplitMode") && shadows["cascadeSplitMode"].is_string())
+                settings.shadows.cascadeSplitMode = stringToCascadeSplitMode(shadows["cascadeSplitMode"].get<std::string>());
+            if (shadows.contains("shadowBias") && shadows["shadowBias"].is_number())
+                settings.shadows.shadowBias = shadows["shadowBias"].get<float>();
+            if (shadows.contains("normalBias") && shadows["normalBias"].is_number())
+                settings.shadows.normalBias = shadows["normalBias"].get<float>();
+        }
+    }
+
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
                                                  scene::SceneGraphSystem& sceneGraph,
                                                  SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
@@ -1336,6 +1420,18 @@ namespace serialization
                 sceneGraph.setAudioSettings(types::AudioSettings::createDefault());
             }
 
+            // Deserialize render settings if present
+            if (sceneJson.contains("renderSettings") && sceneJson["renderSettings"].is_object())
+            {
+                types::RenderSettings renderSettings = types::RenderSettings::createDefault();
+                deserializeRenderSettings(sceneJson["renderSettings"], renderSettings);
+                sceneGraph.setRenderSettings(renderSettings);
+            }
+            else
+            {
+                sceneGraph.setRenderSettings(types::RenderSettings::createDefault());
+            }
+
             scene::Entity& root = sceneGraph.GetRoot();
             deserializeEntity(sceneJson["root"], root, sceneGraph, true, progressCallback, entitiesLoaded,
                               totalEntities);
@@ -1367,6 +1463,9 @@ namespace serialization
 
             // Serialize audio settings at scene level
             sceneJson["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
+
+            // Serialize render settings at scene level
+            sceneJson["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
 
             // Write to file with UTF-8 encoding, no BOM, pretty-printed
             std::string filePath{filename};
@@ -1405,6 +1504,9 @@ namespace serialization
 
             // Include audio settings in snapshot
             snapshot["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
+
+            // Include render settings in snapshot
+            snapshot["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
 
             return snapshot;
         }
@@ -1449,6 +1551,14 @@ namespace serialization
                 types::AudioSettings audioSettings = types::AudioSettings::createDefault();
                 deserializeAudioSettings(snapshot["audioSettings"], audioSettings);
                 sceneGraph.setAudioSettings(audioSettings);
+            }
+
+            // Restore render settings if present
+            if (snapshot.contains("renderSettings") && snapshot["renderSettings"].is_object())
+            {
+                types::RenderSettings renderSettings = types::RenderSettings::createDefault();
+                deserializeRenderSettings(snapshot["renderSettings"], renderSettings);
+                sceneGraph.setRenderSettings(renderSettings);
             }
 
             // Deserialize root entity (no progress callback for snapshot restore)

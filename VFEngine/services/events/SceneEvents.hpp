@@ -4,6 +4,7 @@
 #include "../data/DTOs.hpp"
 #include "types/PhysicsTypes.hpp"
 #include "types/AudioTypes.hpp"
+#include "types/RenderSettings.hpp"
 #include <optional>
 #include <vector>
 #include <string>
@@ -499,6 +500,16 @@ namespace events::scene {
 
     struct GetAudioSettingsQuery : IQuery<types::AudioSettings> {
         std::string_view getName() const override { return "GetAudioSettings"; }
+    };
+
+    struct SetRenderSettingsCommand : ICommand<bool> {
+        types::RenderSettings settings;
+
+        std::string_view getName() const override { return "SetRenderSettings"; }
+    };
+
+    struct GetRenderSettingsQuery : IQuery<types::RenderSettings> {
+        std::string_view getName() const override { return "GetRenderSettings"; }
     };
 
     struct EntityCreatedNotification : INotification {

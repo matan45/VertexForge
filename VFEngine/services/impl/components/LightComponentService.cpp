@@ -6,6 +6,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/LightCullingEvents.hpp"
+#include <algorithm>
 
 namespace services {
 
