@@ -43,7 +43,8 @@ namespace render::shadow
                 case types::CascadeSplitMode::Logarithmic:
                     // Logarithmic distribution: more detail near camera
                     // C_log(i) = near * (far/near)^(i/n)
-                    splits[i] = cameraNear * std::pow(ratio, p);
+                    // Using exp(log(ratio) * p) for better numerical stability with large ratios
+                    splits[i] = cameraNear * std::exp(std::log(ratio) * p);
                     break;
 
                 case types::CascadeSplitMode::Practical:
@@ -52,7 +53,7 @@ namespace render::shadow
                     // Blends logarithmic and linear: lambda * log + (1-lambda) * linear
                     {
                         float linearSplit = cameraNear + range * p;
-                        float logSplit = cameraNear * std::pow(ratio, p);
+                        float logSplit = cameraNear * std::exp(std::log(ratio) * p);
                         splits[i] = lambda * logSplit + (1.0f - lambda) * linearSplit;
                     }
                     break;
@@ -93,8 +94,10 @@ namespace render::shadow
             worldCorners[i] = glm::vec3(worldPos) / worldPos.w;
         }
 
-        // Get camera position from inverse view matrix
-        glm::vec3 cameraPos = glm::vec3(glm::inverse(cameraView)[3]);
+        // Extract camera position efficiently from view matrix
+        // For view matrix V = [R | -R*eye], camera position = -R^T * translation
+        // Using vec3 * mat3 (row-vector multiplication) gives us -t * R = -R^T * t
+        glm::vec3 cameraPos = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
 
         // Compute centers of near and far planes of the full frustum
         glm::vec3 nearCenter = (worldCorners[0] + worldCorners[1] + worldCorners[2] + worldCorners[3]) * 0.25f;

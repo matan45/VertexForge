@@ -659,6 +659,13 @@ namespace render::shadow
         uint32_t viewCount = std::min(static_cast<uint32_t>(data->views.size()),
                                        data->settings.cascadeCount);
 
+        // Warn if view count doesn't match expected cascade count (indicates configuration issue)
+        if (data->views.size() != data->settings.cascadeCount)
+        {
+            spdlog::warn("ShadowSystem: DirectionalCSM light {} has {} views but cascadeCount is {}",
+                         entityId, data->views.size(), data->settings.cascadeCount);
+        }
+
         for (uint32_t i = 0; i < viewCount; ++i)
         {
             auto& view = data->views[i];
