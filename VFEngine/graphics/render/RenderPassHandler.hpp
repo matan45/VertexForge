@@ -91,6 +91,7 @@ namespace render
 
         mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
         material::CallbackId materialChangeCallbackId{};
+        mutable bool lightOcclusionInitialized = false;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -141,6 +142,9 @@ namespace render
         // BVH light culling: set visible lights from frustum query
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();
+
+        // Light occlusion culling: call after GPU work completes to read back results
+        void readBackLightOcclusionResults();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         services::IVFXRuntimeProvider* getVFXRuntimeProvider() const { return vfxRuntimeProvider; }

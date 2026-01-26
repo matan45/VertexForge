@@ -115,6 +115,37 @@ namespace windows
 
                     ImGui::Separator();
 
+                    // Light culling stats
+                    ImGui::Text("Light Culling:");
+                    ImGui::SameLine();
+                    ImGui::TextColored(gpu.bvhLightCullingEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1),
+                                       "BVH");
+                    ImGui::SameLine();
+                    ImGui::TextColored(gpu.hiZLightOcclusionEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1),
+                                       "| Hi-Z Occlusion");
+
+                    if (gpu.totalLights > 0)
+                    {
+                        ImGui::Text("  Total Lights:        %u", gpu.totalLights);
+                        ImGui::Text("  After BVH Cull:      %u", gpu.lightsAfterBVHCull);
+                        ImGui::Text("  After Hi-Z Cull:     %u", gpu.lightsAfterHiZCull);
+                        ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1), "  Culled by BVH:       %u", gpu.lightsCulledByBVH);
+                        ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1), "  Culled by Hi-Z:      %u", gpu.lightsCulledByHiZ);
+
+                        uint32_t totalCulled = gpu.lightsCulledByBVH + gpu.lightsCulledByHiZ;
+                        float lightCullRate = static_cast<float>(totalCulled) / static_cast<float>(gpu.totalLights);
+                        ImGui::Text("Light Cull Rate:");
+                        ImGui::SameLine();
+                        ImGui::ProgressBar(lightCullRate, ImVec2(150, 0),
+                                           (std::to_string(static_cast<int>(lightCullRate * 100)) + "%").c_str());
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "  No lights in scene");
+                    }
+
+                    ImGui::Separator();
+
                     // Merged buffer stats
                     ImGui::Text("Merged Buffer:");
                     ImGui::Text("  Vertices:  %u", gpu.mergedVertexCount);

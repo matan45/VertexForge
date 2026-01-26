@@ -78,6 +78,15 @@ namespace services {
         uint32_t meshletsCulledByFrustum = 0;
         uint32_t meshletsCulledByBackface = 0;
         uint32_t visibleMeshlets = 0;
+
+        // Light culling stats
+        bool bvhLightCullingEnabled = false;
+        bool hiZLightOcclusionEnabled = false;
+        uint32_t totalLights = 0;              // Total point + spot lights in scene
+        uint32_t lightsAfterBVHCull = 0;       // Lights visible after BVH frustum cull
+        uint32_t lightsAfterHiZCull = 0;       // Lights visible after Hi-Z occlusion
+        uint32_t lightsCulledByBVH = 0;        // Lights culled by BVH frustum
+        uint32_t lightsCulledByHiZ = 0;        // Lights culled by Hi-Z occlusion
     };
 
     struct CullingDebugStats {

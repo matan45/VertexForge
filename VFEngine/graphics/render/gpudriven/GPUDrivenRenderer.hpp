@@ -109,6 +109,11 @@ namespace render::gpudriven
         std::unordered_set<uint32_t> prevFrameOccludedLights;
         bool hasPrevFrameOcclusionData = false;
 
+        // Light culling statistics (tracked per frame)
+        uint32_t totalSceneLights = 0;
+        uint32_t lightsAfterBVHCull = 0;
+        uint32_t lightsAfterHiZCull = 0;
+
         // Camera parameters (stored from updateScene for shadow rendering)
         glm::mat4 cachedCameraView{1.0f};
         glm::mat4 cachedCameraProjection{1.0f};
@@ -205,6 +210,11 @@ namespace render::gpudriven
         void setLightOcclusionCullingEnabled(bool enabled) { useLightOcclusionCulling = enabled; }
         bool isLightOcclusionCullingEnabled() const { return useLightOcclusionCulling; }
         occlusion::LightOcclusionCulling* getLightOcclusionCulling() const { return lightOcclusionCulling.get(); }
+
+        // Light culling statistics
+        uint32_t getTotalSceneLights() const;
+        uint32_t getLightsAfterBVHCull() const;
+        uint32_t getLightsAfterHiZCull() const;
 
         // Call at end of frame (after GPU work completes) to read back occlusion results
         // Results will be used for next frame's shadow filtering (Frame N-1 approach)

@@ -41,89 +41,76 @@ layout(set = 0, binding = 3) uniform CameraUBO {
     uint padding1;
 };
 
-// Project a point to clip space
-vec4 projectPoint(vec3 worldPos) {
-    return viewProj * vec4(worldPos, 1.0);
-}
-
 // Test if a sphere is visible against the Hi-Z buffer
+// Uses AABB-based projection like the mesh culling shader for robustness
 bool testSphereVisible(vec3 center, float radius) {
-    // Project sphere center to clip space
-    vec4 centerClip = projectPoint(center);
+    // Build AABB from sphere
+    vec3 aabbMin = center - vec3(radius);
+    vec3 aabbMax = center + vec3(radius);
 
-    // Check if sphere is behind near plane
-    // Account for sphere radius - if center.w + radius < nearPlane, entire sphere is behind
-    float nearPlane = cameraPos.w;
-    if (centerClip.w + radius < nearPlane) {
-        return false;  // Entirely behind camera
+    // Project all 8 AABB corners to clip space
+    vec4 corners[8];
+    corners[0] = viewProj * vec4(aabbMin.x, aabbMin.y, aabbMin.z, 1.0);
+    corners[1] = viewProj * vec4(aabbMax.x, aabbMin.y, aabbMin.z, 1.0);
+    corners[2] = viewProj * vec4(aabbMin.x, aabbMax.y, aabbMin.z, 1.0);
+    corners[3] = viewProj * vec4(aabbMax.x, aabbMax.y, aabbMin.z, 1.0);
+    corners[4] = viewProj * vec4(aabbMin.x, aabbMin.y, aabbMax.z, 1.0);
+    corners[5] = viewProj * vec4(aabbMax.x, aabbMin.y, aabbMax.z, 1.0);
+    corners[6] = viewProj * vec4(aabbMin.x, aabbMax.y, aabbMax.z, 1.0);
+    corners[7] = viewProj * vec4(aabbMax.x, aabbMax.y, aabbMax.z, 1.0);
+
+    // Find screen-space bounds and minimum depth
+    vec2 ndcMin = vec2(1.0);
+    vec2 ndcMax = vec2(-1.0);
+    float minDepth = 1.0;
+
+    for (int i = 0; i < 8; i++) {
+        // If any corner is behind camera, conservatively mark as visible
+        if (corners[i].w <= 0.0) {
+            return true;
+        }
+        vec3 ndc = corners[i].xyz / corners[i].w;
+        ndcMin = min(ndcMin, ndc.xy);
+        ndcMax = max(ndcMax, ndc.xy);
+        minDepth = min(minDepth, ndc.z);
     }
 
-    // If center is behind but sphere extends in front, conservatively visible
-    if (centerClip.w < nearPlane) {
-        return true;  // Sphere straddles near plane
+    // Clamp to screen bounds
+    ndcMin = clamp(ndcMin, vec2(-1.0), vec2(1.0));
+    ndcMax = clamp(ndcMax, vec2(-1.0), vec2(1.0));
+
+    // If in front of near plane, conservatively visible
+    if (minDepth < 0.0) {
+        return true;
     }
-
-    // Perspective divide for center
-    vec3 centerNDC = centerClip.xyz / centerClip.w;
-
-    // Project radius to screen space
-    // The sphere's screen-space radius depends on distance
-    // Approximate: screenRadius = worldRadius / depth * focalLength
-    // Using simplified approach: project a point at (center + right * radius)
-    vec3 camRight = normalize(cross(vec3(0, 1, 0), normalize(cameraPos.xyz - center)));
-    vec4 edgeClip = projectPoint(center + camRight * radius);
-    vec3 edgeNDC = edgeClip.xyz / edgeClip.w;
-    float screenRadius = length(edgeNDC.xy - centerNDC.xy);
 
     // Convert NDC to UV [0, 1]
-    vec2 centerUV = centerNDC.xy * 0.5 + 0.5;
+    vec2 uvMin = ndcMin * 0.5 + 0.5;
+    vec2 uvMax = ndcMax * 0.5 + 0.5;
 
-    // Check if entirely off-screen (accounting for radius)
-    float uvRadius = screenRadius * 0.5;  // NDC to UV scale
-    if (centerUV.x + uvRadius < 0.0 || centerUV.x - uvRadius > 1.0 ||
-        centerUV.y + uvRadius < 0.0 || centerUV.y - uvRadius > 1.0) {
-        return false;  // Entirely off-screen
-    }
-
-    // If partially off-screen, conservatively mark as visible
-    if (centerUV.x - uvRadius < 0.0 || centerUV.x + uvRadius > 1.0 ||
-        centerUV.y - uvRadius < 0.0 || centerUV.y + uvRadius > 1.0) {
-        return true;  // Partially off-screen, conservatively visible
-    }
-
-    // Calculate screen coverage to determine mip level
-    vec2 screenSize2D = screenSize.xy;
-    float screenDiameter = screenRadius * max(screenSize2D.x, screenSize2D.y);
+    // Calculate screen-space size to determine mip level
+    vec2 sizePixels = (uvMax - uvMin) * screenSize.xy;
+    float maxDimension = max(sizePixels.x, sizePixels.y);
 
     // Very small lights (< 1 pixel) - conservatively visible
-    if (screenDiameter < 1.0) {
+    if (maxDimension < 1.0) {
         return true;
     }
 
     // Select mip level based on coverage
-    float mipLevel = floor(log2(screenDiameter)) + 1.0;
+    float mipLevel = ceil(log2(maxDimension));
     mipLevel = clamp(mipLevel, 0.0, float(hiZMipLevels - 1));
 
-    // Sample Hi-Z at center and edges of the sphere's screen projection
-    float hiZCenter = textureLod(hiZPyramid, centerUV, mipLevel).r;
-
-    // Sample at 4 points around the sphere for better coverage
-    vec2 offset = vec2(uvRadius * 0.7, 0.0);  // 0.7 ≈ sqrt(2)/2 for diagonal
-    float hiZ0 = textureLod(hiZPyramid, centerUV + offset, mipLevel).r;
-    float hiZ1 = textureLod(hiZPyramid, centerUV - offset, mipLevel).r;
-    float hiZ2 = textureLod(hiZPyramid, centerUV + offset.yx, mipLevel).r;
-    float hiZ3 = textureLod(hiZPyramid, centerUV - offset.yx, mipLevel).r;
-
-    // Take maximum (furthest) depth from Hi-Z samples
-    float maxHiZDepth = max(max(max(hiZ0, hiZ1), max(hiZ2, hiZ3)), hiZCenter);
-
-    // Calculate the nearest depth of the sphere
-    // The nearest point of the sphere to the camera in NDC depth
-    float sphereNearZ = centerNDC.z - (radius / centerClip.w);
+    // Sample Hi-Z at the 4 corners of the screen-space bounds
+    float hiZDepth = 0.0;
+    hiZDepth = max(hiZDepth, textureLod(hiZPyramid, uvMin, mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZPyramid, uvMax, mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZPyramid, vec2(uvMin.x, uvMax.y), mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZPyramid, vec2(uvMax.x, uvMin.y), mipLevel).r);
 
     // Sphere is visible if its nearest point is in front of (or at) the Hi-Z depth
     // In Vulkan: 0 = near, 1 = far, so smaller = closer
-    return sphereNearZ <= maxHiZDepth;
+    return minDepth <= hiZDepth + 0.0001;
 }
 
 void main() {

@@ -344,6 +344,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::readBackLightOcclusionResults()
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->readBackLightOcclusionResults();
+        }
+    }
+
     void RenderPassHandler::setViewMode(uint32_t mode)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
@@ -385,6 +393,13 @@ namespace render
             camera->hiZBuffer->getHiZSampler(),
             camera->hiZBuffer->getMipLevels()
         );
+
+        // Initialize light occlusion culling once we have a valid Hi-Z buffer
+        if (!lightOcclusionInitialized)
+        {
+            gpuDrivenRenderer->initLightOcclusionCulling(camera->hiZBuffer.get());
+            lightOcclusionInitialized = true;
+        }
     }
 
     void RenderPassHandler::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)

@@ -14,6 +14,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "print/Logger.hpp"
+#include <algorithm>
 #include <array>
 #include <unordered_map>
 #include <memory>
@@ -536,6 +537,28 @@ namespace render::gpudriven
             meshShaderPipeline->resetStats(cmd);
         }
 
+        // Count total scene lights for statistics (before early return so stats always update)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            uint32_t pointCount = static_cast<uint32_t>(registry.view<components::PointLightComponent>().size());
+            uint32_t spotCount = static_cast<uint32_t>(registry.view<components::SpotLightComponent>().size());
+            totalSceneLights = pointCount + spotCount;
+
+            // Lights after BVH cull (if BVH culling is active, use the visible set size)
+            if (useBVHLightCulling && !visibleLightIds.empty())
+            {
+                // Cap to total scene lights to handle stale data
+                lightsAfterBVHCull = std::min(static_cast<uint32_t>(visibleLightIds.size()), totalSceneLights);
+            }
+            else
+            {
+                lightsAfterBVHCull = totalSceneLights;
+            }
+
+            // Initialize Hi-Z cull count - will be updated after occlusion results
+            lightsAfterHiZCull = lightsAfterBVHCull;
+        }
+
         if (stats.totalObjects == 0)
         {
             return;
@@ -677,6 +700,9 @@ namespace render::gpudriven
             {
                 // Update and dispatch light occlusion culling
                 lightOcclusionCulling->updateLights(lightBounds);
+
+                // Upload light bounds from staging to GPU buffer
+                lightOcclusionCulling->recordLightUpload(cmd);
 
                 const auto& camData = cameraBuffer->getData();
                 glm::mat4 viewProj = camData.projection * camData.view;
@@ -1042,12 +1068,19 @@ namespace render::gpudriven
             return;
         }
 
+        // Mark results as ready now that GPU work has completed
+        lightOcclusionCulling->markResultsReady();
+
         // Read back visibility results from GPU (this is the staging buffer read)
-        lightOcclusionCulling->getVisibleLightIds();
+        const auto& visibleLights = lightOcclusionCulling->getVisibleLightIds();
 
         // Store occluded lights for next frame's shadow filtering
         prevFrameOccludedLights = lightOcclusionCulling->getOccludedLightIds();
         hasPrevFrameOcclusionData = true;
+
+        // Update stats based on actual GPU compute results
+        // This shows the real Hi-Z culling effectiveness
+        lightsAfterHiZCull = static_cast<uint32_t>(visibleLights.size());
     }
 
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)
@@ -1117,5 +1150,20 @@ namespace render::gpudriven
         {
             loggerError("GPUDrivenRenderer::recreatePipelines: Cannot recreate pipeline due to missing components");
         }
+    }
+
+    uint32_t GPUDrivenRenderer::getTotalSceneLights() const
+    {
+        return totalSceneLights;
+    }
+
+    uint32_t GPUDrivenRenderer::getLightsAfterBVHCull() const
+    {
+        return lightsAfterBVHCull;
+    }
+
+    uint32_t GPUDrivenRenderer::getLightsAfterHiZCull() const
+    {
+        return lightsAfterHiZCull;
     }
 }

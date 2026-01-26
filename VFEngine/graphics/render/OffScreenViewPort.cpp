@@ -83,6 +83,9 @@ namespace render
 
         device.getGraphicsQueue().waitIdle();
 
+        // Read back light occlusion results now that GPU work is complete
+        renderPassHandler->readBackLightOcclusionResults();
+
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
 

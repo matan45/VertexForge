@@ -121,6 +121,24 @@ namespace controllers::offscreen
             stats.gpuDriven.meshletsCulledByFrustum = meshletStats.culledByFrustum;
             stats.gpuDriven.meshletsCulledByBackface = meshletStats.culledByBackface;
             stats.gpuDriven.visibleMeshlets = meshletStats.visibleMeshlets;
+
+            // Light culling stats
+            stats.gpuDriven.bvhLightCullingEnabled = gpuDrivenRenderer->isBVHLightCullingEnabled();
+            stats.gpuDriven.hiZLightOcclusionEnabled = gpuDrivenRenderer->isLightOcclusionCullingEnabled();
+            stats.gpuDriven.totalLights = gpuDrivenRenderer->getTotalSceneLights();
+            stats.gpuDriven.lightsAfterBVHCull = gpuDrivenRenderer->getLightsAfterBVHCull();
+            stats.gpuDriven.lightsAfterHiZCull = gpuDrivenRenderer->getLightsAfterHiZCull();
+
+            // Safe subtraction to prevent underflow
+            if (stats.gpuDriven.lightsAfterBVHCull <= stats.gpuDriven.totalLights)
+                stats.gpuDriven.lightsCulledByBVH = stats.gpuDriven.totalLights - stats.gpuDriven.lightsAfterBVHCull;
+            else
+                stats.gpuDriven.lightsCulledByBVH = 0;
+
+            if (stats.gpuDriven.lightsAfterHiZCull <= stats.gpuDriven.lightsAfterBVHCull)
+                stats.gpuDriven.lightsCulledByHiZ = stats.gpuDriven.lightsAfterBVHCull - stats.gpuDriven.lightsAfterHiZCull;
+            else
+                stats.gpuDriven.lightsCulledByHiZ = 0;
         }
 
         return stats;
