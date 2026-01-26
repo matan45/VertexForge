@@ -80,11 +80,11 @@ namespace render::lighting
         uint32_t directionalCount;
         uint32_t pointCount;
         uint32_t spotCount;
-        uint32_t padding;
+        float shadowIntensity;  // Controls ambient occlusion in shadowed areas (0-1)
     };
     static_assert(sizeof(GPULightCounts) == 16, "GPULightCounts must be 16 bytes");
     static_assert(offsetof(GPULightCounts, directionalCount) == 0, "GPULightCounts::directionalCount offset mismatch");
     static_assert(offsetof(GPULightCounts, pointCount) == 4, "GPULightCounts::pointCount offset mismatch");
     static_assert(offsetof(GPULightCounts, spotCount) == 8, "GPULightCounts::spotCount offset mismatch");
-    static_assert(offsetof(GPULightCounts, padding) == 12, "GPULightCounts::padding offset mismatch");
+    static_assert(offsetof(GPULightCounts, shadowIntensity) == 12, "GPULightCounts::shadowIntensity offset mismatch");
 }

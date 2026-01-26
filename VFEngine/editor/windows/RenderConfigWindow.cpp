@@ -145,6 +145,22 @@ namespace windows
                 {
                     ImGui::SetTooltip("Enable/disable PCF shadow filtering globally.");
                 }
+
+                ImGui::Separator();
+                ImGui::Text("Shadow Darkness");
+                ImGui::Spacing();
+
+                // Shadow Intensity
+                if (ImGui::SliderFloat("Shadow Intensity", &settings.shadows.shadowIntensity, 0.0f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Controls how dark shadowed areas are.\n"
+                                      "0.0 = Lighter shadows (ambient light in shadows)\n"
+                                      "1.0 = Darker shadows (no ambient in shadows)");
+                }
             }
 
             // Shadow Debug Visualization (visible regardless of shadow state)

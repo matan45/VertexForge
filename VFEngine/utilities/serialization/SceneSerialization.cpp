@@ -1081,7 +1081,8 @@ namespace serialization
             {"cascadeCount", settings.shadows.cascadeCount},
             {"cascadeSplitMode", cascadeSplitModeToString(settings.shadows.cascadeSplitMode)},
             {"shadowBias", settings.shadows.shadowBias},
-            {"normalBias", settings.shadows.normalBias}
+            {"normalBias", settings.shadows.normalBias},
+            {"shadowIntensity", settings.shadows.shadowIntensity}
         };
 
         return j;
@@ -1108,6 +1109,8 @@ namespace serialization
                 settings.shadows.shadowBias = shadows["shadowBias"].get<float>();
             if (shadows.contains("normalBias") && shadows["normalBias"].is_number())
                 settings.shadows.normalBias = shadows["normalBias"].get<float>();
+            if (shadows.contains("shadowIntensity") && shadows["shadowIntensity"].is_number())
+                settings.shadows.shadowIntensity = shadows["shadowIntensity"].get<float>();
         }
     }
 

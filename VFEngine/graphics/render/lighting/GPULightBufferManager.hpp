@@ -83,6 +83,9 @@ namespace render::lighting
         // Shadow system reference for shadow index lookup (optional)
         shadow::ShadowSystem* shadowSystem = nullptr;
 
+        // Shadow intensity for ambient occlusion in shadowed areas
+        float shadowIntensity = 0.5f;
+
         // Track which lights have been registered for shadows (by entity ID)
         std::unordered_set<uint32_t> registeredShadowLights;
 
@@ -120,6 +123,9 @@ namespace render::lighting
 
         // Set shadow system reference for shadow index population
         void setShadowSystem(shadow::ShadowSystem* system) { shadowSystem = system; }
+
+        // Set shadow intensity for ambient occlusion in shadowed areas
+        void setShadowIntensity(float intensity) { shadowIntensity = intensity; }
 
     private:
         void createBuffers();

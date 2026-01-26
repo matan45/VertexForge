@@ -354,7 +354,7 @@ struct LightCounts {
     uint directionalCount;
     uint pointCount;
     uint spotCount;
-    uint padding;
+    float shadowIntensity;  // Controls ambient occlusion in shadowed areas (0-1)
 };
 
 layout(std140, set = 6, binding = 3) uniform LightCountsUBO {
@@ -919,6 +919,7 @@ void main() {
     vec3 ambient = (kD * diffuse + specular) * ao;
 
     vec3 directLighting = vec3(0.0);
+    float minShadow = 1.0;  // Track minimum shadow for ambient occlusion
 
     // Compute linear depth once for shadow cascade selection (also used for cluster lookup)
     float linearZ = linearizeDepth(gl_FragCoord.z);
@@ -937,6 +938,7 @@ void main() {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
             float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, light.position, light.radius);
+            minShadow = min(minShadow, shadow);
             directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
         }
 
@@ -946,6 +948,7 @@ void main() {
             uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
             SpotLight light = spotLights[lightIdx];
             float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos);
+            minShadow = min(minShadow, shadow);
             directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
         }
     }
@@ -954,8 +957,14 @@ void main() {
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
         float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, linearZ);
+        minShadow = min(minShadow, shadow);
         directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
     }
+
+    // Apply shadow intensity to ambient (reduces ambient in shadowed areas)
+    // shadowIntensity: 0 = no ambient occlusion, 1 = full ambient occlusion in shadows
+    float ambientShadowFactor = mix(1.0, minShadow, lightCounts.shadowIntensity);
+    ambient *= ambientShadowFactor;
 
     float emissionMultiplier = emission;
     if (drawData.shaderGroupIndex == 2u) {

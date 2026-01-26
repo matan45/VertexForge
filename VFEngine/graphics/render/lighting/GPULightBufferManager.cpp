@@ -143,7 +143,7 @@ namespace render::lighting
 
             countsMapped = logicalDevice.mapMemory(countsMemory, 0, bufferSize, vk::MemoryMapFlags{});
 
-            GPULightCounts counts{0, 0, 0, 0};
+            GPULightCounts counts{0, 0, 0, 0.5f};
             std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
         }
 
@@ -711,7 +711,7 @@ namespace render::lighting
         counts.directionalCount = directionalCount;
         counts.pointCount = pointCount;
         counts.spotCount = spotCount;
-        counts.padding = 0;
+        counts.shadowIntensity = shadowIntensity;
 
         std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
     }

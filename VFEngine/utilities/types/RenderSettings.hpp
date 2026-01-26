@@ -103,6 +103,11 @@ namespace types
         PCFKernelSize pcfKernelSize = PCFKernelSize::Small;  // Default 3x3
         bool softShadowsEnabled = true;                       // Global soft shadow toggle
 
+        // Shadow intensity: controls how much ambient light is reduced in shadowed areas
+        // 0.0 = no ambient occlusion in shadows (lighter shadows)
+        // 1.0 = full ambient occlusion in shadows (darker shadows)
+        float shadowIntensity = 0.5f;
+
         // Atlas configuration
         ShadowAtlasConfig atlas;
     };

@@ -295,6 +295,13 @@ namespace controllers
         {
             shadowSystem->applyRenderSettings(settings);
         }
+
+        // Pass shadow intensity to light buffer manager for ambient occlusion in shadows
+        auto* lightBufferManager = gpuDriven->getLightBufferManager();
+        if (lightBufferManager)
+        {
+            lightBufferManager->setShadowIntensity(settings.shadows.shadowIntensity);
+        }
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
