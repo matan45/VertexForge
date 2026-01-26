@@ -87,7 +87,6 @@ namespace render::shadow
         gpuShadowData.reserve(ShadowConstants::MAX_TOTAL_SHADOW_VIEWS);
 
         initialized = true;
-        spdlog::info("ShadowSystem initialized");
     }
 
     void ShadowSystem::cleanup()
@@ -152,7 +151,6 @@ namespace render::shadow
 
         initialized = false;
         atlasFirstUse = true;  // Reset so next use transitions from eUndefined
-        spdlog::info("ShadowSystem cleaned up");
     }
 
     void ShadowSystem::recreate()
@@ -188,8 +186,6 @@ namespace render::shadow
             atlasManager->getAtlasWidth(),
             atlasManager->getAtlasHeight()
         );
-
-        spdlog::info("ShadowSystem: Shadow pass pipeline initialized");
     }
 
     void ShadowSystem::createShadowDataBuffer()
@@ -529,13 +525,9 @@ namespace render::shadow
 
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
     {
-        spdlog::info("ShadowSystem::registerLight called: entityId={}, type={}, alreadyRegistered={}",
-                     entityId, static_cast<int>(type), lightShadowData.contains(entityId));
-
         if (lightShadowData.contains(entityId))
         {
             // This is expected when settings are updated each frame
-            spdlog::info("ShadowSystem: Light {} already registered, calling updateLightSettings", entityId);
             updateLightSettings(entityId, settings);
             return true;  // Already registered is considered success
         }
@@ -577,7 +569,6 @@ namespace render::shadow
         lightShadowData[entityId] = std::move(data);
         needsUpdate = true;
 
-        spdlog::debug("ShadowSystem: Registered light {} with {} shadow views", entityId, viewCount);
         return true;
     }
 
@@ -599,8 +590,6 @@ namespace render::shadow
         freeShadowMaps(it->second);
         lightShadowData.erase(it);
         needsUpdate = true;
-
-        spdlog::debug("ShadowSystem: Unregistered light {}", entityId);
     }
 
     void ShadowSystem::updateLightSettings(uint32_t entityId, const ShadowSettings& settings)
@@ -610,19 +599,6 @@ namespace render::shadow
         {
             spdlog::warn("ShadowSystem: Cannot update settings for unknown light {}", entityId);
             return;
-        }
-
-        // Debug: log current state
-        spdlog::info("ShadowSystem::updateLightSettings: light={}, type={}, viewCount={}, usesAtlas={}, resourceHandle.valid={}",
-                     entityId, static_cast<int>(data->type), data->views.size(),
-                     data->usesAtlas(), data->resourceHandle.isValid());
-        if (!data->views.empty())
-        {
-            spdlog::info("  view[0].handle: valid={}, type={}, atlasIdx={}, viewport=({},{},{},{})",
-                         data->views[0].handle.isValid(), static_cast<int>(data->views[0].handle.type),
-                         data->views[0].handle.atlasIndex,
-                         data->views[0].atlasViewport.x, data->views[0].atlasViewport.y,
-                         data->views[0].atlasViewport.z, data->views[0].atlasViewport.w);
         }
 
         // Check if resolution changed (requires reallocation)
@@ -644,8 +620,6 @@ namespace render::shadow
             if (!hasValidAtlasTiles || hasOldDedicatedResource)
             {
                 needsAtlasRealloc = true;
-                spdlog::info("ShadowSystem: Light {} (type {}) needs atlas tile allocation (hasValid={}, hasOldRes={})",
-                             entityId, static_cast<int>(data->type), hasValidAtlasTiles, hasOldDedicatedResource);
             }
         }
 
@@ -748,10 +722,6 @@ namespace render::shadow
                     return false;
                 }
 
-                uint32_t cascadeCount = static_cast<uint32_t>(data.views.size());
-                spdlog::info("ShadowSystem: Allocating {} CSM cascades ({}x{} each)",
-                             cascadeCount, resolution, resolution);
-
                 for (size_t i = 0; i < data.views.size(); ++i)
                 {
                     auto& view = data.views[i];
@@ -777,13 +747,8 @@ namespace render::shadow
                     view.handle = handle;
                     view.handle.cascadeIndex = static_cast<uint16_t>(i);
                     view.atlasViewport = atlasManager->getNormalizedViewport(handle);
-                    spdlog::info("ShadowSystem: CSM cascade {} allocated, viewport=({},{},{},{})",
-                                 i, view.atlasViewport.x, view.atlasViewport.y,
-                                 view.atlasViewport.z, view.atlasViewport.w);
                 }
 
-                spdlog::info("ShadowSystem: Successfully allocated {} CSM cascades in atlas",
-                              cascadeCount);
                 return true;
             }
 
@@ -813,7 +778,6 @@ namespace render::shadow
                     view.atlasViewport = glm::vec4(0.0f, 0.0f, 1.0f, static_cast<float>(i));
                 }
 
-                spdlog::debug("ShadowSystem: Allocated point cube map {}x{}", resolution, resolution);
                 return true;
             }
 
@@ -988,9 +952,6 @@ namespace render::shadow
                 uint32_t viewCount = std::min(static_cast<uint32_t>(data.views.size()),
                                                data.settings.cascadeCount);
 
-                spdlog::info("ShadowSystem: Updating {} CSM cascades for light {}, dir=({},{},{})",
-                             viewCount, entityId, lightDirection.x, lightDirection.y, lightDirection.z);
-
                 for (uint32_t i = 0; i < viewCount; ++i)
                 {
                     auto& view = data.views[i];
@@ -1069,7 +1030,6 @@ namespace render::shadow
                 {
                     // CSM: uses atlas tiles, each cascade has its own tile
                     float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
-                    uint32_t validViews = 0;
 
                     // Add all cascade views (each becomes an entry in shadow data buffer)
                     for (size_t i = 0; i < data.views.size(); ++i)
@@ -1094,9 +1054,7 @@ namespace render::shadow
                         if (!directionalIndices.contains(entityId))
                             directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
                         directionalShadowViews.push_back(viewCopy);
-                        validViews++;
                     }
-                    spdlog::info("ShadowSystem: Collected {} CSM views for light {}", validViews, entityId);
                     break;
                 }
 
@@ -1170,10 +1128,6 @@ namespace render::shadow
             entityToShadowIndex[entityId] = pointOffset + localIdx;
         for (const auto& [entityId, localIdx] : spotIndices)
             entityToShadowIndex[entityId] = spotOffset + localIdx;
-
-        spdlog::info("ShadowSystem::beginFrame complete: directional={}, point={}, spot={}, total entities={}",
-                     directionalShadowViews.size(), pointShadowViews.size(), spotShadowViews.size(),
-                     entityToShadowIndex.size());
     }
 
     void ShadowSystem::updateLightShadowMatrices(uint32_t entityId,
@@ -1461,12 +1415,6 @@ namespace render::shadow
                     if (it != lightShadowData.end())
                     {
                         rangeZ = static_cast<float>(it->second.settings.cascadeCount);
-                        spdlog::info("  Directional view: entityId={}, cascadeCount={}, farPlane={}",
-                                    view.entityId, rangeZ, view.farPlane);
-                    }
-                    else
-                    {
-                        spdlog::warn("  Directional view: entityId={} NOT FOUND in lightShadowData!", view.entityId);
                     }
                 }
                 else
@@ -1517,22 +1465,6 @@ namespace render::shadow
 
         // Build GPU data from current views
         buildGPUShadowData();
-
-        spdlog::info("ShadowSystem::uploadToGPU: gpuShadowData.size={}", gpuShadowData.size());
-        if (!gpuShadowData.empty())
-        {
-            const auto& first = gpuShadowData[0];
-            spdlog::info("  First shadow entry: viewport=({},{},{},{}), bias=({},{},{},{})",
-                        first.atlasViewport.x, first.atlasViewport.y, first.atlasViewport.z, first.atlasViewport.w,
-                        first.biasParams.x, first.biasParams.y, first.biasParams.z, first.biasParams.w);
-            spdlog::info("  rangeParams=({},{},{},{}), pcfParams=({},{},{},{})",
-                        first.rangeParams.x, first.rangeParams.y, first.rangeParams.z, first.rangeParams.w,
-                        first.pcfParams.x, first.pcfParams.y, first.pcfParams.z, first.pcfParams.w);
-            // Log first row of viewProjection matrix to check it's not identity/zero
-            spdlog::info("  viewProj[0]=({},{},{},{})",
-                        first.viewProjection[0][0], first.viewProjection[0][1],
-                        first.viewProjection[0][2], first.viewProjection[0][3]);
-        }
 
         if (gpuShadowData.empty())
             return;
@@ -1595,16 +1527,8 @@ namespace render::shadow
         bool hasAtlasViews = !allViews.empty();
         bool hasPointShadows = !pointShadowViews.empty();
 
-        spdlog::info("ShadowSystem::recordShadowPass: atlasViews={}, spotViews={}, directionalViews={}, pointViews={}",
-                    allViews.size(), spotShadowViews.size(), directionalShadowViews.size(), pointShadowViews.size());
-        spdlog::info("ShadowSystem::recordShadowPass params: batchCount={}, commandsPerSection={}, shaderGroupCount={}, drawCountStructSize={}",
-                    params.batchCount, params.commandsPerSection, params.shaderGroupCount, params.drawCountStructSize);
-
         if (!hasAtlasViews && !hasPointShadows)
-        {
-            spdlog::warn("ShadowSystem::recordShadowPass: No views to render");
             return;
-        }
 
         // Validate batch parameters to prevent out-of-bounds access
         if (params.batchCount == 0 || params.commandsPerSection == 0)
@@ -1711,7 +1635,6 @@ namespace render::shadow
         );
 
         // 5. Render each shadow view
-        uint32_t renderedViews = 0;
         for (const auto* view : allViews)
         {
             if (!view->handle.isValid())
@@ -1722,8 +1645,6 @@ namespace render::shadow
 
             // Set dynamic viewport and scissor for this tile
             vk::Viewport viewport = atlasManager->getPixelViewport(view->handle);
-            spdlog::info("ShadowSystem: Rendering view {}: viewport=({},{},{},{}), entityId={}",
-                        renderedViews, viewport.x, viewport.y, viewport.width, viewport.height, view->entityId);
             cmd.setViewport(0, 1, &viewport);
 
             vk::Rect2D scissor = atlasManager->getScissorRect(view->handle);
@@ -1773,12 +1694,7 @@ namespace render::shadow
                     );
                 }
             }
-            renderedViews++;
         }
-
-        uint32_t totalDrawCalls = renderedViews * params.shaderGroupCount * params.batchCount;
-        spdlog::info("ShadowSystem: Rendered {} atlas shadow views ({} total draw calls across {} shader groups x {} batches)",
-                    renderedViews, totalDrawCalls, params.shaderGroupCount, params.batchCount);
 
         // 6. End render pass
         cmd.endRenderPass();
@@ -2026,10 +1942,7 @@ namespace render::shadow
         setShadowsEnabled(shadowSettings.enabled);
 
         if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
-        {
-            spdlog::info("ShadowSystem: Shadows disabled via RenderSettings");
             return;
-        }
 
         // Get atlas config from quality or use direct config
         types::ShadowAtlasConfig atlasConfig = shadowSettings.atlas;
@@ -2039,9 +1952,6 @@ namespace render::shadow
             atlasConfig = types::ShadowAtlasConfig::fromQuality(shadowSettings.quality);
         }
 
-        spdlog::debug("ShadowSystem: Applying render settings - quality={}, atlasSize={}",
-                      static_cast<int>(shadowSettings.quality), atlasConfig.atlasSize);
-
         // Check if atlas resize is needed
         bool needsResize = atlasManager &&
                            (atlasManager->getAtlasWidth() != atlasConfig.atlasSize ||
@@ -2050,9 +1960,6 @@ namespace render::shadow
         if (needsResize)
         {
             auto resizeStartTime = std::chrono::high_resolution_clock::now();
-
-            spdlog::info("ShadowSystem: Atlas resize required - {} -> {}",
-                         atlasManager->getAtlasWidth(), atlasConfig.atlasSize);
 
             // Store existing light registrations
             struct LightRegInfo
@@ -2139,11 +2046,6 @@ namespace render::shadow
                 spdlog::warn("ShadowSystem: Re-registered {}/{} lights after atlas resize ({} failed)",
                              registeredCount, existingLights.size(), failedCount);
             }
-            else
-            {
-                spdlog::info("ShadowSystem: Re-registered all {} lights after atlas resize",
-                             existingLights.size());
-            }
 
             // Measure and warn about expensive resize operations
             auto resizeEndTime = std::chrono::high_resolution_clock::now();
@@ -2152,10 +2054,6 @@ namespace render::shadow
             {
                 spdlog::warn("ShadowSystem: Atlas resize took {:.1f}ms (exceeds {:.0f}ms frame budget)",
                              resizeMs, FRAME_BUDGET_WARNING_MS);
-            }
-            else
-            {
-                spdlog::debug("ShadowSystem: Atlas resize completed in {:.1f}ms", resizeMs);
             }
         }
         else
@@ -2201,11 +2099,6 @@ namespace render::shadow
         // Apply PCF filtering settings
         globalPcfKernel = static_cast<uint8_t>(shadowSettings.pcfKernelSize);
         globalSoftShadowsEnabled = shadowSettings.softShadowsEnabled;
-
-        spdlog::debug("ShadowSystem: PCF settings - kernel={}, softShadows={}",
-                      globalPcfKernel, globalSoftShadowsEnabled);
-
-        spdlog::info("ShadowSystem: Render settings applied successfully");
     }
 
     uint32_t ShadowSystem::getActiveShadowCasterCount() const

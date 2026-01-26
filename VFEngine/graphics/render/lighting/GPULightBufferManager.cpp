@@ -448,7 +448,6 @@ namespace render::lighting
 
                 // Query shadow index
                 gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
-                spdlog::info("GPULightBufferManager: Directional light {} shadowIndex={}", entityId, gpuLight.shadowIndex);
             }
 
             ++directionalCount;
