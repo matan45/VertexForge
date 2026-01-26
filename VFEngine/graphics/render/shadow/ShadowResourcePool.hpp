@@ -114,6 +114,12 @@ namespace render::shadow
          */
         [[nodiscard]] vk::Sampler getStandardSampler() const { return standardSampler; }
 
+        /**
+         * Get placeholder array view for binding when no CSM lights exist.
+         * This is a 1x1x1 depth array in shader-read-optimal layout.
+         */
+        [[nodiscard]] vk::ImageView getPlaceholderArrayView() const;
+
         // ========================================
         // Descriptor Access
         // ========================================
@@ -172,11 +178,16 @@ namespace render::shadow
         vk::DescriptorSetLayout arrayDescriptorLayout;
         vk::DescriptorSetLayout cubeDescriptorLayout;
 
+        // Placeholder resources for binding when no actual shadows exist
+        std::unique_ptr<ShadowDepthArray> placeholderArray;
+
         bool initialized = false;
 
         void createSamplers();
         void createDescriptorLayouts();
+        void createPlaceholderResources();
         void cleanupDescriptors();
         void cleanupSamplers();
+        void cleanupPlaceholders();
     };
 }

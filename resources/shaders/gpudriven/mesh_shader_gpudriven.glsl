@@ -1014,5 +1014,71 @@ void main() {
         color = clusterColor;
     }
 
+    // Depth visualization - heat map from near (blue) to far (red)
+    if (viewModeValue == 5u) {
+        float linearZ = linearizeDepth(gl_FragCoord.z);
+        float near = clusterParams.depthParams.x;
+        float far = clusterParams.depthParams.y;
+        float normalizedDepth = clamp((linearZ - near) / (far - near), 0.0, 1.0);
+
+        // Heat map: blue -> cyan -> green -> yellow -> red
+        vec3 depthColors[5] = vec3[5](
+            vec3(0.0, 0.0, 1.0),   // Blue (near)
+            vec3(0.0, 1.0, 1.0),   // Cyan
+            vec3(0.0, 1.0, 0.0),   // Green
+            vec3(1.0, 1.0, 0.0),   // Yellow
+            vec3(1.0, 0.0, 0.0)    // Red (far)
+        );
+        float t = normalizedDepth * 4.0;
+        int idx = clamp(int(floor(t)), 0, 3);
+        color = mix(depthColors[idx], depthColors[idx + 1], fract(t));
+    }
+
+    // Shadow visualization - shows combined shadow factor (white = lit, black = shadowed)
+    if (viewModeValue == 6u) {
+        float totalShadow = 1.0;
+
+        // Directional light shadows (CSM)
+        for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
+            DirectionalLight light = directionalLights[i];
+            float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, linearZ);
+            totalShadow = min(totalShadow, shadow);
+        }
+
+        // Point and spot light shadows from cluster
+        if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
+            uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
+            ClusterLightData clusterData = clusterLightGrid[clusterIdx];
+            uint clusterPointCount = clusterData.counts & 0xFFFFu;
+            uint clusterSpotCount = clusterData.counts >> 16u;
+            uint lightOffset = clusterData.offset;
+
+            for (uint i = 0u; i < clusterPointCount; ++i) {
+                uint packedIdx = lightIndexList[lightOffset + i];
+                uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
+                PointLight light = pointLights[lightIdx];
+                if (light.shadowIndex >= 0) {
+                    float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, light.position, light.radius);
+                    totalShadow = min(totalShadow, shadow);
+                }
+            }
+
+            for (uint i = 0u; i < clusterSpotCount; ++i) {
+                uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
+                uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
+                SpotLight light = spotLights[lightIdx];
+                if (light.shadowIndex >= 0) {
+                    float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos);
+                    totalShadow = min(totalShadow, shadow);
+                }
+            }
+        }
+
+        // Visualize: white = fully lit, black = fully shadowed
+        // Add slight color tint: shadows are slightly blue, lit areas slightly warm
+        vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
+        color = shadowColor;
+    }
+
     outColor = vec4(color, alpha);
 }

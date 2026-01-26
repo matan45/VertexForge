@@ -97,7 +97,7 @@ namespace windows
 
         // Position view mode dropdown in top-right of viewport content area
         ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
-        float dropdownWidth = 90.0f;
+        float dropdownWidth = 95.0f;
         ImVec2 dropdownPos = ImVec2(
             windowPos.x + contentMax.x - dropdownWidth - 8.0f,
             windowPos.y + contentMin.y + 8.0f
@@ -111,9 +111,9 @@ namespace windows
             // Sync view mode from backend in case it was changed externally
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster"};
+            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster", "Depth", "Shadow"};
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 5))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 7))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);

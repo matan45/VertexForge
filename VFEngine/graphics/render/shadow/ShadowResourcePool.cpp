@@ -1,6 +1,7 @@
 #include "ShadowResourcePool.hpp"
 #include "ShadowSamplers.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/Utilities.hpp"
 #include <spdlog/spdlog.h>
 
 namespace render::shadow
@@ -25,6 +26,7 @@ namespace render::shadow
 
         createSamplers();
         createDescriptorLayouts();
+        createPlaceholderResources();
 
         initialized = true;
         spdlog::info("ShadowResourcePool initialized");
@@ -40,6 +42,9 @@ namespace render::shadow
 
         // Free all resources
         freeAll();
+
+        // Cleanup placeholders
+        cleanupPlaceholders();
 
         // Cleanup descriptors
         cleanupDescriptors();
@@ -378,5 +383,62 @@ namespace render::shadow
                 ++count;
         }
         return count;
+    }
+
+    void ShadowResourcePool::createPlaceholderResources()
+    {
+        // Create a 1x1x1 placeholder depth array for binding when no CSM lights exist
+        placeholderArray = std::make_unique<ShadowDepthArray>(device);
+        placeholderArray->init(1, 1, 1);
+
+        // Transition to shader-read-optimal layout using a one-time command buffer
+        const auto& logicalDevice = device.getLogicalDevice();
+        auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
+
+        // Transition from undefined to shader read optimal
+        vk::ImageMemoryBarrier barrier{};
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = placeholderArray->getImage();
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        cmd->pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eFragmentShader,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
+
+        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
+
+        spdlog::debug("ShadowResourcePool: Created placeholder depth array");
+    }
+
+    void ShadowResourcePool::cleanupPlaceholders()
+    {
+        if (placeholderArray)
+        {
+            placeholderArray->cleanup();
+            placeholderArray.reset();
+        }
+    }
+
+    vk::ImageView ShadowResourcePool::getPlaceholderArrayView() const
+    {
+        if (placeholderArray && placeholderArray->isInitialized())
+        {
+            return placeholderArray->getArrayView();
+        }
+        return nullptr;
     }
 }

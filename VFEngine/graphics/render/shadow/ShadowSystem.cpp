@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/Utilities.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include <spdlog/spdlog.h>
@@ -43,6 +44,44 @@ namespace render::shadow
 
         // Create shadow texture descriptor for forward pass
         createShadowTextureDescriptor();
+
+        // Transition atlas image to shader-read-optimal for initial binding
+        // (will be transitioned to depth attachment during shadow pass if needed)
+        {
+            const auto& logicalDevice = device.getLogicalDevice();
+            auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
+
+            vk::ImageMemoryBarrier barrier{};
+            barrier.srcAccessMask = {};
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            barrier.oldLayout = vk::ImageLayout::eUndefined;
+            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = atlasManager->getAtlasImage();
+            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = 1;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = 1;
+
+            cmd->pipelineBarrier(
+                vk::PipelineStageFlagBits::eTopOfPipe,
+                vk::PipelineStageFlagBits::eFragmentShader,
+                {},
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+
+            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
+
+            // Mark atlas as no longer in undefined state so shadow pass uses correct transition
+            atlasFirstUse = false;
+        }
+
+        // Initialize with placeholder bindings to avoid validation errors before first uploadToGPU
+        updateShadowTextureDescriptor();
 
         // Reserve space for shadow data
         gpuShadowData.reserve(ShadowConstants::MAX_TOTAL_SHADOW_VIEWS);
@@ -370,7 +409,8 @@ namespace render::shadow
 
         // Binding 1: CSM cascade array (sampler2DArrayShadow)
         // Find first active CSM light and bind its texture array
-        vk::ImageView csmArrayView = atlasManager->getAtlasImageView();  // Fallback placeholder
+        // Use placeholder array view (proper 2D array type) as fallback instead of 2D atlas
+        vk::ImageView csmArrayView = resourcePool->getPlaceholderArrayView();
         for (const auto& [entityId, data] : lightShadowData)
         {
             if (data.type == ShadowMapType::DirectionalCSM &&
