@@ -391,11 +391,15 @@ namespace render::shadow
         placeholderArray = std::make_unique<ShadowDepthArray>(device);
         placeholderArray->init(1, 1, 1);
 
-        // Transition to shader-read-optimal layout using a one-time command buffer
+        // Create a 1x1 placeholder cube map for binding when no point light shadows exist
+        placeholderCube = std::make_unique<ShadowCubeMap>(device);
+        placeholderCube->init(1);
+
+        // Transition both placeholders to shader-read-optimal layout using a one-time command buffer
         const auto& logicalDevice = device.getLogicalDevice();
         auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
 
-        // Transition from undefined to shader read optimal
+        // Transition placeholder array from undefined to shader read optimal
         vk::ImageMemoryBarrier barrier{};
         barrier.srcAccessMask = {};
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -419,9 +423,33 @@ namespace render::shadow
             1, &barrier
         );
 
+        // Transition placeholder cube from undefined to shader read optimal (6 layers for cube faces)
+        vk::ImageMemoryBarrier cubeBarrier{};
+        cubeBarrier.srcAccessMask = {};
+        cubeBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        cubeBarrier.oldLayout = vk::ImageLayout::eUndefined;
+        cubeBarrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        cubeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        cubeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        cubeBarrier.image = placeholderCube->getImage();
+        cubeBarrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        cubeBarrier.subresourceRange.baseMipLevel = 0;
+        cubeBarrier.subresourceRange.levelCount = 1;
+        cubeBarrier.subresourceRange.baseArrayLayer = 0;
+        cubeBarrier.subresourceRange.layerCount = 6;  // All 6 cube faces
+
+        cmd->pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eFragmentShader,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &cubeBarrier
+        );
+
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
 
-        spdlog::debug("ShadowResourcePool: Created placeholder depth array");
+        spdlog::debug("ShadowResourcePool: Created placeholder depth array and cube map");
     }
 
     void ShadowResourcePool::cleanupPlaceholders()
@@ -431,6 +459,11 @@ namespace render::shadow
             placeholderArray->cleanup();
             placeholderArray.reset();
         }
+        if (placeholderCube)
+        {
+            placeholderCube->cleanup();
+            placeholderCube.reset();
+        }
     }
 
     vk::ImageView ShadowResourcePool::getPlaceholderArrayView() const
@@ -438,6 +471,15 @@ namespace render::shadow
         if (placeholderArray && placeholderArray->isInitialized())
         {
             return placeholderArray->getArrayView();
+        }
+        return nullptr;
+    }
+
+    vk::ImageView ShadowResourcePool::getPlaceholderCubeView() const
+    {
+        if (placeholderCube && placeholderCube->isInitialized())
+        {
+            return placeholderCube->getCubeView();
         }
         return nullptr;
     }

@@ -205,6 +205,8 @@ namespace services
         glm::vec3 color{1.0f, 1.0f, 1.0f};
         float intensity = 1.0f;
         bool showGizmo = false;
+        bool castShadows = false;
+        float shadowBias = 0.005f;
     };
 
     struct PointLightData {
@@ -212,6 +214,8 @@ namespace services
         float intensity = 1.0f;
         float radius = 10.0f;
         bool showGizmo = false;
+        bool castShadows = false;
+        float shadowBias = 0.005f;
     };
 
     struct SpotLightData {
@@ -221,5 +225,7 @@ namespace services
         float outerAngle = 45.0f;
         float range = 20.0f;
         bool showGizmo = false;
+        bool castShadows = false;
+        float shadowBias = 0.005f;
     };
 }

@@ -120,6 +120,12 @@ namespace render::shadow
          */
         [[nodiscard]] vk::ImageView getPlaceholderArrayView() const;
 
+        /**
+         * Get placeholder cube view for binding when no point light shadows exist.
+         * This is a 1x1 cube map in shader-read-optimal layout.
+         */
+        [[nodiscard]] vk::ImageView getPlaceholderCubeView() const;
+
         // ========================================
         // Descriptor Access
         // ========================================
@@ -180,6 +186,7 @@ namespace render::shadow
 
         // Placeholder resources for binding when no actual shadows exist
         std::unique_ptr<ShadowDepthArray> placeholderArray;
+        std::unique_ptr<ShadowCubeMap> placeholderCube;
 
         bool initialized = false;
 

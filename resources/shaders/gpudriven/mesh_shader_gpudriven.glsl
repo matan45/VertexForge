@@ -537,11 +537,12 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
 }
 
 // Directional light shadow (CSM with cascade selection)
+// Note: Currently renders to atlas tiles, not separate cascade array layers
 float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
     if (baseShadowIndex < 0) return 1.0;
 
-    // Read cascade count from atlasViewport.z (stored during CPU-side allocation)
-    int cascadeCount = int(shadowData[baseShadowIndex].atlasViewport.z);
+    // Read cascade count from first cascade's rangeParams.z
+    int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
     cascadeCount = clamp(cascadeCount, 1, 4);  // Safety clamp
 
     // Select cascade based on view depth
@@ -566,20 +567,24 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
     // Transform from NDC [-1,1] to texture coords [0,1]
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
+    // Apply atlas viewport transformation (each cascade is a tile in the atlas)
+    projCoords.xy = sd.atlasViewport.xy + projCoords.xy * sd.atlasViewport.zw;
+
     // Apply depth bias (varies per cascade)
     float bias = sd.biasParams.x;
     projCoords.z -= bias;
 
     // Out of range check
     if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
+    if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;
     int kernelRadius = int(sd.pcfParams.x);
 
     if (!filterEnabled || kernelRadius == 0) {
-        // Hard shadows - single sample
-        return texture(shadowCascades, vec4(projCoords.xy, float(cascadeIdx), projCoords.z));
+        // Hard shadows - single sample from atlas
+        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
     }
 
     // PCF filtering with configurable kernel size
@@ -592,8 +597,7 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
     for (int x = -kernelRadius; x <= kernelRadius; ++x) {
         for (int y = -kernelRadius; y <= kernelRadius; ++y) {
             vec2 offset = vec2(float(x), float(y)) * spread;
-            // vec4: xy = texcoord, z = array layer, w = depth compare
-            shadow += texture(shadowCascades, vec4(projCoords.xy + offset, float(cascadeIdx), projCoords.z));
+            shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
             sampleCount++;
         }
     }
@@ -604,20 +608,32 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
 float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lightRadius) {
     if (shadowIndex < 0) return 1.0;
 
-    // Direction from light to fragment (used to sample cube map)
-    vec3 lightToFrag = worldPos - lightPos;
-    float currentDepth = length(lightToFrag);
-    vec3 sampleDir = normalize(lightToFrag);
-
     ShadowData sd = shadowData[shadowIndex];
 
-    // Normalize depth to [0,1] based on light's near/far planes
+    // Get the cube map index from pcfParams.w (-1 means no cube map assigned)
+    int cubeMapIndex = int(sd.pcfParams.w);
+    if (cubeMapIndex < 0) return 1.0;
+
+    // Direction from light to fragment (used to sample cube map)
+    vec3 lightToFrag = worldPos - lightPos;
+    float linearDepth = length(lightToFrag);  // Linear distance from light
+    vec3 sampleDir = normalize(lightToFrag);
+
     float near = sd.rangeParams.x;
     float far = sd.rangeParams.y;
-    float normalizedDepth = (currentDepth - near) / (far - near);
+
+    // For cube maps, the depth stored corresponds to the view-space Z of the selected face.
+    // The major axis component of the direction determines which face is selected.
+    // The view-space Z = linearDepth * majorComponent (since direction is normalized).
+    float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
+    float viewSpaceZ = linearDepth * majorComponent;
+
+    // Convert view-space depth to perspective depth for comparison
+    // The cube map stores perspective depth: depth = (far * (z - near)) / (z * (far - near))
+    float perspectiveDepth = (far * (viewSpaceZ - near)) / (viewSpaceZ * (far - near));
 
     // Apply depth bias
-    normalizedDepth -= sd.biasParams.x;
+    perspectiveDepth -= sd.biasParams.x;
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;
@@ -625,7 +641,7 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lig
 
     if (!filterEnabled || kernelRadius == 0) {
         // Hard shadows - single sample
-        return texture(shadowCubes[nonuniformEXT(shadowIndex)], vec4(sampleDir, normalizedDepth));
+        return texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(sampleDir, perspectiveDepth));
     }
 
     // PCF for cube maps - sample with direction offsets along tangent basis
@@ -644,7 +660,7 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lig
         for (int y = -kernelRadius; y <= kernelRadius; ++y) {
             vec3 offset = tangent * float(x) * spread + bitangent * float(y) * spread;
             vec3 offsetDir = normalize(sampleDir + offset);
-            shadow += texture(shadowCubes[nonuniformEXT(shadowIndex)], vec4(offsetDir, normalizedDepth));
+            shadow += texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(offsetDir, perspectiveDepth));
             sampleCount++;
         }
     }
@@ -1074,9 +1090,57 @@ void main() {
             }
         }
 
-        // Visualize: white = fully lit, black = fully shadowed
-        // Add slight color tint: shadows are slightly blue, lit areas slightly warm
-        vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
+        // Debug: show cube map index status for point lights
+        // Red channel = has valid cube index, Green = perspective depth (0-1), Blue = shadow result
+        bool hasValidCube = false;
+        float debugPerspDepth = 0.0;
+
+        if (lightCounts.pointCount > 0u) {
+            uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
+            ClusterLightData clusterData = clusterLightGrid[clusterIdx];
+            uint clusterPointCount = clusterData.counts & 0xFFFFu;
+            uint lightOffset = clusterData.offset;
+
+            for (uint i = 0u; i < clusterPointCount && !hasValidCube; ++i) {
+                uint packedIdx = lightIndexList[lightOffset + i];
+                uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
+                PointLight light = pointLights[lightIdx];
+                if (light.shadowIndex >= 0) {
+                    ShadowData sd = shadowData[light.shadowIndex];
+                    int cubeIdx = int(sd.pcfParams.w);
+                    if (cubeIdx >= 0) {
+                        hasValidCube = true;
+                        // Compute perspective depth for debug (matching samplePointShadow)
+                        vec3 toFrag = fragWorldPos - light.position;
+                        float dist = length(toFrag);
+                        vec3 dir = normalize(toFrag);
+                        float majorComp = max(abs(dir.x), max(abs(dir.y), abs(dir.z)));
+                        float viewZ = dist * majorComp;
+                        float near = sd.rangeParams.x;
+                        float far = sd.rangeParams.y;
+                        debugPerspDepth = (far * (viewZ - near)) / (viewZ * (far - near));
+                    }
+                }
+            }
+        }
+
+        // Debug visualization for point light shadows:
+        // Red channel: 1.0 if valid cube exists, 0.0 otherwise
+        // Green channel: perspective depth (clamped 0-1) - shows comparison value
+        // Blue channel: shadow result (0=shadowed, 1=lit)
+        vec3 shadowColor;
+        if (!hasValidCube && lightCounts.pointCount > 0u) {
+            // Red = no valid cube map index assigned
+            shadowColor = vec3(1.0, 0.0, 0.0);
+        } else if (hasValidCube) {
+            // Show: R=hasValidCube, G=perspDepth, B=shadowResult
+            // Yellow-ish = valid cube, high depth value, shadowed
+            // Cyan-ish = valid cube, low depth value, lit
+            shadowColor = vec3(1.0, clamp(debugPerspDepth, 0.0, 1.0), totalShadow);
+        } else {
+            // No point lights - show standard shadow visualization
+            shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
+        }
         color = shadowColor;
     }
 

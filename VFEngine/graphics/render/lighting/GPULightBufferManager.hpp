@@ -83,6 +83,9 @@ namespace render::lighting
         // Shadow system reference for shadow index lookup (optional)
         shadow::ShadowSystem* shadowSystem = nullptr;
 
+        // Track which lights have been registered for shadows (by entity ID)
+        std::unordered_set<uint32_t> registeredShadowLights;
+
     public:
         explicit GPULightBufferManager(core::Device& device);
         ~GPULightBufferManager();

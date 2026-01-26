@@ -98,6 +98,13 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         logicalDevice.waitIdle();
 
+        // Cleanup pending cube framebuffers
+        for (vk::Framebuffer fb : pendingCubeFramebuffers)
+        {
+            logicalDevice.destroyFramebuffer(fb);
+        }
+        pendingCubeFramebuffers.clear();
+
         // Cleanup shadow pass pipeline
         if (shadowPassPipeline)
         {
@@ -470,7 +477,22 @@ namespace render::shadow
             ++cubeIndex;
         }
 
-        // Only write cube descriptors if we have any point lights with shadows
+        // Always bind at least a placeholder cube to keep descriptor valid
+        // If no point lights have shadows, bind the placeholder
+        if (cubeInfos.empty())
+        {
+            vk::ImageView placeholderCubeView = resourcePool->getPlaceholderCubeView();
+            if (placeholderCubeView)
+            {
+                vk::DescriptorImageInfo placeholderInfo{};
+                placeholderInfo.sampler = resourcePool->getCubeComparisonSampler();
+                placeholderInfo.imageView = placeholderCubeView;
+                placeholderInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                cubeInfos.push_back(placeholderInfo);
+            }
+        }
+
+        // Write cube descriptors (either real cubes or placeholder)
         if (!cubeInfos.empty())
         {
             vk::WriteDescriptorSet cubeWrite{};
@@ -563,6 +585,12 @@ namespace render::shadow
             spdlog::warn("ShadowSystem: Attempted to unregister unknown light {}", entityId);
             return;
         }
+
+        // Wait for GPU to finish using resources before destroying them
+        // This is necessary because freeShadowMaps destroys Vulkan objects immediately
+        // and the GPU might still be using them from the previous frame.
+        // TODO: Replace with deferred deletion queue for better performance
+        device.getLogicalDevice().waitIdle();
 
         freeShadowMaps(it->second);
         lightShadowData.erase(it);
@@ -777,6 +805,55 @@ namespace render::shadow
         spotShadowViews.clear();
         entityToShadowIndex.clear();
 
+        // Update shadow matrices for all registered lights
+        // For point/spot lights, this extracts position from WorldTransformComponent
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            // Point lights: update cube face matrices from current world transform
+            if (data.type == ShadowMapType::PointCube)
+            {
+                auto entity = static_cast<entt::entity>(entityId);
+                if (!registry.valid(entity) ||
+                    !registry.all_of<components::WorldTransformComponent>(entity))
+                    continue;
+
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+                glm::vec3 lightPosition = glm::vec3(worldTransform.worldMatrix[3]);
+
+                // Get radius from PointLightComponent (used as far plane)
+                float farPlane = data.settings.farPlane;
+                if (registry.all_of<components::PointLightComponent>(entity))
+                {
+                    const auto& pointLight = registry.get<components::PointLightComponent>(entity);
+                    farPlane = pointLight.radius;
+                }
+                float nearPlane = data.settings.nearPlane;
+
+                // Compute all 6 cube face matrices
+                auto faceMatrices = PointShadowCalculator::computeCubeFaceMatrices(
+                    lightPosition, nearPlane, farPlane);
+
+                // Update each face view
+                for (uint32_t face = 0; face < PointShadowCalculator::FACE_COUNT && face < data.views.size(); ++face)
+                {
+                    auto& view = data.views[face];
+                    const auto& faceData = faceMatrices[face];
+
+                    view.viewMatrix = faceData.viewMatrix;
+                    view.projectionMatrix = faceData.projMatrix;
+                    view.viewProjectionMatrix = faceData.viewProjMatrix;
+                    view.nearPlane = nearPlane;
+                    view.farPlane = farPlane;
+                    view.lightPosition = glm::vec4(lightPosition, 1.0f);
+                    view.handle.layer = face;
+                }
+            }
+        }
+
         // Temporary maps to track per-type indices for each entity
         std::unordered_map<uint32_t, int32_t> directionalIndices;
         std::unordered_map<uint32_t, int32_t> pointIndices;
@@ -894,6 +971,7 @@ namespace render::shadow
                     viewCopy.pcfKernelRadius = globalPcfKernel;
                     viewCopy.pcfSoftness = data.settings.softness;
                     viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                    viewCopy.entityId = entityId;  // Set entity ID for cube map index lookup
 
                     pointIndices[entityId] = static_cast<int32_t>(pointShadowViews.size());
                     pointShadowViews.push_back(viewCopy);
@@ -1153,7 +1231,25 @@ namespace render::shadow
     {
         gpuShadowData.clear();
 
-        auto addViews = [this](const std::vector<ShadowView>& views)
+        // Build entity to cube map index mapping
+        // This matches the order in updateShadowTextureDescriptor
+        std::unordered_map<uint32_t, int32_t> entityToCubeIndex;
+        int32_t cubeIdx = 0;
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (data.type == ShadowMapType::PointCube &&
+                data.settings.enabled && data.settings.castShadows &&
+                data.resourceHandle.isValid())
+            {
+                ShadowCubeMap* cube = resourcePool ? resourcePool->getCube(data.resourceHandle) : nullptr;
+                if (cube && cube->isInitialized())
+                {
+                    entityToCubeIndex[entityId] = cubeIdx++;
+                }
+            }
+        }
+
+        auto addViews = [&](const std::vector<ShadowView>& views, bool isPointLight)
         {
             for (const auto& view : views)
             {
@@ -1180,21 +1276,32 @@ namespace render::shadow
                     static_cast<float>(view.handle.cascadeIndex)
                 );
 
-                // PCF params: kernel radius, softness, filter enabled, reserved
+                // PCF params: kernel radius, softness, filter enabled, cubeMapIndex
+                // cubeMapIndex is -1 for non-point lights, otherwise the index into shadowCubes[]
+                float cubeMapIndex = -1.0f;
+                if (isPointLight)
+                {
+                    auto it = entityToCubeIndex.find(view.entityId);
+                    if (it != entityToCubeIndex.end())
+                    {
+                        cubeMapIndex = static_cast<float>(it->second);
+                    }
+                }
+
                 gpu.pcfParams = glm::vec4(
                     static_cast<float>(view.pcfKernelRadius),
                     view.pcfSoftness,
                     view.filterEnabled ? 1.0f : 0.0f,
-                    0.0f  // reserved
+                    cubeMapIndex
                 );
 
                 gpuShadowData.push_back(gpu);
             }
         };
 
-        addViews(directionalShadowViews);
-        addViews(pointShadowViews);
-        addViews(spotShadowViews);
+        addViews(directionalShadowViews, false);
+        addViews(pointShadowViews, true);
+        addViews(spotShadowViews, false);
     }
 
     void ShadowSystem::uploadToGPU(vk::CommandBuffer cmd)
@@ -1247,18 +1354,28 @@ namespace render::shadow
 
     void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd, const ShadowPassParams& params)
     {
-        if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized())
-            return;
+        spdlog::info("ShadowSystem::recordShadowPass called, shadowsEnabled={}, pipeline={}, pipelineInit={}",
+                     shadowsEnabled, shadowPassPipeline != nullptr,
+                     shadowPassPipeline ? shadowPassPipeline->isInitialized() : false);
 
-        // Collect all shadow views
+        if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized())
+        {
+            spdlog::warn("ShadowSystem::recordShadowPass - early return");
+            return;
+        }
+
+        // Collect all shadow views (spot and directional - these use the atlas)
         std::vector<const ShadowView*> allViews;
         for (const auto& view : spotShadowViews)
             allViews.push_back(&view);
         for (const auto& view : directionalShadowViews)
             allViews.push_back(&view);
-        // Note: point shadow views will use cube maps, handled separately in future
 
-        if (allViews.empty())
+        // Check if we have ANY shadow work to do (atlas views OR point cube shadows)
+        bool hasAtlasViews = !allViews.empty();
+        bool hasPointShadows = !pointShadowViews.empty();
+
+        if (!hasAtlasViews && !hasPointShadows)
             return;
 
         // Validate batch parameters to prevent out-of-bounds access
@@ -1286,6 +1403,11 @@ namespace render::shadow
         }
 #endif
 
+        // ========================================
+        // Atlas rendering (spot and directional lights)
+        // ========================================
+        if (hasAtlasViews)
+        {
         // 1. Transition atlas to depth attachment
         // On first use, image is in eUndefined; after that it's in eShaderReadOnlyOptimal
         {
@@ -1443,6 +1565,203 @@ namespace render::shadow
 
         // Mark atlas as initialized for subsequent frames
         atlasFirstUse = false;
+        } // end if (hasAtlasViews)
+
+        // ========================================
+        // Point light cube shadow rendering
+        // ========================================
+        renderPointLightCubeShadows(cmd, params);
+    }
+
+    void ShadowSystem::renderPointLightCubeShadows(vk::CommandBuffer cmd, const ShadowPassParams& params)
+    {
+        spdlog::info("ShadowSystem::renderPointLightCubeShadows called, resourcePool={}, shadowPassPipeline={}",
+                     resourcePool != nullptr, shadowPassPipeline != nullptr);
+
+        if (!resourcePool || !shadowPassPipeline)
+        {
+            spdlog::warn("ShadowSystem::renderPointLightCubeShadows - early return due to null pointer");
+            return;
+        }
+
+        const auto& logicalDevice = device.getLogicalDevice();
+
+        // Collect point lights that need cube shadow rendering
+        std::vector<std::pair<uint32_t, LightShadowData*>> pointLightsToRender;
+        spdlog::info("ShadowSystem::renderPointLightCubeShadows - checking {} lights in lightShadowData",
+                     lightShadowData.size());
+
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            spdlog::info("  Light {}: type={}, enabled={}, castShadows={}, resourceValid={}",
+                         entityId, static_cast<int>(data.type), data.settings.enabled,
+                         data.settings.castShadows, data.resourceHandle.isValid());
+
+            if (data.type != ShadowMapType::PointCube ||
+                !data.settings.enabled || !data.settings.castShadows ||
+                !data.resourceHandle.isValid())
+                continue;
+
+            ShadowCubeMap* cube = resourcePool->getCube(data.resourceHandle);
+            if (!cube || !cube->isInitialized())
+            {
+                spdlog::warn("  Light {}: cube map not found or not initialized", entityId);
+                continue;
+            }
+
+            pointLightsToRender.emplace_back(entityId, &data);
+        }
+
+        if (pointLightsToRender.empty())
+        {
+            spdlog::info("ShadowSystem: No point lights to render cube shadows for");
+            return;
+        }
+
+        spdlog::info("ShadowSystem: Rendering {} point light cube shadows, batchCount={}, commandsPerSection={}",
+                     pointLightsToRender.size(), params.batchCount, params.commandsPerSection);
+
+        // Collect all framebuffers for deferred destruction after command buffer execution
+        // We store them in pendingCubeFramebuffers and destroy them next frame
+        // (This is safe because by next frame, this frame's commands have completed)
+        for (vk::Framebuffer fb : pendingCubeFramebuffers)
+        {
+            logicalDevice.destroyFramebuffer(fb);
+        }
+        pendingCubeFramebuffers.clear();
+
+        // Process each point light
+        for (auto& [entityId, data] : pointLightsToRender)
+        {
+            ShadowCubeMap* cube = resourcePool->getCube(data->resourceHandle);
+            uint32_t cubeSize = cube->getSize();
+
+            // Log light parameters for debugging
+            if (!data->views.empty())
+            {
+                const auto& view0 = data->views[0];
+                spdlog::info("ShadowSystem: Point light {} cube {}x{}, near={}, far={}, pos=({},{},{})",
+                             entityId, cubeSize, cubeSize, view0.nearPlane, view0.farPlane,
+                             view0.lightPosition.x, view0.lightPosition.y, view0.lightPosition.z);
+            }
+
+            // Transition entire cube to depth attachment
+            cube->transitionToDepthAttachment(cmd);
+
+            // Render each of the 6 faces
+            for (uint32_t face = 0; face < ShadowCubeMap::FACE_COUNT; ++face)
+            {
+                if (face >= data->views.size())
+                {
+                    spdlog::warn("ShadowSystem: Point light {} missing view for face {}", entityId, face);
+                    continue;
+                }
+
+                const auto& view = data->views[face];
+
+                // Create temporary framebuffer for this cube face
+                vk::FramebufferCreateInfo fbInfo{};
+                fbInfo.renderPass = shadowPassPipeline->getRenderPass();
+                fbInfo.attachmentCount = 1;
+                vk::ImageView faceView = cube->getFaceView(face);
+                fbInfo.pAttachments = &faceView;
+                fbInfo.width = cubeSize;
+                fbInfo.height = cubeSize;
+                fbInfo.layers = 1;
+
+                vk::Framebuffer faceFramebuffer = logicalDevice.createFramebuffer(fbInfo);
+                pendingCubeFramebuffers.push_back(faceFramebuffer);
+
+                // Begin render pass for this face
+                vk::ClearValue clearValue{};
+                clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+                vk::RenderPassBeginInfo renderPassInfo{};
+                renderPassInfo.renderPass = shadowPassPipeline->getRenderPass();
+                renderPassInfo.framebuffer = faceFramebuffer;
+                renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+                renderPassInfo.renderArea.extent = vk::Extent2D{cubeSize, cubeSize};
+                renderPassInfo.clearValueCount = 1;
+                renderPassInfo.pClearValues = &clearValue;
+
+                cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+                // Bind pipeline
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
+
+                // Bind descriptor sets
+                std::array<vk::DescriptorSet, 4> descriptorSets = {
+                    params.perDrawDataDescSet,
+                    params.meshletDataDescSet,
+                    params.vertexDataDescSet,
+                    params.boneMatrixDescSet
+                };
+                cmd.bindDescriptorSets(
+                    vk::PipelineBindPoint::eGraphics,
+                    shadowPassPipeline->getPipelineLayout(),
+                    0,
+                    static_cast<uint32_t>(descriptorSets.size()),
+                    descriptorSets.data(),
+                    0, nullptr
+                );
+
+                // Set viewport and scissor for full cube face
+                vk::Viewport viewport{};
+                viewport.x = 0.0f;
+                viewport.y = 0.0f;
+                viewport.width = static_cast<float>(cubeSize);
+                viewport.height = static_cast<float>(cubeSize);
+                viewport.minDepth = 0.0f;
+                viewport.maxDepth = 1.0f;
+                cmd.setViewport(0, 1, &viewport);
+
+                vk::Rect2D scissor{};
+                scissor.offset = vk::Offset2D{0, 0};
+                scissor.extent = vk::Extent2D{cubeSize, cubeSize};
+                cmd.setScissor(0, 1, &scissor);
+
+                // Set depth bias
+                cmd.setDepthBias(view.depthBias, 0.0f, view.slopeBias);
+
+                // Push constants
+                ShadowPushConstants pc{};
+                pc.lightViewProjection = view.viewProjectionMatrix;
+                pc.depthBias = view.depthBias;
+                pc.slopeBias = view.slopeBias;
+                pc.normalBias = view.normalBias;
+
+                // Render all batches
+                for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                {
+                    pc.baseDrawIndex = batch * params.commandsPerSection;
+
+                    cmd.pushConstants(
+                        shadowPassPipeline->getPipelineLayout(),
+                        vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                        0,
+                        sizeof(ShadowPushConstants),
+                        &pc
+                    );
+
+                    vk::DeviceSize commandOffset = batch * params.commandsPerSection * sizeof(vk::DrawMeshTasksIndirectCommandEXT);
+                    vk::DeviceSize countOffset = batch * sizeof(uint32_t);
+
+                    cmd.drawMeshTasksIndirectCountEXT(
+                        params.drawCommandBuffer,
+                        commandOffset,
+                        params.drawCountBuffer,
+                        countOffset,
+                        params.commandsPerSection,
+                        sizeof(vk::DrawMeshTasksIndirectCommandEXT)
+                    );
+                }
+
+                cmd.endRenderPass();
+            }
+
+            // Transition cube back to shader read
+            cube->transitionToShaderRead(cmd);
+        }
     }
 
     vk::DescriptorSetLayout ShadowSystem::getAtlasDescriptorLayout() const

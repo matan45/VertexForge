@@ -215,6 +215,9 @@ namespace render::shadow
         float pcfSoftness = 1.0f;     // Kernel spread multiplier
         bool filterEnabled = true;    // Soft shadows toggle
 
+        // Entity ID of the light this view belongs to (for cube map index lookup)
+        uint32_t entityId = 0;
+
         ShadowMapHandle handle;
 
         void updateViewProjection()
@@ -283,7 +286,7 @@ namespace render::shadow
         glm::vec4 atlasViewport;          // 16 bytes - xy=offset, zw=size (normalized 0-1)
         glm::vec4 biasParams;             // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=texelSize
         glm::vec4 rangeParams;            // 16 bytes - x=near, y=far, z=1/(far-near), w=cascadeIndex
-        glm::vec4 pcfParams;              // 16 bytes - x=kernelRadius (0-3), y=softness, z=filterEnabled, w=reserved
+        glm::vec4 pcfParams;              // 16 bytes - x=kernelRadius (0-3), y=softness, z=filterEnabled, w=cubeMapIndex (-1 if not point light)
     };
     static_assert(sizeof(GPUShadowData) == 128, "GPUShadowData must be 128 bytes");
     static_assert(offsetof(GPUShadowData, viewProjection) == 0, "GPUShadowData::viewProjection offset mismatch");

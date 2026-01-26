@@ -57,6 +57,11 @@ namespace windows::details {
             changed |= ImGui::DragFloat("Outer Angle", &light.outerAngle, 0.5f, 1.0f, 90.0f);
             changed |= ImGui::DragFloat("Range", &light.range, 0.1f, 0.1f, 1000.0f);
             changed |= ImGui::Checkbox("Show Gizmo", &light.showGizmo);
+            changed |= ImGui::Checkbox("Cast Shadows", &light.castShadows);
+            if (light.castShadows)
+            {
+                changed |= ImGui::DragFloat("Shadow Bias", &light.shadowBias, 0.0001f, 0.0f, 0.1f, "%.4f");
+            }
 
             if (changed)
             {

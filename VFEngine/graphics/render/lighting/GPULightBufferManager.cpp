@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../shadow/ShadowSystem.hpp"
+#include "../shadow/ShadowTypes.hpp"
 #include "print/Logger.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -386,6 +387,13 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            // Skip inactive entities
+            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
+            {
+                if (!nameComp->isActive)
+                    continue;
+            }
+
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -409,11 +417,36 @@ namespace render::lighting
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
 
-            // Query shadow index from shadow system
+            // Handle shadow registration based on castShadows flag
+            uint32_t entityId = static_cast<uint32_t>(entity);
             gpuLight.shadowIndex = -1;  // Default: no shadow
+
             if (shadowSystem)
             {
-                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(static_cast<uint32_t>(entity));
+                bool isRegistered = registeredShadowLights.contains(entityId);
+
+                if (light.castShadows && !isRegistered)
+                {
+                    // Register light for shadow casting (CSM for directional lights)
+                    shadow::ShadowSettings settings{};
+                    settings.depthBias = light.shadowBias;
+                    settings.enabled = true;
+                    settings.castShadows = true;
+
+                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::DirectionalCSM, settings))
+                    {
+                        registeredShadowLights.insert(entityId);
+                    }
+                }
+                else if (!light.castShadows && isRegistered)
+                {
+                    // Unregister light from shadow casting
+                    shadowSystem->unregisterLight(entityId);
+                    registeredShadowLights.erase(entityId);
+                }
+
+                // Query shadow index
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
 
             ++directionalCount;
@@ -442,6 +475,13 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            // Skip inactive entities
+            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
+            {
+                if (!nameComp->isActive)
+                    continue;
+            }
+
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -464,11 +504,37 @@ namespace render::lighting
             gpuLight.color = light.color;
             gpuLight.intensity = light.intensity;
 
-            // Query shadow index from shadow system
+            // Handle shadow registration based on castShadows flag
+            uint32_t entityId = static_cast<uint32_t>(entity);
             gpuLight.shadowIndex = -1;  // Default: no shadow
+
             if (shadowSystem)
             {
-                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(static_cast<uint32_t>(entity));
+                bool isRegistered = registeredShadowLights.contains(entityId);
+
+                if (light.castShadows && !isRegistered)
+                {
+                    // Register light for shadow casting (cube map for point lights)
+                    shadow::ShadowSettings settings{};
+                    settings.depthBias = light.shadowBias;
+                    settings.farPlane = light.radius;  // Use light radius as far plane
+                    settings.enabled = true;
+                    settings.castShadows = true;
+
+                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::PointCube, settings))
+                    {
+                        registeredShadowLights.insert(entityId);
+                    }
+                }
+                else if (!light.castShadows && isRegistered)
+                {
+                    // Unregister light from shadow casting
+                    shadowSystem->unregisterLight(entityId);
+                    registeredShadowLights.erase(entityId);
+                }
+
+                // Query shadow index
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
             gpuLight.padding[0] = 0;
             gpuLight.padding[1] = 0;
@@ -500,6 +566,13 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            // Skip inactive entities
+            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
+            {
+                if (!nameComp->isActive)
+                    continue;
+            }
+
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -529,11 +602,37 @@ namespace render::lighting
             gpuLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
             gpuLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
 
-            // Query shadow index from shadow system
+            // Handle shadow registration based on castShadows flag
+            uint32_t entityId = static_cast<uint32_t>(entity);
             gpuLight.shadowIndex = -1;  // Default: no shadow
+
             if (shadowSystem)
             {
-                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(static_cast<uint32_t>(entity));
+                bool isRegistered = registeredShadowLights.contains(entityId);
+
+                if (light.castShadows && !isRegistered)
+                {
+                    // Register light for shadow casting
+                    shadow::ShadowSettings settings{};
+                    settings.depthBias = light.shadowBias;
+                    settings.farPlane = light.range;  // Use light range as far plane
+                    settings.enabled = true;
+                    settings.castShadows = true;
+
+                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::Spot2D, settings))
+                    {
+                        registeredShadowLights.insert(entityId);
+                    }
+                }
+                else if (!light.castShadows && isRegistered)
+                {
+                    // Unregister light from shadow casting
+                    shadowSystem->unregisterLight(entityId);
+                    registeredShadowLights.erase(entityId);
+                }
+
+                // Query shadow index
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
             gpuLight.padding[0] = 0;
             gpuLight.padding[1] = 0;
