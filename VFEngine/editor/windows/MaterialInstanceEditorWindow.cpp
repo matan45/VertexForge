@@ -50,7 +50,12 @@ namespace windows
 
     void MaterialInstanceEditorWindow::loadInstance()
     {
-        instanceData = resource::ResourceManager::loadMaterialInstance(instancePath);
+        // Use MaterialManager to reload - this invalidates cache and notifies the rendering system
+        if (material::MaterialManager::instance().reloadInstance(instancePath))
+        {
+            instanceData = resource::ResourceManager::loadMaterialInstance(instancePath);
+        }
+
         if (!instanceData)
         {
             // Create default instance if load failed

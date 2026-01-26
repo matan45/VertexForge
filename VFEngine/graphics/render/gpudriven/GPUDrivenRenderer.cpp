@@ -8,6 +8,7 @@
 #include "../../animation/AnimatorStateMachine.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
+#include "material/MaterialManager.hpp"
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "../../core/Device.hpp"
@@ -160,6 +161,31 @@ namespace render::gpudriven
             return;
         }
 
+        // Register callback to invalidate PBR cache when materials change
+        if (!materialChangeCallbackId)
+        {
+            materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
+                [this](const std::string& materialPath) {
+                    // Clear PBR cache for this material
+                    pbrCache.erase(materialPath);
+
+                    // Clear from registered materials so textures get re-registered
+                    registeredMaterialPaths.erase(materialPath);
+
+                    // Also invalidate any instances that might use this as parent
+                    // (we can't easily track which instances use this parent, so we clear all instances)
+                    if (!material::isInstanceFile(materialPath))
+                    {
+                        std::erase_if(pbrCache, [](const auto& pair) {
+                            return material::isInstanceFile(pair.first);
+                        });
+                        std::erase_if(registeredMaterialPaths, [](const std::string& path) {
+                            return material::isInstanceFile(path);
+                        });
+                    }
+                });
+        }
+
         initialized = true;
         loggerInfo("GPUDrivenRenderer: Initialized successfully");
     }
@@ -170,6 +196,17 @@ namespace render::gpudriven
         {
             return;
         }
+
+        // Unregister material change callback
+        if (materialChangeCallbackId)
+        {
+            material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+            materialChangeCallbackId = {};
+        }
+
+        // Clear caches
+        pbrCache.clear();
+        registeredMaterialPaths.clear();
 
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
@@ -315,20 +352,18 @@ namespace render::gpudriven
             return nullptr;
         }
 
-        auto pbrCache = std::make_shared<std::unordered_map<std::string, mesh::ExtractedPBRValues>>();
-
-        return [this, pbrCache](const std::string& materialPath, TextureSlotType slot) -> uint32_t
+        return [this](const std::string& materialPath, TextureSlotType slot) -> uint32_t
         {
             if (materialPath.empty())
             {
                 return INVALID_TEXTURE_INDEX;
             }
 
-            auto it = pbrCache->find(materialPath);
-            if (it == pbrCache->end())
+            auto it = pbrCache.find(materialPath);
+            if (it == pbrCache.end())
             {
-                it = pbrCache->emplace(materialPath,
-                                       mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
+                it = pbrCache.emplace(materialPath,
+                                      mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
             }
 
             const auto& pbrValues = it->second;

@@ -14,6 +14,8 @@
 #include "../lighting/LightCullingPipeline.hpp"
 #include "../shadow/ShadowSystem.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
+#include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -90,6 +92,10 @@ namespace render::gpudriven
         std::unordered_set<std::string> registeredMaterialPaths;
 
         std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> loadedMaterials;
+
+        // Persistent PBR cache for texture resolution (avoids re-extracting PBR values each frame)
+        std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
+        material::CallbackId materialChangeCallbackId{};
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
