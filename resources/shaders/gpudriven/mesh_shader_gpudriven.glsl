@@ -1090,57 +1090,8 @@ void main() {
             }
         }
 
-        // Debug: show cube map index status for point lights
-        // Red channel = has valid cube index, Green = perspective depth (0-1), Blue = shadow result
-        bool hasValidCube = false;
-        float debugPerspDepth = 0.0;
-
-        if (lightCounts.pointCount > 0u) {
-            uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
-            ClusterLightData clusterData = clusterLightGrid[clusterIdx];
-            uint clusterPointCount = clusterData.counts & 0xFFFFu;
-            uint lightOffset = clusterData.offset;
-
-            for (uint i = 0u; i < clusterPointCount && !hasValidCube; ++i) {
-                uint packedIdx = lightIndexList[lightOffset + i];
-                uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
-                PointLight light = pointLights[lightIdx];
-                if (light.shadowIndex >= 0) {
-                    ShadowData sd = shadowData[light.shadowIndex];
-                    int cubeIdx = int(sd.pcfParams.w);
-                    if (cubeIdx >= 0) {
-                        hasValidCube = true;
-                        // Compute perspective depth for debug (matching samplePointShadow)
-                        vec3 toFrag = fragWorldPos - light.position;
-                        float dist = length(toFrag);
-                        vec3 dir = normalize(toFrag);
-                        float majorComp = max(abs(dir.x), max(abs(dir.y), abs(dir.z)));
-                        float viewZ = dist * majorComp;
-                        float near = sd.rangeParams.x;
-                        float far = sd.rangeParams.y;
-                        debugPerspDepth = (far * (viewZ - near)) / (viewZ * (far - near));
-                    }
-                }
-            }
-        }
-
-        // Debug visualization for point light shadows:
-        // Red channel: 1.0 if valid cube exists, 0.0 otherwise
-        // Green channel: perspective depth (clamped 0-1) - shows comparison value
-        // Blue channel: shadow result (0=shadowed, 1=lit)
-        vec3 shadowColor;
-        if (!hasValidCube && lightCounts.pointCount > 0u) {
-            // Red = no valid cube map index assigned
-            shadowColor = vec3(1.0, 0.0, 0.0);
-        } else if (hasValidCube) {
-            // Show: R=hasValidCube, G=perspDepth, B=shadowResult
-            // Yellow-ish = valid cube, high depth value, shadowed
-            // Cyan-ish = valid cube, low depth value, lit
-            shadowColor = vec3(1.0, clamp(debugPerspDepth, 0.0, 1.0), totalShadow);
-        } else {
-            // No point lights - show standard shadow visualization
-            shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
-        }
+        // Visualize shadow: purple = fully shadowed, white = fully lit
+        vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
         color = shadowColor;
     }
 

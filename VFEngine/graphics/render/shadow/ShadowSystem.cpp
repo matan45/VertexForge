@@ -1354,15 +1354,8 @@ namespace render::shadow
 
     void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd, const ShadowPassParams& params)
     {
-        spdlog::info("ShadowSystem::recordShadowPass called, shadowsEnabled={}, pipeline={}, pipelineInit={}",
-                     shadowsEnabled, shadowPassPipeline != nullptr,
-                     shadowPassPipeline ? shadowPassPipeline->isInitialized() : false);
-
         if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized())
-        {
-            spdlog::warn("ShadowSystem::recordShadowPass - early return");
             return;
-        }
 
         // Collect all shadow views (spot and directional - these use the atlas)
         std::vector<const ShadowView*> allViews;
@@ -1575,28 +1568,16 @@ namespace render::shadow
 
     void ShadowSystem::renderPointLightCubeShadows(vk::CommandBuffer cmd, const ShadowPassParams& params)
     {
-        spdlog::info("ShadowSystem::renderPointLightCubeShadows called, resourcePool={}, shadowPassPipeline={}",
-                     resourcePool != nullptr, shadowPassPipeline != nullptr);
-
         if (!resourcePool || !shadowPassPipeline)
-        {
-            spdlog::warn("ShadowSystem::renderPointLightCubeShadows - early return due to null pointer");
             return;
-        }
 
         const auto& logicalDevice = device.getLogicalDevice();
 
         // Collect point lights that need cube shadow rendering
         std::vector<std::pair<uint32_t, LightShadowData*>> pointLightsToRender;
-        spdlog::info("ShadowSystem::renderPointLightCubeShadows - checking {} lights in lightShadowData",
-                     lightShadowData.size());
 
         for (auto& [entityId, data] : lightShadowData)
         {
-            spdlog::info("  Light {}: type={}, enabled={}, castShadows={}, resourceValid={}",
-                         entityId, static_cast<int>(data.type), data.settings.enabled,
-                         data.settings.castShadows, data.resourceHandle.isValid());
-
             if (data.type != ShadowMapType::PointCube ||
                 !data.settings.enabled || !data.settings.castShadows ||
                 !data.resourceHandle.isValid())
@@ -1604,22 +1585,13 @@ namespace render::shadow
 
             ShadowCubeMap* cube = resourcePool->getCube(data.resourceHandle);
             if (!cube || !cube->isInitialized())
-            {
-                spdlog::warn("  Light {}: cube map not found or not initialized", entityId);
                 continue;
-            }
 
             pointLightsToRender.emplace_back(entityId, &data);
         }
 
         if (pointLightsToRender.empty())
-        {
-            spdlog::info("ShadowSystem: No point lights to render cube shadows for");
             return;
-        }
-
-        spdlog::info("ShadowSystem: Rendering {} point light cube shadows, batchCount={}, commandsPerSection={}",
-                     pointLightsToRender.size(), params.batchCount, params.commandsPerSection);
 
         // Collect all framebuffers for deferred destruction after command buffer execution
         // We store them in pendingCubeFramebuffers and destroy them next frame
@@ -1636,15 +1608,6 @@ namespace render::shadow
             ShadowCubeMap* cube = resourcePool->getCube(data->resourceHandle);
             uint32_t cubeSize = cube->getSize();
 
-            // Log light parameters for debugging
-            if (!data->views.empty())
-            {
-                const auto& view0 = data->views[0];
-                spdlog::info("ShadowSystem: Point light {} cube {}x{}, near={}, far={}, pos=({},{},{})",
-                             entityId, cubeSize, cubeSize, view0.nearPlane, view0.farPlane,
-                             view0.lightPosition.x, view0.lightPosition.y, view0.lightPosition.z);
-            }
-
             // Transition entire cube to depth attachment
             cube->transitionToDepthAttachment(cmd);
 
@@ -1652,10 +1615,7 @@ namespace render::shadow
             for (uint32_t face = 0; face < ShadowCubeMap::FACE_COUNT; ++face)
             {
                 if (face >= data->views.size())
-                {
-                    spdlog::warn("ShadowSystem: Point light {} missing view for face {}", entityId, face);
                     continue;
-                }
 
                 const auto& view = data->views[face];
 
