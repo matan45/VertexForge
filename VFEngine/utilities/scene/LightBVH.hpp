@@ -37,6 +37,9 @@ namespace scene
         void collectDynamicDirectionalLights();
         math::AABB computeLightBounds(entt::entity entity, entt::registry& registry);
 
+        // Check if there are lights waiting for WorldTransformComponent
+        bool hasLightsWithoutWorldTransform(bool checkStatic) const;
+
     public:
         explicit LightBVH() = default;
 

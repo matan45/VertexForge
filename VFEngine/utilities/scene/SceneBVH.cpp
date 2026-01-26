@@ -2,6 +2,26 @@
 
 namespace scene
 {
+    bool SceneBVH::hasMeshesWithoutWorldTransform(bool checkStatic) const
+    {
+        auto& registry = EntityRegistry::getRegistry();
+
+        auto view = registry.view<components::MeshComponent, components::TransformComponent>();
+        for (auto entity : view)
+        {
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            if (transform.isStatic == checkStatic)
+            {
+                if (!registry.all_of<components::WorldTransformComponent>(entity))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     void SceneBVH::rebuildStaticBVH()
     {
         std::vector<math::BVHPrimitive> primitives;
@@ -14,6 +34,15 @@ namespace scene
         }
 
         staticBVH.build(std::move(primitives));
+
+        // If there are meshes waiting for WorldTransformComponent,
+        // keep dirty so we rebuild next frame when transforms are ready
+        if (hasMeshesWithoutWorldTransform(true))
+        {
+            // Keep dirty, transforms not ready yet
+            return;
+        }
+
         staticDirty = false;
         staticStructuralChange = false;
     }
@@ -30,6 +59,15 @@ namespace scene
         }
 
         dynamicBVH.build(std::move(primitives));
+
+        // If there are meshes waiting for WorldTransformComponent,
+        // keep dirty so we rebuild next frame when transforms are ready
+        if (hasMeshesWithoutWorldTransform(false))
+        {
+            // Keep dirty, transforms not ready yet
+            return;
+        }
+
         dirtyDynamicEntities.clear();
         dynamicDirty = false;
         dynamicStructuralChange = false;

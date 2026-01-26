@@ -2,6 +2,41 @@
 
 namespace scene
 {
+    bool LightBVH::hasLightsWithoutWorldTransform(bool checkStatic) const
+    {
+        auto& registry = EntityRegistry::getRegistry();
+
+        // Check point lights
+        auto pointView = registry.view<components::PointLightComponent, components::TransformComponent>();
+        for (auto entity : pointView)
+        {
+            const auto& transform = pointView.get<components::TransformComponent>(entity);
+            if (transform.isStatic == checkStatic)
+            {
+                if (!registry.all_of<components::WorldTransformComponent>(entity))
+                {
+                    return true;
+                }
+            }
+        }
+
+        // Check spot lights
+        auto spotView = registry.view<components::SpotLightComponent, components::TransformComponent>();
+        for (auto entity : spotView)
+        {
+            const auto& transform = spotView.get<components::TransformComponent>(entity);
+            if (transform.isStatic == checkStatic)
+            {
+                if (!registry.all_of<components::WorldTransformComponent>(entity))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     void LightBVH::rebuildStaticLightBVH()
     {
         std::vector<math::BVHPrimitive> primitives;
@@ -15,6 +50,14 @@ namespace scene
 
         staticBVH.build(std::move(primitives));
         collectStaticDirectionalLights();
+
+        // If there are lights waiting for WorldTransformComponent,
+        // keep dirty so we rebuild next frame when transforms are ready
+        if (hasLightsWithoutWorldTransform(true))
+        {
+            // Keep dirty, transforms not ready yet
+            return;
+        }
 
         staticDirty = false;
         staticStructuralChange = false;
@@ -33,6 +76,14 @@ namespace scene
 
         dynamicBVH.build(std::move(primitives));
         collectDynamicDirectionalLights();
+
+        // If there are lights waiting for WorldTransformComponent,
+        // keep dirty so we rebuild next frame when transforms are ready
+        if (hasLightsWithoutWorldTransform(false))
+        {
+            // Keep dirty, transforms not ready yet
+            return;
+        }
 
         dirtyDynamicLights.clear();
         dynamicDirty = false;

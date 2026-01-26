@@ -162,5 +162,8 @@ namespace scene
         void collectStaticPrimitives(std::vector<math::BVHPrimitive>& primitives);
 
         void collectDynamicPrimitives(std::vector<math::BVHPrimitive>& primitives);
+
+        // Check if there are meshes waiting for WorldTransformComponent
+        bool hasMeshesWithoutWorldTransform(bool checkStatic) const;
     };
 }
