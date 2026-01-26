@@ -71,7 +71,8 @@ namespace render::shadow
 
     enum class ShadowQuality : uint8_t
     {
-        Low = 0,            // 512px
+        Off = 0,            // Shadows disabled
+        Low,                // 512px
         Medium,             // 1024px
         High,               // 2048px
         Ultra               // 4096px
@@ -174,6 +175,7 @@ namespace render::shadow
         {
             switch (q)
             {
+                case ShadowQuality::Off:    return 0;
                 case ShadowQuality::Low:    return ShadowConstants::RESOLUTION_LOW;
                 case ShadowQuality::Medium: return ShadowConstants::RESOLUTION_MEDIUM;
                 case ShadowQuality::High:   return ShadowConstants::RESOLUTION_HIGH;

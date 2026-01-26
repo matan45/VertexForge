@@ -90,6 +90,10 @@ namespace render
             ShadowQuality globalQuality = ShadowQuality::High;
             uint8_t globalPcfKernel = 1;           // PCF kernel radius (0=none, 1=3x3, 2=5x5, 3=7x7)
             bool globalSoftShadowsEnabled = true;  // Global soft shadows toggle
+            float globalDepthBias = 0.005f;        // Global shadow depth bias
+            float globalNormalBias = 0.02f;        // Global shadow normal bias
+            uint8_t globalCascadeCount = 4;        // Global CSM cascade count
+            types::CascadeSplitMode globalCascadeSplitMode = types::CascadeSplitMode::Practical;
 
             // State
             bool initialized = false;
@@ -201,6 +205,11 @@ namespace render
 
             void setGlobalQuality(ShadowQuality quality);
             [[nodiscard]] ShadowQuality getGlobalQuality() const { return globalQuality; }
+
+            [[nodiscard]] float getGlobalDepthBias() const { return globalDepthBias; }
+            [[nodiscard]] float getGlobalNormalBias() const { return globalNormalBias; }
+            [[nodiscard]] uint8_t getGlobalCascadeCount() const { return globalCascadeCount; }
+            [[nodiscard]] types::CascadeSplitMode getGlobalCascadeSplitMode() const { return globalCascadeSplitMode; }
 
             // Apply render settings (may trigger atlas resize and reallocation)
             void applyRenderSettings(const types::RenderSettings& settings);

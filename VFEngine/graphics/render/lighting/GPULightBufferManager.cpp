@@ -370,6 +370,9 @@ namespace render::lighting
         collectPointLights(filterPtr);
         collectSpotLights(filterPtr);
 
+        // Clean up shadow registrations for lights whose components were removed
+        cleanupStaleShadowRegistrations();
+
         if (detectChanges())
         {
             updateCountsBuffer();
@@ -417,20 +420,23 @@ namespace render::lighting
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
 
-            // Handle shadow registration based on castShadows flag
+            // Handle shadow registration based on global shadow settings
             uint32_t entityId = static_cast<uint32_t>(entity);
             gpuLight.shadowIndex = -1;  // Default: no shadow
 
             if (shadowSystem)
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
+                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
 
-                if (light.castShadows)
+                if (shadowsEnabled)
                 {
                     // Register or update light for shadow casting (CSM for directional lights)
-                    // Always call registerLight - it will handle already-registered lights by calling updateLightSettings
+                    // Use global settings from shadow system
                     shadow::ShadowSettings settings{};
-                    settings.depthBias = light.shadowBias;
+                    settings.depthBias = shadowSystem->getGlobalDepthBias();
+                    settings.normalBias = shadowSystem->getGlobalNormalBias();
+                    settings.cascadeCount = shadowSystem->getGlobalCascadeCount();
                     settings.enabled = true;
                     settings.castShadows = true;
 
@@ -439,9 +445,9 @@ namespace render::lighting
                         registeredShadowLights.insert(entityId);
                     }
                 }
-                else if (!light.castShadows && isRegistered)
+                else if (!shadowsEnabled && isRegistered)
                 {
-                    // Unregister light from shadow casting
+                    // Unregister light from shadow casting when shadows disabled globally
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
@@ -505,20 +511,22 @@ namespace render::lighting
             gpuLight.color = light.color;
             gpuLight.intensity = light.intensity;
 
-            // Handle shadow registration based on castShadows flag
+            // Handle shadow registration based on global shadow settings
             uint32_t entityId = static_cast<uint32_t>(entity);
             gpuLight.shadowIndex = -1;  // Default: no shadow
 
             if (shadowSystem)
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
+                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
 
-                if (light.castShadows)
+                if (shadowsEnabled)
                 {
                     // Register or update light for shadow casting (cube map for point lights)
-                    // Always call registerLight - it will handle already-registered lights by calling updateLightSettings
+                    // Use global bias from shadow system settings
                     shadow::ShadowSettings settings{};
-                    settings.depthBias = light.shadowBias;
+                    settings.depthBias = shadowSystem->getGlobalDepthBias();
+                    settings.normalBias = shadowSystem->getGlobalNormalBias();
                     settings.farPlane = light.radius;  // Use light radius as far plane
                     settings.enabled = true;
                     settings.castShadows = true;
@@ -528,9 +536,9 @@ namespace render::lighting
                         registeredShadowLights.insert(entityId);
                     }
                 }
-                else if (!light.castShadows && isRegistered)
+                else if (!shadowsEnabled && isRegistered)
                 {
-                    // Unregister light from shadow casting
+                    // Unregister light from shadow casting when shadows disabled globally
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
@@ -604,20 +612,22 @@ namespace render::lighting
             gpuLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
             gpuLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
 
-            // Handle shadow registration based on castShadows flag
+            // Handle shadow registration based on global shadow settings
             uint32_t entityId = static_cast<uint32_t>(entity);
             gpuLight.shadowIndex = -1;  // Default: no shadow
 
             if (shadowSystem)
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
+                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
 
-                if (light.castShadows)
+                if (shadowsEnabled)
                 {
                     // Register or update light for shadow casting
-                    // Always call registerLight - it will handle already-registered lights by calling updateLightSettings
+                    // Use global bias from shadow system settings
                     shadow::ShadowSettings settings{};
-                    settings.depthBias = light.shadowBias;
+                    settings.depthBias = shadowSystem->getGlobalDepthBias();
+                    settings.normalBias = shadowSystem->getGlobalNormalBias();
                     settings.farPlane = light.range;  // Use light range as far plane
                     settings.enabled = true;
                     settings.castShadows = true;
@@ -627,9 +637,9 @@ namespace render::lighting
                         registeredShadowLights.insert(entityId);
                     }
                 }
-                else if (!light.castShadows && isRegistered)
+                else if (!shadowsEnabled && isRegistered)
                 {
-                    // Unregister light from shadow casting
+                    // Unregister light from shadow casting when shadows disabled globally
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
@@ -653,6 +663,40 @@ namespace render::lighting
         else if (!hitLimit && warnedSpotLimit)
         {
             warnedSpotLimit = false;
+        }
+    }
+
+    void GPULightBufferManager::cleanupStaleShadowRegistrations()
+    {
+        if (!shadowSystem || registeredShadowLights.empty())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        // Collect entity IDs that need to be unregistered
+        std::vector<uint32_t> toUnregister;
+
+        for (uint32_t entityId : registeredShadowLights)
+        {
+            auto entity = static_cast<entt::entity>(entityId);
+
+            // Check if entity is still valid and has a light component
+            bool shouldKeep = registry.valid(entity) &&
+                              registry.any_of<components::DirectionalLightComponent,
+                                              components::PointLightComponent,
+                                              components::SpotLightComponent>(entity);
+
+            if (!shouldKeep)
+            {
+                toUnregister.push_back(entityId);
+            }
+        }
+
+        // Unregister stale lights from shadow system
+        for (uint32_t entityId : toUnregister)
+        {
+            shadowSystem->unregisterLight(entityId);
+            registeredShadowLights.erase(entityId);
         }
     }
 

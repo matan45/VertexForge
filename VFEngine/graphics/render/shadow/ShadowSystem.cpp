@@ -1292,10 +1292,8 @@ namespace render::shadow
             glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
         );
 
-        // Get cascade split mode from settings
-        // TODO: When RenderSettings integration is complete, get from there
-        // For now, use Practical mode with the lambda from per-light settings
-        types::CascadeSplitMode splitMode = types::CascadeSplitMode::Practical;
+        // Get cascade split mode from global settings
+        types::CascadeSplitMode splitMode = globalCascadeSplitMode;
 
         // Compute cascade split distances
         auto splits = CascadeShadowCalculator::computeSplitDistances(
@@ -1938,8 +1936,12 @@ namespace render::shadow
 
         const auto& shadowSettings = settings.shadows;
 
-        // Update enabled state
+        // Update enabled state, global bias, and cascade settings
         setShadowsEnabled(shadowSettings.enabled);
+        globalDepthBias = shadowSettings.shadowBias;
+        globalNormalBias = shadowSettings.normalBias;
+        globalCascadeCount = shadowSettings.cascadeCount;
+        globalCascadeSplitMode = shadowSettings.cascadeSplitMode;
 
         if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
             return;

@@ -103,8 +103,6 @@ namespace services {
         data.color = comp.color;
         data.intensity = comp.intensity;
         data.showGizmo = comp.showGizmo;
-        data.castShadows = comp.castShadows;
-        data.shadowBias = comp.shadowBias;
         return data;
     }
 
@@ -127,8 +125,6 @@ namespace services {
         comp.color = validateColor(lightData.color);
         comp.intensity = lightData.intensity;
         comp.showGizmo = lightData.showGizmo;
-        comp.castShadows = lightData.castShadows;
-        comp.shadowBias = lightData.shadowBias;
 
         events::lighting::LightDataChangedNotification notification;
         notification.entity = entity;
@@ -211,8 +207,6 @@ namespace services {
         data.intensity = comp.intensity;
         data.radius = comp.radius;
         data.showGizmo = comp.showGizmo;
-        data.castShadows = comp.castShadows;
-        data.shadowBias = comp.shadowBias;
         return data;
     }
 
@@ -239,8 +233,6 @@ namespace services {
         comp.intensity = lightData.intensity;
         comp.radius = lightData.radius;
         comp.showGizmo = lightData.showGizmo;
-        comp.castShadows = lightData.castShadows;
-        comp.shadowBias = lightData.shadowBias;
 
         events::lighting::LightDataChangedNotification notification;
         notification.entity = entity;
@@ -325,8 +317,6 @@ namespace services {
         data.outerAngle = comp.outerAngle;
         data.range = comp.range;
         data.showGizmo = comp.showGizmo;
-        data.castShadows = comp.castShadows;
-        data.shadowBias = comp.shadowBias;
         return data;
     }
 
@@ -358,8 +348,6 @@ namespace services {
         comp.outerAngle = lightData.outerAngle;
         comp.range = lightData.range;
         comp.showGizmo = lightData.showGizmo;
-        comp.castShadows = lightData.castShadows;
-        comp.shadowBias = lightData.shadowBias;
 
         events::lighting::LightDataChangedNotification notification;
         notification.entity = entity;

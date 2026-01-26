@@ -132,6 +132,7 @@ namespace render::lighting
         void collectDirectionalLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
         void collectPointLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
         void collectSpotLights(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
+        void cleanupStaleShadowRegistrations();
         void updateCountsBuffer();
         bool detectChanges();
     };
