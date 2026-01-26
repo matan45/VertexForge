@@ -344,6 +344,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setDeletionQueue(core::DeferredDeletionQueue* queue)
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->setDeletionQueue(queue);
+        }
+    }
+
     void RenderPassHandler::readBackLightOcclusionResults()
     {
         if (gpuDrivenRenderer && gpuDrivenRendererInitialized)

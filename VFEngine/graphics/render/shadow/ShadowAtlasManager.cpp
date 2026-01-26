@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/Utilities.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 
@@ -35,6 +36,37 @@ namespace render::shadow
         createAtlasImage();
         createAtlasSamplers();
         createDescriptorResources();
+
+        // Transition atlas image to SHADER_READ_ONLY_OPTIMAL for sampling
+        // This ensures the atlas is in a valid layout before first use
+        const auto& logicalDevice = device.getLogicalDevice();
+        auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
+
+        vk::ImageMemoryBarrier barrier{};
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = atlasImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        cmd->pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eFragmentShader,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
+
+        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
+
         updateDescriptorSet();
 
         initialized = true;
@@ -634,6 +666,35 @@ namespace render::shadow
 
         // Recreate image with new size
         createAtlasImage();
+
+        // Transition new atlas image to SHADER_READ_ONLY_OPTIMAL for sampling
+        // This is required because shaders expect the image in this layout
+        auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
+
+        vk::ImageMemoryBarrier barrier{};
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = atlasImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        cmd->pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eFragmentShader,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
+
+        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
 
         // Update descriptor set with new image view
         updateDescriptorSet();

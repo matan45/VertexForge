@@ -28,6 +28,7 @@ namespace core
     class Device;
     class SwapChain;
     class Shader;
+    class DeferredDeletionQueue;
 }
 
 namespace material
@@ -197,6 +198,9 @@ namespace render::gpudriven
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
         lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
+
+        // Set deferred deletion queue for safe resource destruction
+        void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
         // Set visible lights from BVH frustum query (pre-culling before GPU upload)
         // Pass the result of LightBVH::queryFrustum() to only upload visible lights

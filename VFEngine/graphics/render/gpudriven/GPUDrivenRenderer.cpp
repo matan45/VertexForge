@@ -13,6 +13,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../../core/RenderManager.hpp"
 #include "print/Logger.hpp"
 #include <algorithm>
 #include <array>
@@ -128,6 +129,12 @@ namespace render::gpudriven
 
             // Set shadow system reference in light buffer manager for shadow index population
             lightBufferManager->setShadowSystem(shadowSystem.get());
+
+            // Wire deferred deletion queue for safe shadow resource cleanup
+            if (core::RenderManager::getGlobalDeletionQueue())
+            {
+                shadowSystem->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
+            }
 
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             meshShaderPipeline->init(iblDescriptorSetLayout,
@@ -1044,6 +1051,14 @@ namespace render::gpudriven
     {
         visibleLightIds.clear();
         useBVHLightCulling = false;
+    }
+
+    void GPUDrivenRenderer::setDeletionQueue(core::DeferredDeletionQueue* queue)
+    {
+        if (shadowSystem)
+        {
+            shadowSystem->setDeletionQueue(queue);
+        }
     }
 
     void GPUDrivenRenderer::initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer)

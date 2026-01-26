@@ -2,6 +2,7 @@
 #include "ShadowSamplers.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Utilities.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
 #include <spdlog/spdlog.h>
 
 namespace render::shadow
@@ -239,39 +240,85 @@ namespace render::shadow
         if (!handle.isValid())
             return;
 
-        // TODO: Implement deferred destruction for better performance.
-        // Current implementation assumes caller ensures GPU is not using this resource.
-        // Ideal pattern: add to per-frame deletion queue, destroy after N frames.
-        // For now, this is safe when called during frame boundaries or after waitIdle.
-
         if (handle.isArray())
         {
             if (handle.resourceIndex < depthArrays.size() && depthArrays[handle.resourceIndex].allocated)
             {
-                depthArrays[handle.resourceIndex].resource->cleanup();
+                if (deletionQueue)
+                {
+                    // Extract resources and queue for deferred deletion
+                    auto extracted = depthArrays[handle.resourceIndex].resource->extractResources();
+
+                    // Queue the image and memory
+                    std::vector<vk::ImageView> views;
+                    views.reserve(extracted.layerViews.size() + 1);
+                    if (extracted.arrayView)
+                        views.push_back(extracted.arrayView);
+                    for (auto view : extracted.layerViews)
+                    {
+                        if (view)
+                            views.push_back(view);
+                    }
+
+                    deletionQueue->queueImage(extracted.image, extracted.memory, views);
+                    spdlog::debug("ShadowResourcePool: Queued depth array {} for deferred deletion", handle.resourceIndex);
+                }
+                else
+                {
+                    // Fallback to immediate cleanup (caller must ensure GPU synchronization)
+                    depthArrays[handle.resourceIndex].resource->cleanup();
+                    spdlog::debug("ShadowResourcePool: Freed depth array {} (immediate)", handle.resourceIndex);
+                }
+
                 depthArrays[handle.resourceIndex].resource.reset();
                 depthArrays[handle.resourceIndex].allocated = false;
 
                 // Add index to free list for recycling
                 freeArrayIndices.push_back(handle.resourceIndex);
-
-                spdlog::debug("ShadowResourcePool: Freed depth array {}", handle.resourceIndex);
             }
         }
         else if (handle.isCube())
         {
             if (handle.resourceIndex < cubeMaps.size() && cubeMaps[handle.resourceIndex].allocated)
             {
-                cubeMaps[handle.resourceIndex].resource->cleanup();
+                if (deletionQueue)
+                {
+                    // Extract resources and queue for deferred deletion
+                    auto extracted = cubeMaps[handle.resourceIndex].resource->extractResources();
+
+                    // Queue the image and memory
+                    std::vector<vk::ImageView> views;
+                    views.reserve(extracted.faceViews.size() + 1);
+                    if (extracted.cubeView)
+                        views.push_back(extracted.cubeView);
+                    for (auto view : extracted.faceViews)
+                    {
+                        if (view)
+                            views.push_back(view);
+                    }
+
+                    deletionQueue->queueImage(extracted.image, extracted.memory, views);
+                    spdlog::debug("ShadowResourcePool: Queued cube map {} for deferred deletion", handle.resourceIndex);
+                }
+                else
+                {
+                    // Fallback to immediate cleanup (caller must ensure GPU synchronization)
+                    cubeMaps[handle.resourceIndex].resource->cleanup();
+                    spdlog::debug("ShadowResourcePool: Freed cube map {} (immediate)", handle.resourceIndex);
+                }
+
                 cubeMaps[handle.resourceIndex].resource.reset();
                 cubeMaps[handle.resourceIndex].allocated = false;
 
                 // Add index to free list for recycling
                 freeCubeIndices.push_back(handle.resourceIndex);
-
-                spdlog::debug("ShadowResourcePool: Freed cube map {}", handle.resourceIndex);
             }
         }
+    }
+
+    void ShadowResourcePool::setDeletionQueue(core::DeferredDeletionQueue* queue)
+    {
+        deletionQueue = queue;
     }
 
     void ShadowResourcePool::freeAll()

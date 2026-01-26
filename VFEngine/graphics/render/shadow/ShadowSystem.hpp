@@ -18,6 +18,7 @@ namespace core
 {
     class Device;
     class SwapChain;
+    class DeferredDeletionQueue;
 }
 
 namespace render
@@ -227,6 +228,13 @@ namespace render
             [[nodiscard]] bool isInitialized() const { return initialized; }
 
             void setLightBufferManager(lighting::GPULightBufferManager* manager) { lightBufferManager = manager; }
+
+            /**
+             * Set the deferred deletion queue for safe resource destruction.
+             * When set, freed shadow resources are queued for deletion after N frames
+             * instead of being destroyed immediately, eliminating waitIdle() stalls.
+             */
+            void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
             // Get shadow views for rendering (sorted by type)
             [[nodiscard]] const std::vector<ShadowView>& getDirectionalShadowViews() const { return directionalShadowViews; }

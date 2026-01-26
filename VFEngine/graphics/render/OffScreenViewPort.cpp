@@ -169,6 +169,14 @@ namespace render
         renderPassHandler->draw(commandBuffer, core::RenderManager::getImageIndex());
     }
 
+    void OffScreenViewPort::setDeletionQueue(core::DeferredDeletionQueue* queue)
+    {
+        if (renderPassHandler)
+        {
+            renderPassHandler->setDeletionQueue(queue);
+        }
+    }
+
     void OffScreenViewPort::createOffscreenResources()
     {
         vk::Format colorFormat = swapChain.getSwapchainImageFormat();

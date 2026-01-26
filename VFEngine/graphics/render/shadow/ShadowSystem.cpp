@@ -581,15 +581,19 @@ namespace render::shadow
             return;
         }
 
-        // Wait for GPU to finish using resources before destroying them
-        // This is necessary because freeShadowMaps destroys Vulkan objects immediately
-        // and the GPU might still be using them from the previous frame.
-        // TODO: Replace with deferred deletion queue for better performance
-        device.getLogicalDevice().waitIdle();
-
+        // Free shadow resources - uses deferred deletion queue if configured,
+        // otherwise caller must ensure GPU synchronization
         freeShadowMaps(it->second);
         lightShadowData.erase(it);
         needsUpdate = true;
+    }
+
+    void ShadowSystem::setDeletionQueue(core::DeferredDeletionQueue* queue)
+    {
+        if (resourcePool)
+        {
+            resourcePool->setDeletionQueue(queue);
+        }
     }
 
     void ShadowSystem::updateLightSettings(uint32_t entityId, const ShadowSettings& settings)

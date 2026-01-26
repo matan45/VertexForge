@@ -207,6 +207,26 @@ namespace render::shadow
         return layerViews[layer];
     }
 
+    ShadowDepthArray::ExtractedResources ShadowDepthArray::extractResources()
+    {
+        ExtractedResources extracted;
+        extracted.image = image;
+        extracted.memory = memory;
+        extracted.arrayView = arrayView;
+        extracted.layerViews = std::move(layerViews);
+
+        // Clear local handles (ownership transferred)
+        image = nullptr;
+        memory = nullptr;
+        arrayView = nullptr;
+        layerViews.clear();
+        initialized = false;
+        currentLayout = vk::ImageLayout::eUndefined;
+
+        spdlog::debug("ShadowDepthArray: Resources extracted for deferred deletion");
+        return extracted;
+    }
+
     void ShadowDepthArray::transitionToDepthAttachment(vk::CommandBuffer cmd)
     {
         transitionLayers(cmd, 0, layerCount, currentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);

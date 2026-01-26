@@ -197,6 +197,26 @@ namespace render::shadow
         return faceViews[face];
     }
 
+    ShadowCubeMap::ExtractedResources ShadowCubeMap::extractResources()
+    {
+        ExtractedResources extracted;
+        extracted.image = image;
+        extracted.memory = memory;
+        extracted.cubeView = cubeView;
+        extracted.faceViews = faceViews;
+
+        // Clear local handles (ownership transferred)
+        image = nullptr;
+        memory = nullptr;
+        cubeView = nullptr;
+        faceViews.fill(nullptr);
+        initialized = false;
+        currentLayout = vk::ImageLayout::eUndefined;
+
+        spdlog::debug("ShadowCubeMap: Resources extracted for deferred deletion");
+        return extracted;
+    }
+
     void ShadowCubeMap::transitionToDepthAttachment(vk::CommandBuffer cmd)
     {
         transitionFaces(cmd, 0, FACE_COUNT, currentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);

@@ -9,6 +9,7 @@ namespace core
     class Device;
     class SwapChain;
     class CommandPool;
+    class DeferredDeletionQueue;
 }
 
 namespace render
@@ -47,6 +48,9 @@ namespace render
 
         void cleanUp();
         render::RenderPassHandler* getRenderPassHandler() const { return renderPassHandler.get(); }
+
+        // Forward deferred deletion queue to shadow system for safe resource cleanup
+        void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer) const;

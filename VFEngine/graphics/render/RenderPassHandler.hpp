@@ -17,6 +17,7 @@ namespace core
 {
     class Device;
     class SwapChain;
+    class DeferredDeletionQueue;
 }
 
 namespace render::gpudriven
@@ -137,6 +138,9 @@ namespace render
 
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
+
+        // Forward deferred deletion queue to GPU-driven renderer for shadow resource cleanup
+        void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
 
         // BVH light culling: set visible lights from frustum query

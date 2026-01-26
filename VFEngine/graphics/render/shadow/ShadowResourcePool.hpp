@@ -11,6 +11,7 @@
 namespace core
 {
     class Device;
+    class DeferredDeletionQueue;
 }
 
 namespace render::shadow
@@ -61,13 +62,20 @@ namespace render::shadow
         /**
          * Free a previously allocated resource.
          *
-         * SYNCHRONIZATION: Caller must ensure the resource is not in use by the GPU.
-         * Safe to call at frame boundaries or after device idle.
-         * TODO: Future optimization - implement deferred destruction queue.
+         * If a DeferredDeletionQueue is set, resources are queued for deferred deletion
+         * (safe to call without GPU synchronization). Otherwise, immediate cleanup is
+         * performed (caller must ensure GPU is not using this resource).
          *
          * @param handle Handle returned from allocateArray or allocateCube
          */
         void free(const ShadowResourceHandle& handle);
+
+        /**
+         * Set the deferred deletion queue for safe resource destruction.
+         * When set, freed resources are queued for deletion after N frames
+         * instead of being destroyed immediately.
+         */
+        void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
         /**
          * Free all allocated resources.
@@ -157,6 +165,7 @@ namespace render::shadow
 
     private:
         core::Device& device;
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         // Resource pools with free-list for index recycling
         struct ArrayEntry

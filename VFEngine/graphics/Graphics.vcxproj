@@ -122,6 +122,7 @@
     <ClInclude Include="controllers\offscreen\SceneBVHManager.hpp" />
     <ClInclude Include="core\BufferUtilities.hpp" />
     <ClInclude Include="core\CommandPool.hpp" />
+    <ClInclude Include="core\DeferredDeletionQueue.hpp" />
     <ClInclude Include="core\Device.hpp" />
     <ClInclude Include="core\ImageUtilities.hpp" />
     <ClInclude Include="core\MemoryUtilities.hpp" />
@@ -238,6 +239,7 @@
     <ClCompile Include="controllers\offscreen\SceneBVHManager.cpp" />
     <ClCompile Include="core\BufferUtilities.cpp" />
     <ClCompile Include="core\CommandPool.cpp" />
+    <ClCompile Include="core\DeferredDeletionQueue.cpp" />
     <ClCompile Include="core\Device.cpp" />
     <ClCompile Include="core\ImageUtilities.cpp" />
     <ClCompile Include="core\MemoryUtilities.cpp" />

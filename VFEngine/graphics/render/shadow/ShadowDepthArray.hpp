@@ -92,12 +92,27 @@ namespace render::shadow
 
         // Accessors
         [[nodiscard]] vk::Image getImage() const { return image; }
+        [[nodiscard]] vk::DeviceMemory getMemory() const { return memory; }
         [[nodiscard]] vk::Format getFormat() const { return format; }
         [[nodiscard]] uint32_t getWidth() const { return width; }
         [[nodiscard]] uint32_t getHeight() const { return height; }
         [[nodiscard]] uint32_t getLayerCount() const { return layerCount; }
         [[nodiscard]] bool isInitialized() const { return initialized; }
         [[nodiscard]] vk::ImageLayout getCurrentLayout() const { return currentLayout; }
+
+        /**
+         * Extract resources for deferred deletion (transfers ownership).
+         * After calling this, the ShadowDepthArray is left in an uninitialized state.
+         * The caller is responsible for destroying the returned resources.
+         */
+        struct ExtractedResources
+        {
+            vk::Image image;
+            vk::DeviceMemory memory;
+            vk::ImageView arrayView;
+            std::vector<vk::ImageView> layerViews;
+        };
+        [[nodiscard]] ExtractedResources extractResources();
 
     private:
         core::Device& device;
