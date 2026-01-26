@@ -496,7 +496,8 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
     vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
-    // Transform from NDC [-1,1] to texture coords [0,1]
+    // Transform XY from NDC [-1,1] to texture coords [0,1]
+    // Z is already in [0,1] because GLM_FORCE_DEPTH_ZERO_TO_ONE is defined
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
     // Apply atlas viewport transformation
@@ -537,9 +538,9 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
 }
 
 // Directional light shadow (CSM with cascade selection)
-// Note: Currently renders to atlas tiles, not separate cascade array layers
+// Each cascade is a tile in the shadow atlas
 float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
-    if (baseShadowIndex < 0) return 1.0;
+    if (baseShadowIndex < 0) return 1.0;  // No shadow data - fully lit
 
     // Read cascade count from first cascade's rangeParams.z
     int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
@@ -562,21 +563,28 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
 
     // Transform world position to light space
     vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
+
+    // Safety check for orthographic projection (w should be 1.0)
+    if (lightSpacePos.w <= 0.0) return 1.0;
+
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
-    // Transform from NDC [-1,1] to texture coords [0,1]
-    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+    // Transform XY from NDC [-1,1] to texture coords [0,1]
+    // Z is already in [0,1] because GLM_FORCE_DEPTH_ZERO_TO_ONE is defined
+    vec2 texCoords = projCoords.xy * 0.5 + 0.5;
+
+    // Clamp to valid range - objects outside frustum get clamped to edge
+    texCoords = clamp(texCoords, 0.0, 1.0);
 
     // Apply atlas viewport transformation (each cascade is a tile in the atlas)
-    projCoords.xy = sd.atlasViewport.xy + projCoords.xy * sd.atlasViewport.zw;
+    projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
 
     // Apply depth bias (varies per cascade)
     float bias = sd.biasParams.x;
     projCoords.z -= bias;
 
-    // Out of range check
-    if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
-    if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
+    // Clamp Z to valid range
+    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;

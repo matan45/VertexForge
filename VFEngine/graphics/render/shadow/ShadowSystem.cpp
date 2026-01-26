@@ -529,9 +529,13 @@ namespace render::shadow
 
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
     {
+        spdlog::info("ShadowSystem::registerLight called: entityId={}, type={}, alreadyRegistered={}",
+                     entityId, static_cast<int>(type), lightShadowData.contains(entityId));
+
         if (lightShadowData.contains(entityId))
         {
-            spdlog::warn("ShadowSystem: Light {} already registered, updating settings", entityId);
+            // This is expected when settings are updated each frame
+            spdlog::info("ShadowSystem: Light {} already registered, calling updateLightSettings", entityId);
             updateLightSettings(entityId, settings);
             return true;  // Already registered is considered success
         }
@@ -608,16 +612,48 @@ namespace render::shadow
             return;
         }
 
+        // Debug: log current state
+        spdlog::info("ShadowSystem::updateLightSettings: light={}, type={}, viewCount={}, usesAtlas={}, resourceHandle.valid={}",
+                     entityId, static_cast<int>(data->type), data->views.size(),
+                     data->usesAtlas(), data->resourceHandle.isValid());
+        if (!data->views.empty())
+        {
+            spdlog::info("  view[0].handle: valid={}, type={}, atlasIdx={}, viewport=({},{},{},{})",
+                         data->views[0].handle.isValid(), static_cast<int>(data->views[0].handle.type),
+                         data->views[0].handle.atlasIndex,
+                         data->views[0].atlasViewport.x, data->views[0].atlasViewport.y,
+                         data->views[0].atlasViewport.z, data->views[0].atlasViewport.w);
+        }
+
         // Check if resolution changed (requires reallocation)
         bool needsRealloc = data->settings.resolution != settings.resolution;
         bool cascadeCountChanged = (data->type == ShadowMapType::DirectionalCSM &&
                                     data->settings.cascadeCount != settings.cascadeCount);
 
+        // Check if shadow views need reallocation (atlas-based shadows with invalid handles)
+        bool needsAtlasRealloc = false;
+        if (data->usesAtlas())
+        {
+            // Check if any view lacks a valid atlas handle
+            bool hasValidAtlasTiles = !data->views.empty() && data->views[0].handle.isValid();
+
+            // For DirectionalCSM: also check if old dedicated resource exists (migration from old code)
+            bool hasOldDedicatedResource = (data->type == ShadowMapType::DirectionalCSM &&
+                                             data->resourceHandle.isValid());
+
+            if (!hasValidAtlasTiles || hasOldDedicatedResource)
+            {
+                needsAtlasRealloc = true;
+                spdlog::info("ShadowSystem: Light {} (type {}) needs atlas tile allocation (hasValid={}, hasOldRes={})",
+                             entityId, static_cast<int>(data->type), hasValidAtlasTiles, hasOldDedicatedResource);
+            }
+        }
+
         data->settings = settings;
         data->settingsDirty = true;
         needsUpdate = true;
 
-        if (needsRealloc || cascadeCountChanged)
+        if (needsRealloc || cascadeCountChanged || needsAtlasRealloc)
         {
             freeShadowMaps(*data);
 
@@ -705,34 +741,49 @@ namespace render::shadow
 
             case ShadowMapType::DirectionalCSM:
             {
-                // Use resource pool for CSM texture array
-                if (!resourcePool || !resourcePool->isInitialized())
-                    return false;
-
-                uint32_t cascadeCount = static_cast<uint32_t>(data.views.size());
-                ShadowResourceHandle handle = resourcePool->allocateArray(resolution, resolution, cascadeCount);
-
-                if (!handle.isValid())
+                // Use atlas tiles for CSM cascades (same as spot lights)
+                if (!atlasManager || !atlasManager->isInitialized())
                 {
-                    spdlog::error("ShadowSystem: Failed to allocate CSM array {}x{} with {} cascades",
-                                  resolution, resolution, cascadeCount);
+                    spdlog::error("ShadowSystem: Atlas manager not available for CSM allocation");
                     return false;
                 }
 
-                data.resourceHandle = handle;
+                uint32_t cascadeCount = static_cast<uint32_t>(data.views.size());
+                spdlog::info("ShadowSystem: Allocating {} CSM cascades ({}x{} each)",
+                             cascadeCount, resolution, resolution);
 
-                // Set up view metadata (atlas viewport not used for CSM, repurpose for cascade info)
                 for (size_t i = 0; i < data.views.size(); ++i)
                 {
                     auto& view = data.views[i];
-                    view.handle.type = ShadowMapType::DirectionalCSM;
+
+                    ShadowMapHandle handle = atlasManager->allocate(
+                        resolution, resolution,
+                        ShadowMapType::DirectionalCSM,
+                        static_cast<uint32_t>(i)
+                    );
+
+                    if (!handle.isValid())
+                    {
+                        // Rollback previous allocations
+                        for (size_t j = 0; j < i; ++j)
+                        {
+                            atlasManager->free(data.views[j].handle);
+                            data.views[j].handle.invalidate();
+                        }
+                        spdlog::error("ShadowSystem: Failed to allocate CSM cascade {} in atlas", i);
+                        return false;
+                    }
+
+                    view.handle = handle;
                     view.handle.cascadeIndex = static_cast<uint16_t>(i);
-                    // For CSM: atlasViewport.z = cascadeCount, atlasViewport.w = layer/cascade index
-                    view.atlasViewport = glm::vec4(0.0f, 0.0f, static_cast<float>(cascadeCount), static_cast<float>(i));
+                    view.atlasViewport = atlasManager->getNormalizedViewport(handle);
+                    spdlog::info("ShadowSystem: CSM cascade {} allocated, viewport=({},{},{},{})",
+                                 i, view.atlasViewport.x, view.atlasViewport.y,
+                                 view.atlasViewport.z, view.atlasViewport.w);
                 }
 
-                spdlog::debug("ShadowSystem: Allocated CSM array {}x{} with {} cascades",
-                              resolution, resolution, cascadeCount);
+                spdlog::info("ShadowSystem: Successfully allocated {} CSM cascades in atlas",
+                              cascadeCount);
                 return true;
             }
 
@@ -794,7 +845,11 @@ namespace render::shadow
         }
     }
 
-    void ShadowSystem::beginFrame(const std::unordered_set<uint32_t>* visibleLightIds)
+    void ShadowSystem::beginFrame(const glm::mat4& cameraView,
+                                    const glm::mat4& cameraProjection,
+                                    float cameraNear,
+                                    float cameraFar,
+                                    const std::unordered_set<uint32_t>* visibleLightIds)
     {
         if (!shadowsEnabled)
             return;
@@ -807,6 +862,7 @@ namespace render::shadow
 
         // Update shadow matrices for all registered lights
         // For point/spot lights, this extracts position from WorldTransformComponent
+        // For directional lights, this uses camera params for CSM cascade calculations
         auto& registry = scene::EntityRegistry::getRegistry();
         for (auto& [entityId, data] : lightShadowData)
         {
@@ -852,6 +908,116 @@ namespace render::shadow
                     view.handle.layer = face;
                 }
             }
+
+            // Spot lights: update shadow matrix from current world transform
+            if (data.type == ShadowMapType::Spot2D)
+            {
+                auto entity = static_cast<entt::entity>(entityId);
+                if (!registry.valid(entity) ||
+                    !registry.all_of<components::WorldTransformComponent>(entity))
+                    continue;
+
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+                glm::vec3 lightPosition = glm::vec3(worldTransform.worldMatrix[3]);
+
+                // Extract light direction from world transform matrix
+                // Spot lights point along negative Z axis in local space
+                glm::vec3 lightDirection = glm::normalize(
+                    glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
+                );
+
+                // Get spot light parameters
+                float outerAngle = 45.0f;
+                float range = 20.0f;
+                if (registry.all_of<components::SpotLightComponent>(entity))
+                {
+                    const auto& spotLight = registry.get<components::SpotLightComponent>(entity);
+                    outerAngle = spotLight.outerAngle;
+                    range = spotLight.range;
+                }
+
+                float nearPlane = data.settings.nearPlane;
+
+                // Compute spot light shadow matrices
+                auto shadowData = SpotShadowCalculator::computeSpotLightMatrices(
+                    lightPosition, lightDirection, outerAngle, nearPlane, range);
+
+                // Update the view
+                if (!data.views.empty())
+                {
+                    auto& view = data.views[0];
+                    view.viewMatrix = shadowData.viewMatrix;
+                    view.projectionMatrix = shadowData.projMatrix;
+                    view.viewProjectionMatrix = shadowData.viewProjMatrix;
+                    view.nearPlane = nearPlane;
+                    view.farPlane = range;
+                    view.lightPosition = glm::vec4(lightPosition, 1.0f);
+                    view.lightDirection = glm::vec4(lightDirection, 0.0f);
+                }
+            }
+
+            // Directional lights (CSM): update cascade matrices using camera params
+            if (data.type == ShadowMapType::DirectionalCSM)
+            {
+                auto entity = static_cast<entt::entity>(entityId);
+                if (!registry.valid(entity) ||
+                    !registry.all_of<components::WorldTransformComponent>(entity))
+                {
+                    spdlog::warn("ShadowSystem: DirectionalCSM light {} missing WorldTransformComponent", entityId);
+                    continue;
+                }
+
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+
+                // Extract light direction from world transform matrix
+                // Light points along negative Z axis in local space
+                glm::vec3 lightDirection = glm::normalize(
+                    glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
+                );
+
+                // Compute cascade split distances
+                types::CascadeSplitMode splitMode = types::CascadeSplitMode::Practical;
+                auto splits = CascadeShadowCalculator::computeSplitDistances(
+                    cameraNear, cameraFar,
+                    data.settings.cascadeCount,
+                    splitMode,
+                    data.settings.cascadeSplitLambda
+                );
+
+                // Update each cascade view
+                uint32_t viewCount = std::min(static_cast<uint32_t>(data.views.size()),
+                                               data.settings.cascadeCount);
+
+                spdlog::info("ShadowSystem: Updating {} CSM cascades for light {}, dir=({},{},{})",
+                             viewCount, entityId, lightDirection.x, lightDirection.y, lightDirection.z);
+
+                for (uint32_t i = 0; i < viewCount; ++i)
+                {
+                    auto& view = data.views[i];
+
+                    float cascadeNear = splits[i];
+                    float cascadeFar = splits[i + 1];
+
+                    // Get frustum corners in world space for this cascade range
+                    auto frustumCorners = CascadeShadowCalculator::getFrustumCornersWorldSpace(
+                        cameraView, cameraProjection, cascadeNear, cascadeFar);
+
+                    // Compute stable cascade matrix with texel snapping
+                    auto cascadeData = CascadeShadowCalculator::computeCascadeMatrix(
+                        frustumCorners, lightDirection, data.settings.resolution);
+
+                    // Update view data
+                    view.viewMatrix = cascadeData.viewMatrix;
+                    view.projectionMatrix = cascadeData.projMatrix;
+                    view.viewProjectionMatrix = cascadeData.viewProjMatrix;
+                    // Store camera-space cascade split distances for cascade selection in shader
+                    // (not light-space projection bounds which are only used for rendering)
+                    view.nearPlane = cascadeNear;
+                    view.farPlane = cascadeFar;
+                    view.lightDirection = glm::vec4(lightDirection, 0.0f);
+                    view.handle.cascadeIndex = static_cast<uint16_t>(i);
+                }
+            }
         }
 
         // Temporary maps to track per-type indices for each entity
@@ -883,6 +1049,7 @@ namespace render::shadow
                             continue;
 
                         ShadowView viewCopy = view;
+                        viewCopy.entityId = entityId;  // Set entity ID for GPU data lookup
                         viewCopy.depthBias = data.settings.depthBias;
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
@@ -900,17 +1067,22 @@ namespace render::shadow
 
                 case ShadowMapType::DirectionalCSM:
                 {
-                    // CSM: uses dedicated texture array, all cascades share one resource handle
-                    if (!data.resourceHandle.isValid())
-                        continue;
-
+                    // CSM: uses atlas tiles, each cascade has its own tile
                     float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
+                    uint32_t validViews = 0;
 
                     // Add all cascade views (each becomes an entry in shadow data buffer)
                     for (size_t i = 0; i < data.views.size(); ++i)
                     {
                         const auto& view = data.views[i];
+                        if (!view.handle.isValid())
+                        {
+                            spdlog::warn("ShadowSystem: CSM cascade {} has invalid handle", i);
+                            continue;
+                        }
+
                         ShadowView viewCopy = view;
+                        viewCopy.entityId = entityId;  // Set entity ID for GPU data lookup
                         viewCopy.depthBias = data.settings.depthBias;
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
@@ -919,10 +1091,12 @@ namespace render::shadow
                         viewCopy.pcfSoftness = data.settings.softness;
                         viewCopy.filterEnabled = globalSoftShadowsEnabled;
 
-                        if (i == 0)
+                        if (!directionalIndices.contains(entityId))
                             directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
                         directionalShadowViews.push_back(viewCopy);
+                        validViews++;
                     }
+                    spdlog::info("ShadowSystem: Collected {} CSM views for light {}", validViews, entityId);
                     break;
                 }
 
@@ -936,6 +1110,7 @@ namespace render::shadow
                             continue;
 
                         ShadowView viewCopy = view;
+                        viewCopy.entityId = entityId;  // Set entity ID for GPU data lookup
                         viewCopy.depthBias = data.settings.depthBias;
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
@@ -995,6 +1170,10 @@ namespace render::shadow
             entityToShadowIndex[entityId] = pointOffset + localIdx;
         for (const auto& [entityId, localIdx] : spotIndices)
             entityToShadowIndex[entityId] = spotOffset + localIdx;
+
+        spdlog::info("ShadowSystem::beginFrame complete: directional={}, point={}, spot={}, total entities={}",
+                     directionalShadowViews.size(), pointShadowViews.size(), spotShadowViews.size(),
+                     entityToShadowIndex.size());
     }
 
     void ShadowSystem::updateLightShadowMatrices(uint32_t entityId,
@@ -1210,8 +1389,10 @@ namespace render::shadow
             view.viewMatrix = cascadeData.viewMatrix;
             view.projectionMatrix = cascadeData.projMatrix;
             view.viewProjectionMatrix = cascadeData.viewProjMatrix;
-            view.nearPlane = cascadeData.nearDistance;
-            view.farPlane = cascadeData.farDistance;
+            // Store camera-space cascade split distances for cascade selection in shader
+            // (not light-space projection bounds which are only used for rendering)
+            view.nearPlane = cascadeNear;
+            view.farPlane = cascadeFar;
             view.lightDirection = glm::vec4(lightDirection, 0.0f);
 
             // Copy bias settings from per-light settings
@@ -1249,7 +1430,10 @@ namespace render::shadow
             }
         }
 
-        auto addViews = [&](const std::vector<ShadowView>& views, bool isPointLight)
+        // Helper enum to specify view type for different handling
+        enum class ViewType { Directional, Point, Spot };
+
+        auto addViews = [&](const std::vector<ShadowView>& views, ViewType viewType)
         {
             for (const auto& view : views)
             {
@@ -1266,20 +1450,42 @@ namespace render::shadow
                     view.texelSize
                 );
 
-                // Range params: near, far, inverse range, cascade index
-                float range = view.farPlane - view.nearPlane;
-                float invRange = (range > 0.0001f) ? (1.0f / range) : 0.0f;
+                // Range params: near, far, z-component varies by type, cascade index
+                // For directional: z = cascade count (shader needs this for cascade selection)
+                // For others: z = inverse range (unused currently)
+                float rangeZ = 0.0f;
+                if (viewType == ViewType::Directional)
+                {
+                    // Get cascade count for this light
+                    auto it = lightShadowData.find(view.entityId);
+                    if (it != lightShadowData.end())
+                    {
+                        rangeZ = static_cast<float>(it->second.settings.cascadeCount);
+                        spdlog::info("  Directional view: entityId={}, cascadeCount={}, farPlane={}",
+                                    view.entityId, rangeZ, view.farPlane);
+                    }
+                    else
+                    {
+                        spdlog::warn("  Directional view: entityId={} NOT FOUND in lightShadowData!", view.entityId);
+                    }
+                }
+                else
+                {
+                    float range = view.farPlane - view.nearPlane;
+                    rangeZ = (range > 0.0001f) ? (1.0f / range) : 0.0f;
+                }
+
                 gpu.rangeParams = glm::vec4(
                     view.nearPlane,
                     view.farPlane,
-                    invRange,
+                    rangeZ,
                     static_cast<float>(view.handle.cascadeIndex)
                 );
 
                 // PCF params: kernel radius, softness, filter enabled, cubeMapIndex
                 // cubeMapIndex is -1 for non-point lights, otherwise the index into shadowCubes[]
                 float cubeMapIndex = -1.0f;
-                if (isPointLight)
+                if (viewType == ViewType::Point)
                 {
                     auto it = entityToCubeIndex.find(view.entityId);
                     if (it != entityToCubeIndex.end())
@@ -1299,9 +1505,9 @@ namespace render::shadow
             }
         };
 
-        addViews(directionalShadowViews, false);
-        addViews(pointShadowViews, true);
-        addViews(spotShadowViews, false);
+        addViews(directionalShadowViews, ViewType::Directional);
+        addViews(pointShadowViews, ViewType::Point);
+        addViews(spotShadowViews, ViewType::Spot);
     }
 
     void ShadowSystem::uploadToGPU(vk::CommandBuffer cmd)
@@ -1311,6 +1517,22 @@ namespace render::shadow
 
         // Build GPU data from current views
         buildGPUShadowData();
+
+        spdlog::info("ShadowSystem::uploadToGPU: gpuShadowData.size={}", gpuShadowData.size());
+        if (!gpuShadowData.empty())
+        {
+            const auto& first = gpuShadowData[0];
+            spdlog::info("  First shadow entry: viewport=({},{},{},{}), bias=({},{},{},{})",
+                        first.atlasViewport.x, first.atlasViewport.y, first.atlasViewport.z, first.atlasViewport.w,
+                        first.biasParams.x, first.biasParams.y, first.biasParams.z, first.biasParams.w);
+            spdlog::info("  rangeParams=({},{},{},{}), pcfParams=({},{},{},{})",
+                        first.rangeParams.x, first.rangeParams.y, first.rangeParams.z, first.rangeParams.w,
+                        first.pcfParams.x, first.pcfParams.y, first.pcfParams.z, first.pcfParams.w);
+            // Log first row of viewProjection matrix to check it's not identity/zero
+            spdlog::info("  viewProj[0]=({},{},{},{})",
+                        first.viewProjection[0][0], first.viewProjection[0][1],
+                        first.viewProjection[0][2], first.viewProjection[0][3]);
+        }
 
         if (gpuShadowData.empty())
             return;
@@ -1355,7 +1577,12 @@ namespace render::shadow
     void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd, const ShadowPassParams& params)
     {
         if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized())
+        {
+            spdlog::warn("ShadowSystem::recordShadowPass: Not ready (enabled={}, pipeline={}, init={})",
+                        shadowsEnabled, shadowPassPipeline != nullptr,
+                        shadowPassPipeline ? shadowPassPipeline->isInitialized() : false);
             return;
+        }
 
         // Collect all shadow views (spot and directional - these use the atlas)
         std::vector<const ShadowView*> allViews;
@@ -1368,8 +1595,16 @@ namespace render::shadow
         bool hasAtlasViews = !allViews.empty();
         bool hasPointShadows = !pointShadowViews.empty();
 
+        spdlog::info("ShadowSystem::recordShadowPass: atlasViews={}, spotViews={}, directionalViews={}, pointViews={}",
+                    allViews.size(), spotShadowViews.size(), directionalShadowViews.size(), pointShadowViews.size());
+        spdlog::info("ShadowSystem::recordShadowPass params: batchCount={}, commandsPerSection={}, shaderGroupCount={}, drawCountStructSize={}",
+                    params.batchCount, params.commandsPerSection, params.shaderGroupCount, params.drawCountStructSize);
+
         if (!hasAtlasViews && !hasPointShadows)
+        {
+            spdlog::warn("ShadowSystem::recordShadowPass: No views to render");
             return;
+        }
 
         // Validate batch parameters to prevent out-of-bounds access
         if (params.batchCount == 0 || params.commandsPerSection == 0)
@@ -1476,13 +1711,19 @@ namespace render::shadow
         );
 
         // 5. Render each shadow view
+        uint32_t renderedViews = 0;
         for (const auto* view : allViews)
         {
             if (!view->handle.isValid())
+            {
+                spdlog::warn("ShadowSystem: Skipping view with invalid handle");
                 continue;
+            }
 
             // Set dynamic viewport and scissor for this tile
             vk::Viewport viewport = atlasManager->getPixelViewport(view->handle);
+            spdlog::info("ShadowSystem: Rendering view {}: viewport=({},{},{},{}), entityId={}",
+                        renderedViews, viewport.x, viewport.y, viewport.width, viewport.height, view->entityId);
             cmd.setViewport(0, 1, &viewport);
 
             vk::Rect2D scissor = atlasManager->getScissorRect(view->handle);
@@ -1494,38 +1735,50 @@ namespace render::shadow
             // Push constants with light view-projection matrix and per-light bias
             ShadowPushConstants pc{};
             pc.lightViewProjection = view->viewProjectionMatrix;
-            pc.baseDrawIndex = 0;  // Will iterate through batches
+            pc.baseDrawIndex = 0;  // Will iterate through batches and shader groups
             pc.depthBias = view->depthBias;
             pc.slopeBias = view->slopeBias;
             pc.normalBias = view->normalBias;
 
-            // Render all batches for this shadow view
-            for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+            // Render all shader groups and batches for this shadow view
+            // Shadow pass needs to render ALL geometry regardless of shader group
+            for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
             {
-                pc.baseDrawIndex = batch * params.commandsPerSection;
+                for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                {
+                    // Calculate section index for this (batch, shaderGroup) combination
+                    uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
+                    pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
 
-                cmd.pushConstants(
-                    shadowPassPipeline->getPipelineLayout(),
-                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
-                    0,
-                    sizeof(ShadowPushConstants),
-                    &pc
-                );
+                    cmd.pushConstants(
+                        shadowPassPipeline->getPipelineLayout(),
+                        vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                        0,
+                        sizeof(ShadowPushConstants),
+                        &pc
+                    );
 
-                // Calculate offset into draw command and count buffers
-                vk::DeviceSize commandOffset = batch * params.commandsPerSection * sizeof(vk::DrawMeshTasksIndirectCommandEXT);
-                vk::DeviceSize countOffset = batch * sizeof(uint32_t);
+                    // Calculate offset into draw command and count buffers
+                    // drawCountStructSize is sizeof(BatchDrawStats) = 32 bytes, not sizeof(uint32_t)
+                    vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(vk::DrawMeshTasksIndirectCommandEXT);
+                    vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
 
-                cmd.drawMeshTasksIndirectCountEXT(
-                    params.drawCommandBuffer,
-                    commandOffset,
-                    params.drawCountBuffer,
-                    countOffset,
-                    params.commandsPerSection,
-                    sizeof(vk::DrawMeshTasksIndirectCommandEXT)
-                );
+                    cmd.drawMeshTasksIndirectCountEXT(
+                        params.drawCommandBuffer,
+                        commandOffset,
+                        params.drawCountBuffer,
+                        countOffset,
+                        params.commandsPerSection,
+                        sizeof(vk::DrawMeshTasksIndirectCommandEXT)
+                    );
+                }
             }
+            renderedViews++;
         }
+
+        uint32_t totalDrawCalls = renderedViews * params.shaderGroupCount * params.batchCount;
+        spdlog::info("ShadowSystem: Rendered {} atlas shadow views ({} total draw calls across {} shader groups x {} batches)",
+                    renderedViews, totalDrawCalls, params.shaderGroupCount, params.batchCount);
 
         // 6. End render pass
         cmd.endRenderPass();
@@ -1690,30 +1943,34 @@ namespace render::shadow
                 pc.slopeBias = view.slopeBias;
                 pc.normalBias = view.normalBias;
 
-                // Render all batches
-                for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                // Render all shader groups and batches
+                for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
                 {
-                    pc.baseDrawIndex = batch * params.commandsPerSection;
+                    for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                    {
+                        uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
+                        pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
 
-                    cmd.pushConstants(
-                        shadowPassPipeline->getPipelineLayout(),
-                        vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
-                        0,
-                        sizeof(ShadowPushConstants),
-                        &pc
-                    );
+                        cmd.pushConstants(
+                            shadowPassPipeline->getPipelineLayout(),
+                            vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                            0,
+                            sizeof(ShadowPushConstants),
+                            &pc
+                        );
 
-                    vk::DeviceSize commandOffset = batch * params.commandsPerSection * sizeof(vk::DrawMeshTasksIndirectCommandEXT);
-                    vk::DeviceSize countOffset = batch * sizeof(uint32_t);
+                        vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(vk::DrawMeshTasksIndirectCommandEXT);
+                        vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
 
-                    cmd.drawMeshTasksIndirectCountEXT(
-                        params.drawCommandBuffer,
-                        commandOffset,
-                        params.drawCountBuffer,
-                        countOffset,
-                        params.commandsPerSection,
-                        sizeof(vk::DrawMeshTasksIndirectCommandEXT)
-                    );
+                        cmd.drawMeshTasksIndirectCountEXT(
+                            params.drawCommandBuffer,
+                            commandOffset,
+                            params.drawCountBuffer,
+                            countOffset,
+                            params.commandsPerSection,
+                            sizeof(vk::DrawMeshTasksIndirectCommandEXT)
+                        );
+                    }
                 }
 
                 cmd.endRenderPass();

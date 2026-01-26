@@ -268,12 +268,12 @@ namespace render::shadow
 
         [[nodiscard]] bool usesAtlas() const
         {
-            return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D;
+            return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D || type == ShadowMapType::DirectionalCSM;
         }
 
         [[nodiscard]] bool usesDedicatedResource() const
         {
-            return type == ShadowMapType::DirectionalCSM || type == ShadowMapType::PointCube;
+            return type == ShadowMapType::PointCube;
         }
     };
 

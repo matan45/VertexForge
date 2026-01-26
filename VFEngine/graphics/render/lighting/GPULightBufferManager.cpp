@@ -425,9 +425,10 @@ namespace render::lighting
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
 
-                if (light.castShadows && !isRegistered)
+                if (light.castShadows)
                 {
-                    // Register light for shadow casting (CSM for directional lights)
+                    // Register or update light for shadow casting (CSM for directional lights)
+                    // Always call registerLight - it will handle already-registered lights by calling updateLightSettings
                     shadow::ShadowSettings settings{};
                     settings.depthBias = light.shadowBias;
                     settings.enabled = true;
@@ -447,6 +448,7 @@ namespace render::lighting
 
                 // Query shadow index
                 gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
+                spdlog::info("GPULightBufferManager: Directional light {} shadowIndex={}", entityId, gpuLight.shadowIndex);
             }
 
             ++directionalCount;
@@ -512,9 +514,10 @@ namespace render::lighting
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
 
-                if (light.castShadows && !isRegistered)
+                if (light.castShadows)
                 {
-                    // Register light for shadow casting (cube map for point lights)
+                    // Register or update light for shadow casting (cube map for point lights)
+                    // Always call registerLight - it will handle already-registered lights by calling updateLightSettings
                     shadow::ShadowSettings settings{};
                     settings.depthBias = light.shadowBias;
                     settings.farPlane = light.radius;  // Use light radius as far plane
@@ -610,9 +613,10 @@ namespace render::lighting
             {
                 bool isRegistered = registeredShadowLights.contains(entityId);
 
-                if (light.castShadows && !isRegistered)
+                if (light.castShadows)
                 {
-                    // Register light for shadow casting
+                    // Register or update light for shadow casting
+                    // Always call registerLight - it will handle already-registered lights by calling updateLightSettings
                     shadow::ShadowSettings settings{};
                     settings.depthBias = light.shadowBias;
                     settings.farPlane = light.range;  // Use light range as far plane

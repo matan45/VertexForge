@@ -15,6 +15,7 @@
 #include "../shadow/ShadowSystem.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include <vulkan/vulkan.hpp>
+#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 #include <unordered_set>
@@ -101,6 +102,12 @@ namespace render::gpudriven
         // Frame N-1 light occlusion results (used to avoid GPU stalls)
         std::unordered_set<uint32_t> prevFrameOccludedLights;
         bool hasPrevFrameOcclusionData = false;
+
+        // Camera parameters (stored from updateScene for shadow rendering)
+        glm::mat4 cachedCameraView{1.0f};
+        glm::mat4 cachedCameraProjection{1.0f};
+        float cachedCameraNear = 0.1f;
+        float cachedCameraFar = 1000.0f;
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);

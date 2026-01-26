@@ -256,6 +256,12 @@ namespace render::gpudriven
         };
         cameraBuffer->update(cameraParams);
 
+        // Cache camera parameters for shadow rendering
+        cachedCameraView = view;
+        cachedCameraProjection = projection;
+        cachedCameraNear = nearPlane;
+        cachedCameraFar = farPlane;
+
         updateClusterGrid(projection, nearPlane, farPlane);
         updatePipelineDescriptors();
 
@@ -506,6 +512,63 @@ namespace render::gpudriven
             boneMatrixManager->uploadToGPU(cmd);
         }
 
+        // Update shadow system BEFORE light buffer manager
+        // This ensures shadow indices are available when lights query them
+        if (shadowSystem && shadowSystem->isInitialized())
+        {
+            // Build visible light filter using previous frame's occlusion data
+            std::unordered_set<uint32_t> shadowVisibleLights;
+            bool hasShadowFilter = false;
+
+            if (useBVHLightCulling && !visibleLightIds.empty())
+            {
+                shadowVisibleLights = visibleLightIds;
+                hasShadowFilter = true;
+            }
+
+            // Apply previous frame's occlusion results (frame N-1 approach)
+            if (useLightOcclusionCulling && hasPrevFrameOcclusionData && !prevFrameOccludedLights.empty())
+            {
+                if (hasShadowFilter)
+                {
+                    for (uint32_t occludedId : prevFrameOccludedLights)
+                        shadowVisibleLights.erase(occludedId);
+                }
+                else
+                {
+                    // Build visible set excluding occluded lights
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto pointView = registry.view<components::PointLightComponent>();
+                    for (auto entity : pointView)
+                    {
+                        uint32_t entityId = static_cast<uint32_t>(entity);
+                        if (!prevFrameOccludedLights.contains(entityId))
+                            shadowVisibleLights.insert(entityId);
+                    }
+                    auto spotView = registry.view<components::SpotLightComponent>();
+                    for (auto entity : spotView)
+                    {
+                        uint32_t entityId = static_cast<uint32_t>(entity);
+                        if (!prevFrameOccludedLights.contains(entityId))
+                            shadowVisibleLights.insert(entityId);
+                    }
+                    hasShadowFilter = true;
+                }
+            }
+
+            if (hasShadowFilter && !shadowVisibleLights.empty())
+            {
+                shadowSystem->beginFrame(cachedCameraView, cachedCameraProjection,
+                                          cachedCameraNear, cachedCameraFar,
+                                          &shadowVisibleLights);
+            }
+            else
+            {
+                shadowSystem->beginFrame(cachedCameraView, cachedCameraProjection,
+                                          cachedCameraNear, cachedCameraFar);
+            }
+        }
+
         if (lightBufferManager)
         {
             if (useBVHLightCulling && !visibleLightIds.empty())
@@ -622,73 +685,11 @@ namespace render::gpudriven
         batchManager->insertBarriersAfterCompute(cmd);
 
         // Shadow pass - render depth maps for all active shadow views
+        // Note: beginFrame is called in dispatchCompute before light buffer update
+        // to ensure shadow indices are available when lights query them
         if (shadowSystem && shadowSystem->isShadowsEnabled() &&
             meshShaderPipeline && boneMatrixManager && batchManager)
         {
-            // Build the set of lights to render shadows for
-            // Combine BVH frustum culling with HiZ occlusion culling (Frame N-1)
-            std::unordered_set<uint32_t> shadowVisibleLights;
-            bool hasShadowFilter = false;
-
-            // Start with BVH-visible lights if enabled
-            if (useBVHLightCulling && !visibleLightIds.empty())
-            {
-                shadowVisibleLights = visibleLightIds;
-                hasShadowFilter = true;
-            }
-
-            // Filter by HiZ occlusion results from previous frame
-            if (useLightOcclusionCulling && hasPrevFrameOcclusionData && !prevFrameOccludedLights.empty())
-            {
-                if (hasShadowFilter)
-                {
-                    // Remove occluded lights from the BVH-visible set
-                    for (uint32_t occludedId : prevFrameOccludedLights)
-                    {
-                        shadowVisibleLights.erase(occludedId);
-                    }
-                }
-                else
-                {
-                    // No BVH filter - build visible set by iterating all lights and excluding occluded
-                    auto& registry = scene::EntityRegistry::getRegistry();
-
-                    // Collect point lights that are not occluded
-                    auto pointView = registry.view<components::PointLightComponent>();
-                    for (auto entity : pointView)
-                    {
-                        uint32_t entityId = static_cast<uint32_t>(entity);
-                        if (!prevFrameOccludedLights.contains(entityId))
-                        {
-                            shadowVisibleLights.insert(entityId);
-                        }
-                    }
-
-                    // Collect spot lights that are not occluded
-                    auto spotView = registry.view<components::SpotLightComponent>();
-                    for (auto entity : spotView)
-                    {
-                        uint32_t entityId = static_cast<uint32_t>(entity);
-                        if (!prevFrameOccludedLights.contains(entityId))
-                        {
-                            shadowVisibleLights.insert(entityId);
-                        }
-                    }
-
-                    hasShadowFilter = true;
-                }
-            }
-
-            // Pass visible light IDs to skip shadow rendering for culled/occluded lights
-            if (hasShadowFilter && !shadowVisibleLights.empty())
-            {
-                shadowSystem->beginFrame(&shadowVisibleLights);
-            }
-            else
-            {
-                shadowSystem->beginFrame();
-            }
-
             // Upload shadow data to GPU
             shadowSystem->uploadToGPU(cmd);
 
@@ -702,6 +703,8 @@ namespace render::gpudriven
             shadowParams.drawCountBuffer = batchManager->getCombinedDrawCountBuffer();
             shadowParams.batchCount = batchManager->getBatchCount();
             shadowParams.commandsPerSection = batchManager->getCommandsPerSection();
+            shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
+            shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
 
             shadowSystem->recordShadowPass(cmd, shadowParams);
         }

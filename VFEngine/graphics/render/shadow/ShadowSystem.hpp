@@ -141,9 +141,14 @@ namespace render
 
             // Call each frame before shadow pass recording
             // Collects active shadow casters and updates matrices
+            // Camera parameters are required for CSM cascade calculations
             // If visibleLightIds is provided, only collects shadows for visible lights
             // (directional lights are always included as they're global)
-            void beginFrame(const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
+            void beginFrame(const glm::mat4& cameraView,
+                            const glm::mat4& cameraProjection,
+                            float cameraNear,
+                            float cameraFar,
+                            const std::unordered_set<uint32_t>* visibleLightIds = nullptr);
 
             // Update shadow view matrices for a specific light
             // Called when light transform or camera changes
@@ -169,6 +174,8 @@ namespace render
                 vk::Buffer drawCountBuffer;
                 uint32_t batchCount;
                 uint32_t commandsPerSection;
+                uint32_t shaderGroupCount;      // Number of shader groups to iterate
+                uint32_t drawCountStructSize;   // Size of BatchDrawStats struct (for count offset calculation)
             };
 
             // Record shadow pass commands
