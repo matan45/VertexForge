@@ -1,48 +1,14 @@
 #type TASK
 #version 460 core
 #extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/gpu_types.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 const uint TASK_WORKGROUP_SIZE = 32;
 const uint MAX_MESHLETS_PER_PAYLOAD = 32;
-
-// Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
-struct PerDrawData {
-    mat4 modelMatrix;
-    mat4 normalMatrix;
-
-    vec4 albedo;
-    vec4 materialParams;
-
-    uvec4 textureIndices0;
-    uvec4 textureIndices1;
-
-    uint objectIndex;
-    uint flags;
-    float iblDiffuse;
-    float iblSpecular;
-
-    uint lodLevel;
-    uint shaderGroupIndex;
-    uint meshletOffset;
-    uint meshletCount;
-
-    uint baseVertexOffset;
-    uint boneMatrixOffset;
-    uint boneCount;
-    uint padding3;
-};
-
-// Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)
-struct GPUMeshlet {
-    uint vertexOffset;
-    uint primitiveOffset;
-    uint vertexPrimCount;
-    uint globalVertexOffset;
-    vec4 boundingSphere;
-    vec4 cone;
-};
 
 // Shadow push constants
 layout(push_constant) uniform ShadowPushConstants {
@@ -213,6 +179,9 @@ void main() {
 #type MESH
 #version 460 core
 #extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/gpu_types.glsl"
 
 const uint MESHLET_MAX_VERTICES = 64;
 const uint MESHLET_MAX_PRIMITIVES = 124;
@@ -221,43 +190,6 @@ layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 64, max_primitives = 124) out;
 
 // No fragment outputs needed for depth-only pass
-
-// Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
-struct PerDrawData {
-    mat4 modelMatrix;
-    mat4 normalMatrix;
-
-    vec4 albedo;
-    vec4 materialParams;
-
-    uvec4 textureIndices0;
-    uvec4 textureIndices1;
-
-    uint objectIndex;
-    uint flags;
-    float iblDiffuse;
-    float iblSpecular;
-
-    uint lodLevel;
-    uint shaderGroupIndex;
-    uint meshletOffset;
-    uint meshletCount;
-
-    uint baseVertexOffset;
-    uint boneMatrixOffset;
-    uint boneCount;
-    uint padding3;
-};
-
-// Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)
-struct GPUMeshlet {
-    uint vertexOffset;
-    uint primitiveOffset;
-    uint vertexPrimCount;
-    uint globalVertexOffset;
-    vec4 boundingSphere;
-    vec4 cone;
-};
 
 // Shadow push constants
 layout(push_constant) uniform ShadowPushConstants {
@@ -311,11 +243,6 @@ uvec3 unpackPrimitive(uint packed) {
         (packed >> 8) & 0xFFu,
         (packed >> 16) & 0xFFu
     );
-}
-
-void unpackMeshletCounts(uint packed, out uint vertexCount, out uint primitiveCount) {
-    vertexCount = packed & 0xFFu;
-    primitiveCount = (packed >> 8) & 0xFFu;
 }
 
 void main() {

@@ -484,13 +484,15 @@ namespace render::shadow
 
     float ShadowAtlasManager::getAtlasUtilization() const
     {
-        uint32_t usedPixels = 0;
+        // Use uint64_t to prevent overflow with large atlases (e.g., 8192x8192 = 67M pixels)
+        uint64_t usedPixels = 0;
         for (const auto& tile : tiles)
         {
             if (tile.allocated)
-                usedPixels += tile.width * tile.height;
+                usedPixels += static_cast<uint64_t>(tile.width) * tile.height;
         }
-        return static_cast<float>(usedPixels) / static_cast<float>(atlasWidth * atlasHeight);
+        const uint64_t totalPixels = static_cast<uint64_t>(atlasWidth) * atlasHeight;
+        return static_cast<float>(usedPixels) / static_cast<float>(totalPixels);
     }
 
     int32_t ShadowAtlasManager::findFreeTileSlot(uint32_t width, uint32_t height) const

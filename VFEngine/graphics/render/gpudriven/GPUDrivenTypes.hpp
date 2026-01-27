@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
+#include <cstddef>
 #include <string>
 #include "MeshletBufferTypes.hpp"
 
@@ -163,6 +164,25 @@ namespace render::gpudriven
         uint32_t padding2; // 4 bytes
         // Total: 432 bytes
     };
+
+    static_assert(sizeof(GPUCameraData) == 432, "GPUCameraData must be 432 bytes to match GLSL");
+    static_assert(offsetof(GPUCameraData, view) == 0, "GPUCameraData::view offset mismatch");
+    static_assert(offsetof(GPUCameraData, projection) == 64, "GPUCameraData::projection offset mismatch");
+    static_assert(offsetof(GPUCameraData, viewProjection) == 128, "GPUCameraData::viewProjection offset mismatch");
+    static_assert(offsetof(GPUCameraData, invViewProjection) == 192, "GPUCameraData::invViewProjection offset mismatch");
+    static_assert(offsetof(GPUCameraData, cameraPosition) == 256, "GPUCameraData::cameraPosition offset mismatch");
+    static_assert(offsetof(GPUCameraData, screenParams) == 272, "GPUCameraData::screenParams offset mismatch");
+    static_assert(offsetof(GPUCameraData, frustumPlanes) == 288, "GPUCameraData::frustumPlanes offset mismatch");
+    static_assert(offsetof(GPUCameraData, farPlane) == 384, "GPUCameraData::farPlane offset mismatch");
+    static_assert(offsetof(GPUCameraData, objectCount) == 388, "GPUCameraData::objectCount offset mismatch");
+    static_assert(offsetof(GPUCameraData, hiZMipLevels) == 392, "GPUCameraData::hiZMipLevels offset mismatch");
+    static_assert(offsetof(GPUCameraData, frameIndex) == 396, "GPUCameraData::frameIndex offset mismatch");
+    static_assert(offsetof(GPUCameraData, enableFrustumCulling) == 400, "GPUCameraData::enableFrustumCulling offset mismatch");
+    static_assert(offsetof(GPUCameraData, enableOcclusionCulling) == 404, "GPUCameraData::enableOcclusionCulling offset mismatch");
+    static_assert(offsetof(GPUCameraData, enableLODSelection) == 408, "GPUCameraData::enableLODSelection offset mismatch");
+    static_assert(offsetof(GPUCameraData, batchCount) == 412, "GPUCameraData::batchCount offset mismatch");
+    static_assert(offsetof(GPUCameraData, commandsPerBatch) == 416, "GPUCameraData::commandsPerBatch offset mismatch");
+    static_assert(offsetof(GPUCameraData, shaderGroupCount) == 420, "GPUCameraData::shaderGroupCount offset mismatch");
 
     // Submesh location in merged buffer (CPU-side tracking)
     struct SubmeshLocation

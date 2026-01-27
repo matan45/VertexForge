@@ -7,6 +7,7 @@
 #include "resource/Types.hpp"
 #include "material/MaterialTypes.hpp"
 #include <array>
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 
@@ -221,6 +222,8 @@ namespace render::mesh
         glm::vec4 color; // 16 bytes - Wireframe color
     };
 
+    // Camera uniform buffer object - must match CameraData in GLSL shaders
+    // (task_gpudriven.glsl, mesh_shader_gpudriven.glsl)
     struct CameraUBO
     {
         alignas(16) glm::mat4 view;
@@ -230,7 +233,13 @@ namespace render::mesh
         alignas(16) glm::vec4 frustumPlanes[6]; // Frustum planes for per-meshlet culling
     };
 
-    
+    static_assert(sizeof(CameraUBO) == 240, "CameraUBO must be 240 bytes to match GLSL CameraData");
+    static_assert(offsetof(CameraUBO, view) == 0, "CameraUBO::view offset mismatch");
+    static_assert(offsetof(CameraUBO, projection) == 64, "CameraUBO::projection offset mismatch");
+    static_assert(offsetof(CameraUBO, cameraPos) == 128, "CameraUBO::cameraPos offset mismatch");
+    static_assert(offsetof(CameraUBO, time) == 140, "CameraUBO::time offset mismatch");
+    static_assert(offsetof(CameraUBO, frustumPlanes) == 144, "CameraUBO::frustumPlanes offset mismatch");
+
     struct MeshPushConstants
     {
         glm::mat4 model;    // 64 bytes

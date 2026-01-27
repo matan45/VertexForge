@@ -1,6 +1,10 @@
 #type MESH
 #version 460 core
 #extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/gpu_types.glsl"
+#include "../common/camera_types.glsl"
 
 const uint MESHLET_MAX_VERTICES = 64;
 const uint MESHLET_MAX_PRIMITIVES = 124;
@@ -13,52 +17,6 @@ layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragDrawIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
-
-// Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
-struct PerDrawData {
-    mat4 modelMatrix;
-    mat4 normalMatrix;
-
-    vec4 albedo;
-    vec4 materialParams;
-
-    uvec4 textureIndices0;
-    uvec4 textureIndices1;
-
-    uint objectIndex;
-    uint flags;
-    float iblDiffuse;
-    float iblSpecular;
-
-    uint lodLevel;
-    uint shaderGroupIndex;
-    uint meshletOffset;
-    uint meshletCount;
-
-    uint baseVertexOffset;
-    uint boneMatrixOffset; // 0xFFFFFFFF if static mesh
-    uint boneCount;
-    uint padding3;
-};
-
-// Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)
-struct GPUMeshlet {
-    uint vertexOffset;
-    uint primitiveOffset;
-    uint vertexPrimCount;
-    uint globalVertexOffset;
-    vec4 boundingSphere;
-    vec4 cone;
-};
-
-// Must match CameraUBO in MeshTypes.hpp
-struct CameraData {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float time;
-    vec4 frustumPlanes[6];
-};
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -116,11 +74,6 @@ uvec3 unpackPrimitive(uint packed) {
         (packed >> 8) & 0xFFu,
         (packed >> 16) & 0xFFu
     );
-}
-
-void unpackMeshletCounts(uint packed, out uint vertexCount, out uint primitiveCount) {
-    vertexCount = packed & 0xFFu;
-    primitiveCount = (packed >> 8) & 0xFFu;
 }
 
 void main() {
@@ -236,6 +189,10 @@ void main() {
 #type FRAGMENT
 #version 460 core
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/gpu_types.glsl"
+#include "../common/camera_types.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -245,15 +202,6 @@ layout(location = 4) in flat uint fragMeshletIndex;
 
 layout(location = 0) out vec4 outColor;
 
-// Must match CameraUBO in MeshTypes.hpp
-struct CameraData {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float time;
-    vec4 frustumPlanes[6];
-};
-
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
 };
@@ -261,33 +209,6 @@ layout(set = 0, binding = 0) uniform CameraUBO {
 layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
-
-// Must match PerDrawData in GPUDrivenTypes.hpp
-struct PerDrawData {
-    mat4 modelMatrix;
-    mat4 normalMatrix;
-
-    vec4 albedo;
-    vec4 materialParams;
-
-    uvec4 textureIndices0;
-    uvec4 textureIndices1;
-
-    uint objectIndex;
-    uint flags;
-    float iblDiffuse;
-    float iblSpecular;
-
-    uint lodLevel;
-    uint shaderGroupIndex;
-    uint meshletOffset;
-    uint meshletCount;
-
-    uint baseVertexOffset;
-    uint boneMatrixOffset; // 0xFFFFFFFF if static mesh
-    uint boneCount;
-    uint padding3;
-};
 
 layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];

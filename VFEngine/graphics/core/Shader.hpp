@@ -3,10 +3,27 @@
 #include <vulkan/vulkan.hpp>
 #include <shaderc/shaderc.hpp>
 #include <string>
+#include <filesystem>
 #include "resource/ResourceManager.hpp"
 
 namespace core {
 	class Device;
+
+	// Custom shader includer for resolving #include directives
+	class ShaderIncluder : public shaderc::CompileOptions::IncluderInterface {
+	public:
+		explicit ShaderIncluder(const std::filesystem::path& basePath);
+
+		shaderc_include_result* GetInclude(const char* requestedSource,
+		                                   shaderc_include_type type,
+		                                   const char* requestingSource,
+		                                   size_t includeDepth) override;
+
+		void ReleaseInclude(shaderc_include_result* data) override;
+
+	private:
+		std::filesystem::path basePath;
+	};
 
 	class Shader
 	{
@@ -15,6 +32,7 @@ namespace core {
 		std::vector<vk::UniqueShaderModule> shaderModules;
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		std::string lastCompilationError;
+		std::filesystem::path currentShaderBasePath;  // Base path for resolving includes
 
 	public:
 		explicit Shader(Device& device);

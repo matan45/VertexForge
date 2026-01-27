@@ -3,8 +3,105 @@
 #include "print/Logger.hpp"
 #include "print/EditorLogger.hpp"
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 
 namespace core {
+
+	// ============================================
+	// ShaderIncluder Implementation
+	// ============================================
+
+	ShaderIncluder::ShaderIncluder(const std::filesystem::path& basePath)
+		: basePath(basePath)
+	{
+	}
+
+	shaderc_include_result* ShaderIncluder::GetInclude(const char* requestedSource,
+	                                                    shaderc_include_type type,
+	                                                    const char* requestingSource,
+	                                                    size_t includeDepth)
+	{
+		// Resolve the include path relative to the base path
+		std::filesystem::path includePath;
+		if (type == shaderc_include_type_relative) {
+			// Relative include: resolve from requesting source's directory
+			std::filesystem::path requestingDir = std::filesystem::path(requestingSource).parent_path();
+			if (requestingDir.empty()) {
+				requestingDir = basePath;
+			} else if (!requestingDir.is_absolute()) {
+				requestingDir = basePath / requestingDir;
+			}
+			includePath = requestingDir / requestedSource;
+		} else {
+			// Standard include: resolve from base path
+			includePath = basePath / requestedSource;
+		}
+
+		// Normalize the path
+		includePath = std::filesystem::weakly_canonical(includePath);
+
+		// Read the file
+		std::ifstream file(includePath);
+		if (!file.is_open()) {
+			// Return error result
+			auto* result = new shaderc_include_result;
+			result->source_name = "";
+			result->source_name_length = 0;
+
+			std::string* errorMsg = new std::string("Failed to open include file: " + includePath.string());
+			result->content = errorMsg->c_str();
+			result->content_length = errorMsg->size();
+			result->user_data = errorMsg;
+			return result;
+		}
+
+		std::stringstream buffer;
+		buffer << file.rdbuf();
+
+		// Allocate result
+		auto* result = new shaderc_include_result;
+
+		// Store the resolved path as the source name
+		std::string* sourceName = new std::string(includePath.string());
+		result->source_name = sourceName->c_str();
+		result->source_name_length = sourceName->size();
+
+		// Store the content
+		std::string* content = new std::string(buffer.str());
+		result->content = content->c_str();
+		result->content_length = content->size();
+
+		// Store both strings for cleanup
+		auto* userData = new std::pair<std::string*, std::string*>(sourceName, content);
+		result->user_data = userData;
+
+		return result;
+	}
+
+	void ShaderIncluder::ReleaseInclude(shaderc_include_result* data)
+	{
+		if (data) {
+			if (data->user_data) {
+				// Check if it's a pair (success case) or single string (error case)
+				if (data->source_name_length > 0) {
+					auto* userData = static_cast<std::pair<std::string*, std::string*>*>(data->user_data);
+					delete userData->first;  // source_name
+					delete userData->second; // content
+					delete userData;
+				} else {
+					// Error case: user_data is just the error message
+					delete static_cast<std::string*>(data->user_data);
+				}
+			}
+			delete data;
+		}
+	}
+
+	// ============================================
+	// Shader Implementation
+	// ============================================
+
 	Shader::Shader(Device& device) :device{ device }
 	{
 
@@ -14,6 +111,12 @@ namespace core {
 	{
 		auto futureShaders = resource::ResourceManager::loadShaderAsync(path);
 		std::string shaderName = std::filesystem::path(path).stem().string();
+
+		// Store the base path for include resolution
+		currentShaderBasePath = std::filesystem::path(path).parent_path();
+		if (currentShaderBasePath.empty()) {
+			currentShaderBasePath = ".";
+		}
 
 		auto shaders = futureShaders.get();
 		if (!shaders) {
@@ -58,6 +161,11 @@ namespace core {
 		shaderc::CompileOptions options;
 		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
 		options.SetOptimizationLevel(shaderc_optimization_level_performance);
+
+		// Set up custom includer for #include directive support
+		if (!currentShaderBasePath.empty()) {
+			options.SetIncluder(std::make_unique<ShaderIncluder>(currentShaderBasePath));
+		}
 
 		// Compile GLSL to SPIR-V
 		shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(source.data(), kind, shaderName.data(), options);
@@ -121,6 +229,11 @@ namespace core {
 
 	bool Shader::compileFromSource(std::string_view source, std::string_view shaderName)
 	{
+		// Set default base path for includes (current directory)
+		if (currentShaderBasePath.empty()) {
+			currentShaderBasePath = ".";
+		}
+
 		// Parse the source to find #type directives
 		auto shaders = parseShaderSource(source);
 		if (shaders.empty()) {
