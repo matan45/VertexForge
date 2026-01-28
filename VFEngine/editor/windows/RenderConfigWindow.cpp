@@ -110,13 +110,29 @@ namespace windows
                 ImGui::Text("Bias Settings");
                 ImGui::Spacing();
 
-                if (ImGui::DragFloat("Shadow Bias", &settings.shadows.shadowBias, 0.0001f, 0.0f, 0.1f, "%.4f"))
+                if (ImGui::DragFloat("Depth Bias", &settings.shadows.shadowBias, 0.0001f, 0.0f, 0.1f, "%.4f"))
                 {
                     isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Constant depth offset to reduce shadow acne.");
+                }
+                if (ImGui::DragFloat("Slope Bias", &settings.shadows.slopeBias, 0.01f, 0.0f, 5.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Slope-scaled bias for surfaces at grazing angles.\nHigher values reduce shadow acne on angled surfaces.");
                 }
                 if (ImGui::DragFloat("Normal Bias", &settings.shadows.normalBias, 0.001f, 0.0f, 1.0f, "%.3f"))
                 {
                     isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Offset along surface normal to reduce peter-panning.\nHigher values push shadows away from caster.");
                 }
 
                 ImGui::Separator();

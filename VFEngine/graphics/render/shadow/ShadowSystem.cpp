@@ -469,6 +469,11 @@ namespace render::shadow
                     view.farPlane = farPlane;
                     view.lightPosition = glm::vec4(lightPosition, 1.0f);
                     view.handle.layer = face;
+
+                    // Update bias values from settings
+                    view.depthBias = data.settings.depthBias;
+                    view.slopeBias = data.settings.slopeBias;
+                    view.normalBias = data.settings.normalBias;
                 }
             }
 
@@ -516,6 +521,11 @@ namespace render::shadow
                     view.farPlane = range;
                     view.lightPosition = glm::vec4(lightPosition, 1.0f);
                     view.lightDirection = glm::vec4(lightDirection, 0.0f);
+
+                    // Update bias values from settings
+                    view.depthBias = data.settings.depthBias;
+                    view.slopeBias = data.settings.slopeBias;
+                    view.normalBias = data.settings.normalBias;
                 }
             }
 
@@ -575,6 +585,11 @@ namespace render::shadow
                     view.farPlane = cascadeFar;
                     view.lightDirection = glm::vec4(lightDirection, 0.0f);
                     view.handle.cascadeIndex = static_cast<uint16_t>(i);
+
+                    // Update bias values from settings
+                    view.depthBias = data.settings.depthBias;
+                    view.slopeBias = data.settings.slopeBias;
+                    view.normalBias = data.settings.normalBias;
                 }
             }
         }
@@ -812,6 +827,7 @@ namespace render::shadow
         // Update enabled state, global bias, and cascade settings
         setShadowsEnabled(shadowSettings.enabled);
         globalDepthBias = shadowSettings.shadowBias;
+        globalSlopeBias = shadowSettings.slopeBias;
         globalNormalBias = shadowSettings.normalBias;
         globalCascadeCount = shadowSettings.cascadeCount;
         globalCascadeSplitMode = shadowSettings.cascadeSplitMode;
@@ -902,8 +918,11 @@ namespace render::shadow
                     break;
                 }
 
-                // Update cascade count from render settings
+                // Update cascade count and bias settings from render settings
                 newSettings.cascadeCount = shadowSettings.cascadeCount;
+                newSettings.depthBias = shadowSettings.shadowBias;
+                newSettings.slopeBias = shadowSettings.slopeBias;
+                newSettings.normalBias = shadowSettings.normalBias;
 
                 if (registerLight(info.entityId, info.type, newSettings))
                 {
@@ -940,6 +959,7 @@ namespace render::shadow
             {
                 // Update bias settings
                 data.settings.depthBias = shadowSettings.shadowBias;
+                data.settings.slopeBias = shadowSettings.slopeBias;
                 data.settings.normalBias = shadowSettings.normalBias;
 
                 // Update cascade count if changed (requires reallocation for CSM)

@@ -1020,6 +1020,7 @@ namespace serialization
             {"cascadeCount", settings.shadows.cascadeCount},
             {"cascadeSplitMode", cascadeSplitModeToString(settings.shadows.cascadeSplitMode)},
             {"shadowBias", settings.shadows.shadowBias},
+            {"slopeBias", settings.shadows.slopeBias},
             {"normalBias", settings.shadows.normalBias},
             {"shadowIntensity", settings.shadows.shadowIntensity}
         };
@@ -1045,6 +1046,8 @@ namespace serialization
                 settings.shadows.cascadeSplitMode = stringToCascadeSplitMode(shadows["cascadeSplitMode"].get<std::string>());
             if (shadows.contains("shadowBias") && shadows["shadowBias"].is_number())
                 settings.shadows.shadowBias = shadows["shadowBias"].get<float>();
+            if (shadows.contains("slopeBias") && shadows["slopeBias"].is_number())
+                settings.shadows.slopeBias = shadows["slopeBias"].get<float>();
             if (shadows.contains("normalBias") && shadows["normalBias"].is_number())
                 settings.shadows.normalBias = shadows["normalBias"].get<float>();
             if (shadows.contains("shadowIntensity") && shadows["shadowIntensity"].is_number())

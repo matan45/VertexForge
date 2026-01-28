@@ -54,6 +54,7 @@ namespace render
             uint8_t globalPcfKernel = 1;
             bool globalSoftShadowsEnabled = true;
             float globalDepthBias = 0.005f;
+            float globalSlopeBias = 1.5f;
             float globalNormalBias = 0.02f;
             uint8_t globalCascadeCount = 4;
             types::CascadeSplitMode globalCascadeSplitMode = types::CascadeSplitMode::Practical;
@@ -121,6 +122,7 @@ namespace render
             [[nodiscard]] ShadowQuality getGlobalQuality() const { return globalQuality; }
 
             [[nodiscard]] float getGlobalDepthBias() const { return globalDepthBias; }
+            [[nodiscard]] float getGlobalSlopeBias() const { return globalSlopeBias; }
             [[nodiscard]] float getGlobalNormalBias() const { return globalNormalBias; }
             [[nodiscard]] uint8_t getGlobalCascadeCount() const { return globalCascadeCount; }
 

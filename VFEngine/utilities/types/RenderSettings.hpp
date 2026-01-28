@@ -86,6 +86,7 @@ namespace types
 
         // Bias
         float shadowBias = 0.005f;
+        float slopeBias = 1.5f;
         float normalBias = 0.02f;
 
         // PCF

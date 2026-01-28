@@ -408,13 +408,16 @@ float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float co
 // ============================================
 
 // Spot light shadow (2D atlas with PCF 3x3)
-float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
+float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (shadowIndex < 0) return 1.0;
 
     ShadowData sd = shadowData[shadowIndex];
 
+    // Apply normal bias - offset position along normal to reduce peter-panning
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+
     // Transform world position to light space
-    vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
+    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
     // Transform XY from NDC [-1,1] to texture coords [0,1]
@@ -424,9 +427,8 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
     // Apply atlas viewport transformation
     projCoords.xy = sd.atlasViewport.xy + projCoords.xy * sd.atlasViewport.zw;
 
-    // Apply depth bias
-    float bias = sd.biasParams.x;
-    projCoords.z -= bias;
+    // Depth bias is applied during shadow map rendering via cmd.setDepthBias()
+    // No additional bias needed here - double-bias causes peter-panning
 
     // Out of shadow map bounds check
     if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
@@ -462,11 +464,14 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
 
 // Helper function to sample a single cascade with PCF filtering
 // Used by sampleDirectionalShadow for cascade blending
-float sampleCascadeShadow(int shadowIndex, vec3 worldPos) {
+float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     ShadowData sd = shadowData[shadowIndex];
 
+    // Apply normal bias - offset position along normal to reduce peter-panning
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+
     // Transform world position to light space
-    vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
+    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
 
     // Safety check for orthographic projection (w should be 1.0)
     if (lightSpacePos.w <= 0.0) return 1.0;
@@ -483,8 +488,9 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos) {
     // Apply atlas viewport transformation (each cascade is a tile in the atlas)
     projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
 
-    // Apply depth bias (varies per cascade)
-    projCoords.z = clamp(projCoords.z - sd.biasParams.x, 0.0, 1.0);
+    // Depth bias is applied during shadow map rendering via cmd.setDepthBias()
+    // No additional bias needed here - double-bias causes peter-panning
+    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;
@@ -514,7 +520,7 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos) {
 
 // Directional light shadow (CSM with cascade selection and blending)
 // Features: cascade blending for smooth transitions, distance fade
-float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
+float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
     if (baseShadowIndex < 0) return 1.0;  // No shadow data - fully lit
 
     // Read cascade count from first cascade's rangeParams.z
@@ -536,12 +542,12 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
     float cascadeFar = shadowData[shadowIndex].rangeParams.y;
 
     // Sample current cascade
-    float shadow = sampleCascadeShadow(shadowIndex, worldPos);
+    float shadow = sampleCascadeShadow(shadowIndex, worldPos, worldNormal);
 
     // Blend with next cascade in transition zone (last 10% of cascade range)
     float blendZoneStart = cascadeFar * 0.9;
     if (viewZ > blendZoneStart && cascadeIdx < cascadeCount - 1) {
-        float nextShadow = sampleCascadeShadow(shadowIndex + 1, worldPos);
+        float nextShadow = sampleCascadeShadow(shadowIndex + 1, worldPos, worldNormal);
         float blendFactor = smoothstep(blendZoneStart, cascadeFar, viewZ);
         shadow = mix(shadow, nextShadow, blendFactor);
     }
@@ -555,7 +561,7 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
 }
 
 // Point light shadow (cube map sampling with optional PCF)
-float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lightRadius) {
+float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 lightPos, float lightRadius) {
     if (shadowIndex < 0) return 1.0;
 
     ShadowData sd = shadowData[shadowIndex];
@@ -564,8 +570,11 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lig
     int cubeMapIndex = int(sd.pcfParams.w);
     if (cubeMapIndex < 0) return 1.0;
 
+    // Apply normal bias - offset position along normal to reduce peter-panning
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+
     // Direction from light to fragment (used to sample cube map)
-    vec3 lightToFrag = worldPos - lightPos;
+    vec3 lightToFrag = biasedPos - lightPos;
     float linearDepth = length(lightToFrag);  // Linear distance from light
     vec3 sampleDir = normalize(lightToFrag);
 
@@ -582,8 +591,8 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lig
     // The cube map stores perspective depth: depth = (far * (z - near)) / (z * (far - near))
     float perspectiveDepth = (far * (viewSpaceZ - near)) / (viewSpaceZ * (far - near));
 
-    // Apply depth bias
-    perspectiveDepth -= sd.biasParams.x;
+    // Depth bias is applied during shadow map rendering via cmd.setDepthBias()
+    // No additional bias needed here - double-bias causes peter-panning
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;
@@ -883,7 +892,7 @@ void main() {
         for (uint i = 0u; i < clusterPointCount; ++i) {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
-            float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, light.position, light.radius);
+            float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N, light.position, light.radius);
             minShadow = min(minShadow, shadow);
             directLighting += evaluatePointLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
         }
@@ -893,7 +902,7 @@ void main() {
             uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
             uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
             SpotLight light = spotLights[lightIdx];
-            float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos);
+            float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
             minShadow = min(minShadow, shadow);
             directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo, metallic, roughness, F0, light) * shadow;
         }
@@ -902,7 +911,7 @@ void main() {
     // Directional lights with shadow (CSM)
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
-        float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, linearZ);
+        float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
         minShadow = min(minShadow, shadow);
         directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
     }
@@ -1026,7 +1035,7 @@ void main() {
         // Directional light shadows (CSM)
         for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
             DirectionalLight light = directionalLights[i];
-            float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, linearZ);
+            float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
             totalShadow = min(totalShadow, shadow);
         }
 
@@ -1043,7 +1052,7 @@ void main() {
                 uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
                 PointLight light = pointLights[lightIdx];
                 if (light.shadowIndex >= 0) {
-                    float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, light.position, light.radius);
+                    float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N, light.position, light.radius);
                     totalShadow = min(totalShadow, shadow);
                 }
             }
@@ -1053,7 +1062,7 @@ void main() {
                 uint lightIdx = packedIdx & LIGHT_INDEX_MASK;
                 SpotLight light = spotLights[lightIdx];
                 if (light.shadowIndex >= 0) {
-                    float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos);
+                    float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
                     totalShadow = min(totalShadow, shadow);
                 }
             }
