@@ -3,7 +3,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/Utilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
-#include <spdlog/spdlog.h>
+#include "print/Logger.hpp"
 
 namespace render::shadow
 {
@@ -21,16 +21,14 @@ namespace render::shadow
     {
         if (initialized)
         {
-            spdlog::warn("ShadowResourcePool::init() called when already initialized");
+            loggerWarning("ShadowResourcePool::init() called when already initialized");
             return;
         }
 
         createSamplers();
-        createDescriptorLayouts();
         createPlaceholderResources();
 
         initialized = true;
-        spdlog::info("ShadowResourcePool initialized");
     }
 
     void ShadowResourcePool::cleanup()
@@ -41,39 +39,18 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         logicalDevice.waitIdle();
 
-        // Free all resources
         freeAll();
-
-        // Cleanup placeholders
         cleanupPlaceholders();
-
-        // Cleanup descriptors
-        cleanupDescriptors();
-
-        // Cleanup samplers
         cleanupSamplers();
 
         initialized = false;
-        spdlog::info("ShadowResourcePool cleaned up");
-    }
-
-    void ShadowResourcePool::recreate()
-    {
-        // Store existing allocations info for potential re-creation
-        // (Currently just cleanup and reinit)
-        cleanup();
-        init();
     }
 
     void ShadowResourcePool::createSamplers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
-
-        standardSampler = ShadowSamplers::createStandardSampler(logicalDevice);
         comparisonSampler = ShadowSamplers::createComparisonSampler(logicalDevice);
         cubeComparisonSampler = ShadowSamplers::createCubeComparisonSampler(logicalDevice);
-
-        spdlog::debug("ShadowResourcePool: Created samplers");
     }
 
     void ShadowResourcePool::cleanupSamplers()
@@ -90,69 +67,6 @@ namespace render::shadow
             logicalDevice.destroySampler(comparisonSampler);
             comparisonSampler = nullptr;
         }
-        if (standardSampler)
-        {
-            logicalDevice.destroySampler(standardSampler);
-            standardSampler = nullptr;
-        }
-    }
-
-    void ShadowResourcePool::createDescriptorLayouts()
-    {
-        const auto& logicalDevice = device.getLogicalDevice();
-
-        // Layout for depth arrays (CSM)
-        // Binding 0: sampler2DArrayShadow
-        {
-            vk::DescriptorSetLayoutBinding binding{};
-            binding.binding = 0;
-            binding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            binding.descriptorCount = 1;
-            binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = 1;
-            layoutInfo.pBindings = &binding;
-
-            arrayDescriptorLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
-        }
-
-        // Layout for cube maps (point lights)
-        // Binding 0: samplerCubeShadow
-        {
-            vk::DescriptorSetLayoutBinding binding{};
-            binding.binding = 0;
-            binding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            binding.descriptorCount = 1;
-            binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = 1;
-            layoutInfo.pBindings = &binding;
-
-            cubeDescriptorLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
-        }
-
-        spdlog::debug("ShadowResourcePool: Created descriptor layouts");
-    }
-
-    void ShadowResourcePool::cleanupDescriptors()
-    {
-        const auto& logicalDevice = device.getLogicalDevice();
-
-        // Note: We only provide layouts. Descriptor sets are allocated by the
-        // rendering code (e.g., ShadowSystem or forward shading pipeline) using
-        // their own pools for proper lifetime management.
-        if (cubeDescriptorLayout)
-        {
-            logicalDevice.destroyDescriptorSetLayout(cubeDescriptorLayout);
-            cubeDescriptorLayout = nullptr;
-        }
-        if (arrayDescriptorLayout)
-        {
-            logicalDevice.destroyDescriptorSetLayout(arrayDescriptorLayout);
-            arrayDescriptorLayout = nullptr;
-        }
     }
 
     ShadowResourceHandle ShadowResourcePool::allocateArray(uint32_t width, uint32_t height, uint32_t layers)
@@ -161,26 +75,20 @@ namespace render::shadow
         handle.resourceType = ShadowResourceType::Array;
         handle.layerOrFace = 0;
 
-        // Create new depth array
         auto depthArray = std::make_unique<ShadowDepthArray>(device);
         depthArray->init(width, height, layers);
 
-        // Try to reuse a freed index first
         uint32_t index;
         if (!freeArrayIndices.empty())
         {
             index = freeArrayIndices.back();
             freeArrayIndices.pop_back();
-
-            // Reuse existing slot
             depthArrays[index].resource = std::move(depthArray);
             depthArrays[index].allocated = true;
         }
         else
         {
-            // Allocate new slot
             index = static_cast<uint32_t>(depthArrays.size());
-
             ArrayEntry entry;
             entry.resource = std::move(depthArray);
             entry.allocated = true;
@@ -188,10 +96,6 @@ namespace render::shadow
         }
 
         handle.resourceIndex = index;
-
-        spdlog::debug("ShadowResourcePool: Allocated depth array {} ({}x{} x {} layers)",
-                      index, width, height, layers);
-
         return handle;
     }
 
@@ -201,26 +105,20 @@ namespace render::shadow
         handle.resourceType = ShadowResourceType::Cube;
         handle.layerOrFace = 0;
 
-        // Create new cube map
         auto cubeMap = std::make_unique<ShadowCubeMap>(device);
         cubeMap->init(size);
 
-        // Try to reuse a freed index first
         uint32_t index;
         if (!freeCubeIndices.empty())
         {
             index = freeCubeIndices.back();
             freeCubeIndices.pop_back();
-
-            // Reuse existing slot
             cubeMaps[index].resource = std::move(cubeMap);
             cubeMaps[index].allocated = true;
         }
         else
         {
-            // Allocate new slot
             index = static_cast<uint32_t>(cubeMaps.size());
-
             CubeEntry entry;
             entry.resource = std::move(cubeMap);
             entry.allocated = true;
@@ -228,10 +126,6 @@ namespace render::shadow
         }
 
         handle.resourceIndex = index;
-
-        spdlog::debug("ShadowResourcePool: Allocated cube map {} ({}x{} x 6 faces)",
-                      index, size, size);
-
         return handle;
     }
 
@@ -246,10 +140,7 @@ namespace render::shadow
             {
                 if (deletionQueue)
                 {
-                    // Extract resources and queue for deferred deletion
                     auto extracted = depthArrays[handle.resourceIndex].resource->extractResources();
-
-                    // Queue the image and memory
                     std::vector<vk::ImageView> views;
                     views.reserve(extracted.layerViews.size() + 1);
                     if (extracted.arrayView)
@@ -259,21 +150,15 @@ namespace render::shadow
                         if (view)
                             views.push_back(view);
                     }
-
                     deletionQueue->queueImage(extracted.image, extracted.memory, views);
-                    spdlog::debug("ShadowResourcePool: Queued depth array {} for deferred deletion", handle.resourceIndex);
                 }
                 else
                 {
-                    // Fallback to immediate cleanup (caller must ensure GPU synchronization)
                     depthArrays[handle.resourceIndex].resource->cleanup();
-                    spdlog::debug("ShadowResourcePool: Freed depth array {} (immediate)", handle.resourceIndex);
                 }
 
                 depthArrays[handle.resourceIndex].resource.reset();
                 depthArrays[handle.resourceIndex].allocated = false;
-
-                // Add index to free list for recycling
                 freeArrayIndices.push_back(handle.resourceIndex);
             }
         }
@@ -283,10 +168,7 @@ namespace render::shadow
             {
                 if (deletionQueue)
                 {
-                    // Extract resources and queue for deferred deletion
                     auto extracted = cubeMaps[handle.resourceIndex].resource->extractResources();
-
-                    // Queue the image and memory
                     std::vector<vk::ImageView> views;
                     views.reserve(extracted.faceViews.size() + 1);
                     if (extracted.cubeView)
@@ -296,29 +178,21 @@ namespace render::shadow
                         if (view)
                             views.push_back(view);
                     }
-
                     deletionQueue->queueImage(extracted.image, extracted.memory, views);
 
-                    // Queue cached framebuffers for deferred deletion
                     for (auto fb : extracted.framebuffers)
                     {
                         if (fb)
                             deletionQueue->queueFramebuffer(fb);
                     }
-
-                    spdlog::debug("ShadowResourcePool: Queued cube map {} for deferred deletion", handle.resourceIndex);
                 }
                 else
                 {
-                    // Fallback to immediate cleanup (caller must ensure GPU synchronization)
                     cubeMaps[handle.resourceIndex].resource->cleanup();
-                    spdlog::debug("ShadowResourcePool: Freed cube map {} (immediate)", handle.resourceIndex);
                 }
 
                 cubeMaps[handle.resourceIndex].resource.reset();
                 cubeMaps[handle.resourceIndex].allocated = false;
-
-                // Add index to free list for recycling
                 freeCubeIndices.push_back(handle.resourceIndex);
             }
         }
@@ -354,8 +228,6 @@ namespace render::shadow
         }
         cubeMaps.clear();
         freeCubeIndices.clear();
-
-        spdlog::debug("ShadowResourcePool: Freed all resources");
     }
 
     ShadowDepthArray* ShadowResourcePool::getArray(const ShadowResourceHandle& handle)
@@ -442,19 +314,15 @@ namespace render::shadow
 
     void ShadowResourcePool::createPlaceholderResources()
     {
-        // Create a 1x1x1 placeholder depth array for binding when no CSM lights exist
         placeholderArray = std::make_unique<ShadowDepthArray>(device);
         placeholderArray->init(1, 1, 1);
 
-        // Create a 1x1 placeholder cube map for binding when no point light shadows exist
         placeholderCube = std::make_unique<ShadowCubeMap>(device);
         placeholderCube->init(1);
 
-        // Transition both placeholders to shader-read-optimal layout using a one-time command buffer
         const auto& logicalDevice = device.getLogicalDevice();
         auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
 
-        // Transition placeholder array from undefined to shader read optimal
         vk::ImageMemoryBarrier barrier{};
         barrier.srcAccessMask = {};
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -478,7 +346,6 @@ namespace render::shadow
             1, &barrier
         );
 
-        // Transition placeholder cube from undefined to shader read optimal (6 layers for cube faces)
         vk::ImageMemoryBarrier cubeBarrier{};
         cubeBarrier.srcAccessMask = {};
         cubeBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -491,7 +358,7 @@ namespace render::shadow
         cubeBarrier.subresourceRange.baseMipLevel = 0;
         cubeBarrier.subresourceRange.levelCount = 1;
         cubeBarrier.subresourceRange.baseArrayLayer = 0;
-        cubeBarrier.subresourceRange.layerCount = 6;  // All 6 cube faces
+        cubeBarrier.subresourceRange.layerCount = 6;
 
         cmd->pipelineBarrier(
             vk::PipelineStageFlagBits::eTopOfPipe,
@@ -503,8 +370,6 @@ namespace render::shadow
         );
 
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
-
-        spdlog::debug("ShadowResourcePool: Created placeholder depth array and cube map");
     }
 
     void ShadowResourcePool::cleanupPlaceholders()

@@ -135,7 +135,6 @@ namespace render::mesh
 
     void ShadowDebugRenderer::createPipelines(vk::RenderPass renderPass)
     {
-        // Create frustum pipeline (for cascade boxes and spot frustums)
         {
             core::WireframePipelineConfig config{
                 .device = device.getLogicalDevice(),
@@ -150,8 +149,6 @@ namespace render::mesh
             frustumPipelineLayout = result.pipelineLayout;
         }
 
-        // Create sphere pipeline (for point light radius visualization)
-        // Uses a simpler push constant (MVP + color, 80 bytes)
         {
             struct SpherePushConstants
             {
@@ -175,7 +172,6 @@ namespace render::mesh
 
     void ShadowDebugRenderer::createFrustumBuffers()
     {
-        // Create static vertex buffer with NDC corners
         vk::DeviceSize vertexBufferSize = sizeof(ndcCorners);
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
@@ -193,7 +189,6 @@ namespace render::mesh
             vertexBufferSize
         );
 
-        // Create index buffer
         vk::DeviceSize indexBufferSize = sizeof(frustumIndices);
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
@@ -323,7 +318,6 @@ namespace render::mesh
 
         glm::mat4 editorViewProj = editorProjection * editorView;
 
-        // Render frustums (cascades and spot lights)
         bool hasFrustums = false;
         for (const auto& shadow : shadowDrawList)
         {
@@ -354,7 +348,6 @@ namespace render::mesh
             }
         }
 
-        // Render spheres (point lights)
         bool hasSpheres = false;
         for (const auto& shadow : shadowDrawList)
         {
@@ -404,11 +397,9 @@ namespace render::mesh
                                             const ShadowFrustumRenderData& shadow,
                                             const glm::mat4& editorViewProj) const
     {
-        // Build model matrix: translate to light position, scale by radius
         glm::mat4 model = glm::translate(glm::mat4(1.0f), shadow.lightPosition);
         model = glm::scale(model, glm::vec3(shadow.radius));
 
-        // Sphere shader uses simpler push constants (MVP + color)
         struct SpherePushConstants
         {
             glm::mat4 mvp;

@@ -1,7 +1,6 @@
 #pragma once
 #include "EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
-#include "components/Components.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -44,7 +43,7 @@ namespace services
     struct MeshData
     {
         std::string meshPath;
-        std::string animatorPath;  // Path to .vfAnimator file (optional)
+        std::string animatorPath; // Path to .vfAnimator file (optional)
         bool showBoundingBox = false;
     };
 
@@ -153,14 +152,16 @@ namespace services
     };
 
     // Audio component data structs
-    struct AudioSource2DData {
+    struct AudioSource2DData
+    {
         std::string audioFilePath;
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
     };
 
-    struct AudioSource3DData {
+    struct AudioSource3DData
+    {
         std::string audioFilePath;
         float volume = 1.0f;
         float pitch = 1.0f;
@@ -170,7 +171,8 @@ namespace services
         bool showDebugSpheres = false;
     };
 
-    struct ColliderComponentData {
+    struct ColliderComponentData
+    {
         types::ColliderShape shape = types::ColliderShape::Box;
         glm::vec3 size{1.0f};
         float height = 2.0f;
@@ -182,7 +184,8 @@ namespace services
         float restitution = 0.0f;
     };
 
-    struct RigidBodyComponentData {
+    struct RigidBodyComponentData
+    {
         types::RigidBodyType type = types::RigidBodyType::Dynamic;
         float mass = 1.0f;
         float linearDamping = 0.0f;
@@ -195,26 +198,30 @@ namespace services
         bool freezeRotationZ = false;
     };
 
-    struct VFXData {
-        std::string vfxPath;      // Path to .vfVFX asset file
-        bool autoPlay = true;     // Auto-start when play mode begins
-        bool loop = true;         // Loop the VFX effect
+    struct VFXData
+    {
+        std::string vfxPath; // Path to .vfVFX asset file
+        bool autoPlay = true; // Auto-start when play mode begins
+        bool loop = true; // Loop the VFX effect
     };
 
-    struct DirectionalLightData {
+    struct DirectionalLightData
+    {
         glm::vec3 color{1.0f, 1.0f, 1.0f};
         float intensity = 1.0f;
         bool showGizmo = false;
     };
 
-    struct PointLightData {
+    struct PointLightData
+    {
         glm::vec3 color{1.0f, 1.0f, 1.0f};
         float intensity = 1.0f;
         float radius = 10.0f;
         bool showGizmo = false;
     };
 
-    struct SpotLightData {
+    struct SpotLightData
+    {
         glm::vec3 color{1.0f, 1.0f, 1.0f};
         float intensity = 1.0f;
         float innerAngle = 30.0f;

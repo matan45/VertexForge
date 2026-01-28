@@ -191,7 +191,9 @@
     <ClInclude Include="render\shadow\ShadowAtlasManager.hpp" />
     <ClInclude Include="render\shadow\ShadowCubeMap.hpp" />
     <ClInclude Include="render\shadow\ShadowDepthArray.hpp" />
+    <ClInclude Include="render\shadow\ShadowGPUDataManager.hpp" />
     <ClInclude Include="render\shadow\ShadowPassPipeline.hpp" />
+    <ClInclude Include="render\shadow\ShadowPassRecorder.hpp" />
     <ClInclude Include="render\shadow\ShadowResourcePool.hpp" />
     <ClInclude Include="render\shadow\ShadowSamplers.hpp" />
     <ClInclude Include="render\shadow\ShadowSystem.hpp" />
@@ -297,7 +299,9 @@
     <ClCompile Include="render\shadow\ShadowAtlasManager.cpp" />
     <ClCompile Include="render\shadow\ShadowCubeMap.cpp" />
     <ClCompile Include="render\shadow\ShadowDepthArray.cpp" />
+    <ClCompile Include="render\shadow\ShadowGPUDataManager.cpp" />
     <ClCompile Include="render\shadow\ShadowPassPipeline.cpp" />
+    <ClCompile Include="render\shadow\ShadowPassRecorder.cpp" />
     <ClCompile Include="render\shadow\ShadowResourcePool.cpp" />
     <ClCompile Include="render\shadow\ShadowSamplers.cpp" />
     <ClCompile Include="render\shadow\ShadowSystem.cpp" />
@@ -319,6 +323,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
+    <None Include="..\..\resources\shaders\common\camera_types.glsl" />
+    <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_shader_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\task_gpudriven.glsl" />

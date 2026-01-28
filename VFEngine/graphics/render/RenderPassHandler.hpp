@@ -139,15 +139,11 @@ namespace render
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
 
-        // Forward deferred deletion queue to GPU-driven renderer for shadow resource cleanup
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
 
-        // BVH light culling: set visible lights from frustum query
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();
-
-        // Light occlusion culling: call after GPU work completes to read back results
         void readBackLightOcclusionResults();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
@@ -157,14 +153,12 @@ namespace render
         uint32_t getViewMode() const;
 
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
-        occlusion::CameraRenderData* getCamera(occlusion::CameraId id);
         void removeCamera(occlusion::CameraId id);
         void setActiveCamera(occlusion::CameraId id);
         occlusion::CameraId getActiveCameraId() const;
 
         void initHiZ(occlusion::CameraId cameraId, vk::Image depthImage, vk::ImageView depthView,
                      vk::Format depthFormat);
-        bool isHiZInitialized(occlusion::CameraId cameraId) const;
 
         void updateOcclusionObjects(occlusion::CameraId cameraId, const std::vector<occlusion::GPUObjectData>& objects);
         void updateOcclusionCamera(occlusion::CameraId cameraId, const glm::mat4& viewProj, float nearPlane);

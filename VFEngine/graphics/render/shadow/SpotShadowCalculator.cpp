@@ -24,12 +24,8 @@ namespace render::shadow
         const glm::vec3& lightPosition,
         const glm::vec3& lightDirection)
     {
-        // Compute target point (position + direction)
         glm::vec3 target = lightPosition + lightDirection;
-
-        // Get appropriate up vector
         glm::vec3 up = computeUpVector(lightDirection);
-
         return glm::lookAt(lightPosition, target, up);
     }
 
@@ -38,7 +34,6 @@ namespace render::shadow
         float nearPlane,
         float farPlane)
     {
-        // Ensure valid near/far planes
         if (nearPlane <= 0.0f)
         {
             nearPlane = DEFAULT_NEAR_PLANE;
@@ -48,30 +43,19 @@ namespace render::shadow
             farPlane = nearPlane + 1.0f;
         }
 
-        // Clamp outer angle to reasonable range
-        if (outerAngleDegrees <= 0.0f)
-        {
-            outerAngleDegrees = 45.0f;
-        }
-        if (outerAngleDegrees > 89.0f)
-        {
-            outerAngleDegrees = 89.0f;
-        }
+        outerAngleDegrees = glm::clamp(outerAngleDegrees, 1.0f, 89.0f);
 
-        // FOV = outerAngle * 2 to cover the full cone
-        // outerAngle is the half-angle from center to edge
+        // FOV = outerAngle * 2 (half-angle to full cone)
         float fovDegrees = outerAngleDegrees * 2.0f;
 
-        // Create perspective projection
-        // 1:1 aspect ratio for square shadow map tiles
         glm::mat4 proj = glm::perspective(
             glm::radians(fovDegrees),
-            1.0f,  // aspect ratio = 1.0 for square shadow map
+            1.0f,
             nearPlane,
             farPlane
         );
 
-        // Apply Vulkan Y-flip (Vulkan has Y pointing down in NDC)
+        // Vulkan Y-flip
         proj[1][1] *= -1.0f;
 
         return proj;
@@ -79,15 +63,12 @@ namespace render::shadow
 
     glm::vec3 SpotShadowCalculator::computeUpVector(const glm::vec3& lightDirection)
     {
-        // Default world up vector
         glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
 
-        // Check if direction is nearly parallel to world up
-        // (dot product close to 1 or -1)
+        // Use Z axis fallback when direction is nearly parallel to world up
         float dot = std::abs(glm::dot(lightDirection, worldUp));
         if (dot > 0.999f)
         {
-            // Use Z axis as fallback when looking straight up or down
             worldUp = glm::vec3(0.0f, 0.0f, 1.0f);
         }
 

@@ -762,7 +762,7 @@ namespace render::gpudriven
             shadowSystem->uploadToGPU(cmd);
 
             // Record shadow pass with all required descriptor sets and buffers
-            shadow::ShadowSystem::ShadowPassParams shadowParams{};
+            shadow::ShadowPassParams shadowParams{};
             shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
             shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
             shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();

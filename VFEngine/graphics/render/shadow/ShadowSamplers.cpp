@@ -18,19 +18,9 @@ namespace render::shadow
         samplerInfo.compareOp = vk::CompareOp::eNever;
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 0.0f;
-        // Border color for standard depth (0=near, 1=far):
-        // - White (1.0) = max depth = fragments outside shadow map are never in shadow
-        // - Shadow comparison uses LessOrEqual: fragmentDepth <= 1.0 always passes
-        // NOTE: If engine switches to reverse-Z (1=near, 0=far), change to eFloatOpaqueBlack
         samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         return samplerInfo;
-    }
-
-    vk::Sampler ShadowSamplers::createStandardSampler(vk::Device device)
-    {
-        auto samplerInfo = createBaseSamplerInfo();
-        return device.createSampler(samplerInfo);
     }
 
     vk::Sampler ShadowSamplers::createComparisonSampler(vk::Device device)
@@ -46,16 +36,6 @@ namespace render::shadow
         auto samplerInfo = createBaseSamplerInfo();
         samplerInfo.compareEnable = VK_TRUE;
         samplerInfo.compareOp = vk::CompareOp::eLessOrEqual;
-        // Cube maps use the same addressing mode for all dimensions
-        // Border color still represents max depth (no shadow outside cube)
-        return device.createSampler(samplerInfo);
-    }
-
-    vk::Sampler ShadowSamplers::createDebugSampler(vk::Device device)
-    {
-        auto samplerInfo = createBaseSamplerInfo();
-        samplerInfo.magFilter = vk::Filter::eNearest;
-        samplerInfo.minFilter = vk::Filter::eNearest;
         return device.createSampler(samplerInfo);
     }
 }

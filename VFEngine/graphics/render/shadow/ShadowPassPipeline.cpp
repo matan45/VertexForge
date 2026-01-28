@@ -1,15 +1,13 @@
 #include "ShadowPassPipeline.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "print/Logger.hpp"
 #include <array>
 
 namespace render::shadow
 {
-    ShadowPassPipeline::ShadowPassPipeline(core::Device& device, core::SwapChain& swapChain)
+    ShadowPassPipeline::ShadowPassPipeline(core::Device& device)
         : device(device)
-        , swapChain(swapChain)
     {
     }
 
@@ -40,7 +38,6 @@ namespace render::shadow
         createShadowPipeline();
 
         initialized = true;
-        loggerInfo("ShadowPassPipeline initialized");
     }
 
     void ShadowPassPipeline::cleanup()
@@ -78,14 +75,12 @@ namespace render::shadow
         }
 
         initialized = false;
-        loggerInfo("ShadowPassPipeline cleaned up");
     }
 
     void ShadowPassPipeline::createShadowRenderPass()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Depth-only attachment
         vk::AttachmentDescription depthAttachment{};
         depthAttachment.format = depthFormat;
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -100,17 +95,14 @@ namespace render::shadow
         depthRef.attachment = 0;
         depthRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
-        // Single subpass with no color attachments
         vk::SubpassDescription subpass{};
         subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
         subpass.colorAttachmentCount = 0;
         subpass.pColorAttachments = nullptr;
         subpass.pDepthStencilAttachment = &depthRef;
 
-        // Subpass dependencies for layout transitions
         std::array<vk::SubpassDependency, 2> dependencies{};
 
-        // External -> Subpass 0 (depth write)
         dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         dependencies[0].dstSubpass = 0;
         dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eFragmentShader;
@@ -119,7 +111,6 @@ namespace render::shadow
         dependencies[0].dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
         dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
-        // Subpass 0 -> External (depth read in forward pass)
         dependencies[1].srcSubpass = 0;
         dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
         dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eLateFragmentTests;
@@ -137,21 +128,19 @@ namespace render::shadow
         renderPassInfo.pDependencies = dependencies.data();
 
         shadowRenderPass = vkDevice.createRenderPass(renderPassInfo);
-        loggerInfo("ShadowPassPipeline: Created depth-only render pass");
     }
 
     void ShadowPassPipeline::createShadowPipeline()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Load shadow shaders
         shadowShader = std::make_unique<core::Shader>(device);
         shadowShader->readShader("../../resources/shaders/shadow/shadow.glsl");
 
         const auto& stages = shadowShader->getShaderStages();
         if (stages.size() < 2)
         {
-            loggerError("ShadowPassPipeline: Failed to load shadow shaders (need Task + Mesh): {}",
+            loggerError("ShadowPassPipeline: Failed to load shadow shaders: {}",
                         shadowShader->getLastCompilationError());
             return;
         }
@@ -169,19 +158,13 @@ namespace render::shadow
             return;
         }
 
-        // Descriptor set layouts:
-        // Set 0: Per-draw data (reuse from MeshShaderPipeline)
-        // Set 1: Meshlet data (reuse from MeshShaderPipeline)
-        // Set 2: Vertex data (reuse from MeshShaderPipeline)
-        // Set 3: Bone matrices (reuse from MeshShaderPipeline)
         std::array<vk::DescriptorSetLayout, 4> setLayouts = {
-            cachedPerDrawLayout,      // Set 0: Per-draw data
-            cachedMeshletDataLayout,  // Set 1: Meshlet data
-            cachedVertexDataLayout,   // Set 2: Vertex data
-            cachedBoneMatrixLayout    // Set 3: Bone matrices
+            cachedPerDrawLayout,
+            cachedMeshletDataLayout,
+            cachedVertexDataLayout,
+            cachedBoneMatrixLayout
         };
 
-        // Push constants for light view-projection and bias
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
         pushConstantRange.offset = 0;
@@ -195,7 +178,6 @@ namespace render::shadow
 
         shadowPipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
 
-        // Dynamic states for viewport and scissor (per shadow tile)
         std::array<vk::DynamicState, 3> dynamicStates = {
             vk::DynamicState::eViewport,
             vk::DynamicState::eScissor,
@@ -206,14 +188,12 @@ namespace render::shadow
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicState.pDynamicStates = dynamicStates.data();
 
-        // Viewport state (count=1 but values set dynamically)
         vk::PipelineViewportStateCreateInfo viewportState{};
         viewportState.viewportCount = 1;
-        viewportState.pViewports = nullptr;  // Dynamic
+        viewportState.pViewports = nullptr;
         viewportState.scissorCount = 1;
-        viewportState.pScissors = nullptr;   // Dynamic
+        viewportState.pScissors = nullptr;
 
-        // Rasterization state with depth bias
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -221,17 +201,15 @@ namespace render::shadow
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = vk::CullModeFlagBits::eBack;
         rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
-        rasterizer.depthBiasEnable = VK_TRUE;  // Enable dynamic depth bias
-        rasterizer.depthBiasConstantFactor = 0.0f;  // Set via dynamic state
-        rasterizer.depthBiasSlopeFactor = 0.0f;     // Set via dynamic state
+        rasterizer.depthBiasEnable = VK_TRUE;
+        rasterizer.depthBiasConstantFactor = 0.0f;
+        rasterizer.depthBiasSlopeFactor = 0.0f;
         rasterizer.depthBiasClamp = 0.0f;
 
-        // Multisampling
         vk::PipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-        // Depth stencil state
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.depthTestEnable = VK_TRUE;
         depthStencil.depthWriteEnable = VK_TRUE;
@@ -239,18 +217,16 @@ namespace render::shadow
         depthStencil.depthBoundsTestEnable = VK_FALSE;
         depthStencil.stencilTestEnable = VK_FALSE;
 
-        // No color blend state for depth-only pass
         vk::PipelineColorBlendStateCreateInfo colorBlending{};
         colorBlending.logicOpEnable = VK_FALSE;
         colorBlending.attachmentCount = 0;
         colorBlending.pAttachments = nullptr;
 
-        // Create mesh shader pipeline
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
         pipelineInfo.pStages = stages.data();
-        pipelineInfo.pVertexInputState = nullptr;     // Not used for mesh shaders
-        pipelineInfo.pInputAssemblyState = nullptr;   // Not used for mesh shaders
+        pipelineInfo.pVertexInputState = nullptr;
+        pipelineInfo.pInputAssemblyState = nullptr;
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
@@ -264,20 +240,17 @@ namespace render::shadow
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
         {
-            loggerError("ShadowPassPipeline: Failed to create shadow pipeline");
+            loggerError("ShadowPassPipeline: Failed to create pipeline");
             return;
         }
 
         shadowPipeline = result.value;
-        loggerInfo("ShadowPassPipeline: Created shadow graphics pipeline");
     }
 
     void ShadowPassPipeline::createFramebuffer(vk::ImageView depthImageView, uint32_t width, uint32_t height)
     {
         if (atlasFramebuffer)
-        {
             destroyFramebuffer();
-        }
 
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -290,7 +263,6 @@ namespace render::shadow
         framebufferInfo.layers = 1;
 
         atlasFramebuffer = vkDevice.createFramebuffer(framebufferInfo);
-        loggerInfo("ShadowPassPipeline: Created atlas framebuffer ({}x{})", width, height);
     }
 
     void ShadowPassPipeline::destroyFramebuffer()

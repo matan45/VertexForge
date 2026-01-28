@@ -30,7 +30,6 @@ namespace render
         createSampler();
         createOffscreenResources();
 
-        // Create per-frame fences for command buffer synchronization
         vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
         inFlightFences.resize(swapChain.getImageCount());
         for (auto& fence : inFlightFences)
@@ -41,7 +40,6 @@ namespace render
         renderPassHandler = std::make_unique<render::RenderPassHandler>(device, swapChain, offscreenResources);
         renderPassHandler->init();
 
-        // Initialize Hi-Z buffer for occlusion culling
         renderPassHandler->initHiZ(types::MAIN_CAMERA_ID,
                                    offscreenResources.depthImage.depthImage,
                                    offscreenResources.depthImage.depthImageView,
@@ -52,13 +50,11 @@ namespace render
     {
         uint32_t imageIndex = core::RenderManager::getImageIndex();
 
-        // Wait for the previous frame using this command buffer to complete
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
-        (void)result; // Suppress unused warning
+        (void)result;
 
-        // Safe point for descriptor set updates (previous frame completed)
         if (preRenderCallback)
         {
             preRenderCallback();
@@ -83,7 +79,6 @@ namespace render
 
         device.getGraphicsQueue().waitIdle();
 
-        // Read back light occlusion results now that GPU work is complete
         renderPassHandler->readBackLightOcclusionResults();
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
@@ -149,7 +144,6 @@ namespace render
     {
         device.getLogicalDevice().waitIdle();
 
-        // Remove old ImGui textures
         for (auto const& resources : offscreenResources.colorImages)
         {
             if (resources.descriptorSet)
@@ -167,14 +161,6 @@ namespace render
     void OffScreenViewPort::draw(const vk::CommandBuffer& commandBuffer) const
     {
         renderPassHandler->draw(commandBuffer, core::RenderManager::getImageIndex());
-    }
-
-    void OffScreenViewPort::setDeletionQueue(core::DeferredDeletionQueue* queue)
-    {
-        if (renderPassHandler)
-        {
-            renderPassHandler->setDeletionQueue(queue);
-        }
     }
 
     void OffScreenViewPort::createOffscreenResources()
@@ -199,7 +185,6 @@ namespace render
         imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::DepthImage depth;
-        // Create depth image
         core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageMemory);
         core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
 
@@ -221,7 +206,6 @@ namespace render
         for (size_t i = 0; i < swapChain.getImageCount(); i++)
         {
             core::ColorImage color;
-            // Create color image for off-screen rendering
             core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageMemory);
             core::ImageViewInfoRequest imageColorViewRequest(device.getLogicalDevice(), color.colorImage);
             imageColorViewRequest.format = colorFormat;
@@ -236,7 +220,6 @@ namespace render
 
             updateDescriptorSets(color.descriptorSet, color.colorImageView);
 
-            // Store resources
             offscreenResources.colorImages.push_back(std::move(color));
         }
     }
@@ -258,19 +241,15 @@ namespace render
         samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
 
         vk::PhysicalDeviceProperties properties = device.getPhysicalDevice().getProperties();
-
-        // Retrieve the maximum anisotropy level supported by the device
         float maxAnisotropy = properties.limits.maxSamplerAnisotropy;
 
-        // Mipmapping options
-        samplerInfo.anisotropyEnable = VK_TRUE; // Enable anisotropic filtering if supported
+        samplerInfo.anisotropyEnable = VK_TRUE;
         samplerInfo.maxAnisotropy = maxAnisotropy;
-        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack; // Use black for border sampling
-        samplerInfo.unnormalizedCoordinates = VK_FALSE; // Use normalized coordinates [0, 1]
+        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.compareOp = vk::CompareOp::eAlways;
 
-        // Create the sampler
         sampler = device.getLogicalDevice().createSampler(samplerInfo);
     }
 }
