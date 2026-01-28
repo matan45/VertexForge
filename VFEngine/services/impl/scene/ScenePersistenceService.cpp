@@ -240,6 +240,11 @@ namespace services
             audioCmd.settings = sceneGraph->getAudioSettings();
             dispatcher.execute(audioCmd);
 
+            // Apply render/shadow settings from the loaded scene
+            events::render::ApplyShadowSettingsCommand renderCmd;
+            renderCmd.settings = sceneGraph->getRenderSettings();
+            dispatcher.execute(renderCmd);
+
             events::scene::SceneLoadedNotification notification;
             notification.scenePath = filePath;
             dispatcher.publish(notification);
