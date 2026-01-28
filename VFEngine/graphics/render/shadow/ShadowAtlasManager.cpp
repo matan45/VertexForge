@@ -1,16 +1,14 @@
 #include "ShadowAtlasManager.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/SwapChain.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
-#include <spdlog/spdlog.h>
+#include "print/Logger.hpp"
 #include <algorithm>
 
 namespace render::shadow
 {
-    ShadowAtlasManager::ShadowAtlasManager(core::Device& device, core::SwapChain& swapChain)
+    ShadowAtlasManager::ShadowAtlasManager(core::Device& device)
         : device(device)
-        , swapChain(swapChain)
     {
     }
 
@@ -23,22 +21,18 @@ namespace render::shadow
     {
         if (initialized)
         {
-            spdlog::warn("ShadowAtlasManager::init() called when already initialized");
+            loggerWarning("ShadowAtlasManager::init() called when already initialized");
             return;
         }
 
         atlasWidth = width;
         atlasHeight = height;
-
-        // Use D32_SFLOAT for shadow maps - good precision and widely supported
         depthFormat = vk::Format::eD32Sfloat;
 
         createAtlasImage();
         createAtlasSamplers();
         createDescriptorResources();
 
-        // Transition atlas image to SHADER_READ_ONLY_OPTIMAL for sampling
-        // This ensures the atlas is in a valid layout before first use
         const auto& logicalDevice = device.getLogicalDevice();
         auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
 
@@ -70,7 +64,6 @@ namespace render::shadow
         updateDescriptorSet();
 
         initialized = true;
-        spdlog::info("ShadowAtlasManager initialized with {}x{} atlas", atlasWidth, atlasHeight);
     }
 
     void ShadowAtlasManager::cleanup()
@@ -79,11 +72,8 @@ namespace render::shadow
             return;
 
         const auto& logicalDevice = device.getLogicalDevice();
-
-        // Wait for device to be idle before cleanup
         logicalDevice.waitIdle();
 
-        // Cleanup descriptor resources
         if (descriptorPool)
         {
             logicalDevice.destroyDescriptorPool(descriptorPool);
@@ -95,7 +85,6 @@ namespace render::shadow
             descriptorSetLayout = nullptr;
         }
 
-        // Cleanup samplers
         if (comparisonSampler)
         {
             logicalDevice.destroySampler(comparisonSampler);
@@ -107,14 +96,12 @@ namespace render::shadow
             atlasSampler = nullptr;
         }
 
-        // Cleanup image view
         if (atlasImageView)
         {
             logicalDevice.destroyImageView(atlasImageView);
             atlasImageView = nullptr;
         }
 
-        // Cleanup image and memory
         if (atlasImage)
         {
             logicalDevice.destroyImage(atlasImage);
@@ -126,22 +113,11 @@ namespace render::shadow
             atlasMemory = nullptr;
         }
 
-        // Clear allocation data
         tiles.clear();
         handleToTileIndex.clear();
         nextAtlasIndex = 0;
 
         initialized = false;
-        spdlog::info("ShadowAtlasManager cleaned up");
-    }
-
-    void ShadowAtlasManager::recreate()
-    {
-        uint32_t savedWidth = atlasWidth;
-        uint32_t savedHeight = atlasHeight;
-
-        cleanup();
-        init(savedWidth, savedHeight);
     }
 
     void ShadowAtlasManager::createAtlasImage()
@@ -149,14 +125,13 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
-        // Create depth image for shadow atlas
         core::ImageInfoRequest imageInfo(
             logicalDevice,
             physicalDevice,
             atlasWidth,
             atlasHeight,
-            1,  // layers
-            1,  // mipLevels
+            1,
+            1,
             depthFormat,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
@@ -165,15 +140,14 @@ namespace render::shadow
 
         core::ImageUtilities::createImage(imageInfo, atlasImage, atlasMemory);
 
-        // Create image view
         core::ImageViewInfoRequest viewInfo(
             logicalDevice,
             atlasImage,
             depthFormat,
             vk::ImageAspectFlagBits::eDepth,
             vk::ImageViewType::e2D,
-            1,  // layerCount
-            1   // mipLevels
+            1,
+            1
         );
 
         core::ImageUtilities::createImageView(viewInfo, atlasImageView);
@@ -183,7 +157,6 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        // Standard sampler for reading shadow map values
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.magFilter = vk::Filter::eLinear;
         samplerInfo.minFilter = vk::Filter::eLinear;
@@ -198,12 +171,11 @@ namespace render::shadow
         samplerInfo.compareOp = vk::CompareOp::eNever;
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 0.0f;
-        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;  // White = max depth = no shadow
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
         atlasSampler = logicalDevice.createSampler(samplerInfo);
 
-        // Comparison sampler for hardware PCF
         vk::SamplerCreateInfo comparisonInfo = samplerInfo;
         comparisonInfo.compareEnable = VK_TRUE;
         comparisonInfo.compareOp = vk::CompareOp::eLessOrEqual;
@@ -215,16 +187,13 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        // Descriptor set layout - shadow atlas texture + comparison sampler
         std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
 
-        // Binding 0: Shadow atlas sampled image
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        // Binding 1: Shadow atlas with comparison sampler (for hardware PCF)
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[1].descriptorCount = 1;
@@ -236,10 +205,9 @@ namespace render::shadow
 
         descriptorSetLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
 
-        // Descriptor pool
         std::array<vk::DescriptorPoolSize, 1> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 2;  // One for each binding
+        poolSizes[0].descriptorCount = 2;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -248,7 +216,6 @@ namespace render::shadow
 
         descriptorPool = logicalDevice.createDescriptorPool(poolInfo);
 
-        // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = 1;
@@ -297,33 +264,23 @@ namespace render::shadow
         handle.type = type;
         handle.layer = layer;
 
-        // Simple row-based allocation strategy
-        // Find a position where we can fit this tile
         uint32_t bestX = 0;
         uint32_t bestY = 0;
         bool found = false;
 
-        // Try to find space in existing rows or start a new row
         uint32_t currentRowY = 0;
-        uint32_t currentRowHeight = 0;
-        uint32_t currentX = 0;
 
-        // Collect existing tile positions to avoid overlap
         for (const auto& tile : tiles)
         {
             if (!tile.allocated)
                 continue;
 
-            // Track the maximum Y extent
             uint32_t tileEndY = tile.y + tile.height;
             if (tileEndY > currentRowY)
-            {
                 currentRowY = tileEndY;
-            }
         }
 
-        // Try placing at the end of existing rows first
-        for (uint32_t y = 0; y + height <= atlasHeight; y += 256)  // Step by 256 for alignment
+        for (uint32_t y = 0; y + height <= atlasHeight; y += 256)
         {
             for (uint32_t x = 0; x + width <= atlasWidth; x += 256)
             {
@@ -340,12 +297,11 @@ namespace render::shadow
 
         if (!found)
         {
-            spdlog::warn("ShadowAtlasManager: Failed to allocate {}x{} tile - atlas full", width, height);
+            loggerWarning("ShadowAtlasManager: Failed to allocate {}x{} tile - atlas full", width, height);
             handle.invalidate();
             return handle;
         }
 
-        // Create the tile
         ShadowAtlasTile tile;
         tile.x = bestX;
         tile.y = bestY;
@@ -357,30 +313,23 @@ namespace render::shadow
         handle.atlasIndex = nextAtlasIndex++;
         tile.owner = handle;
 
-        // Store tile
         uint32_t tileIndex = static_cast<uint32_t>(tiles.size());
         tiles.push_back(tile);
         handleToTileIndex[handle.atlasIndex] = tileIndex;
-
-        spdlog::debug("ShadowAtlasManager: Allocated tile {} at ({}, {}) size {}x{}",
-                      handle.atlasIndex, bestX, bestY, width, height);
 
         return handle;
     }
 
     bool ShadowAtlasManager::canFitTile(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const
     {
-        // Check atlas bounds
         if (x + width > atlasWidth || y + height > atlasHeight)
             return false;
 
-        // Check overlap with existing tiles
         for (const auto& tile : tiles)
         {
             if (!tile.allocated)
                 continue;
 
-            // Check for intersection
             bool overlapX = (x < tile.x + tile.width) && (x + width > tile.x);
             bool overlapY = (y < tile.y + tile.height) && (y + height > tile.y);
 
@@ -399,7 +348,7 @@ namespace render::shadow
         auto it = handleToTileIndex.find(handle.atlasIndex);
         if (it == handleToTileIndex.end())
         {
-            spdlog::warn("ShadowAtlasManager: Attempted to free unknown handle {}", handle.atlasIndex);
+            loggerWarning("ShadowAtlasManager: Attempted to free unknown handle {}", handle.atlasIndex);
             return;
         }
 
@@ -411,7 +360,6 @@ namespace render::shadow
         }
 
         handleToTileIndex.erase(it);
-        spdlog::debug("ShadowAtlasManager: Freed tile {}", handle.atlasIndex);
     }
 
     void ShadowAtlasManager::freeAll()
@@ -419,7 +367,6 @@ namespace render::shadow
         tiles.clear();
         handleToTileIndex.clear();
         nextAtlasIndex = 0;
-        spdlog::debug("ShadowAtlasManager: Freed all tiles");
     }
 
     ShadowAtlasTile ShadowAtlasManager::getTile(const ShadowMapHandle& handle) const
@@ -471,20 +418,8 @@ namespace render::shadow
         };
     }
 
-    uint32_t ShadowAtlasManager::getAllocatedTileCount() const
-    {
-        uint32_t count = 0;
-        for (const auto& tile : tiles)
-        {
-            if (tile.allocated)
-                ++count;
-        }
-        return count;
-    }
-
     float ShadowAtlasManager::getAtlasUtilization() const
     {
-        // Use uint64_t to prevent overflow with large atlases (e.g., 8192x8192 = 67M pixels)
         uint64_t usedPixels = 0;
         for (const auto& tile : tiles)
         {
@@ -493,20 +428,6 @@ namespace render::shadow
         }
         const uint64_t totalPixels = static_cast<uint64_t>(atlasWidth) * atlasHeight;
         return static_cast<float>(usedPixels) / static_cast<float>(totalPixels);
-    }
-
-    int32_t ShadowAtlasManager::findFreeTileSlot(uint32_t width, uint32_t height) const
-    {
-        // Look for an existing freed slot that can fit this size
-        for (size_t i = 0; i < tiles.size(); ++i)
-        {
-            const auto& tile = tiles[i];
-            if (!tile.allocated && tile.width >= width && tile.height >= height)
-            {
-                return static_cast<int32_t>(i);
-            }
-        }
-        return -1;
     }
 
     std::vector<ShadowMapHandle> ShadowAtlasManager::allocateCascades(
@@ -520,24 +441,18 @@ namespace render::shadow
             ShadowMapHandle handle = allocate(resolution, resolution, ShadowMapType::DirectionalCSM, i);
             if (!handle.isValid())
             {
-                // Rollback all previous allocations
                 for (const auto& h : handles)
-                {
                     free(h);
-                }
                 handles.clear();
-                spdlog::error("ShadowAtlasManager: Failed to allocate cascade {} for entity {}", i, lightEntityId);
+                loggerError("ShadowAtlasManager: Failed to allocate cascade {} for entity {}", i, lightEntityId);
                 return handles;
             }
 
             handle.cascadeIndex = static_cast<uint16_t>(i);
             handles.push_back(handle);
-
-            // Track this handle for the entity
             trackHandleForEntity(lightEntityId, handle.atlasIndex);
         }
 
-        spdlog::debug("ShadowAtlasManager: Allocated {} cascades for entity {}", cascadeCount, lightEntityId);
         return handles;
     }
 
@@ -567,7 +482,6 @@ namespace render::shadow
             }
         }
 
-        spdlog::debug("ShadowAtlasManager: Freed {} tiles for entity {}", it->second.size(), entityId);
         entityToHandles.erase(it);
     }
 
@@ -577,43 +491,34 @@ namespace render::shadow
 
         if (!initialized)
         {
-            spdlog::warn("ShadowAtlasManager::resize() called when not initialized");
-            return result;  // success = false
+            loggerWarning("ShadowAtlasManager::resize() called when not initialized");
+            return result;
         }
 
         if (newWidth == atlasWidth && newHeight == atlasHeight)
         {
-            spdlog::debug("ShadowAtlasManager: Resize skipped - same dimensions");
-            result.success = true;  // No-op is considered success
+            result.success = true;
             return result;
         }
 
-        spdlog::info("ShadowAtlasManager: Resizing atlas from {}x{} to {}x{}",
-                     atlasWidth, atlasHeight, newWidth, newHeight);
-
         const auto& logicalDevice = device.getLogicalDevice();
-        
         logicalDevice.waitIdle();
 
-        // Build reverse lookup: atlasIndex -> entityId (for restoring entity tracking)
         std::unordered_map<uint32_t, uint32_t> atlasIndexToEntity;
         for (const auto& [entityId, indices] : entityToHandles)
         {
             for (uint32_t atlasIndex : indices)
-            {
                 atlasIndexToEntity[atlasIndex] = entityId;
-            }
         }
 
-        // Store current allocation info for reallocation
         struct AllocationInfo
         {
             uint32_t width;
             uint32_t height;
             ShadowMapType type;
             uint32_t layer;
-            uint32_t oldAtlasIndex;  // Original index for entity lookup
-            uint32_t entityId;       // Entity that owns this allocation (0 if untracked)
+            uint32_t oldAtlasIndex;
+            uint32_t entityId;
         };
         std::vector<AllocationInfo> allocations;
 
@@ -624,9 +529,7 @@ namespace render::shadow
                 uint32_t entityId = 0;
                 auto entityIt = atlasIndexToEntity.find(tile.owner.atlasIndex);
                 if (entityIt != atlasIndexToEntity.end())
-                {
                     entityId = entityIt->second;
-                }
 
                 allocations.push_back({
                     tile.width,
@@ -639,7 +542,6 @@ namespace render::shadow
             }
         }
 
-        // Cleanup existing image resources (but not descriptor layout/pool)
         if (atlasImageView)
         {
             logicalDevice.destroyImageView(atlasImageView);
@@ -656,21 +558,16 @@ namespace render::shadow
             atlasMemory = nullptr;
         }
 
-        // Clear allocation data
         tiles.clear();
         handleToTileIndex.clear();
         entityToHandles.clear();
         nextAtlasIndex = 0;
 
-        // Update dimensions
         atlasWidth = newWidth;
         atlasHeight = newHeight;
 
-        // Recreate image with new size
         createAtlasImage();
 
-        // Transition new atlas image to SHADER_READ_ONLY_OPTIMAL for sampling
-        // This is required because shaders expect the image in this layout
         auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
 
         vk::ImageMemoryBarrier barrier{};
@@ -698,10 +595,8 @@ namespace render::shadow
 
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
 
-        // Update descriptor set with new image view
         updateDescriptorSet();
 
-        // Reallocate previous tiles (may fail if new size is smaller)
         result.requestedCount = static_cast<uint32_t>(allocations.size());
         result.reallocatedCount = 0;
 
@@ -712,29 +607,21 @@ namespace render::shadow
             {
                 ++result.reallocatedCount;
 
-                // Restore entity tracking if this allocation was tracked
                 if (info.entityId != 0)
-                {
                     trackHandleForEntity(info.entityId, handle.atlasIndex);
-                }
             }
             else
             {
-                spdlog::warn("ShadowAtlasManager: Failed to reallocate tile {}x{} after resize",
+                loggerWarning("ShadowAtlasManager: Failed to reallocate tile {}x{} after resize",
                              info.width, info.height);
             }
         }
 
         result.success = true;
 
-        if (result.allReallocated())
+        if (!result.allReallocated())
         {
-            spdlog::info("ShadowAtlasManager: Resize complete - all {}/{} tiles reallocated",
-                         result.reallocatedCount, result.requestedCount);
-        }
-        else
-        {
-            spdlog::warn("ShadowAtlasManager: Resize complete with partial failure - {}/{} tiles reallocated",
+            loggerWarning("ShadowAtlasManager: Resize complete with partial failure - {}/{} tiles reallocated",
                          result.reallocatedCount, result.requestedCount);
         }
 
@@ -744,18 +631,13 @@ namespace render::shadow
     ShadowAtlasManager::ResizeResult ShadowAtlasManager::applyQualitySettings(const types::ShadowAtlasConfig& config)
     {
         ResizeResult result;
-        result.success = true;  // Default to success for no-op cases
+        result.success = true;
 
         if (config.atlasSize == 0)
-        {
-            spdlog::debug("ShadowAtlasManager: Quality Off - atlas disabled");
             return result;
-        }
 
         if (config.atlasSize != atlasWidth || config.atlasSize != atlasHeight)
-        {
             return resize(config.atlasSize, config.atlasSize);
-        }
 
         return result;
     }

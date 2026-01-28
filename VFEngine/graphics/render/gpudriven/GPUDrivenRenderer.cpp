@@ -117,7 +117,7 @@ namespace render::gpudriven
                 lightBufferManager->getDescriptorSetLayout()
             );
 
-            shadowSystem = std::make_unique<shadow::ShadowSystem>(device, swapChain);
+            shadowSystem = std::make_unique<shadow::ShadowSystem>(device);
             shadowSystem->init();
             shadowSystem->setLightBufferManager(lightBufferManager.get());
 

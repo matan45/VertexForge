@@ -1,7 +1,7 @@
 #include "ShadowCubeMap.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include <spdlog/spdlog.h>
+#include "print/Logger.hpp"
 
 namespace render::shadow
 {
@@ -71,7 +71,7 @@ namespace render::shadow
     {
         if (initialized)
         {
-            spdlog::warn("ShadowCubeMap::init() called when already initialized");
+            loggerWarning("ShadowCubeMap::init() called when already initialized");
             return;
         }
 
@@ -83,8 +83,6 @@ namespace render::shadow
 
         initialized = true;
         currentLayout = vk::ImageLayout::eUndefined;
-
-        spdlog::debug("ShadowCubeMap initialized: {}x{} (6 faces)", size, size);
     }
 
     void ShadowCubeMap::cleanup()
@@ -92,12 +90,8 @@ namespace render::shadow
         if (!initialized)
             return;
 
-        // NOTE: Caller must ensure this resource is not in use by the GPU.
-        // ShadowResourcePool handles synchronization at the pool level.
-        // Do NOT add waitIdle() here - it causes frame stalls.
         const auto& logicalDevice = device.getLogicalDevice();
 
-        // Cleanup cached framebuffers
         for (auto& fb : cachedFramebuffers)
         {
             if (fb)
@@ -108,7 +102,6 @@ namespace render::shadow
         }
         cachedRenderPass = nullptr;
 
-        // Cleanup per-face views
         for (auto& view : faceViews)
         {
             if (view)
@@ -118,14 +111,12 @@ namespace render::shadow
             }
         }
 
-        // Cleanup cube view
         if (cubeView)
         {
             logicalDevice.destroyImageView(cubeView);
             cubeView = nullptr;
         }
 
-        // Cleanup image and memory
         if (image)
         {
             logicalDevice.destroyImage(image);
@@ -139,15 +130,6 @@ namespace render::shadow
 
         initialized = false;
         currentLayout = vk::ImageLayout::eUndefined;
-
-        spdlog::debug("ShadowCubeMap cleaned up");
-    }
-
-    void ShadowCubeMap::recreate(uint32_t sz)
-    {
-        vk::Format savedFormat = format;
-        cleanup();
-        init(sz, savedFormat);
     }
 
     void ShadowCubeMap::createImage()
@@ -155,19 +137,18 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
-        // Create cube-compatible image with 6 layers
         core::ImageInfoRequest imageInfo(
             logicalDevice,
             physicalDevice,
             size,
             size,
-            FACE_COUNT,  // 6 layers for cube faces
-            1,           // mipLevels
+            ShadowConstants::CUBE_FACE_COUNT,
+            1,
             format,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal,
-            vk::ImageCreateFlagBits::eCubeCompatible  // Required for cube views
+            vk::ImageCreateFlagBits::eCubeCompatible
         );
 
         core::ImageUtilities::createImage(imageInfo, image, memory);
@@ -177,7 +158,6 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        // Create cube view for shader sampling
         vk::ImageViewCreateInfo cubeViewInfo{};
         cubeViewInfo.image = image;
         cubeViewInfo.viewType = vk::ImageViewType::eCube;
@@ -186,12 +166,11 @@ namespace render::shadow
         cubeViewInfo.subresourceRange.baseMipLevel = 0;
         cubeViewInfo.subresourceRange.levelCount = 1;
         cubeViewInfo.subresourceRange.baseArrayLayer = 0;
-        cubeViewInfo.subresourceRange.layerCount = FACE_COUNT;
+        cubeViewInfo.subresourceRange.layerCount = ShadowConstants::CUBE_FACE_COUNT;
 
         cubeView = logicalDevice.createImageView(cubeViewInfo);
 
-        // Create per-face 2D views for framebuffer attachment
-        for (uint32_t face = 0; face < FACE_COUNT; ++face)
+        for (uint32_t face = 0; face < ShadowConstants::CUBE_FACE_COUNT; ++face)
         {
             vk::ImageViewCreateInfo faceViewInfo{};
             faceViewInfo.image = image;
@@ -207,16 +186,6 @@ namespace render::shadow
         }
     }
 
-    vk::ImageView ShadowCubeMap::getFaceView(uint32_t face) const
-    {
-        if (face >= FACE_COUNT)
-        {
-            spdlog::error("ShadowCubeMap::getFaceView() - face {} out of range (max 5)", face);
-            return nullptr;
-        }
-        return faceViews[face];
-    }
-
     ShadowCubeMap::ExtractedResources ShadowCubeMap::extractResources()
     {
         ExtractedResources extracted;
@@ -226,7 +195,6 @@ namespace render::shadow
         extracted.faceViews = faceViews;
         extracted.framebuffers = cachedFramebuffers;
 
-        // Clear local handles (ownership transferred)
         image = nullptr;
         memory = nullptr;
         cubeView = nullptr;
@@ -236,20 +204,18 @@ namespace render::shadow
         initialized = false;
         currentLayout = vk::ImageLayout::eUndefined;
 
-        spdlog::debug("ShadowCubeMap: Resources extracted for deferred deletion");
         return extracted;
     }
 
     vk::Framebuffer ShadowCubeMap::getOrCreateFramebuffer(uint32_t face, vk::RenderPass renderPass,
                                                            const vk::Device& logicalDevice)
     {
-        if (face >= FACE_COUNT)
+        if (face >= ShadowConstants::CUBE_FACE_COUNT)
         {
-            spdlog::error("ShadowCubeMap::getOrCreateFramebuffer() - face {} out of range", face);
+            loggerError("ShadowCubeMap::getOrCreateFramebuffer() - face {} out of range", face);
             return nullptr;
         }
 
-        // If render pass changed, invalidate all cached framebuffers
         if (cachedRenderPass != renderPass)
         {
             for (auto& fb : cachedFramebuffers)
@@ -263,13 +229,9 @@ namespace render::shadow
             cachedRenderPass = renderPass;
         }
 
-        // Return cached framebuffer if available
         if (cachedFramebuffers[face])
-        {
             return cachedFramebuffers[face];
-        }
 
-        // Create new framebuffer for this face
         vk::FramebufferCreateInfo fbInfo{};
         fbInfo.renderPass = renderPass;
         fbInfo.attachmentCount = 1;
@@ -284,44 +246,14 @@ namespace render::shadow
 
     void ShadowCubeMap::transitionToDepthAttachment(vk::CommandBuffer cmd)
     {
-        transitionFaces(cmd, 0, FACE_COUNT, currentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+        transitionFaces(cmd, 0, ShadowConstants::CUBE_FACE_COUNT, currentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
         currentLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
     }
 
     void ShadowCubeMap::transitionToShaderRead(vk::CommandBuffer cmd)
     {
-        transitionFaces(cmd, 0, FACE_COUNT, currentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
+        transitionFaces(cmd, 0, ShadowConstants::CUBE_FACE_COUNT, currentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
         currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-    }
-
-    void ShadowCubeMap::transitionFaceToDepthAttachment(vk::CommandBuffer cmd, uint32_t face,
-                                                         vk::ImageLayout assumedCurrentLayout)
-    {
-        if (face >= FACE_COUNT)
-        {
-            spdlog::error("ShadowCubeMap::transitionFaceToDepthAttachment() - face {} out of range", face);
-            return;
-        }
-
-        // Mark global layout as undefined since we're doing per-face transitions
-        currentLayout = vk::ImageLayout::eUndefined;
-
-        transitionFaces(cmd, face, 1, assumedCurrentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-    }
-
-    void ShadowCubeMap::transitionFaceToShaderRead(vk::CommandBuffer cmd, uint32_t face,
-                                                    vk::ImageLayout assumedCurrentLayout)
-    {
-        if (face >= FACE_COUNT)
-        {
-            spdlog::error("ShadowCubeMap::transitionFaceToShaderRead() - face {} out of range", face);
-            return;
-        }
-
-        // Mark global layout as undefined since we're doing per-face transitions
-        currentLayout = vk::ImageLayout::eUndefined;
-
-        transitionFaces(cmd, face, 1, assumedCurrentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
     }
 
     void ShadowCubeMap::transitionFaces(vk::CommandBuffer cmd, uint32_t baseFace, uint32_t count,
@@ -378,8 +310,8 @@ namespace render::shadow
         }
         else
         {
-            spdlog::error("ShadowCubeMap: Unsupported layout transition from {} to {}",
-                          static_cast<int>(oldLayout), static_cast<int>(newLayout));
+            loggerError("ShadowCubeMap: Unsupported layout transition from {} to {}",
+                        static_cast<int>(oldLayout), static_cast<int>(newLayout));
             return;
         }
 

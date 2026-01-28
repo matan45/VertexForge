@@ -3,7 +3,6 @@
 #include "PointShadowCalculator.hpp"
 #include "SpotShadowCalculator.hpp"
 #include "../../core/Device.hpp"
-#include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -13,9 +12,8 @@
 
 namespace render::shadow
 {
-    ShadowSystem::ShadowSystem(core::Device& device, core::SwapChain& swapChain)
+    ShadowSystem::ShadowSystem(core::Device& device)
         : device(device)
-          , swapChain(swapChain)
     {
     }
 
@@ -32,8 +30,7 @@ namespace render::shadow
             return;
         }
 
-        // Initialize atlas manager (for spot lights)
-        atlasManager = std::make_unique<ShadowAtlasManager>(device, swapChain);
+        atlasManager = std::make_unique<ShadowAtlasManager>(device);
         atlasManager->init();
 
         // Initialize resource pool (for CSM arrays and point light cube maps)
@@ -460,7 +457,7 @@ namespace render::shadow
                     lightPosition, nearPlane, farPlane);
 
                 // Update each face view
-                for (uint32_t face = 0; face < PointShadowCalculator::FACE_COUNT && face < data.views.size(); ++face)
+                for (uint32_t face = 0; face < ShadowConstants::CUBE_FACE_COUNT && face < data.views.size(); ++face)
                 {
                     auto& view = data.views[face];
                     const auto& faceData = faceMatrices[face];

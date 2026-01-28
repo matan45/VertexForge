@@ -16,7 +16,6 @@
 namespace core
 {
     class Device;
-    class SwapChain;
     class DeferredDeletionQueue;
 }
 
@@ -33,7 +32,6 @@ namespace render
         {
         private:
             core::Device& device;
-            core::SwapChain& swapChain;
 
             static constexpr float FRAME_BUDGET_WARNING_MS = 16.0f;
 
@@ -66,7 +64,7 @@ namespace render
             lighting::GPULightBufferManager* lightBufferManager = nullptr;
 
         public:
-            explicit ShadowSystem(core::Device& device, core::SwapChain& swapChain);
+            explicit ShadowSystem(core::Device& device);
             ~ShadowSystem();
 
             ShadowSystem(const ShadowSystem&) = delete;

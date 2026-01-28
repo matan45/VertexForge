@@ -14,6 +14,8 @@ namespace render::shadow
     // ============================================
     namespace ShadowConstants
     {
+        inline constexpr uint32_t CUBE_FACE_COUNT = 6;
+
         inline constexpr uint32_t DEFAULT_ATLAS_SIZE = 4096;
 
         inline constexpr uint32_t MAX_POINT_SHADOW_CASTERS = 32;

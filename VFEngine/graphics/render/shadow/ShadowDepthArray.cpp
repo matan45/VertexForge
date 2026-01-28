@@ -1,7 +1,7 @@
 #include "ShadowDepthArray.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include <spdlog/spdlog.h>
+#include "print/Logger.hpp"
 #include <stdexcept>
 
 namespace render::shadow
@@ -27,7 +27,6 @@ namespace render::shadow
         , layerCount(other.layerCount)
         , format(other.format)
         , initialized(other.initialized)
-        , currentLayout(other.currentLayout)
     {
         other.image = nullptr;
         other.memory = nullptr;
@@ -50,7 +49,6 @@ namespace render::shadow
             layerCount = other.layerCount;
             format = other.format;
             initialized = other.initialized;
-            currentLayout = other.currentLayout;
 
             other.image = nullptr;
             other.memory = nullptr;
@@ -64,14 +62,12 @@ namespace render::shadow
     {
         if (initialized)
         {
-            spdlog::warn("ShadowDepthArray::init() called when already initialized");
+            loggerWarning("ShadowDepthArray::init() called when already initialized");
             return;
         }
 
         if (layers == 0 || layers > 8)
-        {
             throw std::invalid_argument("ShadowDepthArray: layer count must be between 1 and 8");
-        }
 
         width = w;
         height = h;
@@ -82,9 +78,6 @@ namespace render::shadow
         createImageViews();
 
         initialized = true;
-        currentLayout = vk::ImageLayout::eUndefined;
-
-        spdlog::debug("ShadowDepthArray initialized: {}x{} with {} layers", width, height, layerCount);
     }
 
     void ShadowDepthArray::cleanup()
@@ -92,12 +85,8 @@ namespace render::shadow
         if (!initialized)
             return;
 
-        // NOTE: Caller must ensure this resource is not in use by the GPU.
-        // ShadowResourcePool handles synchronization at the pool level.
-        // Do NOT add waitIdle() here - it causes frame stalls.
         const auto& logicalDevice = device.getLogicalDevice();
 
-        // Cleanup per-layer views
         for (auto& view : layerViews)
         {
             if (view)
@@ -108,14 +97,12 @@ namespace render::shadow
         }
         layerViews.clear();
 
-        // Cleanup array view
         if (arrayView)
         {
             logicalDevice.destroyImageView(arrayView);
             arrayView = nullptr;
         }
 
-        // Cleanup image and memory
         if (image)
         {
             logicalDevice.destroyImage(image);
@@ -128,16 +115,6 @@ namespace render::shadow
         }
 
         initialized = false;
-        currentLayout = vk::ImageLayout::eUndefined;
-
-        spdlog::debug("ShadowDepthArray cleaned up");
-    }
-
-    void ShadowDepthArray::recreate(uint32_t w, uint32_t h, uint32_t layers)
-    {
-        vk::Format savedFormat = format;
-        cleanup();
-        init(w, h, layers, savedFormat);
     }
 
     void ShadowDepthArray::createImage()
@@ -150,8 +127,8 @@ namespace render::shadow
             physicalDevice,
             width,
             height,
-            layerCount,  // Multiple layers for CSM
-            1,           // mipLevels
+            layerCount,
+            1,
             format,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
@@ -165,7 +142,6 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        // Create array view (2D_ARRAY type) for shader sampling
         vk::ImageViewCreateInfo arrayViewInfo{};
         arrayViewInfo.image = image;
         arrayViewInfo.viewType = vk::ImageViewType::e2DArray;
@@ -178,7 +154,6 @@ namespace render::shadow
 
         arrayView = logicalDevice.createImageView(arrayViewInfo);
 
-        // Create per-layer 2D views for framebuffer attachment
         layerViews.resize(layerCount);
         for (uint32_t i = 0; i < layerCount; ++i)
         {
@@ -196,17 +171,6 @@ namespace render::shadow
         }
     }
 
-    vk::ImageView ShadowDepthArray::getLayerView(uint32_t layer) const
-    {
-        if (layer >= layerViews.size())
-        {
-            spdlog::error("ShadowDepthArray::getLayerView() - layer {} out of range (max {})",
-                          layer, layerViews.size());
-            return nullptr;
-        }
-        return layerViews[layer];
-    }
-
     ShadowDepthArray::ExtractedResources ShadowDepthArray::extractResources()
     {
         ExtractedResources extracted;
@@ -215,123 +179,12 @@ namespace render::shadow
         extracted.arrayView = arrayView;
         extracted.layerViews = std::move(layerViews);
 
-        // Clear local handles (ownership transferred)
         image = nullptr;
         memory = nullptr;
         arrayView = nullptr;
         layerViews.clear();
         initialized = false;
-        currentLayout = vk::ImageLayout::eUndefined;
 
-        spdlog::debug("ShadowDepthArray: Resources extracted for deferred deletion");
         return extracted;
-    }
-
-    void ShadowDepthArray::transitionToDepthAttachment(vk::CommandBuffer cmd)
-    {
-        transitionLayers(cmd, 0, layerCount, currentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-        currentLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-    }
-
-    void ShadowDepthArray::transitionToShaderRead(vk::CommandBuffer cmd)
-    {
-        transitionLayers(cmd, 0, layerCount, currentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
-        currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-    }
-
-    void ShadowDepthArray::transitionLayerToDepthAttachment(vk::CommandBuffer cmd, uint32_t layer,
-                                                              vk::ImageLayout assumedCurrentLayout)
-    {
-        if (layer >= layerCount)
-        {
-            spdlog::error("ShadowDepthArray::transitionLayerToDepthAttachment() - layer {} out of range", layer);
-            return;
-        }
-
-        // Mark global layout as undefined since we're doing per-layer transitions
-        currentLayout = vk::ImageLayout::eUndefined;
-
-        transitionLayers(cmd, layer, 1, assumedCurrentLayout, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-    }
-
-    void ShadowDepthArray::transitionLayerToShaderRead(vk::CommandBuffer cmd, uint32_t layer,
-                                                        vk::ImageLayout assumedCurrentLayout)
-    {
-        if (layer >= layerCount)
-        {
-            spdlog::error("ShadowDepthArray::transitionLayerToShaderRead() - layer {} out of range", layer);
-            return;
-        }
-
-        // Mark global layout as undefined since we're doing per-layer transitions
-        currentLayout = vk::ImageLayout::eUndefined;
-
-        transitionLayers(cmd, layer, 1, assumedCurrentLayout, vk::ImageLayout::eShaderReadOnlyOptimal);
-    }
-
-    void ShadowDepthArray::transitionLayers(vk::CommandBuffer cmd, uint32_t baseLayer, uint32_t count,
-                                             vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
-    {
-        if (oldLayout == newLayout)
-            return;
-
-        vk::ImageMemoryBarrier barrier{};
-        barrier.oldLayout = oldLayout;
-        barrier.newLayout = newLayout;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = image;
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = baseLayer;
-        barrier.subresourceRange.layerCount = count;
-
-        vk::PipelineStageFlags sourceStage;
-        vk::PipelineStageFlags destinationStage;
-
-        using enum vk::AccessFlagBits;
-        using enum vk::ImageLayout;
-
-        if (oldLayout == eUndefined && newLayout == eDepthStencilAttachmentOptimal)
-        {
-            barrier.srcAccessMask = eNone;
-            barrier.dstAccessMask = eDepthStencilAttachmentWrite;
-            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
-            destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-        }
-        else if (oldLayout == eDepthStencilAttachmentOptimal && newLayout == eShaderReadOnlyOptimal)
-        {
-            barrier.srcAccessMask = eDepthStencilAttachmentWrite;
-            barrier.dstAccessMask = eShaderRead;
-            sourceStage = vk::PipelineStageFlagBits::eLateFragmentTests;
-            destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
-        }
-        else if (oldLayout == eShaderReadOnlyOptimal && newLayout == eDepthStencilAttachmentOptimal)
-        {
-            barrier.srcAccessMask = eShaderRead;
-            barrier.dstAccessMask = eDepthStencilAttachmentWrite;
-            sourceStage = vk::PipelineStageFlagBits::eFragmentShader;
-            destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-        }
-        else if (oldLayout == eUndefined && newLayout == eShaderReadOnlyOptimal)
-        {
-            barrier.srcAccessMask = eNone;
-            barrier.dstAccessMask = eShaderRead;
-            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
-            destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
-        }
-        else
-        {
-            spdlog::error("ShadowDepthArray: Unsupported layout transition from {} to {}",
-                          static_cast<int>(oldLayout), static_cast<int>(newLayout));
-            return;
-        }
-
-        cmd.pipelineBarrier(
-            sourceStage, destinationStage,
-            vk::DependencyFlags{},
-            nullptr, nullptr, barrier
-        );
     }
 }

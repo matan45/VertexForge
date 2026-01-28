@@ -297,7 +297,7 @@ namespace render::shadow
             scissor.offset = vk::Offset2D{0, 0};
             scissor.extent = vk::Extent2D{cubeSize, cubeSize};
 
-            for (uint32_t face = 0; face < ShadowCubeMap::FACE_COUNT; ++face)
+            for (uint32_t face = 0; face < ShadowConstants::CUBE_FACE_COUNT; ++face)
             {
                 if (face >= data->views.size())
                     continue;
