@@ -124,9 +124,9 @@ namespace windows
                 ImGui::Spacing();
 
                 // PCF Kernel Size
-                const char* kernelItems[] = {"None (Hard)", "3x3", "5x5", "7x7"};
+                const char* kernelItems[] = {"1x1 (Hard)", "2x2", "3x3", "4x4", "5x5"};
                 int kernelIdx = static_cast<int>(settings.shadows.pcfKernelSize);
-                if (ImGui::Combo("PCF Kernel", &kernelIdx, kernelItems, 4))
+                if (ImGui::Combo("PCF Kernel", &kernelIdx, kernelItems, 5))
                 {
                     settings.shadows.pcfKernelSize = static_cast<types::PCFKernelSize>(kernelIdx);
                     isDirty = true;

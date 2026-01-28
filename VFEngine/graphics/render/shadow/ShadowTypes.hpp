@@ -213,7 +213,7 @@ namespace render::shadow
         float texelSize = 1.0f / static_cast<float>(ShadowConstants::RESOLUTION_HIGH);
 
         // PCF filtering params (set during beginFrame from global/per-light settings)
-        uint8_t pcfKernelRadius = 1;  // 0=none (hard), 1=3x3, 2=5x5, 3=7x7
+        uint8_t pcfKernelRadius = 2;  // 0=1x1 (hard), 1=2x2, 2=3x3, 3=4x4, 4=5x5
         float pcfSoftness = 1.0f;     // Kernel spread multiplier
         bool filterEnabled = true;    // Soft shadows toggle
 

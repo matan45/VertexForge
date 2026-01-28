@@ -7,24 +7,23 @@
 
 namespace scene
 {
-    // Callback to get mesh bounding box by path
     using MeshBoundsCallback = std::function<const math::AABB*(const std::string&)>;
 
     class SceneBVH
     {
     private:
-        math::BVH staticBVH; 
+        math::BVH staticBVH;
         math::BVH dynamicBVH;
 
         MeshBoundsCallback meshBoundsCallback;
 
-        std::unordered_set<uint32_t> staticEntities; 
-        std::unordered_set<uint32_t> dynamicEntities; 
-        std::unordered_set<uint32_t> dirtyDynamicEntities; // Entities needing bounds update
+        std::unordered_set<uint32_t> staticEntities;
+        std::unordered_set<uint32_t> dynamicEntities;
+        std::unordered_set<uint32_t> dirtyDynamicEntities;
 
         bool staticDirty = true;
         bool dynamicDirty = true;
-        bool staticStructuralChange = true; 
+        bool staticStructuralChange = true;
         bool dynamicStructuralChange = true;
 
     public:
@@ -37,7 +36,6 @@ namespace scene
 
         void rebuildStaticBVH();
         void rebuildDynamicBVH();
-
         void refitDynamicBVH();
 
         void rebuildAll()
@@ -45,7 +43,6 @@ namespace scene
             rebuildStaticBVH();
             rebuildDynamicBVH();
         }
-
 
         void markStaticDirty()
         {
@@ -67,30 +64,11 @@ namespace scene
             markStaticDirty();
         }
 
-        bool isStaticDirty() const
-        {
-            return staticDirty;
-        }
-
-        bool isDynamicDirty() const
-        {
-            return dynamicDirty;
-        }
-
-        bool needsDynamicRebuild() const
-        {
-            return dynamicStructuralChange;
-        }
-
-        size_t getDirtyDynamicEntityCount() const
-        {
-            return dirtyDynamicEntities.size();
-        }
-
-        bool isDirty() const
-        {
-            return staticDirty || dynamicDirty;
-        }
+        bool isStaticDirty() const { return staticDirty; }
+        bool isDynamicDirty() const { return dynamicDirty; }
+        bool needsDynamicRebuild() const { return dynamicStructuralChange; }
+        size_t getDirtyDynamicEntityCount() const { return dirtyDynamicEntities.size(); }
+        bool isDirty() const { return staticDirty || dynamicDirty; }
 
         void rebuildStaticIfDirty()
         {
@@ -110,60 +88,30 @@ namespace scene
             }
         }
 
-        // Query both trees and merge results
         void queryFrustum(const math::Frustum& frustum, std::vector<uint32_t>& results) const;
 
-        // Query specific trees (for debugging/optimization)
-        void queryStaticFrustum(const math::Frustum& frustum, std::vector<uint32_t>& results) const
-        {
-            staticBVH.queryFrustum(frustum, results);
-        }
-
-        void queryDynamicFrustum(const math::Frustum& frustum, std::vector<uint32_t>& results) const
-        {
-            dynamicBVH.queryFrustum(frustum, results);
-        }
-        
         bool isStaticEntity(uint32_t entityId) const
         {
             return staticEntities.find(entityId) != staticEntities.end();
         }
-        
+
         bool isDynamicEntity(uint32_t entityId) const
         {
             return dynamicEntities.find(entityId) != dynamicEntities.end();
         }
 
-        // === Statistics ===
         size_t getStaticNodeCount() const { return staticBVH.getNodeCount(); }
         size_t getDynamicNodeCount() const { return dynamicBVH.getNodeCount(); }
         size_t getStaticEntityCount() const { return staticBVH.getPrimitiveCount(); }
         size_t getDynamicEntityCount() const { return dynamicBVH.getPrimitiveCount(); }
 
-        // Legacy methods
-        bool isBuilt() const
-        {
-            return staticBVH.isBuilt() || dynamicBVH.isBuilt();
-        }
-
-        size_t getNodeCount() const
-        {
-            return staticBVH.getNodeCount() + dynamicBVH.getNodeCount();
-        }
-
-        size_t getEntityCount() const
-        {
-            return staticBVH.getPrimitiveCount() + dynamicBVH.getPrimitiveCount();
-        }
+        bool isBuilt() const { return staticBVH.isBuilt() || dynamicBVH.isBuilt(); }
 
         void clear();
 
     private:
         void collectStaticPrimitives(std::vector<math::BVHPrimitive>& primitives);
-
         void collectDynamicPrimitives(std::vector<math::BVHPrimitive>& primitives);
-
-        // Check if there are meshes waiting for WorldTransformComponent
         bool hasMeshesWithoutWorldTransform(bool checkStatic) const;
     };
 }

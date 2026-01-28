@@ -6,7 +6,6 @@ namespace scene
     {
         auto& registry = EntityRegistry::getRegistry();
 
-        // Check point lights
         auto pointView = registry.view<components::PointLightComponent, components::TransformComponent>();
         for (auto entity : pointView)
         {
@@ -20,7 +19,6 @@ namespace scene
             }
         }
 
-        // Check spot lights
         auto spotView = registry.view<components::SpotLightComponent, components::TransformComponent>();
         for (auto entity : spotView)
         {
@@ -51,11 +49,8 @@ namespace scene
         staticBVH.build(std::move(primitives));
         collectStaticDirectionalLights();
 
-        // If there are lights waiting for WorldTransformComponent,
-        // keep dirty so we rebuild next frame when transforms are ready
         if (hasLightsWithoutWorldTransform(true))
         {
-            // Keep dirty, transforms not ready yet
             return;
         }
 
@@ -77,11 +72,8 @@ namespace scene
         dynamicBVH.build(std::move(primitives));
         collectDynamicDirectionalLights();
 
-        // If there are lights waiting for WorldTransformComponent,
-        // keep dirty so we rebuild next frame when transforms are ready
         if (hasLightsWithoutWorldTransform(false))
         {
-            // Keep dirty, transforms not ready yet
             return;
         }
 

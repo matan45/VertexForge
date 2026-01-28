@@ -19,33 +19,22 @@ namespace types
         Practical
     };
 
-    /**
-     * PCF kernel size for shadow filtering.
-     * Controls shadow softness vs performance tradeoff.
-     */
     enum class PCFKernelSize : uint8_t
     {
-        None = 0,    // 1x1 - Hard shadows (no filtering)
-        Small = 1,   // 3x3 - 9 samples
-        Medium = 2,  // 5x5 - 25 samples
-        Large = 3    // 7x7 - 49 samples
+        x1 = 0,  // 1x1 - Hard shadows
+        x2 = 1,  // 2x2
+        x3 = 2,  // 3x3
+        x4 = 3,  // 4x4
+        x5 = 4   // 5x5
     };
 
-    /**
-     * Shadow atlas configuration.
-     * Controls atlas size and per-light-type resolutions.
-     */
     struct ShadowAtlasConfig
     {
-        uint32_t atlasSize = 4096;              // Total atlas size (width and height)
-        uint32_t directionalResolution = 2048;  // Per cascade resolution
-        uint32_t spotResolution = 1024;         // Per spot light resolution
-        uint32_t pointResolution = 512;         // Per cube face resolution
-        bool dynamicReallocation = true;        // Allow runtime resize
+        uint32_t atlasSize = 4096;
+        uint32_t directionalResolution = 2048;
+        uint32_t spotResolution = 1024;
+        uint32_t pointResolution = 512;
 
-        /**
-         * Get atlas configuration based on shadow quality level.
-         */
         static ShadowAtlasConfig fromQuality(ShadowQuality quality)
         {
             ShadowAtlasConfig config;
@@ -91,24 +80,21 @@ namespace types
         bool enabled = true;
         ShadowQuality quality = ShadowQuality::High;
 
-        // Directional Light (CSM) settings
+        // CSM settings
         uint8_t cascadeCount = 4;
         CascadeSplitMode cascadeSplitMode = CascadeSplitMode::Practical;
 
-        // Global bias settings
+        // Bias
         float shadowBias = 0.005f;
         float normalBias = 0.02f;
 
-        // PCF filtering settings
-        PCFKernelSize pcfKernelSize = PCFKernelSize::Small;  // Default 3x3
-        bool softShadowsEnabled = true;                       // Global soft shadow toggle
+        // PCF
+        PCFKernelSize pcfKernelSize = PCFKernelSize::x3;
+        bool softShadowsEnabled = true;
 
-        // Shadow intensity: controls how much ambient light is reduced in shadowed areas
-        // 0.0 = no ambient occlusion in shadows (lighter shadows)
-        // 1.0 = full ambient occlusion in shadows (darker shadows)
+        // 0.0 = lighter shadows, 1.0 = darker shadows
         float shadowIntensity = 0.5f;
 
-        // Atlas configuration
         ShadowAtlasConfig atlas;
     };
 
@@ -118,9 +104,7 @@ namespace types
 
         static RenderSettings createDefault()
         {
-            RenderSettings settings;
-            settings.shadows = ShadowSettings{};
-            return settings;
+            return RenderSettings{};
         }
     };
 }

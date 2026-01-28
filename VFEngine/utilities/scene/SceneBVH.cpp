@@ -35,11 +35,8 @@ namespace scene
 
         staticBVH.build(std::move(primitives));
 
-        // If there are meshes waiting for WorldTransformComponent,
-        // keep dirty so we rebuild next frame when transforms are ready
         if (hasMeshesWithoutWorldTransform(true))
         {
-            // Keep dirty, transforms not ready yet
             return;
         }
 
@@ -60,11 +57,8 @@ namespace scene
 
         dynamicBVH.build(std::move(primitives));
 
-        // If there are meshes waiting for WorldTransformComponent,
-        // keep dirty so we rebuild next frame when transforms are ready
         if (hasMeshesWithoutWorldTransform(false))
         {
-            // Keep dirty, transforms not ready yet
             return;
         }
 
@@ -81,7 +75,6 @@ namespace scene
             return;
         }
 
-        // Collect new bounds for dirty entities
         std::unordered_map<uint32_t, math::AABB> updatedBounds;
         auto& registry = EntityRegistry::getRegistry();
 
@@ -119,7 +112,6 @@ namespace scene
             updatedBounds[entityId] = localAABB->getTransformed(worldTransform.worldMatrix);
         }
 
-        // Apply batch update to BVH
         dynamicBVH.updateEntitiesBounds(updatedBounds);
 
         dirtyDynamicEntities.clear();
@@ -155,7 +147,6 @@ namespace scene
     void SceneBVH::queryFrustum(const math::Frustum& frustum, std::vector<uint32_t>& results) const
     {
         results.clear();
-
         results.reserve(staticEntities.size() + dynamicEntities.size());
 
         if (staticBVH.isBuilt())
@@ -192,7 +183,6 @@ namespace scene
         for (auto entity : view)
         {
             const auto& transform = view.get<components::TransformComponent>(entity);
-
             if (!transform.isStatic)
             {
                 continue;
@@ -237,7 +227,6 @@ namespace scene
         for (auto entity : view)
         {
             const auto& transform = view.get<components::TransformComponent>(entity);
-
             if (transform.isStatic)
             {
                 continue;

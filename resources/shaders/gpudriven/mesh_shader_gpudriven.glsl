@@ -317,7 +317,7 @@ struct ShadowData {
     vec4 atlasViewport;       // 16 bytes - xy=offset, zw=size (CSM: z=cascadeCount)
     vec4 biasParams;          // 16 bytes - x=depthBias, y=slopeBias, z=normalBias, w=texelSize
     vec4 rangeParams;         // 16 bytes - x=near, y=far, z=1/(far-near), w=cascadeIndex
-    vec4 pcfParams;           // 16 bytes - x=kernelRadius (0-3), y=softness, z=filterEnabled, w=reserved
+    vec4 pcfParams;           // 16 bytes - x=kernelSize (0-4: 1x1 to 5x5), y=softness, z=filterEnabled, w=reserved
 };
 
 layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
@@ -434,9 +434,9 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelRadius = int(sd.pcfParams.x);
+    int kernelSize = int(sd.pcfParams.x);  // 0=1x1, 1=2x2, 2=3x3, 3=4x4, 4=5x5
 
-    if (!filterEnabled || kernelRadius == 0) {
+    if (!filterEnabled || kernelSize == 0) {
         // Hard shadows - single sample
         return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
     }
@@ -447,10 +447,12 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
     float softness = sd.pcfParams.y;
     float spread = texelSize * softness;
     int sampleCount = 0;
+    int size = kernelSize + 1;  // 2x2, 3x3, 4x4, or 5x5
+    float halfSize = float(size) * 0.5;
 
-    for (int x = -kernelRadius; x <= kernelRadius; ++x) {
-        for (int y = -kernelRadius; y <= kernelRadius; ++y) {
-            vec2 offset = vec2(float(x), float(y)) * spread;
+    for (int x = 0; x < size; ++x) {
+        for (int y = 0; y < size; ++y) {
+            vec2 offset = (vec2(float(x), float(y)) - halfSize + 0.5) * spread;
             shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
             sampleCount++;
         }
@@ -486,9 +488,9 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos) {
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelRadius = int(sd.pcfParams.x);
+    int kernelSize = int(sd.pcfParams.x);  // 0=1x1, 1=2x2, 2=3x3, 3=4x4, 4=5x5
 
-    if (!filterEnabled || kernelRadius == 0) {
+    if (!filterEnabled || kernelSize == 0) {
         // Hard shadows - single sample from atlas
         return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
     }
@@ -497,10 +499,12 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos) {
     float shadow = 0.0;
     float spread = sd.biasParams.w * sd.pcfParams.y;
     int sampleCount = 0;
+    int size = kernelSize + 1;
+    float halfSize = float(size) * 0.5;
 
-    for (int x = -kernelRadius; x <= kernelRadius; ++x) {
-        for (int y = -kernelRadius; y <= kernelRadius; ++y) {
-            vec2 offset = vec2(float(x), float(y)) * spread;
+    for (int x = 0; x < size; ++x) {
+        for (int y = 0; y < size; ++y) {
+            vec2 offset = (vec2(float(x), float(y)) - halfSize + 0.5) * spread;
             shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
             sampleCount++;
         }
@@ -583,9 +587,9 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lig
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelRadius = int(sd.pcfParams.x);
+    int kernelSize = int(sd.pcfParams.x);  // 0=1x1, 1=2x2, 2=3x3, 3=4x4, 4=5x5
 
-    if (!filterEnabled || kernelRadius == 0) {
+    if (!filterEnabled || kernelSize == 0) {
         // Hard shadows - single sample
         return texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(sampleDir, perspectiveDepth));
     }
@@ -601,10 +605,14 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 lightPos, float lig
 
     float shadow = 0.0;
     int sampleCount = 0;
+    int size = kernelSize + 1;
+    float halfSize = float(size) * 0.5;
 
-    for (int x = -kernelRadius; x <= kernelRadius; ++x) {
-        for (int y = -kernelRadius; y <= kernelRadius; ++y) {
-            vec3 offset = tangent * float(x) * spread + bitangent * float(y) * spread;
+    for (int x = 0; x < size; ++x) {
+        for (int y = 0; y < size; ++y) {
+            float fx = float(x) - halfSize + 0.5;
+            float fy = float(y) - halfSize + 0.5;
+            vec3 offset = tangent * fx * spread + bitangent * fy * spread;
             vec3 offsetDir = normalize(sampleDir + offset);
             shadow += texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(offsetDir, perspectiveDepth));
             sampleCount++;

@@ -36,8 +36,6 @@ namespace scene
         void collectStaticDirectionalLights();
         void collectDynamicDirectionalLights();
         math::AABB computeLightBounds(entt::entity entity, entt::registry& registry);
-
-        // Check if there are lights waiting for WorldTransformComponent
         bool hasLightsWithoutWorldTransform(bool checkStatic) const;
 
     public:
@@ -104,8 +102,6 @@ namespace scene
         size_t getStaticLightCount() const { return staticBVH.getPrimitiveCount() + staticDirectionalLights.size(); }
         size_t getDynamicLightCount() const { return dynamicBVH.getPrimitiveCount() + dynamicDirectionalLights.size(); }
 
-        // Returns entity IDs of point/spot lights intersecting the frustum
-        // Directional lights are always included (global/infinite range)
         void queryFrustum(const math::Frustum& frustum, std::vector<uint32_t>& visibleLights) const
         {
             visibleLights.clear();

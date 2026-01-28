@@ -1,10 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <entt/entt.hpp>
 #include <string>
 #include <map>
-#include <optional>
 #include <cstdint>
 #include "../uuid/UUID.hpp"
 #include "../types/PhysicsTypes.hpp"
@@ -30,8 +28,10 @@ namespace components
 
     using OptionalComponents = entt::type_list<IBLComponent, CameraComponent, MeshComponent, MaterialComponent,
                                                BillboardComponent, AudioSource2DComponent, AudioSource3DComponent,
-                                               ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent,
-                                               VFXComponent, DirectionalLightComponent, PointLightComponent, SpotLightComponent>;
+                                               ScriptComponent, ColliderComponent, RigidBodyComponent, AnimatorComponent
+                                               ,
+                                               VFXComponent, DirectionalLightComponent, PointLightComponent,
+                                               SpotLightComponent>;
 
     struct WorldTransformComponent
     {
@@ -84,24 +84,6 @@ namespace components
         bool isDirty = true;
         bool isStatic = true;
 
-        void setPosition(const glm::vec3& newPos)
-        {
-            position = newPos;
-            isDirty = true;
-        }
-
-        void setRotation(const glm::vec3& newRot)
-        {
-            rotation = newRot;
-            isDirty = true;
-        }
-
-        void setScale(const glm::vec3& newScale)
-        {
-            scale = newScale;
-            isDirty = true;
-        }
-
         glm::mat4 getMatrix() const
         {
             auto transform = glm::mat4(1.0f);
@@ -119,20 +101,18 @@ namespace components
         glm::mat4 projectionMatrix{1.0f};
         glm::mat4 viewMatrix{1.0f};
         bool isPerspective = true;
-        bool isPrimary = false; // True if this is the primary camera for runtime playback
+        bool isPrimary = false;
         bool showFrustum = false;
-        float fieldOfView = 90.0f; // For perspective cameras, in degrees
-        float orthoSize = 10.0f; // For orthographic cameras, half the height of the view
+        float fieldOfView = 90.0f;
+        float orthoSize = 10.0f;
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;
-        float aspectRatio = 1.778f; // Typically screen width / height
+        float aspectRatio = 1.778f;
 
-        // Occlusion culling settings
-        uint32_t cameraId = 0; // Unique ID for occlusion culling system
-        bool enableOcclusionCulling = true; // Whether to use Hi-Z occlusion culling for this camera
-        bool isRegistered = false; // Whether this camera has been registered with the occlusion system
+        uint32_t cameraId = 0;
+        bool enableOcclusionCulling = true;
+        bool isRegistered = false;
 
-        // Static counter for generating unique camera IDs
         static inline uint32_t nextCameraId = 0;
 
         static uint32_t generateCameraId()
@@ -179,9 +159,9 @@ namespace components
         {
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, position);
-            model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0, 1, 0)); // Yaw
-            model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1, 0, 0)); // Pitch
-            model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0, 0, 1)); // Roll
+            model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0, 1, 0));
+            model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1, 0, 0));
+            model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0, 0, 1));
 
             viewMatrix = glm::inverse(model);
         }
@@ -190,7 +170,7 @@ namespace components
     struct MeshComponent
     {
         std::string meshPath;
-        std::string animatorPath;  // Path to .vfAnimator file (optional)
+        std::string animatorPath;
         bool showBoundingBox = false;
     };
 
@@ -219,31 +199,6 @@ namespace components
             }
             return defaultMaterial;
         }
-
-        bool hasSubmeshMaterial(const std::string& submeshName) const
-        {
-            return subMeshMaterials.find(submeshName) != subMeshMaterials.end();
-        }
-
-        void clearSubMeshMaterials()
-        {
-            subMeshMaterials.clear();
-        }
-
-        void setParameterOverride(const std::string& paramName, float value)
-        {
-            parameterOverrides[paramName] = value;
-        }
-
-        std::optional<float> getParameterOverride(const std::string& paramName) const
-        {
-            auto it = parameterOverrides.find(paramName);
-            if (it != parameterOverrides.end())
-            {
-                return it->second;
-            }
-            return std::nullopt;
-        }
     };
 
     enum class BillboardSizeMode : uint8_t
@@ -270,7 +225,7 @@ namespace components
         uint32_t atlasIndex = 0;
 
         BillboardSizeMode sizeMode = BillboardSizeMode::ScreenSpace;
-        glm::vec2 size{64.0f, 64.0f}; // Pixels (screen-space) or world units
+        glm::vec2 size{64.0f, 64.0f};
 
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
 
@@ -301,8 +256,8 @@ namespace components
     struct AudioSource2DComponent
     {
         std::string audioFilePath;
-        float volume = 1.0f; // 0.0 to 1.0
-        float pitch = 1.0f; // 0.5 to 2.0
+        float volume = 1.0f;
+        float pitch = 1.0f;
         bool loop = false;
 
         uint64_t activeHandle = 0;
@@ -312,11 +267,11 @@ namespace components
     struct AudioSource3DComponent
     {
         std::string audioFilePath;
-        float volume = 1.0f; // 0.0 to 1.0
-        float pitch = 1.0f; // 0.5 to 2.0
+        float volume = 1.0f;
+        float pitch = 1.0f;
         bool loop = false;
-        float minDistance = 1.0f; // Distance where volume starts to attenuate
-        float maxDistance = 100.0f; // Distance where volume reaches minimum
+        float minDistance = 1.0f;
+        float maxDistance = 100.0f;
         bool showDebugSpheres = false;
 
         uint64_t activeHandle = 0;
@@ -356,15 +311,6 @@ namespace components
             return nullptr;
         }
 
-        ScriptEntry* findByInstanceId(uint64_t instanceId)
-        {
-            for (auto& entry : scripts)
-            {
-                if (entry.instanceId == instanceId) return &entry;
-            }
-            return nullptr;
-        }
-
         bool hasScript(const std::string& path) const
         {
             return findByPath(path) != nullptr;
@@ -383,36 +329,12 @@ namespace components
         }
     };
 
-    /**
-     * AnimatorComponent provides ECS access to an entity's animation state machine.
-     *
-     * OWNERSHIP MODEL:
-     * - The stateMachine pointer is NON-OWNING (observer pattern)
-     * - Actual ownership: RuntimeAnimatorSystem singleton owns all AnimatorStateMachine instances
-     * - Lifetime guarantee: RuntimeAnimatorSystem clears this pointer before destroying the state machine
-     *
-     * USAGE:
-     * - Do NOT delete or store this pointer long-term
-     * - Do NOT access after RuntimeAnimatorSystem::shutdown()
-     * - Prefer using AnimatorComponentService or EventDispatcher commands for safe access
-     * - Direct pointer access is only safe during the frame it was retrieved
-     *
-     * WHY void*:
-     * - Avoids circular header dependencies (Components.hpp cannot include AnimatorStateMachine.hpp)
-     * - Cast to animation::AnimatorStateMachine* when needed in code that includes the header
-     */
+    // Non-owning pointer to AnimatorStateMachine (owned by RuntimeAnimatorSystem)
+    // Cast to animation::AnimatorStateMachine* when needed
     struct AnimatorComponent
     {
-        // Non-owning pointer to AnimatorStateMachine (owned by RuntimeAnimatorSystem)
-        // Valid only while RuntimeAnimatorSystem is active and entity has animator initialized
         void* stateMachine = nullptr;
-
-        // Cached animator asset path (mirrors MeshComponent::animatorPath)
-        // Used by RuntimeAnimatorSystem to detect when animator needs reinitialization
         std::string animatorPath;
-
-        // True when stateMachine is valid and ready for use
-        // Set to false when RuntimeAnimatorSystem destroys or reinitializes the animator
         bool isInitialized = false;
     };
 
@@ -423,39 +345,26 @@ namespace components
     {
         ColliderShape shape = ColliderShape::Box;
 
-        // Shape dimensions
-        glm::vec3 size{1.0f};       // Box half-extents, or x=radius for sphere/capsule
-        float height = 2.0f;         // Capsule total height
-
-        // Transform offset from entity center
+        glm::vec3 size{1.0f};
+        float height = 2.0f;
         glm::vec3 offset{0.0f};
-
-        // Mesh collider path (for ConvexMesh/TriangleMesh)
         std::string meshPath;
 
-        // Behavior
-        bool isTrigger = false;      // Trigger/Sensor mode (no physical response)
-
-        // Collision layer (0-15, default 1 = Dynamic layer)
+        bool isTrigger = false;
         uint8_t collisionLayer = 1;
 
-        // Physics material properties
         float friction = 0.5f;
-        float restitution = 0.0f;    // Bounciness
+        float restitution = 0.0f;
     };
 
     struct RigidBodyComponent
     {
         RigidBodyType type = RigidBodyType::Dynamic;
 
-        // Mass properties (ignored for Static bodies)
         float mass = 1.0f;
-
-        // Damping
         float linearDamping = 0.0f;
         float angularDamping = 0.05f;
 
-        // Axis constraints (lock movement/rotation on specific axes)
         bool freezePositionX = false;
         bool freezePositionY = false;
         bool freezePositionZ = false;
@@ -466,13 +375,12 @@ namespace components
 
     struct VFXComponent
     {
-        std::string vfxPath;              // Path to .vfVFX asset file
-        bool autoPlay = true;             // Auto-start when entity becomes active
-        bool loop = true;                 // Loop the VFX effect
+        std::string vfxPath;
+        bool autoPlay = true;
+        bool loop = true;
 
-        // Runtime state (managed by VFXSceneRenderer, not serialized)
-        uint32_t runtimeInstanceId = 0;   // Internal ID for VFXSceneRenderer
-        bool isPlaying = false;           // Current playback state
+        uint32_t runtimeInstanceId = 0;
+        bool isPlaying = false;
     };
 
     struct DirectionalLightComponent
@@ -494,8 +402,8 @@ namespace components
     {
         glm::vec3 color{1.0f, 1.0f, 1.0f};
         float intensity{1.0f};
-        float innerAngle{30.0f};  // degrees
-        float outerAngle{45.0f};  // degrees
+        float innerAngle{30.0f};
+        float outerAngle{45.0f};
         float range{20.0f};
         bool showGizmo = false;
     };
