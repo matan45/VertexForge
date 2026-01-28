@@ -901,7 +901,13 @@ void main() {
 
     // Apply shadow intensity to ambient (reduces ambient in shadowed areas)
     // shadowIntensity: 0 = no ambient occlusion, 1 = full ambient occlusion in shadows
-    float ambientShadowFactor = mix(1.0, minShadow, lightCounts.shadowIntensity);
+    //
+    // With PCF soft shadows, minShadow is often in 0.3-0.7 range instead of 0 or 1.
+    // Apply a power curve to make soft shadows darker while preserving soft edges.
+    // Higher shadowIntensity = more contrast = darker shadows
+    float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;  // Range [1, 3]
+    float adjustedShadow = pow(minShadow, shadowContrast);
+    float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
     ambient *= ambientShadowFactor;
 
     float emissionMultiplier = emission;

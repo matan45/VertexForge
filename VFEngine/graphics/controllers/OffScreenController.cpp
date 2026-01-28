@@ -410,12 +410,23 @@ namespace controllers
 
     void OffScreenController::prepareFrameShadowDebug()
     {
-        if (!showShadowDebug || playModeActive)
-            return;
-
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler)
             return;
+
+        // If shadow debug is disabled or in play mode, make sure to disable it on the renderer
+        if (!showShadowDebug || playModeActive)
+        {
+            if (renderHandler->isDebugRendererInitialized())
+            {
+                auto* debugRenderer = renderHandler->getDebugRenderer();
+                if (debugRenderer)
+                {
+                    debugRenderer->setShowShadowDebug(false);
+                }
+            }
+            return;
+        }
 
         // Ensure debug renderer is initialized
         if (!renderHandler->isDebugRendererInitialized())

@@ -943,12 +943,11 @@ namespace render::shadow
                     glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f))
                 );
 
-                // Compute cascade split distances
-                types::CascadeSplitMode splitMode = types::CascadeSplitMode::Practical;
+                // Compute cascade split distances using global split mode setting
                 auto splits = CascadeShadowCalculator::computeSplitDistances(
                     cameraNear, cameraFar,
                     data.settings.cascadeCount,
-                    splitMode,
+                    globalCascadeSplitMode,
                     data.settings.cascadeSplitLambda
                 );
 
