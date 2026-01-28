@@ -7,6 +7,7 @@
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/shadow/ShadowSystem.hpp"
 #include "../render/tools/ShadowDebugRenderer.hpp"
+#include "types/RenderSettings.hpp"
 #include "offscreen/IBLController.hpp"
 #include "offscreen/MeshAssetManager.hpp"
 #include "offscreen/CameraController.hpp"
@@ -335,6 +336,11 @@ namespace controllers
         stats.directionalLightCount = static_cast<uint32_t>(shadowSystem->getDirectionalShadowViews().size());
         stats.pointLightCount = static_cast<uint32_t>(shadowSystem->getPointShadowViews().size());
         stats.spotLightCount = static_cast<uint32_t>(shadowSystem->getSpotShadowViews().size());
+
+        // Get point resolution from current quality setting for accurate VRAM calculation
+        auto quality = static_cast<types::ShadowQuality>(shadowSystem->getGlobalQuality());
+        auto atlasConfig = types::ShadowAtlasConfig::fromQuality(quality);
+        stats.pointResolution = atlasConfig.pointResolution;
 
         return stats;
     }

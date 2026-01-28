@@ -118,6 +118,7 @@ namespace services {
         uint32_t directionalLightCount = 0;
         uint32_t pointLightCount = 0;
         uint32_t spotLightCount = 0;
+        uint32_t pointResolution = 512;  // Per-face resolution for VRAM calculation
     };
 
     class IOffScreenProvider {

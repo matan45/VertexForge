@@ -102,9 +102,6 @@ namespace render
             bool atlasFirstUse = true;  // Track if atlas needs initial layout transition
             uint32_t maxShadowCasters = ShadowConstants::MAX_TOTAL_SHADOW_VIEWS;
 
-            // Pending cube face framebuffers for deferred destruction (destroyed next frame)
-            std::vector<vk::Framebuffer> pendingCubeFramebuffers;
-
             // External references (not owned)
             lighting::GPULightBufferManager* lightBufferManager = nullptr;
 

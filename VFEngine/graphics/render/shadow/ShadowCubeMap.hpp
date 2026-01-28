@@ -101,6 +101,17 @@ namespace render::shadow
         [[nodiscard]] vk::ImageLayout getCurrentLayout() const { return currentLayout; }
 
         /**
+         * Get or create a cached framebuffer for a specific cube face.
+         * Framebuffers are cached per face and only recreated if the render pass changes.
+         * @param face Face index (0-5)
+         * @param renderPass The render pass to create framebuffer for
+         * @param logicalDevice The Vulkan device
+         * @return Cached or newly created framebuffer for the face
+         */
+        [[nodiscard]] vk::Framebuffer getOrCreateFramebuffer(uint32_t face, vk::RenderPass renderPass,
+                                                              const vk::Device& logicalDevice);
+
+        /**
          * Extract resources for deferred deletion (transfers ownership).
          * After calling this, the ShadowCubeMap is left in an uninitialized state.
          * The caller is responsible for destroying the returned resources.
@@ -111,6 +122,7 @@ namespace render::shadow
             vk::DeviceMemory memory;
             vk::ImageView cubeView;
             std::array<vk::ImageView, FACE_COUNT> faceViews;
+            std::array<vk::Framebuffer, FACE_COUNT> framebuffers;
         };
         [[nodiscard]] ExtractedResources extractResources();
 
@@ -122,6 +134,10 @@ namespace render::shadow
         vk::DeviceMemory memory;
         vk::ImageView cubeView;                          // Cube view for shader sampling
         std::array<vk::ImageView, FACE_COUNT> faceViews; // Per-face 2D views for framebuffer
+
+        // Cached framebuffers (one per face)
+        std::array<vk::Framebuffer, FACE_COUNT> cachedFramebuffers{};
+        vk::RenderPass cachedRenderPass{};  // Track which render pass framebuffers were created for
 
         // Configuration
         uint32_t size = 0;

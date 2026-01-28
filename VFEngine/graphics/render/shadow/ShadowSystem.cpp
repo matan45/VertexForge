@@ -97,13 +97,6 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         logicalDevice.waitIdle();
 
-        // Cleanup pending cube framebuffers
-        for (vk::Framebuffer fb : pendingCubeFramebuffers)
-        {
-            logicalDevice.destroyFramebuffer(fb);
-        }
-        pendingCubeFramebuffers.clear();
-
         // Cleanup shadow pass pipeline
         if (shadowPassPipeline)
         {
@@ -1763,14 +1756,13 @@ namespace render::shadow
         if (pointLightsToRender.empty())
             return;
 
-        // Collect all framebuffers for deferred destruction after command buffer execution
-        // We store them in pendingCubeFramebuffers and destroy them next frame
-        // (This is safe because by next frame, this frame's commands have completed)
-        for (vk::Framebuffer fb : pendingCubeFramebuffers)
-        {
-            logicalDevice.destroyFramebuffer(fb);
-        }
-        pendingCubeFramebuffers.clear();
+        // Prepare descriptor sets once (same for all faces and lights)
+        std::array<vk::DescriptorSet, 4> descriptorSets = {
+            params.perDrawDataDescSet,
+            params.meshletDataDescSet,
+            params.vertexDataDescSet,
+            params.boneMatrixDescSet
+        };
 
         // Process each point light
         for (auto& [entityId, data] : pointLightsToRender)
@@ -1781,6 +1773,19 @@ namespace render::shadow
             // Transition entire cube to depth attachment
             cube->transitionToDepthAttachment(cmd);
 
+            // Prepare viewport and scissor once per light (same for all faces)
+            vk::Viewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(cubeSize);
+            viewport.height = static_cast<float>(cubeSize);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+
+            vk::Rect2D scissor{};
+            scissor.offset = vk::Offset2D{0, 0};
+            scissor.extent = vk::Extent2D{cubeSize, cubeSize};
+
             // Render each of the 6 faces
             for (uint32_t face = 0; face < ShadowCubeMap::FACE_COUNT; ++face)
             {
@@ -1789,18 +1794,9 @@ namespace render::shadow
 
                 const auto& view = data->views[face];
 
-                // Create temporary framebuffer for this cube face
-                vk::FramebufferCreateInfo fbInfo{};
-                fbInfo.renderPass = shadowPassPipeline->getRenderPass();
-                fbInfo.attachmentCount = 1;
-                vk::ImageView faceView = cube->getFaceView(face);
-                fbInfo.pAttachments = &faceView;
-                fbInfo.width = cubeSize;
-                fbInfo.height = cubeSize;
-                fbInfo.layers = 1;
-
-                vk::Framebuffer faceFramebuffer = logicalDevice.createFramebuffer(fbInfo);
-                pendingCubeFramebuffers.push_back(faceFramebuffer);
+                // Get or create cached framebuffer for this cube face
+                vk::Framebuffer faceFramebuffer = cube->getOrCreateFramebuffer(
+                    face, shadowPassPipeline->getRenderPass(), logicalDevice);
 
                 // Begin render pass for this face
                 vk::ClearValue clearValue{};
@@ -1816,16 +1812,8 @@ namespace render::shadow
 
                 cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-                // Bind pipeline
+                // Bind pipeline and descriptors (must be inside render pass)
                 cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
-
-                // Bind descriptor sets
-                std::array<vk::DescriptorSet, 4> descriptorSets = {
-                    params.perDrawDataDescSet,
-                    params.meshletDataDescSet,
-                    params.vertexDataDescSet,
-                    params.boneMatrixDescSet
-                };
                 cmd.bindDescriptorSets(
                     vk::PipelineBindPoint::eGraphics,
                     shadowPassPipeline->getPipelineLayout(),
@@ -1835,19 +1823,8 @@ namespace render::shadow
                     0, nullptr
                 );
 
-                // Set viewport and scissor for full cube face
-                vk::Viewport viewport{};
-                viewport.x = 0.0f;
-                viewport.y = 0.0f;
-                viewport.width = static_cast<float>(cubeSize);
-                viewport.height = static_cast<float>(cubeSize);
-                viewport.minDepth = 0.0f;
-                viewport.maxDepth = 1.0f;
+                // Set viewport and scissor
                 cmd.setViewport(0, 1, &viewport);
-
-                vk::Rect2D scissor{};
-                scissor.offset = vk::Offset2D{0, 0};
-                scissor.extent = vk::Extent2D{cubeSize, cubeSize};
                 cmd.setScissor(0, 1, &scissor);
 
                 // Set depth bias

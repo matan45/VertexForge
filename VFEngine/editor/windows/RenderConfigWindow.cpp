@@ -185,6 +185,51 @@ namespace windows
                                   "- Point: Sphere radius (magenta)");
             }
 
+            // Shadow Statistics (read-only info)
+            ImGui::Separator();
+            ImGui::Text("Statistics");
+            ImGui::Spacing();
+
+            auto shadowStats = dispatcher.query(events::render::GetShadowStatsQuery{});
+
+            // Atlas info
+            if (shadowStats.atlasWidth > 0)
+            {
+                ImGui::Text("Atlas: %ux%u", shadowStats.atlasWidth, shadowStats.atlasHeight);
+
+                // Utilization bar
+                ImGui::Text("Utilization:");
+                ImGui::SameLine();
+                ImGui::ProgressBar(shadowStats.atlasUtilization, ImVec2(-1, 0),
+                    (std::to_string(static_cast<int>(shadowStats.atlasUtilization * 100)) + "%%").c_str());
+
+                // Estimated VRAM for atlas (D32_SFLOAT = 4 bytes per texel)
+                float atlasMB = (shadowStats.atlasWidth * shadowStats.atlasHeight * 4) / (1024.0f * 1024.0f);
+
+                // Estimate point light cube maps VRAM (6 faces * resolution^2 * 4 bytes per active light)
+                uint32_t pointRes = shadowStats.pointResolution;
+                float cubeMB = shadowStats.pointLightCount * 6 * pointRes * pointRes * 4 / (1024.0f * 1024.0f);
+
+                float totalMB = atlasMB + cubeMB;
+                ImGui::Text("Est. VRAM: %.1f MB (Atlas: %.1f, Cubes: %.1f)",
+                           totalMB, atlasMB, cubeMB);
+            }
+            else
+            {
+                ImGui::TextDisabled("No shadow atlas allocated");
+            }
+
+            // Active lights summary
+            if (shadowStats.activeShadowCasters > 0)
+            {
+                ImGui::Text("Active: %u casters, %u views",
+                           shadowStats.activeShadowCasters, shadowStats.activeShadowViews);
+                ImGui::TextDisabled("  Dir: %u  Point: %u  Spot: %u",
+                                   shadowStats.directionalLightCount,
+                                   shadowStats.pointLightCount,
+                                   shadowStats.spotLightCount);
+            }
+
             ImGui::Unindent(10.0f);
         }
     }

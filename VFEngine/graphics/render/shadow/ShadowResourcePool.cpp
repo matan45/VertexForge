@@ -298,6 +298,14 @@ namespace render::shadow
                     }
 
                     deletionQueue->queueImage(extracted.image, extracted.memory, views);
+
+                    // Queue cached framebuffers for deferred deletion
+                    for (auto fb : extracted.framebuffers)
+                    {
+                        if (fb)
+                            deletionQueue->queueFramebuffer(fb);
+                    }
+
                     spdlog::debug("ShadowResourcePool: Queued cube map {} for deferred deletion", handle.resourceIndex);
                 }
                 else

@@ -9,6 +9,7 @@ namespace render::shadow
         : device(device)
     {
         faceViews.fill(nullptr);
+        cachedFramebuffers.fill(nullptr);
     }
 
     ShadowCubeMap::~ShadowCubeMap()
@@ -22,6 +23,8 @@ namespace render::shadow
         , memory(other.memory)
         , cubeView(other.cubeView)
         , faceViews(other.faceViews)
+        , cachedFramebuffers(other.cachedFramebuffers)
+        , cachedRenderPass(other.cachedRenderPass)
         , size(other.size)
         , format(other.format)
         , initialized(other.initialized)
@@ -31,6 +34,8 @@ namespace render::shadow
         other.memory = nullptr;
         other.cubeView = nullptr;
         other.faceViews.fill(nullptr);
+        other.cachedFramebuffers.fill(nullptr);
+        other.cachedRenderPass = nullptr;
         other.initialized = false;
     }
 
@@ -44,6 +49,8 @@ namespace render::shadow
             memory = other.memory;
             cubeView = other.cubeView;
             faceViews = other.faceViews;
+            cachedFramebuffers = other.cachedFramebuffers;
+            cachedRenderPass = other.cachedRenderPass;
             size = other.size;
             format = other.format;
             initialized = other.initialized;
@@ -53,6 +60,8 @@ namespace render::shadow
             other.memory = nullptr;
             other.cubeView = nullptr;
             other.faceViews.fill(nullptr);
+            other.cachedFramebuffers.fill(nullptr);
+            other.cachedRenderPass = nullptr;
             other.initialized = false;
         }
         return *this;
@@ -87,6 +96,17 @@ namespace render::shadow
         // ShadowResourcePool handles synchronization at the pool level.
         // Do NOT add waitIdle() here - it causes frame stalls.
         const auto& logicalDevice = device.getLogicalDevice();
+
+        // Cleanup cached framebuffers
+        for (auto& fb : cachedFramebuffers)
+        {
+            if (fb)
+            {
+                logicalDevice.destroyFramebuffer(fb);
+                fb = nullptr;
+            }
+        }
+        cachedRenderPass = nullptr;
 
         // Cleanup per-face views
         for (auto& view : faceViews)
@@ -204,17 +224,62 @@ namespace render::shadow
         extracted.memory = memory;
         extracted.cubeView = cubeView;
         extracted.faceViews = faceViews;
+        extracted.framebuffers = cachedFramebuffers;
 
         // Clear local handles (ownership transferred)
         image = nullptr;
         memory = nullptr;
         cubeView = nullptr;
         faceViews.fill(nullptr);
+        cachedFramebuffers.fill(nullptr);
+        cachedRenderPass = nullptr;
         initialized = false;
         currentLayout = vk::ImageLayout::eUndefined;
 
         spdlog::debug("ShadowCubeMap: Resources extracted for deferred deletion");
         return extracted;
+    }
+
+    vk::Framebuffer ShadowCubeMap::getOrCreateFramebuffer(uint32_t face, vk::RenderPass renderPass,
+                                                           const vk::Device& logicalDevice)
+    {
+        if (face >= FACE_COUNT)
+        {
+            spdlog::error("ShadowCubeMap::getOrCreateFramebuffer() - face {} out of range", face);
+            return nullptr;
+        }
+
+        // If render pass changed, invalidate all cached framebuffers
+        if (cachedRenderPass != renderPass)
+        {
+            for (auto& fb : cachedFramebuffers)
+            {
+                if (fb)
+                {
+                    logicalDevice.destroyFramebuffer(fb);
+                    fb = nullptr;
+                }
+            }
+            cachedRenderPass = renderPass;
+        }
+
+        // Return cached framebuffer if available
+        if (cachedFramebuffers[face])
+        {
+            return cachedFramebuffers[face];
+        }
+
+        // Create new framebuffer for this face
+        vk::FramebufferCreateInfo fbInfo{};
+        fbInfo.renderPass = renderPass;
+        fbInfo.attachmentCount = 1;
+        fbInfo.pAttachments = &faceViews[face];
+        fbInfo.width = size;
+        fbInfo.height = size;
+        fbInfo.layers = 1;
+
+        cachedFramebuffers[face] = logicalDevice.createFramebuffer(fbInfo);
+        return cachedFramebuffers[face];
     }
 
     void ShadowCubeMap::transitionToDepthAttachment(vk::CommandBuffer cmd)
