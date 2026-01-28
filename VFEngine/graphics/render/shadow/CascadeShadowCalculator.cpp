@@ -1,5 +1,6 @@
 #include "CascadeShadowCalculator.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/ext/matrix_clip_space.hpp>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -194,19 +195,44 @@ namespace render::shadow
 
         // 7. Extend Z range to catch shadow casters outside camera frustum
         // Objects behind the camera might still cast shadows into the visible area
+        // For outdoor scenes with sun, we need a larger extension to catch distant shadow casters
+        //
+        // In light space (after lookAt with glm::lookAt which is RH):
+        // - Light is at origin, looking down -Z
+        // - Points in front of the light have NEGATIVE Z values
+        // - minBounds.z is most negative (farthest from light)
+        // - maxBounds.z is least negative (closest to light)
         float zRange = maxBounds.z - minBounds.z;
-        float zNear = minBounds.z - zRange * 0.5f;  // Extend back
-        float zFar = maxBounds.z;
 
-        result.nearDistance = zNear;
-        result.farDistance = zFar;
+        // Extend back significantly - use max of proportional and minimum extension
+        // This handles both small indoor scenes and large outdoor environments
+        float zExtension = std::max(zRange * 2.0f, 500.0f);
 
-        // 8. Build orthographic projection matrix
-        // glm::ortho creates: left, right, bottom, top, near, far
-        result.projMatrix = glm::ortho(
+        // For Vulkan orthographic projection (right-handed, [0,1] depth):
+        // glm::orthoRH_ZO expects POSITIVE distance values for near/far.
+        // These represent distances from the camera (light) origin:
+        // - Objects at Z = -nearClip map to depth 0 (closest)
+        // - Objects at Z = -farClip map to depth 1 (farthest)
+        //
+        // Since minBounds.z and maxBounds.z are negative:
+        // - nearClip = -maxBounds.z (closest geometry, positive)
+        // - farClip = -(minBounds.z - zExtension) = -minBounds.z + zExtension (farthest + margin, positive)
+        float nearClip = -maxBounds.z;
+        float farClip = -minBounds.z + zExtension;
+
+        // Ensure near < far and both positive
+        if (nearClip < 0.01f) nearClip = 0.01f;
+        if (farClip <= nearClip) farClip = nearClip + 1.0f;
+
+        result.nearDistance = nearClip;
+        result.farDistance = farClip;
+
+        // 8. Build orthographic projection matrix for Vulkan (RH, [0,1] depth)
+        // Using glm::orthoRH_ZO for correct Vulkan depth mapping
+        result.projMatrix = glm::orthoRH_ZO(
             minBounds.x, maxBounds.x,  // left, right
             minBounds.y, maxBounds.y,  // bottom, top
-            zNear, zFar                // near, far
+            nearClip, farClip          // near, far (positive distances)
         );
 
         // 9. Flip Y for Vulkan coordinate system

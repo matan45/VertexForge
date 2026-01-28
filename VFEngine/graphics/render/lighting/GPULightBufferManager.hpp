@@ -125,7 +125,8 @@ namespace render::lighting
         void setShadowSystem(shadow::ShadowSystem* system) { shadowSystem = system; }
 
         // Set shadow intensity for ambient occlusion in shadowed areas
-        void setShadowIntensity(float intensity) { shadowIntensity = intensity; }
+        void setShadowIntensity(float intensity);
+        float getShadowIntensity() const { return shadowIntensity; }
 
     private:
         void createBuffers();

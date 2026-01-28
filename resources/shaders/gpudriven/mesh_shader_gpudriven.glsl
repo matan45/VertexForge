@@ -458,28 +458,9 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos) {
     return shadow / float(sampleCount);
 }
 
-// Directional light shadow (CSM with cascade selection)
-// Each cascade is a tile in the shadow atlas
-float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
-    if (baseShadowIndex < 0) return 1.0;  // No shadow data - fully lit
-
-    // Read cascade count from first cascade's rangeParams.z
-    int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
-    cascadeCount = clamp(cascadeCount, 1, 4);  // Safety clamp
-
-    // Select cascade based on view depth
-    // The rangeParams.y stores the far plane for each cascade
-    int cascadeIdx = 0;
-    for (int i = 0; i < cascadeCount; ++i) {
-        int idx = baseShadowIndex + i;
-        if (viewZ < shadowData[idx].rangeParams.y) {
-            cascadeIdx = i;
-            break;
-        }
-        cascadeIdx = i;  // Use furthest cascade if beyond all
-    }
-
-    int shadowIndex = baseShadowIndex + cascadeIdx;
+// Helper function to sample a single cascade with PCF filtering
+// Used by sampleDirectionalShadow for cascade blending
+float sampleCascadeShadow(int shadowIndex, vec3 worldPos) {
     ShadowData sd = shadowData[shadowIndex];
 
     // Transform world position to light space
@@ -501,11 +482,7 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
     projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
 
     // Apply depth bias (varies per cascade)
-    float bias = sd.biasParams.x;
-    projCoords.z -= bias;
-
-    // Clamp Z to valid range
-    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
+    projCoords.z = clamp(projCoords.z - sd.biasParams.x, 0.0, 1.0);
 
     // Check if PCF filtering is enabled
     bool filterEnabled = sd.pcfParams.z > 0.5;
@@ -518,9 +495,7 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
 
     // PCF filtering with configurable kernel size
     float shadow = 0.0;
-    float texelSize = sd.biasParams.w;
-    float softness = sd.pcfParams.y;
-    float spread = texelSize * softness;
+    float spread = sd.biasParams.w * sd.pcfParams.y;
     int sampleCount = 0;
 
     for (int x = -kernelRadius; x <= kernelRadius; ++x) {
@@ -531,6 +506,48 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
         }
     }
     return shadow / float(sampleCount);
+}
+
+// Directional light shadow (CSM with cascade selection and blending)
+// Features: cascade blending for smooth transitions, distance fade
+float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, float viewZ) {
+    if (baseShadowIndex < 0) return 1.0;  // No shadow data - fully lit
+
+    // Read cascade count from first cascade's rangeParams.z
+    int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
+    cascadeCount = clamp(cascadeCount, 1, 4);  // Safety clamp
+
+    // Select cascade based on view depth
+    // The rangeParams.y stores the far plane for each cascade
+    int cascadeIdx = 0;
+    for (int i = 0; i < cascadeCount; ++i) {
+        if (viewZ < shadowData[baseShadowIndex + i].rangeParams.y) {
+            cascadeIdx = i;
+            break;
+        }
+        cascadeIdx = i;  // Use furthest cascade if beyond all
+    }
+
+    int shadowIndex = baseShadowIndex + cascadeIdx;
+    float cascadeFar = shadowData[shadowIndex].rangeParams.y;
+
+    // Sample current cascade
+    float shadow = sampleCascadeShadow(shadowIndex, worldPos);
+
+    // Blend with next cascade in transition zone (last 10% of cascade range)
+    float blendZoneStart = cascadeFar * 0.9;
+    if (viewZ > blendZoneStart && cascadeIdx < cascadeCount - 1) {
+        float nextShadow = sampleCascadeShadow(shadowIndex + 1, worldPos);
+        float blendFactor = smoothstep(blendZoneStart, cascadeFar, viewZ);
+        shadow = mix(shadow, nextShadow, blendFactor);
+    }
+
+    // Distance fade for last cascade - smooth transition to fully lit at max distance
+    float maxDistance = shadowData[baseShadowIndex + cascadeCount - 1].rangeParams.y;
+    float fadeStart = maxDistance * 0.85;
+    float fadeFactor = 1.0 - smoothstep(fadeStart, maxDistance, viewZ);
+
+    return mix(1.0, shadow, fadeFactor);
 }
 
 // Point light shadow (cube map sampling with optional PCF)

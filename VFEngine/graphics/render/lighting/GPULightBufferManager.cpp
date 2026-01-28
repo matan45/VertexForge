@@ -716,6 +716,16 @@ namespace render::lighting
         std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
     }
 
+    void GPULightBufferManager::setShadowIntensity(float intensity)
+    {
+        if (shadowIntensity != intensity)
+        {
+            shadowIntensity = intensity;
+            updateCountsBuffer();
+            needsUpload = true;
+        }
+    }
+
     void GPULightBufferManager::uploadToGPU(vk::CommandBuffer cmd)
     {
         if (!initialized || !needsUpload)
