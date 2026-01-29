@@ -132,8 +132,22 @@ namespace render::shadow
             float dist = glm::length(corner - frustumCenter);
             radius = std::max(radius, dist);
         }
-        // Quantize radius for temporal stability
-        radius = std::ceil(radius * 16.0f) / 16.0f;
+
+        // Quantize radius to LARGE steps for temporal stability
+        // Using power-of-2 buckets ensures radius only changes when cascade size roughly doubles
+        // This prevents "breathing" from small floating-point variations
+        if (radius > 0.0f)
+        {
+            float log2Radius = std::log2(radius);
+            // Round up to nearest 0.5 in log space (i.e., sqrt(2) multiplier buckets)
+            // This gives ~41% size increments, which is coarse enough to be stable
+            float quantizedLog = std::ceil(log2Radius * 2.0f) / 2.0f;
+            radius = std::pow(2.0f, quantizedLog);
+        }
+        else
+        {
+            radius = 1.0f;  // Fallback for degenerate cases
+        }
 
         // Step 3: Setup light coordinate system (world-anchored, not frustum-centered)
         glm::vec3 lightDir = glm::normalize(lightDirection);
@@ -145,22 +159,37 @@ namespace render::shadow
         glm::vec3 lightRight = glm::normalize(glm::cross(worldUp, lightDir));
         glm::vec3 lightUp = glm::cross(lightDir, lightRight);
 
-        // Step 4: Compute STABLE texel size from sphere diameter
-        // This ensures texel size is constant regardless of frustum orientation
+        // Step 4: Compute texel size from sphere diameter
         float sphereDiameter = 2.0f * radius;
         float stableTexelSize = sphereDiameter / static_cast<float>(shadowMapResolution);
         result.texelSize = stableTexelSize;
 
-        // Step 5: SNAP frustum center to WORLD-ANCHORED texel grid in light space
+        // Step 5: SNAP frustum center to WORLD-ANCHORED grid in light space
         // Project frustum center onto light-space axes (relative to world origin 0,0,0)
-        // This makes the snap grid fixed in world space, not moving with the frustum
         float lightSpaceX = glm::dot(frustumCenter, lightRight);
         float lightSpaceY = glm::dot(frustumCenter, lightUp);
         float lightSpaceZ = glm::dot(frustumCenter, lightDir);
 
-        // Snap X and Y to texel grid (Z is depth direction, doesn't need snapping)
-        float snappedX = snapToTexel(lightSpaceX, stableTexelSize);
-        float snappedY = snapToTexel(lightSpaceY, stableTexelSize);
+        // CRITICAL: Use a FIXED snap grid that doesn't depend on the current texel size
+        // The snap grid must be stable even when radius/texelSize changes
+        // Snap to the texel size, but quantize the texel size itself to a power of 2
+        // This ensures the snap grid spacing is always consistent
+        float snapGridSize = stableTexelSize;
+        if (snapGridSize > 0.0f)
+        {
+            // Quantize snap grid to power-of-2 for absolute stability
+            float log2Grid = std::log2(snapGridSize);
+            float quantizedLog = std::ceil(log2Grid);  // Round up to next power of 2
+            snapGridSize = std::pow(2.0f, quantizedLog);
+        }
+        else
+        {
+            snapGridSize = 1.0f;
+        }
+
+        // Snap X and Y to the stable grid
+        float snappedX = snapToTexel(lightSpaceX, snapGridSize);
+        float snappedY = snapToTexel(lightSpaceY, snapGridSize);
 
         // Step 6: Reconstruct snapped position in world space
         glm::vec3 snappedFrustumCenter = snappedX * lightRight +
@@ -171,7 +200,7 @@ namespace render::shadow
         glm::vec3 lightPos = snappedFrustumCenter - lightDir * radius;
         result.viewMatrix = glm::lookAt(lightPos, snappedFrustumCenter, lightUp);
 
-        // Step 8: Compute tight Z bounds for depth precision
+        // Step 8: Compute Z bounds for depth range
         float minZ = std::numeric_limits<float>::max();
         float maxZ = std::numeric_limits<float>::lowest();
         for (const auto& corner : frustumCorners)
@@ -185,17 +214,27 @@ namespace render::shadow
         // This prevents scale changes when the frustum rotates
         float stableExtent = radius;
 
-        // Step 10: Extend Z range to catch shadow casters outside camera frustum
+        // Step 10: Stabilize Z range to prevent depth precision shifts during movement
+        // Quantize Z bounds to reduce frame-to-frame variation
         float zRange = maxZ - minZ;
         float zExtension = std::max(zRange * 2.0f, 500.0f);
+
+        // Quantize Z bounds to large steps (10 unit increments) for stability
+        // This prevents shadow acne/peter-panning changes as camera moves
+        float zQuantization = 10.0f;
+        minZ = std::floor(minZ / zQuantization) * zQuantization;
+        maxZ = std::ceil(maxZ / zQuantization) * zQuantization;
 
         // orthoRH_ZO expects positive near/far distances
         // In RH light space: more negative Z = farther from light
         float nearClip = -maxZ;
         float farClip = -minZ + zExtension;
 
-        if (nearClip < 0.01f) nearClip = 0.01f;
-        if (farClip <= nearClip) farClip = nearClip + 1.0f;
+        // Quantize near/far as well for additional stability
+        nearClip = std::max(0.1f, std::floor(nearClip / zQuantization) * zQuantization);
+        farClip = std::ceil(farClip / zQuantization) * zQuantization;
+
+        if (farClip <= nearClip) farClip = nearClip + zQuantization;
 
         result.nearDistance = nearClip;
         result.farDistance = farClip;
