@@ -3,6 +3,7 @@
 #include "scene/Entity.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "math/TransformUtils.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
@@ -335,6 +336,13 @@ namespace services
 
         if (sceneEntity.hasComponent<components::WorldTransformComponent>())
         {
+            const auto& worldComp = sceneEntity.getComponent<components::WorldTransformComponent>();
+            auto decomposed = math::decomposeMatrix(worldComp.worldMatrix);
+            data.worldTransform = TransformData{decomposed.position, decomposed.rotation, decomposed.scale};
+        }
+        else
+        {
+            // No world transform yet, use local
             data.worldTransform = data.localTransform;
         }
 

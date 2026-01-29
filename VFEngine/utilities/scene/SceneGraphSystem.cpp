@@ -116,37 +116,47 @@ namespace scene {
 
 	void SceneGraphSystem::markTransformDirty(Entity& entity) const
 	{
+		markTransformDirtyRecursive(entity);
+	}
+
+	void SceneGraphSystem::markTransformDirtyRecursive(Entity& entity) const
+	{
 		if (entity.hasComponent<components::TransformComponent>()) {
-			auto& transform = entity.getComponent<components::TransformComponent>();
-			transform.isDirty = true;
+			entity.getComponent<components::TransformComponent>().isDirty = true;
+		}
+		for (auto& child : entity.getChildren()) {
+			markTransformDirtyRecursive(child);
 		}
 	}
 
 	void SceneGraphSystem::updateChildWorldTransforms(Entity& entity, const glm::mat4& parentWorldTransform)
 	{
 		auto& transform = entity.getComponent<components::TransformComponent>();
+		glm::mat4 worldMatrix;
 
-		// Check if the transform or any ancestor's transform is dirty
 		if (transform.isDirty) {
 			// Calculate the new world transform by combining with the parent's world transform
-			glm::mat4 worldMatrix = parentWorldTransform * transform.getMatrix();
+			worldMatrix = parentWorldTransform * transform.getMatrix();
 
 			// Update or replace the WorldTransform component
 			entity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = worldMatrix;
 
 			// Mark the transform as clean
 			transform.isDirty = false;
-
-			// Recursively update the children
-			for (auto& child : entity.getChildren()) {
-				updateChildWorldTransforms(child, worldMatrix);
-			}
+		}
+		else if (entity.hasComponent<components::WorldTransformComponent>()) {
+			// Use cached world matrix
+			worldMatrix = entity.getComponent<components::WorldTransformComponent>().worldMatrix;
 		}
 		else {
-			// If not dirty, simply propagate the current parent's world transform to children
-			for (auto& child : entity.getChildren()) {
-				updateChildWorldTransforms(child, parentWorldTransform);
-			}
+			// No cached matrix, compute it
+			worldMatrix = parentWorldTransform * transform.getMatrix();
+			entity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = worldMatrix;
+		}
+
+		// Always recursively update children with the correct world matrix
+		for (auto& child : entity.getChildren()) {
+			updateChildWorldTransforms(child, worldMatrix);
 		}
 	}
 

@@ -27,6 +27,7 @@ namespace scene {
 
 		void updateWorldTransforms();
 		void updateCamera() const;
+		void markTransformDirty(Entity& entity) const;
 
 		Entity& GetRoot() {
 			return root;
@@ -69,7 +70,7 @@ namespace scene {
 		}
 
 	private:
-		void markTransformDirty(Entity& entity) const;
+		void markTransformDirtyRecursive(Entity& entity) const;
 		void updateChildWorldTransforms(Entity& parent, const glm::mat4& parentWorldTransform);
 		bool isDescendant(scene::Entity& parent, scene::Entity& child) const;
 	};

@@ -27,6 +27,7 @@ namespace services
         void registerEventHandlers(events::EventDispatcher& dispatcher);
 
         void setTransform(EntityHandle entity, const TransformData& transform);
+        void setWorldTransform(EntityHandle entity, const TransformData& worldTransform);
         std::optional<TransformData> getTransform(EntityHandle entity) const;
         std::optional<TransformData> getWorldTransform(EntityHandle entity) const;
     };
