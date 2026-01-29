@@ -119,56 +119,80 @@ namespace render::shadow
     {
         CascadeData result{};
 
+        // Step 1: Compute frustum center
         glm::vec3 frustumCenter{0.0f};
         for (const auto& corner : frustumCorners)
             frustumCenter += corner;
         frustumCenter /= 8.0f;
 
-        // Bounding sphere radius for rotation-invariant bounds
+        // Step 2: Compute bounding sphere radius for rotation-invariant bounds
         float radius = 0.0f;
         for (const auto& corner : frustumCorners)
         {
             float dist = glm::length(corner - frustumCenter);
             radius = std::max(radius, dist);
         }
+        // Quantize radius for temporal stability
         radius = std::ceil(radius * 16.0f) / 16.0f;
 
+        // Step 3: Setup light coordinate system (world-anchored, not frustum-centered)
         glm::vec3 lightDir = glm::normalize(lightDirection);
-        glm::vec3 lightUp = (std::abs(lightDir.y) < 0.99f)
+        glm::vec3 worldUp = (std::abs(lightDir.y) < 0.99f)
             ? glm::vec3(0.0f, 1.0f, 0.0f)
             : glm::vec3(1.0f, 0.0f, 0.0f);
 
-        glm::vec3 lightPos = frustumCenter - lightDir * radius;
-        result.viewMatrix = glm::lookAt(lightPos, frustumCenter, lightUp);
+        // Compute stable light-space axes (based only on light direction, not frustum)
+        glm::vec3 lightRight = glm::normalize(glm::cross(worldUp, lightDir));
+        glm::vec3 lightUp = glm::cross(lightDir, lightRight);
 
-        glm::vec3 minBounds{std::numeric_limits<float>::max()};
-        glm::vec3 maxBounds{std::numeric_limits<float>::lowest()};
+        // Step 4: Compute STABLE texel size from sphere diameter
+        // This ensures texel size is constant regardless of frustum orientation
+        float sphereDiameter = 2.0f * radius;
+        float stableTexelSize = sphereDiameter / static_cast<float>(shadowMapResolution);
+        result.texelSize = stableTexelSize;
 
+        // Step 5: SNAP frustum center to WORLD-ANCHORED texel grid in light space
+        // Project frustum center onto light-space axes (relative to world origin 0,0,0)
+        // This makes the snap grid fixed in world space, not moving with the frustum
+        float lightSpaceX = glm::dot(frustumCenter, lightRight);
+        float lightSpaceY = glm::dot(frustumCenter, lightUp);
+        float lightSpaceZ = glm::dot(frustumCenter, lightDir);
+
+        // Snap X and Y to texel grid (Z is depth direction, doesn't need snapping)
+        float snappedX = snapToTexel(lightSpaceX, stableTexelSize);
+        float snappedY = snapToTexel(lightSpaceY, stableTexelSize);
+
+        // Step 6: Reconstruct snapped position in world space
+        glm::vec3 snappedFrustumCenter = snappedX * lightRight +
+                                          snappedY * lightUp +
+                                          lightSpaceZ * lightDir;
+
+        // Step 7: Build view matrix with snapped center
+        glm::vec3 lightPos = snappedFrustumCenter - lightDir * radius;
+        result.viewMatrix = glm::lookAt(lightPos, snappedFrustumCenter, lightUp);
+
+        // Step 8: Compute tight Z bounds for depth precision
+        float minZ = std::numeric_limits<float>::max();
+        float maxZ = std::numeric_limits<float>::lowest();
         for (const auto& corner : frustumCorners)
         {
             glm::vec3 lightSpaceCorner = glm::vec3(result.viewMatrix * glm::vec4(corner, 1.0f));
-            minBounds = glm::min(minBounds, lightSpaceCorner);
-            maxBounds = glm::max(maxBounds, lightSpaceCorner);
+            minZ = std::min(minZ, lightSpaceCorner.z);
+            maxZ = std::max(maxZ, lightSpaceCorner.z);
         }
 
-        float worldUnitsPerTexelX = (maxBounds.x - minBounds.x) / static_cast<float>(shadowMapResolution);
-        float worldUnitsPerTexelY = (maxBounds.y - minBounds.y) / static_cast<float>(shadowMapResolution);
-        result.texelSize = std::max(worldUnitsPerTexelX, worldUnitsPerTexelY);
+        // Step 9: Use SPHERE-BASED stable XY bounds instead of tight AABB
+        // This prevents scale changes when the frustum rotates
+        float stableExtent = radius;
 
-        // Snap to texel grid to prevent shadow swimming
-        minBounds.x = snapToTexel(minBounds.x, worldUnitsPerTexelX);
-        minBounds.y = snapToTexel(minBounds.y, worldUnitsPerTexelY);
-        maxBounds.x = snapToTexel(maxBounds.x, worldUnitsPerTexelX);
-        maxBounds.y = snapToTexel(maxBounds.y, worldUnitsPerTexelY);
-
-        // Extend Z range to catch shadow casters outside camera frustum
-        // In RH light space: minBounds.z is farthest, maxBounds.z is closest
-        float zRange = maxBounds.z - minBounds.z;
+        // Step 10: Extend Z range to catch shadow casters outside camera frustum
+        float zRange = maxZ - minZ;
         float zExtension = std::max(zRange * 2.0f, 500.0f);
 
         // orthoRH_ZO expects positive near/far distances
-        float nearClip = -maxBounds.z;
-        float farClip = -minBounds.z + zExtension;
+        // In RH light space: more negative Z = farther from light
+        float nearClip = -maxZ;
+        float farClip = -minZ + zExtension;
 
         if (nearClip < 0.01f) nearClip = 0.01f;
         if (farClip <= nearClip) farClip = nearClip + 1.0f;
@@ -176,9 +200,10 @@ namespace render::shadow
         result.nearDistance = nearClip;
         result.farDistance = farClip;
 
+        // Step 11: Create orthographic projection with stable sphere-based bounds
         result.projMatrix = glm::orthoRH_ZO(
-            minBounds.x, maxBounds.x,
-            minBounds.y, maxBounds.y,
+            -stableExtent, stableExtent,
+            -stableExtent, stableExtent,
             nearClip, farClip
         );
 
