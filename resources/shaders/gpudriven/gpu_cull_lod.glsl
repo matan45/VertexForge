@@ -63,9 +63,12 @@ vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
 }
 
 bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
+    float tolerance = sphere.w * 0.01; // 1% of radius as tolerance
+    float effectiveRadius = sphere.w + tolerance;
+
     for (int i = 0; i < 6; i++) {
         float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
-        if (distance < -sphere.w) {
+        if (distance < -effectiveRadius) {
             return false;
         }
     }
@@ -177,12 +180,7 @@ void main() {
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
     uint commandsPerSection = getCommandsPerSection();
 
-    // VK-275: Skip frustum culling for large objects to avoid precision issues
-    // Large bounding spheres (like walls/floors) can be incorrectly culled at frustum edges
-    const float LARGE_OBJECT_RADIUS = 5.0;
-    bool skipFrustumCull = worldSphere.w > LARGE_OBJECT_RADIUS;
-
-    if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u && !skipFrustumCull) {
+    if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
             atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
             return;
