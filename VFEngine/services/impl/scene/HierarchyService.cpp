@@ -317,6 +317,19 @@ namespace services
                 auto& newAnim = newEntity.addComponent<components::AnimatorComponent>();
                 newAnim.animatorPath = origAnim.animatorPath;
             }
+                
+            if (orig.hasComponent<components::BillboardComponent>())
+            {
+                auto& origBillboard = orig.getComponent<components::BillboardComponent>();
+                auto& newBillboard = newEntity.addComponent<components::BillboardComponent>();
+                newBillboard.iconType = origBillboard.iconType;
+                newBillboard.atlasIndex = origBillboard.atlasIndex;
+                newBillboard.sizeMode = origBillboard.sizeMode;
+                newBillboard.size = origBillboard.size;
+                newBillboard.colorTint = origBillboard.colorTint;
+                newBillboard.editorOnly = origBillboard.editorOnly;
+                newBillboard.selectable = origBillboard.selectable;
+            }
 
             for (auto& child : orig.getChildren())
             {

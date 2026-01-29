@@ -177,7 +177,12 @@ void main() {
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
     uint commandsPerSection = getCommandsPerSection();
 
-    if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
+    // VK-275: Skip frustum culling for large objects to avoid precision issues
+    // Large bounding spheres (like walls/floors) can be incorrectly culled at frustum edges
+    const float LARGE_OBJECT_RADIUS = 5.0;
+    bool skipFrustumCull = worldSphere.w > LARGE_OBJECT_RADIUS;
+
+    if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u && !skipFrustumCull) {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
             atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
             return;
