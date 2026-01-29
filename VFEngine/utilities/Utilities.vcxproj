@@ -108,6 +108,7 @@
     <ClInclude Include="math\Frustum.hpp" />
     <ClInclude Include="math\LightBounds.hpp" />
     <ClInclude Include="math\MathHelper.hpp" />
+    <ClInclude Include="math\TransformUtils.hpp" />
     <ClInclude Include="nfd\FileDialog.hpp" />
     <ClInclude Include="print\EditorLogger.hpp" />
     <ClInclude Include="print\LogEntry.hpp" />

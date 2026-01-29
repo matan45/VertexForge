@@ -38,6 +38,13 @@ namespace events::scene {
         std::string_view getName() const override { return "SetTransform"; }
     };
 
+    struct SetWorldTransformCommand : ICommand<> {
+        services::EntityHandle entity;
+        services::TransformData worldTransform;
+
+        std::string_view getName() const override { return "SetWorldTransform"; }
+    };
+
     struct SetEntityNameCommand : ICommand<> {
         services::EntityHandle entity;
         std::string newName;
@@ -320,6 +327,12 @@ namespace events::scene {
         services::EntityHandle entity;
 
         std::string_view getName() const override { return "GetTransform"; }
+    };
+
+    struct GetWorldTransformQuery : IQuery<std::optional<services::TransformData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetWorldTransform"; }
     };
 
     struct GetSceneHierarchyQuery : IQuery<services::SceneHierarchyData> {
