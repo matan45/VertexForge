@@ -91,11 +91,8 @@ namespace render::gpudriven
         FreeListAllocator vertexAllocator;
         FreeListAllocator indexAllocator;
 
-        // Persistent PBR cache for material lookups (avoids re-extracting each frame)
         std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
-        // Cache for instance -> parent material path (avoids repeated loadMaterialInstance calls)
         std::unordered_map<std::string, std::string> instanceToParentCache;
-        // Material change callback for cache invalidation
         material::CallbackId materialChangeCallbackId{};
 
     public:

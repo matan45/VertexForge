@@ -186,17 +186,14 @@ namespace render::gpudriven
     {
         std::array<vk::DescriptorBufferInfo, 3> bufferInfos{};
 
-        // Binding 0: GPUMeshlet[] buffer
         bufferInfos[0].buffer = meshletBuffer.getMeshletBuffer();
         bufferInfos[0].offset = 0;
         bufferInfos[0].range = VK_WHOLE_SIZE;
 
-        // Binding 1: Meshlet vertex indices buffer
         bufferInfos[1].buffer = meshletBuffer.getMeshletVertexBuffer();
         bufferInfos[1].offset = 0;
         bufferInfos[1].range = VK_WHOLE_SIZE;
 
-        // Binding 2: Meshlet primitive buffer
         bufferInfos[2].buffer = meshletBuffer.getMeshletPrimitiveBuffer();
         bufferInfos[2].offset = 0;
         bufferInfos[2].range = VK_WHOLE_SIZE;
@@ -258,8 +255,6 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Create descriptor set layout for per-draw data (Set 1)
-        // Accessed by Task, Mesh, Fragment, and Vertex shaders (Vertex for custom material pipelines)
         vk::DescriptorSetLayoutBinding perDrawBinding{};
         perDrawBinding.binding = 0;
         perDrawBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -301,28 +296,23 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // 4 bindings: meshlet buffer, vertex indices, primitive indices, stats
         std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
 
-        // Binding 0: GPUMeshlet[] buffer
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
 
-        // Binding 1: Meshlet vertex indices buffer
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
 
-        // Binding 2: Meshlet primitive buffer
         bindings[2].binding = 2;
         bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
 
-        // Binding 3: Culling stats buffer (read/write by task shader)
         bindings[3].binding = 3;
         bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[3].descriptorCount = 1;
@@ -368,15 +358,13 @@ namespace render::gpudriven
 
         vkDevice.updateDescriptorSets(statsWrite, {});
 
-        loggerInfo("MeshShaderPipeline: Created meshlet data descriptor with stats buffer");
+        loggerInfo("MeshShaderPipeline: Created meshlet data descriptor");
     }
 
     void MeshShaderPipeline::createVertexDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Create descriptor set layout for vertex data (Set 4)
-        // Single binding for interleaved vertex buffer
         vk::DescriptorSetLayoutBinding vertexBinding{};
         vertexBinding.binding = 0;
         vertexBinding.descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -451,17 +439,17 @@ namespace render::gpudriven
         }
 
         std::array<vk::DescriptorSetLayout, 11> setLayouts = {
-            iblLayout,             // Set 0: Camera/IBL
-            perDrawDataLayout,     // Set 1: Per-draw data
-            bindlessTextureLayout, // Set 2: Bindless textures
-            meshletDataLayout,     // Set 3: Meshlet data
-            vertexDataLayout,      // Set 4: Vertex data
-            boneMatrixLayout,      // Set 5: Bone matrices for skeletal animation
-            lightDataLayout,       // Set 6: Light buffers (directional, point, spot + counts)
-            clusterGridLayout,     // Set 7: Cluster grid parameters
-            cullingOutputLayout,   // Set 8: Light culling output (cluster light grid + index list)
-            shadowDataLayout,      // Set 9: Shadow data SSBO (view-projection matrices, bias, etc.)
-            shadowTextureLayout    // Set 10: Shadow textures (atlas, CSM array, point cubes)
+            iblLayout,
+            perDrawDataLayout,
+            bindlessTextureLayout,
+            meshletDataLayout,
+            vertexDataLayout,
+            boneMatrixLayout,
+            lightDataLayout,
+            clusterGridLayout,
+            cullingOutputLayout,
+            shadowDataLayout,
+            shadowTextureLayout
         };
 
         vk::PushConstantRange pushConstantRange{};
@@ -530,8 +518,6 @@ namespace render::gpudriven
             return cachedStats;
         }
 
-        // Ensure all GPU writes to stats buffer are complete before host read.
-        // Task shader writes to this buffer; wait for graphics queue to finish.
         device.getGraphicsQueue().waitIdle();
 
         vk::Device vkDevice = device.getLogicalDevice();

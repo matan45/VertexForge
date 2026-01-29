@@ -53,14 +53,12 @@ namespace render::gpudriven
 
         createBuffers();
 
-        // Register callback to invalidate caches when materials change
         if (!materialChangeCallbackId)
         {
             materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
                 [this](const std::string& materialPath) {
                     pbrCache.erase(materialPath);
                     instanceToParentCache.erase(materialPath);
-                    // Also invalidate all instance entries when a parent material changes
                     if (!material::isInstanceFile(materialPath))
                     {
                         std::erase_if(pbrCache, [](const auto& pair) {
@@ -83,14 +81,12 @@ namespace render::gpudriven
     {
         if (!initialized) return;
 
-        // Unregister material change callback
         if (materialChangeCallbackId)
         {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
             materialChangeCallbackId = {};
         }
 
-        // Clear caches
         pbrCache.clear();
         instanceToParentCache.clear();
 
@@ -569,7 +565,6 @@ namespace render::gpudriven
             std::string effectiveMaterialPath = materialPath;
             if (material::isInstanceFile(materialPath))
             {
-                // Use cached parent path lookup
                 auto cacheIt = instanceToParentCache.find(materialPath);
                 if (cacheIt != instanceToParentCache.end())
                 {

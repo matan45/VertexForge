@@ -22,9 +22,7 @@ namespace types
     enum class PCFKernelSize : uint8_t
     {
         x1 = 0,  // 1x1 - Hard shadows
-        x2 = 1,  // 2x2
         x3 = 2,  // 3x3
-        x4 = 3,  // 4x4
         x5 = 4   // 5x5
     };
 

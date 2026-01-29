@@ -271,7 +271,7 @@ void main() {
     perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
     perDrawData[globalDrawIndex].meshletCount = meshletCount;
     perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
-    perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;  // 0xFFFFFFFF for static meshes
-    perDrawData[globalDrawIndex].boneCount = 0u;  // Not used currently, bone count determined per-vertex
+    perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
+    perDrawData[globalDrawIndex].boneCount = 0u;
     perDrawData[globalDrawIndex].padding3 = 0u;
 }

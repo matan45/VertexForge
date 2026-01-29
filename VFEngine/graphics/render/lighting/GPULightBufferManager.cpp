@@ -190,7 +190,6 @@ namespace render::lighting
 
         std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
 
-        // Binding 0: Directional lights SSBO
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
@@ -199,7 +198,6 @@ namespace render::lighting
                                  vk::ShaderStageFlagBits::eMeshEXT;
         bindings[0].pImmutableSamplers = nullptr;
 
-        // Binding 1: Point lights SSBO
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[1].descriptorCount = 1;
@@ -208,7 +206,6 @@ namespace render::lighting
                                  vk::ShaderStageFlagBits::eMeshEXT;
         bindings[1].pImmutableSamplers = nullptr;
 
-        // Binding 2: Spot lights SSBO
         bindings[2].binding = 2;
         bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[2].descriptorCount = 1;
@@ -217,7 +214,6 @@ namespace render::lighting
                                  vk::ShaderStageFlagBits::eMeshEXT;
         bindings[2].pImmutableSamplers = nullptr;
 
-        // Binding 3: Light counts UBO
         bindings[3].binding = 3;
         bindings[3].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[3].descriptorCount = 1;
@@ -307,7 +303,6 @@ namespace render::lighting
 
     void GPULightBufferManager::updateFromScene()
     {
-        // No filtering - collect all lights
         updateFromScene(std::unordered_set<uint32_t>{});
     }
 
@@ -318,59 +313,11 @@ namespace render::lighting
             return;
         }
 
-#ifndef NDEBUG
-        // Debug validation: check that visibleLightIds contain valid light entities
-        // This helps detect sync issues between LightBVH and ECS registry
-        if (!visibleLightIds.empty())
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            uint32_t invalidCount = 0;
-            uint32_t noLightComponentCount = 0;
-
-            for (uint32_t entityId : visibleLightIds)
-            {
-                auto entity = static_cast<entt::entity>(entityId);
-
-                if (!registry.valid(entity))
-                {
-                    ++invalidCount;
-                    continue;
-                }
-
-                // Check if entity has at least one light component
-                bool hasLight = registry.any_of<
-                    components::DirectionalLightComponent,
-                    components::PointLightComponent,
-                    components::SpotLightComponent>(entity);
-
-                if (!hasLight)
-                {
-                    ++noLightComponentCount;
-                }
-            }
-
-            if (invalidCount > 0)
-            {
-                loggerWarning("GPULightBufferManager: {} stale entity IDs in visibleLightIds (BVH may be out of sync)",
-                              invalidCount);
-            }
-            if (noLightComponentCount > 0)
-            {
-                loggerWarning("GPULightBufferManager: {} entity IDs have no light component (BVH contains non-light entities)",
-                              noLightComponentCount);
-            }
-        }
-#endif
-
-        // If the set is empty, collect all lights (no filtering)
-        // Otherwise, only collect lights that are in the visible set
         const std::unordered_set<uint32_t>* filterPtr = visibleLightIds.empty() ? nullptr : &visibleLightIds;
 
         collectDirectionalLights(filterPtr);
         collectPointLights(filterPtr);
         collectSpotLights(filterPtr);
-
-        // Clean up shadow registrations for lights whose components were removed
         cleanupStaleShadowRegistrations();
 
         if (detectChanges())
@@ -390,7 +337,6 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
             {
                 if (!nameComp->isActive)
@@ -411,8 +357,6 @@ namespace render::lighting
             const auto& light = view.get<components::DirectionalLightComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Extract forward direction from world matrix (handles parented entities correctly)
-            // Transform local forward (0, 0, -1) by the world matrix rotation
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
             GPUDirectionalLight& gpuLight = cpuDirectionalLights[directionalCount];
@@ -420,9 +364,8 @@ namespace render::lighting
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
 
-            // Handle shadow registration based on global shadow settings
             uint32_t entityId = static_cast<uint32_t>(entity);
-            gpuLight.shadowIndex = -1;  // Default: no shadow
+            gpuLight.shadowIndex = -1;
 
             if (shadowSystem)
             {
@@ -431,8 +374,6 @@ namespace render::lighting
 
                 if (shadowsEnabled)
                 {
-                    // Register or update light for shadow casting (CSM for directional lights)
-                    // Use global settings from shadow system
                     shadow::ShadowSettings settings{};
                     settings.depthBias = shadowSystem->getGlobalDepthBias();
                     settings.normalBias = shadowSystem->getGlobalNormalBias();
@@ -447,19 +388,16 @@ namespace render::lighting
                 }
                 else if (!shadowsEnabled && isRegistered)
                 {
-                    // Unregister light from shadow casting when shadows disabled globally
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
 
-                // Query shadow index
                 gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
 
             ++directionalCount;
         }
 
-        // One-time warning when limit is exceeded (resets when count drops below limit)
         if (hitLimit && !warnedDirectionalLimit)
         {
             loggerWarning("GPULightBufferManager: Exceeded max directional lights ({}). Additional lights will be ignored.",
@@ -482,7 +420,6 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
             {
                 if (!nameComp->isActive)
@@ -511,9 +448,8 @@ namespace render::lighting
             gpuLight.color = light.color;
             gpuLight.intensity = light.intensity;
 
-            // Handle shadow registration based on global shadow settings
             uint32_t entityId = static_cast<uint32_t>(entity);
-            gpuLight.shadowIndex = -1;  // Default: no shadow
+            gpuLight.shadowIndex = -1;
 
             if (shadowSystem)
             {
@@ -522,12 +458,10 @@ namespace render::lighting
 
                 if (shadowsEnabled)
                 {
-                    // Register or update light for shadow casting (cube map for point lights)
-                    // Use global bias from shadow system settings
                     shadow::ShadowSettings settings{};
                     settings.depthBias = shadowSystem->getGlobalDepthBias();
                     settings.normalBias = shadowSystem->getGlobalNormalBias();
-                    settings.farPlane = light.radius;  // Use light radius as far plane
+                    settings.farPlane = light.radius;
                     settings.enabled = true;
                     settings.castShadows = true;
 
@@ -538,12 +472,10 @@ namespace render::lighting
                 }
                 else if (!shadowsEnabled && isRegistered)
                 {
-                    // Unregister light from shadow casting when shadows disabled globally
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
 
-                // Query shadow index
                 gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
             gpuLight.padding[0] = 0;
@@ -553,7 +485,6 @@ namespace render::lighting
             ++pointCount;
         }
 
-        // One-time warning when limit is exceeded (resets when count drops below limit)
         if (hitLimit && !warnedPointLimit)
         {
             loggerWarning("GPULightBufferManager: Exceeded max point lights ({}). Additional lights will be ignored.",
@@ -576,7 +507,6 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
             {
                 if (!nameComp->isActive)
@@ -598,9 +528,6 @@ namespace render::lighting
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
             glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
-
-            // Extract forward direction from world matrix (handles parented entities correctly)
-            // Transform local forward (0, 0, -1) by the world matrix rotation
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
             GPUSpotLight& gpuLight = cpuSpotLights[spotCount];
@@ -612,9 +539,8 @@ namespace render::lighting
             gpuLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
             gpuLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
 
-            // Handle shadow registration based on global shadow settings
             uint32_t entityId = static_cast<uint32_t>(entity);
-            gpuLight.shadowIndex = -1;  // Default: no shadow
+            gpuLight.shadowIndex = -1;
 
             if (shadowSystem)
             {
@@ -623,12 +549,10 @@ namespace render::lighting
 
                 if (shadowsEnabled)
                 {
-                    // Register or update light for shadow casting
-                    // Use global bias from shadow system settings
                     shadow::ShadowSettings settings{};
                     settings.depthBias = shadowSystem->getGlobalDepthBias();
                     settings.normalBias = shadowSystem->getGlobalNormalBias();
-                    settings.farPlane = light.range;  // Use light range as far plane
+                    settings.farPlane = light.range;
                     settings.enabled = true;
                     settings.castShadows = true;
 
@@ -639,12 +563,10 @@ namespace render::lighting
                 }
                 else if (!shadowsEnabled && isRegistered)
                 {
-                    // Unregister light from shadow casting when shadows disabled globally
                     shadowSystem->unregisterLight(entityId);
                     registeredShadowLights.erase(entityId);
                 }
 
-                // Query shadow index
                 gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
             }
             gpuLight.padding[0] = 0;
@@ -653,7 +575,6 @@ namespace render::lighting
             ++spotCount;
         }
 
-        // One-time warning when limit is exceeded (resets when count drops below limit)
         if (hitLimit && !warnedSpotLimit)
         {
             loggerWarning("GPULightBufferManager: Exceeded max spot lights ({}). Additional lights will be ignored.",
@@ -672,15 +593,12 @@ namespace render::lighting
             return;
 
         auto& registry = scene::EntityRegistry::getRegistry();
-
-        // Collect entity IDs that need to be unregistered
         std::vector<uint32_t> toUnregister;
 
         for (uint32_t entityId : registeredShadowLights)
         {
             auto entity = static_cast<entt::entity>(entityId);
 
-            // Check if entity is still valid and has a light component
             bool shouldKeep = registry.valid(entity) &&
                               registry.any_of<components::DirectionalLightComponent,
                                               components::PointLightComponent,
@@ -692,7 +610,6 @@ namespace render::lighting
             }
         }
 
-        // Unregister stale lights from shadow system
         for (uint32_t entityId : toUnregister)
         {
             shadowSystem->unregisterLight(entityId);
@@ -733,8 +650,6 @@ namespace render::lighting
             return;
         }
 
-        // Barrier: Wait for previous frame's shader reads to complete before writing
-        // This prevents a race condition where we write to buffers still being read
         std::array<vk::BufferMemoryBarrier, 3> preTransferBarriers{};
 
         preTransferBarriers[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;

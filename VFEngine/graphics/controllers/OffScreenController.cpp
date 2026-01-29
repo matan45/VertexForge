@@ -42,7 +42,6 @@ namespace controllers
 
         auto* renderHandler = offScreen->getRenderPassHandler();
 
-        // Create extracted managers
         iblController = std::make_unique<offscreen::IBLController>(*renderHandler);
         meshAssetManager = std::make_unique<offscreen::MeshAssetManager>(*renderHandler);
         cameraController = std::make_unique<offscreen::CameraController>(*renderHandler);
@@ -51,11 +50,9 @@ namespace controllers
         framePreparation = std::make_unique<offscreen::FramePreparationSystem>();
         statsCollector = std::make_unique<offscreen::CullingStatsCollector>();
 
-        // Initialize BVH managers
         bvhManager->init(renderHandler);
         lightBvhManager->init();
 
-        // Subscribe to material saved notifications for cache invalidation
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
             [this](const events::material::MaterialFileSavedNotification& notification)
             {
@@ -297,7 +294,6 @@ namespace controllers
             shadowSystem->applyRenderSettings(settings);
         }
 
-        // Pass shadow intensity to light buffer manager for ambient occlusion in shadows
         auto* lightBufferManager = gpuDriven->getLightBufferManager();
         if (lightBufferManager)
         {
@@ -332,12 +328,10 @@ namespace controllers
         stats.activeShadowCasters = shadowSystem->getActiveShadowCasterCount();
         stats.activeShadowViews = shadowSystem->getActiveShadowViewCount();
 
-        // Count light types from shadow views
         stats.directionalLightCount = static_cast<uint32_t>(shadowSystem->getDirectionalShadowViews().size());
         stats.pointLightCount = static_cast<uint32_t>(shadowSystem->getPointShadowViews().size());
         stats.spotLightCount = static_cast<uint32_t>(shadowSystem->getSpotShadowViews().size());
 
-        // Get point resolution from current quality setting for accurate VRAM calculation
         auto quality = static_cast<types::ShadowQuality>(shadowSystem->getGlobalQuality());
         auto atlasConfig = types::ShadowAtlasConfig::fromQuality(quality);
         stats.pointResolution = atlasConfig.pointResolution;
@@ -420,7 +414,6 @@ namespace controllers
         if (!renderHandler)
             return;
 
-        // If shadow debug is disabled or in play mode, make sure to disable it on the renderer
         if (!showShadowDebug || playModeActive)
         {
             if (renderHandler->isDebugRendererInitialized())
@@ -434,7 +427,6 @@ namespace controllers
             return;
         }
 
-        // Ensure debug renderer is initialized
         if (!renderHandler->isDebugRendererInitialized())
         {
             if (renderHandler->isMeshPipelineInitialized())
@@ -451,7 +443,6 @@ namespace controllers
         if (!debugRenderer)
             return;
 
-        // Get shadow system
         auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
         if (!gpuDriven)
             return;
@@ -460,7 +451,6 @@ namespace controllers
         if (!shadowSystem || !shadowSystem->isInitialized())
             return;
 
-        // Collect shadow debug info and convert to render data
         auto shadowInfos = shadowSystem->getShadowDebugInfo();
         std::vector<render::mesh::ShadowFrustumRenderData> shadowDrawList;
         shadowDrawList.reserve(shadowInfos.size());
@@ -486,7 +476,7 @@ namespace controllers
                 case render::shadow::ShadowMapType::PointCube:
                     renderData.type = render::mesh::ShadowFrustumType::PointSphere;
                     renderData.lightPosition = info.lightPosition;
-                    renderData.radius = info.farPlane;  // farPlane is the sphere radius for point lights
+                    renderData.radius = info.farPlane;
                     break;
 
                 default:
@@ -496,7 +486,6 @@ namespace controllers
             shadowDrawList.push_back(renderData);
         }
 
-        // Set the draw list and enable shadow debug
         debugRenderer->setShadowFrustumDrawList(std::move(shadowDrawList));
         debugRenderer->setShowShadowDebug(showShadowDebug);
     }

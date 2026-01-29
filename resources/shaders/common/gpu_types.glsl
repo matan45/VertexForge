@@ -1,9 +1,3 @@
-// Shared GPU struct definitions - SINGLE SOURCE OF TRUTH
-// Must match corresponding C++ structs in GPUDrivenTypes.hpp and MeshletBufferTypes.hpp
-//
-// Usage: #include "common/gpu_types.glsl"
-// Requires: #extension GL_GOOGLE_include_directive : require
-
 #ifndef GPU_TYPES_GLSL
 #define GPU_TYPES_GLSL
 
@@ -35,19 +29,15 @@ struct PerDrawData {
 };
 
 // Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)
-// Note: vertexCount and primitiveCount are packed into vertexPrimCount
-// Use unpackMeshletCounts() to extract individual values
 struct GPUMeshlet {
     uint vertexOffset;
     uint primitiveOffset;
-    uint vertexPrimCount;    // Packed: (primitiveCount << 8) | vertexCount
+    uint vertexPrimCount;
     uint globalVertexOffset;
     vec4 boundingSphere;
     vec4 cone;
 };
 
-// Unpack vertex and primitive counts from GPUMeshlet.vertexPrimCount
-// Matches C++ layout: vertexCount (uint8), primitiveCount (uint8), padding (uint16)
 void unpackMeshletCounts(uint packed, out uint vertexCount, out uint primitiveCount) {
     vertexCount = packed & 0xFFu;
     primitiveCount = (packed >> 8) & 0xFFu;
@@ -78,9 +68,6 @@ struct GPUObjectData {
     uint availableLODMask;
     uint shaderGroupIndex;
 
-    // Meshlet LOD data - meshlet locations in meshlet buffer
-    // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding/boneMatrixOffset)
-    // Note: meshletLod3.w stores boneMatrixOffset (0xFFFFFFFF = static mesh)
     uvec4 meshletLod0;
     uvec4 meshletLod1;
     uvec4 meshletLod2;

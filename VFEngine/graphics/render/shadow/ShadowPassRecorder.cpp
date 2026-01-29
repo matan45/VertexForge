@@ -62,20 +62,6 @@ namespace render::shadow
             return;
         }
 
-#ifndef NDEBUG
-        if (!params.perDrawDataDescSet || !params.meshletDataDescSet ||
-            !params.vertexDataDescSet || !params.boneMatrixDescSet)
-        {
-            loggerError("ShadowPassRecorder::recordShadowPass: Invalid descriptor set(s) - "
-                          "perDraw={}, meshlet={}, vertex={}, bone={}",
-                          static_cast<bool>(params.perDrawDataDescSet),
-                          static_cast<bool>(params.meshletDataDescSet),
-                          static_cast<bool>(params.vertexDataDescSet),
-                          static_cast<bool>(params.boneMatrixDescSet));
-            return;
-        }
-#endif
-
         // Atlas rendering (spot and directional lights)
         if (hasAtlasViews)
         {

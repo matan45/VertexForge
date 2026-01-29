@@ -10,7 +10,6 @@ layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 const uint TASK_WORKGROUP_SIZE = 32;
 const uint MAX_MESHLETS_PER_PAYLOAD = 32;
 
-// Shadow push constants
 layout(push_constant) uniform ShadowPushConstants {
     mat4 lightViewProjection;
     uint baseDrawIndex;
@@ -37,7 +36,7 @@ taskPayloadSharedEXT MeshletPayload payload;
 
 shared uint sharedVisibleCount;
 shared uint sharedMeshletIndices[TASK_WORKGROUP_SIZE];
-shared vec4 sharedFrustumPlanes[6];  // Extracted once, shared across workgroup
+shared vec4 sharedFrustumPlanes[6];
 
 vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
@@ -47,59 +46,6 @@ vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     float maxScale = max(max(scaleX, scaleY), scaleZ);
     float worldRadius = localSphere.w * maxScale;
     return vec4(worldCenter, worldRadius);
-}
-
-// Extract frustum planes from view-projection matrix
-void extractFrustumPlanes(mat4 vp, out vec4 planes[6]) {
-    // Left
-    planes[0] = vec4(
-        vp[0][3] + vp[0][0],
-        vp[1][3] + vp[1][0],
-        vp[2][3] + vp[2][0],
-        vp[3][3] + vp[3][0]
-    );
-    // Right
-    planes[1] = vec4(
-        vp[0][3] - vp[0][0],
-        vp[1][3] - vp[1][0],
-        vp[2][3] - vp[2][0],
-        vp[3][3] - vp[3][0]
-    );
-    // Bottom
-    planes[2] = vec4(
-        vp[0][3] + vp[0][1],
-        vp[1][3] + vp[1][1],
-        vp[2][3] + vp[2][1],
-        vp[3][3] + vp[3][1]
-    );
-    // Top
-    planes[3] = vec4(
-        vp[0][3] - vp[0][1],
-        vp[1][3] - vp[1][1],
-        vp[2][3] - vp[2][1],
-        vp[3][3] - vp[3][1]
-    );
-    // Near
-    planes[4] = vec4(
-        vp[0][3] + vp[0][2],
-        vp[1][3] + vp[1][2],
-        vp[2][3] + vp[2][2],
-        vp[3][3] + vp[3][2]
-    );
-    // Far
-    planes[5] = vec4(
-        vp[0][3] - vp[0][2],
-        vp[1][3] - vp[1][2],
-        vp[2][3] - vp[2][2],
-        vp[3][3] - vp[3][2]
-    );
-
-    // Normalize planes (with epsilon to prevent division by zero)
-    const float PLANE_NORMALIZE_EPSILON = 0.0001;
-    for (int i = 0; i < 6; i++) {
-        float len = max(length(planes[i].xyz), PLANE_NORMALIZE_EPSILON);
-        planes[i] /= len;
-    }
 }
 
 bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
@@ -120,20 +66,17 @@ void main() {
     uint workgroupMeshletBase = gl_WorkGroupID.x * TASK_WORKGROUP_SIZE;
     uint meshletIndex = workgroupMeshletBase + localMeshletIndex;
 
-    // Extract frustum planes once in invocation 0, share via shared memory
     if (gl_LocalInvocationID.x == 0) {
         sharedVisibleCount = 0;
 
-        // Extract and normalize frustum planes from light view-projection matrix
         mat4 vp = pc.lightViewProjection;
-        sharedFrustumPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]); // Left
-        sharedFrustumPlanes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]); // Right
-        sharedFrustumPlanes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]); // Bottom
-        sharedFrustumPlanes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]); // Top
-        sharedFrustumPlanes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]); // Near
-        sharedFrustumPlanes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]); // Far
+        sharedFrustumPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
+        sharedFrustumPlanes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
+        sharedFrustumPlanes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
+        sharedFrustumPlanes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
+        sharedFrustumPlanes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
+        sharedFrustumPlanes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
 
-        // Normalize planes (with epsilon to prevent division by zero for degenerate matrices)
         const float PLANE_NORMALIZE_EPSILON = 0.0001;
         for (int i = 0; i < 6; i++) {
             float len = max(length(sharedFrustumPlanes[i].xyz), PLANE_NORMALIZE_EPSILON);
@@ -149,8 +92,6 @@ void main() {
         uint globalMeshletIndex = drawData.meshletOffset + meshletIndex;
         GPUMeshlet meshlet = meshlets[globalMeshletIndex];
         vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
-
-        // Frustum culling using shared planes (extracted once by invocation 0)
         isVisible = sphereInFrustum(worldSphere, sharedFrustumPlanes);
 
         if (isVisible) {
@@ -189,9 +130,6 @@ const uint MESHLET_MAX_PRIMITIVES = 124;
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 64, max_primitives = 124) out;
 
-// No fragment outputs needed for depth-only pass
-
-// Shadow push constants
 layout(push_constant) uniform ShadowPushConstants {
     mat4 lightViewProjection;
     uint baseDrawIndex;
@@ -216,7 +154,6 @@ layout(std430, set = 1, binding = 2) readonly buffer MeshletPrimitiveBuffer {
     uint meshletPrimitives[];
 };
 
-// Raw float array: 16 floats per vertex (position.xyz, normal.xyz, texCoord.xy, boneIndices.xyzw, boneWeights.xyzw)
 layout(std430, set = 2, binding = 0) readonly buffer VertexBuffer {
     float vertexData[];
 };
@@ -278,9 +215,7 @@ void main() {
                 vertexData[baseIdx + 2]
             );
 
-            // Apply GPU skinning if this is an animated mesh
             if (drawData.boneMatrixOffset != 0xFFFFFFFFu) {
-                // Read bone indices (stored as floats, need to reinterpret as ints)
                 ivec4 boneIndices = ivec4(
                     floatBitsToInt(vertexData[baseIdx + 8]),
                     floatBitsToInt(vertexData[baseIdx + 9]),
@@ -317,7 +252,6 @@ void main() {
 
     barrier();
 
-    // Output positions only - depth-only rendering
     for (uint iter = 0; iter < numIterations; iter++) {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
         if (localVertexIndex < vertexCount) {
@@ -326,7 +260,6 @@ void main() {
         }
     }
 
-    // Output primitive indices
     uint numPrimIterations = (primitiveCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numPrimIterations; iter++) {
         uint localPrimIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;

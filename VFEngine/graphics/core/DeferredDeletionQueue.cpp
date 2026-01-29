@@ -96,7 +96,6 @@ namespace core
     {
         lastFrameNumber = currentFrame;
 
-        // Process deletions that are old enough
         auto it = pendingDeletions.begin();
         while (it != pendingDeletions.end())
         {
@@ -119,7 +118,6 @@ namespace core
         if (pendingDeletions.empty())
             return;
 
-        // Wait for GPU to finish all work before flushing
         device.getLogicalDevice().waitIdle();
 
         for (const auto& pending : pendingDeletions)

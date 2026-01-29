@@ -21,12 +21,10 @@ namespace core
         void cleanUp() override;
         void* render() override;
 
-        // IBL API
         void iblSet(std::string_view iblPath) override;
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection) override;
         void iblRemove() override;
 
-        // Mesh API
         std::string meshLoad(std::string_view meshPath) override;
         void meshUnload(const std::string& meshId) override;
         void meshUpdateCamera(services::CameraId cameraId, const glm::mat4& view, const glm::mat4& projection,
@@ -37,11 +35,9 @@ namespace core
         std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const override;
         void prepareFrameMeshes() override;
 
-        // BVH spatial culling
         void rebuildBVH() override;
         void markBVHDirty() override;
 
-        // Multi-camera occlusion culling
         void createCamera(services::CameraId id, bool enableOcclusion = false) override;
         void removeCamera(services::CameraId id) override;
         void setActiveCamera(services::CameraId id) override;
@@ -50,52 +46,41 @@ namespace core
         void prepareFrameAudioSpheres() override;
         void prepareFrameLightGizmos() override;
 
-        // Billboard API
         void prepareFrameBillboards() override;
         void setShowBillboardIcons(bool show) override;
         bool getShowBillboardIcons() const override;
         bool loadBillboardAtlas(const std::string& atlasPath) override;
 
-        // Debug/Stats API
         services::CullingDebugStats getCullingStats() const override;
 
-        // Shadow Settings API
         void applyShadowSettings(const types::RenderSettings& settings) override;
         services::ShadowStats getShadowStats() const override;
 
-        // Editor Mode API
         void setPlayMode(bool playMode) override;
         bool isPlayMode() const override;
 
-        // Debug Rendering API
         void setShowDebugRendering(bool show) override;
         bool getShowDebugRendering() const override;
 
-        // Grid API
         void setShowGrid(bool show) override;
         bool getShowGrid() const override;
         void prepareGrid() override;
 
-        // Physics Debug API
         void setShowPhysicsDebug(bool show) override;
         bool getShowPhysicsDebug() const override;
         void prepareFramePhysicsColliders() override;
 
-        // View Mode API
         void setViewMode(uint32_t mode) override;
         uint32_t getViewMode() const override;
 
-        // Cluster Debug API
         void setShowClusterDebug(bool show) override;
         bool getShowClusterDebug() const override;
         void prepareFrameClusterDebug() override;
 
-        // Shadow Debug API
         void setShowShadowDebug(bool show) override;
         bool getShowShadowDebug() const override;
         void prepareFrameShadowDebug() override;
 
-        // VFX Runtime API
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;
 
     private:

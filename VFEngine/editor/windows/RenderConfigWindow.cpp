@@ -44,12 +44,10 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Save settings to scene
         events::scene::SetRenderSettingsCommand sceneCmd;
         sceneCmd.settings = settings;
         dispatcher.execute(sceneCmd);
 
-        // Apply shadow settings to the shadow system
         events::render::ApplyShadowSettingsCommand shadowCmd;
         shadowCmd.settings = settings;
         dispatcher.execute(shadowCmd);
@@ -70,13 +68,11 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                // Shadow Quality
                 const char* qualityItems[] = {"Off", "Low (512)", "Medium (1024)", "High (2048)", "Ultra (4096)"};
                 int currentQuality = static_cast<int>(settings.shadows.quality);
                 if (ImGui::Combo("Quality", &currentQuality, qualityItems, 5))
                 {
                     settings.shadows.quality = static_cast<types::ShadowQuality>(currentQuality);
-                    // Update atlas config from quality
                     settings.shadows.atlas = types::ShadowAtlasConfig::fromQuality(settings.shadows.quality);
                     isDirty = true;
                 }
@@ -89,7 +85,6 @@ namespace windows
                 ImGui::Text("Directional Light (CSM)");
                 ImGui::Spacing();
 
-                // Cascade Count
                 int cascades = settings.shadows.cascadeCount;
                 if (ImGui::SliderInt("Cascade Count", &cascades, 1, 4))
                 {
@@ -97,7 +92,6 @@ namespace windows
                     isDirty = true;
                 }
 
-                // Cascade Split Mode
                 const char* splitModes[] = {"Linear", "Logarithmic", "Practical"};
                 int currentMode = static_cast<int>(settings.shadows.cascadeSplitMode);
                 if (ImGui::Combo("Split Mode", &currentMode, splitModes, 3))
@@ -139,12 +133,22 @@ namespace windows
                 ImGui::Text("Shadow Filtering");
                 ImGui::Spacing();
 
-                // PCF Kernel Size
-                const char* kernelItems[] = {"1x1 (Hard)", "2x2", "3x3", "4x4", "5x5"};
-                int kernelIdx = static_cast<int>(settings.shadows.pcfKernelSize);
-                if (ImGui::Combo("PCF Kernel", &kernelIdx, kernelItems, 5))
+                const char* kernelItems[] = {"1x1 (Hard)", "3x3", "5x5"};
+                int kernelIdx = 0;
+                switch (settings.shadows.pcfKernelSize)
                 {
-                    settings.shadows.pcfKernelSize = static_cast<types::PCFKernelSize>(kernelIdx);
+                    case types::PCFKernelSize::x1: kernelIdx = 0; break;
+                    case types::PCFKernelSize::x3: kernelIdx = 1; break;
+                    case types::PCFKernelSize::x5: kernelIdx = 2; break;
+                }
+                if (ImGui::Combo("PCF Kernel", &kernelIdx, kernelItems, 3))
+                {
+                    switch (kernelIdx)
+                    {
+                        case 0: settings.shadows.pcfKernelSize = types::PCFKernelSize::x1; break;
+                        case 1: settings.shadows.pcfKernelSize = types::PCFKernelSize::x3; break;
+                        case 2: settings.shadows.pcfKernelSize = types::PCFKernelSize::x5; break;
+                    }
                     isDirty = true;
                 }
                 if (ImGui::IsItemHovered())
@@ -152,7 +156,6 @@ namespace windows
                     ImGui::SetTooltip("PCF kernel size for soft shadow edges.\nLarger = softer but slower.");
                 }
 
-                // Soft Shadows Toggle
                 if (ImGui::Checkbox("Soft Shadows", &settings.shadows.softShadowsEnabled))
                 {
                     isDirty = true;
@@ -166,7 +169,6 @@ namespace windows
                 ImGui::Text("Shadow Darkness");
                 ImGui::Spacing();
 
-                // Shadow Intensity
                 if (ImGui::SliderFloat("Shadow Intensity", &settings.shadows.shadowIntensity, 0.0f, 1.0f, "%.2f"))
                 {
                     isDirty = true;
@@ -179,7 +181,6 @@ namespace windows
                 }
             }
 
-            // Shadow Debug Visualization (visible regardless of shadow state)
             ImGui::Separator();
             ImGui::Text("Debug Visualization");
             ImGui::Spacing();
@@ -201,28 +202,23 @@ namespace windows
                                   "- Point: Sphere radius (magenta)");
             }
 
-            // Shadow Statistics (read-only info)
             ImGui::Separator();
             ImGui::Text("Statistics");
             ImGui::Spacing();
 
             auto shadowStats = dispatcher.query(events::render::GetShadowStatsQuery{});
 
-            // Atlas info
             if (shadowStats.atlasWidth > 0)
             {
                 ImGui::Text("Atlas: %ux%u", shadowStats.atlasWidth, shadowStats.atlasHeight);
 
-                // Utilization bar
                 ImGui::Text("Utilization:");
                 ImGui::SameLine();
                 ImGui::ProgressBar(shadowStats.atlasUtilization, ImVec2(-1, 0),
                     (std::to_string(static_cast<int>(shadowStats.atlasUtilization * 100)) + "%%").c_str());
 
-                // Estimated VRAM for atlas (D32_SFLOAT = 4 bytes per texel)
                 float atlasMB = (shadowStats.atlasWidth * shadowStats.atlasHeight * 4) / (1024.0f * 1024.0f);
 
-                // Estimate point light cube maps VRAM (6 faces * resolution^2 * 4 bytes per active light)
                 uint32_t pointRes = shadowStats.pointResolution;
                 float cubeMB = shadowStats.pointLightCount * 6 * pointRes * pointRes * 4 / (1024.0f * 1024.0f);
 
@@ -235,7 +231,6 @@ namespace windows
                 ImGui::TextDisabled("No shadow atlas allocated");
             }
 
-            // Active lights summary
             if (shadowStats.activeShadowCasters > 0)
             {
                 ImGui::Text("Active: %u casters, %u views",
@@ -261,14 +256,12 @@ namespace windows
 
         if (ImGui::Begin("Render Configuration", &visible))
         {
-            // Shadow settings section
             drawShadowSection();
 
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
-            // Action buttons at bottom
             if (ImGui::Button("Save to Scene", ImVec2(100, 0)))
             {
                 saveToScene();

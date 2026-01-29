@@ -94,28 +94,23 @@ namespace render::gpudriven
 
         std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> loadedMaterials;
 
-        // Persistent PBR cache for texture resolution (avoids re-extracting PBR values each frame)
         std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
         material::CallbackId materialChangeCallbackId{};
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
 
-        // BVH-culled visible light entity IDs (set per-frame before dispatchCompute)
         std::unordered_set<uint32_t> visibleLightIds;
         bool useBVHLightCulling = false;
         bool useLightOcclusionCulling = false;
 
-        // Frame N-1 light occlusion results (used to avoid GPU stalls)
         std::unordered_set<uint32_t> prevFrameOccludedLights;
         bool hasPrevFrameOcclusionData = false;
 
-        // Light culling statistics (tracked per frame)
         uint32_t totalSceneLights = 0;
         uint32_t lightsAfterBVHCull = 0;
         uint32_t lightsAfterHiZCull = 0;
 
-        // Camera parameters (stored from updateScene for shadow rendering)
         glm::mat4 cachedCameraView{1.0f};
         glm::mat4 cachedCameraProjection{1.0f};
         float cachedCameraNear = 0.1f;
@@ -199,29 +194,21 @@ namespace render::gpudriven
         lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
-        // Set deferred deletion queue for safe resource destruction
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
 
-        // Set visible lights from BVH frustum query (pre-culling before GPU upload)
-        // Pass the result of LightBVH::queryFrustum() to only upload visible lights
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
-
         void clearVisibleLights();
         bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
 
-        // Light occlusion culling (Hi-Z based)
         void initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer);
         void setLightOcclusionCullingEnabled(bool enabled) { useLightOcclusionCulling = enabled; }
         bool isLightOcclusionCullingEnabled() const { return useLightOcclusionCulling; }
         occlusion::LightOcclusionCulling* getLightOcclusionCulling() const { return lightOcclusionCulling.get(); }
 
-        // Light culling statistics
         uint32_t getTotalSceneLights() const;
         uint32_t getLightsAfterBVHCull() const;
         uint32_t getLightsAfterHiZCull() const;
 
-        // Call at end of frame (after GPU work completes) to read back occlusion results
-        // Results will be used for next frame's shadow filtering (Frame N-1 approach)
         void readBackLightOcclusionResults();
 
     private:

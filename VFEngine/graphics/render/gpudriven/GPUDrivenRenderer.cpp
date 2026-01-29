@@ -127,10 +127,8 @@ namespace render::gpudriven
                 return;
             }
 
-            // Set shadow system reference in light buffer manager for shadow index population
             lightBufferManager->setShadowSystem(shadowSystem.get());
 
-            // Wire deferred deletion queue for safe shadow resource cleanup
             if (core::RenderManager::getGlobalDeletionQueue())
             {
                 shadowSystem->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
@@ -147,7 +145,6 @@ namespace render::gpudriven
                                      shadowSystem->getShadowTextureLayout(),
                                      renderPass);
 
-            // Initialize shadow pass pipeline with descriptor layouts from mesh shader pipeline
             shadowSystem->initShadowPass(
                 meshShaderPipeline->getPerDrawDataLayout(),
                 meshShaderPipeline->getMeshletDataLayout(),
@@ -169,19 +166,13 @@ namespace render::gpudriven
             return;
         }
 
-        // Register callback to invalidate PBR cache when materials change
         if (!materialChangeCallbackId)
         {
             materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
                 [this](const std::string& materialPath) {
-                    // Clear PBR cache for this material
                     pbrCache.erase(materialPath);
-
-                    // Clear from registered materials so textures get re-registered
                     registeredMaterialPaths.erase(materialPath);
 
-                    // Also invalidate any instances that might use this as parent
-                    // (we can't easily track which instances use this parent, so we clear all instances)
                     if (!material::isInstanceFile(materialPath))
                     {
                         std::erase_if(pbrCache, [](const auto& pair) {
@@ -205,14 +196,12 @@ namespace render::gpudriven
             return;
         }
 
-        // Unregister material change callback
         if (materialChangeCallbackId)
         {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
             materialChangeCallbackId = {};
         }
 
-        // Clear caches
         pbrCache.clear();
         registeredMaterialPaths.clear();
 
@@ -301,7 +290,6 @@ namespace render::gpudriven
         };
         cameraBuffer->update(cameraParams);
 
-        // Cache camera parameters for shadow rendering
         cachedCameraView = view;
         cachedCameraProjection = projection;
         cachedCameraNear = nearPlane;
@@ -511,7 +499,6 @@ namespace render::gpudriven
                     lightCullingPipeline->getDescriptorSet());
             }
 
-            // Update shadow descriptors
             if (shadowSystem && shadowSystem->isInitialized())
             {
                 meshShaderPipeline->updateShadowDescriptors(
@@ -544,17 +531,14 @@ namespace render::gpudriven
             meshShaderPipeline->resetStats(cmd);
         }
 
-        // Count total scene lights for statistics (before early return so stats always update)
         {
             auto& registry = scene::EntityRegistry::getRegistry();
             uint32_t pointCount = static_cast<uint32_t>(registry.view<components::PointLightComponent>().size());
             uint32_t spotCount = static_cast<uint32_t>(registry.view<components::SpotLightComponent>().size());
             totalSceneLights = pointCount + spotCount;
 
-            // Lights after BVH cull (if BVH culling is active, use the visible set size)
             if (useBVHLightCulling && !visibleLightIds.empty())
             {
-                // Cap to total scene lights to handle stale data
                 lightsAfterBVHCull = std::min(static_cast<uint32_t>(visibleLightIds.size()), totalSceneLights);
             }
             else
@@ -562,7 +546,6 @@ namespace render::gpudriven
                 lightsAfterBVHCull = totalSceneLights;
             }
 
-            // Initialize Hi-Z cull count - will be updated after occlusion results
             lightsAfterHiZCull = lightsAfterBVHCull;
         }
 
@@ -577,11 +560,9 @@ namespace render::gpudriven
             boneMatrixManager->uploadToGPU(cmd);
         }
 
-        // Update shadow system BEFORE light buffer manager
-        // This ensures shadow indices are available when lights query them
+        // Shadow system must update before light buffer manager so shadow indices are available
         if (shadowSystem && shadowSystem->isInitialized())
         {
-            // Build visible light filter using previous frame's occlusion data
             std::unordered_set<uint32_t> shadowVisibleLights;
             bool hasShadowFilter = false;
 
@@ -591,7 +572,7 @@ namespace render::gpudriven
                 hasShadowFilter = true;
             }
 
-            // Apply previous frame's occlusion results (frame N-1 approach)
+            // Frame N-1 approach: use previous frame's occlusion results
             if (useLightOcclusionCulling && hasPrevFrameOcclusionData && !prevFrameOccludedLights.empty())
             {
                 if (hasShadowFilter)
@@ -601,7 +582,6 @@ namespace render::gpudriven
                 }
                 else
                 {
-                    // Build visible set excluding occluded lights
                     auto& registry = scene::EntityRegistry::getRegistry();
                     auto pointView = registry.view<components::PointLightComponent>();
                     for (auto entity : pointView)
@@ -647,28 +627,21 @@ namespace render::gpudriven
             lightBufferManager->uploadToGPU(cmd);
         }
 
-        // Light occlusion culling - test visible lights against HiZ buffer
-        // This runs AFTER light buffer upload but BEFORE shadow pass
-        // Results are used to skip shadow rendering for occluded lights
         if (useLightOcclusionCulling && lightOcclusionCulling && lightOcclusionCulling->isInitialized())
         {
-            // Build light bounds from the lights we're about to process
             std::vector<occlusion::GPULightBounds> lightBounds;
             auto& registry = scene::EntityRegistry::getRegistry();
 
-            // Collect point lights
             auto pointView = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
             for (auto entity : pointView)
             {
                 uint32_t entityId = static_cast<uint32_t>(entity);
-                // Skip if BVH culling is active and this light was culled
                 if (useBVHLightCulling && !visibleLightIds.empty() && !visibleLightIds.contains(entityId))
                     continue;
 
                 const auto& light = pointView.get<components::PointLightComponent>(entity);
                 const auto& transform = pointView.get<components::WorldTransformComponent>(entity);
 
-                // Extract position from world matrix column 3
                 glm::vec3 position = glm::vec3(transform.worldMatrix[3]);
 
                 occlusion::GPULightBounds bounds{};
@@ -679,7 +652,6 @@ namespace render::gpudriven
                 lightBounds.push_back(bounds);
             }
 
-            // Collect spot lights
             auto spotView = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
             for (auto entity : spotView)
             {
@@ -690,9 +662,7 @@ namespace render::gpudriven
                 const auto& light = spotView.get<components::SpotLightComponent>(entity);
                 const auto& transform = spotView.get<components::WorldTransformComponent>(entity);
 
-                // Extract position from world matrix column 3
                 glm::vec3 position = glm::vec3(transform.worldMatrix[3]);
-                // Extract forward direction (local -Z transformed to world)
                 glm::vec3 forward = glm::normalize(glm::vec3(transform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
                 occlusion::GPULightBounds bounds{};
@@ -705,10 +675,7 @@ namespace render::gpudriven
 
             if (!lightBounds.empty())
             {
-                // Update and dispatch light occlusion culling
                 lightOcclusionCulling->updateLights(lightBounds);
-
-                // Upload light bounds from staging to GPU buffer
                 lightOcclusionCulling->recordLightUpload(cmd);
 
                 const auto& camData = cameraBuffer->getData();
@@ -752,16 +719,11 @@ namespace render::gpudriven
         cullPipeline->dispatch(cmd, stats.totalObjects);
         batchManager->insertBarriersAfterCompute(cmd);
 
-        // Shadow pass - render depth maps for all active shadow views
-        // Note: beginFrame is called in dispatchCompute before light buffer update
-        // to ensure shadow indices are available when lights query them
         if (shadowSystem && shadowSystem->isShadowsEnabled() &&
             meshShaderPipeline && boneMatrixManager && batchManager)
         {
-            // Upload shadow data to GPU
             shadowSystem->uploadToGPU(cmd);
 
-            // Record shadow pass with all required descriptor sets and buffers
             shadow::ShadowPassParams shadowParams{};
             shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
             shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
@@ -794,17 +756,17 @@ namespace render::gpudriven
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
         std::array<vk::DescriptorSet, 11> descriptorSets = {
-            iblDescriptorSet,                                      // Set 0: Camera/IBL
-            meshShaderPipeline->getPerDrawDataDescriptorSet(),     // Set 1: Per-draw data
-            bindlessTextures->getDescriptorSet(),                  // Set 2: Bindless textures
-            meshShaderPipeline->getMeshletDataDescriptorSet(),     // Set 3: Meshlet data
-            meshShaderPipeline->getVertexDataDescriptorSet(),      // Set 4: Vertex data
-            boneMatrixManager->getDescriptorSet(),                 // Set 5: Bone matrices
-            meshShaderPipeline->getLightDataDescriptorSet(),       // Set 6: Light buffers
-            meshShaderPipeline->getClusterGridDescriptorSet(),     // Set 7: Cluster grid params
-            meshShaderPipeline->getCullingOutputDescriptorSet(),   // Set 8: Light culling output
-            meshShaderPipeline->getShadowDataDescriptorSet(),      // Set 9: Shadow data SSBO
-            meshShaderPipeline->getShadowTextureDescriptorSet()    // Set 10: Shadow textures
+            iblDescriptorSet,
+            meshShaderPipeline->getPerDrawDataDescriptorSet(),
+            bindlessTextures->getDescriptorSet(),
+            meshShaderPipeline->getMeshletDataDescriptorSet(),
+            meshShaderPipeline->getVertexDataDescriptorSet(),
+            boneMatrixManager->getDescriptorSet(),
+            meshShaderPipeline->getLightDataDescriptorSet(),
+            meshShaderPipeline->getClusterGridDescriptorSet(),
+            meshShaderPipeline->getCullingOutputDescriptorSet(),
+            meshShaderPipeline->getShadowDataDescriptorSet(),
+            meshShaderPipeline->getShadowTextureDescriptorSet()
         };
 
         cmd.bindDescriptorSets(
@@ -1083,18 +1045,13 @@ namespace render::gpudriven
             return;
         }
 
-        // Mark results as ready now that GPU work has completed
         lightOcclusionCulling->markResultsReady();
 
-        // Read back visibility results from GPU (this is the staging buffer read)
         const auto& visibleLights = lightOcclusionCulling->getVisibleLightIds();
 
-        // Store occluded lights for next frame's shadow filtering
         prevFrameOccludedLights = lightOcclusionCulling->getOccludedLightIds();
         hasPrevFrameOcclusionData = true;
 
-        // Update stats based on actual GPU compute results
-        // This shows the real Hi-Z culling effectiveness
         lightsAfterHiZCull = static_cast<uint32_t>(visibleLights.size());
     }
 
@@ -1115,8 +1072,6 @@ namespace render::gpudriven
             cachedIBLLayout = newIBLLayout;
         }
 
-        // All these components are required for mesh shader pipeline recreation
-        // They should all exist if initialized is true - log errors if any are missing
         bool canRecreate = true;
         if (!meshShaderPipeline)
         {
