@@ -1,0 +1,101 @@
+#pragma once
+
+#include <vulkan/vulkan.hpp>
+#include <vector>
+#include <variant>
+#include <functional>
+#include <cstdint>
+
+namespace core
+{
+    class Device;
+
+    class DeferredDeletionQueue
+    {
+    public:
+        static constexpr uint32_t FRAMES_BEFORE_DELETE = 3;
+
+        explicit DeferredDeletionQueue(Device& device);
+        ~DeferredDeletionQueue();
+
+        DeferredDeletionQueue(const DeferredDeletionQueue&) = delete;
+        DeferredDeletionQueue& operator=(const DeferredDeletionQueue&) = delete;
+
+        void queueBuffer(vk::Buffer buffer, vk::DeviceMemory memory);
+        void queueImage(vk::Image image, vk::DeviceMemory memory,
+                        const std::vector<vk::ImageView>& views = {});
+        void queueImageView(vk::ImageView view);
+        void queueFramebuffer(vk::Framebuffer framebuffer);
+        void queueSampler(vk::Sampler sampler);
+        void queueDescriptorPool(vk::DescriptorPool pool);
+        void queueCustom(std::function<void(vk::Device)> deletionFunc);
+
+        void processDeletions(uint32_t currentFrame);
+        void flush();
+
+        [[nodiscard]] bool hasPendingDeletions() const { return !pendingDeletions.empty(); }
+        [[nodiscard]] size_t getPendingCount() const { return pendingDeletions.size(); }
+
+    private:
+        Device& device;
+        uint32_t lastFrameNumber = 0;
+
+        struct BufferDeletion
+        {
+            vk::Buffer buffer;
+            vk::DeviceMemory memory;
+        };
+
+        struct ImageDeletion
+        {
+            vk::Image image;
+            vk::DeviceMemory memory;
+            std::vector<vk::ImageView> views;
+        };
+
+        struct ImageViewDeletion
+        {
+            vk::ImageView view;
+        };
+
+        struct FramebufferDeletion
+        {
+            vk::Framebuffer framebuffer;
+        };
+
+        struct SamplerDeletion
+        {
+            vk::Sampler sampler;
+        };
+
+        struct DescriptorPoolDeletion
+        {
+            vk::DescriptorPool pool;
+        };
+
+        struct CustomDeletion
+        {
+            std::function<void(vk::Device)> deletionFunc;
+        };
+
+        using DeletionData = std::variant<
+            BufferDeletion,
+            ImageDeletion,
+            ImageViewDeletion,
+            FramebufferDeletion,
+            SamplerDeletion,
+            DescriptorPoolDeletion,
+            CustomDeletion
+        >;
+
+        struct PendingDeletion
+        {
+            DeletionData data;
+            uint32_t frameQueued;
+        };
+
+        std::vector<PendingDeletion> pendingDeletions;
+
+        void executeDelete(const DeletionData& data);
+    };
+}

@@ -2,6 +2,7 @@
 #include "Device.hpp"
 #include "SwapChain.hpp"
 #include "CommandPool.hpp"
+#include "DeferredDeletionQueue.hpp"
 #include "print/Logger.hpp"
 #include "../window/Window.hpp"
 #include "../imguiPass/ImguiRender.hpp"
@@ -15,7 +16,10 @@ namespace core {
 
 	}
 
-	RenderManager::~RenderManager() = default;
+	RenderManager::~RenderManager()
+	{
+		globalDeletionQueue = nullptr;
+	}
 
 	void RenderManager::init()
 	{
@@ -23,6 +27,9 @@ namespace core {
 
 		imguiRender = std::make_unique<imguiPass::ImguiRender>(device, swapChain, *commandPool, window);
 		imguiRender->init();
+
+		deletionQueue = std::make_unique<DeferredDeletionQueue>(device);
+		globalDeletionQueue = deletionQueue.get();
 
 		uint32_t imageCount = swapChain.getImageCount();
 
@@ -121,6 +128,12 @@ namespace core {
 		// Present the rendered image (use per-image semaphore)
 		present(imageIndex);
 
+		// Process deferred deletions for resources that are now safe to destroy
+		if (deletionQueue)
+		{
+			deletionQueue->processDeletions(currentFrame);
+		}
+
 		// Advance to next frame
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
@@ -145,6 +158,12 @@ namespace core {
 	void RenderManager::cleanUp() const
 	{
 		device.getLogicalDevice().waitIdle();
+
+		// Flush any remaining deferred deletions
+		if (deletionQueue)
+		{
+			deletionQueue->flush();
+		}
 
 		commandPool->cleanUp();
 

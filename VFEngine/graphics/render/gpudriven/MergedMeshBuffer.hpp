@@ -2,6 +2,8 @@
 
 #include "GPUDrivenTypes.hpp"
 #include "FreeListAllocator.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
+#include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <entt/entt.hpp>
 #include <functional>
@@ -88,6 +90,10 @@ namespace render::gpudriven
 
         FreeListAllocator vertexAllocator;
         FreeListAllocator indexAllocator;
+
+        std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
+        std::unordered_map<std::string, std::string> instanceToParentCache;
+        material::CallbackId materialChangeCallbackId{};
 
     public:
         explicit MergedMeshBuffer(core::Device& device);

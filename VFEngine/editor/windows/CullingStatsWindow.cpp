@@ -27,7 +27,6 @@ namespace windows
                 ImGui::Indent();
                 const auto& gpu = stats.gpuDriven;
 
-                // Status indicators
                 ImGui::Text("Status:");
                 ImGui::SameLine();
                 ImGui::TextColored(gpu.enabled ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1),
@@ -56,7 +55,6 @@ namespace windows
 
                     ImGui::Separator();
 
-                    // Object counts
                     ImGui::Text("Objects: %u total", gpu.totalObjects);
                     if (gpu.totalObjects > 0)
                     {
@@ -64,7 +62,6 @@ namespace windows
                         ImGui::Text("  Culled by Occlusion: %u", gpu.culledByOcclusion);
                         ImGui::Text("  Visible:             %u", gpu.visibleObjects);
 
-                        // Culling efficiency
                         uint32_t totalCulled = gpu.culledByFrustum + gpu.culledByOcclusion;
                         float cullRate = static_cast<float>(totalCulled) / static_cast<float>(gpu.totalObjects);
                         ImGui::Text("Cull Rate:");
@@ -75,7 +72,6 @@ namespace windows
 
                     ImGui::Separator();
 
-                    // LOD distribution
                     ImGui::Text("LOD Distribution:");
                     uint32_t totalLOD = gpu.objectsLOD0 + gpu.objectsLOD1 + gpu.objectsLOD2 + gpu.objectsLOD3;
                     if (totalLOD > 0)
@@ -92,7 +88,6 @@ namespace windows
 
                     ImGui::Separator();
 
-                    // Meshlet culling stats (task shader level)
                     ImGui::Text("Meshlet Culling (Task Shader):");
                     if (gpu.totalMeshlets > 0)
                     {
@@ -115,7 +110,36 @@ namespace windows
 
                     ImGui::Separator();
 
-                    // Merged buffer stats
+                    ImGui::Text("Light Culling:");
+                    ImGui::SameLine();
+                    ImGui::TextColored(gpu.bvhLightCullingEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1),
+                                       "BVH");
+                    ImGui::SameLine();
+                    ImGui::TextColored(gpu.hiZLightOcclusionEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1),
+                                       "| Hi-Z Occlusion");
+
+                    if (gpu.totalLights > 0)
+                    {
+                        ImGui::Text("  Total Lights:        %u", gpu.totalLights);
+                        ImGui::Text("  After BVH Cull:      %u", gpu.lightsAfterBVHCull);
+                        ImGui::Text("  After Hi-Z Cull:     %u", gpu.lightsAfterHiZCull);
+                        ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1), "  Culled by BVH:       %u", gpu.lightsCulledByBVH);
+                        ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1), "  Culled by Hi-Z:      %u", gpu.lightsCulledByHiZ);
+
+                        uint32_t totalCulled = gpu.lightsCulledByBVH + gpu.lightsCulledByHiZ;
+                        float lightCullRate = static_cast<float>(totalCulled) / static_cast<float>(gpu.totalLights);
+                        ImGui::Text("Light Cull Rate:");
+                        ImGui::SameLine();
+                        ImGui::ProgressBar(lightCullRate, ImVec2(150, 0),
+                                           (std::to_string(static_cast<int>(lightCullRate * 100)) + "%").c_str());
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "  No lights in scene");
+                    }
+
+                    ImGui::Separator();
+
                     ImGui::Text("Merged Buffer:");
                     ImGui::Text("  Vertices:  %u", gpu.mergedVertexCount);
                     ImGui::Text("  Indices:   %u", gpu.mergedIndexCount);
@@ -129,7 +153,6 @@ namespace windows
 
                     ImGui::Separator();
 
-                    // Batch rendering stats
                     ImGui::Text("Indirect Batches:");
                     ImGui::Text("  Batches:           %u", gpu.batchCount);
                     ImGui::Text("  Commands/Batch:    %u", gpu.commandsPerBatch);
@@ -156,7 +179,6 @@ namespace windows
 
                     ImGui::Separator();
 
-                    // Memory usage with capacity info
                     ImGui::Text("GPU Memory (Used / Allocated):");
                     auto formatMemory = [](uint64_t bytes) -> std::string
                     {
@@ -177,9 +199,8 @@ namespace windows
                         return std::to_string(bytes) + " B";
                     };
 
-                    // Calculate used memory based on totalObjects
-                    uint64_t usedDrawCmd = gpu.totalObjects * 20;  // sizeof(DrawIndexedIndirectCommand)
-                    uint64_t usedPerDraw = gpu.totalObjects * 224; // sizeof(PerDrawData)
+                    uint64_t usedDrawCmd = gpu.totalObjects * 20;
+                    uint64_t usedPerDraw = gpu.totalObjects * 224;
                     uint64_t usedTotal = usedDrawCmd + gpu.drawCountBufferSize + usedPerDraw;
 
                     ImGui::Text("  Draw Commands:  %s / %s",
@@ -200,7 +221,6 @@ namespace windows
             }
             ImGui::Separator();
 
-            // BVH Statistics
             if (ImGui::CollapsingHeader("BVH Statistics (CPU)", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent();

@@ -12,7 +12,12 @@
 #include "../lighting/GPULightBufferManager.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
+#include "../shadow/ShadowSystem.hpp"
+#include "../occlusion/LightOcclusionCulling.hpp"
+#include "../material/MaterialPBRExtractor.hpp"
+#include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 #include <unordered_set>
@@ -23,6 +28,7 @@ namespace core
     class Device;
     class SwapChain;
     class Shader;
+    class DeferredDeletionQueue;
 }
 
 namespace material
@@ -35,6 +41,11 @@ namespace render::mesh
     class MaterialTextureCache;
     class MeshStreamManager;
     struct MeshRenderData;
+}
+
+namespace render::occlusion
+{
+    class HiZBuffer;
 }
 
 namespace render::gpudriven
@@ -56,6 +67,8 @@ namespace render::gpudriven
         std::unique_ptr<lighting::GPULightBufferManager> lightBufferManager;
         std::unique_ptr<lighting::ClusterGridManager> clusterGridManager;
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
+        std::unique_ptr<shadow::ShadowSystem> shadowSystem;
+        std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
 
         bool initialized = false;
         bool enabled = false;
@@ -81,12 +94,27 @@ namespace render::gpudriven
 
         std::unordered_map<std::string, std::shared_ptr<material::MaterialData>> loadedMaterials;
 
+        std::unordered_map<std::string, mesh::ExtractedPBRValues> pbrCache;
+        material::CallbackId materialChangeCallbackId{};
+
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
 
-        // BVH-culled visible light entity IDs (set per-frame before dispatchCompute)
         std::unordered_set<uint32_t> visibleLightIds;
         bool useBVHLightCulling = false;
+        bool useLightOcclusionCulling = false;
+
+        std::unordered_set<uint32_t> prevFrameOccludedLights;
+        bool hasPrevFrameOcclusionData = false;
+
+        uint32_t totalSceneLights = 0;
+        uint32_t lightsAfterBVHCull = 0;
+        uint32_t lightsAfterHiZCull = 0;
+
+        glm::mat4 cachedCameraView{1.0f};
+        glm::mat4 cachedCameraProjection{1.0f};
+        float cachedCameraNear = 0.1f;
+        float cachedCameraFar = 1000.0f;
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -164,13 +192,24 @@ namespace render::gpudriven
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
         lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
+        shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
-        // Set visible lights from BVH frustum query (pre-culling before GPU upload)
-        // Pass the result of LightBVH::queryFrustum() to only upload visible lights
+        void setDeletionQueue(core::DeferredDeletionQueue* queue);
+
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
-
         void clearVisibleLights();
         bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
+
+        void initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer);
+        void setLightOcclusionCullingEnabled(bool enabled) { useLightOcclusionCulling = enabled; }
+        bool isLightOcclusionCullingEnabled() const { return useLightOcclusionCulling; }
+        occlusion::LightOcclusionCulling* getLightOcclusionCulling() const { return lightOcclusionCulling.get(); }
+
+        uint32_t getTotalSceneLights() const;
+        uint32_t getLightsAfterBVHCull() const;
+        uint32_t getLightsAfterHiZCull() const;
+
+        void readBackLightOcclusionResults();
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);

@@ -15,8 +15,6 @@ namespace render
 {
     class RenderPassHandler;
 
-    // Callback invoked after fence wait but before command recording
-    // Useful for safe descriptor set updates
     using PreRenderCallback = std::function<void()>;
 
     class OffScreenViewPort
@@ -30,8 +28,6 @@ namespace render
 
         vk::Sampler sampler;
         core::OffscreenResources offscreenResources;
-
-        // Per-frame fences to ensure command buffers aren't reused while in flight
         std::vector<vk::Fence> inFlightFences;
 
     public:
@@ -40,9 +36,6 @@ namespace render
 
         void init();
         void recreate();
-
-        // Render with optional pre-render callback (called after fence wait, before command recording)
-        // Use for safe descriptor set updates
         vk::DescriptorSet render(const PreRenderCallback& preRenderCallback = nullptr);
 
         void cleanUp();

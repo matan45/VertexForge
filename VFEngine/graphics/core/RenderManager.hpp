@@ -21,6 +21,7 @@ namespace core {
 	class Device;
 	class SwapChain;
 	class CommandPool;
+	class DeferredDeletionQueue;
 
 	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -34,6 +35,7 @@ namespace core {
 		const window::Window* window;  // Non-owning pointer
 		std::unique_ptr<CommandPool> commandPool;
 		std::unique_ptr<imguiPass::ImguiRender> imguiRender;
+		std::unique_ptr<DeferredDeletionQueue> deletionQueue;
 		mutable ResizeCallback onResizeCallback;
 
 		// Per-frame synchronization objects (indexed by currentFrame)
@@ -48,6 +50,7 @@ namespace core {
 
 		uint32_t currentFrame = 0;
 		inline static uint32_t imageIndex;
+		inline static DeferredDeletionQueue* globalDeletionQueue;
 
 	public:
 		explicit RenderManager(Device& device, SwapChain& swapChain,const window::Window* window);
@@ -60,8 +63,12 @@ namespace core {
 		void recreate(uint32_t width, uint32_t height) const;
 
 		static uint32_t getImageIndex() { return imageIndex; }
+		static DeferredDeletionQueue* getGlobalDeletionQueue() { return globalDeletionQueue; }
 
 		void setResizeCallback(ResizeCallback callback) { onResizeCallback = std::move(callback); }
+
+		// Access for systems that need deferred deletion
+		DeferredDeletionQueue* getDeletionQueue() { return deletionQueue.get(); }
 
 		void cleanUp() const;
 

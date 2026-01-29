@@ -4,6 +4,7 @@
 #include "../data/AsyncLoadingTypes.hpp"
 #include "../providers/IOffScreenProvider.hpp"
 #include "resource/Types.hpp"
+#include "types/RenderSettings.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <string>
@@ -162,8 +163,29 @@ namespace events::render {
         std::string_view getName() const override { return "GetShowClusterDebug"; }
     };
 
+    struct SetShowShadowDebugCommand : ICommand<> {
+        bool show;
+
+        std::string_view getName() const override { return "SetShowShadowDebug"; }
+    };
+
+    struct GetShowShadowDebugQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowShadowDebug"; }
+    };
+
     struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {
         std::string_view getName() const override { return "GetCullingStats"; }
+    };
+
+    // Shadow settings
+    struct ApplyShadowSettingsCommand : ICommand<> {
+        types::RenderSettings settings;
+
+        std::string_view getName() const override { return "ApplyShadowSettings"; }
+    };
+
+    struct GetShadowStatsQuery : IQuery<services::ShadowStats> {
+        std::string_view getName() const override { return "GetShadowStats"; }
     };
 
 }

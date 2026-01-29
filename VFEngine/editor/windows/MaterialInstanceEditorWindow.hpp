@@ -22,7 +22,6 @@ namespace windows
         std::shared_ptr<material::MaterialData> parentMaterial;
         material::ExtractedParentPBR parentPBR;
 
-        // Preview rendering
         std::unique_ptr<editor::OrbitCamera> previewCamera;
         bool previewNeedsInit = true;
 
@@ -30,11 +29,9 @@ namespace windows
         bool needsInit = true;
         bool isDirty = false;
 
-        // Preview panel state
         float previewPanelWidth = 250.0f;
         bool isDraggingPreview = false;
 
-        // Temporary override values for editing
         glm::vec4 tempAlbedo{1.0f};
         float tempMetallic = 0.0f;
         float tempRoughness = 0.5f;
@@ -43,7 +40,6 @@ namespace windows
         float tempIblDiffuse = 1.0f;
         float tempIblSpecular = 0.5f;
 
-        // Track which overrides are enabled
         bool albedoOverrideEnabled = false;
         bool metallicOverrideEnabled = false;
         bool roughnessOverrideEnabled = false;
@@ -80,7 +76,6 @@ namespace windows
         void syncFromInstanceData();
         void syncToInstanceData();
 
-        // Texture picker helper
         bool drawTextureOverrideSlot(
             const char* label,
             material::TextureSlot slot,

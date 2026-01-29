@@ -36,14 +36,12 @@ namespace render
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
     {
-        // Note: Callback registration moved to init() for exception safety.
-        // If constructor body threw after registering callback, destructor wouldn't
-        // be called and the callback would leak.
     }
 
     RenderPassHandler::~RenderPassHandler()
     {
-        if (materialChangeCallbackId) {
+        if (materialChangeCallbackId)
+        {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
         }
     }
@@ -52,15 +50,17 @@ namespace render
     {
         clearColor->init();
 
-        if (!materialChangeCallbackId) {
+        if (!materialChangeCallbackId)
+        {
             materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
-                [this](const std::string& materialPath) {
+                [this](const std::string& materialPath)
+                {
                     customShaderRequirementCache.erase(materialPath);
 
-                    // When a parent material changes, invalidate all instance entries
-                    // since we can't easily track which instances use this parent
-                    if (!material::isInstanceFile(materialPath)) {
-                        std::erase_if(customShaderRequirementCache, [](const auto& pair) {
+                    if (!material::isInstanceFile(materialPath))
+                    {
+                        std::erase_if(customShaderRequirementCache, [](const auto& pair)
+                        {
                             return material::isInstanceFile(pair.first);
                         });
                     }
@@ -88,8 +88,6 @@ namespace render
         }
         meshPipelineInitialized = true;
 
-        // Auto-initialize GPU-driven renderer now that mesh pipeline is ready
-        // Skip for material preview to allow custom per-material shaders
         if (enableGPUDriven)
         {
             initGPUDrivenRenderer();
@@ -344,6 +342,22 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setDeletionQueue(core::DeferredDeletionQueue* queue)
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->setDeletionQueue(queue);
+        }
+    }
+
+    void RenderPassHandler::readBackLightOcclusionResults()
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->readBackLightOcclusionResults();
+        }
+    }
+
     void RenderPassHandler::setViewMode(uint32_t mode)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
@@ -385,6 +399,12 @@ namespace render
             camera->hiZBuffer->getHiZSampler(),
             camera->hiZBuffer->getMipLevels()
         );
+
+        if (!lightOcclusionInitialized)
+        {
+            gpuDrivenRenderer->initLightOcclusionCulling(camera->hiZBuffer.get());
+            lightOcclusionInitialized = true;
+        }
     }
 
     void RenderPassHandler::setCameraFrustumDrawList(std::vector<mesh::CameraFrustumRenderData>&& frustums)
@@ -477,11 +497,6 @@ namespace render
         return cameraOcclusionManager->createCamera(id, enableOcclusion);
     }
 
-    occlusion::CameraRenderData* RenderPassHandler::getCamera(occlusion::CameraId id)
-    {
-        return cameraOcclusionManager->getCamera(id);
-    }
-
     void RenderPassHandler::removeCamera(occlusion::CameraId id)
     {
         cameraOcclusionManager->removeCamera(id);
@@ -501,11 +516,6 @@ namespace render
                                     vk::Format depthFormat)
     {
         cameraOcclusionManager->initCameraHiZ(cameraId, depthImage, depthView, depthFormat);
-    }
-
-    bool RenderPassHandler::isHiZInitialized(occlusion::CameraId cameraId) const
-    {
-        return cameraOcclusionManager->isHiZInitialized(cameraId);
     }
 
     void RenderPassHandler::updateOcclusionObjects(occlusion::CameraId cameraId,
@@ -602,14 +612,16 @@ namespace render
         iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
-        bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized() && vfxRuntimeProvider->getInstanceCount() > 0;
+        bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized() && vfxRuntimeProvider->
+            getInstanceCount() > 0;
         bool hasCustomShaderMeshes = !customShaderMeshDrawList.empty();
 
         if (hasVFX)
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
-        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems || hasVFX);
+        bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes ||
+            hasDebugItems || hasVFX);
 
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
         {

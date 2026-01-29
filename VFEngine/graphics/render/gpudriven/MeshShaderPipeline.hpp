@@ -15,20 +15,15 @@ namespace render::gpudriven
     class MeshletBuffer;
     class MergedMeshBuffer;
 
-
     struct MeshShaderPushConstants
     {
-        uint32_t baseDrawIndex; // Base index into perDrawData buffer for this dispatch
+        uint32_t baseDrawIndex;
         uint32_t viewMode;
         float screenWidth;
         float screenHeight;
     };
 
-    // Separate push constants for task shader culling control
-    // Note: Push constants are shared, so these flags are packed into viewMode bits
-    // Bit 0-7: viewMode (0=Color, 1=Meshlet, 2=LOD)
-    // Bit 8: enableFrustumCulling
-    // Bit 9: enableBackfaceCulling
+    // viewMode bit packing: bits 0-7 = viewMode, bit 8 = frustum culling, bit 9 = backface culling
     constexpr uint32_t MESHLET_CULL_FRUSTUM_BIT = 0x100;
     constexpr uint32_t MESHLET_CULL_BACKFACE_BIT = 0x200;
 
@@ -40,7 +35,6 @@ namespace render::gpudriven
         uint32_t visibleMeshlets;
     };
 
-
     class MeshShaderPipeline
     {
     private:
@@ -51,35 +45,35 @@ namespace render::gpudriven
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
-        // Set 1: Per-draw data (written by compute, read by task/mesh/fragment)
         vk::DescriptorSetLayout perDrawDataLayout;
         vk::DescriptorPool perDrawDataPool;
         vk::DescriptorSet perDrawDataDescriptorSet;
 
-        // Set 3: Meshlet data (meshlet buffer, vertex indices, primitive indices)
         vk::DescriptorSetLayout meshletDataLayout;
         vk::DescriptorPool meshletDataPool;
         vk::DescriptorSet meshletDataDescriptorSet;
 
-        // Set 4: Merged vertex data (positions, normals, texcoords)
         vk::DescriptorSetLayout vertexDataLayout;
         vk::DescriptorPool vertexDataPool;
         vk::DescriptorSet vertexDataDescriptorSet;
 
-        // Debug stats buffer (binding 3 in set 3)
         vk::Buffer statsBuffer;
         vk::DeviceMemory statsBufferMemory;
         MeshletCullingStats cachedStats{};
 
-        // Set 6, 7, 8: Lighting descriptor sets (external, not owned)
-        vk::DescriptorSet lightDataDescriptorSet;      // Set 6: Light buffers from GPULightBufferManager
-        vk::DescriptorSet clusterGridDescriptorSet;    // Set 7: Cluster params from ClusterGridManager
-        vk::DescriptorSet cullingOutputDescriptorSet;  // Set 8: Culling output from LightCullingPipeline
+        vk::DescriptorSet lightDataDescriptorSet;
+        vk::DescriptorSet clusterGridDescriptorSet;
+        vk::DescriptorSet cullingOutputDescriptorSet;
 
-        // Cached lighting layouts for pipeline recreation
+        vk::DescriptorSet shadowDataDescriptorSet;
+        vk::DescriptorSet shadowTextureDescriptorSet;
+
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
         vk::DescriptorSetLayout cachedCullingOutputLayout;
+
+        vk::DescriptorSetLayout cachedShadowDataLayout;
+        vk::DescriptorSetLayout cachedShadowTextureLayout;
 
     public:
         explicit MeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -94,6 +88,8 @@ namespace render::gpudriven
                   vk::DescriptorSetLayout lightDataLayout,
                   vk::DescriptorSetLayout clusterGridLayout,
                   vk::DescriptorSetLayout cullingOutputLayout,
+                  vk::DescriptorSetLayout shadowDataLayout,
+                  vk::DescriptorSetLayout shadowTextureLayout,
                   vk::RenderPass renderPass);
 
         void cleanup();
@@ -104,17 +100,20 @@ namespace render::gpudriven
                       vk::DescriptorSetLayout lightDataLayout,
                       vk::DescriptorSetLayout clusterGridLayout,
                       vk::DescriptorSetLayout cullingOutputLayout,
+                      vk::DescriptorSetLayout shadowDataLayout,
+                      vk::DescriptorSetLayout shadowTextureLayout,
                       vk::RenderPass renderPass);
-
 
         void updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer);
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
         void updateVertexDescriptors(MergedMeshBuffer& mergedBuffer);
 
-        // Update lighting descriptor sets (called each frame from GPUDrivenRenderer)
         void updateLightingDescriptors(vk::DescriptorSet lightDataDescSet,
                                        vk::DescriptorSet clusterGridDescSet,
                                        vk::DescriptorSet cullingOutputDescSet);
+
+        void updateShadowDescriptors(vk::DescriptorSet shadowDataDescSet,
+                                     vk::DescriptorSet shadowTextureDescSet);
 
         vk::Pipeline getPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
@@ -124,6 +123,12 @@ namespace render::gpudriven
         vk::DescriptorSet getLightDataDescriptorSet() const { return lightDataDescriptorSet; }
         vk::DescriptorSet getClusterGridDescriptorSet() const { return clusterGridDescriptorSet; }
         vk::DescriptorSet getCullingOutputDescriptorSet() const { return cullingOutputDescriptorSet; }
+        vk::DescriptorSet getShadowDataDescriptorSet() const { return shadowDataDescriptorSet; }
+        vk::DescriptorSet getShadowTextureDescriptorSet() const { return shadowTextureDescriptorSet; }
+
+        vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
+        vk::DescriptorSetLayout getMeshletDataLayout() const { return meshletDataLayout; }
+        vk::DescriptorSetLayout getVertexDataLayout() const { return vertexDataLayout; }
 
         void resetStats(vk::CommandBuffer cmd);
         MeshletCullingStats readStats();
@@ -139,6 +144,8 @@ namespace render::gpudriven
                                               vk::DescriptorSetLayout lightDataLayout,
                                               vk::DescriptorSetLayout clusterGridLayout,
                                               vk::DescriptorSetLayout cullingOutputLayout,
+                                              vk::DescriptorSetLayout shadowDataLayout,
+                                              vk::DescriptorSetLayout shadowTextureLayout,
                                               vk::RenderPass renderPass);
     };
 }

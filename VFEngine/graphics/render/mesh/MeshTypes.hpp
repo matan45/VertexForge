@@ -7,6 +7,7 @@
 #include "resource/Types.hpp"
 #include "material/MaterialTypes.hpp"
 #include <array>
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 
@@ -17,8 +18,6 @@ namespace material
 
 namespace render::mesh
 {
-    // Texture index packing utilities
-    // Pack 4 texture indices (8 bits each, range 0-254, 255 = no texture) into a single uint32
     constexpr uint8_t TEXTURE_INDEX_NONE = 255;
 
     inline uint32_t packTextureIndices(uint8_t idx0, uint8_t idx1, uint8_t idx2, uint8_t idx3) {
@@ -28,25 +27,15 @@ namespace render::mesh
                (static_cast<uint32_t>(idx3) << 24);
     }
 
-    inline uint8_t unpackTextureIndex(uint32_t packed, int slot) {
-        return static_cast<uint8_t>((packed >> (slot * 8)) & 0xFF);
-    }
-    
     inline uint8_t floatToPackedIndex(float idx) {
         return (idx < 0.0f) ? TEXTURE_INDEX_NONE : static_cast<uint8_t>(idx);
-    }
-    
-    inline float packedToFloatIndex(uint8_t idx) {
-        return (idx == TEXTURE_INDEX_NONE) ? -1.0f : static_cast<float>(idx);
     }
 }
 
 namespace render::mesh
 {
-    // Forward declare blend mode for use in render data
     using BlendMode = ::material::BlendMode;
 
-    // GPU buffers for a single LOD level (used by preview windows)
     struct LODGPUBuffers
     {
         vk::Buffer vertexBuffer;
@@ -62,9 +51,9 @@ namespace render::mesh
     
     struct SubMeshGPUData
     {
-        std::string name; // Submesh name for material assignment
-        std::array<LODGPUBuffers, resource::LOD_LEVEL_COUNT> lodLevels; // 4 LOD levels
-        math::AABB boundingBox; // AABB for this submesh (local space, computed from LOD0)
+        std::string name;
+        std::array<LODGPUBuffers, resource::LOD_LEVEL_COUNT> lodLevels;
+        math::AABB boundingBox;
 
         const LODGPUBuffers& getLOD(uint32_t level) const
         {
@@ -73,11 +62,10 @@ namespace render::mesh
     };
 
 
-    // Mesh with GPU buffers (used by preview windows)
     struct MeshGPUData
     {
         std::vector<SubMeshGPUData> subMeshes;
-        math::AABB boundingBox; // Combined AABB of all submeshes (local space)
+        math::AABB boundingBox;
 
         int findSubmeshIndex(const std::string& name) const
         {
@@ -123,7 +111,6 @@ namespace render::mesh
         }
     };
 
-    // Mesh metadata (submeshes, combined bounding box)
     struct MeshMetadata
     {
         std::vector<SubMeshMetadata> subMeshes;
@@ -153,42 +140,36 @@ namespace render::mesh
         }
     };
 
-    // Per-submesh material override
     struct SubMeshMaterialInfo
     {
-        std::string materialPath; // Path to .vfMat file (empty = use default)
-        // Override PBR values if no material file
+        std::string materialPath;
         glm::vec4 albedo{1.0f, 1.0f, 1.0f, 1.0f};
         float metallic = 0.0f;
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
-        uint8_t blendMode = 0; // 0=Opaque, 1=Masked, 2=Translucent
+        uint8_t blendMode = 0;
         float iblDiffuse = 1.0f;
         float iblSpecular = 0.5f;
     };
 
     struct MeshRenderData
     {
-        entt::entity entity = entt::null; // Source entity for animation/bone lookup
-        std::string meshPath; // Path to identify loaded mesh
-        glm::mat4 modelMatrix{1.0f}; // World transform
+        entt::entity entity = entt::null;
+        std::string meshPath;
+        glm::mat4 modelMatrix{1.0f};
 
-        // Default PBR values
-        glm::vec4 albedo{1.0f, 1.0f, 1.0f, 1.0f}; // Base color (RGB + alpha)
+        glm::vec4 albedo{1.0f, 1.0f, 1.0f, 1.0f};
         float metallic = 0.0f;
         float roughness = 0.5f;
         float ao = 1.0f;
         float emission = 0.0f;
 
-        // Texture indices for all 16 slots (-1.0 = no texture)
-        // See ::material::TextureSlot for slot definitions
         std::array<float, ::material::MAX_MATERIAL_TEXTURES> textureIndices = {
             -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,
             -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f
         };
 
-        // Legacy accessors for common texture slots
         float& albedoTexIdx() { return textureIndices[::material::toIndex(::material::TextureSlot::Albedo)]; }
         float& normalTexIdx() { return textureIndices[::material::toIndex(::material::TextureSlot::Normal)]; }
         float& ormTexIdx() { return textureIndices[::material::toIndex(::material::TextureSlot::ORM)]; }
@@ -198,15 +179,14 @@ namespace render::mesh
         float& emissionTexIdx() { return textureIndices[::material::toIndex(::material::TextureSlot::Emission)]; }
         float& heightTexIdx() { return textureIndices[::material::toIndex(::material::TextureSlot::Height)]; }
 
-        // Material assignments per submesh (keyed by submesh name)
         std::unordered_map<std::string, SubMeshMaterialInfo> submeshMaterials;
         std::string defaultMaterialPath;
 
-        bool showBoundingBox = false; // Debug: render AABB wireframe
-        int highlightedSubMesh = -1; // -1 = none, otherwise index of submesh to highlight
+        bool showBoundingBox = false;
+        int highlightedSubMesh = -1;
 
-        float lodBias = 0.0f; // Shift LOD selection (+1 = lower quality, -1 = higher)
-        int forceLODLevel = -1; // Force specific LOD (-1 = automatic selection)
+        float lodBias = 0.0f;
+        int forceLODLevel = -1;
 
         const SubMeshMaterialInfo* getMaterialForSubmesh(const std::string& submeshName) const
         {
@@ -217,36 +197,42 @@ namespace render::mesh
 
     struct AABBPushConstants
     {
-        glm::mat4 mvp; // 64 bytes - Model-View-Projection matrix
-        glm::vec4 color; // 16 bytes - Wireframe color
+        glm::mat4 mvp;
+        glm::vec4 color;
     };
 
+    // Must match CameraData in GLSL shaders
     struct CameraUBO
     {
         alignas(16) glm::mat4 view;
         alignas(16) glm::mat4 projection;
         alignas(16) glm::vec3 cameraPos;
-        float time; // Animation time in seconds
-        alignas(16) glm::vec4 frustumPlanes[6]; // Frustum planes for per-meshlet culling
+        float time;
+        alignas(16) glm::vec4 frustumPlanes[6];
     };
 
-    
+    static_assert(sizeof(CameraUBO) == 240, "CameraUBO must be 240 bytes to match GLSL CameraData");
+    static_assert(offsetof(CameraUBO, view) == 0, "CameraUBO::view offset mismatch");
+    static_assert(offsetof(CameraUBO, projection) == 64, "CameraUBO::projection offset mismatch");
+    static_assert(offsetof(CameraUBO, cameraPos) == 128, "CameraUBO::cameraPos offset mismatch");
+    static_assert(offsetof(CameraUBO, time) == 140, "CameraUBO::time offset mismatch");
+    static_assert(offsetof(CameraUBO, frustumPlanes) == 144, "CameraUBO::frustumPlanes offset mismatch");
+
     struct MeshPushConstants
     {
-        glm::mat4 model;    // 64 bytes
-        glm::vec4 albedo;   // 16 bytes (RGB + alpha)
-        float metallic;     // 4 bytes
-        float roughness;    // 4 bytes
-        float ao;           // 4 bytes
-        float emission;     // 4 bytes
+        glm::mat4 model;
+        glm::vec4 albedo;
+        float metallic;
+        float roughness;
+        float ao;
+        float emission;
 
-        uint32_t textureIndicesPacked[4]; // 16 bytes total for 16 texture indices
+        uint32_t textureIndicesPacked[4];
 
-        float blendMode;    // 4 bytes (0=Opaque, 1=Masked, 2=Translucent)
-        float iblDiffuse;   // 4 bytes
-        float iblSpecular;  // 4 bytes
+        float blendMode;
+        float iblDiffuse;
+        float iblSpecular;
 
-        // Helper to pack all 16 texture indices from float array
         void packTextureIndices(const std::array<float, 16>& indices) {
             for (int group = 0; group < 4; ++group) {
                 textureIndicesPacked[group] = render::mesh::packTextureIndices(
@@ -258,14 +244,12 @@ namespace render::mesh
             }
         }
 
-        // Helper to set a single texture index
         void setTextureIndex(::material::TextureSlot slot, float index) {
             int slotIdx = ::material::toIndex(slot);
             int group = slotIdx / 4;
             int offset = slotIdx % 4;
             uint8_t packedIdx = floatToPackedIndex(index);
 
-            // Clear the byte at this position and set new value
             textureIndicesPacked[group] &= ~(0xFF << (offset * 8));
             textureIndicesPacked[group] |= (static_cast<uint32_t>(packedIdx) << (offset * 8));
         }
@@ -278,7 +262,7 @@ namespace render::mesh
         {
             vk::VertexInputBindingDescription bindingDescription{};
             bindingDescription.binding = 0;
-            bindingDescription.stride = 64; // sizeof(Vertex): vec3 + vec3 + vec2 + ivec4 + vec4
+            bindingDescription.stride = 64;
             bindingDescription.inputRate = vk::VertexInputRate::eVertex;
             return bindingDescription;
         }
@@ -287,27 +271,20 @@ namespace render::mesh
         {
             std::array<vk::VertexInputAttributeDescription, 3> attributes{};
 
-            // location 0: position (vec3)
             attributes[0].binding = 0;
             attributes[0].location = 0;
             attributes[0].format = vk::Format::eR32G32B32Sfloat;
             attributes[0].offset = 0;
 
-            // location 1: normal (vec3)
             attributes[1].binding = 0;
             attributes[1].location = 1;
             attributes[1].format = vk::Format::eR32G32B32Sfloat;
             attributes[1].offset = 12;
 
-            // location 2: texCoords (vec2)
             attributes[2].binding = 0;
             attributes[2].location = 2;
             attributes[2].format = vk::Format::eR32G32Sfloat;
             attributes[2].offset = 24;
-
-            // Note: boneIndices (offset 32) and boneWeights (offset 48) are in the vertex data
-            // but not declared here since static mesh shader doesn't use them.
-            // The 64-byte stride ensures correct data layout.
 
             return attributes;
         }

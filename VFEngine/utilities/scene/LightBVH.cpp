@@ -2,6 +2,39 @@
 
 namespace scene
 {
+    bool LightBVH::hasLightsWithoutWorldTransform(bool checkStatic) const
+    {
+        auto& registry = EntityRegistry::getRegistry();
+
+        auto pointView = registry.view<components::PointLightComponent, components::TransformComponent>();
+        for (auto entity : pointView)
+        {
+            const auto& transform = pointView.get<components::TransformComponent>(entity);
+            if (transform.isStatic == checkStatic)
+            {
+                if (!registry.all_of<components::WorldTransformComponent>(entity))
+                {
+                    return true;
+                }
+            }
+        }
+
+        auto spotView = registry.view<components::SpotLightComponent, components::TransformComponent>();
+        for (auto entity : spotView)
+        {
+            const auto& transform = spotView.get<components::TransformComponent>(entity);
+            if (transform.isStatic == checkStatic)
+            {
+                if (!registry.all_of<components::WorldTransformComponent>(entity))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     void LightBVH::rebuildStaticLightBVH()
     {
         std::vector<math::BVHPrimitive> primitives;
@@ -15,6 +48,11 @@ namespace scene
 
         staticBVH.build(std::move(primitives));
         collectStaticDirectionalLights();
+
+        if (hasLightsWithoutWorldTransform(true))
+        {
+            return;
+        }
 
         staticDirty = false;
         staticStructuralChange = false;
@@ -33,6 +71,11 @@ namespace scene
 
         dynamicBVH.build(std::move(primitives));
         collectDynamicDirectionalLights();
+
+        if (hasLightsWithoutWorldTransform(false))
+        {
+            return;
+        }
 
         dirtyDynamicLights.clear();
         dynamicDirty = false;

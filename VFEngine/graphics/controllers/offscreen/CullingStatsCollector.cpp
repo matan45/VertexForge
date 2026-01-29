@@ -26,7 +26,6 @@ namespace controllers::offscreen
         auto& registry = scene::EntityRegistry::getRegistry();
         uint32_t totalMeshEntities = static_cast<uint32_t>(registry.view<components::MeshComponent>().size());
 
-        // Iterate over all registered cameras
         for (const auto& [cameraId, cameraData] : cameraManager->getAllCameras())
         {
             services::CameraCullingStats camStats;
@@ -38,7 +37,6 @@ namespace controllers::offscreen
             camStats.bvhBuilt = bvhManager->isBuilt();
             camStats.totalMeshEntities = totalMeshEntities;
 
-            // Get visibility results for this camera if occlusion is active
             if (camStats.occlusionInitialized && cameraData->occlusionManager)
             {
                 auto visibilityResults = cameraManager->getVisibilityResults(cameraId);
@@ -61,13 +59,11 @@ namespace controllers::offscreen
             stats.cameraStats.push_back(camStats);
         }
 
-        // Mesh BVH statistics
         stats.staticBvhEntityCount = bvhManager->getStaticEntityCount();
         stats.dynamicBvhEntityCount = bvhManager->getDynamicEntityCount();
         stats.staticBvhNodeCount = bvhManager->getStaticNodeCount();
         stats.dynamicBvhNodeCount = bvhManager->getDynamicNodeCount();
 
-        // Light BVH statistics
         if (lightBvhManager)
         {
             stats.staticLightBvhCount = lightBvhManager->getStaticLightCount();
@@ -76,7 +72,6 @@ namespace controllers::offscreen
             stats.dynamicLightBvhNodeCount = lightBvhManager->getDynamicNodeCount();
         }
 
-        // GPU-driven rendering statistics
         auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
         if (gpuDrivenRenderer && renderHandler->isGPUDrivenRendererInitialized())
         {
@@ -113,7 +108,6 @@ namespace controllers::offscreen
             stats.gpuDriven.perDrawDataBufferSize = gpuDrivenRenderer->getPerDrawDataBufferSize();
             stats.gpuDriven.totalMemoryUsage = gpuDrivenRenderer->getTotalMemoryUsage();
 
-            // Meshlet culling stats (from task shader)
             stats.gpuDriven.meshletFrustumCullingEnabled = gpuDrivenRenderer->isMeshletFrustumCullingEnabled();
             stats.gpuDriven.meshletBackfaceCullingEnabled = gpuDrivenRenderer->isMeshletBackfaceCullingEnabled();
             auto meshletStats = gpuDrivenRenderer->getMeshletCullingStats();
@@ -121,6 +115,22 @@ namespace controllers::offscreen
             stats.gpuDriven.meshletsCulledByFrustum = meshletStats.culledByFrustum;
             stats.gpuDriven.meshletsCulledByBackface = meshletStats.culledByBackface;
             stats.gpuDriven.visibleMeshlets = meshletStats.visibleMeshlets;
+
+            stats.gpuDriven.bvhLightCullingEnabled = gpuDrivenRenderer->isBVHLightCullingEnabled();
+            stats.gpuDriven.hiZLightOcclusionEnabled = gpuDrivenRenderer->isLightOcclusionCullingEnabled();
+            stats.gpuDriven.totalLights = gpuDrivenRenderer->getTotalSceneLights();
+            stats.gpuDriven.lightsAfterBVHCull = gpuDrivenRenderer->getLightsAfterBVHCull();
+            stats.gpuDriven.lightsAfterHiZCull = gpuDrivenRenderer->getLightsAfterHiZCull();
+
+            if (stats.gpuDriven.lightsAfterBVHCull <= stats.gpuDriven.totalLights)
+                stats.gpuDriven.lightsCulledByBVH = stats.gpuDriven.totalLights - stats.gpuDriven.lightsAfterBVHCull;
+            else
+                stats.gpuDriven.lightsCulledByBVH = 0;
+
+            if (stats.gpuDriven.lightsAfterHiZCull <= stats.gpuDriven.lightsAfterBVHCull)
+                stats.gpuDriven.lightsCulledByHiZ = stats.gpuDriven.lightsAfterBVHCull - stats.gpuDriven.lightsAfterHiZCull;
+            else
+                stats.gpuDriven.lightsCulledByHiZ = 0;
         }
 
         return stats;

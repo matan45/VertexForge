@@ -2,6 +2,7 @@
 #include "Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
 #include "../types/AudioTypes.hpp"
+#include "../types/RenderSettings.hpp"
 
 namespace scene {
 
@@ -11,6 +12,7 @@ namespace scene {
 		Entity root;
 		types::PhysicsSettings physicsSettings = types::PhysicsSettings::createDefault();
 		types::AudioSettings audioSettings = types::AudioSettings::createDefault();
+		types::RenderSettings renderSettings = types::RenderSettings::createDefault();
 	public:
 		explicit SceneGraphSystem();
 		~SceneGraphSystem() = default;
@@ -54,14 +56,22 @@ namespace scene {
 			audioSettings = settings;
 		}
 
+		types::RenderSettings& getRenderSettings() {
+			return renderSettings;
+		}
+
+		const types::RenderSettings& getRenderSettings() const {
+			return renderSettings;
+		}
+
+		void setRenderSettings(const types::RenderSettings& settings) {
+			renderSettings = settings;
+		}
+
 	private:
 		void markTransformDirty(Entity& entity) const;
-
 		void updateChildWorldTransforms(Entity& parent, const glm::mat4& parentWorldTransform);
-
-		bool isDescendant(scene::Entity& parent,scene::Entity& child) const;
+		bool isDescendant(scene::Entity& parent, scene::Entity& child) const;
 	};
 
 }
-
-

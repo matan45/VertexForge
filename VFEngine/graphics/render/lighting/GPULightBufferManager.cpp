@@ -1,6 +1,8 @@
 #include "GPULightBufferManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../shadow/ShadowSystem.hpp"
+#include "../shadow/ShadowTypes.hpp"
 #include "print/Logger.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -141,7 +143,7 @@ namespace render::lighting
 
             countsMapped = logicalDevice.mapMemory(countsMemory, 0, bufferSize, vk::MemoryMapFlags{});
 
-            GPULightCounts counts{0, 0, 0, 0};
+            GPULightCounts counts{0, 0, 0, 0.5f};
             std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
         }
 
@@ -188,7 +190,6 @@ namespace render::lighting
 
         std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
 
-        // Binding 0: Directional lights SSBO
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
@@ -197,7 +198,6 @@ namespace render::lighting
                                  vk::ShaderStageFlagBits::eMeshEXT;
         bindings[0].pImmutableSamplers = nullptr;
 
-        // Binding 1: Point lights SSBO
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[1].descriptorCount = 1;
@@ -206,7 +206,6 @@ namespace render::lighting
                                  vk::ShaderStageFlagBits::eMeshEXT;
         bindings[1].pImmutableSamplers = nullptr;
 
-        // Binding 2: Spot lights SSBO
         bindings[2].binding = 2;
         bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[2].descriptorCount = 1;
@@ -215,7 +214,6 @@ namespace render::lighting
                                  vk::ShaderStageFlagBits::eMeshEXT;
         bindings[2].pImmutableSamplers = nullptr;
 
-        // Binding 3: Light counts UBO
         bindings[3].binding = 3;
         bindings[3].descriptorType = vk::DescriptorType::eUniformBuffer;
         bindings[3].descriptorCount = 1;
@@ -305,7 +303,6 @@ namespace render::lighting
 
     void GPULightBufferManager::updateFromScene()
     {
-        // No filtering - collect all lights
         updateFromScene(std::unordered_set<uint32_t>{});
     }
 
@@ -316,57 +313,12 @@ namespace render::lighting
             return;
         }
 
-#ifndef NDEBUG
-        // Debug validation: check that visibleLightIds contain valid light entities
-        // This helps detect sync issues between LightBVH and ECS registry
-        if (!visibleLightIds.empty())
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            uint32_t invalidCount = 0;
-            uint32_t noLightComponentCount = 0;
-
-            for (uint32_t entityId : visibleLightIds)
-            {
-                auto entity = static_cast<entt::entity>(entityId);
-
-                if (!registry.valid(entity))
-                {
-                    ++invalidCount;
-                    continue;
-                }
-
-                // Check if entity has at least one light component
-                bool hasLight = registry.any_of<
-                    components::DirectionalLightComponent,
-                    components::PointLightComponent,
-                    components::SpotLightComponent>(entity);
-
-                if (!hasLight)
-                {
-                    ++noLightComponentCount;
-                }
-            }
-
-            if (invalidCount > 0)
-            {
-                loggerWarning("GPULightBufferManager: {} stale entity IDs in visibleLightIds (BVH may be out of sync)",
-                              invalidCount);
-            }
-            if (noLightComponentCount > 0)
-            {
-                loggerWarning("GPULightBufferManager: {} entity IDs have no light component (BVH contains non-light entities)",
-                              noLightComponentCount);
-            }
-        }
-#endif
-
-        // If the set is empty, collect all lights (no filtering)
-        // Otherwise, only collect lights that are in the visible set
         const std::unordered_set<uint32_t>* filterPtr = visibleLightIds.empty() ? nullptr : &visibleLightIds;
 
         collectDirectionalLights(filterPtr);
         collectPointLights(filterPtr);
         collectSpotLights(filterPtr);
+        cleanupStaleShadowRegistrations();
 
         if (detectChanges())
         {
@@ -385,6 +337,12 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
+            {
+                if (!nameComp->isActive)
+                    continue;
+            }
+
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -399,20 +357,47 @@ namespace render::lighting
             const auto& light = view.get<components::DirectionalLightComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            // Extract forward direction from world matrix (handles parented entities correctly)
-            // Transform local forward (0, 0, -1) by the world matrix rotation
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
             GPUDirectionalLight& gpuLight = cpuDirectionalLights[directionalCount];
             gpuLight.direction = direction;
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
-            gpuLight.padding = 0;
+
+            uint32_t entityId = static_cast<uint32_t>(entity);
+            gpuLight.shadowIndex = -1;
+
+            if (shadowSystem)
+            {
+                bool isRegistered = registeredShadowLights.contains(entityId);
+                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
+
+                if (shadowsEnabled)
+                {
+                    shadow::ShadowSettings settings{};
+                    settings.depthBias = shadowSystem->getGlobalDepthBias();
+                    settings.normalBias = shadowSystem->getGlobalNormalBias();
+                    settings.cascadeCount = shadowSystem->getGlobalCascadeCount();
+                    settings.enabled = true;
+                    settings.castShadows = true;
+
+                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::DirectionalCSM, settings))
+                    {
+                        registeredShadowLights.insert(entityId);
+                    }
+                }
+                else if (!shadowsEnabled && isRegistered)
+                {
+                    shadowSystem->unregisterLight(entityId);
+                    registeredShadowLights.erase(entityId);
+                }
+
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
+            }
 
             ++directionalCount;
         }
 
-        // One-time warning when limit is exceeded (resets when count drops below limit)
         if (hitLimit && !warnedDirectionalLimit)
         {
             loggerWarning("GPULightBufferManager: Exceeded max directional lights ({}). Additional lights will be ignored.",
@@ -435,6 +420,12 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
+            {
+                if (!nameComp->isActive)
+                    continue;
+            }
+
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -457,10 +448,43 @@ namespace render::lighting
             gpuLight.color = light.color;
             gpuLight.intensity = light.intensity;
 
+            uint32_t entityId = static_cast<uint32_t>(entity);
+            gpuLight.shadowIndex = -1;
+
+            if (shadowSystem)
+            {
+                bool isRegistered = registeredShadowLights.contains(entityId);
+                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
+
+                if (shadowsEnabled)
+                {
+                    shadow::ShadowSettings settings{};
+                    settings.depthBias = shadowSystem->getGlobalDepthBias();
+                    settings.normalBias = shadowSystem->getGlobalNormalBias();
+                    settings.farPlane = light.radius;
+                    settings.enabled = true;
+                    settings.castShadows = true;
+
+                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::PointCube, settings))
+                    {
+                        registeredShadowLights.insert(entityId);
+                    }
+                }
+                else if (!shadowsEnabled && isRegistered)
+                {
+                    shadowSystem->unregisterLight(entityId);
+                    registeredShadowLights.erase(entityId);
+                }
+
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
+            }
+            gpuLight.padding[0] = 0;
+            gpuLight.padding[1] = 0;
+            gpuLight.padding[2] = 0;
+
             ++pointCount;
         }
 
-        // One-time warning when limit is exceeded (resets when count drops below limit)
         if (hitLimit && !warnedPointLimit)
         {
             loggerWarning("GPULightBufferManager: Exceeded max point lights ({}). Additional lights will be ignored.",
@@ -483,6 +507,12 @@ namespace render::lighting
 
         for (auto entity : view)
         {
+            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
+            {
+                if (!nameComp->isActive)
+                    continue;
+            }
+
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
                 continue;
@@ -498,9 +528,6 @@ namespace render::lighting
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
             glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
-
-            // Extract forward direction from world matrix (handles parented entities correctly)
-            // Transform local forward (0, 0, -1) by the world matrix rotation
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
             GPUSpotLight& gpuLight = cpuSpotLights[spotCount];
@@ -511,14 +538,43 @@ namespace render::lighting
             gpuLight.color = light.color;
             gpuLight.cosInnerAngle = std::cos(glm::radians(light.innerAngle));
             gpuLight.cosOuterAngle = std::cos(glm::radians(light.outerAngle));
-            gpuLight.padding[0] = 0.0f;
-            gpuLight.padding[1] = 0.0f;
-            gpuLight.padding[2] = 0.0f;
+
+            uint32_t entityId = static_cast<uint32_t>(entity);
+            gpuLight.shadowIndex = -1;
+
+            if (shadowSystem)
+            {
+                bool isRegistered = registeredShadowLights.contains(entityId);
+                bool shadowsEnabled = shadowSystem->isShadowsEnabled();
+
+                if (shadowsEnabled)
+                {
+                    shadow::ShadowSettings settings{};
+                    settings.depthBias = shadowSystem->getGlobalDepthBias();
+                    settings.normalBias = shadowSystem->getGlobalNormalBias();
+                    settings.farPlane = light.range;
+                    settings.enabled = true;
+                    settings.castShadows = true;
+
+                    if (shadowSystem->registerLight(entityId, shadow::ShadowMapType::Spot2D, settings))
+                    {
+                        registeredShadowLights.insert(entityId);
+                    }
+                }
+                else if (!shadowsEnabled && isRegistered)
+                {
+                    shadowSystem->unregisterLight(entityId);
+                    registeredShadowLights.erase(entityId);
+                }
+
+                gpuLight.shadowIndex = shadowSystem->getShadowViewIndex(entityId);
+            }
+            gpuLight.padding[0] = 0;
+            gpuLight.padding[1] = 0;
 
             ++spotCount;
         }
 
-        // One-time warning when limit is exceeded (resets when count drops below limit)
         if (hitLimit && !warnedSpotLimit)
         {
             loggerWarning("GPULightBufferManager: Exceeded max spot lights ({}). Additional lights will be ignored.",
@@ -528,6 +584,36 @@ namespace render::lighting
         else if (!hitLimit && warnedSpotLimit)
         {
             warnedSpotLimit = false;
+        }
+    }
+
+    void GPULightBufferManager::cleanupStaleShadowRegistrations()
+    {
+        if (!shadowSystem || registeredShadowLights.empty())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<uint32_t> toUnregister;
+
+        for (uint32_t entityId : registeredShadowLights)
+        {
+            auto entity = static_cast<entt::entity>(entityId);
+
+            bool shouldKeep = registry.valid(entity) &&
+                              registry.any_of<components::DirectionalLightComponent,
+                                              components::PointLightComponent,
+                                              components::SpotLightComponent>(entity);
+
+            if (!shouldKeep)
+            {
+                toUnregister.push_back(entityId);
+            }
+        }
+
+        for (uint32_t entityId : toUnregister)
+        {
+            shadowSystem->unregisterLight(entityId);
+            registeredShadowLights.erase(entityId);
         }
     }
 
@@ -542,9 +628,19 @@ namespace render::lighting
         counts.directionalCount = directionalCount;
         counts.pointCount = pointCount;
         counts.spotCount = spotCount;
-        counts.padding = 0;
+        counts.shadowIntensity = shadowIntensity;
 
         std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
+    }
+
+    void GPULightBufferManager::setShadowIntensity(float intensity)
+    {
+        if (shadowIntensity != intensity)
+        {
+            shadowIntensity = intensity;
+            updateCountsBuffer();
+            needsUpload = true;
+        }
     }
 
     void GPULightBufferManager::uploadToGPU(vk::CommandBuffer cmd)
@@ -554,8 +650,6 @@ namespace render::lighting
             return;
         }
 
-        // Barrier: Wait for previous frame's shader reads to complete before writing
-        // This prevents a race condition where we write to buffers still being read
         std::array<vk::BufferMemoryBarrier, 3> preTransferBarriers{};
 
         preTransferBarriers[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;

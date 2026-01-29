@@ -155,6 +155,16 @@ namespace controllers {
 		return offScreenController->getCullingStats();
 	}
 
+	void OffScreen::applyShadowSettings(const types::RenderSettings& settings)
+	{
+		offScreenController->applyShadowSettings(settings);
+	}
+
+	services::ShadowStats OffScreen::getShadowStats() const
+	{
+		return offScreenController->getShadowStats();
+	}
+
 	void OffScreen::setPlayMode(bool playMode)
 	{
 		offScreenController->setPlayMode(playMode);
@@ -228,6 +238,21 @@ namespace controllers {
 	void OffScreen::prepareFrameClusterDebug()
 	{
 		offScreenController->prepareFrameClusterDebug();
+	}
+
+	void OffScreen::setShowShadowDebug(bool show)
+	{
+		offScreenController->setShowShadowDebug(show);
+	}
+
+	bool OffScreen::getShowShadowDebug() const
+	{
+		return offScreenController->getShowShadowDebug();
+	}
+
+	void OffScreen::prepareFrameShadowDebug()
+	{
+		offScreenController->prepareFrameShadowDebug();
 	}
 
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)

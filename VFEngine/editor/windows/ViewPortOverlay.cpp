@@ -32,7 +32,6 @@ namespace windows
             loadIconAtlas();
         }
 
-        // Position overlay in top-left of viewport content area
         ImVec2 windowPos = ImGui::GetWindowPos();
         ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
         ImVec2 overlayPos = ImVec2(windowPos.x + contentMin.x + 8.0f,
@@ -95,9 +94,8 @@ namespace windows
         }
         ImGui::End();
 
-        // Position view mode dropdown in top-right of viewport content area
         ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
-        float dropdownWidth = 90.0f;
+        float dropdownWidth = 95.0f;
         ImVec2 dropdownPos = ImVec2(
             windowPos.x + contentMax.x - dropdownWidth - 8.0f,
             windowPos.y + contentMin.y + 8.0f
@@ -108,12 +106,11 @@ namespace windows
 
         if (ImGui::Begin("##ViewModeOverlay", nullptr, overlayFlags))
         {
-            // Sync view mode from backend in case it was changed externally
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster"};
+            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster", "Depth", "Shadow"};
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 5))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 7))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);
@@ -146,7 +143,6 @@ namespace windows
         uint32_t index = static_cast<uint32_t>(icon);
         uint32_t maxIndex = ATLAS_COLUMNS * ATLAS_ROWS;
 
-        // Bounds check - fallback to first icon if out of range
         if (index >= maxIndex)
         {
             index = 0;

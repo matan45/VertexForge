@@ -1,57 +1,15 @@
 #type TASK
 #version 460 core
 #extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/gpu_types.glsl"
+#include "../common/camera_types.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 const uint TASK_WORKGROUP_SIZE = 32;
 const uint MAX_MESHLETS_PER_PAYLOAD = 32;
-
-// Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
-struct PerDrawData {
-    mat4 modelMatrix;
-    mat4 normalMatrix;
-
-    vec4 albedo;
-    vec4 materialParams;
-
-    uvec4 textureIndices0;
-    uvec4 textureIndices1;
-
-    uint objectIndex;
-    uint flags;
-    float iblDiffuse;
-    float iblSpecular;
-
-    uint lodLevel;
-    uint shaderGroupIndex;
-    uint meshletOffset;
-    uint meshletCount;
-
-    uint baseVertexOffset;
-    uint boneMatrixOffset; // Offset into bone SSBO, 0xFFFFFFFF if static
-    uint boneCount;        // Number of bones for this object
-    uint padding3;
-};
-
-// Must match GPUMeshlet in MeshletBufferTypes.hpp (48 bytes)
-struct GPUMeshlet {
-    uint vertexOffset;
-    uint primitiveOffset;
-    uint vertexPrimCount;
-    uint globalVertexOffset;
-    vec4 boundingSphere;
-    vec4 cone;
-};
-
-// Must match CameraUBO in MeshTypes.hpp
-struct CameraData {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float time;
-    vec4 frustumPlanes[6];
-};
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;

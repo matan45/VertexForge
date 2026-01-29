@@ -5,6 +5,7 @@
 #include "../scene/Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
 #include "../types/AudioTypes.hpp"
+#include "../types/RenderSettings.hpp"
 
 namespace scene
 {
@@ -95,6 +96,9 @@ namespace serialization
         static json serializeAudioSettings(const types::AudioSettings& settings);
         static void deserializeAudioSettings(const json& j, types::AudioSettings& settings);
 
+        static json serializeRenderSettings(const types::RenderSettings& settings);
+        static void deserializeRenderSettings(const json& j, types::RenderSettings& settings);
+
         static std::string audioDistanceModelToString(types::AudioDistanceModel model);
         static types::AudioDistanceModel stringToAudioDistanceModel(const std::string& str);
 
@@ -109,5 +113,11 @@ namespace serialization
 
         static std::string colliderShapeToString(components::ColliderShape shape);
         static components::ColliderShape stringToColliderShape(const std::string& str);
+
+        static std::string shadowQualityToString(types::ShadowQuality quality);
+        static types::ShadowQuality stringToShadowQuality(const std::string& str);
+
+        static std::string cascadeSplitModeToString(types::CascadeSplitMode mode);
+        static types::CascadeSplitMode stringToCascadeSplitMode(const std::string& str);
     };
 }

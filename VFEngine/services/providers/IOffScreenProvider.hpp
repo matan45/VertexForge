@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <optional>
 #include "types/CameraTypes.hpp"
+#include "types/RenderSettings.hpp"
 
 namespace services {
 
@@ -77,6 +78,15 @@ namespace services {
         uint32_t meshletsCulledByFrustum = 0;
         uint32_t meshletsCulledByBackface = 0;
         uint32_t visibleMeshlets = 0;
+
+        // Light culling stats
+        bool bvhLightCullingEnabled = false;
+        bool hiZLightOcclusionEnabled = false;
+        uint32_t totalLights = 0;
+        uint32_t lightsAfterBVHCull = 0;
+        uint32_t lightsAfterHiZCull = 0;
+        uint32_t lightsCulledByBVH = 0;
+        uint32_t lightsCulledByHiZ = 0;
     };
 
     struct CullingDebugStats {
@@ -95,8 +105,19 @@ namespace services {
         size_t staticLightBvhNodeCount = 0;
         size_t dynamicLightBvhNodeCount = 0;
 
-        // GPU-driven rendering statistics
         GPUDrivenDebugStats gpuDriven;
+    };
+
+    struct ShadowStats {
+        uint32_t atlasWidth = 0;
+        uint32_t atlasHeight = 0;
+        float atlasUtilization = 0.0f;
+        uint32_t activeShadowCasters = 0;
+        uint32_t activeShadowViews = 0;
+        uint32_t directionalLightCount = 0;
+        uint32_t pointLightCount = 0;
+        uint32_t spotLightCount = 0;
+        uint32_t pointResolution = 512;  // Per-face resolution for VRAM calculation
     };
 
     class IOffScreenProvider {
@@ -119,7 +140,7 @@ namespace services {
                                        const glm::vec3& cameraPos, float time = 0.0f) = 0;
         virtual bool isMeshLoaded(const std::string& meshPath) const = 0;
         virtual std::vector<std::string> getLoadedMeshes() const = 0;
-        virtual void prepareCameras() = 0;  // Sync CameraComponents with occlusion system
+        virtual void prepareCameras() = 0;
         virtual std::optional<MeshBounds> getMeshBoundingBox(const std::string& meshPath) const = 0;
         virtual void prepareFrameMeshes() = 0;
 
@@ -128,7 +149,6 @@ namespace services {
         virtual void markBVHDirty() = 0;
 
         // Multi-camera occlusion culling
-        // Create a secondary camera (e.g., minimap) with optional occlusion culling
         virtual void createCamera(CameraId id, bool enableOcclusion = false) = 0;
         virtual void removeCamera(CameraId id) = 0;
         virtual void setActiveCamera(CameraId id) = 0;
@@ -145,6 +165,10 @@ namespace services {
 
         // Debug/Stats API
         virtual CullingDebugStats getCullingStats() const = 0;
+
+        // Shadow Settings API
+        virtual void applyShadowSettings(const types::RenderSettings& settings) = 0;
+        virtual ShadowStats getShadowStats() const = 0;
 
         // Editor Mode API
         virtual void setPlayMode(bool playMode) = 0;
@@ -172,6 +196,11 @@ namespace services {
         virtual void setShowClusterDebug(bool show) = 0;
         virtual bool getShowClusterDebug() const = 0;
         virtual void prepareFrameClusterDebug() = 0;
+
+        // Shadow Debug API
+        virtual void setShowShadowDebug(bool show) = 0;
+        virtual bool getShowShadowDebug() const = 0;
+        virtual void prepareFrameShadowDebug() = 0;
 
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;

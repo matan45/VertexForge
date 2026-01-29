@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../mesh/MeshStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
@@ -7,11 +8,14 @@
 #include "../../animation/AnimatorStateMachine.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
+#include "material/MaterialManager.hpp"
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../../core/RenderManager.hpp"
 #include "print/Logger.hpp"
+#include <algorithm>
 #include <array>
 #include <unordered_map>
 #include <memory>
@@ -113,6 +117,23 @@ namespace render::gpudriven
                 lightBufferManager->getDescriptorSetLayout()
             );
 
+            shadowSystem = std::make_unique<shadow::ShadowSystem>(device);
+            shadowSystem->init();
+            shadowSystem->setLightBufferManager(lightBufferManager.get());
+
+            if (!shadowSystem || !shadowSystem->isInitialized())
+            {
+                loggerError("GPUDrivenRenderer: Shadow system initialization failed");
+                return;
+            }
+
+            lightBufferManager->setShadowSystem(shadowSystem.get());
+
+            if (core::RenderManager::getGlobalDeletionQueue())
+            {
+                shadowSystem->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
+            }
+
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
             meshShaderPipeline->init(iblDescriptorSetLayout,
                                      bindlessTextures->getDescriptorSetLayout(),
@@ -120,7 +141,16 @@ namespace render::gpudriven
                                      lightBufferManager->getDescriptorSetLayout(),
                                      clusterGridManager->getDescriptorSetLayout(),
                                      lightCullingPipeline->getDescriptorSetLayout(),
+                                     shadowSystem->getShadowDataLayout(),
+                                     shadowSystem->getShadowTextureLayout(),
                                      renderPass);
+
+            shadowSystem->initShadowPass(
+                meshShaderPipeline->getPerDrawDataLayout(),
+                meshShaderPipeline->getMeshletDataLayout(),
+                meshShaderPipeline->getVertexDataLayout(),
+                boneMatrixManager->getDescriptorSetLayout()
+            );
 
             if (meshStreamManager)
             {
@@ -136,6 +166,25 @@ namespace render::gpudriven
             return;
         }
 
+        if (!materialChangeCallbackId)
+        {
+            materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
+                [this](const std::string& materialPath) {
+                    pbrCache.erase(materialPath);
+                    registeredMaterialPaths.erase(materialPath);
+
+                    if (!material::isInstanceFile(materialPath))
+                    {
+                        std::erase_if(pbrCache, [](const auto& pair) {
+                            return material::isInstanceFile(pair.first);
+                        });
+                        std::erase_if(registeredMaterialPaths, [](const std::string& path) {
+                            return material::isInstanceFile(path);
+                        });
+                    }
+                });
+        }
+
         initialized = true;
         loggerInfo("GPUDrivenRenderer: Initialized successfully");
     }
@@ -147,10 +196,21 @@ namespace render::gpudriven
             return;
         }
 
+        if (materialChangeCallbackId)
+        {
+            material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+            materialChangeCallbackId = {};
+        }
+
+        pbrCache.clear();
+        registeredMaterialPaths.clear();
+
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
+        if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
+        if (shadowSystem) shadowSystem->cleanup();
         if (lightCullingPipeline) lightCullingPipeline->cleanup();
         if (clusterGridManager) clusterGridManager->cleanup();
         if (lightBufferManager) lightBufferManager->cleanup();
@@ -163,7 +223,9 @@ namespace render::gpudriven
         if (mergedBuffer) mergedBuffer->cleanup();
 
         meshStreamManager.reset();
+        lightOcclusionCulling.reset();
         meshShaderPipeline.reset();
+        shadowSystem.reset();
         lightCullingPipeline.reset();
         clusterGridManager.reset();
         lightBufferManager.reset();
@@ -228,6 +290,11 @@ namespace render::gpudriven
         };
         cameraBuffer->update(cameraParams);
 
+        cachedCameraView = view;
+        cachedCameraProjection = projection;
+        cachedCameraNear = nearPlane;
+        cachedCameraFar = farPlane;
+
         updateClusterGrid(projection, nearPlane, farPlane);
         updatePipelineDescriptors();
 
@@ -281,20 +348,18 @@ namespace render::gpudriven
             return nullptr;
         }
 
-        auto pbrCache = std::make_shared<std::unordered_map<std::string, mesh::ExtractedPBRValues>>();
-
-        return [this, pbrCache](const std::string& materialPath, TextureSlotType slot) -> uint32_t
+        return [this](const std::string& materialPath, TextureSlotType slot) -> uint32_t
         {
             if (materialPath.empty())
             {
                 return INVALID_TEXTURE_INDEX;
             }
 
-            auto it = pbrCache->find(materialPath);
-            if (it == pbrCache->end())
+            auto it = pbrCache.find(materialPath);
+            if (it == pbrCache.end())
             {
-                it = pbrCache->emplace(materialPath,
-                                       mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
+                it = pbrCache.emplace(materialPath,
+                                      mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
             }
 
             const auto& pbrValues = it->second;
@@ -433,6 +498,13 @@ namespace render::gpudriven
                     clusterGridManager->getDescriptorSet(),
                     lightCullingPipeline->getDescriptorSet());
             }
+
+            if (shadowSystem && shadowSystem->isInitialized())
+            {
+                meshShaderPipeline->updateShadowDescriptors(
+                    shadowSystem->getShadowDataDescSet(),
+                    shadowSystem->getShadowTextureDescSet());
+            }
         }
     }
 
@@ -459,6 +531,24 @@ namespace render::gpudriven
             meshShaderPipeline->resetStats(cmd);
         }
 
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            uint32_t pointCount = static_cast<uint32_t>(registry.view<components::PointLightComponent>().size());
+            uint32_t spotCount = static_cast<uint32_t>(registry.view<components::SpotLightComponent>().size());
+            totalSceneLights = pointCount + spotCount;
+
+            if (useBVHLightCulling && !visibleLightIds.empty())
+            {
+                lightsAfterBVHCull = std::min(static_cast<uint32_t>(visibleLightIds.size()), totalSceneLights);
+            }
+            else
+            {
+                lightsAfterBVHCull = totalSceneLights;
+            }
+
+            lightsAfterHiZCull = lightsAfterBVHCull;
+        }
+
         if (stats.totalObjects == 0)
         {
             return;
@@ -468,6 +558,60 @@ namespace render::gpudriven
         if (boneMatrixManager)
         {
             boneMatrixManager->uploadToGPU(cmd);
+        }
+
+        // Shadow system must update before light buffer manager so shadow indices are available
+        if (shadowSystem && shadowSystem->isInitialized())
+        {
+            std::unordered_set<uint32_t> shadowVisibleLights;
+            bool hasShadowFilter = false;
+
+            if (useBVHLightCulling && !visibleLightIds.empty())
+            {
+                shadowVisibleLights = visibleLightIds;
+                hasShadowFilter = true;
+            }
+
+            // Frame N-1 approach: use previous frame's occlusion results
+            if (useLightOcclusionCulling && hasPrevFrameOcclusionData && !prevFrameOccludedLights.empty())
+            {
+                if (hasShadowFilter)
+                {
+                    for (uint32_t occludedId : prevFrameOccludedLights)
+                        shadowVisibleLights.erase(occludedId);
+                }
+                else
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto pointView = registry.view<components::PointLightComponent>();
+                    for (auto entity : pointView)
+                    {
+                        uint32_t entityId = static_cast<uint32_t>(entity);
+                        if (!prevFrameOccludedLights.contains(entityId))
+                            shadowVisibleLights.insert(entityId);
+                    }
+                    auto spotView = registry.view<components::SpotLightComponent>();
+                    for (auto entity : spotView)
+                    {
+                        uint32_t entityId = static_cast<uint32_t>(entity);
+                        if (!prevFrameOccludedLights.contains(entityId))
+                            shadowVisibleLights.insert(entityId);
+                    }
+                    hasShadowFilter = true;
+                }
+            }
+
+            if (hasShadowFilter && !shadowVisibleLights.empty())
+            {
+                shadowSystem->beginFrame(cachedCameraView, cachedCameraProjection,
+                                          cachedCameraNear, cachedCameraFar,
+                                          &shadowVisibleLights);
+            }
+            else
+            {
+                shadowSystem->beginFrame(cachedCameraView, cachedCameraProjection,
+                                          cachedCameraNear, cachedCameraFar);
+            }
         }
 
         if (lightBufferManager)
@@ -481,6 +625,67 @@ namespace render::gpudriven
                 lightBufferManager->updateFromScene();
             }
             lightBufferManager->uploadToGPU(cmd);
+        }
+
+        if (useLightOcclusionCulling && lightOcclusionCulling && lightOcclusionCulling->isInitialized())
+        {
+            std::vector<occlusion::GPULightBounds> lightBounds;
+            auto& registry = scene::EntityRegistry::getRegistry();
+
+            auto pointView = registry.view<components::PointLightComponent, components::WorldTransformComponent>();
+            for (auto entity : pointView)
+            {
+                uint32_t entityId = static_cast<uint32_t>(entity);
+                if (useBVHLightCulling && !visibleLightIds.empty() && !visibleLightIds.contains(entityId))
+                    continue;
+
+                const auto& light = pointView.get<components::PointLightComponent>(entity);
+                const auto& transform = pointView.get<components::WorldTransformComponent>(entity);
+
+                glm::vec3 position = glm::vec3(transform.worldMatrix[3]);
+
+                occlusion::GPULightBounds bounds{};
+                bounds.positionRadius = glm::vec4(position, light.radius);
+                bounds.direction = glm::vec4(0.0f);
+                bounds.entityId = entityId;
+                bounds.lightType = static_cast<uint32_t>(occlusion::LightOcclusionType::Point);
+                lightBounds.push_back(bounds);
+            }
+
+            auto spotView = registry.view<components::SpotLightComponent, components::WorldTransformComponent>();
+            for (auto entity : spotView)
+            {
+                uint32_t entityId = static_cast<uint32_t>(entity);
+                if (useBVHLightCulling && !visibleLightIds.empty() && !visibleLightIds.contains(entityId))
+                    continue;
+
+                const auto& light = spotView.get<components::SpotLightComponent>(entity);
+                const auto& transform = spotView.get<components::WorldTransformComponent>(entity);
+
+                glm::vec3 position = glm::vec3(transform.worldMatrix[3]);
+                glm::vec3 forward = glm::normalize(glm::vec3(transform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+
+                occlusion::GPULightBounds bounds{};
+                bounds.positionRadius = glm::vec4(position, light.range);
+                bounds.direction = glm::vec4(forward, light.outerAngle);
+                bounds.entityId = entityId;
+                bounds.lightType = static_cast<uint32_t>(occlusion::LightOcclusionType::Spot);
+                lightBounds.push_back(bounds);
+            }
+
+            if (!lightBounds.empty())
+            {
+                lightOcclusionCulling->updateLights(lightBounds);
+                lightOcclusionCulling->recordLightUpload(cmd);
+
+                const auto& camData = cameraBuffer->getData();
+                glm::mat4 viewProj = camData.projection * camData.view;
+                // cameraPosition is vec4: xyz = position, w = nearPlane
+                lightOcclusionCulling->updateCamera(viewProj, glm::vec3(camData.cameraPosition), camData.cameraPosition.w);
+
+                lightOcclusionCulling->cull(cmd);
+                lightOcclusionCulling->copyResultsToStaging(cmd);
+            }
         }
 
         if (clusterGridManager)
@@ -513,6 +718,26 @@ namespace render::gpudriven
 
         cullPipeline->dispatch(cmd, stats.totalObjects);
         batchManager->insertBarriersAfterCompute(cmd);
+
+        if (shadowSystem && shadowSystem->isShadowsEnabled() &&
+            meshShaderPipeline && boneMatrixManager && batchManager)
+        {
+            shadowSystem->uploadToGPU(cmd);
+
+            shadow::ShadowPassParams shadowParams{};
+            shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
+            shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
+            shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
+            shadowParams.boneMatrixDescSet = boneMatrixManager->getDescriptorSet();
+            shadowParams.drawCommandBuffer = batchManager->getCombinedDrawCommandBuffer();
+            shadowParams.drawCountBuffer = batchManager->getCombinedDrawCountBuffer();
+            shadowParams.batchCount = batchManager->getBatchCount();
+            shadowParams.commandsPerSection = batchManager->getCommandsPerSection();
+            shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
+            shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
+
+            shadowSystem->recordShadowPass(cmd, shadowParams);
+        }
     }
 
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
@@ -530,16 +755,18 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, activePipeline);
 
-        std::array<vk::DescriptorSet, 9> descriptorSets = {
-            iblDescriptorSet,                                      // Set 0: Camera/IBL
-            meshShaderPipeline->getPerDrawDataDescriptorSet(),     // Set 1: Per-draw data
-            bindlessTextures->getDescriptorSet(),                  // Set 2: Bindless textures
-            meshShaderPipeline->getMeshletDataDescriptorSet(),     // Set 3: Meshlet data
-            meshShaderPipeline->getVertexDataDescriptorSet(),      // Set 4: Vertex data
-            boneMatrixManager->getDescriptorSet(),                 // Set 5: Bone matrices
-            meshShaderPipeline->getLightDataDescriptorSet(),       // Set 6: Light buffers
-            meshShaderPipeline->getClusterGridDescriptorSet(),     // Set 7: Cluster grid params
-            meshShaderPipeline->getCullingOutputDescriptorSet()    // Set 8: Light culling output
+        std::array<vk::DescriptorSet, 11> descriptorSets = {
+            iblDescriptorSet,
+            meshShaderPipeline->getPerDrawDataDescriptorSet(),
+            bindlessTextures->getDescriptorSet(),
+            meshShaderPipeline->getMeshletDataDescriptorSet(),
+            meshShaderPipeline->getVertexDataDescriptorSet(),
+            boneMatrixManager->getDescriptorSet(),
+            meshShaderPipeline->getLightDataDescriptorSet(),
+            meshShaderPipeline->getClusterGridDescriptorSet(),
+            meshShaderPipeline->getCullingOutputDescriptorSet(),
+            meshShaderPipeline->getShadowDataDescriptorSet(),
+            meshShaderPipeline->getShadowTextureDescriptorSet()
         };
 
         cmd.bindDescriptorSets(
@@ -788,6 +1015,46 @@ namespace render::gpudriven
         useBVHLightCulling = false;
     }
 
+    void GPUDrivenRenderer::setDeletionQueue(core::DeferredDeletionQueue* queue)
+    {
+        if (shadowSystem)
+        {
+            shadowSystem->setDeletionQueue(queue);
+        }
+    }
+
+    void GPUDrivenRenderer::initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer)
+    {
+        if (!hiZBuffer)
+        {
+            loggerWarning("GPUDrivenRenderer: Cannot init light occlusion culling - HiZBuffer is null");
+            return;
+        }
+
+        lightOcclusionCulling = std::make_unique<occlusion::LightOcclusionCulling>(device, swapChain);
+        lightOcclusionCulling->init(hiZBuffer);
+        useLightOcclusionCulling = true;
+
+        loggerInfo("GPUDrivenRenderer: Light occlusion culling initialized");
+    }
+
+    void GPUDrivenRenderer::readBackLightOcclusionResults()
+    {
+        if (!useLightOcclusionCulling || !lightOcclusionCulling || !lightOcclusionCulling->isInitialized())
+        {
+            return;
+        }
+
+        lightOcclusionCulling->markResultsReady();
+
+        const auto& visibleLights = lightOcclusionCulling->getVisibleLightIds();
+
+        prevFrameOccludedLights = lightOcclusionCulling->getOccludedLightIds();
+        hasPrevFrameOcclusionData = true;
+
+        lightsAfterHiZCull = static_cast<uint32_t>(visibleLights.size());
+    }
+
     void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)
     {
         if (!initialized) return;
@@ -805,8 +1072,6 @@ namespace render::gpudriven
             cachedIBLLayout = newIBLLayout;
         }
 
-        // All these components are required for mesh shader pipeline recreation
-        // They should all exist if initialized is true - log errors if any are missing
         bool canRecreate = true;
         if (!meshShaderPipeline)
         {
@@ -839,7 +1104,7 @@ namespace render::gpudriven
             canRecreate = false;
         }
 
-        if (canRecreate)
+        if (canRecreate && shadowSystem)
         {
             meshShaderPipeline->recreate(cachedIBLLayout,
                                          bindlessTextures->getDescriptorSetLayout(),
@@ -847,11 +1112,28 @@ namespace render::gpudriven
                                          lightBufferManager->getDescriptorSetLayout(),
                                          clusterGridManager->getDescriptorSetLayout(),
                                          lightCullingPipeline->getDescriptorSetLayout(),
+                                         shadowSystem->getShadowDataLayout(),
+                                         shadowSystem->getShadowTextureLayout(),
                                          cachedRenderPass);
         }
         else
         {
             loggerError("GPUDrivenRenderer::recreatePipelines: Cannot recreate pipeline due to missing components");
         }
+    }
+
+    uint32_t GPUDrivenRenderer::getTotalSceneLights() const
+    {
+        return totalSceneLights;
+    }
+
+    uint32_t GPUDrivenRenderer::getLightsAfterBVHCull() const
+    {
+        return lightsAfterBVHCull;
+    }
+
+    uint32_t GPUDrivenRenderer::getLightsAfterHiZCull() const
+    {
+        return lightsAfterHiZCull;
     }
 }

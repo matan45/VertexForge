@@ -45,6 +45,7 @@ namespace services
         prepareFrameLightGizmos();
         prepareFramePhysicsColliders();
         prepareFrameClusterDebug();
+        prepareFrameShadowDebug();
 
         void* descriptorSet = offScreenProvider->render();
 
@@ -417,10 +418,41 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowClusterDebug() : false;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShowShadowDebugCommand>(
+            [this](const events::render::SetShowShadowDebugCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setShowShadowDebug(cmd.show);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowShadowDebugQuery>(
+            [this](const events::render::GetShowShadowDebugQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowShadowDebug() : false;
+            });
+
         dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
             [this](const events::render::GetCullingStatsQuery&)
             {
                 return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
+            });
+
+        // Shadow settings
+        dispatcher.registerCommandHandler<events::render::ApplyShadowSettingsCommand>(
+            [this](const events::render::ApplyShadowSettingsCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->applyShadowSettings(cmd.settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShadowStatsQuery>(
+            [this](const events::render::GetShadowStatsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShadowStats() : services::ShadowStats{};
             });
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
@@ -584,5 +616,15 @@ namespace services
         }
 
         offScreenProvider->prepareFrameClusterDebug();
+    }
+
+    void EditorRenderServiceImpl::prepareFrameShadowDebug()
+    {
+        if (!offScreenProvider)
+        {
+            return;
+        }
+
+        offScreenProvider->prepareFrameShadowDebug();
     }
 }

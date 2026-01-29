@@ -52,6 +52,25 @@ namespace render::gpudriven
         indexAllocator.reset(maxIndexCount);
 
         createBuffers();
+
+        if (!materialChangeCallbackId)
+        {
+            materialChangeCallbackId = material::MaterialManager::instance().registerChangeCallback(
+                [this](const std::string& materialPath) {
+                    pbrCache.erase(materialPath);
+                    instanceToParentCache.erase(materialPath);
+                    if (!material::isInstanceFile(materialPath))
+                    {
+                        std::erase_if(pbrCache, [](const auto& pair) {
+                            return material::isInstanceFile(pair.first);
+                        });
+                        std::erase_if(instanceToParentCache, [](const auto& pair) {
+                            return material::isInstanceFile(pair.first);
+                        });
+                    }
+                });
+        }
+
         initialized = true;
 
         loggerInfo("MergedMeshBuffer initialized: {} max vertices, {} max indices, {} max objects",
@@ -61,6 +80,15 @@ namespace render::gpudriven
     void MergedMeshBuffer::cleanup()
     {
         if (!initialized) return;
+
+        if (materialChangeCallbackId)
+        {
+            material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+            materialChangeCallbackId = {};
+        }
+
+        pbrCache.clear();
+        instanceToParentCache.clear();
 
         device.getLogicalDevice().waitIdle();
         destroyBuffers();
@@ -518,9 +546,14 @@ namespace render::gpudriven
             float iblDiffuse = 1.0f, iblSpecular = 0.5f;
             if (!materialPath.empty())
             {
-                auto pbrValues = mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath);
-                iblDiffuse = pbrValues.iblDiffuse;
-                iblSpecular = pbrValues.iblSpecular;
+                auto it = pbrCache.find(materialPath);
+                if (it == pbrCache.end())
+                {
+                    it = pbrCache.emplace(materialPath,
+                                          mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath)).first;
+                }
+                iblDiffuse = it->second.iblDiffuse;
+                iblSpecular = it->second.iblSpecular;
             }
             obj.iblParams = glm::vec4(iblDiffuse, iblSpecular, 0.0f, 0.0f);
             obj.materialParams = glm::vec4(meshRender.metallic, meshRender.roughness, meshRender.ao,
@@ -532,10 +565,19 @@ namespace render::gpudriven
             std::string effectiveMaterialPath = materialPath;
             if (material::isInstanceFile(materialPath))
             {
-                auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-                if (instanceData && !instanceData->parentMaterialPath.empty())
+                auto cacheIt = instanceToParentCache.find(materialPath);
+                if (cacheIt != instanceToParentCache.end())
                 {
-                    effectiveMaterialPath = instanceData->parentMaterialPath;
+                    effectiveMaterialPath = cacheIt->second;
+                }
+                else
+                {
+                    auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
+                    if (instanceData && !instanceData->parentMaterialPath.empty())
+                    {
+                        effectiveMaterialPath = instanceData->parentMaterialPath;
+                        instanceToParentCache[materialPath] = effectiveMaterialPath;
+                    }
                 }
             }
 

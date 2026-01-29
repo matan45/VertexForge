@@ -22,6 +22,7 @@ namespace render::mesh
     class PhysicsDebugRenderer;
     class LightGizmoDebugRenderer;
     class ClusterDebugRenderer;
+    class ShadowDebugRenderer;
     struct MeshRenderData;
     struct MeshGPUData;
     struct CameraFrustumRenderData;
@@ -29,6 +30,7 @@ namespace render::mesh
     struct PhysicsColliderRenderData;
     struct LightGizmoRenderData;
     struct ClusterDebugRenderData;
+    struct ShadowFrustumRenderData;
 }
 
 namespace render
@@ -46,6 +48,7 @@ namespace render
         std::unique_ptr<mesh::PhysicsDebugRenderer> physicsDebugRenderer;
         std::unique_ptr<mesh::LightGizmoDebugRenderer> lightGizmoRenderer;
         std::unique_ptr<mesh::ClusterDebugRenderer> clusterDebugRenderer;
+        std::unique_ptr<mesh::ShadowDebugRenderer> shadowDebugRenderer;
 
         std::vector<mesh::CameraFrustumRenderData> cameraFrustumDrawList;
 
@@ -57,10 +60,13 @@ namespace render
 
         std::unique_ptr<mesh::ClusterDebugRenderData> clusterDebugData;
 
+        std::vector<mesh::ShadowFrustumRenderData> shadowFrustumDrawList;
+
         bool initialized = false;
         bool showGrid = true;
         bool showPhysicsDebug = false;
         bool showClusterDebug = false;
+        bool showShadowDebug = false;
         bool hasBoundingBoxesToRender = false;
 
     public:
@@ -85,6 +91,10 @@ namespace render
         void setClusterDebugData(mesh::ClusterDebugRenderData&& data);
         void setShowClusterDebug(bool show);
         bool getShowClusterDebug() const { return showClusterDebug; }
+
+        void setShadowFrustumDrawList(std::vector<mesh::ShadowFrustumRenderData>&& frustums);
+        void setShowShadowDebug(bool show) { showShadowDebug = show; }
+        bool getShowShadowDebug() const { return showShadowDebug; }
 
         void render(const vk::CommandBuffer& commandBuffer,
                     const std::vector<mesh::MeshRenderData>& meshDrawList,

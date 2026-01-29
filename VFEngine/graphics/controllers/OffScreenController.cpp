@@ -4,6 +4,10 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
 #include "../render/DebugRenderer.hpp"
+#include "../render/gpudriven/GPUDrivenRenderer.hpp"
+#include "../render/shadow/ShadowSystem.hpp"
+#include "../render/tools/ShadowDebugRenderer.hpp"
+#include "types/RenderSettings.hpp"
 #include "offscreen/IBLController.hpp"
 #include "offscreen/MeshAssetManager.hpp"
 #include "offscreen/CameraController.hpp"
@@ -38,7 +42,6 @@ namespace controllers
 
         auto* renderHandler = offScreen->getRenderPassHandler();
 
-        // Create extracted managers
         iblController = std::make_unique<offscreen::IBLController>(*renderHandler);
         meshAssetManager = std::make_unique<offscreen::MeshAssetManager>(*renderHandler);
         cameraController = std::make_unique<offscreen::CameraController>(*renderHandler);
@@ -47,11 +50,9 @@ namespace controllers
         framePreparation = std::make_unique<offscreen::FramePreparationSystem>();
         statsCollector = std::make_unique<offscreen::CullingStatsCollector>();
 
-        // Initialize BVH managers
         bvhManager->init(renderHandler);
         lightBvhManager->init();
 
-        // Subscribe to material saved notifications for cache invalidation
         auto token = events::EventDispatcher::instance().subscribe<events::material::MaterialFileSavedNotification>(
             [this](const events::material::MaterialFileSavedNotification& notification)
             {
@@ -277,6 +278,67 @@ namespace controllers
         return statsCollector->collect(offScreen->getRenderPassHandler(), bvhManager.get(), lightBvhManager.get());
     }
 
+    void OffScreenController::applyShadowSettings(const types::RenderSettings& settings)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (!gpuDriven)
+            return;
+
+        auto* shadowSystem = gpuDriven->getShadowSystem();
+        if (shadowSystem)
+        {
+            shadowSystem->applyRenderSettings(settings);
+        }
+
+        auto* lightBufferManager = gpuDriven->getLightBufferManager();
+        if (lightBufferManager)
+        {
+            lightBufferManager->setShadowIntensity(settings.shadows.shadowIntensity);
+        }
+    }
+
+    services::ShadowStats OffScreenController::getShadowStats() const
+    {
+        services::ShadowStats stats{};
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return stats;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (!gpuDriven)
+            return stats;
+
+        auto* shadowSystem = gpuDriven->getShadowSystem();
+        if (!shadowSystem)
+            return stats;
+
+        auto* atlasManager = shadowSystem->getAtlasManager();
+        if (atlasManager)
+        {
+            stats.atlasWidth = atlasManager->getAtlasWidth();
+            stats.atlasHeight = atlasManager->getAtlasHeight();
+            stats.atlasUtilization = atlasManager->getAtlasUtilization();
+        }
+
+        stats.activeShadowCasters = shadowSystem->getActiveShadowCasterCount();
+        stats.activeShadowViews = shadowSystem->getActiveShadowViewCount();
+
+        stats.directionalLightCount = static_cast<uint32_t>(shadowSystem->getDirectionalShadowViews().size());
+        stats.pointLightCount = static_cast<uint32_t>(shadowSystem->getPointShadowViews().size());
+        stats.spotLightCount = static_cast<uint32_t>(shadowSystem->getSpotShadowViews().size());
+
+        auto quality = static_cast<types::ShadowQuality>(shadowSystem->getGlobalQuality());
+        auto atlasConfig = types::ShadowAtlasConfig::fromQuality(quality);
+        stats.pointResolution = atlasConfig.pointResolution;
+
+        return stats;
+    }
+
     void OffScreenController::setShowGrid(bool show)
     {
         showGrid = show;
@@ -344,6 +406,88 @@ namespace controllers
         ctx.showClusterDebug = showClusterDebug;
 
         framePreparation->prepareClusterDebug(ctx);
+    }
+
+    void OffScreenController::prepareFrameShadowDebug()
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler)
+            return;
+
+        if (!showShadowDebug || playModeActive)
+        {
+            if (renderHandler->isDebugRendererInitialized())
+            {
+                auto* debugRenderer = renderHandler->getDebugRenderer();
+                if (debugRenderer)
+                {
+                    debugRenderer->setShowShadowDebug(false);
+                }
+            }
+            return;
+        }
+
+        if (!renderHandler->isDebugRendererInitialized())
+        {
+            if (renderHandler->isMeshPipelineInitialized())
+            {
+                renderHandler->initDebugRenderer();
+            }
+            else
+            {
+                return;
+            }
+        }
+
+        auto* debugRenderer = renderHandler->getDebugRenderer();
+        if (!debugRenderer)
+            return;
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (!gpuDriven)
+            return;
+
+        auto* shadowSystem = gpuDriven->getShadowSystem();
+        if (!shadowSystem || !shadowSystem->isInitialized())
+            return;
+
+        auto shadowInfos = shadowSystem->getShadowDebugInfo();
+        std::vector<render::mesh::ShadowFrustumRenderData> shadowDrawList;
+        shadowDrawList.reserve(shadowInfos.size());
+
+        for (const auto& info : shadowInfos)
+        {
+            render::mesh::ShadowFrustumRenderData renderData;
+
+            switch (info.type)
+            {
+                case render::shadow::ShadowMapType::DirectionalCSM:
+                case render::shadow::ShadowMapType::Directional2D:
+                    renderData.type = render::mesh::ShadowFrustumType::DirectionalCascade;
+                    renderData.cascadeIndex = info.cascadeIndex;
+                    renderData.inverseViewProjection = glm::inverse(info.viewProjectionMatrix);
+                    break;
+
+                case render::shadow::ShadowMapType::Spot2D:
+                    renderData.type = render::mesh::ShadowFrustumType::SpotFrustum;
+                    renderData.inverseViewProjection = glm::inverse(info.viewProjectionMatrix);
+                    break;
+
+                case render::shadow::ShadowMapType::PointCube:
+                    renderData.type = render::mesh::ShadowFrustumType::PointSphere;
+                    renderData.lightPosition = info.lightPosition;
+                    renderData.radius = info.farPlane;
+                    break;
+
+                default:
+                    continue;
+            }
+
+            shadowDrawList.push_back(renderData);
+        }
+
+        debugRenderer->setShadowFrustumDrawList(std::move(shadowDrawList));
+        debugRenderer->setShowShadowDebug(showShadowDebug);
     }
 
     void OffScreenController::setPlayMode(bool playMode)

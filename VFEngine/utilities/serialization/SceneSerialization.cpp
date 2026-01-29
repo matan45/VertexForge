@@ -4,9 +4,17 @@
 #include "../components/Components.hpp"
 #include "../print/EditorLogger.hpp"
 #include <fstream>
+#include <algorithm>
 
 namespace serialization
 {
+    // Helper to clean null terminators from strings
+    static void cleanNullTerminators(std::string& str)
+    {
+        if (auto pos = str.find('\0'); pos != std::string::npos)
+            str.resize(pos);
+    }
+
     json SceneSerialization::serializeTransform(const components::TransformComponent& transform)
     {
         json j;
@@ -34,12 +42,8 @@ namespace serialization
     json SceneSerialization::serializeIBL(const components::IBLComponent& ibl)
     {
         json j;
-        // Remove any embedded null terminators from the string
         std::string cleanFileName = ibl.fileName;
-        if (auto pos = cleanFileName.find('\0'); pos != std::string::npos)
-        {
-            cleanFileName.resize(pos);
-        }
+        cleanNullTerminators(cleanFileName);
         j["fileName"] = cleanFileName;
         return j;
     }
@@ -47,23 +51,15 @@ namespace serialization
     json SceneSerialization::serializeMesh(const components::MeshComponent& mesh)
     {
         json j;
-        // Remove any embedded null terminators from the string
         std::string cleanPath = mesh.meshPath;
-        if (auto pos = cleanPath.find('\0'); pos != std::string::npos)
-        {
-            cleanPath.resize(pos);
-        }
+        cleanNullTerminators(cleanPath);
         j["meshPath"] = cleanPath;
         j["showBoundingBox"] = mesh.showBoundingBox;
 
-        // Serialize animator path if set
         if (!mesh.animatorPath.empty())
         {
             std::string cleanAnimatorPath = mesh.animatorPath;
-            if (auto pos = cleanAnimatorPath.find('\0'); pos != std::string::npos)
-            {
-                cleanAnimatorPath.resize(pos);
-            }
+            cleanNullTerminators(cleanAnimatorPath);
             j["animatorPath"] = cleanAnimatorPath;
         }
         return j;
@@ -73,23 +69,19 @@ namespace serialization
     {
         json entityJson;
 
-        // Use UUID for persistent identification
         entityJson["uuid"] = entity.getUUID().getValue();
         entityJson["name"] = entity.getName();
 
-        // Active state
         if (entity.hasComponent<components::NameComponent>())
         {
             entityJson["isActive"] = entity.getComponent<components::NameComponent>().isActive;
         }
 
-        // Transform (always present per Entity constructor)
         if (entity.hasComponent<components::TransformComponent>())
         {
             entityJson["transform"] = serializeTransform(entity.getComponent<components::TransformComponent>());
         }
 
-        // Optional components
         json componentsJson = json::object();
 
         if (entity.hasComponent<components::CameraComponent>())
@@ -169,7 +161,6 @@ namespace serialization
 
         entityJson["components"] = componentsJson;
 
-        // Serialize children recursively
         json childrenJson = json::array();
         for (auto& child : entity.getChildren())
         {
@@ -199,7 +190,6 @@ namespace serialization
 
     void SceneSerialization::deserializeCamera(const json& j, components::CameraComponent& camera)
     {
-        // Restore cameraId if present (for snapshot restore)
         if (auto it = j.find("cameraId"); it != j.end() && it->is_number_unsigned())
             camera.cameraId = it->get<uint32_t>();
         if (auto it = j.find("fieldOfView"); it != j.end() && it->is_number())
@@ -250,28 +240,19 @@ namespace serialization
     {
         json j;
 
-        // Clean and save default material path
         std::string cleanDefaultPath = material.defaultMaterial;
-        if (auto pos = cleanDefaultPath.find('\0'); pos != std::string::npos)
-        {
-            cleanDefaultPath.resize(pos);
-        }
+        cleanNullTerminators(cleanDefaultPath);
         j["defaultMaterial"] = cleanDefaultPath;
 
-        // Serialize submesh materials map
         json subMeshMaterialsJson = json::object();
         for (const auto& [submeshName, matPath] : material.subMeshMaterials)
         {
             std::string cleanMatPath = matPath;
-            if (auto pos = cleanMatPath.find('\0'); pos != std::string::npos)
-            {
-                cleanMatPath.resize(pos);
-            }
+            cleanNullTerminators(cleanMatPath);
             subMeshMaterialsJson[submeshName] = cleanMatPath;
         }
         j["subMeshMaterials"] = subMeshMaterialsJson;
 
-        // Serialize parameter overrides
         json paramOverridesJson = json::object();
         for (const auto& [paramName, value] : material.parameterOverrides)
         {
@@ -353,7 +334,7 @@ namespace serialization
         if (str == "audio2D") return components::BillboardIconType::Audio2D;
         if (str == "audio3D") return components::BillboardIconType::Audio3D;
         if (str == "particle") return components::BillboardIconType::Particle;
-        // Legacy support for old scene files
+        // Legacy support
         if (str == "light") return components::BillboardIconType::PointLight;
         if (str == "audioSource") return components::BillboardIconType::Audio3D;
         return components::BillboardIconType::Custom;
@@ -397,17 +378,12 @@ namespace serialization
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
     {
         json j;
-        // Clean the audio file path
         std::string cleanPath = audioSource.audioFilePath;
-        if (auto pos = cleanPath.find('\0'); pos != std::string::npos)
-        {
-            cleanPath.resize(pos);
-        }
+        cleanNullTerminators(cleanPath);
         j["audioFilePath"] = cleanPath;
         j["volume"] = audioSource.volume;
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
-        // Note: activeHandle and isPlaying are runtime state, not serialized
         return j;
     }
 
@@ -437,12 +413,8 @@ namespace serialization
     json SceneSerialization::serializeAudioSource3D(const components::AudioSource3DComponent& audioSource)
     {
         json j;
-        // Clean the audio file path
         std::string cleanPath = audioSource.audioFilePath;
-        if (auto pos = cleanPath.find('\0'); pos != std::string::npos)
-        {
-            cleanPath.resize(pos);
-        }
+        cleanNullTerminators(cleanPath);
         j["audioFilePath"] = cleanPath;
         j["volume"] = audioSource.volume;
         j["pitch"] = audioSource.pitch;
@@ -450,7 +422,6 @@ namespace serialization
         j["minDistance"] = audioSource.minDistance;
         j["maxDistance"] = audioSource.maxDistance;
         j["showDebugSpheres"] = audioSource.showDebugSpheres;
-        // Note: activeHandle and isPlaying are runtime state, not serialized
         return j;
     }
 
@@ -496,15 +467,10 @@ namespace serialization
         for (const auto& entry : script.scripts)
         {
             json entryJson;
-            // Clean the script path
             std::string cleanPath = entry.scriptPath;
-            if (auto pos = cleanPath.find('\0'); pos != std::string::npos)
-            {
-                cleanPath.resize(pos);
-            }
+            cleanNullTerminators(cleanPath);
             entryJson["scriptPath"] = cleanPath;
             entryJson["enabled"] = entry.enabled;
-            // Note: started, instanceId, hasOnStart, hasOnUpdate, hasOnDestroy are runtime state
             scriptsArray.push_back(entryJson);
         }
         j["scripts"] = scriptsArray;
@@ -573,6 +539,48 @@ namespace serialization
         return components::ColliderShape::Box;
     }
 
+    std::string SceneSerialization::shadowQualityToString(types::ShadowQuality quality)
+    {
+        switch (quality)
+        {
+        case types::ShadowQuality::Off: return "off";
+        case types::ShadowQuality::Low: return "low";
+        case types::ShadowQuality::Medium: return "medium";
+        case types::ShadowQuality::High: return "high";
+        case types::ShadowQuality::Ultra: return "ultra";
+        default: return "high";
+        }
+    }
+
+    types::ShadowQuality SceneSerialization::stringToShadowQuality(const std::string& str)
+    {
+        if (str == "off") return types::ShadowQuality::Off;
+        if (str == "low") return types::ShadowQuality::Low;
+        if (str == "medium") return types::ShadowQuality::Medium;
+        if (str == "high") return types::ShadowQuality::High;
+        if (str == "ultra") return types::ShadowQuality::Ultra;
+        return types::ShadowQuality::High;
+    }
+
+    std::string SceneSerialization::cascadeSplitModeToString(types::CascadeSplitMode mode)
+    {
+        switch (mode)
+        {
+        case types::CascadeSplitMode::Linear: return "linear";
+        case types::CascadeSplitMode::Logarithmic: return "logarithmic";
+        case types::CascadeSplitMode::Practical: return "practical";
+        default: return "practical";
+        }
+    }
+
+    types::CascadeSplitMode SceneSerialization::stringToCascadeSplitMode(const std::string& str)
+    {
+        if (str == "linear") return types::CascadeSplitMode::Linear;
+        if (str == "logarithmic") return types::CascadeSplitMode::Logarithmic;
+        if (str == "practical") return types::CascadeSplitMode::Practical;
+        return types::CascadeSplitMode::Practical;
+    }
+
     json SceneSerialization::serializeCollider(const components::ColliderComponent& collider)
     {
         json j;
@@ -580,12 +588,8 @@ namespace serialization
         j["size"] = json::array({collider.size.x, collider.size.y, collider.size.z});
         j["height"] = collider.height;
         j["offset"] = json::array({collider.offset.x, collider.offset.y, collider.offset.z});
-        // Clean mesh path
         std::string cleanPath = collider.meshPath;
-        if (auto pos = cleanPath.find('\0'); pos != std::string::npos)
-        {
-            cleanPath.resize(pos);
-        }
+        cleanNullTerminators(cleanPath);
         j["meshPath"] = cleanPath;
         j["isTrigger"] = collider.isTrigger;
         j["collisionLayer"] = collider.collisionLayer;
@@ -623,7 +627,6 @@ namespace serialization
         if (auto it = j.find("collisionLayer"); it != j.end() && it->is_number_unsigned())
         {
             uint8_t layer = it->get<uint8_t>();
-            // Clamp to valid range (0-15), default to 1 (Dynamic) if out of range
             collider.collisionLayer = layer < 16 ? layer : 1;
         }
         if (auto it = j.find("friction"); it != j.end() && it->is_number())
@@ -699,16 +702,11 @@ namespace serialization
     json SceneSerialization::serializeVFX(const components::VFXComponent& vfx)
     {
         json j;
-        // Clean the VFX file path
         std::string cleanPath = vfx.vfxPath;
-        if (auto pos = cleanPath.find('\0'); pos != std::string::npos)
-        {
-            cleanPath.resize(pos);
-        }
+        cleanNullTerminators(cleanPath);
         j["vfxPath"] = cleanPath;
         j["autoPlay"] = vfx.autoPlay;
         j["loop"] = vfx.loop;
-        // Note: runtimeInstanceId and isPlaying are runtime state, not serialized
         return j;
     }
 
@@ -830,25 +828,21 @@ namespace serialization
     {
         json j;
 
-        // Gravity
         j["gravity"] = json::array({settings.gravity.x, settings.gravity.y, settings.gravity.z});
         j["gravityScale"] = settings.gravityScale;
 
-        // Simulation
         j["simulation"] = {
             {"fixedTimestep", settings.fixedTimestep},
             {"maxAccumulator", settings.maxAccumulator},
             {"maxStepsPerFrame", settings.maxStepsPerFrame}
         };
 
-        // Sleep thresholds
         j["sleepThresholds"] = {
             {"linearVelocity", settings.linearSleepThreshold},
             {"angularVelocity", settings.angularSleepThreshold},
             {"timeToSleep", settings.timeToSleep}
         };
 
-        // Collision layers
         j["collisionLayers"] = json::array();
         for (const auto& layer : settings.layers)
         {
@@ -859,7 +853,6 @@ namespace serialization
             });
         }
 
-        // Collision matrix
         j["collisionMatrix"] = json::array();
         for (size_t i = 0; i < settings.layers.size(); ++i)
         {
@@ -876,7 +869,6 @@ namespace serialization
 
     void SceneSerialization::deserializePhysicsSettings(const json& j, types::PhysicsSettings& settings)
     {
-        // Gravity
         if (j.contains("gravity") && j["gravity"].is_array() && j["gravity"].size() == 3)
         {
             settings.gravity.x = j["gravity"][0].get<float>();
@@ -888,7 +880,6 @@ namespace serialization
             settings.gravityScale = j["gravityScale"].get<float>();
         }
 
-        // Simulation
         if (j.contains("simulation"))
         {
             const auto& sim = j["simulation"];
@@ -900,7 +891,6 @@ namespace serialization
                 settings.maxStepsPerFrame = sim["maxStepsPerFrame"].get<int>();
         }
 
-        // Sleep thresholds
         if (j.contains("sleepThresholds"))
         {
             const auto& sleep = j["sleepThresholds"];
@@ -912,7 +902,6 @@ namespace serialization
                 settings.timeToSleep = sleep["timeToSleep"].get<float>();
         }
 
-        // Collision layers
         if (j.contains("collisionLayers") && j["collisionLayers"].is_array())
         {
             settings.layers.clear();
@@ -929,10 +918,8 @@ namespace serialization
             }
         }
 
-        // Collision matrix
         if (j.contains("collisionMatrix") && j["collisionMatrix"].is_array())
         {
-            // Reset all collision matrix entries
             for (auto& row : settings.collisionMatrix)
             {
                 row.reset();
@@ -986,14 +973,12 @@ namespace serialization
     {
         json j;
 
-        // Listener settings
         j["listener"] = {
             {"masterVolume", settings.masterVolume},
             {"dopplerFactor", settings.dopplerFactor},
             {"speedOfSound", settings.speedOfSound}
         };
 
-        // Distance model settings
         j["distanceModel"] = {
             {"model", audioDistanceModelToString(settings.distanceModel)},
             {"defaultRolloffFactor", settings.defaultRolloffFactor}
@@ -1004,7 +989,6 @@ namespace serialization
 
     void SceneSerialization::deserializeAudioSettings(const json& j, types::AudioSettings& settings)
     {
-        // Listener settings
         if (j.contains("listener") && j["listener"].is_object())
         {
             const auto& listener = j["listener"];
@@ -1016,7 +1000,6 @@ namespace serialization
                 settings.speedOfSound = listener["speedOfSound"].get<float>();
         }
 
-        // Distance model settings
         if (j.contains("distanceModel") && j["distanceModel"].is_object())
         {
             const auto& dm = j["distanceModel"];
@@ -1024,6 +1007,51 @@ namespace serialization
                 settings.distanceModel = stringToAudioDistanceModel(dm["model"].get<std::string>());
             if (dm.contains("defaultRolloffFactor") && dm["defaultRolloffFactor"].is_number())
                 settings.defaultRolloffFactor = dm["defaultRolloffFactor"].get<float>();
+        }
+    }
+
+    json SceneSerialization::serializeRenderSettings(const types::RenderSettings& settings)
+    {
+        json j;
+
+        j["shadows"] = {
+            {"enabled", settings.shadows.enabled},
+            {"quality", shadowQualityToString(settings.shadows.quality)},
+            {"cascadeCount", settings.shadows.cascadeCount},
+            {"cascadeSplitMode", cascadeSplitModeToString(settings.shadows.cascadeSplitMode)},
+            {"shadowBias", settings.shadows.shadowBias},
+            {"slopeBias", settings.shadows.slopeBias},
+            {"normalBias", settings.shadows.normalBias},
+            {"shadowIntensity", settings.shadows.shadowIntensity}
+        };
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
+    {
+        if (j.contains("shadows") && j["shadows"].is_object())
+        {
+            const auto& shadows = j["shadows"];
+            if (shadows.contains("enabled") && shadows["enabled"].is_boolean())
+                settings.shadows.enabled = shadows["enabled"].get<bool>();
+            if (shadows.contains("quality") && shadows["quality"].is_string())
+                settings.shadows.quality = stringToShadowQuality(shadows["quality"].get<std::string>());
+            if (shadows.contains("cascadeCount") && shadows["cascadeCount"].is_number_unsigned())
+            {
+                uint8_t count = shadows["cascadeCount"].get<uint8_t>();
+                settings.shadows.cascadeCount = std::clamp(count, uint8_t(1), uint8_t(4));
+            }
+            if (shadows.contains("cascadeSplitMode") && shadows["cascadeSplitMode"].is_string())
+                settings.shadows.cascadeSplitMode = stringToCascadeSplitMode(shadows["cascadeSplitMode"].get<std::string>());
+            if (shadows.contains("shadowBias") && shadows["shadowBias"].is_number())
+                settings.shadows.shadowBias = shadows["shadowBias"].get<float>();
+            if (shadows.contains("slopeBias") && shadows["slopeBias"].is_number())
+                settings.shadows.slopeBias = shadows["slopeBias"].get<float>();
+            if (shadows.contains("normalBias") && shadows["normalBias"].is_number())
+                settings.shadows.normalBias = shadows["normalBias"].get<float>();
+            if (shadows.contains("shadowIntensity") && shadows["shadowIntensity"].is_number())
+                settings.shadows.shadowIntensity = shadows["shadowIntensity"].get<float>();
         }
     }
 
@@ -1074,7 +1102,6 @@ namespace serialization
             entity.setName(entityName);
         }
 
-        // Restore active state
         if (entityJson.contains("isActive") && entityJson["isActive"].is_boolean())
         {
             if (entity.hasComponent<components::NameComponent>())
@@ -1188,7 +1215,6 @@ namespace serialization
             {
                 auto& vfxComp = entity.addOrReplaceComponent<components::VFXComponent>();
                 deserializeVFX(componentsJson["vfx"], vfxComp);
-                // Auto-attach billboard if not explicitly serialized
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
@@ -1200,7 +1226,6 @@ namespace serialization
             {
                 auto& lightComp = entity.addOrReplaceComponent<components::DirectionalLightComponent>();
                 deserializeDirectionalLight(componentsJson["directionalLight"], lightComp);
-                // Auto-attach billboard if not explicitly serialized
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
@@ -1212,7 +1237,6 @@ namespace serialization
             {
                 auto& lightComp = entity.addOrReplaceComponent<components::PointLightComponent>();
                 deserializePointLight(componentsJson["pointLight"], lightComp);
-                // Auto-attach billboard if not explicitly serialized
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
@@ -1224,7 +1248,6 @@ namespace serialization
             {
                 auto& lightComp = entity.addOrReplaceComponent<components::SpotLightComponent>();
                 deserializeSpotLight(componentsJson["spotLight"], lightComp);
-                // Auto-attach billboard if not explicitly serialized
                 if (!componentsJson.contains("billboard"))
                 {
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
@@ -1249,7 +1272,7 @@ namespace serialization
 
     size_t SceneSerialization::countEntities(const json& entityJson)
     {
-        size_t count = 1; // Count this entity
+        size_t count = 1;
         if (entityJson.contains("children") && entityJson["children"].is_array())
         {
             for (const auto& child : entityJson["children"])
@@ -1279,7 +1302,6 @@ namespace serialization
             sceneJson = json::parse(file);
             file.close();
 
-            // Validate required structure before clearing scene
             if (!sceneJson.is_object())
             {
                 vfLogError("Invalid scene file: root is not a JSON object");
@@ -1304,7 +1326,7 @@ namespace serialization
             return false;
         }
 
-        // Phase 2: File validated successfully - now safe to clear and load
+        // Phase 2: File validated - safe to clear and load
         try
         {
             size_t totalEntities = countEntities(sceneJson["root"]);
@@ -1312,7 +1334,6 @@ namespace serialization
 
             sceneGraph.clearScene();
 
-            // Deserialize physics settings if present
             if (sceneJson.contains("physicsSettings") && sceneJson["physicsSettings"].is_object())
             {
                 types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
@@ -1324,7 +1345,6 @@ namespace serialization
                 sceneGraph.setPhysicsSettings(types::PhysicsSettings::createDefault());
             }
 
-            // Deserialize audio settings if present
             if (sceneJson.contains("audioSettings") && sceneJson["audioSettings"].is_object())
             {
                 types::AudioSettings audioSettings = types::AudioSettings::createDefault();
@@ -1336,6 +1356,17 @@ namespace serialization
                 sceneGraph.setAudioSettings(types::AudioSettings::createDefault());
             }
 
+            if (sceneJson.contains("renderSettings") && sceneJson["renderSettings"].is_object())
+            {
+                types::RenderSettings renderSettings = types::RenderSettings::createDefault();
+                deserializeRenderSettings(sceneJson["renderSettings"], renderSettings);
+                sceneGraph.setRenderSettings(renderSettings);
+            }
+            else
+            {
+                sceneGraph.setRenderSettings(types::RenderSettings::createDefault());
+            }
+
             scene::Entity& root = sceneGraph.GetRoot();
             deserializeEntity(sceneJson["root"], root, sceneGraph, true, progressCallback, entitiesLoaded,
                               totalEntities);
@@ -1345,7 +1376,6 @@ namespace serialization
         catch (const std::exception& e)
         {
             vfLogError("Failed to deserialize scene: {}", e.what());
-            // Scene is in partial state - clear to avoid corruption
             sceneGraph.clearScene();
             return false;
         }
@@ -1361,14 +1391,10 @@ namespace serialization
             scene::Entity& root = sceneGraph.GetRoot();
 
             sceneJson["root"] = serializeEntity(root);
-
-            // Serialize physics settings at scene level
             sceneJson["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
-
-            // Serialize audio settings at scene level
             sceneJson["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
+            sceneJson["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
 
-            // Write to file with UTF-8 encoding, no BOM, pretty-printed
             std::string filePath{filename};
             std::ofstream file{filePath};
             if (!file.is_open())
@@ -1377,7 +1403,7 @@ namespace serialization
                 return false;
             }
 
-            file << sceneJson.dump(2); // Pretty print with 2-space indent
+            file << sceneJson.dump(2);
             file.close();
 
             vfLogInfo("Scene saved successfully to: {}", filename);
@@ -1399,12 +1425,9 @@ namespace serialization
 
             scene::Entity& root = sceneGraph.GetRoot();
             snapshot["root"] = serializeEntity(root);
-
-            // Include physics settings in snapshot
             snapshot["physicsSettings"] = serializePhysicsSettings(sceneGraph.getPhysicsSettings());
-
-            // Include audio settings in snapshot
             snapshot["audioSettings"] = serializeAudioSettings(sceneGraph.getAudioSettings());
+            snapshot["renderSettings"] = serializeRenderSettings(sceneGraph.getRenderSettings());
 
             return snapshot;
         }
@@ -1419,7 +1442,6 @@ namespace serialization
     {
         try
         {
-            // Validate snapshot structure
             if (!snapshot.is_object())
             {
                 vfLogError("Invalid snapshot: not a JSON object");
@@ -1432,10 +1454,8 @@ namespace serialization
                 return false;
             }
 
-            // Clear current scene and restore from snapshot
             sceneGraph.clearScene();
 
-            // Restore physics settings if present
             if (snapshot.contains("physicsSettings") && snapshot["physicsSettings"].is_object())
             {
                 types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
@@ -1443,7 +1463,6 @@ namespace serialization
                 sceneGraph.setPhysicsSettings(settings);
             }
 
-            // Restore audio settings if present
             if (snapshot.contains("audioSettings") && snapshot["audioSettings"].is_object())
             {
                 types::AudioSettings audioSettings = types::AudioSettings::createDefault();
@@ -1451,7 +1470,13 @@ namespace serialization
                 sceneGraph.setAudioSettings(audioSettings);
             }
 
-            // Deserialize root entity (no progress callback for snapshot restore)
+            if (snapshot.contains("renderSettings") && snapshot["renderSettings"].is_object())
+            {
+                types::RenderSettings renderSettings = types::RenderSettings::createDefault();
+                deserializeRenderSettings(snapshot["renderSettings"], renderSettings);
+                sceneGraph.setRenderSettings(renderSettings);
+            }
+
             scene::Entity& root = sceneGraph.GetRoot();
             size_t entitiesLoaded = 0;
             size_t totalEntities = countEntities(snapshot["root"]);
@@ -1463,7 +1488,6 @@ namespace serialization
         catch (const std::exception& e)
         {
             vfLogError("Failed to restore scene from snapshot: {}", e.what());
-            // Scene is in partial state - clear to avoid corruption
             sceneGraph.clearScene();
             return false;
         }

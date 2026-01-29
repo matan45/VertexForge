@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
+#include <cstddef>
 #include <string>
 #include "MeshletBufferTypes.hpp"
 
@@ -10,42 +11,31 @@ namespace render::gpudriven
 {
     enum class LODStreamState : uint8_t
     {
-        NotRequested, // LOD not yet requested for streaming
-        Queued, // In priority queue waiting to stream
-        Streaming, // Currently loading from disk
-        Uploading, // Data loaded, GPU transfer in progress
-        Ready, // Fully available for rendering
-        Evicted // Unloaded to make room (can reload)
+        NotRequested,
+        Queued,
+        Streaming,
+        Uploading,
+        Ready,
+        Evicted
     };
 
     constexpr uint32_t MAX_GPU_OBJECTS = 65536;
-
     constexpr uint32_t MAX_DRAW_COMMANDS = 700000;
-
     constexpr uint32_t DEFAULT_BATCH_COUNT = 4;
     constexpr uint32_t MAX_BATCH_COUNT = 8;
-
     constexpr uint32_t MAX_BINDLESS_TEXTURES = 4096;
-
     constexpr uint32_t MAX_SHADER_GROUPS = 16;
-
     constexpr uint32_t LOD_LEVEL_COUNT = 4;
-
     constexpr uint32_t CULL_WORKGROUP_SIZE = 64;
-
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
-    // Animation constants for GPU skinning
-    // Memory usage: MAX_BONES_PER_OBJECT * MAX_ANIMATED_OBJECTS * sizeof(mat4)
-    //             = 128 * 1024 * 64 bytes = 8 MB (CPU + GPU buffers)
-    constexpr uint32_t MAX_BONES_PER_OBJECT = 128;  // Max bones per skeleton
-    constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024; // Max concurrent animated entities
-    constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF; // Indicates static (non-animated) mesh
+    constexpr uint32_t MAX_BONES_PER_OBJECT = 128;
+    constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
+    constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
 
-    constexpr float LOD_THRESHOLD_0 = 400.0f; // LOD0 for >= 400 pixels
-    constexpr float LOD_THRESHOLD_1 = 200.0f; // LOD1 for >= 200 pixels
-    constexpr float LOD_THRESHOLD_2 = 100.0f; // LOD2 for >= 100 pixels
-    // LOD3 for < 100 pixels
+    constexpr float LOD_THRESHOLD_0 = 400.0f;
+    constexpr float LOD_THRESHOLD_1 = 200.0f;
+    constexpr float LOD_THRESHOLD_2 = 100.0f;
 
     struct alignas(16) LODDrawInfo
     {
@@ -58,48 +48,33 @@ namespace render::gpudriven
     struct alignas(16) GPUObjectData
     {
         glm::mat4 modelMatrix;
-
         glm::vec4 boundingSphere;
-
         glm::uvec4 lod0Data;
         glm::uvec4 lod1Data;
         glm::uvec4 lod2Data;
         glm::uvec4 lod3Data;
-
         glm::vec4 lodThresholds;
-
         glm::vec4 albedo;
         glm::vec4 materialParams;
         glm::vec4 iblParams;
-
-        // Bindless texture indices
         glm::uvec4 textureIndices0;
         glm::uvec4 textureIndices1;
-
-        // Object flags and indices
         uint32_t flags;
         uint32_t entityId;
         uint32_t availableLODMask;
         uint32_t shaderGroupIndex;
-        // 256 bytes up to here
-
-        // Meshlet LOD data - meshlet locations in meshlet buffer
-        // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, boneMatrixOffset/padding)
-        // Note: meshletLod3.w stores boneMatrixOffset (INVALID_BONE_OFFSET = 0xFFFFFFFF for static meshes)
         glm::uvec4 meshletLod0;
         glm::uvec4 meshletLod1;
         glm::uvec4 meshletLod2;
-        glm::uvec4 meshletLod3; // .w = boneMatrixOffset for animation support
-        // Total: 320 bytes
+        glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
     };
-
-    static_assert(sizeof(GPUObjectData) == 320, "GPUObjectData must be 320 bytes");
+    static_assert(sizeof(GPUObjectData) == 320);
 
 
     namespace ObjectFlags
     {
-        constexpr uint32_t AlphaMask = 1 << 4; // Object uses alpha masking
-        constexpr uint32_t UniformScale = 1 << 9; // Object has uniform scale (fast normal matrix path)
+        constexpr uint32_t AlphaMask = 1 << 4;
+        constexpr uint32_t UniformScale = 1 << 9;
     }
 
 
@@ -107,79 +82,59 @@ namespace render::gpudriven
     {
         glm::mat4 modelMatrix;
         glm::mat4 normalMatrix;
-
         glm::vec4 albedo;
         glm::vec4 materialParams;
-
         glm::uvec4 textureIndices0;
         glm::uvec4 textureIndices1;
-
         uint32_t objectIndex;
         uint32_t flags;
         float iblDiffuse;
         float iblSpecular;
-
         uint32_t lodLevel;
         uint32_t shaderGroupIndex;
-
-        uint32_t meshletOffset; // First meshlet index in meshlet buffer
-        uint32_t meshletCount; // Number of meshlets for selected LOD
-
-        uint32_t baseVertexOffset; // Base vertex offset in merged vertex buffer
-        uint32_t boneMatrixOffset; // Offset into global bone SSBO, INVALID_BONE_OFFSET if static
-        uint32_t boneCount; // Number of bones for this object
+        uint32_t meshletOffset;
+        uint32_t meshletCount;
+        uint32_t baseVertexOffset;
+        uint32_t boneMatrixOffset;
+        uint32_t boneCount;
         uint32_t padding3;
-        // Total: 240 bytes
     };
-
-    static_assert(sizeof(PerDrawData) == 240, "PerDrawData must be 240 bytes to match GLSL");
+    static_assert(sizeof(PerDrawData) == 240);
 
     struct alignas(16) GPUCameraData
     {
-        glm::mat4 view; // 64 bytes
-        glm::mat4 projection; // 64 bytes
-        glm::mat4 viewProjection; // 64 bytes
-        glm::mat4 invViewProjection; // 64 bytes
-
-        glm::vec4 cameraPosition; // 16 bytes - xyz = position, w = nearPlane
-        glm::vec4 screenParams; // 16 bytes - xy = resolution, zw = 1/resolution
-
-        // Frustum planes for culling (Ax + By + Cz + D = 0)
-        glm::vec4 frustumPlanes[6]; // 96 bytes
-
-        float farPlane; // 4 bytes
-        uint32_t objectCount; // 4 bytes
-        uint32_t hiZMipLevels; // 4 bytes
-        uint32_t frameIndex; // 4 bytes
-
-        uint32_t enableFrustumCulling; // 4 bytes - boolean
-        uint32_t enableOcclusionCulling; // 4 bytes - boolean
-        uint32_t enableLODSelection; // 4 bytes - boolean
-        uint32_t batchCount; // 4 bytes - number of batches for indirect rendering
-
-        uint32_t commandsPerBatch; // 4 bytes - max draw commands per batch
-        uint32_t shaderGroupCount; // 4 bytes - number of shader groups (for buffer indexing)
-        uint32_t padding1; // 4 bytes
-        uint32_t padding2; // 4 bytes
-        // Total: 432 bytes
+        glm::mat4 view;
+        glm::mat4 projection;
+        glm::mat4 viewProjection;
+        glm::mat4 invViewProjection;
+        glm::vec4 cameraPosition;
+        glm::vec4 screenParams;
+        glm::vec4 frustumPlanes[6];
+        float farPlane;
+        uint32_t objectCount;
+        uint32_t hiZMipLevels;
+        uint32_t frameIndex;
+        uint32_t enableFrustumCulling;
+        uint32_t enableOcclusionCulling;
+        uint32_t enableLODSelection;
+        uint32_t batchCount;
+        uint32_t commandsPerBatch;
+        uint32_t shaderGroupCount;
+        uint32_t padding1;
+        uint32_t padding2;
     };
+    static_assert(sizeof(GPUCameraData) == 432);
 
-    // Submesh location in merged buffer (CPU-side tracking)
     struct SubmeshLocation
     {
         std::string meshPath;
         std::string submeshName;
-        uint32_t submeshIndex; // Index within the mesh
-
+        uint32_t submeshIndex;
         std::array<LODDrawInfo, LOD_LEVEL_COUNT> lods;
-
-        // Meshlet data per LOD level
         std::array<MeshletLODInfo, LOD_LEVEL_COUNT> meshletLods{};
-
         glm::vec3 aabbMin;
         glm::vec3 aabbMax;
-        glm::vec4 boundingSphere; // xyz = center, w = radius
-
+        glm::vec4 boundingSphere;
         std::array<LODStreamState, LOD_LEVEL_COUNT> lodStates{};
 
         void calculateBoundingSphere()
@@ -198,24 +153,19 @@ namespace render::gpudriven
             return false;
         }
 
-
-        // Returns LOD_LEVEL_COUNT if no LOD is ready
         uint32_t getBestAvailableLOD(uint32_t requestedLOD) const
         {
-            // First try to find a LOD >= requested (lower detail is acceptable)
             for (uint32_t lod = requestedLOD; lod < LOD_LEVEL_COUNT; ++lod)
             {
                 if (lodStates[lod] == LODStreamState::Ready) return lod;
             }
-            // Fallback to any ready LOD (prefer lower index = higher detail)
             for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
             {
                 if (lodStates[lod] == LODStreamState::Ready) return lod;
             }
-            return LOD_LEVEL_COUNT; // None ready
+            return LOD_LEVEL_COUNT;
         }
 
-        // Get bitmask of available LODs (for GPU)
         uint32_t getAvailableLODMask() const
         {
             uint32_t mask = 0;
@@ -229,7 +179,6 @@ namespace render::gpudriven
             return mask;
         }
 
-        // Check if meshlet data is available for this submesh
         bool hasMeshletData() const
         {
             for (const auto& mlod : meshletLods)
@@ -239,10 +188,8 @@ namespace render::gpudriven
             return false;
         }
 
-        // Get best available LOD with meshlet data
         uint32_t getBestAvailableMeshletLOD(uint32_t requestedLOD) const
         {
-            // First try requested or lower detail
             for (uint32_t lod = requestedLOD; lod < LOD_LEVEL_COUNT; ++lod)
             {
                 if (meshletLods[lod].meshletCount > 0 &&
@@ -251,7 +198,6 @@ namespace render::gpudriven
                     return lod;
                 }
             }
-            // Fallback to any available meshlet LOD
             for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
             {
                 if (meshletLods[lod].meshletCount > 0 &&
@@ -260,53 +206,41 @@ namespace render::gpudriven
                     return lod;
                 }
             }
-            return LOD_LEVEL_COUNT; // None ready
+            return LOD_LEVEL_COUNT;
         }
     };
 
-    // Mesh registration info for merged buffer
     struct MergedMeshInfo
     {
         std::string meshPath;
         std::vector<SubmeshLocation> submeshes;
-        uint32_t firstSubmeshIndex; // First submesh index in global array
+        uint32_t firstSubmeshIndex;
         uint32_t submeshCount;
-
-        glm::vec3 aabbMin; // Combined AABB of all submeshes
+        glm::vec3 aabbMin;
         glm::vec3 aabbMax;
     };
 
-    // Draw statistics for debugging
     struct GPUDrivenStats
     {
-        uint32_t totalObjects; // Total objects submitted
-        uint32_t visibleObjects; // Objects passing culling
-        uint32_t drawCalls; // Actual draw calls issued (should be 1 for full GPU-driven)
-
-        // Per-LOD distribution
+        uint32_t totalObjects;
+        uint32_t visibleObjects;
+        uint32_t drawCalls;
         uint32_t objectsLOD0;
         uint32_t objectsLOD1;
         uint32_t objectsLOD2;
         uint32_t objectsLOD3;
-
-        // Culling statistics
         uint32_t culledByFrustum;
         uint32_t culledByOcclusion;
     };
 
-    // VkDrawMeshTasksIndirectCommandEXT structure (matches Vulkan spec)
-    // Used for mesh shader dispatch instead of indirect draws
     struct MeshTasksIndirectCommand
     {
-        uint32_t groupCountX; // Number of task shader workgroups in X dimension
-        uint32_t groupCountY; // Number of task shader workgroups in Y dimension (typically 1)
-        uint32_t groupCountZ; // Number of task shader workgroups in Z dimension (typically 1)
+        uint32_t groupCountX;
+        uint32_t groupCountY;
+        uint32_t groupCountZ;
     };
+    static_assert(sizeof(MeshTasksIndirectCommand) == 12);
 
-    static_assert(sizeof(MeshTasksIndirectCommand) == 12,
-                  "MeshTasksIndirectCommand must match VkDrawMeshTasksIndirectCommandEXT");
-
-    
     struct alignas(32) BatchDrawStats
     {
         uint32_t drawCount;
@@ -315,9 +249,8 @@ namespace render::gpudriven
         uint32_t lodCount2;
         uint32_t lodCount3;
         uint32_t culledByFrustum;
-        uint32_t culledByOcclusion; // Objects culled by Hi-Z occlusion
-        uint32_t padding; // Padding to 32 bytes
+        uint32_t culledByOcclusion;
+        uint32_t padding;
     };
-
-    static_assert(sizeof(BatchDrawStats) == 32, "BatchDrawStats must be 32 bytes for GPU alignment");
+    static_assert(sizeof(BatchDrawStats) == 32);
 }

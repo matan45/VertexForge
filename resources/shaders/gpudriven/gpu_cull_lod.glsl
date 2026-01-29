@@ -1,5 +1,9 @@
 #type COMPUTE
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/gpu_types.glsl"
+#include "../common/camera_types.glsl"
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
@@ -9,109 +13,12 @@ const uint FLAG_NO_CULL       = 1u << 6;
 const uint FLAG_NO_OCCLUDE    = 1u << 7;
 const uint FLAG_UNIFORM_SCALE = 1u << 9;
 
-// Must match GPUObjectData in GPUDrivenTypes.hpp (320 bytes)
-struct GPUObjectData {
-    mat4 modelMatrix;          
-
-    vec4 boundingSphere;       
-
-    uvec4 lod0Data;             
-    uvec4 lod1Data;             
-    uvec4 lod2Data;             
-    uvec4 lod3Data;            
-
-    vec4 lodThresholds;         
-
-    vec4 albedo;                
-    vec4 materialParams;        
-    vec4 iblParams;             
-
-    uvec4 textureIndices0;      
-    uvec4 textureIndices1;     
-
-    uint flags;                
-    uint entityId;              
-    uint availableLODMask;      
-    uint shaderGroupIndex;      
-
-    // Meshlet LOD data - meshlet locations in meshlet buffer
-    // Each uvec4: (meshletOffset, meshletCount, baseVertexOffset, padding/boneMatrixOffset)
-    // Note: meshletLod3.w stores boneMatrixOffset (0xFFFFFFFF = static mesh)
-    uvec4 meshletLod0;
-    uvec4 meshletLod1;
-    uvec4 meshletLod2;
-    uvec4 meshletLod3;
-};
-
-// Must match PerDrawData in GPUDrivenTypes.hpp (240 bytes)
-struct PerDrawData {
-    mat4 modelMatrix;           
-    mat4 normalMatrix;          
-
-    vec4 albedo;                
-    vec4 materialParams;        
-
-    uvec4 textureIndices0;      
-    uvec4 textureIndices1;      
-
-    uint objectIndex;          
-    uint flags;                 
-    float iblDiffuse;           
-    float iblSpecular;         
-
-    uint lodLevel;              
-    uint shaderGroupIndex;      
-    // Meshlet dispatch info (for mesh shader path)
-    uint meshletOffset;        
-    uint meshletCount;          
-
-    uint baseVertexOffset;
-    uint boneMatrixOffset;      // Offset into global bone SSBO, 0xFFFFFFFF if static
-    uint boneCount;             // Number of bones for this object
-    uint padding3;              
-};
-
-// VkDrawMeshTasksIndirectCommandEXT (12 bytes)
-struct MeshTasksCommand {
-    uint groupCountX;
-    uint groupCountY;
-    uint groupCountZ;
-};
-
-// Must match GPUCameraData in GPUDrivenTypes.hpp
-struct CameraData {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProjection;
-    mat4 invViewProjection;
-
-    vec4 cameraPosition;       
-    vec4 screenParams;         
-
-    vec4 frustumPlanes[6];
-
-    float farPlane;
-    uint objectCount;
-    uint hiZMipLevels;
-    uint frameIndex;
-
-    uint enableFrustumCulling;
-    uint enableOcclusionCulling;
-    uint enableLODSelection;
-    uint batchCount;            
-
-    uint commandsPerBatch;     
-    uint shaderGroupCount;     
-    uint padding1;
-    uint padding2;
-};
-
 layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
     GPUObjectData objects[];
 };
 
 layout(set = 0, binding = 1) uniform CameraUBO {
-    CameraData camera;
+    GPUCameraData camera;
 };
 
 uint getCommandsPerSection() {
@@ -128,18 +35,6 @@ layout(std430, set = 0, binding = 2) writeonly buffer DrawCommandBuffer {
 
 layout(std430, set = 0, binding = 3) writeonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
-};
-
-// Must match BatchDrawStats in GPUDrivenTypes.hpp
-struct BatchDrawStats {
-    uint drawCount;         
-    uint lodCount0;         
-    uint lodCount1;          
-    uint lodCount2;          
-    uint lodCount3;          
-    uint culledByFrustum;    
-    uint culledByOcclusion;  
-    uint padding;            
 };
 
 layout(std430, set = 0, binding = 4) buffer DrawCountBuffer {
@@ -376,7 +271,7 @@ void main() {
     perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
     perDrawData[globalDrawIndex].meshletCount = meshletCount;
     perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
-    perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;  // 0xFFFFFFFF for static meshes
-    perDrawData[globalDrawIndex].boneCount = 0u;  // Not used currently, bone count determined per-vertex
+    perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
+    perDrawData[globalDrawIndex].boneCount = 0u;
     perDrawData[globalDrawIndex].padding3 = 0u;
 }

@@ -20,11 +20,9 @@ namespace windows
         : instancePath(instancePath)
           , previewCamera(std::make_unique<editor::OrbitCamera>())
     {
-        // Extract filename for window title
         fs::path path(instancePath);
         windowTitle = "Instance: " + path.stem().string();
 
-        // Configure camera for material preview sphere
         previewCamera->target = glm::vec3(0.0f);
         previewCamera->distance = 3.0f;
         previewCamera->yaw = 45.0f;
@@ -50,10 +48,13 @@ namespace windows
 
     void MaterialInstanceEditorWindow::loadInstance()
     {
-        instanceData = resource::ResourceManager::loadMaterialInstance(instancePath);
+        if (material::MaterialManager::instance().reloadInstance(instancePath))
+        {
+            instanceData = resource::ResourceManager::loadMaterialInstance(instancePath);
+        }
+
         if (!instanceData)
         {
-            // Create default instance if load failed
             instanceData = std::make_shared<material::MaterialInstanceData>();
             instanceData->name = "New Instance";
         }
@@ -83,7 +84,6 @@ namespace windows
             isDirty = false;
             updatePreviewMaterial();
 
-            // Notify for cache invalidation in rendering systems
             events::material::MaterialFileSavedNotification notification;
             notification.materialPath = instancePath;
             events::EventDispatcher::instance().publish(notification);
@@ -94,8 +94,6 @@ namespace windows
     {
         if (!instanceData || !parentMaterial) return;
 
-        // Initialize temp values from instance overrides or parent values
-        // Albedo
         if (instanceData->albedoOverride.has_value())
         {
             tempAlbedo = *instanceData->albedoOverride;
@@ -107,7 +105,6 @@ namespace windows
             albedoOverrideEnabled = false;
         }
 
-        // Metallic
         if (instanceData->metallicOverride.has_value())
         {
             tempMetallic = *instanceData->metallicOverride;
@@ -119,7 +116,6 @@ namespace windows
             metallicOverrideEnabled = false;
         }
 
-        // Roughness
         if (instanceData->roughnessOverride.has_value())
         {
             tempRoughness = *instanceData->roughnessOverride;
@@ -131,7 +127,6 @@ namespace windows
             roughnessOverrideEnabled = false;
         }
 
-        // AO
         if (instanceData->aoOverride.has_value())
         {
             tempAo = *instanceData->aoOverride;
@@ -143,7 +138,6 @@ namespace windows
             aoOverrideEnabled = false;
         }
 
-        // Emission
         if (instanceData->emissionOverride.has_value())
         {
             tempEmission = *instanceData->emissionOverride;
@@ -155,7 +149,6 @@ namespace windows
             emissionOverrideEnabled = false;
         }
 
-        // IBL
         if (instanceData->iblDiffuseOverride.has_value())
         {
             tempIblDiffuse = *instanceData->iblDiffuseOverride;
@@ -183,7 +176,6 @@ namespace windows
     {
         if (!instanceData) return;
 
-        // Apply or clear overrides based on toggle state
         if (albedoOverrideEnabled)
             instanceData->albedoOverride = tempAlbedo;
         else
@@ -224,28 +216,23 @@ namespace windows
     {
         if (!previewNeedsInit) return;
 
-        // Initialize preview via service
         services::events::preview::InitMaterialPreviewCommand initCmd;
         initCmd.instanceId = services::PreviewInstanceId(this);
         events::EventDispatcher::instance().execute(initCmd);
 
         previewNeedsInit = false;
-
-        // Now that preview is initialized, send material params
         updatePreviewMaterial();
     }
 
     void MaterialInstanceEditorWindow::draw()
     {
-        // Handle cleanup when window is closing - must happen BEFORE any ImGui rendering
-        // that might reference preview resources (like ImGui::Image with preview descriptor set)
         if (!isOpen && !previewNeedsInit)
         {
             services::events::preview::CleanUpMaterialPreviewCommand cleanupCmd;
             cleanupCmd.instanceId = services::PreviewInstanceId(this);
             events::EventDispatcher::instance().execute(cleanupCmd);
-            previewNeedsInit = true; // Mark as cleaned up
-            return; // Don't render anything - window is closing
+            previewNeedsInit = true;
+            return;
         }
 
         if (needsInit)
@@ -264,18 +251,15 @@ namespace windows
 
         drawToolbar();
 
-        // Split into preview on left, properties on right
         float availWidth = ImGui::GetContentRegionAvail().x;
         float propertiesWidth = availWidth - previewPanelWidth - 8.0f;
 
-        // Preview panel (left)
         ImGui::BeginChild("PreviewPanel", ImVec2(previewPanelWidth, 0), true);
         drawPreviewPanel();
         ImGui::EndChild();
 
         ImGui::SameLine();
 
-        // Properties panel (right)
         ImGui::BeginChild("PropertiesPanel", ImVec2(propertiesWidth, 0), true);
         drawParentInfo();
         ImGui::Separator();
@@ -338,7 +322,6 @@ namespace windows
         ImGui::Text("Scalar Overrides");
         ImGui::Spacing();
 
-        // Albedo color
         bool changed = false;
         if (ImGui::Checkbox("##AlbedoOverride", &albedoOverrideEnabled))
         {
@@ -352,7 +335,6 @@ namespace windows
         }
         ImGui::EndDisabled();
 
-        // Metallic
         if (ImGui::Checkbox("##MetallicOverride", &metallicOverrideEnabled))
         {
             changed = true;
@@ -365,7 +347,6 @@ namespace windows
         }
         ImGui::EndDisabled();
 
-        // Roughness
         if (ImGui::Checkbox("##RoughnessOverride", &roughnessOverrideEnabled))
         {
             changed = true;
@@ -378,7 +359,6 @@ namespace windows
         }
         ImGui::EndDisabled();
 
-        // AO
         if (ImGui::Checkbox("##AOOverride", &aoOverrideEnabled))
         {
             changed = true;
@@ -391,7 +371,6 @@ namespace windows
         }
         ImGui::EndDisabled();
 
-        // Emission
         if (ImGui::Checkbox("##EmissionOverride", &emissionOverrideEnabled))
         {
             changed = true;
@@ -418,25 +397,21 @@ namespace windows
     {
         bool changed = false;
 
-        // Use slot index as unique ID scope
         ImGui::PushID(static_cast<int>(slot));
 
         bool hasOverride = instanceData && instanceData->isTextureOverridden(slot);
         std::string currentPath = hasOverride ? instanceData->getTextureOverride(slot) : parentTexture;
 
-        // Override checkbox
         bool overrideEnabled = hasOverride;
         if (ImGui::Checkbox("##TexOverride", &overrideEnabled))
         {
             if (overrideEnabled)
             {
-                // Enable override - use parent's texture or placeholder if empty
                 std::string initialPath = parentTexture.empty() ? " " : parentTexture;
                 instanceData->textureOverrides[slot] = initialPath;
             }
             else
             {
-                // Clear override
                 instanceData->textureOverrides.erase(slot);
             }
             changed = true;
@@ -444,15 +419,12 @@ namespace windows
 
         ImGui::SameLine();
 
-        // Texture path display
         fs::path texPath(currentPath);
         std::string displayName = currentPath.empty() || currentPath == " " ? "(none)" : texPath.filename().string();
 
-        // Label
         ImGui::Text("%s:", label);
         ImGui::SameLine();
 
-        // Highlight if this is an override
         if (overrideEnabled)
         {
             ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "%s", displayName.c_str());
@@ -462,7 +434,6 @@ namespace windows
             ImGui::TextDisabled("%s", displayName.c_str());
         }
 
-        // Browse button
         ImGui::SameLine();
         if (ImGui::SmallButton("..."))
         {
@@ -478,7 +449,6 @@ namespace windows
             }
         }
 
-        // Clear button (only if override is enabled)
         if (overrideEnabled)
         {
             ImGui::SameLine();
@@ -534,22 +504,19 @@ namespace windows
             initPreview();
         }
 
-        // Calculate square viewport size
         ImVec2 previewSize = ImGui::GetContentRegionAvail();
         float viewportSize = std::min(previewSize.x - 10.0f, previewSize.y - 20.0f);
-        viewportSize = std::max(viewportSize, 100.0f); // Minimum size
+        viewportSize = std::max(viewportSize, 100.0f);
 
         ImGui::BeginChild("PreviewViewport", ImVec2(viewportSize, viewportSize), true,
                           ImGuiWindowFlags_NoScrollbar);
         {
-            // Update camera aspect ratio
-            previewCamera->setAspectRatio(1.0f); // Square
+            previewCamera->setAspectRatio(1.0f);
 
             handlePreviewInput();
 
             auto& dispatcher = events::EventDispatcher::instance();
 
-            // Update camera via service
             services::events::preview::UpdateMaterialCameraCommand cameraCmd;
             cameraCmd.instanceId = services::PreviewInstanceId(this);
             cameraCmd.view = previewCamera->getViewMatrix();
@@ -558,7 +525,6 @@ namespace windows
             cameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
             dispatcher.execute(cameraCmd);
 
-            // Render and get texture handle
             services::events::preview::RenderMaterialPreviewQuery renderQuery;
             renderQuery.instanceId = services::PreviewInstanceId(this);
             auto textureHandle = dispatcher.query(renderQuery);
@@ -582,7 +548,6 @@ namespace windows
 
         bool isHovered = ImGui::IsWindowHovered();
 
-        // Track drag start/end
         if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
             isDraggingPreview = true;
@@ -592,12 +557,10 @@ namespace windows
             isDraggingPreview = false;
         }
 
-        // Only process input when hovered
         if (!isHovered) return;
 
         ImGuiIO& io = ImGui::GetIO();
 
-        // Scroll to zoom
         if (io.MouseWheel != 0.0f)
         {
             float zoomFactor = 1.0f - io.MouseWheel * previewCamera->zoomSensitivity * 0.1f;
@@ -605,7 +568,6 @@ namespace windows
             previewCamera->updateMatrices();
         }
 
-        // Left mouse drag to orbit - only if drag started in preview
         if (isDraggingPreview && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             ImVec2 delta = io.MouseDelta;
@@ -614,10 +576,7 @@ namespace windows
             {
                 previewCamera->yaw += delta.x * previewCamera->orbitSensitivity;
                 previewCamera->pitch -= delta.y * previewCamera->orbitSensitivity;
-
-                // Clamp pitch to avoid gimbal lock
                 previewCamera->pitch = glm::clamp(previewCamera->pitch, -89.0f, 89.0f);
-
                 previewCamera->updateMatrices();
             }
         }
@@ -630,14 +589,12 @@ namespace windows
         services::MaterialPreviewParams params;
         params.useCustomShader = false;
 
-        // Apply scalar values (use override if enabled, otherwise parent values)
         params.albedo = albedoOverrideEnabled ? tempAlbedo : parentPBR.albedo;
         params.metallic = metallicOverrideEnabled ? tempMetallic : parentPBR.metallic;
         params.roughness = roughnessOverrideEnabled ? tempRoughness : parentPBR.roughness;
         params.ao = aoOverrideEnabled ? tempAo : parentPBR.ao;
         params.emission = emissionOverrideEnabled ? tempEmission : parentPBR.emission;
 
-        // Helper to get texture path (override or parent)
         auto getTexture = [this](material::TextureSlot slot, const std::string& parentPath) -> std::string
         {
             if (instanceData->isTextureOverridden(slot))
@@ -657,7 +614,6 @@ namespace windows
         params.emissionTexturePath = getTexture(material::TextureSlot::Emission, parentPBR.emissionTexturePath);
         params.heightTexturePath = getTexture(material::TextureSlot::Height, parentPBR.heightTexturePath);
 
-        // Send params to preview service
         services::events::preview::SetMaterialParamsCommand cmd;
         cmd.instanceId = services::PreviewInstanceId(this);
         cmd.params = params;
