@@ -240,6 +240,84 @@ namespace services
                 }
             }
 
+            if (orig.hasComponent<components::ColliderComponent>())
+            {
+                auto& origCollider = orig.getComponent<components::ColliderComponent>();
+                auto& newCollider = newEntity.addComponent<components::ColliderComponent>();
+                newCollider.shape = origCollider.shape;
+                newCollider.size = origCollider.size;
+                newCollider.height = origCollider.height;
+                newCollider.offset = origCollider.offset;
+                newCollider.meshPath = origCollider.meshPath;
+                newCollider.isTrigger = origCollider.isTrigger;
+                newCollider.collisionLayer = origCollider.collisionLayer;
+                newCollider.friction = origCollider.friction;
+                newCollider.restitution = origCollider.restitution;
+            }
+
+            if (orig.hasComponent<components::RigidBodyComponent>())
+            {
+                auto& origRB = orig.getComponent<components::RigidBodyComponent>();
+                auto& newRB = newEntity.addComponent<components::RigidBodyComponent>();
+                newRB.type = origRB.type;
+                newRB.mass = origRB.mass;
+                newRB.linearDamping = origRB.linearDamping;
+                newRB.angularDamping = origRB.angularDamping;
+                newRB.freezePositionX = origRB.freezePositionX;
+                newRB.freezePositionY = origRB.freezePositionY;
+                newRB.freezePositionZ = origRB.freezePositionZ;
+                newRB.freezeRotationX = origRB.freezeRotationX;
+                newRB.freezeRotationY = origRB.freezeRotationY;
+                newRB.freezeRotationZ = origRB.freezeRotationZ;
+            }
+
+            if (orig.hasComponent<components::DirectionalLightComponent>())
+            {
+                auto& origLight = orig.getComponent<components::DirectionalLightComponent>();
+                auto& newLight = newEntity.addComponent<components::DirectionalLightComponent>();
+                newLight.color = origLight.color;
+                newLight.intensity = origLight.intensity;
+                newLight.showGizmo = origLight.showGizmo;
+            }
+
+            if (orig.hasComponent<components::PointLightComponent>())
+            {
+                auto& origLight = orig.getComponent<components::PointLightComponent>();
+                auto& newLight = newEntity.addComponent<components::PointLightComponent>();
+                newLight.color = origLight.color;
+                newLight.intensity = origLight.intensity;
+                newLight.radius = origLight.radius;
+                newLight.showGizmo = origLight.showGizmo;
+            }
+
+            if (orig.hasComponent<components::SpotLightComponent>())
+            {
+                auto& origLight = orig.getComponent<components::SpotLightComponent>();
+                auto& newLight = newEntity.addComponent<components::SpotLightComponent>();
+                newLight.color = origLight.color;
+                newLight.intensity = origLight.intensity;
+                newLight.innerAngle = origLight.innerAngle;
+                newLight.outerAngle = origLight.outerAngle;
+                newLight.range = origLight.range;
+                newLight.showGizmo = origLight.showGizmo;
+            }
+
+            if (orig.hasComponent<components::VFXComponent>())
+            {
+                auto& origVFX = orig.getComponent<components::VFXComponent>();
+                auto& newVFX = newEntity.addComponent<components::VFXComponent>();
+                newVFX.vfxPath = origVFX.vfxPath;
+                newVFX.autoPlay = origVFX.autoPlay;
+                newVFX.loop = origVFX.loop;
+            }
+
+            if (orig.hasComponent<components::AnimatorComponent>())
+            {
+                auto& origAnim = orig.getComponent<components::AnimatorComponent>();
+                auto& newAnim = newEntity.addComponent<components::AnimatorComponent>();
+                newAnim.animatorPath = origAnim.animatorPath;
+            }
+
             for (auto& child : orig.getChildren())
             {
                 duplicateRecursive(child, newHandle);
