@@ -131,6 +131,10 @@ namespace scene {
 
 	void SceneGraphSystem::updateChildWorldTransforms(Entity& entity, const glm::mat4& parentWorldTransform)
 	{
+		if (!entity.hasComponent<components::TransformComponent>()) {
+			return;
+		}
+
 		auto& transform = entity.getComponent<components::TransformComponent>();
 		glm::mat4 worldMatrix;
 

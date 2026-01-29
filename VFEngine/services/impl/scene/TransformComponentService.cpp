@@ -118,6 +118,12 @@ namespace services
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
 
+        // Convert world transform to matrix once
+        glm::mat4 worldMatrix = math::composeMatrix(
+            worldTransform.position,
+            worldTransform.rotation,
+            worldTransform.scale);
+
         // Compute the local transform from world transform
         TransformData localTransform = worldTransform;
 
@@ -133,12 +139,6 @@ namespace services
                     const auto& parentWorld = parentEntity.getComponent<components::WorldTransformComponent>().worldMatrix;
                     glm::mat4 parentWorldInverse = glm::inverse(parentWorld);
 
-                    // Convert world transform to matrix
-                    glm::mat4 worldMatrix = math::composeMatrix(
-                        worldTransform.position,
-                        worldTransform.rotation,
-                        worldTransform.scale);
-
                     // Local = inverse(parentWorld) * worldMatrix
                     glm::mat4 localMatrix = parentWorldInverse * worldMatrix;
 
@@ -149,7 +149,26 @@ namespace services
             }
         }
 
-        // Set the local transform (which will trigger proper dirty marking)
-        setTransform(entity, localTransform);
+        // Set local transform values directly
+        if (sceneEntity.hasComponent<components::TransformComponent>())
+        {
+            auto& comp = sceneEntity.getComponent<components::TransformComponent>();
+            comp.position = localTransform.position;
+            comp.rotation = localTransform.rotation;
+            comp.scale = localTransform.scale;
+
+            // Cache the world matrix directly - avoid recomputation during update
+            sceneEntity.addOrReplaceComponent<components::WorldTransformComponent>().worldMatrix = worldMatrix;
+
+            // Mark children dirty (not this entity - world matrix already set)
+            for (auto& child : sceneEntity.getChildren()) {
+                sceneGraph->markTransformDirty(child);
+            }
+
+            events::scene::TransformChangedNotification notification;
+            notification.entity = entity;
+            notification.newTransform = localTransform;
+            events::EventDispatcher::instance().publish(notification);
+        }
     }
 }

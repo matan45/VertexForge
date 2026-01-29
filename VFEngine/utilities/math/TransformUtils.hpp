@@ -2,18 +2,19 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 namespace math
 {
     struct DecomposedTransform
     {
         glm::vec3 position{0.0f};
-        glm::vec3 rotation{0.0f};  // Euler angles in degrees
+        glm::vec3 rotation{0.0f};  // Euler angles in degrees (XYZ order)
         glm::vec3 scale{1.0f};
     };
 
     // Decompose a transformation matrix into position, rotation (Euler degrees), and scale
+    // Rotation uses XYZ order to match TransformComponent::getMatrix()
     inline DecomposedTransform decomposeMatrix(const glm::mat4& matrix)
     {
         DecomposedTransform result;
@@ -23,9 +24,12 @@ namespace math
 
         glm::decompose(matrix, result.scale, rotationQuat, result.position, skew, perspective);
 
-        // Convert quaternion to Euler angles (degrees)
-        glm::vec3 eulerRadians = glm::eulerAngles(rotationQuat);
-        result.rotation = glm::degrees(eulerRadians);
+        // Extract Euler angles in XYZ order (matching compose order)
+        // Build rotation matrix from quaternion and extract XYZ angles
+        glm::mat4 rotationMatrix = glm::mat4_cast(rotationQuat);
+        float x, y, z;
+        glm::extractEulerAngleXYZ(rotationMatrix, x, y, z);
+        result.rotation = glm::degrees(glm::vec3(x, y, z));
 
         return result;
     }
