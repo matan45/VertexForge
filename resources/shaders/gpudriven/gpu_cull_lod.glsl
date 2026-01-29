@@ -63,12 +63,9 @@ vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
 }
 
 bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
-    float tolerance = sphere.w * 0.01; // 1% of radius as tolerance
-    float effectiveRadius = sphere.w + tolerance;
-
     for (int i = 0; i < 6; i++) {
         float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
-        if (distance < -effectiveRadius) {
+        if (distance < -sphere.w) {
             return false;
         }
     }
