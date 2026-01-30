@@ -865,18 +865,9 @@ void main() {
         color = meshletColor;
     }
 
-    if (viewModeValue == 2u) {
-        vec3 lodColors[4] = vec3[4](
-            vec3(0.0, 1.0, 0.0),
-            vec3(1.0, 1.0, 0.0),
-            vec3(1.0, 0.5, 0.0),
-            vec3(1.0, 0.0, 0.0)
-        );
-        uint lod = min(drawData.lodLevel, 3u);
-        color = mix(color, lodColors[lod], 0.5);
-    }
+    // VK-300: LOD mode (index 2) removed - discrete LOD no longer used
 
-    if (viewModeValue == 3u) {
+    if (viewModeValue == 2u) {  // Mipmap (was 3)
         float dx = max(length(texDx), length(texDy));
         float mipLevel = log2(max(dx * 1024.0, 1.0));
         mipLevel = clamp(mipLevel, 0.0, 10.0);
@@ -895,7 +886,7 @@ void main() {
         color = mipColor;
     }
 
-    if (viewModeValue == 4u) {
+    if (viewModeValue == 3u) {  // Cluster (was 4)
         float linearZ = linearizeDepth(gl_FragCoord.z);
         uint clusterIdx = getClusterIndex(gl_FragCoord.xy, linearZ);
 
@@ -913,7 +904,7 @@ void main() {
         color = clusterColor;
     }
 
-    if (viewModeValue == 5u) {
+    if (viewModeValue == 4u) {  // Depth (was 5)
         float linearZ = linearizeDepth(gl_FragCoord.z);
         float near = clusterParams.depthParams.x;
         float far = clusterParams.depthParams.y;
@@ -931,7 +922,7 @@ void main() {
         color = mix(depthColors[idx], depthColors[idx + 1], fract(t));
     }
 
-    if (viewModeValue == 6u) {
+    if (viewModeValue == 5u) {  // Shadow (was 6)
         float totalShadow = 1.0;
 
         for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
@@ -972,13 +963,14 @@ void main() {
         color = shadowColor;
     }
 
-    // VK-298: DAG Debug Visualization Modes (7-10)
+    // VK-298: DAG Debug Visualization Modes (6-9, was 7-10)
 
-    // Mode 7: DAG Cluster Color - unique color per TRIANGLE using hash
-    // Combines cluster index with primitive ID for per-triangle variation
-    if (viewModeValue == 7u) {
-        // Use gl_PrimitiveID for per-triangle coloring within each meshlet/cluster
-        uint h = fragClusterIndex + uint(gl_PrimitiveID);
+    // Mode 6: DAG Cluster Color - unique color per cluster
+    // Hash cluster index for distinct colors per cluster
+    if (viewModeValue == 6u) {  // DAG Cluster (was 7)
+        // Use cluster index for consistent per-cluster coloring
+        // Note: gl_PrimitiveID requires geometry shader capability with mesh shaders
+        uint h = fragClusterIndex;
         h = h * 747796405u + 2891336453u;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
@@ -993,8 +985,8 @@ void main() {
         color = clusterColor;
     }
 
-    // Mode 8: DAG Level - hierarchy depth visualization (blue=fine, red=coarse)
-    if (viewModeValue == 8u) {
+    // Mode 7: DAG Level - hierarchy depth visualization (blue=fine, red=coarse)
+    if (viewModeValue == 7u) {  // DAG Level (was 8)
         const uint MAX_DAG_LEVEL = 8u;
         float t = float(fragClusterLevel) / float(MAX_DAG_LEVEL);
         t = clamp(t, 0.0, 1.0);
@@ -1013,16 +1005,16 @@ void main() {
         color = levelColor;
     }
 
-    // Mode 9: Screen Error - LOD selection quality heatmap (green=good, red=high error)
-    if (viewModeValue == 9u) {
+    // Mode 8: Screen Error - LOD selection quality heatmap (green=good, red=high error)
+    if (viewModeValue == 8u) {  // Screen Error (was 9)
         // Normalize screen error to 0-10 pixel range for visualization
         float t = clamp(fragScreenError / 10.0, 0.0, 1.0);
         vec3 errorColor = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), t);
         color = errorColor;
     }
 
-    // Mode 10: Streaming State - loading status visualization
-    if (viewModeValue == 10u) {
+    // Mode 9: Streaming State - loading status visualization
+    if (viewModeValue == 9u) {  // Streaming (was 10)
         vec3 streamingColor;
         if (fragStreamingState == 0u) {
             streamingColor = vec3(1.0, 0.0, 0.0);  // NOT_LOADED: red

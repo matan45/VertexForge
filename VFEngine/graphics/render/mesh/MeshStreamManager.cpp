@@ -93,6 +93,14 @@ namespace render::mesh
                             {
                                 loc->meshletLods[lod] = meshletBuffer->getMeshletLODInfo(*alloc, lod);
                             }
+                            // VK-300: Log meshlet info for debugging
+                            loggerInfo("MeshStreamManager: Mesh {} submesh {} has meshlets: "
+                                       "LOD0={}, LOD1={}, LOD2={}, LOD3={}",
+                                       meshPath, submeshInfo.name,
+                                       loc->meshletLods[0].meshletCount,
+                                       loc->meshletLods[1].meshletCount,
+                                       loc->meshletLods[2].meshletCount,
+                                       loc->meshletLods[3].meshletCount);
                         }
                     }
                 }
@@ -103,6 +111,11 @@ namespace render::mesh
                     "MeshStreamManager: Failed to reserve meshlet space for {}, mesh shader rendering will use fallback",
                     meshPath);
             }
+        }
+        else if (meshletBuffer)
+        {
+            loggerWarning("MeshStreamManager: Mesh {} has no meshlet data (version < 0.0.4?), mesh shader rendering unavailable",
+                          meshPath);
         }
 
         scheduleInitialLODs(meshPath);

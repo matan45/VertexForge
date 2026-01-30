@@ -36,12 +36,14 @@ namespace resource
         glm::vec4 boundingSphere{0.0f};
     };
 
+    // VK-300: SubmeshStreamInfo maintains LOD arrays for file format backward compatibility
+    // New meshes have identical data in all LOD slots - discrete LOD removed, DAG clusters used instead
     struct SubmeshStreamInfo
     {
         std::string name;
-        std::array<LODFileInfo, LOD_LEVEL_COUNT> lods;
+        std::array<LODFileInfo, LOD_LEVEL_COUNT> lods;  // VK-300: All slots contain LOD0 data now
 
-        // Meshlet info per LOD (v0.0.4+)
+        // Meshlet info per LOD (v0.0.4+) - VK-300: All slots contain LOD0 meshlets now
         std::array<LODMeshletFileInfo, LOD_LEVEL_COUNT> meshletLods{};
         std::streampos meshletDataOffset = 0; // File position where meshlet data starts
         bool hasMeshletData = false;

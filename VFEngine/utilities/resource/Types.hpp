@@ -104,7 +104,9 @@ namespace resource
         std::vector<uint32_t> indices;
     };
 
-   
+    // VK-300: LOD_LEVEL_COUNT kept for file format backward compatibility
+    // All LOD slots now contain the same data (LOD0) - discrete LOD selection removed
+    // New meshes use DAG cluster system instead
     constexpr uint32_t LOD_LEVEL_COUNT = 4;
 
     struct MeshData

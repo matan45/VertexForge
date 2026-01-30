@@ -488,45 +488,21 @@ namespace render::gpudriven
             );
         }
 
-        obj.meshletLod0 = glm::uvec4(
-            submeshLoc.meshletLods[0].meshletOffset,
-            submeshLoc.meshletLods[0].meshletCount,
-            submeshLoc.meshletLods[0].baseVertexOffset,
-            0
-        );
-        obj.meshletLod1 = glm::uvec4(
-            submeshLoc.meshletLods[1].meshletOffset,
-            submeshLoc.meshletLods[1].meshletCount,
-            submeshLoc.meshletLods[1].baseVertexOffset,
-            0
-        );
-        obj.meshletLod2 = glm::uvec4(
-            submeshLoc.meshletLods[2].meshletOffset,
-            submeshLoc.meshletLods[2].meshletCount,
-            submeshLoc.meshletLods[2].baseVertexOffset,
-            0
-        );
+        // VK-300: meshletLod0-3 removed - reserved for future use
+        obj.reserved1 = glm::uvec4(0);
+        obj.reserved2 = glm::uvec4(0);
+        obj.reserved3 = glm::uvec4(0);
+        obj.reserved4 = glm::uvec4(0);
 
         uint32_t boneOffset = INVALID_BONE_OFFSET;
         if (boneOffsetResolver && meshRender.entity != entt::null)
         {
             boneOffset = boneOffsetResolver(meshRender.entity);
         }
+        obj.boneMatrixOffset = boneOffset;
 
-        obj.meshletLod3 = glm::uvec4(
-            submeshLoc.meshletLods[3].meshletOffset,
-            submeshLoc.meshletLods[3].meshletCount,
-            submeshLoc.meshletLods[3].baseVertexOffset,
-            boneOffset
-        );
-
-        float bias = meshRender.lodBias;
-        obj.lodThresholds = glm::vec4(
-            LOD_THRESHOLD_0 * std::pow(2.0f, -bias),
-            LOD_THRESHOLD_1 * std::pow(2.0f, -bias),
-            LOD_THRESHOLD_2 * std::pow(2.0f, -bias),
-            bias
-        );
+        // VK-300: lodThresholds removed - reserved for future use
+        obj.reserved0 = glm::vec4(0.0f);
 
         const auto* subMat = meshRender.getMaterialForSubmesh(submeshLoc.submeshName);
         std::string materialPath;
@@ -634,7 +610,36 @@ namespace render::gpudriven
             obj.flags |= ObjectFlags::UniformScale;
         }
 
-        obj.availableLODMask = submeshLoc.getAvailableLODMask();
+        // VK-300: Enable DAG cluster rendering for all objects
+        // DAGFullyLoaded is set if we have meshlet data (temporary - will be based on ClusterBuffer state)
+        obj.flags |= ObjectFlags::UseClusterDAG;
+        if (submeshLoc.hasMeshletData())
+        {
+            obj.flags |= ObjectFlags::DAGFullyLoaded;
+            // Find best available LOD with meshlet data
+            // LOD 3 loads first, so prefer lower indices but fallback to any available
+            const MeshletLODInfo* bestMeshletInfo = nullptr;
+            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+            {
+                if (submeshLoc.meshletLods[lod].meshletCount > 0)
+                {
+                    bestMeshletInfo = &submeshLoc.meshletLods[lod];
+                    break;
+                }
+            }
+            if (bestMeshletInfo)
+            {
+                obj.setDagClusterInfo(
+                    0,  // dagHeaderIndex - will be set by ClusterBuffer when data is loaded
+                    bestMeshletInfo->meshletOffset,
+                    bestMeshletInfo->meshletCount,
+                    0   // rootClusterIndex - first cluster is root
+                );
+            }
+        }
+
+        // VK-300: boneMatrixOffset is now set above (line ~515)
+        // availableLODMask removed - no longer needed without discrete LOD
 
         obj.shaderGroupIndex = (shaderGroupResolver && !materialPath.empty())
                                    ? shaderGroupResolver(materialPath)
@@ -648,6 +653,7 @@ namespace render::gpudriven
                                          float time)
     {
         currentObjectCount = 0;
+        static bool loggedMeshletWarning = false;
 
         for (const auto& meshRender : renderData)
         {
@@ -665,6 +671,13 @@ namespace render::gpudriven
 
                 if (!submeshLoc.hasRenderableLOD())
                 {
+                    if (!loggedMeshletWarning)
+                    {
+                        loggerWarning("MergedMeshBuffer: Submesh {}:{} has no meshlet data - "
+                                      "mesh file may need re-import for mesh shader rendering",
+                                      meshRender.meshPath, submeshLoc.submeshName);
+                        loggedMeshletWarning = true;
+                    }
                     continue;
                 }
 

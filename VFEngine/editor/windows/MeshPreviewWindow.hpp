@@ -25,9 +25,8 @@ namespace windows
         // Mesh preview
         math::AABB meshBounds; // Cached bounds for camera fitting
         std::vector<services::SubMeshInfo> subMeshes;
-        std::vector<services::LODInfo> lodLevels;
+        // VK-300: lodLevels and selectedLOD removed - discrete LOD no longer used
         int selectedSubMesh = -1; // -1 = all submeshes
-        int selectedLOD = -1; // -1 = auto, 0-3 = force specific LOD
 
         // Camera input state
         bool isDraggingPreview = false;

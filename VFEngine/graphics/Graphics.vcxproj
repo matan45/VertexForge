@@ -151,6 +151,7 @@
     <ClInclude Include="render\gpudriven\BoneMatrixManager.hpp" />
     <ClInclude Include="render\gpudriven\ClusterBuffer.hpp" />
     <ClInclude Include="render\gpudriven\ClusterBufferTypes.hpp" />
+    <ClInclude Include="render\gpudriven\ClusterDAGTraversalPipeline.hpp" />
     <ClInclude Include="render\gpudriven\FreeListAllocator.hpp" />
     <ClInclude Include="render\gpudriven\GPUCullLODPipeline.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenCameraBuffer.hpp" />
@@ -270,6 +271,7 @@
     <ClCompile Include="render\gpudriven\BindlessTextureManager.cpp" />
     <ClCompile Include="render\gpudriven\BoneMatrixManager.cpp" />
     <ClCompile Include="render\gpudriven\ClusterBuffer.cpp" />
+    <ClCompile Include="render\gpudriven\ClusterDAGTraversalPipeline.cpp" />
     <ClCompile Include="render\gpudriven\GPUCullLODPipeline.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenCameraBuffer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
@@ -335,6 +337,7 @@
     <None Include="..\..\resources\shaders\gpudriven\cluster_dag_traverse.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_shader_gpudriven.glsl" />
+    <None Include="..\..\resources\shaders\gpudriven\prepare_dag_indirect.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\task_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_cull.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_generate.glsl" />

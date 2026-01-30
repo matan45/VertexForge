@@ -178,6 +178,20 @@ namespace render::gpudriven
             workQueueBufferBMemory
         );
 
+        // VK-300: Create indirect draw command buffer for mesh shader indirect dispatch
+        core::BufferUtilities::createBuffer(
+            core::BufferInfoRequest{
+                logicalDevice, device.getPhysicalDevice(),
+                getIndirectDrawCommandBufferSize(),
+                vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eIndirectBuffer |
+                vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            },
+            indirectDrawCommandBuffer,
+            indirectDrawCommandBufferMemory
+        );
+
         // Initialize traversal state buffer to zero to prevent undefined behavior
         // This is critical as shaders read state.inputQueueCount before writes
         GPUDAGTraversalState initialState = {};
@@ -278,6 +292,17 @@ namespace render::gpudriven
         {
             logicalDevice.freeMemory(workQueueBufferBMemory);
             workQueueBufferBMemory = nullptr;
+        }
+
+        if (indirectDrawCommandBuffer)
+        {
+            logicalDevice.destroyBuffer(indirectDrawCommandBuffer);
+            indirectDrawCommandBuffer = nullptr;
+        }
+        if (indirectDrawCommandBufferMemory)
+        {
+            logicalDevice.freeMemory(indirectDrawCommandBufferMemory);
+            indirectDrawCommandBufferMemory = nullptr;
         }
     }
 

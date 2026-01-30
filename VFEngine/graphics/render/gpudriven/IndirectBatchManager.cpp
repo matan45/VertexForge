@@ -226,6 +226,17 @@ namespace render::gpudriven
                 std::memset(stagingMapped, 0, getCombinedDrawCountBufferSize());
             }
 
+            // VK-300: Object to draw index mapping for DAG cluster traversal
+            // Maps objectIndex -> globalDrawIndex, used by cluster_dag_traverse.glsl
+            {
+                core::BufferInfoRequest request(logicalDevice, physicalDevice);
+                request.size = static_cast<vk::DeviceSize>(MAX_GPU_OBJECTS) * sizeof(uint32_t);
+                request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+                    vk::BufferUsageFlagBits::eTransferDst;
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::BufferUtilities::createBuffer(request, objectDrawIndexBuffer, objectDrawIndexMemory);
+            }
+
             return true;
         }
         catch (const vk::OutOfDeviceMemoryError& e)
@@ -258,6 +269,7 @@ namespace render::gpudriven
             stagingMapped = nullptr;
         }
 
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectDrawIndexBuffer, objectDrawIndexMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, combinedPerDrawDataBuffer, combinedPerDrawDataMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, combinedDrawCountBuffer, combinedDrawCountMemory);

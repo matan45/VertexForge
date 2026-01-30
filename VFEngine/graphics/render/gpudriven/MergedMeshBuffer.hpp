@@ -130,17 +130,20 @@ namespace render::gpudriven
         MergedMeshInfo* reserveMesh(const std::string& meshPath,
                                     const resource::MeshStreamHeader& header);
 
+        // VK-300: Per-LOD methods kept for API compatibility
+        // All LOD levels now contain the same data (LOD0) - discrete LOD selection removed
+        // New rendering uses DAG cluster system for continuous LOD
         bool uploadLOD(const std::string& meshPath,
                        const std::string& submeshName,
                        uint32_t submeshIndex,
-                       uint32_t lodLevel,
+                       uint32_t lodLevel,  // VK-300: All levels contain LOD0 data
                        const resource::Vertex* vertexData, uint32_t vertexCount,
                        const uint32_t* indexData, uint32_t indexCount);
 
         void markLODReady(const std::string& meshPath,
                           const std::string& submeshName,
                           uint32_t submeshIndex,
-                          uint32_t lodLevel);
+                          uint32_t lodLevel);  // VK-300: All levels contain LOD0 data
 
         SubmeshLocation* getSubmeshLocationMutable(const std::string& meshPath,
                                                    const std::string& submeshName,

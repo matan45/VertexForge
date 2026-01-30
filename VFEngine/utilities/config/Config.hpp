@@ -38,7 +38,7 @@ namespace importConfig
     struct MeshImportConfig
     {
         bool generateConvexDecomposition = false;
-        bool generateClusterDAG = false;  // Enable Nanite-style cluster DAG generation
+        bool generateClusterDAG = true;   // VK-300: Always enabled - DAG is now the only LOD system
         uint32_t maxConvexHulls = 16;
         uint32_t vhacdResolution = 100000;
         uint32_t maxVerticesPerHull = 32;

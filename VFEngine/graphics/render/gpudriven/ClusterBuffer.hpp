@@ -117,6 +117,10 @@ namespace render::gpudriven
         vk::Buffer workQueueBufferB;                 // uint[] - work queue B (ping-pong)
         vk::DeviceMemory workQueueBufferBMemory;
 
+        // VK-300: Indirect draw command buffer for mesh shader dispatch
+        vk::Buffer indirectDrawCommandBuffer;        // MeshTasksIndirectCommand for task shader
+        vk::DeviceMemory indirectDrawCommandBufferMemory;
+
         // Capacity limits
         uint32_t maxClusterCount = 0;
         uint32_t maxDAGHeaderCount = 0;
@@ -224,6 +228,7 @@ namespace render::gpudriven
         vk::Buffer getTraversalStateBuffer() const { return traversalStateBuffer; }
         vk::Buffer getWorkQueueBufferA() const { return workQueueBufferA; }
         vk::Buffer getWorkQueueBufferB() const { return workQueueBufferB; }
+        vk::Buffer getIndirectDrawCommandBuffer() const { return indirectDrawCommandBuffer; }
 
         // =========================================================================
         // Size Queries
@@ -236,13 +241,15 @@ namespace render::gpudriven
         size_t getClusterChildBufferSize() const { return maxClusterCount * sizeof(GPUClusterChildren); }
         size_t getTraversalStateBufferSize() const { return sizeof(GPUDAGTraversalState); }
         size_t getWorkQueueBufferSize() const { return maxWorkQueueCount * sizeof(uint32_t); }
+        size_t getIndirectDrawCommandBufferSize() const { return 12; }  // MeshTasksIndirectCommand: 3 * uint32
 
         size_t getTotalBufferSize() const
         {
             return getClusterBufferSize() + getDAGHeaderBufferSize() +
                    getClusterSelectionBufferSize() + getStreamingUnitBufferSize() +
                    getClusterChildBufferSize() + getTraversalStateBufferSize() +
-                   getWorkQueueBufferSize() * 2; // Two work queue buffers
+                   getWorkQueueBufferSize() * 2 + // Two work queue buffers
+                   getIndirectDrawCommandBufferSize();
         }
 
         uint32_t getCurrentClusterCount() const { return currentClusterCount; }

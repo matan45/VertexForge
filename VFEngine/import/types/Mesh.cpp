@@ -287,100 +287,8 @@ namespace types
         return result;
     }
 
-    LODMeshData Mesh::simplifyMesh(const LODMeshData& source, float targetRatio) const
-    {
-        if (source.indices.empty() || source.vertices.empty())
-        {
-            return source;
-        }
-
-        if (targetRatio >= 1.0f)
-        {
-            return source;
-        }
-
-        size_t targetIndexCount = static_cast<size_t>(source.indices.size() * targetRatio);
-        targetIndexCount = std::max(targetIndexCount, static_cast<size_t>(3));
-        targetIndexCount = (targetIndexCount / 3) * 3;
-
-        LODMeshData result;
-        result.indices.resize(source.indices.size());
-
-        size_t actualIndexCount = meshopt_simplifySloppy(
-            result.indices.data(),
-            source.indices.data(),
-            source.indices.size(),
-            reinterpret_cast<const float*>(source.vertices.data()),
-            source.vertices.size(),
-            sizeof(resource::Vertex),
-            targetIndexCount,
-            FLT_MAX,
-            nullptr
-        );
-
-        result.indices.resize(actualIndexCount);
-
-        if (actualIndexCount == source.indices.size())
-        {
-            vfLogWarning("  Simplification failed for ratio {:.1f}%, keeping original", targetRatio * 100.0f);
-            return source;
-        }
-
-        meshopt_optimizeVertexCache(
-            result.indices.data(),
-            result.indices.data(),
-            result.indices.size(),
-            source.vertices.size()
-        );
-
-        std::vector<unsigned int> remap(source.vertices.size(), ~0u);
-        size_t uniqueVertexCount = 0;
-
-        for (size_t i = 0; i < result.indices.size(); ++i)
-        {
-            uint32_t idx = result.indices[i];
-            if (remap[idx] == ~0u)
-            {
-                remap[idx] = static_cast<unsigned int>(uniqueVertexCount++);
-            }
-        }
-
-        result.vertices.resize(uniqueVertexCount);
-        for (size_t i = 0; i < source.vertices.size(); ++i)
-        {
-            if (remap[i] != ~0u)
-            {
-                result.vertices[remap[i]] = source.vertices[i];
-            }
-        }
-
-        for (size_t i = 0; i < result.indices.size(); ++i)
-        {
-            result.indices[i] = remap[result.indices[i]];
-        }
-
-        return result;
-    }
-
-    std::array<LODMeshData, resource::LOD_LEVEL_COUNT> Mesh::generateLODLevels(const LODMeshData& lod0) const
-    {
-        std::array<LODMeshData, resource::LOD_LEVEL_COUNT> lodLevels;
-
-        lodLevels[0] = lod0;
-
-        for (uint32_t level = 1; level < resource::LOD_LEVEL_COUNT; ++level)
-        {
-            lodLevels[level] = simplifyMesh(lod0, lodRatios[level]);
-
-            vfLogInfo("  LOD{}: {} vertices, {} triangles ({}%)",
-                      level,
-                      lodLevels[level].vertices.size(),
-                      lodLevels[level].indices.size() / 3,
-                      static_cast<int>(lodRatios[level] * 100));
-        }
-
-        return lodLevels;
-    }
+    // VK-300: simplifyMesh() and generateLODLevels() removed - discrete LOD no longer generated
+    // All LOD slots now use LOD0 data for backward file format compatibility
 
     MeshletBuildResult Mesh::buildMeshletsForLOD(const LODMeshData& lodMesh) const
     {
@@ -648,18 +556,20 @@ namespace types
             resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
 
             LODMeshData lod0 = convertAssimpMesh(assimpMesh, skeleton);
-            auto lodLevels = generateLODLevels(lod0);
 
+            // VK-300: Discrete LOD generation removed - write LOD0 for all slots (backward compatibility)
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
             {
-                writeLODLevel(outFile, lodLevels[lod]);
+                writeLODLevel(outFile, lod0);
             }
 
             vfLogInfo("  Generating meshlets...");
+            // VK-300: Build meshlets only for LOD0, use for all slots
+            MeshletBuildResult lod0Meshlets = buildMeshletsForLOD(lod0);
             std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
             {
-                meshletResults[lod] = buildMeshletsForLOD(lodLevels[lod]);
+                meshletResults[lod] = lod0Meshlets;
             }
 
             writeMeshletData(outFile, meshletResults);
@@ -675,8 +585,8 @@ namespace types
                 vfLogInfo("  Building Cluster DAG hierarchy...");
                 ClusterDAGBuilder dagBuilder;
                 dagData = dagBuilder.build(
-                    lodLevels[0],
-                    meshletResults[0],
+                    lod0,
+                    lod0Meshlets,
                     [&progressCallback, i, numMeshes = scene->mNumMeshes](float p) {
                         if (progressCallback)
                         {

@@ -108,13 +108,13 @@ namespace windows
         {
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            // VK-298: Added DAG debug visualization modes (7-10)
+            // VK-300: "LOD" removed, DAG modes available (6-9)
             const char* viewModeLabels[] = {
-                "Color", "Meshlet", "LOD", "Mipmap", "Cluster", "Depth", "Shadow",
+                "Color", "Meshlet", "Mipmap", "Cluster", "Depth", "Shadow",
                 "DAG Cluster", "DAG Level", "Screen Error", "Streaming"
             };
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 11))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 10))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);

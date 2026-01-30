@@ -100,7 +100,7 @@ namespace events::render {
     };
 
     struct SetViewModeCommand : ICommand<> {
-        uint32_t mode;  // 0=Color, 1=Meshlet, 2=LOD, 3=Mipmap, 4=Cluster
+        uint32_t mode;  // 0=Color, 1=Meshlet, 2=Mipmap, 3=Cluster, 4=Depth, 5=Shadow, 6-9=DAG modes
 
         std::string_view getName() const override { return "SetViewMode"; }
     };
