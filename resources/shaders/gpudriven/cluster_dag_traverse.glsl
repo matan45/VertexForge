@@ -3,11 +3,12 @@
 #extension GL_GOOGLE_include_directive : require
 
 // =========================================================================
-// Cluster DAG Traversal Compute Shader (VK-291)
+// Cluster DAG Traversal Compute Shader (VK-291, VK-292)
 //
-// Processes work queue entries, performing frustum culling and screen-space
-// error evaluation to select clusters or enqueue children for further traversal.
-// Uses ping-pong buffers for multi-pass traversal.
+// Processes work queue entries, performing frustum culling, Hi-Z occlusion
+// culling, and screen-space error evaluation to select clusters or enqueue
+// children for further traversal. Uses ping-pong buffers for multi-pass
+// traversal. Culling prunes entire subtrees for early-out optimization.
 // =========================================================================
 
 #include "../common/gpu_types.glsl"
@@ -86,6 +87,70 @@ bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
     return true;
 }
 
+// Hi-Z occlusion test - returns true if potentially visible
+bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, uint hiZMipLevels) {
+    vec3 center = worldSphere.xyz;
+    float radius = worldSphere.w;
+    vec3 aabbMin = center - vec3(radius);
+    vec3 aabbMax = center + vec3(radius);
+
+    // Project 8 corners of AABB to clip space
+    vec4 corners[8];
+    corners[0] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMin.z, 1.0);
+    corners[1] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMin.z, 1.0);
+    corners[2] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMin.z, 1.0);
+    corners[3] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMin.z, 1.0);
+    corners[4] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMax.z, 1.0);
+    corners[5] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMax.z, 1.0);
+    corners[6] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMax.z, 1.0);
+    corners[7] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMax.z, 1.0);
+
+    // Find NDC bounds and minimum depth
+    vec2 ndcMin = vec2(1.0);
+    vec2 ndcMax = vec2(-1.0);
+    float minDepth = 1.0;
+
+    for (int i = 0; i < 8; i++) {
+        // If any corner is behind the camera, assume visible
+        if (corners[i].w <= 0.0) {
+            return true;
+        }
+        vec3 ndc = corners[i].xyz / corners[i].w;
+        ndcMin = min(ndcMin, ndc.xy);
+        ndcMax = max(ndcMax, ndc.xy);
+        minDepth = min(minDepth, ndc.z);
+    }
+
+    // Clamp to valid NDC range
+    ndcMin = clamp(ndcMin, vec2(-1.0), vec2(1.0));
+    ndcMax = clamp(ndcMax, vec2(-1.0), vec2(1.0));
+
+    // If behind near plane, assume visible
+    if (minDepth < 0.0) {
+        return true;
+    }
+
+    // Convert NDC to UV coordinates
+    vec2 uvMin = ndcMin * 0.5 + 0.5;
+    vec2 uvMax = ndcMax * 0.5 + 0.5;
+
+    // Select mip level based on projected size
+    vec2 sizePixels = (uvMax - uvMin) * screenSize;
+    float maxDimension = max(sizePixels.x, sizePixels.y);
+    float mipLevel = ceil(log2(maxDimension));
+    mipLevel = clamp(mipLevel, 0.0, float(hiZMipLevels - 1u));
+
+    // Sample Hi-Z at 4 corners and take maximum depth
+    float hiZDepth = 0.0;
+    hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMin, mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMax, mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMin.x, uvMax.y), mipLevel).r);
+    hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMax.x, uvMin.y), mipLevel).r);
+
+    // Visible if object's minimum depth is in front of or at Hi-Z depth
+    return minDepth <= hiZDepth + 0.0001;
+}
+
 // Pack object index and local cluster index into single uint
 // Format: (objectIndex << 20) | (localClusterIndex & 0xFFFFF)
 // Supports up to 4096 objects and 1M clusters per object
@@ -157,6 +222,19 @@ void main() {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
             atomicAdd(state.totalSubtreesCulled, 1u);
             return;
+        }
+    }
+
+    // =========================================================================
+    // Hi-Z Occlusion Culling - prunes entire subtree if occluded (VK-292)
+    // =========================================================================
+    if (params.enableOcclusion != 0u) {
+        if (camera.hiZMipLevels > 0u) {
+            if (!hiZOcclusionTest(worldSphere, camera.viewProjection,
+                                  camera.screenParams.xy, camera.hiZMipLevels)) {
+                atomicAdd(state.totalSubtreesCulled, 1u);
+                return;
+            }
         }
     }
 
