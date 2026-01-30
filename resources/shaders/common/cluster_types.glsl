@@ -6,19 +6,19 @@
 // Must match C++ structs in ClusterBufferTypes.hpp
 // =========================================================================
 
-// Must match GPUCluster in ClusterBufferTypes.hpp (64 bytes)
-// GLSL packing: meshletCount/triangleCount and level/flags are packed into uint
+// Must match GPUCluster in ClusterDAGTypes.hpp (64 bytes)
+// Fields are packed to match C++ layout exactly for direct buffer upload
 struct GPUCluster {
     uint meshletOffset;           // +0
     uint vertexOffset;            // +4
-    uint meshletTrianglePacked;   // +8  meshletCount | (triangleCount << 16)
+    uint meshletTrianglePacked;   // +8  (meshletCount | (triangleCount << 16))
     uint vertexCount;             // +12
     vec4 boundingSphere;          // +16
     vec4 cone;                    // +32
     uint parentIndex;             // +48
     uint siblingIndex;            // +52
     float geometricError;         // +56
-    uint levelFlags;              // +60  level | (flags << 16)
+    uint levelFlagsPacked;        // +60 (level | (flags << 16))
 };
 
 // Must match GPUClusterSelection in ClusterBufferTypes.hpp (16 bytes)
