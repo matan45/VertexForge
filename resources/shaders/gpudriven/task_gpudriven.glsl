@@ -164,8 +164,8 @@ void processDiscreteLOD() {
         payload.meshletCount = visibleCount;
 
         // VK-298: Set debug values for discrete LOD mode
-        // Use drawIndex + workgroup to create unique colors per draw call
-        payload.debugClusterIndex = drawIndex * 1000u + gl_WorkGroupID.x;
+        // Use meshletOffset as base - stable across frames (mesh shader adds globalMeshletIndex for per-meshlet variation)
+        payload.debugClusterIndex = drawData.meshletOffset;
         payload.debugClusterLevel = drawData.lodLevel;  // Use mesh LOD level (0-3)
         // Estimate screen error from LOD level (higher LOD = lower detail = higher error)
         payload.debugScreenError = float(drawData.lodLevel) * 2.5;  // 0, 2.5, 5.0, 7.5

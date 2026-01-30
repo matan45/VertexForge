@@ -178,7 +178,9 @@ void main() {
             fragDrawIndex[localVertexIndex] = drawIndex;
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
             // VK-298: Debug visualization outputs
-            fragClusterIndex[localVertexIndex] = payload.debugClusterIndex;
+            // In discrete LOD mode, use meshlet index for per-meshlet cluster colors
+            // In DAG mode, payload.debugClusterIndex contains the actual cluster index
+            fragClusterIndex[localVertexIndex] = payload.debugClusterIndex + globalMeshletIndex;
             fragClusterLevel[localVertexIndex] = payload.debugClusterLevel;
             fragScreenError[localVertexIndex] = payload.debugScreenError;
             fragStreamingState[localVertexIndex] = payload.debugStreamingState;
@@ -972,9 +974,11 @@ void main() {
 
     // VK-298: DAG Debug Visualization Modes (7-10)
 
-    // Mode 7: DAG Cluster Color - unique color per cluster using hash
+    // Mode 7: DAG Cluster Color - unique color per TRIANGLE using hash
+    // Combines cluster index with primitive ID for per-triangle variation
     if (viewModeValue == 7u) {
-        uint h = fragClusterIndex;
+        // Use gl_PrimitiveID for per-triangle coloring within each meshlet/cluster
+        uint h = fragClusterIndex + uint(gl_PrimitiveID);
         h = h * 747796405u + 2891336453u;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
         h = ((h >> 16) ^ h) * 0x45d9f3bu;
