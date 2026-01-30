@@ -43,6 +43,12 @@ layout(std430, set = 0, binding = 4) buffer DrawCountBuffer {
 
 layout(set = 0, binding = 5) uniform sampler2D hiZTexture;
 
+// Object to draw index mapping for cluster DAG rendering (VK-293)
+// Each DAG object stores its drawIndex here, indexed by objectIndex
+layout(std430, set = 0, binding = 6) writeonly buffer ObjectDrawIndexMap {
+    uint objectDrawIndexMap[];
+};
+
 uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
     switch (level) {
         case 0: return obj.meshletLod0;
@@ -171,10 +177,58 @@ void main() {
 
     GPUObjectData obj = objects[objectIndex];
 
-    // Skip DAG objects - they use cluster-based LOD selection (VK-291)
+    // Handle DAG objects separately - they use cluster-based LOD selection (VK-291)
     if (usesClusterDAG(obj)) {
-        // TODO (VK-291): Implement DAG traversal for cluster selection
-        // For now, DAG objects are handled separately
+        // DAG objects still need PerDrawData for material/transform info
+        // Allocate a drawIndex and fill PerDrawData, then store mapping for cluster traversal
+
+        // Use section 0 for DAG objects (they're rendered via separate cluster dispatch)
+        uint dagSection = 0;
+        uint commandsPerSection = getCommandsPerSection();
+
+        uint localDrawIndex = atomicAdd(batchStats[dagSection].drawCount, 1);
+        if (localDrawIndex >= commandsPerSection) {
+            atomicAdd(batchStats[dagSection].drawCount, uint(-1));
+            objectDrawIndexMap[objectIndex] = 0xFFFFFFFFu;  // Invalid
+            return;
+        }
+
+        uint globalDrawIndex = dagSection * commandsPerSection + localDrawIndex;
+
+        // Store mapping from objectIndex to drawIndex for cluster traversal
+        objectDrawIndexMap[objectIndex] = globalDrawIndex;
+
+        // Fill PerDrawData with object transforms and materials
+        perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
+
+        mat3 modelMat3 = mat3(obj.modelMatrix);
+        mat3 normalMat3;
+        if ((obj.flags & FLAG_UNIFORM_SCALE) != 0u) {
+            float scale = length(modelMat3[0]);
+            normalMat3 = modelMat3 * (1.0 / scale);
+        } else {
+            normalMat3 = transpose(inverse(modelMat3));
+        }
+        perDrawData[globalDrawIndex].normalMatrix = mat4(normalMat3);
+
+        perDrawData[globalDrawIndex].albedo = obj.albedo;
+        perDrawData[globalDrawIndex].materialParams = obj.materialParams;
+        perDrawData[globalDrawIndex].textureIndices0 = obj.textureIndices0;
+        perDrawData[globalDrawIndex].textureIndices1 = obj.textureIndices1;
+        perDrawData[globalDrawIndex].objectIndex = objectIndex;
+        perDrawData[globalDrawIndex].flags = obj.flags;
+        perDrawData[globalDrawIndex].iblDiffuse = obj.iblParams.x;
+        perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
+        perDrawData[globalDrawIndex].lodLevel = 0u;  // DAG handles LOD internally
+        perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
+        perDrawData[globalDrawIndex].meshletOffset = 0u;  // Not used for DAG
+        perDrawData[globalDrawIndex].meshletCount = 0u;   // Not used for DAG
+        perDrawData[globalDrawIndex].baseVertexOffset = 0u;
+        perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
+        perDrawData[globalDrawIndex].boneCount = 0u;
+        perDrawData[globalDrawIndex].padding3 = 0u;
+
+        // Don't create draw commands - cluster rendering is dispatched separately
         return;
     }
 

@@ -14,6 +14,7 @@ namespace render::gpudriven
 {
     class MeshletBuffer;
     class MergedMeshBuffer;
+    class ClusterBuffer;
 
     struct MeshShaderPushConstants
     {
@@ -21,6 +22,11 @@ namespace render::gpudriven
         uint32_t viewMode;
         float screenWidth;
         float screenHeight;
+        // Cluster DAG mode fields (VK-293)
+        uint32_t clusterMode;       // 0 = discrete LOD, 1 = cluster DAG
+        uint32_t clusterBaseIndex;  // Base index into selection buffer
+        uint32_t clusterCount;      // Number of clusters to process
+        uint32_t padding;           // Alignment
     };
 
     // viewMode bit packing: bits 0-7 = viewMode, bit 8 = frustum culling, bit 9 = backface culling
@@ -107,6 +113,7 @@ namespace render::gpudriven
         void updatePerDrawDescriptor(vk::Buffer perDrawDataBuffer);
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
         void updateVertexDescriptors(MergedMeshBuffer& mergedBuffer);
+        void updateClusterDescriptors(ClusterBuffer& clusterBuffer);
 
         void updateLightingDescriptors(vk::DescriptorSet lightDataDescSet,
                                        vk::DescriptorSet clusterGridDescSet,

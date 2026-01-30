@@ -63,6 +63,11 @@ layout(std430, set = 0, binding = 13) writeonly buffer SelectionBuffer {
     GPUClusterSelection selections[];
 };
 
+// Object to draw index mapping - filled by gpu_cull_lod.glsl (VK-293)
+layout(std430, set = 0, binding = 14) readonly buffer ObjectDrawIndexMap {
+    uint objectDrawIndexMap[];
+};
+
 // =========================================================================
 // Helper Functions
 // =========================================================================
@@ -271,7 +276,8 @@ void main() {
             selections[slot].clusterIndex = globalClusterIdx;
             selections[slot].isSelected = 1u;
             selections[slot].screenError = screenError;
-            selections[slot].padding = objectIndex; // Store object index for rendering
+            // Store drawIndex (not objectIndex) for task shader's PerDrawData lookup
+            selections[slot].padding = objectDrawIndexMap[objectIndex];
         }
 
         atomicAdd(state.totalSelected, 1u);
