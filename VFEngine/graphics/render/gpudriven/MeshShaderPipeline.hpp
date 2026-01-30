@@ -27,11 +27,27 @@ namespace render::gpudriven
         uint32_t clusterBaseIndex;  // Base index into selection buffer
         uint32_t clusterCount;      // Number of clusters to process
         uint32_t padding;           // Alignment
+
+        // SECURITY: Before dispatch in cluster DAG mode (clusterMode == 1), validate:
+        //   clusterBaseIndex + clusterCount <= MAX_CLUSTER_SELECTIONS_PER_FRAME
+        // The shader also validates against buffer bounds, but CPU validation
+        // provides defense-in-depth and clearer error reporting.
     };
 
     // viewMode bit packing: bits 0-7 = viewMode, bit 8 = frustum culling, bit 9 = backface culling
     constexpr uint32_t MESHLET_CULL_FRUSTUM_BIT = 0x100;
     constexpr uint32_t MESHLET_CULL_BACKFACE_BIT = 0x200;
+
+    // SECURITY: Validate cluster DAG push constants before dispatch
+    // Returns true if valid, false if parameters would cause buffer overrun
+    inline bool validateClusterDAGPushConstants(const MeshShaderPushConstants& pc,
+                                                 uint32_t maxSelectionBufferSize)
+    {
+        // Check for overflow in addition
+        if (pc.clusterBaseIndex > maxSelectionBufferSize) return false;
+        if (pc.clusterCount > maxSelectionBufferSize - pc.clusterBaseIndex) return false;
+        return true;
+    }
 
     struct MeshletCullingStats
     {

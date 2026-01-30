@@ -971,11 +971,37 @@ namespace resource
         file.seekg(currentPos);
 
         // Only read streaming units if there's enough data remaining
-        // Minimum: 8 bytes for count + rootStreamingUnit
-        if (!file.fail() && (endPos - currentPos) >= 8)
+        // Minimum: 8 bytes for count + rootStreamingUnit header fields
+        constexpr std::streamoff STREAMING_UNIT_HEADER_SIZE = 8;  // count (4) + rootUnit (4)
+        constexpr std::streamoff STREAMING_UNIT_RECORD_SIZE = 48; // Size of each StreamingUnit on disk
+        constexpr uint32_t MAX_STREAMING_UNITS = 1024 * 1024;     // Sanity limit: 1M units
+
+        std::streamoff remainingBytes = endPos - currentPos;
+
+        if (!file.fail() && remainingBytes >= STREAMING_UNIT_HEADER_SIZE)
         {
             uint32_t streamingUnitCount = endian::readLE<uint32_t>(file);
             outData.header.rootStreamingUnit = endian::readLE<uint32_t>(file);
+
+            // Validate streaming unit count before allocating/reading
+            if (streamingUnitCount > MAX_STREAMING_UNITS)
+            {
+                vfLogError("MeshStreamHandle: Invalid streaming unit count {} (max {}), possible file corruption",
+                           streamingUnitCount, MAX_STREAMING_UNITS);
+                return false;
+            }
+
+            // Validate file contains enough data for all streaming units
+            std::streamoff expectedDataSize = static_cast<std::streamoff>(streamingUnitCount) * STREAMING_UNIT_RECORD_SIZE;
+            std::streamoff availableData = remainingBytes - STREAMING_UNIT_HEADER_SIZE;
+
+            if (expectedDataSize > availableData)
+            {
+                vfLogError("MeshStreamHandle: Truncated streaming unit data - expected {} bytes for {} units, only {} available",
+                           expectedDataSize, streamingUnitCount, availableData);
+                return false;
+            }
+
             outData.header.streamingUnitCount = streamingUnitCount;
 
             if (streamingUnitCount > 0)

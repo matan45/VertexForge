@@ -276,8 +276,11 @@ void main() {
             selections[slot].clusterIndex = globalClusterIdx;
             selections[slot].isSelected = 1u;
             selections[slot].screenError = screenError;
-            // Store drawIndex (not objectIndex) for task shader's PerDrawData lookup
-            selections[slot].padding = objectDrawIndexMap[objectIndex];
+            // VK-298: Pack drawIndex (lower 24 bits) and streaming state (upper 8 bits)
+            // Streaming state: 0=not loaded, 1=loading, 2=loaded
+            uint drawIdx = objectDrawIndexMap[objectIndex];
+            uint streamState = dagHeader.reserved.x;  // From GPUClusterDAGHeader
+            selections[slot].padding = (drawIdx & 0xFFFFFFu) | (streamState << 24);
         }
 
         atomicAdd(state.totalSelected, 1u);

@@ -65,7 +65,11 @@ namespace render::mesh
             return;
         }
 
-        if (--it->second.referenceCount == 0)
+        --it->second.referenceCount;
+
+        // THREAD SAFETY: Only erase when both refCount is 0 AND no async reads are pending.
+        // This prevents use-after-free when async threads are accessing the handle.
+        if (it->second.canBeErased())
         {
             // Evict all cluster data for this mesh
             clusterBuffer.evictMesh(meshPath);
@@ -87,9 +91,12 @@ namespace render::mesh
     // Mesh Stream Management
     // =========================================================================
 
-    void ClusterStreamManager::openMeshStream(const std::string& meshPath)
+    void ClusterStreamManager::openMeshStreamLocked(const std::string& meshPath, const MeshStatesLock& lock)
     {
-        // Note: meshStatesMutex must be held by caller
+        // THREAD SAFETY: Verify lock is actually held (debug assertion)
+        assert(lock.owns_lock() && "meshStatesMutex must be held");
+        (void)lock;  // Suppress unused parameter warning in release builds
+
         auto it = meshStates.find(meshPath);
         if (it == meshStates.end() || it->second.headerParsed)
         {
@@ -128,12 +135,15 @@ namespace render::mesh
                     meshPath, header.numSubmeshes);
 
         // Schedule initial cluster loading
-        scheduleInitialClusters(meshPath);
+        scheduleInitialClustersLocked(meshPath, lock);
     }
 
-    void ClusterStreamManager::scheduleInitialClusters(const std::string& meshPath)
+    void ClusterStreamManager::scheduleInitialClustersLocked(const std::string& meshPath, const MeshStatesLock& lock)
     {
-        // Note: meshStatesMutex must be held by caller
+        // THREAD SAFETY: Verify lock is actually held (debug assertion)
+        assert(lock.owns_lock() && "meshStatesMutex must be held");
+        (void)lock;  // Suppress unused parameter warning in release builds
+
         auto it = meshStates.find(meshPath);
         if (it == meshStates.end() || !it->second.handle)
         {
@@ -197,12 +207,12 @@ namespace render::mesh
 
         // Step 1: Open pending mesh streams
         {
-            std::lock_guard<std::mutex> lock(meshStatesMutex);
+            MeshStatesLock lock(meshStatesMutex);
             for (auto& [path, state] : meshStates)
             {
                 if (!state.headerParsed && state.referenceCount > 0)
                 {
-                    openMeshStream(path);
+                    openMeshStreamLocked(path, lock);
                 }
             }
         }
@@ -251,7 +261,7 @@ namespace render::mesh
             clusterBuffer.setStreamState(request.meshPath, request.submeshName,
                                          request.submeshIndex, gpudriven::ClusterStreamState::Streaming);
 
-            // Update internal tracking
+            // Update internal tracking and increment pending async counter
             {
                 std::lock_guard<std::mutex> meshLock(meshStatesMutex);
                 auto meshIt = meshStates.find(request.meshPath);
@@ -261,6 +271,10 @@ namespace render::mesh
                     auto& submeshState = meshIt->second.submeshStates[key];
                     submeshState.state = gpudriven::ClusterStreamState::Streaming;
                     submeshState.inQueue = false;
+
+                    // THREAD SAFETY: Increment pending async reads to prevent mesh state
+                    // from being erased while async operation is in flight
+                    meshIt->second.pendingAsyncReads++;
                 }
             }
 
@@ -296,6 +310,36 @@ namespace render::mesh
 
     void ClusterStreamManager::handleCompletedRead(ClusterStreamingResult&& result)
     {
+        // THREAD SAFETY: Decrement pending async reads counter now that async operation is complete.
+        // This must happen regardless of success/failure to maintain correct count.
+        // Also check if mesh state should be cleaned up (deferred from releaseMesh).
+        {
+            std::lock_guard<std::mutex> lock(meshStatesMutex);
+            auto it = meshStates.find(result.meshPath);
+            if (it != meshStates.end())
+            {
+                if (it->second.pendingAsyncReads > 0)
+                {
+                    it->second.pendingAsyncReads--;
+                }
+
+                // Check if mesh was released while async was in flight
+                if (it->second.canBeErased())
+                {
+                    clusterBuffer.evictMesh(result.meshPath);
+                    for (const auto& [key, submeshState] : it->second.submeshStates)
+                    {
+                        if (submeshState.gpuMemoryUsed > 0)
+                        {
+                            currentGPUMemoryUsed -= submeshState.gpuMemoryUsed;
+                        }
+                    }
+                    meshStates.erase(it);
+                    return;  // Mesh was released, don't process result
+                }
+            }
+        }
+
         if (!result.success || !result.dagData)
         {
             loggerError("ClusterStreamManager: Failed to read cluster DAG for {}:{}#{}",
@@ -427,13 +471,30 @@ namespace render::mesh
                 result.submeshIndex = submeshIndex;
                 result.success = false;
 
-                std::lock_guard<std::mutex> lock(meshStatesMutex);
-                auto it = meshStates.find(meshPath);
-                if (it != meshStates.end() && it->second.handle)
+                // THREAD SAFETY: Minimize lock scope - only hold lock to get handle pointer.
+                // The disk I/O operation (readClusterDAG) happens OUTSIDE the lock to avoid
+                // blocking the main thread's update() calls for long periods.
+                //
+                // SAFETY NOTE: MeshStreamHandle is owned by meshStates and only freed when
+                // canBeErased() returns true (refCount == 0 AND pendingAsyncReads == 0).
+                // processStreamingQueue() increments pendingAsyncReads before starting this
+                // async operation, ensuring the handle remains valid until handleCompletedRead()
+                // decrements the counter.
+                resource::MeshStreamHandle* handle = nullptr;
+                {
+                    std::lock_guard<std::mutex> lock(meshStatesMutex);
+                    auto it = meshStates.find(meshPath);
+                    if (it != meshStates.end() && it->second.handle)
+                    {
+                        handle = it->second.handle.get();
+                    }
+                }
+
+                // Perform disk I/O outside the lock
+                if (handle)
                 {
                     result.dagData = std::make_unique<resource::ClusterDAGData>();
-                    result.success = it->second.handle->readClusterDAG(
-                        submeshIndex, *result.dagData);
+                    result.success = handle->readClusterDAG(submeshIndex, *result.dagData);
                 }
 
                 return result;
@@ -446,6 +507,38 @@ namespace render::mesh
 
     void ClusterStreamManager::updatePriorities(const glm::vec3& cameraPos)
     {
+        // VK-298 Performance Fix: Avoid O(n log n) priority rebuild every frame
+        // Only update when:
+        // 1. Enough frames have passed since last update, OR
+        // 2. Camera has moved significantly
+
+        uint64_t framesSinceUpdate = currentFrame - lastPriorityUpdateFrame;
+        float cameraMoved = glm::length(cameraPos - lastCameraPos);
+
+        bool shouldUpdate = false;
+
+        // Time-based throttle: update at most every N frames
+        if (framesSinceUpdate >= priorityUpdateFrameInterval)
+        {
+            shouldUpdate = true;
+        }
+
+        // Movement-based trigger: force update if camera moved significantly
+        // This ensures responsiveness when user is actively navigating
+        if (cameraMoved >= cameraMovementThreshold)
+        {
+            shouldUpdate = true;
+        }
+
+        if (!shouldUpdate)
+        {
+            return;
+        }
+
+        // Track update state
+        lastPriorityUpdateFrame = currentFrame;
+        lastCameraPos = cameraPos;
+
         // Rebuild priority queue with updated priorities
         std::lock_guard<std::mutex> queueLock(queueMutex);
 
@@ -456,6 +549,7 @@ namespace render::mesh
 
         // Extract all requests
         std::vector<ClusterStreamingRequest> requests;
+        requests.reserve(streamingQueue.size());  // Avoid reallocs
         while (!streamingQueue.empty())
         {
             requests.push_back(streamingQueue.top());
@@ -474,21 +568,27 @@ namespace render::mesh
                                                    const glm::vec3& cameraPos) const
     {
         // Screen error is primary factor (lower = finer detail = higher priority)
-        float screenErrorPriority = request.screenError;
+        // Clamp to reasonable range to prevent numerical issues
+        float screenErrorPriority = std::clamp(request.screenError, 0.0f, 1000.0f);
 
         // Distance factor (closer = higher priority)
+        // Clamp to prevent numerical instability with very distant objects
+        // Max factor of 11.0 corresponds to ~1000 unit distance
         float distance = glm::length(request.worldCenter - cameraPos);
-        float distanceFactor = 1.0f + distance * 0.01f;
+        float distanceFactor = 1.0f + std::min(distance * 0.01f, 10.0f);
 
         // Screen coverage (larger = higher priority)
+        // Already bounded: coverage in [0, boundingRadius], factor in (0, 1]
         float screenCoverage = request.boundingRadius / std::max(1.0f, distance);
         float coverageFactor = 1.0f / (1.0f + screenCoverage * 10.0f);
 
         // Recency bonus (recently visible = higher priority)
+        // Already bounded: factor in [1.0, 2.0]
         uint64_t framesSinceVisible = currentFrame - request.lastVisibleFrame;
         float recencyFactor = 1.0f + std::min(static_cast<float>(framesSinceVisible) * 0.01f, 1.0f);
 
         // Combined priority (lower = higher priority)
+        // With all factors bounded, result is stable and comparable
         return screenErrorPriority * distanceFactor * coverageFactor * recencyFactor;
     }
 

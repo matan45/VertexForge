@@ -157,8 +157,14 @@ namespace render::mesh
     {
         std::unique_ptr<resource::MeshStreamHandle> handle;
         uint32_t referenceCount = 0;
+        uint32_t pendingAsyncReads = 0;  // Track in-flight async operations to prevent use-after-free
         bool headerParsed = false;
         std::unordered_map<std::string, ClusterSubmeshState> submeshStates;  // key: submeshName#submeshIdx
+
+        // THREAD SAFETY: Mesh state can only be erased when both conditions are met:
+        // 1. referenceCount == 0 (no external references)
+        // 2. pendingAsyncReads == 0 (no in-flight async operations)
+        bool canBeErased() const { return referenceCount == 0 && pendingAsyncReads == 0; }
     };
 
     // =========================================================================
@@ -213,6 +219,13 @@ namespace render::mesh
 
         // Frame tracking for LRU
         uint64_t currentFrame = 0;
+
+        // Priority update optimization (VK-298 performance fix)
+        // Avoid O(n log n) rebuild every frame by throttling updates
+        uint64_t lastPriorityUpdateFrame = 0;
+        glm::vec3 lastCameraPos{0.0f};
+        uint32_t priorityUpdateFrameInterval = 15;   // Update at most every N frames
+        float cameraMovementThreshold = 5.0f;        // Force update if camera moves this far
 
         // VK-296: Eviction configuration and statistics
         EvictionConfig evictionConfig;
@@ -296,6 +309,12 @@ namespace render::mesh
         void enableDependencyRespect(bool enable) { evictionConfig.respectDependencies = enable; }
         const EvictionStats& getEvictionStats() const { return evictionStats; }
 
+        // Priority update throttling (VK-298 performance optimization)
+        void setPriorityUpdateInterval(uint32_t frames) { priorityUpdateFrameInterval = frames; }
+        void setCameraMovementThreshold(float distance) { cameraMovementThreshold = distance; }
+        uint32_t getPriorityUpdateInterval() const { return priorityUpdateFrameInterval; }
+        float getCameraMovementThreshold() const { return cameraMovementThreshold; }
+
         // =========================================================================
         // Statistics
         // =========================================================================
@@ -317,9 +336,15 @@ namespace render::mesh
         // Internal Methods
         // =========================================================================
 
+        // Type alias for lock guard - used to enforce lock holding at compile time
+        using MeshStatesLock = std::unique_lock<std::mutex>;
+
         // Mesh stream management
-        void openMeshStream(const std::string& meshPath);
-        void scheduleInitialClusters(const std::string& meshPath);
+        // THREAD SAFETY: These functions require meshStatesMutex to be held.
+        // The lock parameter enforces this at compile time - callers must pass
+        // a valid unique_lock, ensuring they have acquired the mutex.
+        void openMeshStreamLocked(const std::string& meshPath, const MeshStatesLock& lock);
+        void scheduleInitialClustersLocked(const std::string& meshPath, const MeshStatesLock& lock);
 
         // Streaming pipeline
         void processStreamingQueue();

@@ -180,12 +180,18 @@ void processDiscreteLOD() {
 // =========================================================================
 // Cluster DAG Path - processes clusters from DAG traversal selection buffer
 // =========================================================================
+
+// SECURITY: Maximum selection buffer size - must match MAX_CLUSTER_SELECTIONS_PER_FRAME in ClusterBufferTypes.hpp
+const uint MAX_SELECTION_BUFFER_SIZE = 1024u * 1024u;
+
 void processClusterDAG() {
     // Each workgroup processes one cluster from the selection buffer
     uint selectionIdx = pc.clusterBaseIndex + gl_WorkGroupID.x;
 
-    // Bounds check - emit empty if beyond cluster count
-    if (selectionIdx >= pc.clusterCount) {
+    // SECURITY: Bounds check against BOTH user-supplied count AND actual buffer size
+    // This prevents buffer overrun if clusterBaseIndex is maliciously large
+    // CPU-side validation should also ensure: clusterBaseIndex + clusterCount <= MAX_SELECTION_BUFFER_SIZE
+    if (selectionIdx >= pc.clusterCount || selectionIdx >= MAX_SELECTION_BUFFER_SIZE) {
         if (gl_LocalInvocationID.x == 0) {
             payload.meshletCount = 0;
             EmitMeshTasksEXT(0, 1, 1);
@@ -196,7 +202,9 @@ void processClusterDAG() {
     // Load cluster selection from DAG traversal output
     GPUClusterSelection selection = selections[selectionIdx];
     uint globalClusterIdx = selection.clusterIndex;
-    uint drawIndex = selection.padding;  // drawIndex stored in padding field
+    // VK-298: Unpack drawIndex (lower 24 bits) and streaming state (upper 8 bits)
+    uint drawIndex = selection.padding & 0xFFFFFFu;
+    uint streamingState = selection.padding >> 24;
 
     // Validate selection
     if (selection.isSelected == 0u) {
@@ -293,7 +301,7 @@ void processClusterDAG() {
         unpackClusterLevelFlags(cluster.levelFlagsPacked, clusterLevel, clusterFlags);
         payload.debugClusterLevel = clusterLevel;
         payload.debugScreenError = selection.screenError;
-        payload.debugStreamingState = 2u;  // TODO: Get from streaming unit state
+        payload.debugStreamingState = streamingState;  // From packed selection.padding
 
         for (uint i = 0; i < visibleCount; i++) {
             payload.meshletIndices[i] = sharedMeshletIndices[i];

@@ -40,7 +40,7 @@ struct GPUClusterDAGHeader {
     uint rootClusterIndex;
     uint streamingUnitCount;
     vec4 boundingSphere;
-    uvec4 reserved;
+    uvec4 reserved;  // reserved.x = streaming state (VK-298): 0=not loaded, 1=loading, 2=loaded
 };
 
 // Must match GPUClusterTraversalParams in ClusterBufferTypes.hpp (64 bytes)
