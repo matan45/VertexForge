@@ -60,6 +60,12 @@ struct MeshletPayload {
     uint drawIndex;
     uint meshletIndices[MAX_MESHLETS_PER_PAYLOAD];
     uint meshletCount;
+
+    // VK-298: Debug visualization fields (set per-cluster in DAG mode)
+    uint debugClusterIndex;      // Unique cluster ID for visualization
+    uint debugClusterLevel;      // DAG hierarchy depth (0 = leaf, higher = coarser)
+    float debugScreenError;      // Screen-space error from LOD selection
+    uint debugStreamingState;    // 0=not loaded, 1=loading, 2=loaded
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -156,6 +162,12 @@ void processDiscreteLOD() {
         uint visibleCount = min(sharedVisibleCount, MAX_MESHLETS_PER_PAYLOAD);
         payload.drawIndex = drawIndex;
         payload.meshletCount = visibleCount;
+
+        // VK-298: Set default debug values for discrete LOD mode
+        payload.debugClusterIndex = 0u;
+        payload.debugClusterLevel = drawData.lodLevel;  // Use mesh LOD as proxy
+        payload.debugScreenError = 0.0;
+        payload.debugStreamingState = 2u;  // Assume loaded in discrete mode
 
         for (uint i = 0; i < visibleCount; i++) {
             payload.meshletIndices[i] = sharedMeshletIndices[i];
@@ -274,6 +286,14 @@ void processClusterDAG() {
         uint visibleCount = min(sharedVisibleCount, MAX_MESHLETS_PER_PAYLOAD);
         payload.drawIndex = drawIndex;
         payload.meshletCount = visibleCount;
+
+        // VK-298: Set debug visualization data from cluster
+        payload.debugClusterIndex = globalClusterIdx;
+        uint clusterLevel, clusterFlags;
+        unpackClusterLevelFlags(cluster.levelFlagsPacked, clusterLevel, clusterFlags);
+        payload.debugClusterLevel = clusterLevel;
+        payload.debugScreenError = selection.screenError;
+        payload.debugStreamingState = 2u;  // TODO: Get from streaming unit state
 
         for (uint i = 0; i < visibleCount; i++) {
             payload.meshletIndices[i] = sharedMeshletIndices[i];
