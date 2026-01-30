@@ -149,6 +149,7 @@
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
     <ClInclude Include="render\gpudriven\BindlessTextureManager.hpp" />
     <ClInclude Include="render\gpudriven\BoneMatrixManager.hpp" />
+    <ClInclude Include="render\gpudriven\ClusterBufferTypes.hpp" />
     <ClInclude Include="render\gpudriven\FreeListAllocator.hpp" />
     <ClInclude Include="render\gpudriven\GPUCullLODPipeline.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenCameraBuffer.hpp" />
@@ -324,6 +325,7 @@
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
+    <None Include="..\..\resources\shaders\common\cluster_types.glsl" />
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_shader_gpudriven.glsl" />
