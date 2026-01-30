@@ -115,6 +115,7 @@
     <ClInclude Include="print\Logger.hpp" />
     <ClInclude Include="resource\AnimationResource.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />
+    <ClInclude Include="resource\ClusterDAGTypes.hpp" />
     <ClInclude Include="resource\ConvexHullTypes.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
     <ClInclude Include="resource\FontResource.hpp" />
