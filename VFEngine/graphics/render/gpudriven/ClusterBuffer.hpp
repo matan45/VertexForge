@@ -254,6 +254,9 @@ namespace render::gpudriven
 
         void flushPendingTransfers();
 
+        // Reset traversal state for new frame (clears all counters)
+        void resetTraversalState();
+
     private:
         void createBuffers();
         void destroyBuffers();

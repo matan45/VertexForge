@@ -92,7 +92,7 @@ namespace render::gpudriven
         uint32_t targetTriangleCount;// +32 Target triangle budget
         uint32_t maxTriangleCount;   // +36 Hard triangle limit
         uint32_t currentSelectedCount;// +40 Atomic counter output
-        uint32_t padding0;           // +44
+        uint32_t maxWorkQueueEntries;// +44 Work queue capacity for bounds checking
 
         // Reserved for future use
         glm::vec4 reserved;          // +48

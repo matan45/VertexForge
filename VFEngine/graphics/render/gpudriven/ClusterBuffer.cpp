@@ -177,6 +177,15 @@ namespace render::gpudriven
             workQueueBufferB,
             workQueueBufferBMemory
         );
+
+        // Initialize traversal state buffer to zero to prevent undefined behavior
+        // This is critical as shaders read state.inputQueueCount before writes
+        GPUDAGTraversalState initialState = {};
+        transferManager->copyToBufferAsync(traversalStateBuffer, &initialState,
+                                           sizeof(GPUDAGTraversalState), 0);
+
+        // Flush to ensure initialization completes before any rendering
+        flushPendingTransfers();
     }
 
     void ClusterBuffer::destroyBuffers()
@@ -777,6 +786,19 @@ namespace render::gpudriven
         {
             transferManager->waitAll();
         }
+    }
+
+    void ClusterBuffer::resetTraversalState()
+    {
+        if (!initialized || !traversalStateBuffer)
+        {
+            return;
+        }
+
+        // Reset all counters to zero for new frame
+        GPUDAGTraversalState resetState = {};
+        transferManager->copyToBufferAsync(traversalStateBuffer, &resetState,
+                                           sizeof(GPUDAGTraversalState), 0);
     }
 
 } // namespace render::gpudriven

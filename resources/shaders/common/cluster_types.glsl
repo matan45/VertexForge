@@ -56,7 +56,7 @@ struct GPUClusterTraversalParams {
     uint targetTriangleCount;
     uint maxTriangleCount;
     uint currentSelectedCount;
-    uint padding0;
+    uint maxWorkQueueEntries;  // Work queue capacity for bounds checking
     vec4 reserved;
 };
 

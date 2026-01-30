@@ -27,6 +27,10 @@ layout(set = 0, binding = 1) uniform CameraUBO {
     GPUCameraData camera;
 };
 
+layout(std430, set = 0, binding = 9) readonly buffer TraversalParamsBuffer {
+    GPUClusterTraversalParams params;
+};
+
 layout(std430, set = 0, binding = 10) buffer TraversalStateBuffer {
     GPUDAGTraversalState state;
 };
@@ -75,6 +79,11 @@ void main() {
 
     // Allocate slot in work queue (atomic)
     uint queueIdx = atomicAdd(state.inputQueueCount, 1u);
+
+    // Bounds check to prevent buffer overflow
+    if (queueIdx >= params.maxWorkQueueEntries) {
+        return;
+    }
 
     // Pack and store work item
     uint packed = packWorkItem(objIdx, rootClusterIdx);

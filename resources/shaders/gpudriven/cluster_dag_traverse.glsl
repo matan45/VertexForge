@@ -281,25 +281,33 @@ void main() {
         // Enqueue left child if present
         if (children.leftChild != INVALID_CLUSTER_INDEX) {
             uint queueIdx = atomicAdd(state.outputQueueCount, 1u);
-            uint outPacked = packWorkItem(objectIndex, children.leftChild);
 
-            // Write to opposite queue (ping-pong)
-            if ((state.passIndex % 2u) == 0u) {
-                workQueueB[queueIdx] = outPacked;
-            } else {
-                workQueueA[queueIdx] = outPacked;
+            // Bounds check to prevent buffer overflow
+            if (queueIdx < params.maxWorkQueueEntries) {
+                uint outPacked = packWorkItem(objectIndex, children.leftChild);
+
+                // Write to opposite queue (ping-pong)
+                if ((state.passIndex % 2u) == 0u) {
+                    workQueueB[queueIdx] = outPacked;
+                } else {
+                    workQueueA[queueIdx] = outPacked;
+                }
             }
         }
 
         // Enqueue right child if present
         if (children.rightChild != INVALID_CLUSTER_INDEX) {
             uint queueIdx = atomicAdd(state.outputQueueCount, 1u);
-            uint outPacked = packWorkItem(objectIndex, children.rightChild);
 
-            if ((state.passIndex % 2u) == 0u) {
-                workQueueB[queueIdx] = outPacked;
-            } else {
-                workQueueA[queueIdx] = outPacked;
+            // Bounds check to prevent buffer overflow
+            if (queueIdx < params.maxWorkQueueEntries) {
+                uint outPacked = packWorkItem(objectIndex, children.rightChild);
+
+                if ((state.passIndex % 2u) == 0u) {
+                    workQueueB[queueIdx] = outPacked;
+                } else {
+                    workQueueA[queueIdx] = outPacked;
+                }
             }
         }
     }
