@@ -67,14 +67,51 @@ namespace render::gpudriven
         glm::uvec4 meshletLod1;
         glm::uvec4 meshletLod2;
         glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
+
+        // =====================================================================
+        // DAG Mode Accessors (when ObjectFlags::UseClusterDAG is set)
+        // These interpret lod0Data/lod1Data/lod2Data as DAG metadata
+        // =====================================================================
+
+        // lod0Data in DAG mode: cluster info
+        uint32_t getDagHeaderIndex() const { return lod0Data.x; }
+        uint32_t getDagClusterOffset() const { return lod0Data.y; }
+        uint32_t getDagClusterCount() const { return lod0Data.z; }
+        uint32_t getDagRootClusterIndex() const { return lod0Data.w; }
+
+        void setDagClusterInfo(uint32_t headerIdx, uint32_t offset, uint32_t count, uint32_t root = 0)
+        {
+            lod0Data = glm::uvec4(headerIdx, offset, count, root);
+        }
+
+        // lod1Data in DAG mode: streaming info
+        uint32_t getDagStreamingUnitOffset() const { return lod1Data.x; }
+        uint32_t getDagStreamingUnitCount() const { return lod1Data.y; }
+        uint32_t getDagStreamingUnitMask() const { return lod1Data.z; }
+        uint32_t getDagLeafClusterCount() const { return lod1Data.w; }
+
+        void setDagStreamingInfo(uint32_t offset, uint32_t count, uint32_t mask, uint32_t leafCount)
+        {
+            lod1Data = glm::uvec4(offset, count, mask, leafCount);
+        }
+
+        // lod2Data in DAG mode: depth info
+        uint32_t getDagMaxDepth() const { return lod2Data.x; }
+        void setDagMaxDepth(uint32_t depth) { lod2Data.x = depth; }
+
+        // Helper: Check if using DAG mode
+        bool usesClusterDAG() const { return (flags & ObjectFlags::UseClusterDAG) != 0; }
+        bool isDagFullyLoaded() const { return (flags & ObjectFlags::DAGFullyLoaded) != 0; }
     };
     static_assert(sizeof(GPUObjectData) == 320);
 
 
     namespace ObjectFlags
     {
-        constexpr uint32_t AlphaMask = 1 << 4;
-        constexpr uint32_t UniformScale = 1 << 9;
+        constexpr uint32_t AlphaMask      = 1 << 4;
+        constexpr uint32_t UniformScale   = 1 << 9;
+        constexpr uint32_t UseClusterDAG  = 1 << 10;  // Use DAG mode instead of discrete LODs
+        constexpr uint32_t DAGFullyLoaded = 1 << 11;  // All streaming units ready
     }
 
 

@@ -170,6 +170,14 @@ void main() {
     }
 
     GPUObjectData obj = objects[objectIndex];
+
+    // Skip DAG objects - they use cluster-based LOD selection (VK-291)
+    if (usesClusterDAG(obj)) {
+        // TODO (VK-291): Implement DAG traversal for cluster selection
+        // For now, DAG objects are handled separately
+        return;
+    }
+
     vec4 worldSphere = transformBoundingSphere(obj.boundingSphere, obj.modelMatrix);
 
     uint batchIndex = objectIndex % camera.batchCount;
