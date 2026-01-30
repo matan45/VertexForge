@@ -10,9 +10,9 @@ workspace "VertexForge"
       toolset "v145"
    filter {}
 
-   -- Enable UTF-8 support for all C++ projects (required by spdlog/fmt)
+   -- Enable UTF-8 support and multi-processor compilation for all C++ projects
    filter "language:C++"
-      buildoptions { "/utf-8" }
+      buildoptions { "/utf-8", "/MP" }  -- /MP enables parallel compilation across CPU cores
       defines {
          "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1",
          "GLM_FORCE_DEPTH_ZERO_TO_ONE"  -- Vulkan uses [0,1] depth range, not OpenGL's [-1,1]
