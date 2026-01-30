@@ -30,7 +30,8 @@ namespace render::gpudriven
     // =========================================================================
 
     void ClusterBuffer::init(uint32_t maxClusters, uint32_t maxDAGHeaders,
-                             uint32_t maxSelections, uint32_t maxStreamingUnits)
+                             uint32_t maxSelections, uint32_t maxStreamingUnits,
+                             uint32_t maxWorkQueueEntries)
     {
         if (initialized)
         {
@@ -42,6 +43,7 @@ namespace render::gpudriven
         maxDAGHeaderCount = maxDAGHeaders;
         maxSelectionCount = maxSelections;
         maxStreamingUnitCount = maxStreamingUnits;
+        maxWorkQueueCount = maxWorkQueueEntries;
 
         // Initialize allocators
         clusterAllocator.reset(maxClusterCount);
@@ -52,8 +54,8 @@ namespace render::gpudriven
 
         initialized = true;
 
-        vfLogInfo("ClusterBuffer: Initialized with {} clusters, {} DAG headers, {} selections, {} streaming units",
-                  maxClusterCount, maxDAGHeaderCount, maxSelectionCount, maxStreamingUnitCount);
+        vfLogInfo("ClusterBuffer: Initialized with {} clusters, {} DAG headers, {} selections, {} streaming units, {} work queue entries",
+                  maxClusterCount, maxDAGHeaderCount, maxSelectionCount, maxStreamingUnitCount, maxWorkQueueCount);
         vfLogInfo("ClusterBuffer: Total buffer size: {} MB",
                   getTotalBufferSize() / (1024 * 1024));
     }
@@ -128,6 +130,53 @@ namespace render::gpudriven
             streamingUnitBuffer,
             streamingUnitBufferMemory
         );
+
+        // Create cluster child buffer (GPUClusterChildren[]) - for DAG traversal
+        core::BufferUtilities::createBuffer(
+            core::BufferInfoRequest{
+                logicalDevice, device.getPhysicalDevice(),
+                getClusterChildBufferSize(),
+                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            },
+            clusterChildBuffer,
+            clusterChildBufferMemory
+        );
+
+        // Create traversal state buffer (GPUDAGTraversalState)
+        core::BufferUtilities::createBuffer(
+            core::BufferInfoRequest{
+                logicalDevice, device.getPhysicalDevice(),
+                getTraversalStateBufferSize(),
+                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            },
+            traversalStateBuffer,
+            traversalStateBufferMemory
+        );
+
+        // Create work queue buffers (ping-pong)
+        core::BufferUtilities::createBuffer(
+            core::BufferInfoRequest{
+                logicalDevice, device.getPhysicalDevice(),
+                getWorkQueueBufferSize(),
+                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            },
+            workQueueBufferA,
+            workQueueBufferAMemory
+        );
+
+        core::BufferUtilities::createBuffer(
+            core::BufferInfoRequest{
+                logicalDevice, device.getPhysicalDevice(),
+                getWorkQueueBufferSize(),
+                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            },
+            workQueueBufferB,
+            workQueueBufferBMemory
+        );
     }
 
     void ClusterBuffer::destroyBuffers()
@@ -176,6 +225,50 @@ namespace render::gpudriven
         {
             logicalDevice.freeMemory(streamingUnitBufferMemory);
             streamingUnitBufferMemory = nullptr;
+        }
+
+        if (clusterChildBuffer)
+        {
+            logicalDevice.destroyBuffer(clusterChildBuffer);
+            clusterChildBuffer = nullptr;
+        }
+        if (clusterChildBufferMemory)
+        {
+            logicalDevice.freeMemory(clusterChildBufferMemory);
+            clusterChildBufferMemory = nullptr;
+        }
+
+        if (traversalStateBuffer)
+        {
+            logicalDevice.destroyBuffer(traversalStateBuffer);
+            traversalStateBuffer = nullptr;
+        }
+        if (traversalStateBufferMemory)
+        {
+            logicalDevice.freeMemory(traversalStateBufferMemory);
+            traversalStateBufferMemory = nullptr;
+        }
+
+        if (workQueueBufferA)
+        {
+            logicalDevice.destroyBuffer(workQueueBufferA);
+            workQueueBufferA = nullptr;
+        }
+        if (workQueueBufferAMemory)
+        {
+            logicalDevice.freeMemory(workQueueBufferAMemory);
+            workQueueBufferAMemory = nullptr;
+        }
+
+        if (workQueueBufferB)
+        {
+            logicalDevice.destroyBuffer(workQueueBufferB);
+            workQueueBufferB = nullptr;
+        }
+        if (workQueueBufferBMemory)
+        {
+            logicalDevice.freeMemory(workQueueBufferBMemory);
+            workQueueBufferBMemory = nullptr;
         }
     }
 
@@ -378,6 +471,11 @@ namespace render::gpudriven
         // Upload clusters
         uploadClustersAt(alloc.clusterOffset, gpuClusters.data(), alloc.clusterCount);
 
+        // Build and upload child indices for DAG traversal
+        std::vector<GPUClusterChildren> childIndices;
+        buildChildIndices(gpuClusters, childIndices);
+        uploadClusterChildrenAt(alloc.clusterOffset, childIndices.data(), alloc.clusterCount);
+
         // Build and upload DAG header
         GPUClusterDAGHeader gpuHeader{};
         gpuHeader.clusterCount = dagData.header.clusterCount;
@@ -462,6 +560,68 @@ namespace render::gpudriven
         size_t dstOffset = static_cast<size_t>(offset) * sizeof(GPUClusterStreamingUnit);
 
         transferManager->copyToBufferAsync(streamingUnitBuffer, data, dataSize, dstOffset);
+    }
+
+    void ClusterBuffer::uploadClusterChildrenAt(uint32_t offset, const GPUClusterChildren* data, uint32_t count)
+    {
+        if (!data || count == 0) return;
+
+        if (offset + count > maxClusterCount)
+        {
+            vfLogError("ClusterBuffer: Cluster children upload exceeds buffer bounds (offset={}, count={}, max={})",
+                       offset, count, maxClusterCount);
+            return;
+        }
+
+        size_t dataSize = static_cast<size_t>(count) * sizeof(GPUClusterChildren);
+        size_t dstOffset = static_cast<size_t>(offset) * sizeof(GPUClusterChildren);
+
+        transferManager->copyToBufferAsync(clusterChildBuffer, data, dataSize, dstOffset);
+    }
+
+    void ClusterBuffer::buildChildIndices(const std::vector<GPUCluster>& clusters,
+                                          std::vector<GPUClusterChildren>& outChildren)
+    {
+        // Initialize all children to invalid
+        outChildren.resize(clusters.size());
+        for (auto& child : outChildren)
+        {
+            child.leftChild = INVALID_GPU_CLUSTER_INDEX;
+            child.rightChild = INVALID_GPU_CLUSTER_INDEX;
+        }
+
+        // Build child indices by scanning parent references
+        // For each cluster, find its parent and register as left or right child
+        for (uint32_t i = 0; i < clusters.size(); ++i)
+        {
+            uint32_t parentIdx = clusters[i].parentIndex;
+            if (parentIdx == INVALID_GPU_CLUSTER_INDEX)
+            {
+                // Root cluster - no parent
+                continue;
+            }
+
+            if (parentIdx >= clusters.size())
+            {
+                vfLogWarning("ClusterBuffer: Invalid parent index {} for cluster {}", parentIdx, i);
+                continue;
+            }
+
+            // Assign as left child if available, otherwise right child
+            if (outChildren[parentIdx].leftChild == INVALID_GPU_CLUSTER_INDEX)
+            {
+                outChildren[parentIdx].leftChild = i;
+            }
+            else if (outChildren[parentIdx].rightChild == INVALID_GPU_CLUSTER_INDEX)
+            {
+                outChildren[parentIdx].rightChild = i;
+            }
+            else
+            {
+                vfLogWarning("ClusterBuffer: Parent cluster {} already has two children, cannot assign cluster {}",
+                             parentIdx, i);
+            }
+        }
     }
 
     // =========================================================================
