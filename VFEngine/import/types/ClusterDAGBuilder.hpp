@@ -71,8 +71,10 @@ namespace types
             const MeshletBuildResult& meshletResult) const;
 
         // Phase 2: Spatial grouping - pair clusters for hierarchy
+        // Uses pointer + count to avoid vector copies
         std::vector<std::pair<uint32_t, uint32_t>> groupClustersSpatially(
-            const std::vector<BuildCluster>& clusters,
+            const BuildCluster* clusters,
+            size_t clusterCount,
             uint32_t baseIndex) const;
 
         // Phase 3: Generate parent cluster with simplified geometry

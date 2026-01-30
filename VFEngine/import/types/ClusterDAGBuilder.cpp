@@ -5,6 +5,33 @@
 #include <cfloat>
 #include <cmath>
 #include <unordered_set>
+#include <numeric>
+
+namespace
+{
+    // Morton code helpers for spatial sorting (Z-order curve)
+    // Expands a 10-bit integer into 30 bits by inserting 2 zeros between each bit
+    uint32_t expandBits(uint32_t v)
+    {
+        v = (v * 0x00010001u) & 0xFF0000FFu;
+        v = (v * 0x00000101u) & 0x0F00F00Fu;
+        v = (v * 0x00000011u) & 0xC30C30C3u;
+        v = (v * 0x00000005u) & 0x49249249u;
+        return v;
+    }
+
+    // Calculates a 30-bit Morton code for a 3D point in [0,1] range
+    uint32_t morton3D(float x, float y, float z)
+    {
+        x = glm::clamp(x, 0.0f, 1.0f) * 1023.0f;
+        y = glm::clamp(y, 0.0f, 1.0f) * 1023.0f;
+        z = glm::clamp(z, 0.0f, 1.0f) * 1023.0f;
+        uint32_t xx = expandBits(static_cast<uint32_t>(x));
+        uint32_t yy = expandBits(static_cast<uint32_t>(y));
+        uint32_t zz = expandBits(static_cast<uint32_t>(z));
+        return (xx << 2) | (yy << 1) | zz;
+    }
+}
 
 namespace types
 {
@@ -178,48 +205,73 @@ namespace types
     }
 
     std::vector<std::pair<uint32_t, uint32_t>> ClusterDAGBuilder::groupClustersSpatially(
-        const std::vector<BuildCluster>& clusters,
+        const BuildCluster* clusters,
+        size_t clusterCount,
         uint32_t baseIndex) const
     {
         std::vector<std::pair<uint32_t, uint32_t>> pairs;
-        std::vector<bool> paired(clusters.size(), false);
 
-        // For each unpaired cluster, find its nearest unpaired neighbor
-        for (uint32_t i = 0; i < static_cast<uint32_t>(clusters.size()); ++i)
+        if (clusterCount == 0)
         {
-            if (paired[i]) continue;
+            return pairs;
+        }
 
-            float bestDistance = FLT_MAX;
-            uint32_t bestMatch = resource::INVALID_CLUSTER_INDEX;
+        if (clusterCount == 1)
+        {
+            pairs.emplace_back(baseIndex, resource::INVALID_CLUSTER_INDEX);
+            return pairs;
+        }
 
-            glm::vec3 centerI(clusters[i].boundingSphere);
+        // Compute bounding box of all cluster centers for normalization
+        glm::vec3 minBounds(FLT_MAX);
+        glm::vec3 maxBounds(-FLT_MAX);
 
-            for (uint32_t j = i + 1; j < static_cast<uint32_t>(clusters.size()); ++j)
-            {
-                if (paired[j]) continue;
+        for (size_t i = 0; i < clusterCount; ++i)
+        {
+            glm::vec3 center(clusters[i].boundingSphere);
+            minBounds = glm::min(minBounds, center);
+            maxBounds = glm::max(maxBounds, center);
+        }
 
-                glm::vec3 centerJ(clusters[j].boundingSphere);
-                float distance = glm::distance(centerI, centerJ);
+        glm::vec3 extent = maxBounds - minBounds;
+        glm::vec3 invExtent(
+            extent.x > 1e-6f ? 1.0f / extent.x : 0.0f,
+            extent.y > 1e-6f ? 1.0f / extent.y : 0.0f,
+            extent.z > 1e-6f ? 1.0f / extent.z : 0.0f
+        );
 
-                if (distance < bestDistance)
-                {
-                    bestDistance = distance;
-                    bestMatch = j;
-                }
-            }
+        // Compute Morton codes and create sorted indices
+        std::vector<std::pair<uint32_t, uint32_t>> mortonIndices;  // (morton code, original index)
+        mortonIndices.reserve(clusterCount);
 
-            if (bestMatch != resource::INVALID_CLUSTER_INDEX)
-            {
-                pairs.emplace_back(baseIndex + i, baseIndex + bestMatch);
-                paired[i] = true;
-                paired[bestMatch] = true;
-            }
-            else
-            {
-                // Odd cluster out - will be promoted without pairing
-                pairs.emplace_back(baseIndex + i, resource::INVALID_CLUSTER_INDEX);
-                paired[i] = true;
-            }
+        for (uint32_t i = 0; i < static_cast<uint32_t>(clusterCount); ++i)
+        {
+            glm::vec3 center(clusters[i].boundingSphere);
+            glm::vec3 normalized = (center - minBounds) * invExtent;
+            uint32_t morton = morton3D(normalized.x, normalized.y, normalized.z);
+            mortonIndices.emplace_back(morton, i);
+        }
+
+        // Sort by Morton code - O(n log n)
+        std::sort(mortonIndices.begin(), mortonIndices.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+
+        // Pair adjacent clusters in Morton order
+        // This gives good spatial locality due to Z-order curve properties
+        pairs.reserve((clusterCount + 1) / 2);
+
+        for (size_t i = 0; i + 1 < mortonIndices.size(); i += 2)
+        {
+            uint32_t idx1 = mortonIndices[i].second;
+            uint32_t idx2 = mortonIndices[i + 1].second;
+            pairs.emplace_back(baseIndex + idx1, baseIndex + idx2);
+        }
+
+        // Handle odd cluster
+        if (mortonIndices.size() % 2 == 1)
+        {
+            uint32_t lastIdx = mortonIndices.back().second;
+            pairs.emplace_back(baseIndex + lastIdx, resource::INVALID_CLUSTER_INDEX);
         }
 
         return pairs;
@@ -324,6 +376,9 @@ namespace types
             // Record base index for this level
             uint32_t levelBaseIndex = static_cast<uint32_t>(allClusters.size());
 
+            // Save count before moving clusters
+            size_t clustersInThisLevel = currentLevel.size();
+
             // Set level for current clusters and add to result
             for (auto& cluster : currentLevel)
             {
@@ -331,13 +386,13 @@ namespace types
                 allClusters.push_back(std::move(cluster));
             }
 
-            processedClusters += static_cast<uint32_t>(currentLevel.size());
+            processedClusters += static_cast<uint32_t>(clustersInThisLevel);
             currentLevel.clear();
 
-            // Group clusters spatially
+            // Group clusters spatially - pass pointer to this level's clusters (no copy)
             auto pairs = groupClustersSpatially(
-                std::vector<BuildCluster>(allClusters.end() - static_cast<ptrdiff_t>(processedClusters - levelBaseIndex),
-                                           allClusters.end()),
+                allClusters.data() + levelBaseIndex,
+                clustersInThisLevel,
                 levelBaseIndex);
 
             // Create parent level
@@ -447,7 +502,7 @@ namespace types
         glm::vec3 avgNormal(0.0f);
         uint32_t triangleCount = 0;
 
-        for (size_t i = 0; i + 2 < indices.size(); i += 3)
+        for (size_t i = 0; i + 3 <= indices.size(); i += 3)
         {
             uint32_t i0 = indices[i];
             uint32_t i1 = indices[i + 1];
@@ -484,7 +539,7 @@ namespace types
         // Compute cone angle (max deviation from average normal)
         float minCosAngle = 1.0f;
 
-        for (size_t i = 0; i + 2 < indices.size(); i += 3)
+        for (size_t i = 0; i + 3 <= indices.size(); i += 3)
         {
             uint32_t i0 = indices[i];
             uint32_t i1 = indices[i + 1];
