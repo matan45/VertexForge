@@ -419,19 +419,98 @@ namespace types
     }
 
     void Mesh::writeMeshletData(std::ofstream& outFile,
-                                const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const
+                                const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults,
+                                const std::vector<uint32_t>& meshletReorderMap) const
     {
+        // VK-300: If reorder map provided, reorder meshlets so cluster DAG has contiguous indices
+        // The reorder map format: reorderMap[newIndex] = oldIndex
+        // When writing: write meshlets[oldIndex] at position newIndex
+        bool needsReorder = !meshletReorderMap.empty();
+
+        // Build reordered data if needed
+        std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> reorderedResults;
+
+        if (needsReorder)
+        {
+            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            {
+                const auto& src = meshletResults[lod];
+                auto& dst = reorderedResults[lod];
+
+                // Verify reorder map size matches meshlet count
+                if (meshletReorderMap.size() != src.meshlets.size())
+                {
+                    vfLogWarning("Meshlet reorder map size ({}) doesn't match meshlet count ({}), skipping reorder",
+                                 meshletReorderMap.size(), src.meshlets.size());
+                    // Fall back to original order
+                    reorderedResults[lod] = src;
+                    continue;
+                }
+
+                dst.meshlets.resize(meshletReorderMap.size());
+
+                // Track new offsets for vertex and primitive data
+                uint32_t newVertexOffset = 0;
+                uint32_t newPrimOffset = 0;
+
+                for (uint32_t newIdx = 0; newIdx < static_cast<uint32_t>(meshletReorderMap.size()); ++newIdx)
+                {
+                    uint32_t oldIdx = meshletReorderMap[newIdx];
+                    if (oldIdx >= src.meshlets.size())
+                    {
+                        vfLogError("Invalid meshlet reorder: oldIdx {} >= meshlet count {}",
+                                   oldIdx, src.meshlets.size());
+                        continue;
+                    }
+
+                    const auto& oldMeshlet = src.meshlets[oldIdx];
+                    auto& newMeshlet = dst.meshlets[newIdx];
+
+                    // Copy bounds
+                    newMeshlet.bounds = oldMeshlet.bounds;
+
+                    // Copy descriptor with updated offsets
+                    newMeshlet.descriptor.vertexCount = oldMeshlet.descriptor.vertexCount;
+                    newMeshlet.descriptor.primitiveCount = oldMeshlet.descriptor.primitiveCount;
+                    newMeshlet.descriptor.vertexOffset = newVertexOffset;
+                    newMeshlet.descriptor.primitiveOffset = newPrimOffset;
+
+                    // Copy vertex indices in new order
+                    for (uint8_t v = 0; v < oldMeshlet.descriptor.vertexCount; ++v)
+                    {
+                        dst.meshletVertices.push_back(
+                            src.meshletVertices[oldMeshlet.descriptor.vertexOffset + v]);
+                    }
+
+                    // Copy primitive indices in new order
+                    for (uint8_t p = 0; p < oldMeshlet.descriptor.primitiveCount; ++p)
+                    {
+                        dst.meshletPrimitives.push_back(
+                            src.meshletPrimitives[oldMeshlet.descriptor.primitiveOffset + p]);
+                    }
+
+                    newVertexOffset += oldMeshlet.descriptor.vertexCount;
+                    newPrimOffset += oldMeshlet.descriptor.primitiveCount;
+                }
+            }
+        }
+
+        // Use reordered or original data
+        const auto& results = needsReorder ? reorderedResults : meshletResults;
+
+        // Write header counts
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
-            const auto& result = meshletResults[lod];
+            const auto& result = results[lod];
             resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(result.meshlets.size()));
             resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(result.meshletVertices.size()));
             resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(result.meshletPrimitives.size()));
         }
 
+        // Write meshlet descriptors and bounds
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
-            for (const auto& meshlet : meshletResults[lod].meshlets)
+            for (const auto& meshlet : results[lod].meshlets)
             {
                 resource::endian::writeLE<uint32_t>(outFile, meshlet.descriptor.vertexOffset);
                 resource::endian::writeLE<uint32_t>(outFile, meshlet.descriptor.primitiveOffset);
@@ -450,17 +529,19 @@ namespace types
             }
         }
 
+        // Write meshlet vertices
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
-            for (uint32_t idx : meshletResults[lod].meshletVertices)
+            for (uint32_t idx : results[lod].meshletVertices)
             {
                 resource::endian::writeLE<uint32_t>(outFile, idx);
             }
         }
 
+        // Write meshlet primitives
         for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
         {
-            for (uint32_t packed : meshletResults[lod].meshletPrimitives)
+            for (uint32_t packed : results[lod].meshletPrimitives)
             {
                 resource::endian::writeLE<uint32_t>(outFile, packed);
             }
@@ -572,13 +653,8 @@ namespace types
                 meshletResults[lod] = lod0Meshlets;
             }
 
-            writeMeshletData(outFile, meshletResults);
-
-            resource::ConvexDecompositionData convexData = generateConvexDecomposition(
-                lod0, config.meshConfig);
-            writeConvexDecompositionData(outFile, convexData);
-
-            // Build cluster DAG if enabled
+            // VK-300: Build cluster DAG BEFORE writing meshlets to get reorder map
+            // This ensures all clusters have contiguous meshlet indices
             resource::ClusterDAGData dagData;
             if (config.meshConfig.generateClusterDAG)
             {
@@ -603,6 +679,12 @@ namespace types
                               dagData.header.clusterCount,
                               dagData.header.leafClusterCount,
                               dagData.header.maxDepth);
+
+                    if (!dagData.meshletReorderMap.empty())
+                    {
+                        vfLogInfo("    Reordering {} meshlets for contiguous cluster access",
+                                  dagData.meshletReorderMap.size());
+                    }
                 }
             }
             else
@@ -610,6 +692,14 @@ namespace types
                 vfLogInfo("  Cluster DAG generation disabled");
             }
 
+            // Write meshlets with reorder map (if DAG was built)
+            writeMeshletData(outFile, meshletResults, dagData.meshletReorderMap);
+
+            resource::ConvexDecompositionData convexData = generateConvexDecomposition(
+                lod0, config.meshConfig);
+            writeConvexDecompositionData(outFile, convexData);
+
+            // Write cluster DAG data (already built above)
             writeClusterDAGData(outFile, dagData);
 
             if (progressCallback)

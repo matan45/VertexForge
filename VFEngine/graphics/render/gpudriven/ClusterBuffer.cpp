@@ -629,18 +629,23 @@ namespace render::gpudriven
 
         // Build child indices by scanning parent references
         // For each cluster, find its parent and register as left or right child
+        uint32_t rootCount = 0;
+        uint32_t orphanedCount = 0;
+
         for (uint32_t i = 0; i < clusters.size(); ++i)
         {
             uint32_t parentIdx = clusters[i].parentIndex;
             if (parentIdx == INVALID_GPU_CLUSTER_INDEX)
             {
                 // Root cluster - no parent
+                ++rootCount;
                 continue;
             }
 
             if (parentIdx >= clusters.size())
             {
                 vfLogWarning("ClusterBuffer: Invalid parent index {} for cluster {}", parentIdx, i);
+                ++orphanedCount;
                 continue;
             }
 
@@ -657,7 +662,60 @@ namespace render::gpudriven
             {
                 vfLogWarning("ClusterBuffer: Parent cluster {} already has two children, cannot assign cluster {}",
                              parentIdx, i);
+                ++orphanedCount;
             }
+        }
+
+        // VK-300 DEBUG: Verify DAG connectivity by traversing from root
+        uint32_t reachableCount = 0;
+        uint32_t leafCount = 0;
+        std::vector<bool> visited(clusters.size(), false);
+        std::vector<uint32_t> stack;
+
+        // Find root (cluster with no parent, should be index 0)
+        for (uint32_t i = 0; i < clusters.size(); ++i)
+        {
+            if (clusters[i].parentIndex == INVALID_GPU_CLUSTER_INDEX)
+            {
+                stack.push_back(i);
+            }
+        }
+
+        while (!stack.empty())
+        {
+            uint32_t idx = stack.back();
+            stack.pop_back();
+
+            if (idx >= clusters.size() || visited[idx])
+                continue;
+
+            visited[idx] = true;
+            ++reachableCount;
+
+            // Check if leaf (using levelFlagsPacked)
+            uint32_t flags = (clusters[idx].levelFlagsPacked >> 16) & 0xFFFF;
+            if (flags & 0x1)  // CLUSTER_FLAG_IS_LEAF
+            {
+                ++leafCount;
+            }
+
+            // Add children to stack
+            if (outChildren[idx].leftChild != INVALID_GPU_CLUSTER_INDEX)
+            {
+                stack.push_back(outChildren[idx].leftChild);
+            }
+            if (outChildren[idx].rightChild != INVALID_GPU_CLUSTER_INDEX)
+            {
+                stack.push_back(outChildren[idx].rightChild);
+            }
+        }
+
+        vfLogInfo("ClusterBuffer: DAG structure - {} roots, {} total, {} reachable, {} leaves reachable, {} orphaned",
+                  rootCount, clusters.size(), reachableCount, leafCount, orphanedCount);
+
+        if (reachableCount != clusters.size())
+        {
+            vfLogWarning("ClusterBuffer: DAG has {} unreachable clusters!", clusters.size() - reachableCount);
         }
     }
 

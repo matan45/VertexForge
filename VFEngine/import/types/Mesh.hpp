@@ -60,8 +60,10 @@ namespace types
         void writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const;
 
         MeshletBuildResult buildMeshletsForLOD(const LODMeshData& lodMesh) const;
+        // VK-300: Added optional reorder map for cluster DAG contiguous meshlet indices
         void writeMeshletData(std::ofstream& outFile,
-                              const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const;
+                              const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults,
+                              const std::vector<uint32_t>& meshletReorderMap = {}) const;
 
         resource::ConvexDecompositionData generateConvexDecomposition(
             const LODMeshData& meshData,

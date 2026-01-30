@@ -258,19 +258,6 @@ void processClusterDAG() {
     // Transform cluster bounds for culling
     vec4 worldSphere = transformBoundingSphere(cluster.boundingSphere, drawData.modelMatrix);
 
-    // CLUSTER-LEVEL BACKFACE CONE CULLING
-    // If entire cluster is backfacing, skip all its meshlets
-    if ((pc.viewMode & MESHLET_CULL_BACKFACE_BIT) != 0u) {
-        if (!coneCullTest(cluster.cone, drawData.modelMatrix, camera.cameraPos, worldSphere.xyz)) {
-            // Entire cluster is backfacing
-            if (gl_LocalInvocationID.x == 0) {
-                payload.meshletCount = 0;
-                EmitMeshTasksEXT(0, 1, 1);
-            }
-            return;
-        }
-    }
-
     // PROCESS MESHLETS WITHIN CLUSTER
     // Each thread in workgroup processes one meshlet
     uint localMeshletIdx = gl_LocalInvocationID.x;

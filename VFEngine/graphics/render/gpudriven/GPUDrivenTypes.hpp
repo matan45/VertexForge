@@ -170,6 +170,7 @@ namespace render::gpudriven
         glm::vec3 aabbMax;
         glm::vec4 boundingSphere;
         std::array<LODStreamState, LOD_LEVEL_COUNT> lodStates{};
+        bool hasClusterDAGUploaded = false;  // VK-300: Track cluster DAG availability
 
         void calculateBoundingSphere()
         {
@@ -180,8 +181,8 @@ namespace render::gpudriven
 
         bool hasRenderableLOD() const
         {
-            // VK-300: Only check meshlet data (DAG mode)
-            return hasMeshletData();
+            // VK-300: Check either meshlet data OR cluster DAG data
+            return hasMeshletData() || hasClusterDAGUploaded;
         }
 
         uint32_t getBestAvailableLOD(uint32_t requestedLOD) const

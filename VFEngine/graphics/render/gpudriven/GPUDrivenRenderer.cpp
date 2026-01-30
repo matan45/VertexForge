@@ -172,6 +172,7 @@ namespace render::gpudriven
             {
                 clusterStreamManager = std::make_unique<mesh::ClusterStreamManager>(device, *clusterBuffer);
                 clusterStreamManager->setMeshletBuffer(meshletBuffer.get());
+                clusterStreamManager->setMergedMeshBuffer(mergedBuffer.get());  // VK-300: For marking cluster availability
                 loggerInfo("GPUDrivenRenderer: ClusterStreamManager initialized for DAG streaming");
             }
         }
@@ -294,7 +295,29 @@ namespace render::gpudriven
         ShaderGroupResolver shaderGroupResolver = [](const std::string&) -> uint32_t { return 0; };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
+        // VK-300: Create cluster DAG resolver for Nanite-style rendering
+        ClusterDAGResolver clusterResolver = nullptr;
+        if (clusterBuffer)
+        {
+            clusterResolver = [this](const std::string& meshPath,
+                                     const std::string& submeshName,
+                                     uint32_t submeshIndex) -> ClusterDAGResolverResult
+            {
+                ClusterDAGResolverResult result{};
+                const auto* alloc = clusterBuffer->getAllocation(meshPath, submeshName, submeshIndex);
+                if (alloc && alloc->isAllocated)
+                {
+                    ClusterDAGInfo info = clusterBuffer->getClusterDAGInfo(*alloc);
+                    result.clusterOffset = info.clusterOffset;
+                    result.clusterCount = info.clusterCount;
+                    result.dagHeaderIndex = info.dagHeaderIndex;
+                    result.hasClusterData = info.clusterCount > 0;
+                }
+                return result;
+            };
+        }
+
+        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, clusterResolver, time);
 
         CameraUpdateParams cameraParams{
             .view = view,
@@ -345,9 +368,22 @@ namespace render::gpudriven
         for (const auto& meshRender : opaqueObjects)
         {
             meshStreamManager->requestMesh(meshRender.meshPath);
+
+            // VK-300: Also request cluster DAG data for Nanite-style rendering
+            if (clusterStreamManager)
+            {
+                clusterStreamManager->requestMesh(meshRender.meshPath);
+            }
         }
 
         meshStreamManager->update(cameraPosition);
+
+        // VK-300: Update cluster streaming for DAG data
+        if (clusterStreamManager)
+        {
+            static uint64_t clusterStreamFrameIndex = 0;
+            clusterStreamManager->update(cameraPosition, clusterStreamFrameIndex++);
+        }
     }
 
     void GPUDrivenRenderer::registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
@@ -866,9 +902,10 @@ namespace render::gpudriven
 
         auto extent = swapChain.getSwapchainExtent();
 
-        // VK-300: DAG cluster rendering path with indirect dispatch
-        // The task shader reads from the cluster selection buffer filled by DAG traversal
-        // Each workgroup processes one selected cluster
+        // VK-300: Render BOTH paths - DAG objects AND fallback objects
+        // This ensures meshes with cluster data use DAG, and meshes without use direct meshlet
+
+        // Path 1: DAG cluster rendering for objects with cluster data
         if (clusterBuffer && clusterBuffer->getCurrentClusterCount() > 0)
         {
             MeshShaderPushConstants pushConstants{};
@@ -892,8 +929,7 @@ namespace render::gpudriven
                 sizeof(MeshShaderPushConstants),
                 &pushConstants);
 
-            // VK-300: Use indirect dispatch with actual selectedCount from DAG traversal
-            // The prepare_dag_indirect.glsl shader wrote the workgroup count to the indirect buffer
+            // Use indirect dispatch with actual selectedCount from DAG traversal
             cmd.drawMeshTasksIndirectEXT(
                 clusterBuffer->getIndirectDrawCommandBuffer(),
                 0,  // offset
@@ -901,10 +937,12 @@ namespace render::gpudriven
                 12  // stride (sizeof MeshTasksIndirectCommand)
             );
         }
-        else
+
+        // Path 2: Fallback direct meshlet rendering for objects WITHOUT cluster data
+        // This renders all objects - the gpu_cull_lod shader generates commands for all objects
+        // Objects with DAG data will have been rendered above, but rendering them again
+        // with the fallback path is harmless (they have valid meshlet data too)
         {
-            // Fallback: direct meshlet rendering (no cluster DAG data available)
-            // The gpu_cull_lod shader wrote draw commands to section 0
             vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(0, 0);
             vk::DeviceSize countOffset = batchManager->getDrawCountOffset(0, 0);
 

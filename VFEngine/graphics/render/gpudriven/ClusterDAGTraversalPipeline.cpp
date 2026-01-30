@@ -1,5 +1,6 @@
 #include "ClusterDAGTraversalPipeline.hpp"
 #include "ClusterBuffer.hpp"
+#include "ClusterBufferTypes.hpp"
 #include "GPUDrivenTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
@@ -838,8 +839,21 @@ namespace render::gpudriven
             uint32_t traverseGroupCount = (MAX_WORK_QUEUE_ENTRIES + DAG_WORKGROUP_SIZE - 1) / DAG_WORKGROUP_SIZE;
             cmd.dispatch(traverseGroupCount, 1, 1);
 
-            // Update pass index in traversal state (using vkCmdUpdateBuffer)
-            // The shader reads passIndex to determine which queue to read/write (ping-pong)
+            // Barrier: compute shader writes must complete before transfer reads/writes
+            vk::MemoryBarrier computeToTransferBarrier{
+                vk::AccessFlagBits::eShaderWrite,
+                vk::AccessFlagBits::eTransferWrite
+            };
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eComputeShader,
+                vk::PipelineStageFlagBits::eTransfer,
+                vk::DependencyFlags{},
+                1, &computeToTransferBarrier,
+                0, nullptr,
+                0, nullptr
+            );
+
+            // Update pass index for next pass
             uint32_t nextPassIndex = pass + 1;
             cmd.updateBuffer(
                 clusterBuffer.getTraversalStateBuffer(),
@@ -848,17 +862,42 @@ namespace render::gpudriven
                 &nextPassIndex
             );
 
-            // Swap input/output queue counts for next pass
-            // Reset outputQueueCount to 0, copy outputQueueCount to inputQueueCount
-            // This is tricky without GPU readback - for now we just do barrier
-            // The shader handles the swap internally based on passIndex % 2
+            // Reset the alternate queue counter for ping-pong
+            // Next pass will read from current output and write to current input
+            // Pass 0 (even): wrote to outputQueueCount, next pass reads outputQueueCount, writes to inputQueueCount
+            // Pass 1 (odd): wrote to inputQueueCount, next pass reads inputQueueCount, writes to outputQueueCount
+            uint32_t zeroCount = 0;
+            if ((nextPassIndex % 2) == 0)
+            {
+                // Next pass is even - reset outputQueueCount (where it will write)
+                cmd.updateBuffer(
+                    clusterBuffer.getTraversalStateBuffer(),
+                    offsetof(GPUDAGTraversalState, outputQueueCount),
+                    sizeof(uint32_t),
+                    &zeroCount
+                );
+            }
+            else
+            {
+                // Next pass is odd - reset inputQueueCount (where it will write)
+                cmd.updateBuffer(
+                    clusterBuffer.getTraversalStateBuffer(),
+                    offsetof(GPUDAGTraversalState, inputQueueCount),
+                    sizeof(uint32_t),
+                    &zeroCount
+                );
+            }
 
-            // Barrier between passes
+            // Barrier: transfer writes must complete before next compute shader reads
+            vk::MemoryBarrier transferToComputeBarrier{
+                vk::AccessFlagBits::eTransferWrite,
+                vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
+            };
             cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eTransfer,
                 vk::PipelineStageFlagBits::eComputeShader,
-                vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer,
                 vk::DependencyFlags{},
-                1, &memBarrier,
+                1, &transferToComputeBarrier,
                 0, nullptr,
                 0, nullptr
             );

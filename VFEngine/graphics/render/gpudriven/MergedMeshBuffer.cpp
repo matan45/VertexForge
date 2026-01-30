@@ -439,6 +439,17 @@ namespace render::gpudriven
         }
     }
 
+    void MergedMeshBuffer::markClusterDAGReady(const std::string& meshPath,
+                                               const std::string& submeshName,
+                                               uint32_t submeshIndex)
+    {
+        SubmeshLocation* loc = getSubmeshLocationMutable(meshPath, submeshName, submeshIndex);
+        if (loc)
+        {
+            loc->hasClusterDAGUploaded = true;
+        }
+    }
+
     SubmeshLocation* MergedMeshBuffer::getSubmeshLocationMutable(const std::string& meshPath,
                                                                  const std::string& submeshName,
                                                                  uint32_t submeshIndex)
@@ -466,6 +477,7 @@ namespace render::gpudriven
                                               const TextureIndexResolver& textureResolver,
                                               const ShaderGroupResolver& shaderGroupResolver,
                                               const BoneOffsetResolver& boneOffsetResolver,
+                                              const ClusterDAGResolver& clusterResolver,
                                               float time)
     {
         obj.modelMatrix = meshRender.modelMatrix;
@@ -611,13 +623,34 @@ namespace render::gpudriven
         }
 
         // VK-300: Enable DAG cluster rendering for all objects
-        // DAGFullyLoaded is set if we have meshlet data (temporary - will be based on ClusterBuffer state)
         obj.flags |= ObjectFlags::UseClusterDAG;
-        if (submeshLoc.hasMeshletData())
+
+        // Try to get cluster DAG info from ClusterBuffer first
+        bool hasClusterData = false;
+        if (clusterResolver)
         {
-            obj.flags |= ObjectFlags::DAGFullyLoaded;
+            ClusterDAGResolverResult clusterInfo = clusterResolver(
+                submeshLoc.meshPath, submeshLoc.submeshName, submeshLoc.submeshIndex);
+
+            if (clusterInfo.hasClusterData)
+            {
+                obj.flags |= ObjectFlags::DAGFullyLoaded;
+                obj.setDagClusterInfo(
+                    clusterInfo.dagHeaderIndex,
+                    clusterInfo.clusterOffset,
+                    clusterInfo.clusterCount,
+                    0  // rootClusterIndex - first cluster is root
+                );
+                hasClusterData = true;
+            }
+        }
+
+        // Fallback to meshlet info if no cluster data available
+        // NOTE: Do NOT set DAGFullyLoaded flag here - these objects will use
+        // the fallback meshlet path, not DAG traversal
+        if (!hasClusterData && submeshLoc.hasMeshletData())
+        {
             // Find best available LOD with meshlet data
-            // LOD 3 loads first, so prefer lower indices but fallback to any available
             const MeshletLODInfo* bestMeshletInfo = nullptr;
             for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
             {
@@ -629,11 +662,12 @@ namespace render::gpudriven
             }
             if (bestMeshletInfo)
             {
+                // Store meshlet info in lod0Data for fallback rendering
                 obj.setDagClusterInfo(
-                    0,  // dagHeaderIndex - will be set by ClusterBuffer when data is loaded
+                    0,  // dagHeaderIndex - not used in fallback mode
                     bestMeshletInfo->meshletOffset,
                     bestMeshletInfo->meshletCount,
-                    0   // rootClusterIndex - first cluster is root
+                    0   // rootClusterIndex - not used in fallback mode
                 );
             }
         }
@@ -650,6 +684,7 @@ namespace render::gpudriven
                                          const TextureIndexResolver& textureResolver,
                                          const ShaderGroupResolver& shaderGroupResolver,
                                          const BoneOffsetResolver& boneOffsetResolver,
+                                         const ClusterDAGResolver& clusterResolver,
                                          float time)
     {
         currentObjectCount = 0;
@@ -688,7 +723,7 @@ namespace render::gpudriven
                 }
 
                 GPUObjectData& obj = cpuObjectData[currentObjectCount];
-                populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
+                populateObjectData(obj, meshRender, submeshLoc, textureResolver, shaderGroupResolver, boneOffsetResolver, clusterResolver, time);
                 obj.entityId = currentObjectCount;
 
                 currentObjectCount++;

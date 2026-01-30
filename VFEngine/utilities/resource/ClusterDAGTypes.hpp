@@ -291,6 +291,12 @@ namespace resource
         std::vector<Cluster> clusters;
         std::vector<ClusterStreamingUnit> streamingUnits;  // VK-295
 
+        // VK-300: Meshlet reorder map - ensures all clusters have contiguous meshlet indices
+        // meshletReorderMap[newIndex] = oldIndex
+        // Use this when writing meshlets to file: write meshlets[reorderMap[i]] at position i
+        // If empty, no reordering needed (all clusters already have contiguous indices)
+        std::vector<uint32_t> meshletReorderMap;
+
         // Helper: Get cluster at index (bounds-checked)
         [[nodiscard]] const Cluster* getCluster(uint32_t index) const
         {
@@ -433,6 +439,7 @@ namespace resource
             header = ClusterDAGHeader{};
             clusters.clear();
             streamingUnits.clear();
+            meshletReorderMap.clear();
         }
     };
 

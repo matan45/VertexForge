@@ -203,10 +203,19 @@ void main() {
     perDrawData[globalDrawIndex].padding3 = 0u;
 
     // Generate draw command for fallback mode (when cluster data not available)
-    // This allows direct meshlet rendering without DAG traversal
-    // Dispatch enough workgroups to cover all meshlets (32 meshlets per workgroup)
+    // Objects WITH DAGFullyLoaded flag will be rendered via DAG traversal path,
+    // so we skip generating fallback commands for them (set groupCountX = 0)
+    // Objects WITHOUT DAGFullyLoaded flag use direct meshlet rendering
     MeshTasksCommand cmd;
-    cmd.groupCountX = (meshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
+    bool hasDAGData = (obj.flags & FLAG_DAG_FULLY_LOADED) != 0u;
+    if (hasDAGData) {
+        // Skip fallback rendering - this object will be rendered via DAG path
+        cmd.groupCountX = 0u;
+    } else {
+        // Fallback: direct meshlet rendering
+        // lod0Data.y/z contain meshlet offset/count for non-DAG objects
+        cmd.groupCountX = (meshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
+    }
     cmd.groupCountY = 1u;
     cmd.groupCountZ = 1u;
     drawCommands[globalDrawIndex] = cmd;

@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <functional>
+#include <unordered_map>
 #include <unordered_set>
 #include <numeric>
 
@@ -434,13 +436,25 @@ namespace types
                 }
                 else
                 {
-                    // Single cluster promotes to next level
-                    BuildCluster promoted = allClusters[leftIdx];
-                    promoted.level = maxLevel + 1;
-                    // Clear child indices since this is a promoted cluster
-                    promoted.leftChildIndex = resource::INVALID_CLUSTER_INDEX;
-                    promoted.rightChildIndex = resource::INVALID_CLUSTER_INDEX;
-                    nextLevel.push_back(std::move(promoted));
+                    // Single cluster - create a parent that wraps it
+                    // This ensures the original cluster has a parent and remains reachable
+                    BuildCluster wrapper;
+                    wrapper.level = maxLevel + 1;
+                    wrapper.boundingSphere = allClusters[leftIdx].boundingSphere;
+                    wrapper.cone = allClusters[leftIdx].cone;
+                    wrapper.geometricError = allClusters[leftIdx].geometricError * 1.5f;
+                    wrapper.vertices = allClusters[leftIdx].vertices;
+                    wrapper.indices = allClusters[leftIdx].indices;
+                    wrapper.meshletIndices = allClusters[leftIdx].meshletIndices;
+                    wrapper.leftChildIndex = leftIdx;
+                    wrapper.rightChildIndex = resource::INVALID_CLUSTER_INDEX;
+                    wrapper.flags = resource::ClusterFlags::HasLeftChild;
+
+                    // Set parent reference on the original cluster
+                    uint32_t wrapperIdx = static_cast<uint32_t>(allClusters.size() + nextLevel.size());
+                    allClusters[leftIdx].parentIndex = wrapperIdx;
+
+                    nextLevel.push_back(std::move(wrapper));
                 }
             }
 
@@ -758,6 +772,134 @@ namespace types
             }
         }
 
+        // =========================================================================
+        // VK-300: Reorder meshlets so all clusters have contiguous indices
+        // =========================================================================
+        // The problem: Morton code spatial sorting pairs clusters that are spatially
+        // close but may have non-adjacent meshlet indices. When parents merge children's
+        // meshlets, they get non-contiguous indices.
+        //
+        // The solution: DFS traverse from root, visiting left then right children.
+        // Assign new consecutive meshlet indices as we visit leaf clusters.
+        // This ensures siblings have adjacent meshlet ranges, making parents contiguous.
+
+        // Step 1: Count expected leaf clusters
+        uint32_t expectedLeafCount = 0;
+        uint32_t totalMeshletRefs = 0;
+        for (const auto& cluster : clusters)
+        {
+            if (cluster.flags & resource::ClusterFlags::IsLeaf)
+            {
+                ++expectedLeafCount;
+                totalMeshletRefs += static_cast<uint32_t>(cluster.meshletIndices.size());
+            }
+        }
+
+        // Step 2: DFS to collect leaf clusters in traversal order
+        std::vector<uint32_t> leafOrder;
+        leafOrder.reserve(clusters.size());
+
+        std::function<void(uint32_t)> collectLeaves = [&](uint32_t clusterIdx) {
+            if (clusterIdx >= clusters.size())
+            {
+                vfLogWarning("    DFS: Invalid cluster index {} (size={})", clusterIdx, clusters.size());
+                return;
+            }
+
+            const auto& cluster = clusters[clusterIdx];
+            if (cluster.flags & resource::ClusterFlags::IsLeaf)
+            {
+                leafOrder.push_back(clusterIdx);
+                return;
+            }
+
+            // Visit left child
+            if (cluster.leftChildIndex != resource::INVALID_CLUSTER_INDEX)
+            {
+                collectLeaves(cluster.leftChildIndex);
+            }
+
+            // Visit right child
+            if (cluster.rightChildIndex != resource::INVALID_CLUSTER_INDEX)
+            {
+                collectLeaves(cluster.rightChildIndex);
+            }
+        };
+        collectLeaves(0);  // Start from root (index 0)
+
+        // Validate we collected all leaves
+        if (leafOrder.size() != expectedLeafCount)
+        {
+            vfLogError("    Meshlet reorder: DFS collected {} leaves but expected {} - DAG may be disconnected!",
+                       leafOrder.size(), expectedLeafCount);
+        }
+
+        // Step 3: Build old->new meshlet index mapping
+        // Visit leaf clusters in DFS order, assign consecutive indices to their meshlets
+        std::unordered_map<uint32_t, uint32_t> oldToNew;
+        uint32_t nextNewIndex = 0;
+
+        for (uint32_t leafIdx : leafOrder)
+        {
+            auto& cluster = clusters[leafIdx];
+            for (uint32_t oldMeshletIdx : cluster.meshletIndices)
+            {
+                if (oldToNew.find(oldMeshletIdx) == oldToNew.end())
+                {
+                    oldToNew[oldMeshletIdx] = nextNewIndex++;
+                }
+            }
+        }
+
+        vfLogInfo("    Meshlet reorder: {} unique meshlets from {} leaves (expected {} refs)",
+                  oldToNew.size(), leafOrder.size(), totalMeshletRefs);
+
+        // Step 4: Build reorderMap for file writing
+        // reorderMap[newIndex] = oldIndex
+        // When writing meshlets to file: write meshlets[reorderMap[i]] at position i
+        if (nextNewIndex > 0)
+        {
+            result.meshletReorderMap.resize(nextNewIndex);
+            for (const auto& [oldIdx, newIdx] : oldToNew)
+            {
+                result.meshletReorderMap[newIdx] = oldIdx;
+            }
+        }
+
+        // Step 5: Update all cluster meshletIndices with new indices
+        uint32_t unmappedCount = 0;
+        for (auto& cluster : clusters)
+        {
+            for (auto& meshletIdx : cluster.meshletIndices)
+            {
+                auto it = oldToNew.find(meshletIdx);
+                if (it != oldToNew.end())
+                {
+                    meshletIdx = it->second;
+                }
+                else
+                {
+                    ++unmappedCount;
+                }
+            }
+            // Re-sort meshletIndices to ensure ascending order (important for offset calculation)
+            std::sort(cluster.meshletIndices.begin(), cluster.meshletIndices.end());
+        }
+
+        // Report any unmapped meshlets (indicates DFS didn't reach all leaves)
+        if (unmappedCount > 0)
+        {
+            vfLogError("    Meshlet reorder: {} meshlet references were NOT remapped - rendering artifacts expected!",
+                       unmappedCount);
+        }
+
+        vfLogInfo("    Meshlet reorder: {} meshlets remapped for contiguous cluster access",
+                  nextNewIndex);
+
+        // =========================================================================
+        // Continue with normal finalization
+        // =========================================================================
+
         // Count leaves and find max depth
         uint32_t leafCount = 0;
         uint32_t maxDepth = 0;
@@ -781,17 +923,50 @@ namespace types
         // Convert BuildCluster to resource::Cluster
         result.clusters.reserve(clusters.size());
 
-        for (const auto& build : clusters)
+        // VK-300: Verify all clusters now have contiguous meshlet indices
+        uint32_t nonContiguousCount = 0;
+        uint32_t debugNonLeafCount = clusters.size() - leafCount;
+
+        for (size_t clusterIdx = 0; clusterIdx < clusters.size(); ++clusterIdx)
         {
+            const auto& build = clusters[clusterIdx];
             resource::Cluster cluster;
 
-            // Descriptor - stores meshlet info
+            // Descriptor - stores meshlet info (now using reordered indices)
             cluster.descriptor.meshletOffset = build.meshletIndices.empty() ? 0 :
                                                build.meshletIndices[0];
             cluster.descriptor.meshletCount = static_cast<uint16_t>(build.meshletIndices.size());
             cluster.descriptor.triangleCount = static_cast<uint16_t>(build.indices.size() / 3);
             cluster.descriptor.vertexOffset = 0;  // Will be set during rendering
             cluster.descriptor.vertexCount = static_cast<uint32_t>(build.vertices.size());
+
+            // VK-300: Verify contiguous after reordering
+            bool isLeaf = (build.flags & resource::ClusterFlags::IsLeaf) != 0;
+
+            if (build.meshletIndices.size() > 1)
+            {
+                bool contiguous = true;
+                for (size_t i = 1; i < build.meshletIndices.size(); ++i)
+                {
+                    if (build.meshletIndices[i] != build.meshletIndices[i - 1] + 1)
+                    {
+                        contiguous = false;
+                        break;
+                    }
+                }
+                if (!contiguous)
+                {
+                    ++nonContiguousCount;
+                    if (nonContiguousCount <= 3)  // Limit log spam
+                    {
+                        vfLogWarning("    Cluster {} (level={}, {}) STILL has NON-CONTIGUOUS meshlets after reorder: "
+                                     "offset={}, count={}, indices=[{}...{}]",
+                                     clusterIdx, build.level, isLeaf ? "LEAF" : "NON-LEAF",
+                                     build.meshletIndices[0], build.meshletIndices.size(),
+                                     build.meshletIndices.front(), build.meshletIndices.back());
+                    }
+                }
+            }
 
             // Bounds
             cluster.bounds.boundingSphere = build.boundingSphere;
@@ -805,6 +980,19 @@ namespace types
             cluster.hierarchy.flags = build.flags;
 
             result.clusters.push_back(cluster);
+        }
+
+        // VK-300: Summary
+        if (nonContiguousCount > 0)
+        {
+            vfLogWarning("    After reorder: {} clusters still have NON-CONTIGUOUS meshlets "
+                         "(leafs={}, non-leafs={}, total={})",
+                         nonContiguousCount, leafCount, debugNonLeafCount, clusters.size());
+        }
+        else
+        {
+            vfLogInfo("    All {} clusters have contiguous meshlet indices (leafs={}, non-leafs={})",
+                      clusters.size(), leafCount, debugNonLeafCount);
         }
 
         // VK-295: Generate streaming units for efficient I/O

@@ -25,6 +25,7 @@ namespace render::gpudriven
 {
     class ClusterBuffer;
     class MeshletBuffer;
+    class MergedMeshBuffer;
     enum class ClusterStreamState : uint8_t;
 }
 
@@ -190,6 +191,7 @@ namespace render::mesh
         core::Device& device;
         gpudriven::ClusterBuffer& clusterBuffer;
         gpudriven::MeshletBuffer* meshletBuffer = nullptr;
+        gpudriven::MergedMeshBuffer* mergedMeshBuffer = nullptr;  // VK-300: For marking cluster availability
 
         // Per-mesh file handles and states
         std::unordered_map<std::string, ClusterMeshState> meshStates;
@@ -290,6 +292,7 @@ namespace render::mesh
         // =========================================================================
 
         void setMeshletBuffer(gpudriven::MeshletBuffer* buffer) { meshletBuffer = buffer; }
+        void setMergedMeshBuffer(gpudriven::MergedMeshBuffer* buffer) { mergedMeshBuffer = buffer; }
         void setMaxGPUMemoryBudget(size_t bytes) { maxGPUMemoryBudget = bytes; }
         void setMaxBytesPerFrame(size_t bytes) { maxBytesPerFrame = bytes; }
         void setMaxPendingReads(uint32_t count) { maxPendingReads = count; }

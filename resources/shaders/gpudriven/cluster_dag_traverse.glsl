@@ -175,8 +175,14 @@ void unpackWorkItem(uint packed, out uint objectIndex, out uint localClusterInde
 void main() {
     uint workIdx = gl_GlobalInvocationID.x;
 
+    // Determine which queue count to use based on pass index (ping-pong)
+    // Even passes: read inputQueueCount, odd passes: read outputQueueCount
+    uint queueCount = ((state.passIndex % 2u) == 0u)
+        ? state.inputQueueCount
+        : state.outputQueueCount;
+
     // Early exit if beyond queue size
-    if (workIdx >= state.inputQueueCount) {
+    if (workIdx >= queueCount) {
         return;
     }
 
@@ -262,11 +268,14 @@ void main() {
     // =========================================================================
     // Selection Decision
     // =========================================================================
-    bool shouldSelect = isLeaf || shouldSelectCluster(
-        screenError,
-        params.screenErrorThreshold,
-        params.errorMultiplier
-    );
+    // VK-300: Only select LEAF clusters for now.
+    // Parent clusters contain the SAME meshlets as their children (union of all
+    // descendant leaves' meshlets), so selecting parents provides no LOD benefit.
+    // True hierarchical LOD requires generating simplified meshlets for parents.
+    //
+    // The meshlet reordering ensures all clusters CAN be selected without artifacts
+    // (contiguous indices), enabling future LOD work.
+    bool shouldSelect = isLeaf;
 
     if (shouldSelect) {
         // SELECT this cluster - add to selection buffer
@@ -286,17 +295,24 @@ void main() {
         atomicAdd(state.totalSelected, 1u);
     } else {
         // TRAVERSE to children - enqueue to output queue for next pass
+        // Ping-pong: even passes write to outputQueueCount, odd passes write to inputQueueCount
+        bool evenPass = ((state.passIndex % 2u) == 0u);
 
         // Enqueue left child if present
         if (children.leftChild != INVALID_CLUSTER_INDEX) {
-            uint queueIdx = atomicAdd(state.outputQueueCount, 1u);
+            uint queueIdx;
+            if (evenPass) {
+                queueIdx = atomicAdd(state.outputQueueCount, 1u);
+            } else {
+                queueIdx = atomicAdd(state.inputQueueCount, 1u);
+            }
 
             // Bounds check to prevent buffer overflow
             if (queueIdx < params.maxWorkQueueEntries) {
                 uint outPacked = packWorkItem(objectIndex, children.leftChild);
 
                 // Write to opposite queue (ping-pong)
-                if ((state.passIndex % 2u) == 0u) {
+                if (evenPass) {
                     workQueueB[queueIdx] = outPacked;
                 } else {
                     workQueueA[queueIdx] = outPacked;
@@ -306,13 +322,18 @@ void main() {
 
         // Enqueue right child if present
         if (children.rightChild != INVALID_CLUSTER_INDEX) {
-            uint queueIdx = atomicAdd(state.outputQueueCount, 1u);
+            uint queueIdx;
+            if (evenPass) {
+                queueIdx = atomicAdd(state.outputQueueCount, 1u);
+            } else {
+                queueIdx = atomicAdd(state.inputQueueCount, 1u);
+            }
 
             // Bounds check to prevent buffer overflow
             if (queueIdx < params.maxWorkQueueEntries) {
                 uint outPacked = packWorkItem(objectIndex, children.rightChild);
 
-                if ((state.passIndex % 2u) == 0u) {
+                if (evenPass) {
                     workQueueB[queueIdx] = outPacked;
                 } else {
                     workQueueA[queueIdx] = outPacked;
