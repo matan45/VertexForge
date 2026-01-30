@@ -1005,11 +1005,23 @@ void main() {
         color = levelColor;
     }
 
-    // Mode 8: Screen Error - LOD selection quality heatmap (green=good, red=high error)
+    // Mode 8: Screen Error - LOD selection quality heatmap
+    // Uses log scale for better visualization of low error values
     if (viewModeValue == 8u) {  // Screen Error (was 9)
-        // Normalize screen error to 0-10 pixel range for visualization
-        float t = clamp(fragScreenError / 10.0, 0.0, 1.0);
-        vec3 errorColor = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), t);
+        // Log scale: shows variation from 0.01 to 10 pixels
+        // log10(0.01) = -2, log10(10) = 1, range of 3
+        float logError = log(max(fragScreenError, 0.001) + 1.0);  // +1 to handle 0
+        float t = clamp(logError / 2.5, 0.0, 1.0);  // Normalize to 0-1
+
+        // Color gradient: blue (low) -> green (medium) -> yellow -> red (high)
+        vec3 errorColor;
+        if (t < 0.33) {
+            errorColor = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 0.0), t * 3.0);
+        } else if (t < 0.66) {
+            errorColor = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0), (t - 0.33) * 3.0);
+        } else {
+            errorColor = mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (t - 0.66) * 3.0);
+        }
         color = errorColor;
     }
 

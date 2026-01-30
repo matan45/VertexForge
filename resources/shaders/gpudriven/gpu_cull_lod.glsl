@@ -149,8 +149,35 @@ void main() {
 
     GPUObjectData obj = objects[objectIndex];
 
-    // All objects use DAG cluster rendering (VK-300)
-    // Fill PerDrawData for material/transform info, store mapping for cluster traversal
+    // =========================================================================
+    // Object-Level Culling (VK-300: restored)
+    // =========================================================================
+    vec4 worldSphere = transformBoundingSphere(obj.boundingSphere, obj.modelMatrix);
+
+    // Frustum culling (unless disabled per-object)
+    bool noCull = (obj.flags & LOCAL_FLAG_NO_CULL) != 0u;
+    if (!noCull) {
+        if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
+            atomicAdd(batchStats[0].culledByFrustum, 1u);
+            objectDrawIndexMap[objectIndex] = 0xFFFFFFFFu;  // Invalid - culled
+            return;
+        }
+    }
+
+    // Hi-Z occlusion culling (unless disabled per-object)
+    bool noOcclude = (obj.flags & LOCAL_FLAG_NO_OCCLUDE) != 0u;
+    if (!noOcclude && camera.hiZMipLevels > 0u) {
+        if (!hiZOcclusionTest(worldSphere, camera.viewProjection,
+                              camera.screenParams.xy, camera.hiZMipLevels)) {
+            atomicAdd(batchStats[0].culledByOcclusion, 1u);
+            objectDrawIndexMap[objectIndex] = 0xFFFFFFFFu;  // Invalid - occluded
+            return;
+        }
+    }
+
+    // =========================================================================
+    // Object passed culling - fill PerDrawData
+    // =========================================================================
 
     uint dagSection = 0;
     uint commandsPerSection = getCommandsPerSection();

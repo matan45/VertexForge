@@ -268,14 +268,25 @@ void main() {
     // =========================================================================
     // Selection Decision
     // =========================================================================
-    // VK-300: Only select LEAF clusters for now.
-    // Parent clusters contain the SAME meshlets as their children (union of all
-    // descendant leaves' meshlets), so selecting parents provides no LOD benefit.
-    // True hierarchical LOD requires generating simplified meshlets for parents.
+    // VK-300: With meshlet reordering, all clusters now have contiguous indices.
+    // Enable hierarchical selection for debug visualization.
     //
-    // The meshlet reordering ensures all clusters CAN be selected without artifacts
-    // (contiguous indices), enabling future LOD work.
-    bool shouldSelect = isLeaf;
+    // IMPORTANT: Parent clusters can have MORE meshlets than MAX_MESHLETS_PER_PAYLOAD (32).
+    // We can only select a cluster if its meshlets fit in the payload, otherwise
+    // we must traverse to children to get smaller clusters.
+    //
+    // Note: Parent clusters contain the SAME meshlets as children (no simplified
+    // geometry). True LOD benefit requires generating simplified meshlets (future work).
+    uint meshletCount;
+    uint triangleCount;
+    unpackClusterCounts(cluster.meshletTrianglePacked, meshletCount, triangleCount);
+
+    // Only select if meshlets fit in task shader payload (32 max)
+    const uint MAX_MESHLETS_PER_PAYLOAD = 32u;
+    bool fitsInPayload = meshletCount <= MAX_MESHLETS_PER_PAYLOAD;
+
+    bool errorBelowThreshold = screenError < params.screenErrorThreshold;
+    bool shouldSelect = isLeaf || (errorBelowThreshold && fitsInPayload);
 
     if (shouldSelect) {
         // SELECT this cluster - add to selection buffer
