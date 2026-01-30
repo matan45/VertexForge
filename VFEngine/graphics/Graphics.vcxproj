@@ -177,6 +177,7 @@
     <ClInclude Include="render\material\MaterialPBRExtractor.hpp" />
     <ClInclude Include="render\material\MaterialShaderCache.hpp" />
     <ClInclude Include="render\material\MaterialTextureCache.hpp" />
+    <ClInclude Include="render\mesh\ClusterStreamManager.hpp" />
     <ClInclude Include="render\mesh\MaterialCacheManager.hpp" />
     <ClInclude Include="render\mesh\MeshGPUCache.hpp" />
     <ClInclude Include="render\mesh\MeshStreamManager.hpp" />
@@ -288,6 +289,7 @@
     <ClCompile Include="render\material\MaterialPBRExtractor.cpp" />
     <ClCompile Include="render\material\MaterialShaderCache.cpp" />
     <ClCompile Include="render\material\MaterialTextureCache.cpp" />
+    <ClCompile Include="render\mesh\ClusterStreamManager.cpp" />
     <ClCompile Include="render\mesh\MaterialCacheManager.cpp" />
     <ClCompile Include="render\mesh\MeshGPUCache.cpp" />
     <ClCompile Include="render\mesh\MeshStreamManager.cpp" />

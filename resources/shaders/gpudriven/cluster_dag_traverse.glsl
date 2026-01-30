@@ -63,6 +63,11 @@ layout(std430, set = 0, binding = 13) writeonly buffer SelectionBuffer {
     GPUClusterSelection selections[];
 };
 
+// Object to draw index mapping - filled by gpu_cull_lod.glsl (VK-293)
+layout(std430, set = 0, binding = 14) readonly buffer ObjectDrawIndexMap {
+    uint objectDrawIndexMap[];
+};
+
 // =========================================================================
 // Helper Functions
 // =========================================================================
@@ -271,7 +276,11 @@ void main() {
             selections[slot].clusterIndex = globalClusterIdx;
             selections[slot].isSelected = 1u;
             selections[slot].screenError = screenError;
-            selections[slot].padding = objectIndex; // Store object index for rendering
+            // VK-298: Pack drawIndex (lower 24 bits) and streaming state (upper 8 bits)
+            // Streaming state: 0=not loaded, 1=loading, 2=loaded
+            uint drawIdx = objectDrawIndexMap[objectIndex];
+            uint streamState = dagHeader.reserved.x;  // From GPUClusterDAGHeader
+            selections[slot].padding = (drawIdx & 0xFFFFFFu) | (streamState << 24);
         }
 
         atomicAdd(state.totalSelected, 1u);

@@ -17,6 +17,11 @@ layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragDrawIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
+// VK-298: Debug visualization outputs
+layout(location = 5) flat out uint fragClusterIndex[];
+layout(location = 6) flat out uint fragClusterLevel[];
+layout(location = 7) flat out float fragScreenError[];
+layout(location = 8) flat out uint fragStreamingState[];
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -52,6 +57,12 @@ struct MeshletPayload {
     uint drawIndex;
     uint meshletIndices[MAX_MESHLETS_PER_PAYLOAD];
     uint meshletCount;
+
+    // VK-298: Debug visualization fields (set per-cluster in DAG mode)
+    uint debugClusterIndex;
+    uint debugClusterLevel;
+    float debugScreenError;
+    uint debugStreamingState;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -166,6 +177,11 @@ void main() {
             fragTexCoord[localVertexIndex] = sharedTexCoords[localVertexIndex];
             fragDrawIndex[localVertexIndex] = drawIndex;
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
+            // VK-298: Debug visualization outputs
+            fragClusterIndex[localVertexIndex] = payload.debugClusterIndex;
+            fragClusterLevel[localVertexIndex] = payload.debugClusterLevel;
+            fragScreenError[localVertexIndex] = payload.debugScreenError;
+            fragStreamingState[localVertexIndex] = payload.debugStreamingState;
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * worldPos;
         }
     }
@@ -194,6 +210,11 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) in flat uint fragDrawIndex;
 layout(location = 4) in flat uint fragMeshletIndex;
+// VK-298: Debug visualization inputs
+layout(location = 5) in flat uint fragClusterIndex;
+layout(location = 6) in flat uint fragClusterLevel;
+layout(location = 7) in flat float fragScreenError;
+layout(location = 8) in flat uint fragStreamingState;
 
 layout(location = 0) out vec4 outColor;
 
@@ -947,6 +968,68 @@ void main() {
 
         vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
         color = shadowColor;
+    }
+
+    // VK-298: DAG Debug Visualization Modes (7-10)
+
+    // Mode 7: DAG Cluster Color - unique color per cluster using hash
+    if (viewModeValue == 7u) {
+        uint h = fragClusterIndex;
+        h = h * 747796405u + 2891336453u;
+        h = ((h >> 16) ^ h) * 0x45d9f3bu;
+        h = ((h >> 16) ^ h) * 0x45d9f3bu;
+        h = (h >> 16) ^ h;
+
+        vec3 clusterColor = vec3(
+            float((h >> 0) & 0xFFu) / 255.0,
+            float((h >> 8) & 0xFFu) / 255.0,
+            float((h >> 16) & 0xFFu) / 255.0
+        );
+        clusterColor = normalize(clusterColor + 0.1) * 0.8;
+        color = clusterColor;
+    }
+
+    // Mode 8: DAG Level - hierarchy depth visualization (blue=fine, red=coarse)
+    if (viewModeValue == 8u) {
+        const uint MAX_DAG_LEVEL = 8u;
+        float t = float(fragClusterLevel) / float(MAX_DAG_LEVEL);
+        t = clamp(t, 0.0, 1.0);
+
+        // Cool to warm gradient: blue -> cyan -> green -> yellow -> red
+        vec3 levelColor;
+        if (t < 0.25) {
+            levelColor = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), t * 4.0);
+        } else if (t < 0.5) {
+            levelColor = mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), (t - 0.25) * 4.0);
+        } else if (t < 0.75) {
+            levelColor = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0), (t - 0.5) * 4.0);
+        } else {
+            levelColor = mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (t - 0.75) * 4.0);
+        }
+        color = levelColor;
+    }
+
+    // Mode 9: Screen Error - LOD selection quality heatmap (green=good, red=high error)
+    if (viewModeValue == 9u) {
+        // Normalize screen error to 0-10 pixel range for visualization
+        float t = clamp(fragScreenError / 10.0, 0.0, 1.0);
+        vec3 errorColor = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), t);
+        color = errorColor;
+    }
+
+    // Mode 10: Streaming State - loading status visualization
+    if (viewModeValue == 10u) {
+        vec3 streamingColor;
+        if (fragStreamingState == 0u) {
+            streamingColor = vec3(1.0, 0.0, 0.0);  // NOT_LOADED: red
+        } else if (fragStreamingState == 1u) {
+            streamingColor = vec3(1.0, 1.0, 0.0);  // LOADING: yellow
+        } else if (fragStreamingState == 2u) {
+            streamingColor = vec3(0.0, 1.0, 0.0);  // LOADED: green
+        } else {
+            streamingColor = vec3(0.5, 0.5, 0.5); // UNKNOWN: gray
+        }
+        color = streamingColor;
     }
 
     outColor = vec4(color, alpha);

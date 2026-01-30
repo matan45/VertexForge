@@ -1,6 +1,7 @@
 #include "MeshShaderPipeline.hpp"
 #include "MeshletBuffer.hpp"
 #include "MergedMeshBuffer.hpp"
+#include "ClusterBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -230,6 +231,34 @@ namespace render::gpudriven
         device.getLogicalDevice().updateDescriptorSets(vertexWrite, {});
     }
 
+    void MeshShaderPipeline::updateClusterDescriptors(ClusterBuffer& clusterBuffer)
+    {
+        std::array<vk::DescriptorBufferInfo, 2> bufferInfos{};
+
+        // Binding 4: ClusterBuffer
+        bufferInfos[0].buffer = clusterBuffer.getClusterBuffer();
+        bufferInfos[0].offset = 0;
+        bufferInfos[0].range = VK_WHOLE_SIZE;
+
+        // Binding 5: ClusterSelectionBuffer
+        bufferInfos[1].buffer = clusterBuffer.getClusterSelectionBuffer();
+        bufferInfos[1].offset = 0;
+        bufferInfos[1].range = VK_WHOLE_SIZE;
+
+        std::array<vk::WriteDescriptorSet, 2> writes{};
+        for (uint32_t i = 0; i < 2; i++)
+        {
+            writes[i].dstSet = meshletDataDescriptorSet;
+            writes[i].dstBinding = 4 + i;  // Bindings 4 and 5
+            writes[i].dstArrayElement = 0;
+            writes[i].descriptorCount = 1;
+            writes[i].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[i].pBufferInfo = &bufferInfos[i];
+        }
+
+        device.getLogicalDevice().updateDescriptorSets(writes, {});
+    }
+
     void MeshShaderPipeline::updateLightingDescriptors(vk::DescriptorSet lightDataDescSet,
                                                        vk::DescriptorSet clusterGridDescSet,
                                                        vk::DescriptorSet cullingOutputDescSet)
@@ -296,27 +325,43 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
 
+        // Binding 0: MeshletBuffer (task + mesh shader)
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
 
+        // Binding 1: MeshletVertexBuffer (mesh shader)
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
 
+        // Binding 2: MeshletPrimitiveBuffer (mesh shader)
         bindings[2].binding = 2;
         bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
 
+        // Binding 3: CullingStatsBuffer (task shader)
         bindings[3].binding = 3;
         bindings[3].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+
+        // Binding 4: ClusterBuffer (task shader) - VK-293
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+
+        // Binding 5: ClusterSelectionBuffer (task shader) - VK-293
+        bindings[5].binding = 5;
+        bindings[5].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[5].descriptorCount = 1;
+        bindings[5].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -326,7 +371,7 @@ namespace render::gpudriven
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 4;
+        poolSize.descriptorCount = 6;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;

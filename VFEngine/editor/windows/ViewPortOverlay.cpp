@@ -95,7 +95,7 @@ namespace windows
         ImGui::End();
 
         ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
-        float dropdownWidth = 95.0f;
+        float dropdownWidth = 110.0f;  // VK-298: Widened for longer DAG mode labels
         ImVec2 dropdownPos = ImVec2(
             windowPos.x + contentMax.x - dropdownWidth - 8.0f,
             windowPos.y + contentMin.y + 8.0f
@@ -108,9 +108,13 @@ namespace windows
         {
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster", "Depth", "Shadow"};
+            // VK-298: Added DAG debug visualization modes (7-10)
+            const char* viewModeLabels[] = {
+                "Color", "Meshlet", "LOD", "Mipmap", "Cluster", "Depth", "Shadow",
+                "DAG Cluster", "DAG Level", "Screen Error", "Streaming"
+            };
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 7))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 11))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);

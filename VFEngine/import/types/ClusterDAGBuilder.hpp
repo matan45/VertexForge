@@ -126,5 +126,16 @@ namespace types
         // Helper: Convert BuildClusters to final ClusterDAGData
         resource::ClusterDAGData finalizeClusters(
             std::vector<BuildCluster>& clusters) const;
+
+        // Phase 5 (VK-295): Generate streaming units for efficient I/O
+        // Groups clusters by level (parent-before-children order) with Morton sorting
+        std::vector<resource::ClusterStreamingUnit> generateStreamingUnits(
+            const std::vector<resource::Cluster>& clusters) const;
+
+        // Helper: Merge bounding spheres for streaming unit
+        glm::vec4 mergeStreamingUnitBounds(
+            const std::vector<resource::Cluster>& clusters,
+            uint32_t startIndex,
+            uint32_t count) const;
     };
 }

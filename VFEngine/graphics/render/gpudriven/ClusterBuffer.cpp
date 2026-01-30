@@ -496,6 +496,9 @@ namespace render::gpudriven
         gpuHeader.rootClusterIndex = 0; // Root is always at index 0 within DAG
         gpuHeader.streamingUnitCount = 0; // TODO: Populate when streaming units are implemented
         gpuHeader.boundingSphere = dagData.header.boundingSphere;
+        // VK-298: Set streaming state in reserved[0] for debug visualization
+        // 0=not loaded, 1=loading, 2=loaded
+        gpuHeader.reserved[0] = 2;  // Mark as loaded since we're uploading complete DAG
 
         uploadDAGHeaderAt(alloc.dagHeaderIndex, gpuHeader);
 
