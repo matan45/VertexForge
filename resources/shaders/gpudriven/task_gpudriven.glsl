@@ -112,14 +112,17 @@ bool coneCullTest(vec4 cone, mat4 modelMatrix, vec3 cameraPos, vec3 meshletCente
 void processDirectMeshlet() {
     // Each draw processes meshlets for one object
     // gl_DrawID identifies which draw command (0 to N-1) we're processing
-    // gl_WorkGroupID.x is the workgroup within that draw (always 0 since we dispatch 1 workgroup per draw)
+    // gl_WorkGroupID.x identifies which batch of meshlets within that draw (0 to ceil(meshletCount/32)-1)
     uint drawIndex = pc.baseDrawIndex + gl_DrawID;
 
     // Load draw data
     PerDrawData drawData = perDrawData[drawIndex];
 
-    // Skip if no meshlets
-    if (drawData.meshletCount == 0u) {
+    // Calculate which batch of meshlets this workgroup handles
+    uint workgroupMeshletOffset = gl_WorkGroupID.x * TASK_WORKGROUP_SIZE;
+
+    // Skip if this workgroup is beyond the meshlet count
+    if (workgroupMeshletOffset >= drawData.meshletCount) {
         if (gl_LocalInvocationID.x == 0) {
             payload.meshletCount = 0;
             EmitMeshTasksEXT(0, 1, 1);
@@ -127,18 +130,21 @@ void processDirectMeshlet() {
         return;
     }
 
+    // Calculate how many meshlets this workgroup should process
+    uint remainingMeshlets = drawData.meshletCount - workgroupMeshletOffset;
+    uint meshletCountThisWorkgroup = min(remainingMeshlets, TASK_WORKGROUP_SIZE);
+
     // Initialize shared memory
     if (gl_LocalInvocationID.x == 0) {
         sharedVisibleCount = 0;
     }
     barrier();
 
-    // Process meshlets within this draw call
-    uint meshletCount = min(drawData.meshletCount, TASK_WORKGROUP_SIZE);
+    // Process meshlets within this workgroup's batch
     uint localMeshletIdx = gl_LocalInvocationID.x;
 
-    if (localMeshletIdx < meshletCount) {
-        uint globalMeshletIdx = drawData.meshletOffset + localMeshletIdx;
+    if (localMeshletIdx < meshletCountThisWorkgroup) {
+        uint globalMeshletIdx = drawData.meshletOffset + workgroupMeshletOffset + localMeshletIdx;
         GPUMeshlet meshlet = meshlets[globalMeshletIdx];
 
         vec4 meshletWorldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
