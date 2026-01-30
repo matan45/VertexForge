@@ -77,6 +77,15 @@ namespace windows
                             meshConfig.maxVerticesPerHull = static_cast<uint32_t>(maxVerts);
                         }
                     }
+
+                    ImGui::Separator();
+                    ImGui::Checkbox("Generate Cluster DAG (Nanite-style)", &meshConfig.generateClusterDAG);
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Generates hierarchical cluster DAG for seamless LOD transitions.\n"
+                                          "Enables per-cluster LOD selection at runtime.");
+                    }
+
                     ImGui::Unindent();
                 }
 

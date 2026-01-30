@@ -34,10 +34,11 @@ struct FileExtension
 
 namespace importConfig
 {
-    // Mesh-specific import settings for V-HACD convex decomposition
+    // Mesh-specific import settings for V-HACD convex decomposition and cluster DAG
     struct MeshImportConfig
     {
         bool generateConvexDecomposition = false;
+        bool generateClusterDAG = false;  // Enable Nanite-style cluster DAG generation
         uint32_t maxConvexHulls = 16;
         uint32_t vhacdResolution = 100000;
         uint32_t maxVerticesPerHull = 32;

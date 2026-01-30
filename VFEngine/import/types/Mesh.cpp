@@ -1,4 +1,5 @@
 #include "Mesh.hpp"
+#include "ClusterDAGBuilder.hpp"
 #include "print/EditorLogger.hpp"
 #include "resource/EndianUtils.hpp"
 
@@ -667,9 +668,39 @@ namespace types
                 lod0, config.meshConfig);
             writeConvexDecompositionData(outFile, convexData);
 
-            // Write empty cluster DAG placeholder (will be populated by VK-285 cluster builder)
-            resource::ClusterDAGData emptyDAG;
-            writeClusterDAGData(outFile, emptyDAG);
+            // Build cluster DAG if enabled
+            resource::ClusterDAGData dagData;
+            if (config.meshConfig.generateClusterDAG)
+            {
+                vfLogInfo("  Building Cluster DAG hierarchy...");
+                ClusterDAGBuilder dagBuilder;
+                dagData = dagBuilder.build(
+                    lodLevels[0],
+                    meshletResults[0],
+                    [&progressCallback, i, numMeshes = scene->mNumMeshes](float p) {
+                        if (progressCallback)
+                        {
+                            float submeshProgress = static_cast<float>(i) / numMeshes;
+                            float dagContribution = 0.05f / numMeshes;
+                            float overall = 0.2f + submeshProgress * 0.7f + p * dagContribution;
+                            progressCallback(overall);
+                        }
+                    });
+
+                if (dagData.header.clusterCount > 0)
+                {
+                    vfLogInfo("    Cluster DAG: {} clusters, {} leaves, depth {}",
+                              dagData.header.clusterCount,
+                              dagData.header.leafClusterCount,
+                              dagData.header.maxDepth);
+                }
+            }
+            else
+            {
+                vfLogInfo("  Cluster DAG generation disabled");
+            }
+
+            writeClusterDAGData(outFile, dagData);
 
             if (progressCallback)
             {
