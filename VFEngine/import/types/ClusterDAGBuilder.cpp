@@ -827,11 +827,13 @@ namespace types
         };
         collectLeaves(0);  // Start from root (index 0)
 
-        // Validate we collected all leaves
+        // Validate we collected all leaves - disconnected DAG is a fatal error
         if (leafOrder.size() != expectedLeafCount)
         {
-            vfLogError("    Meshlet reorder: DFS collected {} leaves but expected {} - DAG may be disconnected!",
+            vfLogError("    Meshlet reorder: DFS collected {} leaves but expected {} - DAG is disconnected!",
                        leafOrder.size(), expectedLeafCount);
+            vfLogError("    Cannot build valid cluster structure from disconnected DAG. Import failed.");
+            return resource::ClusterDAGData{};
         }
 
         // Step 3: Build old->new meshlet index mapping
@@ -925,7 +927,7 @@ namespace types
 
         // VK-300: Verify all clusters now have contiguous meshlet indices
         uint32_t nonContiguousCount = 0;
-        uint32_t debugNonLeafCount = clusters.size() - leafCount;
+        uint32_t debugNonLeafCount = static_cast<uint32_t>(clusters.size()) - leafCount;
 
         for (size_t clusterIdx = 0; clusterIdx < clusters.size(); ++clusterIdx)
         {

@@ -328,6 +328,9 @@ void main() {
                 } else {
                     workQueueA[queueIdx] = outPacked;
                 }
+            } else {
+                // Track overflow for debugging - work item silently dropped
+                atomicAdd(state.workQueueOverflowCount, 1u);
             }
         }
 
@@ -349,6 +352,9 @@ void main() {
                 } else {
                     workQueueA[queueIdx] = outPacked;
                 }
+            } else {
+                // Track overflow for debugging - work item silently dropped
+                atomicAdd(state.workQueueOverflowCount, 1u);
             }
         }
     }

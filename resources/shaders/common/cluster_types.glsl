@@ -80,14 +80,14 @@ struct GPUClusterChildren {
 
 // Must match GPUDAGTraversalState in ClusterBufferTypes.hpp (32 bytes)
 struct GPUDAGTraversalState {
-    uint inputQueueCount;      // Items to process this pass
-    uint outputQueueCount;     // Items queued for next pass
-    uint selectedCount;        // Total selected clusters (atomic)
-    uint passIndex;            // Current pass number
-    uint totalProcessed;       // Statistics
-    uint totalSelected;        // Statistics
-    uint totalSubtreesCulled;  // Statistics
-    uint padding;
+    uint inputQueueCount;         // Items to process this pass
+    uint outputQueueCount;        // Items queued for next pass
+    uint selectedCount;           // Total selected clusters (atomic)
+    uint passIndex;               // Current pass number
+    uint totalProcessed;          // Statistics
+    uint totalSelected;           // Statistics
+    uint totalSubtreesCulled;     // Statistics
+    uint workQueueOverflowCount;  // Work items dropped due to queue overflow
 };
 
 // =========================================================================
