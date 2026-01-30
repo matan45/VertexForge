@@ -33,6 +33,37 @@ namespace resource
     // If screenError < threshold, can use this cluster instead of children
     constexpr float DEFAULT_SCREEN_ERROR_THRESHOLD = 1.0f;
 
+    // Default error multiplier for tuning transition distances
+    // Higher values = transitions happen farther from camera (more aggressive LOD)
+    // Lower values = transitions happen closer (higher quality)
+    constexpr float DEFAULT_ERROR_MULTIPLIER = 1.0f;
+
+    // =========================================================================
+    // ErrorConfig - Configurable error settings for LOD selection
+    // =========================================================================
+
+    struct ErrorConfig
+    {
+        // Screen-space error threshold in pixels
+        float screenErrorThreshold = DEFAULT_SCREEN_ERROR_THRESHOLD;
+
+        // Multiplier applied to computed screen error before threshold comparison
+        float errorMultiplier = DEFAULT_ERROR_MULTIPLIER;
+
+        // Apply multiplier to computed screen error
+        [[nodiscard]] float adjustedScreenError(float rawScreenError) const
+        {
+            return rawScreenError * errorMultiplier;
+        }
+
+        // Check if cluster should be selected (error below threshold)
+        // Returns true if this cluster's error is acceptable for rendering
+        [[nodiscard]] bool shouldSelectCluster(float screenError) const
+        {
+            return adjustedScreenError(screenError) < screenErrorThreshold;
+        }
+    };
+
     // =========================================================================
     // ClusterFlags - Bit flags for cluster state
     // =========================================================================
@@ -185,8 +216,8 @@ namespace resource
         // Maximum geometric error in the DAG (root's error)
         float maxGeometricError;
 
-        // Padding for alignment
-        float padding0;
+        // Minimum geometric error in the DAG (leaf error, usually 0)
+        float minGeometricError;
 
         // Bounding sphere of entire submesh (matches root cluster bounds)
         glm::vec4 boundingSphere;
@@ -357,6 +388,61 @@ namespace resource
         return (geometricError / distanceToCamera) * projectionFactor;
     }
 
+    // =========================================================================
+    // ClusterLODSelector - Runtime helper for cluster LOD selection
+    // =========================================================================
+
+    class ClusterLODSelector
+    {
+    public:
+        ClusterLODSelector() = default;
+
+        // Initialize with camera/screen parameters (call once per frame)
+        void beginFrame(float screenHeight, float fovY, const ErrorConfig& config = {})
+        {
+            projectionFactor_ = computeProjectionFactor(screenHeight, fovY);
+            config_ = config;
+        }
+
+        // Compute raw screen error for a cluster (without multiplier)
+        [[nodiscard]] float computeScreenError(
+            float geometricError,
+            float distanceToCamera) const
+        {
+            return calculateScreenSpaceErrorFast(
+                geometricError, distanceToCamera, projectionFactor_);
+        }
+
+        // Determine if cluster should be rendered (vs drilling down to children)
+        // Returns true if this cluster's error is acceptable
+        [[nodiscard]] bool shouldRenderCluster(
+            float geometricError,
+            float distanceToCamera) const
+        {
+            float screenError = computeScreenError(geometricError, distanceToCamera);
+            return config_.shouldSelectCluster(screenError);
+        }
+
+        // Get the adjusted screen error for a cluster (with multiplier applied)
+        [[nodiscard]] float getAdjustedScreenError(
+            float geometricError,
+            float distanceToCamera) const
+        {
+            float screenError = computeScreenError(geometricError, distanceToCamera);
+            return config_.adjustedScreenError(screenError);
+        }
+
+        // Get current projection factor (for external use)
+        [[nodiscard]] float getProjectionFactor() const { return projectionFactor_; }
+
+        // Get current error config
+        [[nodiscard]] const ErrorConfig& getConfig() const { return config_; }
+
+    private:
+        float projectionFactor_ = 0.0f;
+        ErrorConfig config_;
+    };
+
 } // namespace resource
 
 // =========================================================================
@@ -369,30 +455,86 @@ namespace render::gpudriven
     constexpr uint32_t MAX_GPU_CLUSTERS = 4 * 1024 * 1024;
 
     // =========================================================================
+    // Packing helpers for GPU struct compatibility
+    // =========================================================================
+
+    inline uint32_t packMeshletTriangleCounts(uint16_t meshletCount, uint16_t triangleCount)
+    {
+        return static_cast<uint32_t>(meshletCount) | (static_cast<uint32_t>(triangleCount) << 16);
+    }
+
+    inline void unpackMeshletTriangleCounts(uint32_t packed, uint16_t& meshletCount, uint16_t& triangleCount)
+    {
+        meshletCount = static_cast<uint16_t>(packed & 0xFFFF);
+        triangleCount = static_cast<uint16_t>((packed >> 16) & 0xFFFF);
+    }
+
+    inline uint32_t packLevelFlags(uint16_t level, uint16_t flags)
+    {
+        return static_cast<uint32_t>(level) | (static_cast<uint32_t>(flags) << 16);
+    }
+
+    inline void unpackLevelFlags(uint32_t packed, uint16_t& level, uint16_t& flags)
+    {
+        level = static_cast<uint16_t>(packed & 0xFFFF);
+        flags = static_cast<uint16_t>((packed >> 16) & 0xFFFF);
+    }
+
+    // =========================================================================
     // GPUCluster - GPU-optimized cluster layout (64 bytes, 16-byte aligned)
+    // Layout matches GLSL struct exactly for direct buffer upload
     // =========================================================================
 
     struct alignas(16) GPUCluster
     {
         // Descriptor data (16 bytes)
-        uint32_t meshletOffset;      // +0
-        uint32_t vertexOffset;       // +4
-        uint16_t meshletCount;       // +8
-        uint16_t triangleCount;      // +10
-        uint32_t vertexCount;        // +12
+        uint32_t meshletOffset;          // +0
+        uint32_t vertexOffset;           // +4
+        uint32_t meshletTrianglePacked;  // +8  (meshletCount | (triangleCount << 16))
+        uint32_t vertexCount;            // +12
 
         // Bounding sphere (16 bytes)
-        glm::vec4 boundingSphere;    // +16
+        glm::vec4 boundingSphere;        // +16
 
         // Normal cone (16 bytes)
-        glm::vec4 cone;              // +32
+        glm::vec4 cone;                  // +32
 
         // Hierarchy data (16 bytes)
-        uint32_t parentIndex;        // +48
-        uint32_t siblingIndex;       // +52
-        float geometricError;        // +56
-        uint16_t level;              // +60
-        uint16_t flags;              // +62
+        uint32_t parentIndex;            // +48
+        uint32_t siblingIndex;           // +52
+        float geometricError;            // +56
+        uint32_t levelFlagsPacked;       // +60 (level | (flags << 16))
+
+        // Accessors for packed fields
+        [[nodiscard]] uint16_t getMeshletCount() const
+        {
+            return static_cast<uint16_t>(meshletTrianglePacked & 0xFFFF);
+        }
+
+        [[nodiscard]] uint16_t getTriangleCount() const
+        {
+            return static_cast<uint16_t>((meshletTrianglePacked >> 16) & 0xFFFF);
+        }
+
+        [[nodiscard]] uint16_t getLevel() const
+        {
+            return static_cast<uint16_t>(levelFlagsPacked & 0xFFFF);
+        }
+
+        [[nodiscard]] uint16_t getFlags() const
+        {
+            return static_cast<uint16_t>((levelFlagsPacked >> 16) & 0xFFFF);
+        }
+
+        void setMeshletTriangleCounts(uint16_t meshletCount, uint16_t triangleCount)
+        {
+            meshletTrianglePacked = packMeshletTriangleCounts(meshletCount, triangleCount);
+        }
+
+        void setLevelFlags(uint16_t level, uint16_t flags)
+        {
+            levelFlagsPacked = packLevelFlags(level, flags);
+        }
     };
 
     static_assert(sizeof(GPUCluster) == 64, "GPUCluster must be 64 bytes");
@@ -400,6 +542,7 @@ namespace render::gpudriven
     static_assert(offsetof(GPUCluster, boundingSphere) == 16, "boundingSphere offset must be 16");
     static_assert(offsetof(GPUCluster, cone) == 32, "cone offset must be 32");
     static_assert(offsetof(GPUCluster, parentIndex) == 48, "parentIndex offset must be 48");
+    static_assert(offsetof(GPUCluster, levelFlagsPacked) == 60, "levelFlagsPacked offset must be 60");
 
     // =========================================================================
     // GPUClusterSelection - Per-frame cluster selection state (16 bytes)
@@ -432,16 +575,18 @@ namespace render::gpudriven
         GPUCluster gpu{};
         gpu.meshletOffset = cluster.descriptor.meshletOffset;
         gpu.vertexOffset = cluster.descriptor.vertexOffset;
-        gpu.meshletCount = cluster.descriptor.meshletCount;
-        gpu.triangleCount = cluster.descriptor.triangleCount;
+        gpu.meshletTrianglePacked = packMeshletTriangleCounts(
+            cluster.descriptor.meshletCount,
+            cluster.descriptor.triangleCount);
         gpu.vertexCount = cluster.descriptor.vertexCount;
         gpu.boundingSphere = cluster.bounds.boundingSphere;
         gpu.cone = cluster.bounds.cone;
         gpu.parentIndex = cluster.hierarchy.parentIndex;
         gpu.siblingIndex = cluster.hierarchy.siblingIndex;
         gpu.geometricError = cluster.hierarchy.geometricError;
-        gpu.level = cluster.hierarchy.level;
-        gpu.flags = cluster.hierarchy.flags;
+        gpu.levelFlagsPacked = packLevelFlags(
+            cluster.hierarchy.level,
+            cluster.hierarchy.flags);
         return gpu;
     }
 

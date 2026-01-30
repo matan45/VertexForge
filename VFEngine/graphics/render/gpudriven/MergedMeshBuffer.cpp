@@ -534,7 +534,7 @@ namespace render::gpudriven
         if (subMat)
         {
             obj.albedo = subMat->albedo;
-            obj.iblParams = glm::vec4(subMat->iblDiffuse, subMat->iblSpecular, 0.0f, 0.0f);
+            obj.iblParams = glm::vec4(subMat->iblDiffuse, subMat->iblSpecular, meshRender.clusterErrorMultiplier, 0.0f);
             obj.materialParams = glm::vec4(subMat->metallic, subMat->roughness, subMat->ao, subMat->emission);
             materialPath = subMat->materialPath;
         }
@@ -555,7 +555,7 @@ namespace render::gpudriven
                 iblDiffuse = it->second.iblDiffuse;
                 iblSpecular = it->second.iblSpecular;
             }
-            obj.iblParams = glm::vec4(iblDiffuse, iblSpecular, 0.0f, 0.0f);
+            obj.iblParams = glm::vec4(iblDiffuse, iblSpecular, meshRender.clusterErrorMultiplier, 0.0f);
             obj.materialParams = glm::vec4(meshRender.metallic, meshRender.roughness, meshRender.ao,
                                            meshRender.emission);
         }
