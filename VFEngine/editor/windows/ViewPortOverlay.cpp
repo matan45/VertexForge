@@ -108,13 +108,13 @@ namespace windows
         {
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            // VK-300: "LOD" removed, DAG modes available (6-9)
+            // VK-300: "LOD" and "Screen Error" removed, DAG modes available (6-8)
             const char* viewModeLabels[] = {
                 "Color", "Meshlet", "Mipmap", "Cluster", "Depth", "Shadow",
-                "DAG Cluster", "DAG Level", "Screen Error", "Streaming"
+                "DAG Cluster", "DAG Level", "Streaming"
             };
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 10))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 9))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);
