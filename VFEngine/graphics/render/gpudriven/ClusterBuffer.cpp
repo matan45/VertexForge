@@ -5,7 +5,6 @@
 #include "resource/ClusterDAGTypes.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/EditorLogger.hpp"
-#include <cassert>
 
 namespace render::gpudriven
 {
@@ -393,6 +392,12 @@ namespace render::gpudriven
 
         uploadDAGHeaderAt(alloc.dagHeaderIndex, gpuHeader);
 
+        // Mark as uploading until transfers complete
+        alloc.streamState = ClusterStreamState::Uploading;
+
+        // Wait for async transfers to complete before marking ready
+        flushPendingTransfers();
+
         // Mark as used in allocators
         clusterAllocator.markUsed(alloc.clusterCount);
         dagHeaderAllocator.markUsed(1);
@@ -400,7 +405,7 @@ namespace render::gpudriven
         currentClusterCount = clusterAllocator.getUsedCount();
         currentDAGHeaderCount = dagHeaderAllocator.getUsedCount();
 
-        // Update stream state
+        // Now safe to mark as ready
         alloc.streamState = ClusterStreamState::Ready;
 
         return true;
@@ -414,20 +419,30 @@ namespace render::gpudriven
     {
         if (!data || count == 0) return;
 
-        assert(offset + count <= maxClusterCount && "Cluster upload exceeds buffer bounds");
+        if (offset + count > maxClusterCount)
+        {
+            vfLogError("ClusterBuffer: Cluster upload exceeds buffer bounds (offset={}, count={}, max={})",
+                       offset, count, maxClusterCount);
+            return;
+        }
 
-        size_t dataSize = count * sizeof(GPUCluster);
-        size_t dstOffset = offset * sizeof(GPUCluster);
+        size_t dataSize = static_cast<size_t>(count) * sizeof(GPUCluster);
+        size_t dstOffset = static_cast<size_t>(offset) * sizeof(GPUCluster);
 
         transferManager->copyToBufferAsync(clusterBuffer, data, dataSize, dstOffset);
     }
 
     void ClusterBuffer::uploadDAGHeaderAt(uint32_t index, const GPUClusterDAGHeader& header)
     {
-        assert(index < maxDAGHeaderCount && "DAG header upload exceeds buffer bounds");
+        if (index >= maxDAGHeaderCount)
+        {
+            vfLogError("ClusterBuffer: DAG header upload exceeds buffer bounds (index={}, max={})",
+                       index, maxDAGHeaderCount);
+            return;
+        }
 
         size_t dataSize = sizeof(GPUClusterDAGHeader);
-        size_t dstOffset = index * sizeof(GPUClusterDAGHeader);
+        size_t dstOffset = static_cast<size_t>(index) * sizeof(GPUClusterDAGHeader);
 
         transferManager->copyToBufferAsync(dagHeaderBuffer, &header, dataSize, dstOffset);
     }
@@ -436,10 +451,15 @@ namespace render::gpudriven
     {
         if (!data || count == 0) return;
 
-        assert(offset + count <= maxStreamingUnitCount && "Streaming unit upload exceeds buffer bounds");
+        if (offset + count > maxStreamingUnitCount)
+        {
+            vfLogError("ClusterBuffer: Streaming unit upload exceeds buffer bounds (offset={}, count={}, max={})",
+                       offset, count, maxStreamingUnitCount);
+            return;
+        }
 
-        size_t dataSize = count * sizeof(GPUClusterStreamingUnit);
-        size_t dstOffset = offset * sizeof(GPUClusterStreamingUnit);
+        size_t dataSize = static_cast<size_t>(count) * sizeof(GPUClusterStreamingUnit);
+        size_t dstOffset = static_cast<size_t>(offset) * sizeof(GPUClusterStreamingUnit);
 
         transferManager->copyToBufferAsync(streamingUnitBuffer, data, dataSize, dstOffset);
     }
@@ -462,11 +482,14 @@ namespace render::gpudriven
         size_t allocIndex = it->second;
         auto& alloc = allocations[allocIndex];
 
+        // Safety: ensure any pending uploads complete before eviction
+        if (alloc.streamState == ClusterStreamState::Uploading)
+        {
+            flushPendingTransfers();
+        }
+
         freeClusterSpace(alloc);
-
-        alloc.streamState = ClusterStreamState::Evicted;
         alloc = ClusterDAGAllocation{};
-
         freeAllocationSlots.push_back(allocIndex);
         allocationKeyToIndex.erase(it);
 
@@ -476,13 +499,24 @@ namespace render::gpudriven
     void ClusterBuffer::evictMesh(const std::string& meshPath)
     {
         std::vector<std::string> keysToRemove;
+        bool hasUploadingAllocations = false;
 
         for (const auto& [key, index] : allocationKeyToIndex)
         {
             if (key.rfind(meshPath + ":", 0) == 0)
             {
                 keysToRemove.push_back(key);
+                if (allocations[index].streamState == ClusterStreamState::Uploading)
+                {
+                    hasUploadingAllocations = true;
+                }
             }
+        }
+
+        // Safety: ensure any pending uploads complete before eviction
+        if (hasUploadingAllocations)
+        {
+            flushPendingTransfers();
         }
 
         for (const auto& key : keysToRemove)

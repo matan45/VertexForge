@@ -11,8 +11,10 @@
 namespace render::gpudriven
 {
     // =========================================================================
-    // Additional Constants for Cluster Buffers
+    // Constants for Cluster Buffers
     // =========================================================================
+
+    // Note: MAX_GPU_CLUSTERS is defined in resource/ClusterDAGTypes.hpp (included above)
 
     // Maximum clusters that can be selected per frame
     constexpr uint32_t MAX_CLUSTER_SELECTIONS_PER_FRAME = 1024 * 1024;

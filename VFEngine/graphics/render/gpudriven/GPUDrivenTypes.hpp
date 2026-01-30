@@ -37,6 +37,15 @@ namespace render::gpudriven
     constexpr float LOD_THRESHOLD_1 = 200.0f;
     constexpr float LOD_THRESHOLD_2 = 100.0f;
 
+    // Object flags - must be defined before GPUObjectData which references them
+    namespace ObjectFlags
+    {
+        constexpr uint32_t AlphaMask      = 1 << 4;
+        constexpr uint32_t UniformScale   = 1 << 9;
+        constexpr uint32_t UseClusterDAG  = 1 << 10;  // Use DAG mode instead of discrete LODs
+        constexpr uint32_t DAGFullyLoaded = 1 << 11;  // All streaming units ready
+    }
+
     struct alignas(16) LODDrawInfo
     {
         uint32_t vertexOffset;
@@ -104,16 +113,6 @@ namespace render::gpudriven
         bool isDagFullyLoaded() const { return (flags & ObjectFlags::DAGFullyLoaded) != 0; }
     };
     static_assert(sizeof(GPUObjectData) == 320);
-
-
-    namespace ObjectFlags
-    {
-        constexpr uint32_t AlphaMask      = 1 << 4;
-        constexpr uint32_t UniformScale   = 1 << 9;
-        constexpr uint32_t UseClusterDAG  = 1 << 10;  // Use DAG mode instead of discrete LODs
-        constexpr uint32_t DAGFullyLoaded = 1 << 11;  // All streaming units ready
-    }
-
 
     struct alignas(16) PerDrawData
     {
