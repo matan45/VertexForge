@@ -935,6 +935,28 @@ namespace types
             resource::endian::writeLE<uint16_t>(outFile, cluster.hierarchy.level);
             resource::endian::writeLE<uint16_t>(outFile, cluster.hierarchy.flags);
         }
+
+        // VK-295: Write streaming units
+        uint32_t streamingUnitCount = static_cast<uint32_t>(dagData.streamingUnits.size());
+        resource::endian::writeLE<uint32_t>(outFile, streamingUnitCount);
+        resource::endian::writeLE<uint32_t>(outFile, dagData.header.rootStreamingUnit);
+
+        for (const auto& unit : dagData.streamingUnits)
+        {
+            resource::endian::writeLE<uint32_t>(outFile, unit.clusterStartIndex);
+            resource::endian::writeLE<uint32_t>(outFile, unit.clusterCount);
+            resource::endian::writeLE<uint32_t>(outFile, unit.meshletStartOffset);
+            resource::endian::writeLE<uint32_t>(outFile, unit.meshletCount);
+            resource::endian::writeLE<float>(outFile, unit.minGeometricError);
+            resource::endian::writeLE<float>(outFile, unit.maxGeometricError);
+            resource::endian::writeLE<uint16_t>(outFile, unit.minLevel);
+            resource::endian::writeLE<uint16_t>(outFile, unit.maxLevel);
+            resource::endian::writeLE<uint32_t>(outFile, unit.dependsOnUnit);
+            resource::endian::writeLE<float>(outFile, unit.boundingSphere.x);
+            resource::endian::writeLE<float>(outFile, unit.boundingSphere.y);
+            resource::endian::writeLE<float>(outFile, unit.boundingSphere.z);
+            resource::endian::writeLE<float>(outFile, unit.boundingSphere.w);
+        }
     }
 
     void Mesh::writeSkeletonData(std::ofstream& outFile, const ExtractedSkeleton& skeleton) const

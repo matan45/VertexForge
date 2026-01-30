@@ -39,6 +39,22 @@ namespace resource
     constexpr float DEFAULT_ERROR_MULTIPLIER = 1.0f;
 
     // =========================================================================
+    // Streaming Unit Constants (VK-295)
+    // =========================================================================
+
+    // Minimum clusters per streaming unit (for efficient I/O)
+    constexpr uint32_t MIN_CLUSTERS_PER_STREAMING_UNIT = 4;
+
+    // Maximum clusters per streaming unit (balance I/O size vs granularity)
+    constexpr uint32_t MAX_CLUSTERS_PER_STREAMING_UNIT = 16;
+
+    // Target streaming unit size in KB (~50-200KB for efficient disk I/O)
+    constexpr uint32_t TARGET_STREAMING_UNIT_SIZE_KB = 100;
+
+    // Invalid streaming unit index sentinel
+    constexpr uint32_t INVALID_STREAMING_UNIT_INDEX = 0xFFFFFFFF;
+
+    // =========================================================================
     // ErrorConfig - Configurable error settings for LOD selection
     // =========================================================================
 
@@ -222,11 +238,48 @@ namespace resource
         // Bounding sphere of entire submesh (matches root cluster bounds)
         glm::vec4 boundingSphere;
 
-        // Reserved for future use (streaming state, etc.)
-        uint32_t reserved[6];
+        // Streaming unit info (VK-295)
+        uint32_t streamingUnitCount;     // Number of streaming units
+        uint32_t rootStreamingUnit;      // Index of unit containing root cluster
+
+        // Reserved for future use
+        uint32_t reserved[4];
     };
 
     static_assert(sizeof(ClusterDAGHeader) == 64, "ClusterDAGHeader must be 64 bytes");
+
+    // =========================================================================
+    // ClusterStreamingUnit - Groups clusters for efficient I/O (VK-295)
+    // =========================================================================
+
+    struct ClusterStreamingUnit
+    {
+        // Cluster range in this streaming unit
+        uint32_t clusterStartIndex;      // First cluster index in global array
+        uint32_t clusterCount;           // Number of clusters (4-16 typical)
+
+        // Meshlet data range for this unit
+        uint32_t meshletStartOffset;     // First meshlet offset in meshlet array
+        uint32_t meshletCount;           // Total meshlets covered by this unit
+
+        // Error bounds for LOD selection and priority
+        float minGeometricError;         // Min error in unit (finest detail)
+        float maxGeometricError;         // Max error in unit (coarsest in unit)
+
+        // Hierarchy info for dependency tracking
+        uint16_t minLevel;               // Minimum DAG level in unit
+        uint16_t maxLevel;               // Maximum DAG level in unit
+        uint32_t dependsOnUnit;          // Parent streaming unit index (INVALID if root unit)
+
+        // Spatial bounds for distance-based priority calculation
+        glm::vec4 boundingSphere;        // Merged bounds of all clusters in unit
+
+        // Check if this is the root streaming unit (no dependencies)
+        [[nodiscard]] bool isRootUnit() const
+        {
+            return dependsOnUnit == INVALID_STREAMING_UNIT_INDEX;
+        }
+    };
 
     // =========================================================================
     // ClusterDAGData - Complete DAG for a submesh (CPU storage)
@@ -236,6 +289,7 @@ namespace resource
     {
         ClusterDAGHeader header{};
         std::vector<Cluster> clusters;
+        std::vector<ClusterStreamingUnit> streamingUnits;  // VK-295
 
         // Helper: Get cluster at index (bounds-checked)
         [[nodiscard]] const Cluster* getCluster(uint32_t index) const
@@ -296,6 +350,21 @@ namespace resource
             return leaves;
         }
 
+        // Helper: Get streaming unit containing a cluster (VK-295)
+        [[nodiscard]] uint32_t getStreamingUnitIndex(uint32_t clusterIndex) const
+        {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(streamingUnits.size()); ++i)
+            {
+                const auto& unit = streamingUnits[i];
+                if (clusterIndex >= unit.clusterStartIndex &&
+                    clusterIndex < unit.clusterStartIndex + unit.clusterCount)
+                {
+                    return i;
+                }
+            }
+            return INVALID_STREAMING_UNIT_INDEX;
+        }
+
         // Validate DAG integrity
         [[nodiscard]] bool isValid() const
         {
@@ -317,11 +386,53 @@ namespace resource
             return true;
         }
 
+        // Validate streaming units integrity (VK-295)
+        [[nodiscard]] bool validateStreamingUnits() const
+        {
+            if (streamingUnits.empty()) return true;  // No units is valid (legacy)
+
+            if (streamingUnits.size() != header.streamingUnitCount) return false;
+
+            // Verify parent-before-children ordering (parent units have lower indices)
+            for (uint32_t i = 0; i < static_cast<uint32_t>(streamingUnits.size()); ++i)
+            {
+                const auto& unit = streamingUnits[i];
+
+                // dependsOnUnit must be less than current index (or INVALID for root)
+                if (unit.dependsOnUnit != INVALID_STREAMING_UNIT_INDEX &&
+                    unit.dependsOnUnit >= i)
+                {
+                    return false;  // Dependency order violated
+                }
+
+                // Verify cluster range is valid
+                if (unit.clusterStartIndex + unit.clusterCount > clusters.size())
+                {
+                    return false;
+                }
+
+                // Verify cluster count is within limits
+                if (unit.clusterCount < MIN_CLUSTERS_PER_STREAMING_UNIT ||
+                    unit.clusterCount > MAX_CLUSTERS_PER_STREAMING_UNIT)
+                {
+                    // Allow smaller units for remainder clusters at end
+                    if (i != streamingUnits.size() - 1 ||
+                        unit.clusterCount > MAX_CLUSTERS_PER_STREAMING_UNIT)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
         // Clear all data
         void clear()
         {
             header = ClusterDAGHeader{};
             clusters.clear();
+            streamingUnits.clear();
         }
     };
 

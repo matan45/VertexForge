@@ -963,14 +963,53 @@ namespace resource
             cluster.hierarchy.flags = endian::readLE<uint16_t>(file);
         }
 
+        // VK-295: Read streaming units (if present)
+        // Check if there's more data for streaming units
+        auto currentPos = file.tellg();
+        file.seekg(0, std::ios::end);
+        auto endPos = file.tellg();
+        file.seekg(currentPos);
+
+        // Only read streaming units if there's enough data remaining
+        // Minimum: 8 bytes for count + rootStreamingUnit
+        if (!file.fail() && (endPos - currentPos) >= 8)
+        {
+            uint32_t streamingUnitCount = endian::readLE<uint32_t>(file);
+            outData.header.rootStreamingUnit = endian::readLE<uint32_t>(file);
+            outData.header.streamingUnitCount = streamingUnitCount;
+
+            if (streamingUnitCount > 0)
+            {
+                outData.streamingUnits.resize(streamingUnitCount);
+
+                for (uint32_t i = 0; i < streamingUnitCount; ++i)
+                {
+                    auto& unit = outData.streamingUnits[i];
+                    unit.clusterStartIndex = endian::readLE<uint32_t>(file);
+                    unit.clusterCount = endian::readLE<uint32_t>(file);
+                    unit.meshletStartOffset = endian::readLE<uint32_t>(file);
+                    unit.meshletCount = endian::readLE<uint32_t>(file);
+                    unit.minGeometricError = endian::readLE<float>(file);
+                    unit.maxGeometricError = endian::readLE<float>(file);
+                    unit.minLevel = endian::readLE<uint16_t>(file);
+                    unit.maxLevel = endian::readLE<uint16_t>(file);
+                    unit.dependsOnUnit = endian::readLE<uint32_t>(file);
+                    unit.boundingSphere.x = endian::readLE<float>(file);
+                    unit.boundingSphere.y = endian::readLE<float>(file);
+                    unit.boundingSphere.z = endian::readLE<float>(file);
+                    unit.boundingSphere.w = endian::readLE<float>(file);
+                }
+            }
+        }
+
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to read cluster DAG data for submesh {}", submeshIdx);
             return false;
         }
 
-        vfLogInfo("MeshStreamHandle: Loaded cluster DAG with {} clusters for submesh {}",
-                  outData.header.clusterCount, submeshIdx);
+        vfLogInfo("MeshStreamHandle: Loaded cluster DAG with {} clusters, {} streaming units for submesh {}",
+                  outData.header.clusterCount, outData.streamingUnits.size(), submeshIdx);
         return true;
     }
 

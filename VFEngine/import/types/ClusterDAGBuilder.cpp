@@ -33,6 +33,19 @@ namespace
     }
 }
 
+namespace
+{
+    // Helper: compute Morton code for a cluster center
+    uint32_t computeClusterMorton(const glm::vec4& boundingSphere,
+                                   const glm::vec3& minBounds,
+                                   const glm::vec3& invExtent)
+    {
+        glm::vec3 center(boundingSphere);
+        glm::vec3 normalized = (center - minBounds) * invExtent;
+        return morton3D(normalized.x, normalized.y, normalized.z);
+    }
+}
+
 namespace types
 {
     ClusterDAGBuilder::ClusterDAGBuilder(const ClusterDAGConfig& config)
@@ -794,6 +807,224 @@ namespace types
             result.clusters.push_back(cluster);
         }
 
+        // VK-295: Generate streaming units for efficient I/O
+        result.streamingUnits = generateStreamingUnits(result.clusters);
+        result.header.streamingUnitCount = static_cast<uint32_t>(result.streamingUnits.size());
+
+        // Find root streaming unit (the one containing cluster 0)
+        result.header.rootStreamingUnit = result.getStreamingUnitIndex(0);
+
+        vfLogInfo("    Generated {} streaming units", result.streamingUnits.size());
+
         return result;
+    }
+
+    std::vector<resource::ClusterStreamingUnit> ClusterDAGBuilder::generateStreamingUnits(
+        const std::vector<resource::Cluster>& clusters) const
+    {
+        std::vector<resource::ClusterStreamingUnit> units;
+
+        if (clusters.empty())
+        {
+            return units;
+        }
+
+        // Step 1: Group cluster indices by level (root level 0, leaves have highest level)
+        // Since root is at index 0 and has the lowest level, process levels 0 to maxLevel
+        uint32_t maxLevel = 0;
+        for (const auto& cluster : clusters)
+        {
+            maxLevel = std::max(maxLevel, static_cast<uint32_t>(cluster.hierarchy.level));
+        }
+
+        std::vector<std::vector<uint32_t>> levelToClusters(maxLevel + 1);
+        for (uint32_t i = 0; i < static_cast<uint32_t>(clusters.size()); ++i)
+        {
+            uint16_t level = clusters[i].hierarchy.level;
+            levelToClusters[level].push_back(i);
+        }
+
+        // Step 2: Compute bounding box for Morton code normalization
+        glm::vec3 minBounds(FLT_MAX);
+        glm::vec3 maxBounds(-FLT_MAX);
+
+        for (const auto& cluster : clusters)
+        {
+            glm::vec3 center(cluster.bounds.boundingSphere);
+            minBounds = glm::min(minBounds, center);
+            maxBounds = glm::max(maxBounds, center);
+        }
+
+        glm::vec3 extent = maxBounds - minBounds;
+        glm::vec3 invExtent(
+            extent.x > 1e-6f ? 1.0f / extent.x : 0.0f,
+            extent.y > 1e-6f ? 1.0f / extent.y : 0.0f,
+            extent.z > 1e-6f ? 1.0f / extent.z : 0.0f
+        );
+
+        // Step 3: Track which cluster belongs to which streaming unit
+        std::vector<uint32_t> clusterToUnit(clusters.size(), resource::INVALID_STREAMING_UNIT_INDEX);
+
+        // Step 4: Process levels from root (0) to leaves (maxLevel) - parent-before-children
+        for (uint32_t level = 0; level <= maxLevel; ++level)
+        {
+            const auto& clusterIndices = levelToClusters[level];
+            if (clusterIndices.empty())
+            {
+                continue;
+            }
+
+            // Sort cluster indices at this level by Morton code for spatial locality
+            std::vector<std::pair<uint32_t, uint32_t>> mortonIndices;  // (morton, clusterIndex)
+            mortonIndices.reserve(clusterIndices.size());
+
+            for (uint32_t clusterIdx : clusterIndices)
+            {
+                uint32_t morton = computeClusterMorton(
+                    clusters[clusterIdx].bounds.boundingSphere,
+                    minBounds,
+                    invExtent);
+                mortonIndices.emplace_back(morton, clusterIdx);
+            }
+
+            std::sort(mortonIndices.begin(), mortonIndices.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
+
+            // Greedily group adjacent clusters into streaming units
+            size_t idx = 0;
+            while (idx < mortonIndices.size())
+            {
+                resource::ClusterStreamingUnit unit{};
+                unit.clusterStartIndex = mortonIndices[idx].second;
+                unit.clusterCount = 0;
+                unit.meshletStartOffset = UINT32_MAX;
+                unit.meshletCount = 0;
+                unit.minGeometricError = FLT_MAX;
+                unit.maxGeometricError = 0.0f;
+                unit.minLevel = UINT16_MAX;
+                unit.maxLevel = 0;
+                unit.dependsOnUnit = resource::INVALID_STREAMING_UNIT_INDEX;
+                unit.boundingSphere = glm::vec4(0.0f);
+
+                // Find min cluster index among candidates (for contiguous range)
+                uint32_t minClusterIdx = UINT32_MAX;
+                uint32_t maxClusterIdx = 0;
+
+                // Collect clusters for this unit (4-16 clusters, but respect level)
+                std::vector<uint32_t> unitClusters;
+                while (idx < mortonIndices.size() &&
+                       unitClusters.size() < resource::MAX_CLUSTERS_PER_STREAMING_UNIT)
+                {
+                    uint32_t clusterIdx = mortonIndices[idx].second;
+                    unitClusters.push_back(clusterIdx);
+                    minClusterIdx = std::min(minClusterIdx, clusterIdx);
+                    maxClusterIdx = std::max(maxClusterIdx, clusterIdx);
+                    ++idx;
+
+                    // Stop at minimum size if we've hit target
+                    if (unitClusters.size() >= resource::MIN_CLUSTERS_PER_STREAMING_UNIT &&
+                        idx < mortonIndices.size())
+                    {
+                        // Check if next cluster is far away (Morton distance heuristic)
+                        uint32_t currentMorton = mortonIndices[idx - 1].first;
+                        uint32_t nextMorton = mortonIndices[idx].first;
+                        uint32_t mortonDist = (nextMorton > currentMorton)
+                            ? (nextMorton - currentMorton)
+                            : (currentMorton - nextMorton);
+
+                        // If large spatial gap, break here
+                        if (mortonDist > 0x10000)  // ~1/16 of Morton range
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                // Fill streaming unit data
+                unit.clusterStartIndex = minClusterIdx;
+                unit.clusterCount = static_cast<uint32_t>(unitClusters.size());
+
+                for (uint32_t clusterIdx : unitClusters)
+                {
+                    const auto& cluster = clusters[clusterIdx];
+
+                    // Aggregate meshlet info
+                    if (cluster.descriptor.meshletOffset < unit.meshletStartOffset)
+                    {
+                        unit.meshletStartOffset = cluster.descriptor.meshletOffset;
+                    }
+                    unit.meshletCount += cluster.descriptor.meshletCount;
+
+                    // Aggregate error bounds
+                    unit.minGeometricError = std::min(unit.minGeometricError,
+                                                       cluster.hierarchy.geometricError);
+                    unit.maxGeometricError = std::max(unit.maxGeometricError,
+                                                       cluster.hierarchy.geometricError);
+
+                    // Aggregate level range
+                    unit.minLevel = std::min(unit.minLevel, cluster.hierarchy.level);
+                    unit.maxLevel = std::max(unit.maxLevel, cluster.hierarchy.level);
+
+                    // Merge bounding spheres
+                    if (unit.boundingSphere.w == 0.0f)
+                    {
+                        unit.boundingSphere = cluster.bounds.boundingSphere;
+                    }
+                    else
+                    {
+                        unit.boundingSphere = mergeBoundingSpheres(
+                            unit.boundingSphere,
+                            cluster.bounds.boundingSphere);
+                    }
+
+                    // Record this cluster's unit assignment
+                    clusterToUnit[clusterIdx] = static_cast<uint32_t>(units.size());
+                }
+
+                // Determine dependency: find parent cluster's unit
+                // Use the first cluster in the unit that has a valid parent
+                for (uint32_t clusterIdx : unitClusters)
+                {
+                    const auto& cluster = clusters[clusterIdx];
+                    if (cluster.hierarchy.parentIndex != resource::INVALID_CLUSTER_INDEX)
+                    {
+                        uint32_t parentUnit = clusterToUnit[cluster.hierarchy.parentIndex];
+                        if (parentUnit != resource::INVALID_STREAMING_UNIT_INDEX &&
+                            parentUnit != static_cast<uint32_t>(units.size()))
+                        {
+                            unit.dependsOnUnit = parentUnit;
+                            break;
+                        }
+                    }
+                }
+
+                units.push_back(unit);
+            }
+        }
+
+        return units;
+    }
+
+    glm::vec4 ClusterDAGBuilder::mergeStreamingUnitBounds(
+        const std::vector<resource::Cluster>& clusters,
+        uint32_t startIndex,
+        uint32_t count) const
+    {
+        glm::vec4 merged(0.0f);
+
+        for (uint32_t i = 0; i < count && (startIndex + i) < clusters.size(); ++i)
+        {
+            const auto& cluster = clusters[startIndex + i];
+            if (merged.w == 0.0f)
+            {
+                merged = cluster.bounds.boundingSphere;
+            }
+            else
+            {
+                merged = mergeBoundingSpheres(merged, cluster.bounds.boundingSphere);
+            }
+        }
+
+        return merged;
     }
 }
