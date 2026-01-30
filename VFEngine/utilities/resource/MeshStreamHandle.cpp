@@ -89,6 +89,7 @@ namespace resource
         hasConvexHulls = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 5);
         // Version 0.0.7+ uses 64-byte vertices (with bone data), older versions use 32-byte
         has64ByteVertices = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 7);
+        hasClusterDAGs = (majorVersion == 0 && minorVersion == 0 && patchVersion >= 8);
 
         header.numSubmeshes = endian::readLE<uint32_t>(file);
 
@@ -211,6 +212,14 @@ namespace resource
                     return false;
                 }
             }
+
+            if (hasClusterDAGs)
+            {
+                if (!parseClusterDAGHeaders(meshIdx))
+                {
+                    return false;
+                }
+            }
         }
 
         // Parse skeleton data header (v0.0.7+)
@@ -323,6 +332,51 @@ namespace resource
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to parse convex data for submesh {}", meshIdx);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool MeshStreamHandle::parseClusterDAGHeaders(uint32_t meshIdx)
+    {
+        auto& submeshInfo = header.submeshes[meshIdx];
+
+        submeshInfo.clusterDAGDataOffset = file.tellg();
+
+        uint8_t hasDAG = endian::readLE<uint8_t>(file);
+        submeshInfo.hasClusterDAGData = (hasDAG != 0);
+
+        if (!submeshInfo.hasClusterDAGData)
+        {
+            return !file.fail();
+        }
+
+        auto& dagInfo = submeshInfo.clusterDAGInfo;
+        dagInfo.clusterCount = endian::readLE<uint32_t>(file);
+
+        if (dagInfo.clusterCount > maxClusterCount)
+        {
+            vfLogError("MeshStreamHandle: Cluster count {} exceeds limit {} in submesh {}",
+                       dagInfo.clusterCount, maxClusterCount, meshIdx);
+            return false;
+        }
+
+        dagInfo.leafClusterCount = endian::readLE<uint32_t>(file);
+        dagInfo.maxDepth = endian::readLE<uint32_t>(file);
+        dagInfo.maxGeometricError = endian::readLE<float>(file);
+
+        dagInfo.boundingSphere.x = endian::readLE<float>(file);
+        dagInfo.boundingSphere.y = endian::readLE<float>(file);
+        dagInfo.boundingSphere.z = endian::readLE<float>(file);
+        dagInfo.boundingSphere.w = endian::readLE<float>(file);
+
+        // Skip cluster data (64 bytes per cluster)
+        file.seekg(dagInfo.clusterCount * 64, std::ios::cur);
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to parse cluster DAG data for submesh {}", meshIdx);
             return false;
         }
 
@@ -819,6 +873,104 @@ namespace resource
             return false;
         }
 
+        return true;
+    }
+
+    bool MeshStreamHandle::readClusterDAG(uint32_t submeshIdx, ClusterDAGData& outData)
+    {
+        std::lock_guard<std::mutex> lock(fileMutex);
+
+        outData.clear();
+
+        if (!file.is_open())
+        {
+            vfLogError("MeshStreamHandle: File not open");
+            return false;
+        }
+
+        if (!hasClusterDAGs)
+        {
+            return true; // No cluster DAG data is valid (older file)
+        }
+
+        if (submeshIdx >= header.numSubmeshes)
+        {
+            vfLogError("MeshStreamHandle: Invalid submesh index {} (max {})",
+                       submeshIdx, header.numSubmeshes);
+            return false;
+        }
+
+        const auto& submeshInfo = header.submeshes[submeshIdx];
+        if (!submeshInfo.hasClusterDAGData)
+        {
+            return true; // No DAG for this submesh is valid
+        }
+
+        file.seekg(submeshInfo.clusterDAGDataOffset);
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to seek to cluster DAG for submesh {}", submeshIdx);
+            return false;
+        }
+
+        // Read hasDAG flag
+        uint8_t hasDAG = endian::readLE<uint8_t>(file);
+        if (hasDAG == 0)
+        {
+            return true;
+        }
+
+        // Read header
+        outData.header.clusterCount = endian::readLE<uint32_t>(file);
+        outData.header.leafClusterCount = endian::readLE<uint32_t>(file);
+        outData.header.maxDepth = endian::readLE<uint32_t>(file);
+        outData.header.maxGeometricError = endian::readLE<float>(file);
+
+        outData.header.boundingSphere.x = endian::readLE<float>(file);
+        outData.header.boundingSphere.y = endian::readLE<float>(file);
+        outData.header.boundingSphere.z = endian::readLE<float>(file);
+        outData.header.boundingSphere.w = endian::readLE<float>(file);
+
+        // Read clusters
+        outData.clusters.resize(outData.header.clusterCount);
+
+        for (uint32_t i = 0; i < outData.header.clusterCount; ++i)
+        {
+            auto& cluster = outData.clusters[i];
+
+            // ClusterDescriptor (16 bytes)
+            cluster.descriptor.meshletOffset = endian::readLE<uint32_t>(file);
+            cluster.descriptor.meshletCount = endian::readLE<uint16_t>(file);
+            cluster.descriptor.triangleCount = endian::readLE<uint16_t>(file);
+            cluster.descriptor.vertexOffset = endian::readLE<uint32_t>(file);
+            cluster.descriptor.vertexCount = endian::readLE<uint32_t>(file);
+
+            // ClusterBounds (32 bytes)
+            cluster.bounds.boundingSphere.x = endian::readLE<float>(file);
+            cluster.bounds.boundingSphere.y = endian::readLE<float>(file);
+            cluster.bounds.boundingSphere.z = endian::readLE<float>(file);
+            cluster.bounds.boundingSphere.w = endian::readLE<float>(file);
+            cluster.bounds.cone.x = endian::readLE<float>(file);
+            cluster.bounds.cone.y = endian::readLE<float>(file);
+            cluster.bounds.cone.z = endian::readLE<float>(file);
+            cluster.bounds.cone.w = endian::readLE<float>(file);
+
+            // ClusterHierarchy (16 bytes)
+            cluster.hierarchy.parentIndex = endian::readLE<uint32_t>(file);
+            cluster.hierarchy.siblingIndex = endian::readLE<uint32_t>(file);
+            cluster.hierarchy.geometricError = endian::readLE<float>(file);
+            cluster.hierarchy.level = endian::readLE<uint16_t>(file);
+            cluster.hierarchy.flags = endian::readLE<uint16_t>(file);
+        }
+
+        if (file.fail())
+        {
+            vfLogError("MeshStreamHandle: Failed to read cluster DAG data for submesh {}", submeshIdx);
+            return false;
+        }
+
+        vfLogInfo("MeshStreamHandle: Loaded cluster DAG with {} clusters for submesh {}",
+                  outData.header.clusterCount, submeshIdx);
         return true;
     }
 

@@ -620,7 +620,7 @@ namespace types
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
         resource::endian::writeLE<uint32_t>(outFile, 0);
         resource::endian::writeLE<uint32_t>(outFile, 0);
-        resource::endian::writeLE<uint32_t>(outFile, 7);
+        resource::endian::writeLE<uint32_t>(outFile, 8);  // v0.0.8 - added cluster DAG support
         resource::endian::writeLE<uint32_t>(outFile, scene->mNumMeshes);
 
         resource::endian::writeLE<uint32_t>(outFile, 0);
@@ -666,6 +666,10 @@ namespace types
             resource::ConvexDecompositionData convexData = generateConvexDecomposition(
                 lod0, config.meshConfig);
             writeConvexDecompositionData(outFile, convexData);
+
+            // Write empty cluster DAG placeholder (will be populated by VK-285 cluster builder)
+            resource::ClusterDAGData emptyDAG;
+            writeClusterDAGData(outFile, emptyDAG);
 
             if (progressCallback)
             {
@@ -848,6 +852,57 @@ namespace types
             resource::endian::writeLE<float>(outFile, hull.center.y);
             resource::endian::writeLE<float>(outFile, hull.center.z);
             resource::endian::writeLE<float>(outFile, hull.volume);
+        }
+    }
+
+    void Mesh::writeClusterDAGData(std::ofstream& outFile,
+                                   const resource::ClusterDAGData& dagData) const
+    {
+        bool hasDAG = dagData.header.clusterCount > 0 && !dagData.clusters.empty();
+        resource::endian::writeLE<uint8_t>(outFile, hasDAG ? 1 : 0);
+
+        if (!hasDAG)
+        {
+            return;
+        }
+
+        // Write header
+        resource::endian::writeLE<uint32_t>(outFile, dagData.header.clusterCount);
+        resource::endian::writeLE<uint32_t>(outFile, dagData.header.leafClusterCount);
+        resource::endian::writeLE<uint32_t>(outFile, dagData.header.maxDepth);
+        resource::endian::writeLE<float>(outFile, dagData.header.maxGeometricError);
+
+        resource::endian::writeLE<float>(outFile, dagData.header.boundingSphere.x);
+        resource::endian::writeLE<float>(outFile, dagData.header.boundingSphere.y);
+        resource::endian::writeLE<float>(outFile, dagData.header.boundingSphere.z);
+        resource::endian::writeLE<float>(outFile, dagData.header.boundingSphere.w);
+
+        // Write clusters (64 bytes each)
+        for (const auto& cluster : dagData.clusters)
+        {
+            // ClusterDescriptor (16 bytes)
+            resource::endian::writeLE<uint32_t>(outFile, cluster.descriptor.meshletOffset);
+            resource::endian::writeLE<uint16_t>(outFile, cluster.descriptor.meshletCount);
+            resource::endian::writeLE<uint16_t>(outFile, cluster.descriptor.triangleCount);
+            resource::endian::writeLE<uint32_t>(outFile, cluster.descriptor.vertexOffset);
+            resource::endian::writeLE<uint32_t>(outFile, cluster.descriptor.vertexCount);
+
+            // ClusterBounds (32 bytes)
+            resource::endian::writeLE<float>(outFile, cluster.bounds.boundingSphere.x);
+            resource::endian::writeLE<float>(outFile, cluster.bounds.boundingSphere.y);
+            resource::endian::writeLE<float>(outFile, cluster.bounds.boundingSphere.z);
+            resource::endian::writeLE<float>(outFile, cluster.bounds.boundingSphere.w);
+            resource::endian::writeLE<float>(outFile, cluster.bounds.cone.x);
+            resource::endian::writeLE<float>(outFile, cluster.bounds.cone.y);
+            resource::endian::writeLE<float>(outFile, cluster.bounds.cone.z);
+            resource::endian::writeLE<float>(outFile, cluster.bounds.cone.w);
+
+            // ClusterHierarchy (16 bytes)
+            resource::endian::writeLE<uint32_t>(outFile, cluster.hierarchy.parentIndex);
+            resource::endian::writeLE<uint32_t>(outFile, cluster.hierarchy.siblingIndex);
+            resource::endian::writeLE<float>(outFile, cluster.hierarchy.geometricError);
+            resource::endian::writeLE<uint16_t>(outFile, cluster.hierarchy.level);
+            resource::endian::writeLE<uint16_t>(outFile, cluster.hierarchy.flags);
         }
     }
 

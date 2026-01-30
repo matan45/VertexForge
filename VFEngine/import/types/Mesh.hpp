@@ -7,6 +7,7 @@
 #include "resource/Types.hpp"
 #include "resource/MeshletTypes.hpp"
 #include "resource/ConvexHullTypes.hpp"
+#include "resource/ClusterDAGTypes.hpp"
 struct aiScene;
 struct aiMesh;
 
@@ -69,6 +70,9 @@ namespace types
             const importConfig::MeshImportConfig& config) const;
         void writeConvexDecompositionData(std::ofstream& outFile,
                                           const resource::ConvexDecompositionData& decomposition) const;
+
+        void writeClusterDAGData(std::ofstream& outFile,
+                                 const resource::ClusterDAGData& dagData) const;
 
         void writeSkeletonData(std::ofstream& outFile, const ExtractedSkeleton& skeleton) const;
     };

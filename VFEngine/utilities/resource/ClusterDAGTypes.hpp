@@ -192,7 +192,7 @@ namespace resource
         glm::vec4 boundingSphere;
 
         // Reserved for future use (streaming state, etc.)
-        uint32_t reserved[8];
+        uint32_t reserved[6];
     };
 
     static_assert(sizeof(ClusterDAGHeader) == 64, "ClusterDAGHeader must be 64 bytes");

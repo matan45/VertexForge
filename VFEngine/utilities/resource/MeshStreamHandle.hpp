@@ -9,6 +9,7 @@
 #include "Types.hpp"
 #include "MeshletTypes.hpp"
 #include "ConvexHullTypes.hpp"
+#include "ClusterDAGTypes.hpp"
 
 namespace resource
 {
@@ -26,6 +27,15 @@ namespace resource
         uint32_t primitiveCount = 0;
     };
 
+    struct ClusterDAGFileInfo
+    {
+        uint32_t clusterCount = 0;
+        uint32_t leafClusterCount = 0;
+        uint32_t maxDepth = 0;
+        float maxGeometricError = 0.0f;
+        glm::vec4 boundingSphere{0.0f};
+    };
+
     struct SubmeshStreamInfo
     {
         std::string name;
@@ -39,6 +49,11 @@ namespace resource
         // Convex decomposition (v0.0.5+)
         std::streampos convexDataOffset = 0; // File position where convex data starts
         bool hasConvexData = false;
+
+        // Cluster DAG (v0.0.8+)
+        ClusterDAGFileInfo clusterDAGInfo{};
+        std::streampos clusterDAGDataOffset = 0; // File position where cluster DAG data starts
+        bool hasClusterDAGData = false;
     };
 
     struct MeshStreamHeader
@@ -64,6 +79,7 @@ namespace resource
         static constexpr uint32_t maxConvexHullCount = 256;      // Per submesh
         static constexpr uint32_t maxHullVertexCount = 256;      // Jolt Physics limit
         static constexpr uint32_t maxHullIndexCount = 4096;      // Triangle indices per hull
+        static constexpr uint32_t maxClusterCount = 16384;       // MAX_CLUSTERS_PER_SUBMESH
 
         std::ifstream file;
         MeshStreamHeader header;
@@ -72,6 +88,7 @@ namespace resource
         bool hasConvexHulls = false;    // True if file has convex hull data (v0.0.5+)
         bool has64ByteVertices = false; // True if file has 64-byte vertices with bone data (v0.0.7+)
         bool hasSkeleton = false;       // True if file has full skeleton data (v0.0.7+)
+        bool hasClusterDAGs = false;    // True if file has cluster DAG data (v0.0.8+)
         mutable std::mutex fileMutex; // Protects file reads from concurrent access
 
     public:
@@ -98,9 +115,13 @@ namespace resource
 
         bool readConvexDecomposition(uint32_t submeshIdx, ConvexDecompositionData& outData);
 
+        bool readClusterDAG(uint32_t submeshIdx, ClusterDAGData& outData);
+
         bool hasMeshletData() const { return hasMeshlets; }
 
         bool hasConvexData() const { return hasConvexHulls; }
+
+        bool hasClusterDAGData() const { return hasClusterDAGs; }
 
         bool hasBoneData() const { return has64ByteVertices; }
 
@@ -114,6 +135,8 @@ namespace resource
         bool parseMeshletHeaders(uint32_t meshIdx);
 
         bool parseConvexHeaders(uint32_t meshIdx);
+
+        bool parseClusterDAGHeaders(uint32_t meshIdx);
 
         bool parseSkeletonHeader();
     };
