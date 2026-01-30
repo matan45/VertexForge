@@ -1,6 +1,7 @@
 #include "ClusterStreamManager.hpp"
 #include "../gpudriven/ClusterBuffer.hpp"
 #include "../gpudriven/MeshletBuffer.hpp"
+#include "../gpudriven/MergedMeshBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "resource/ClusterDAGTypes.hpp"
@@ -435,6 +436,13 @@ namespace render::mesh
                         submeshState.state = gpudriven::ClusterStreamState::Ready;
                         submeshState.gpuMemoryUsed = memoryUsed;
                     }
+                }
+
+                // VK-300: Mark cluster DAG as ready in MergedMeshBuffer
+                // This enables hasRenderableLOD() to return true for DAG-only submeshes
+                if (mergedMeshBuffer)
+                {
+                    mergedMeshBuffer->markClusterDAGReady(upload.meshPath, upload.submeshName, upload.submeshIndex);
                 }
 
                 loggerWarning("ClusterStreamManager: Uploaded cluster DAG for {}:{}#{} ({} KB)",

@@ -145,10 +145,7 @@ namespace windows
         subMeshQuery.instanceId = services::PreviewInstanceId(this);
         subMeshes = events::EventDispatcher::instance().query(subMeshQuery);
 
-        // Get LOD info
-        services::events::preview::GetPreviewMeshLODInfoQuery lodQuery;
-        lodQuery.instanceId = services::PreviewInstanceId(this);
-        lodLevels = events::EventDispatcher::instance().query(lodQuery);
+        // VK-300: LOD info query removed - discrete LOD no longer used
     }
 
     void MeshPreviewWindow::handlePreviewInput()
@@ -206,7 +203,7 @@ namespace windows
         services::MeshPreviewParams meshParams;
         meshParams.modelMatrix = model;
         meshParams.highlightedSubMesh = selectedSubMesh;
-        meshParams.forceLODLevel = selectedLOD;
+        // VK-300: forceLODLevel always -1 (auto) - discrete LOD removed
 
         services::events::preview::SetMeshPreviewParamsCommand meshCmd;
         meshCmd.instanceId = services::PreviewInstanceId(this);
@@ -277,41 +274,11 @@ namespace windows
 
         ImGui::Separator();
 
-        // LOD Level Selection
-        if (!lodLevels.empty())
-        {
-            ImGui::Spacing();
-            ImGui::Text("LOD Level");
-
-            const char* lodLabels[] = {"Auto", "LOD 0 (100%)", "LOD 1 (50%)", "LOD 2 (25%)", "LOD 3 (12.5%)"};
-            int currentLOD = selectedLOD + 1; // -1 becomes 0 (Auto), 0 becomes 1 (LOD 0), etc.
-
-            float itemWidth = ImGui::GetContentRegionAvail().x;
-            ImGui::SetNextItemWidth(itemWidth);
-            if (ImGui::Combo("##LODLevel", &currentLOD, lodLabels, 5))
-            {
-                selectedLOD = currentLOD - 1; // 0 becomes -1 (Auto), 1 becomes 0 (LOD 0), etc.
-            }
-
-
-            int displayLOD = (selectedLOD >= 0) ? selectedLOD : 0;
-            if (static_cast<size_t>(displayLOD) < lodLevels.size())
-            {
-                const auto& lodInfo = lodLevels[displayLOD];
-                if (selectedLOD < 0)
-                {
-                    ImGui::TextDisabled("Auto (showing LOD0):");
-                }
-                else
-                {
-                    ImGui::TextDisabled("LOD %d (%.1f%%):", lodInfo.lodLevel, lodInfo.reductionPercent);
-                }
-                ImGui::Text("  Vertices: %u", lodInfo.vertexCount);
-                ImGui::Text("  Triangles: %u", lodInfo.indexCount / 3);
-            }
-
-            ImGui::Separator();
-        }
+        // VK-300: Discrete LOD removed - DAG clusters now handle continuous LOD
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "LOD: DAG Clusters");
+        ImGui::TextDisabled("(Continuous LOD via cluster selection)");
+        ImGui::Separator();
 
         // Summary
         uint32_t totalVerts = 0;
@@ -322,7 +289,7 @@ namespace windows
             totalIndices += info.indexCount;
         }
 
-        ImGui::TextDisabled("Total (LOD0):");
+        ImGui::TextDisabled("Mesh Stats:");
         ImGui::Text("  Submeshes: %zu", subMeshes.size());
         ImGui::Text("  Vertices: %u", totalVerts);
         ImGui::Text("  Triangles: %u", totalIndices / 3);

@@ -9,9 +9,10 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 const uint TASK_WORKGROUP_SIZE = 32;
 
-const uint FLAG_NO_CULL       = 1u << 6;
-const uint FLAG_NO_OCCLUDE    = 1u << 7;
-const uint FLAG_UNIFORM_SCALE = 1u << 9;
+// Local flag constants (must not conflict with #define in gpu_types.glsl)
+const uint LOCAL_FLAG_NO_CULL       = 1u << 6;
+const uint LOCAL_FLAG_NO_OCCLUDE    = 1u << 7;
+// Note: FLAG_UNIFORM_SCALE is already defined in gpu_types.glsl as a macro
 
 layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
     GPUObjectData objects[];
@@ -49,14 +50,8 @@ layout(std430, set = 0, binding = 6) writeonly buffer ObjectDrawIndexMap {
     uint objectDrawIndexMap[];
 };
 
-uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
-    switch (level) {
-        case 0: return obj.meshletLod0;
-        case 1: return obj.meshletLod1;
-        case 2: return obj.meshletLod2;
-        default: return obj.meshletLod3;
-    }
-}
+// VK-300: getMeshletLODData(), selectLOD(), findBestAvailableLOD() removed
+// All objects now use DAG cluster rendering
 
 vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
@@ -88,33 +83,7 @@ float projectSphereToScreen(vec4 worldSphere, mat4 projection, vec2 screenSize) 
     return screenDiameter;
 }
 
-uint selectLOD(float screenPixels, vec4 thresholds) {
-    float adjustedPixels = screenPixels * pow(2.0, -thresholds.w);
-    if (adjustedPixels > thresholds.x) return 0;
-    if (adjustedPixels > thresholds.y) return 1;
-    if (adjustedPixels > thresholds.z) return 2;
-    return 3;
-}
-
-uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
-    if (availableMask == 0xFu) {
-        return targetLOD;
-    }
-    if (availableMask == 0u) {
-        return 0xFFFFFFFFu;
-    }
-    for (uint lod = targetLOD; lod < 4u; ++lod) {
-        if ((availableMask & (1u << lod)) != 0u) {
-            return lod;
-        }
-    }
-    for (uint lod = 0u; lod < 4u; ++lod) {
-        if ((availableMask & (1u << lod)) != 0u) {
-            return lod;
-        }
-    }
-    return 0xFFFFFFFFu;
-}
+// VK-300: selectLOD() and findBestAvailableLOD() removed - discrete LOD no longer used
 
 bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, uint hiZMipLevels) {
     vec3 center = worldSphere.xyz;
@@ -169,6 +138,9 @@ bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, ui
     return minDepth <= hiZDepth + 0.0001;
 }
 
+// VK-300: All objects now use DAG cluster rendering
+// Discrete LOD path has been removed
+
 void main() {
     uint objectIndex = gl_GlobalInvocationID.x;
     if (objectIndex >= camera.objectCount) {
@@ -177,137 +149,52 @@ void main() {
 
     GPUObjectData obj = objects[objectIndex];
 
-    // Handle DAG objects separately - they use cluster-based LOD selection (VK-291)
-    if (usesClusterDAG(obj)) {
-        // DAG objects still need PerDrawData for material/transform info
-        // Allocate a drawIndex and fill PerDrawData, then store mapping for cluster traversal
-
-        // Use section 0 for DAG objects (they're rendered via separate cluster dispatch)
-        uint dagSection = 0;
-        uint commandsPerSection = getCommandsPerSection();
-
-        uint localDrawIndex = atomicAdd(batchStats[dagSection].drawCount, 1);
-        if (localDrawIndex >= commandsPerSection) {
-            atomicAdd(batchStats[dagSection].drawCount, uint(-1));
-            objectDrawIndexMap[objectIndex] = 0xFFFFFFFFu;  // Invalid
-            return;
-        }
-
-        uint globalDrawIndex = dagSection * commandsPerSection + localDrawIndex;
-
-        // Store mapping from objectIndex to drawIndex for cluster traversal
-        objectDrawIndexMap[objectIndex] = globalDrawIndex;
-
-        // Fill PerDrawData with object transforms and materials
-        perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
-
-        mat3 modelMat3 = mat3(obj.modelMatrix);
-        mat3 normalMat3;
-        if ((obj.flags & FLAG_UNIFORM_SCALE) != 0u) {
-            float scale = length(modelMat3[0]);
-            normalMat3 = modelMat3 * (1.0 / scale);
-        } else {
-            normalMat3 = transpose(inverse(modelMat3));
-        }
-        perDrawData[globalDrawIndex].normalMatrix = mat4(normalMat3);
-
-        perDrawData[globalDrawIndex].albedo = obj.albedo;
-        perDrawData[globalDrawIndex].materialParams = obj.materialParams;
-        perDrawData[globalDrawIndex].textureIndices0 = obj.textureIndices0;
-        perDrawData[globalDrawIndex].textureIndices1 = obj.textureIndices1;
-        perDrawData[globalDrawIndex].objectIndex = objectIndex;
-        perDrawData[globalDrawIndex].flags = obj.flags;
-        perDrawData[globalDrawIndex].iblDiffuse = obj.iblParams.x;
-        perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
-        perDrawData[globalDrawIndex].lodLevel = 0u;  // DAG handles LOD internally
-        perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
-        perDrawData[globalDrawIndex].meshletOffset = 0u;  // Not used for DAG
-        perDrawData[globalDrawIndex].meshletCount = 0u;   // Not used for DAG
-        perDrawData[globalDrawIndex].baseVertexOffset = 0u;
-        perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
-        perDrawData[globalDrawIndex].boneCount = 0u;
-        perDrawData[globalDrawIndex].padding3 = 0u;
-
-        // Don't create draw commands - cluster rendering is dispatched separately
-        return;
-    }
-
+    // =========================================================================
+    // Object-Level Culling (VK-300: restored)
+    // =========================================================================
     vec4 worldSphere = transformBoundingSphere(obj.boundingSphere, obj.modelMatrix);
 
-    uint batchIndex = objectIndex % camera.batchCount;
-    uint shaderGroup = obj.shaderGroupIndex;
-    uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
-    uint commandsPerSection = getCommandsPerSection();
-
-    if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
+    // Frustum culling (unless disabled per-object)
+    bool noCull = (obj.flags & LOCAL_FLAG_NO_CULL) != 0u;
+    if (!noCull) {
         if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
-            atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
+            atomicAdd(batchStats[0].culledByFrustum, 1u);
+            objectDrawIndexMap[objectIndex] = 0xFFFFFFFFu;  // Invalid - culled
             return;
         }
     }
 
-    if (camera.enableOcclusionCulling != 0u && (obj.flags & FLAG_NO_OCCLUDE) == 0u) {
-        if (camera.hiZMipLevels > 0u) {
-            if (!hiZOcclusionTest(worldSphere, camera.viewProjection, camera.screenParams.xy, camera.hiZMipLevels)) {
-                atomicAdd(batchStats[sectionIndex].culledByOcclusion, 1);
-                return;
-            }
+    // Hi-Z occlusion culling (unless disabled per-object)
+    bool noOcclude = (obj.flags & LOCAL_FLAG_NO_OCCLUDE) != 0u;
+    if (!noOcclude && camera.hiZMipLevels > 0u) {
+        if (!hiZOcclusionTest(worldSphere, camera.viewProjection,
+                              camera.screenParams.xy, camera.hiZMipLevels)) {
+            atomicAdd(batchStats[0].culledByOcclusion, 1u);
+            objectDrawIndexMap[objectIndex] = 0xFFFFFFFFu;  // Invalid - occluded
+            return;
         }
     }
 
-    uint targetLOD = 0;
-    if (camera.enableLODSelection != 0u) {
-        vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
-        viewSphere.w = worldSphere.w;
-        float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-        targetLOD = selectLOD(screenPixels, obj.lodThresholds);
-    }
+    // =========================================================================
+    // Object passed culling - fill PerDrawData
+    // =========================================================================
 
-    uint lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);
-    if (lodLevel == 0xFFFFFFFFu) {
-        return;
-    }
+    uint dagSection = 0;
+    uint commandsPerSection = getCommandsPerSection();
 
-    uvec4 meshletLodData = getMeshletLODData(obj, lodLevel);
-    uint meshletOffset = meshletLodData.x;
-    uint meshletCount = meshletLodData.y;
-    uint baseVertexOffset = meshletLodData.z;
-
-    while (lodLevel > 0u && meshletCount == 0u) {
-        lodLevel--;
-        if ((obj.availableLODMask & (1u << lodLevel)) == 0u) {
-            continue;
-        }
-        meshletLodData = getMeshletLODData(obj, lodLevel);
-        meshletOffset = meshletLodData.x;
-        meshletCount = meshletLodData.y;
-        baseVertexOffset = meshletLodData.z;
-    }
-
-    if (meshletCount == 0u) {
-        return;
-    }
-
-    uint localDrawIndex = atomicAdd(batchStats[sectionIndex].drawCount, 1);
+    uint localDrawIndex = atomicAdd(batchStats[dagSection].drawCount, 1);
     if (localDrawIndex >= commandsPerSection) {
-        atomicAdd(batchStats[sectionIndex].drawCount, uint(-1));
+        atomicAdd(batchStats[dagSection].drawCount, uint(-1));
+        objectDrawIndexMap[objectIndex] = 0xFFFFFFFFu;  // Invalid
         return;
     }
 
-    switch (lodLevel) {
-        case 0u: atomicAdd(batchStats[sectionIndex].lodCount0, 1); break;
-        case 1u: atomicAdd(batchStats[sectionIndex].lodCount1, 1); break;
-        case 2u: atomicAdd(batchStats[sectionIndex].lodCount2, 1); break;
-        default: atomicAdd(batchStats[sectionIndex].lodCount3, 1); break;
-    }
+    uint globalDrawIndex = dagSection * commandsPerSection + localDrawIndex;
 
-    uint globalDrawIndex = sectionIndex * commandsPerSection + localDrawIndex;
-    uint taskGroupCount = (meshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
+    // Store mapping from objectIndex to drawIndex for cluster traversal
+    objectDrawIndexMap[objectIndex] = globalDrawIndex;
 
-    drawCommands[globalDrawIndex].groupCountX = taskGroupCount;
-    drawCommands[globalDrawIndex].groupCountY = 1u;
-    drawCommands[globalDrawIndex].groupCountZ = 1u;
-
+    // Fill PerDrawData with object transforms and materials
     perDrawData[globalDrawIndex].modelMatrix = obj.modelMatrix;
 
     mat3 modelMat3 = mat3(obj.modelMatrix);
@@ -328,12 +215,35 @@ void main() {
     perDrawData[globalDrawIndex].flags = obj.flags;
     perDrawData[globalDrawIndex].iblDiffuse = obj.iblParams.x;
     perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
-    perDrawData[globalDrawIndex].lodLevel = lodLevel;
+    perDrawData[globalDrawIndex].lodLevel = 0u;  // DAG handles LOD internally
     perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
+
+    // Get meshlet info from DAG cluster info (lod0Data)
+    // In DAG mode: lod0Data = {dagHeaderIdx, clusterOffset/meshletOffset, clusterCount/meshletCount, root}
+    uint meshletOffset = obj.lod0Data.y;
+    uint meshletCount = obj.lod0Data.z;
     perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
     perDrawData[globalDrawIndex].meshletCount = meshletCount;
-    perDrawData[globalDrawIndex].baseVertexOffset = baseVertexOffset;
-    perDrawData[globalDrawIndex].boneMatrixOffset = obj.meshletLod3.w;
+    perDrawData[globalDrawIndex].baseVertexOffset = 0u;
+    perDrawData[globalDrawIndex].boneMatrixOffset = obj.boneMatrixOffset;
     perDrawData[globalDrawIndex].boneCount = 0u;
     perDrawData[globalDrawIndex].padding3 = 0u;
+
+    // Generate draw command for fallback mode (when cluster data not available)
+    // Objects WITH DAGFullyLoaded flag will be rendered via DAG traversal path,
+    // so we skip generating fallback commands for them (set groupCountX = 0)
+    // Objects WITHOUT DAGFullyLoaded flag use direct meshlet rendering
+    MeshTasksCommand cmd;
+    bool hasDAGData = (obj.flags & FLAG_DAG_FULLY_LOADED) != 0u;
+    if (hasDAGData) {
+        // Skip fallback rendering - this object will be rendered via DAG path
+        cmd.groupCountX = 0u;
+    } else {
+        // Fallback: direct meshlet rendering
+        // lod0Data.y/z contain meshlet offset/count for non-DAG objects
+        cmd.groupCountX = (meshletCount + TASK_WORKGROUP_SIZE - 1u) / TASK_WORKGROUP_SIZE;
+    }
+    cmd.groupCountY = 1u;
+    cmd.groupCountZ = 1u;
+    drawCommands[globalDrawIndex] = cmd;
 }

@@ -146,10 +146,10 @@ namespace render::gpudriven
         uint32_t selectedCount;        // +8  Total clusters selected (atomic)
         uint32_t passIndex;            // +12 Current traversal pass number
 
-        uint32_t totalProcessed;       // +16 Statistics: total clusters processed
-        uint32_t totalSelected;        // +20 Statistics: total clusters selected
-        uint32_t totalSubtreesCulled;  // +24 Statistics: subtrees pruned by culling
-        uint32_t padding;              // +28 Padding for alignment
+        uint32_t totalProcessed;         // +16 Statistics: total clusters processed
+        uint32_t totalSelected;          // +20 Statistics: total clusters selected
+        uint32_t totalSubtreesCulled;    // +24 Statistics: subtrees pruned by culling
+        uint32_t workQueueOverflowCount; // +28 Statistics: work items dropped due to queue overflow
     };
 
     static_assert(sizeof(GPUDAGTraversalState) == 32, "GPUDAGTraversalState must be 32 bytes");

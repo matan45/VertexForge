@@ -54,7 +54,7 @@ struct GPUObjectData {
     uvec4 lod2Data;      // In DAG mode: maxDepth, reserved, reserved, reserved
     uvec4 lod3Data;      // In DAG mode: reserved
 
-    vec4 lodThresholds;
+    vec4 reserved0;          // VK-300: lodThresholds removed - reserved for future use
 
     vec4 albedo;
     vec4 materialParams;
@@ -65,13 +65,13 @@ struct GPUObjectData {
 
     uint flags;
     uint entityId;
-    uint availableLODMask;
+    uint boneMatrixOffset;   // VK-300: Moved from meshletLod3.w to dedicated field
     uint shaderGroupIndex;
 
-    uvec4 meshletLod0;
-    uvec4 meshletLod1;
-    uvec4 meshletLod2;
-    uvec4 meshletLod3;
+    uvec4 reserved1;         // VK-300: meshletLod0 removed - reserved for future use
+    uvec4 reserved2;         // VK-300: meshletLod1 removed - reserved for future use
+    uvec4 reserved3;         // VK-300: meshletLod2 removed - reserved for future use
+    uvec4 reserved4;         // VK-300: meshletLod3 removed - reserved for future use
 };
 
 // =====================================================================

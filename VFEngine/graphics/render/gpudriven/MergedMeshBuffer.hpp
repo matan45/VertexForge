@@ -50,6 +50,18 @@ namespace render::gpudriven
 
     using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
+    // VK-300: Cluster DAG info for Nanite-style rendering
+    struct ClusterDAGResolverResult
+    {
+        uint32_t clusterOffset = 0;
+        uint32_t clusterCount = 0;
+        uint32_t dagHeaderIndex = 0;
+        bool hasClusterData = false;
+    };
+
+    using ClusterDAGResolver = std::function<ClusterDAGResolverResult(
+        const std::string& meshPath, const std::string& submeshName, uint32_t submeshIndex)>;
+
     class MergedMeshBuffer
     {
     private:
@@ -110,6 +122,7 @@ namespace render::gpudriven
                            const TextureIndexResolver& textureResolver = nullptr,
                            const ShaderGroupResolver& shaderGroupResolver = nullptr,
                            const BoneOffsetResolver& boneOffsetResolver = nullptr,
+                           const ClusterDAGResolver& clusterResolver = nullptr,
                            float time = 0.0f);
 
         void uploadObjects(vk::CommandBuffer cmd);
@@ -130,17 +143,25 @@ namespace render::gpudriven
         MergedMeshInfo* reserveMesh(const std::string& meshPath,
                                     const resource::MeshStreamHeader& header);
 
+        // VK-300: Per-LOD methods kept for API compatibility
+        // All LOD levels now contain the same data (LOD0) - discrete LOD selection removed
+        // New rendering uses DAG cluster system for continuous LOD
         bool uploadLOD(const std::string& meshPath,
                        const std::string& submeshName,
                        uint32_t submeshIndex,
-                       uint32_t lodLevel,
+                       uint32_t lodLevel,  // VK-300: All levels contain LOD0 data
                        const resource::Vertex* vertexData, uint32_t vertexCount,
                        const uint32_t* indexData, uint32_t indexCount);
 
         void markLODReady(const std::string& meshPath,
                           const std::string& submeshName,
                           uint32_t submeshIndex,
-                          uint32_t lodLevel);
+                          uint32_t lodLevel);  // VK-300: All levels contain LOD0 data
+
+        // VK-300: Mark cluster DAG data as uploaded and ready
+        void markClusterDAGReady(const std::string& meshPath,
+                                 const std::string& submeshName,
+                                 uint32_t submeshIndex);
 
         SubmeshLocation* getSubmeshLocationMutable(const std::string& meshPath,
                                                    const std::string& submeshName,
@@ -165,6 +186,7 @@ namespace render::gpudriven
                                 const TextureIndexResolver& textureResolver,
                                 const ShaderGroupResolver& shaderGroupResolver,
                                 const BoneOffsetResolver& boneOffsetResolver,
+                                const ClusterDAGResolver& clusterResolver,
                                 float time);
 
         static std::string makeSubmeshKey(const std::string& meshPath, const std::string& submeshName,

@@ -79,11 +79,12 @@ namespace windows
                     }
 
                     ImGui::Separator();
-                    ImGui::Checkbox("Generate Cluster DAG (Nanite-style)", &meshConfig.generateClusterDAG);
+                    // VK-300: Cluster DAG is now always generated (discrete LOD removed)
+                    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Cluster DAG: Always Generated");
                     if (ImGui::IsItemHovered())
                     {
-                        ImGui::SetTooltip("Generates hierarchical cluster DAG for seamless LOD transitions.\n"
-                                          "Enables per-cluster LOD selection at runtime.");
+                        ImGui::SetTooltip("Hierarchical cluster DAG is generated for all meshes.\n"
+                                          "Enables seamless per-cluster LOD selection at runtime.");
                     }
 
                     ImGui::Unindent();

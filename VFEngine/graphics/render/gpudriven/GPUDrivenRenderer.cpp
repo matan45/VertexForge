@@ -2,6 +2,7 @@
 #include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../mesh/MeshStreamManager.hpp"
+#include "../mesh/ClusterStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../animation/RuntimeAnimatorSystem.hpp"
@@ -101,6 +102,14 @@ namespace render::gpudriven
             meshletBuffer = std::make_unique<MeshletBuffer>(device);
             meshletBuffer->init();
 
+            clusterBuffer = std::make_unique<ClusterBuffer>(device);
+            clusterBuffer->init();
+            loggerInfo("GPUDrivenRenderer: ClusterBuffer initialized for DAG cluster rendering");
+
+            clusterTraversalPipeline = std::make_unique<ClusterDAGTraversalPipeline>(device);
+            clusterTraversalPipeline->init();
+            loggerInfo("GPUDrivenRenderer: ClusterDAGTraversalPipeline initialized for DAG traversal");
+
             boneMatrixManager = std::make_unique<BoneMatrixManager>(device);
             boneMatrixManager->init();
 
@@ -156,6 +165,15 @@ namespace render::gpudriven
             {
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());
                 loggerInfo("GPUDrivenRenderer: Meshlet streaming enabled");
+            }
+
+            // Initialize cluster streaming manager for DAG data
+            if (clusterBuffer)
+            {
+                clusterStreamManager = std::make_unique<mesh::ClusterStreamManager>(device, *clusterBuffer);
+                clusterStreamManager->setMeshletBuffer(meshletBuffer.get());
+                clusterStreamManager->setMergedMeshBuffer(mergedBuffer.get());  // VK-300: For marking cluster availability
+                loggerInfo("GPUDrivenRenderer: ClusterStreamManager initialized for DAG streaming");
             }
         }
         else
@@ -215,6 +233,8 @@ namespace render::gpudriven
         if (clusterGridManager) clusterGridManager->cleanup();
         if (lightBufferManager) lightBufferManager->cleanup();
         if (boneMatrixManager) boneMatrixManager->cleanup();
+        if (clusterTraversalPipeline) clusterTraversalPipeline->cleanup();
+        if (clusterBuffer) clusterBuffer->cleanup();
         if (meshletBuffer) meshletBuffer->cleanup();
         if (cameraBuffer) cameraBuffer->cleanup();
         if (cullPipeline) cullPipeline->cleanup();
@@ -222,6 +242,7 @@ namespace render::gpudriven
         if (batchManager) batchManager->cleanup();
         if (mergedBuffer) mergedBuffer->cleanup();
 
+        clusterStreamManager.reset();
         meshStreamManager.reset();
         lightOcclusionCulling.reset();
         meshShaderPipeline.reset();
@@ -230,6 +251,8 @@ namespace render::gpudriven
         clusterGridManager.reset();
         lightBufferManager.reset();
         boneMatrixManager.reset();
+        clusterTraversalPipeline.reset();
+        clusterBuffer.reset();
         meshletBuffer.reset();
         cameraBuffer.reset();
         cullPipeline.reset();
@@ -272,7 +295,29 @@ namespace render::gpudriven
         ShaderGroupResolver shaderGroupResolver = [](const std::string&) -> uint32_t { return 0; };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, time);
+        // VK-300: Create cluster DAG resolver for Nanite-style rendering
+        ClusterDAGResolver clusterResolver = nullptr;
+        if (clusterBuffer)
+        {
+            clusterResolver = [this](const std::string& meshPath,
+                                     const std::string& submeshName,
+                                     uint32_t submeshIndex) -> ClusterDAGResolverResult
+            {
+                ClusterDAGResolverResult result{};
+                const auto* alloc = clusterBuffer->getAllocation(meshPath, submeshName, submeshIndex);
+                if (alloc && alloc->isAllocated)
+                {
+                    ClusterDAGInfo info = clusterBuffer->getClusterDAGInfo(*alloc);
+                    result.clusterOffset = info.clusterOffset;
+                    result.clusterCount = info.clusterCount;
+                    result.dagHeaderIndex = info.dagHeaderIndex;
+                    result.hasClusterData = info.clusterCount > 0;
+                }
+                return result;
+            };
+        }
+
+        mergedBuffer->updateObjects(opaqueObjects, textureResolver, shaderGroupResolver, boneOffsetResolver, clusterResolver, time);
 
         CameraUpdateParams cameraParams{
             .view = view,
@@ -299,6 +344,17 @@ namespace render::gpudriven
         updatePipelineDescriptors();
 
         stats.totalObjects = mergedBuffer->getObjectCount();
+
+        // VK-300: Debug logging for rendering issues
+        static bool loggedObjectCount = false;
+        uint32_t registeredCount = static_cast<uint32_t>(mergedBuffer->getRegisteredMeshes().size());
+        if (!loggedObjectCount && stats.totalObjects == 0 && registeredCount > 0)
+        {
+            loggerWarning("GPUDrivenRenderer: 0 objects to render despite {} registered meshes - "
+                          "meshes may lack meshlet data (re-import with version >= 0.0.4)",
+                          registeredCount);
+            loggedObjectCount = true;
+        }
     }
 
     void GPUDrivenRenderer::updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
@@ -312,9 +368,22 @@ namespace render::gpudriven
         for (const auto& meshRender : opaqueObjects)
         {
             meshStreamManager->requestMesh(meshRender.meshPath);
+
+            // VK-300: Also request cluster DAG data for Nanite-style rendering
+            if (clusterStreamManager)
+            {
+                clusterStreamManager->requestMesh(meshRender.meshPath);
+            }
         }
 
         meshStreamManager->update(cameraPosition);
+
+        // VK-300: Update cluster streaming for DAG data
+        if (clusterStreamManager)
+        {
+            static uint64_t clusterStreamFrameIndex = 0;
+            clusterStreamManager->update(cameraPosition, clusterStreamFrameIndex++);
+        }
     }
 
     void GPUDrivenRenderer::registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects)
@@ -482,14 +551,31 @@ namespace render::gpudriven
             cameraBuffer->getBuffer(),
             batchManager->getCombinedDrawCommandBuffer(),
             batchManager->getCombinedPerDrawDataBuffer(),
-            batchManager->getCombinedDrawCountBuffer()
+            batchManager->getCombinedDrawCountBuffer(),
+            batchManager->getObjectDrawIndexBuffer()
         );
+
+        // VK-300: Update DAG traversal pipeline descriptors
+        if (clusterTraversalPipeline && clusterBuffer)
+        {
+            clusterTraversalPipeline->updateDescriptors(
+                mergedBuffer->getObjectBuffer(),
+                cameraBuffer->getBuffer(),
+                batchManager->getObjectDrawIndexBuffer(),
+                *clusterBuffer
+            );
+        }
 
         if (meshShaderPipeline && mergedBuffer->getObjectCount() > 0)
         {
             meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+
+            if (clusterBuffer)
+            {
+                meshShaderPipeline->updateClusterDescriptors(*clusterBuffer);
+            }
 
             if (lightBufferManager && clusterGridManager && lightCullingPipeline)
             {
@@ -717,6 +803,43 @@ namespace render::gpudriven
         }
 
         cullPipeline->dispatch(cmd, stats.totalObjects);
+
+        // VK-300: DAG cluster traversal for hierarchical LOD selection
+        if (clusterTraversalPipeline && clusterBuffer && clusterBuffer->getCurrentClusterCount() > 0)
+        {
+            // Barrier after cull pipeline - objectDrawIndexMap must be written before traversal reads it
+            vk::MemoryBarrier cullToTraversalBarrier{
+                vk::AccessFlagBits::eShaderWrite,
+                vk::AccessFlagBits::eShaderRead
+            };
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eComputeShader,
+                vk::PipelineStageFlagBits::eComputeShader,
+                vk::DependencyFlags{},
+                1, &cullToTraversalBarrier,
+                0, nullptr,
+                0, nullptr
+            );
+
+            // Calculate projection factor: screenHeight / (2 * tan(fovY/2))
+            auto extent = swapChain.getSwapchainExtent();
+            float projectionFactor = cachedCameraProjection[1][1] * static_cast<float>(extent.height) * 0.5f;
+
+            // Set traversal parameters
+            static uint32_t frameIndex = 0;
+            clusterTraversalPipeline->setTraversalParams(
+                projectionFactor,
+                1.0f,  // screenErrorThreshold (pixels)
+                1.0f,  // errorMultiplier
+                frameIndex++,
+                frustumCullingEnabled,
+                occlusionCullingEnabled
+            );
+
+            // Dispatch DAG traversal
+            clusterTraversalPipeline->dispatch(cmd, stats.totalObjects, *clusterBuffer);
+        }
+
         batchManager->insertBarriersAfterCompute(cmd);
 
         if (shadowSystem && shadowSystem->isShadowsEnabled() &&
@@ -779,38 +902,76 @@ namespace render::gpudriven
 
         auto extent = swapChain.getSwapchainExtent();
 
-        for (uint32_t shaderGroup = 0; shaderGroup <= 2; ++shaderGroup)
+        // VK-300: Render BOTH paths - DAG objects AND fallback objects
+        // This ensures meshes with cluster data use DAG, and meshes without use direct meshlet
+
+        // Path 1: DAG cluster rendering for objects with cluster data
+        if (clusterBuffer && clusterBuffer->getCurrentClusterCount() > 0)
         {
-            for (uint32_t batch = 0; batch < batchCount; ++batch)
-            {
-                vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, shaderGroup);
-                vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, shaderGroup);
+            MeshShaderPushConstants pushConstants{};
+            pushConstants.baseDrawIndex = 0;  // Not used in DAG mode - drawIndex comes from selection
 
-                MeshShaderPushConstants pushConstants{};
-                pushConstants.baseDrawIndex = batchManager->getSectionIndex(batch, shaderGroup) * commandsPerSection;
+            pushConstants.viewMode = currentViewMode;
+            if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+            if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            pushConstants.screenWidth = static_cast<float>(extent.width);
+            pushConstants.screenHeight = static_cast<float>(extent.height);
 
-                pushConstants.viewMode = currentViewMode;
-                if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
-                if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
-                pushConstants.screenWidth = static_cast<float>(extent.width);
-                pushConstants.screenHeight = static_cast<float>(extent.height);
+            // Set cluster selection range - clusterCount used for bounds checking in shader
+            pushConstants.clusterBaseIndex = 0;
+            pushConstants.clusterCount = MAX_CLUSTER_SELECTIONS_PER_FRAME;
 
-                cmd.pushConstants(
-                    layout,
-                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT |
-                    vk::ShaderStageFlagBits::eFragment,
-                    0,
-                    sizeof(MeshShaderPushConstants),
-                    &pushConstants);
+            cmd.pushConstants(
+                layout,
+                vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT |
+                vk::ShaderStageFlagBits::eFragment,
+                0,
+                sizeof(MeshShaderPushConstants),
+                &pushConstants);
 
-                cmd.drawMeshTasksIndirectCountEXT(
-                    batchManager->getCombinedDrawCommandBuffer(),
-                    cmdOffset,
-                    batchManager->getCombinedDrawCountBuffer(),
-                    countOffset,
-                    commandsPerSection,
-                    sizeof(MeshTasksIndirectCommand));
-            }
+            // Use indirect dispatch with actual selectedCount from DAG traversal
+            cmd.drawMeshTasksIndirectEXT(
+                clusterBuffer->getIndirectDrawCommandBuffer(),
+                0,  // offset
+                1,  // drawCount (single indirect command)
+                12  // stride (sizeof MeshTasksIndirectCommand)
+            );
+        }
+
+        // Path 2: Fallback direct meshlet rendering for objects WITHOUT cluster data
+        // This renders all objects - the gpu_cull_lod shader generates commands for all objects
+        // Objects with DAG data will have been rendered above, but rendering them again
+        // with the fallback path is harmless (they have valid meshlet data too)
+        {
+            vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(0, 0);
+            vk::DeviceSize countOffset = batchManager->getDrawCountOffset(0, 0);
+
+            MeshShaderPushConstants pushConstants{};
+            pushConstants.baseDrawIndex = 0;
+
+            pushConstants.viewMode = currentViewMode;
+            if (meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
+            if (meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+            pushConstants.screenWidth = static_cast<float>(extent.width);
+            pushConstants.screenHeight = static_cast<float>(extent.height);
+            pushConstants.clusterBaseIndex = 0;
+            pushConstants.clusterCount = 0;  // 0 triggers direct meshlet mode in task shader
+
+            cmd.pushConstants(
+                layout,
+                vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT |
+                vk::ShaderStageFlagBits::eFragment,
+                0,
+                sizeof(MeshShaderPushConstants),
+                &pushConstants);
+
+            cmd.drawMeshTasksIndirectCountEXT(
+                batchManager->getCombinedDrawCommandBuffer(),
+                cmdOffset,
+                batchManager->getCombinedDrawCountBuffer(),
+                countOffset,
+                commandsPerSection,
+                sizeof(MeshTasksIndirectCommand));
         }
     }
 
@@ -911,6 +1072,12 @@ namespace render::gpudriven
         if (cullPipeline && hiZView && hiZSampler)
         {
             cullPipeline->updateHiZDescriptor(hiZView, hiZSampler);
+        }
+
+        // VK-300: Also update Hi-Z for DAG traversal pipeline
+        if (clusterTraversalPipeline && hiZView && hiZSampler)
+        {
+            clusterTraversalPipeline->updateHiZDescriptor(hiZView, hiZSampler);
         }
     }
 

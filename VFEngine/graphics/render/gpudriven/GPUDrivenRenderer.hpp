@@ -9,6 +9,8 @@
 #include "MeshShaderPipeline.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
+#include "ClusterBuffer.hpp"
+#include "ClusterDAGTraversalPipeline.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
 #include "../lighting/ClusterGridManager.hpp"
 #include "../lighting/LightCullingPipeline.hpp"
@@ -40,6 +42,7 @@ namespace render::mesh
 {
     class MaterialTextureCache;
     class MeshStreamManager;
+    class ClusterStreamManager;
     struct MeshRenderData;
 }
 
@@ -64,6 +67,8 @@ namespace render::gpudriven
         std::unique_ptr<MeshShaderPipeline> meshShaderPipeline;
         std::unique_ptr<MeshletBuffer> meshletBuffer;
         std::unique_ptr<BoneMatrixManager> boneMatrixManager;
+        std::unique_ptr<ClusterBuffer> clusterBuffer;
+        std::unique_ptr<ClusterDAGTraversalPipeline> clusterTraversalPipeline;
         std::unique_ptr<lighting::GPULightBufferManager> lightBufferManager;
         std::unique_ptr<lighting::ClusterGridManager> clusterGridManager;
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
@@ -98,6 +103,7 @@ namespace render::gpudriven
         material::CallbackId materialChangeCallbackId{};
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
+        std::unique_ptr<mesh::ClusterStreamManager> clusterStreamManager;
         bool meshStreamingEnabled = true;
 
         std::unordered_set<uint32_t> visibleLightIds;
@@ -193,6 +199,7 @@ namespace render::gpudriven
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
         lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
+        ClusterBuffer* getClusterBuffer() const { return clusterBuffer.get(); }
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
 

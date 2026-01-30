@@ -29,12 +29,15 @@ namespace render::gpudriven
 
 namespace render::mesh
 {
+    // VK-300: Discrete LOD system deprecated - all LOD slots contain the same data (LOD0)
+    // The lodLevel field is kept for API compatibility but all levels return identical data
+    // New rendering uses DAG cluster system for continuous LOD
     struct StreamingRequest
     {
         std::string meshPath;
         std::string submeshName;
         uint32_t submeshIndex;
-        uint32_t lodLevel;
+        uint32_t lodLevel;  // VK-300: Deprecated - all levels contain LOD0 data
         float priority;
         glm::vec3 worldCenter;
         float boundingRadius;

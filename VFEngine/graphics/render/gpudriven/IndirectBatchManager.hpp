@@ -28,6 +28,10 @@ namespace render::gpudriven {
         vk::DeviceMemory stagingMemory;
         void* stagingMapped = nullptr;
 
+        // VK-300: Object to draw index mapping for DAG cluster traversal
+        vk::Buffer objectDrawIndexBuffer;
+        vk::DeviceMemory objectDrawIndexMemory;
+
         uint32_t batchCount = 0;
         uint32_t commandsPerBatch = 0;
         uint32_t shaderGroupCount = 0;
@@ -77,6 +81,7 @@ namespace render::gpudriven {
         vk::Buffer getCombinedDrawCommandBuffer() const { return combinedDrawCommandBuffer; }
         vk::Buffer getCombinedDrawCountBuffer() const { return combinedDrawCountBuffer; }
         vk::Buffer getCombinedPerDrawDataBuffer() const { return combinedPerDrawDataBuffer; }
+        vk::Buffer getObjectDrawIndexBuffer() const { return objectDrawIndexBuffer; }
 
         vk::DeviceSize getCombinedDrawCommandBufferSize() const {
             return batchCount * shaderGroupCount * commandsPerSection * sizeof(MeshTasksIndirectCommand);

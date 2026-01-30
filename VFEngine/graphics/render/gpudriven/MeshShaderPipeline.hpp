@@ -22,13 +22,13 @@ namespace render::gpudriven
         uint32_t viewMode;
         float screenWidth;
         float screenHeight;
-        // Cluster DAG mode fields (VK-293)
-        uint32_t clusterMode;       // 0 = discrete LOD, 1 = cluster DAG
+        // VK-300: clusterMode removed - always DAG mode now
         uint32_t clusterBaseIndex;  // Base index into selection buffer
         uint32_t clusterCount;      // Number of clusters to process
-        uint32_t padding;           // Alignment
+        uint32_t padding1;          // Alignment
+        uint32_t padding2;          // Alignment
 
-        // SECURITY: Before dispatch in cluster DAG mode (clusterMode == 1), validate:
+        // SECURITY: Before dispatch, validate:
         //   clusterBaseIndex + clusterCount <= MAX_CLUSTER_SELECTIONS_PER_FRAME
         // The shader also validates against buffer bounds, but CPU validation
         // provides defense-in-depth and clearer error reporting.
@@ -82,6 +82,12 @@ namespace render::gpudriven
         vk::Buffer statsBuffer;
         vk::DeviceMemory statsBufferMemory;
         MeshletCullingStats cachedStats{};
+
+        // VK-293: Dummy buffers for cluster bindings when no ClusterBuffer is available
+        vk::Buffer dummyClusterBuffer;
+        vk::DeviceMemory dummyClusterBufferMemory;
+        vk::Buffer dummyClusterSelectionBuffer;
+        vk::DeviceMemory dummyClusterSelectionBufferMemory;
 
         vk::DescriptorSet lightDataDescriptorSet;
         vk::DescriptorSet clusterGridDescriptorSet;
@@ -161,6 +167,7 @@ namespace render::gpudriven
         void createPerDrawDataDescriptor();
         void createMeshletDataDescriptor();
         void createVertexDataDescriptor();
+        void createDummyClusterBuffers();  // VK-293
         void createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
                                               vk::DescriptorSetLayout bindlessTextureLayout,
                                               vk::DescriptorSetLayout boneMatrixLayout,

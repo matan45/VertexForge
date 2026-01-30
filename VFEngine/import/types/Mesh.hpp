@@ -48,8 +48,7 @@ namespace types
         static constexpr size_t chunkSize = 256 * 1024;
         static constexpr uint32_t MAX_BONES_PER_VERTEX = 4;
 
-        static constexpr std::array<float, resource::LOD_LEVEL_COUNT> lodRatios = {1.0f, 0.5f, 0.25f, 0.125f};
-
+        // VK-300: lodRatios removed - discrete LOD no longer generated
 
         void saveToFileStreamingWithLOD(std::string_view location, std::string_view fileName,
                                         const aiScene* scene, const importConfig::ImportConfig& config,
@@ -57,13 +56,14 @@ namespace types
 
         ExtractedSkeleton extractSkeleton(const aiScene* scene) const;
         LODMeshData convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const;
-        std::array<LODMeshData, resource::LOD_LEVEL_COUNT> generateLODLevels(const LODMeshData& lod0) const;
-        LODMeshData simplifyMesh(const LODMeshData& source, float targetRatio) const;
+        // VK-300: generateLODLevels() and simplifyMesh() removed - discrete LOD no longer generated
         void writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const;
 
         MeshletBuildResult buildMeshletsForLOD(const LODMeshData& lodMesh) const;
+        // VK-300: Added optional reorder map for cluster DAG contiguous meshlet indices
         void writeMeshletData(std::ofstream& outFile,
-                              const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const;
+                              const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults,
+                              const std::vector<uint32_t>& meshletReorderMap = {}) const;
 
         resource::ConvexDecompositionData generateConvexDecomposition(
             const LODMeshData& meshData,

@@ -175,8 +175,14 @@ void unpackWorkItem(uint packed, out uint objectIndex, out uint localClusterInde
 void main() {
     uint workIdx = gl_GlobalInvocationID.x;
 
+    // Determine which queue count to use based on pass index (ping-pong)
+    // Even passes: read inputQueueCount, odd passes: read outputQueueCount
+    uint queueCount = ((state.passIndex % 2u) == 0u)
+        ? state.inputQueueCount
+        : state.outputQueueCount;
+
     // Early exit if beyond queue size
-    if (workIdx >= state.inputQueueCount) {
+    if (workIdx >= queueCount) {
         return;
     }
 
@@ -262,11 +268,25 @@ void main() {
     // =========================================================================
     // Selection Decision
     // =========================================================================
-    bool shouldSelect = isLeaf || shouldSelectCluster(
-        screenError,
-        params.screenErrorThreshold,
-        params.errorMultiplier
-    );
+    // VK-300: With meshlet reordering, all clusters now have contiguous indices.
+    // Enable hierarchical selection for debug visualization.
+    //
+    // IMPORTANT: Parent clusters can have MORE meshlets than MAX_MESHLETS_PER_PAYLOAD (32).
+    // We can only select a cluster if its meshlets fit in the payload, otherwise
+    // we must traverse to children to get smaller clusters.
+    //
+    // Note: Parent clusters contain the SAME meshlets as children (no simplified
+    // geometry). True LOD benefit requires generating simplified meshlets (future work).
+    uint meshletCount;
+    uint triangleCount;
+    unpackClusterCounts(cluster.meshletTrianglePacked, meshletCount, triangleCount);
+
+    // Only select if meshlets fit in task shader payload (32 max)
+    const uint MAX_MESHLETS_PER_PAYLOAD = 32u;
+    bool fitsInPayload = meshletCount <= MAX_MESHLETS_PER_PAYLOAD;
+
+    bool errorBelowThreshold = screenError < params.screenErrorThreshold;
+    bool shouldSelect = isLeaf || (errorBelowThreshold && fitsInPayload);
 
     if (shouldSelect) {
         // SELECT this cluster - add to selection buffer
@@ -286,37 +306,55 @@ void main() {
         atomicAdd(state.totalSelected, 1u);
     } else {
         // TRAVERSE to children - enqueue to output queue for next pass
+        // Ping-pong: even passes write to outputQueueCount, odd passes write to inputQueueCount
+        bool evenPass = ((state.passIndex % 2u) == 0u);
 
         // Enqueue left child if present
         if (children.leftChild != INVALID_CLUSTER_INDEX) {
-            uint queueIdx = atomicAdd(state.outputQueueCount, 1u);
+            uint queueIdx;
+            if (evenPass) {
+                queueIdx = atomicAdd(state.outputQueueCount, 1u);
+            } else {
+                queueIdx = atomicAdd(state.inputQueueCount, 1u);
+            }
 
             // Bounds check to prevent buffer overflow
             if (queueIdx < params.maxWorkQueueEntries) {
                 uint outPacked = packWorkItem(objectIndex, children.leftChild);
 
                 // Write to opposite queue (ping-pong)
-                if ((state.passIndex % 2u) == 0u) {
+                if (evenPass) {
                     workQueueB[queueIdx] = outPacked;
                 } else {
                     workQueueA[queueIdx] = outPacked;
                 }
+            } else {
+                // Track overflow for debugging - work item silently dropped
+                atomicAdd(state.workQueueOverflowCount, 1u);
             }
         }
 
         // Enqueue right child if present
         if (children.rightChild != INVALID_CLUSTER_INDEX) {
-            uint queueIdx = atomicAdd(state.outputQueueCount, 1u);
+            uint queueIdx;
+            if (evenPass) {
+                queueIdx = atomicAdd(state.outputQueueCount, 1u);
+            } else {
+                queueIdx = atomicAdd(state.inputQueueCount, 1u);
+            }
 
             // Bounds check to prevent buffer overflow
             if (queueIdx < params.maxWorkQueueEntries) {
                 uint outPacked = packWorkItem(objectIndex, children.rightChild);
 
-                if ((state.passIndex % 2u) == 0u) {
+                if (evenPass) {
                     workQueueB[queueIdx] = outPacked;
                 } else {
                     workQueueA[queueIdx] = outPacked;
                 }
+            } else {
+                // Track overflow for debugging - work item silently dropped
+                atomicAdd(state.workQueueOverflowCount, 1u);
             }
         }
     }

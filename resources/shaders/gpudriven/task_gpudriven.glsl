@@ -2,6 +2,7 @@
 #version 460 core
 #extension GL_EXT_mesh_shader : require
 #extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_shader_draw_parameters : require
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
@@ -46,11 +47,11 @@ layout(push_constant) uniform PushConstants {
     uint viewMode;
     float screenWidth;
     float screenHeight;
-    // Cluster DAG mode fields (VK-293)
-    uint clusterMode;       // 0 = discrete LOD, 1 = cluster DAG
+    // VK-300: clusterMode removed - always DAG mode now
     uint clusterBaseIndex;  // Base index into selection buffer
     uint clusterCount;      // Number of clusters to process
-    uint padding;           // Alignment
+    uint padding1;          // Alignment
+    uint padding2;          // Alignment (replaces removed clusterMode)
 } pc;
 
 const uint MESHLET_CULL_FRUSTUM_BIT = 0x100u;
@@ -104,70 +105,92 @@ bool coneCullTest(vec4 cone, mat4 modelMatrix, vec3 cameraPos, vec3 meshletCente
 }
 
 // =========================================================================
-// Discrete LOD Path - processes meshlets from PerDrawData ranges
+// Direct Meshlet Path - processes meshlets directly from PerDrawData
+// Used when cluster data isn't available (fallback mode)
 // =========================================================================
-void processDiscreteLOD() {
+
+void processDirectMeshlet() {
+    // Each draw processes meshlets for one object
+    // gl_DrawID identifies which draw command (0 to N-1) we're processing
+    // gl_WorkGroupID.x identifies which batch of meshlets within that draw (0 to ceil(meshletCount/32)-1)
     uint drawIndex = pc.baseDrawIndex + gl_DrawID;
+
+    // Load draw data
     PerDrawData drawData = perDrawData[drawIndex];
 
-    uint localMeshletIndex = gl_LocalInvocationID.x;
-    uint workgroupMeshletBase = gl_WorkGroupID.x * TASK_WORKGROUP_SIZE;
-    uint meshletIndex = workgroupMeshletBase + localMeshletIndex;
+    // Calculate which batch of meshlets this workgroup handles
+    uint workgroupMeshletOffset = gl_WorkGroupID.x * TASK_WORKGROUP_SIZE;
 
+    // Skip if this workgroup is beyond the meshlet count
+    if (workgroupMeshletOffset >= drawData.meshletCount) {
+        if (gl_LocalInvocationID.x == 0) {
+            payload.meshletCount = 0;
+            EmitMeshTasksEXT(0, 1, 1);
+        }
+        return;
+    }
+
+    // Calculate how many meshlets this workgroup should process
+    uint remainingMeshlets = drawData.meshletCount - workgroupMeshletOffset;
+    uint meshletCountThisWorkgroup = min(remainingMeshlets, TASK_WORKGROUP_SIZE);
+
+    // Initialize shared memory
     if (gl_LocalInvocationID.x == 0) {
         sharedVisibleCount = 0;
     }
     barrier();
 
-    bool isValidMeshlet = meshletIndex < drawData.meshletCount;
-    bool isVisible = false;
+    // Process meshlets within this workgroup's batch
+    uint localMeshletIdx = gl_LocalInvocationID.x;
 
-    if (isValidMeshlet) {
-        uint globalMeshletIndex = drawData.meshletOffset + meshletIndex;
-        GPUMeshlet meshlet = meshlets[globalMeshletIndex];
-        vec4 worldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
+    if (localMeshletIdx < meshletCountThisWorkgroup) {
+        uint globalMeshletIdx = drawData.meshletOffset + workgroupMeshletOffset + localMeshletIdx;
+        GPUMeshlet meshlet = meshlets[globalMeshletIdx];
+
+        vec4 meshletWorldSphere = transformBoundingSphere(meshlet.boundingSphere, drawData.modelMatrix);
+        bool visible = true;
 
         atomicAdd(stats.totalMeshlets, 1);
-        isVisible = true;
 
+        // Frustum cull
         if ((pc.viewMode & MESHLET_CULL_FRUSTUM_BIT) != 0u) {
-            bool frustumVisible = sphereInFrustum(worldSphere, camera.frustumPlanes);
-            if (!frustumVisible) {
+            visible = sphereInFrustum(meshletWorldSphere, camera.frustumPlanes);
+            if (!visible) {
                 atomicAdd(stats.culledByFrustum, 1);
-                isVisible = false;
             }
         }
 
-        if (isVisible && (pc.viewMode & MESHLET_CULL_BACKFACE_BIT) != 0u) {
-            bool backfaceVisible = coneCullTest(meshlet.cone, drawData.modelMatrix,
-                                                camera.cameraPos, worldSphere.xyz);
-            if (!backfaceVisible) {
+        // Backface cone cull
+        if (visible && (pc.viewMode & MESHLET_CULL_BACKFACE_BIT) != 0u) {
+            visible = coneCullTest(meshlet.cone, drawData.modelMatrix,
+                                   camera.cameraPos, meshletWorldSphere.xyz);
+            if (!visible) {
                 atomicAdd(stats.culledByBackface, 1);
-                isVisible = false;
             }
         }
 
-        if (isVisible) {
+        if (visible) {
             atomicAdd(stats.visibleMeshlets, 1);
             uint slot = atomicAdd(sharedVisibleCount, 1);
-            if (slot < TASK_WORKGROUP_SIZE) {
-                sharedMeshletIndices[slot] = globalMeshletIndex;
+            if (slot < MAX_MESHLETS_PER_PAYLOAD) {
+                sharedMeshletIndices[slot] = globalMeshletIdx;
             }
         }
     }
 
     barrier();
 
+    // Emit payload to mesh shader
     if (gl_LocalInvocationID.x == 0) {
         uint visibleCount = min(sharedVisibleCount, MAX_MESHLETS_PER_PAYLOAD);
         payload.drawIndex = drawIndex;
         payload.meshletCount = visibleCount;
 
-        // VK-298: Set default debug values for discrete LOD mode
+        // No DAG data in direct mode - use defaults
         payload.debugClusterIndex = 0u;
-        payload.debugClusterLevel = drawData.lodLevel;  // Use mesh LOD as proxy
+        payload.debugClusterLevel = 0u;
         payload.debugScreenError = 0.0;
-        payload.debugStreamingState = 2u;  // Assume loaded in discrete mode
+        payload.debugStreamingState = 2u;  // Loaded
 
         for (uint i = 0; i < visibleCount; i++) {
             payload.meshletIndices[i] = sharedMeshletIndices[i];
@@ -235,19 +258,6 @@ void processClusterDAG() {
     // Transform cluster bounds for culling
     vec4 worldSphere = transformBoundingSphere(cluster.boundingSphere, drawData.modelMatrix);
 
-    // CLUSTER-LEVEL BACKFACE CONE CULLING
-    // If entire cluster is backfacing, skip all its meshlets
-    if ((pc.viewMode & MESHLET_CULL_BACKFACE_BIT) != 0u) {
-        if (!coneCullTest(cluster.cone, drawData.modelMatrix, camera.cameraPos, worldSphere.xyz)) {
-            // Entire cluster is backfacing
-            if (gl_LocalInvocationID.x == 0) {
-                payload.meshletCount = 0;
-                EmitMeshTasksEXT(0, 1, 1);
-            }
-            return;
-        }
-    }
-
     // PROCESS MESHLETS WITHIN CLUSTER
     // Each thread in workgroup processes one meshlet
     uint localMeshletIdx = gl_LocalInvocationID.x;
@@ -313,13 +323,14 @@ void processClusterDAG() {
 
 // =========================================================================
 // Main Entry Point
+// Selects between DAG cluster mode and direct meshlet mode based on clusterCount
 // =========================================================================
 void main() {
-    if (pc.clusterMode == 0u) {
-        // Discrete LOD path - traditional per-object meshlet processing
-        processDiscreteLOD();
-    } else {
-        // Cluster DAG path - process clusters from DAG traversal
+    if (pc.clusterCount > 0u) {
+        // DAG cluster rendering mode - process clusters from selection buffer
         processClusterDAG();
+    } else {
+        // Direct meshlet rendering mode - fallback when cluster data not available
+        processDirectMeshlet();
     }
 }

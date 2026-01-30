@@ -33,9 +33,7 @@ namespace render::gpudriven
     constexpr uint32_t MAX_ANIMATED_OBJECTS = 1024;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
 
-    constexpr float LOD_THRESHOLD_0 = 400.0f;
-    constexpr float LOD_THRESHOLD_1 = 200.0f;
-    constexpr float LOD_THRESHOLD_2 = 100.0f;
+    // VK-300: LOD_THRESHOLD_* constants removed - discrete LOD no longer used
 
     // Object flags - must be defined before GPUObjectData which references them
     namespace ObjectFlags
@@ -62,7 +60,7 @@ namespace render::gpudriven
         glm::uvec4 lod1Data;
         glm::uvec4 lod2Data;
         glm::uvec4 lod3Data;
-        glm::vec4 lodThresholds;      // x,y,z = LOD thresholds, w = lodBias
+        glm::vec4 reserved0;          // VK-300: lodThresholds removed - reserved for future use
         glm::vec4 albedo;
         glm::vec4 materialParams;     // x = metallic, y = roughness, z = ao, w = emission
         glm::vec4 iblParams;          // x = iblDiffuse, y = iblSpecular, z = clusterErrorMultiplier, w = reserved
@@ -70,12 +68,12 @@ namespace render::gpudriven
         glm::uvec4 textureIndices1;
         uint32_t flags;
         uint32_t entityId;
-        uint32_t availableLODMask;
+        uint32_t boneMatrixOffset;   // VK-300: Moved from meshletLod3.w to dedicated field
         uint32_t shaderGroupIndex;
-        glm::uvec4 meshletLod0;
-        glm::uvec4 meshletLod1;
-        glm::uvec4 meshletLod2;
-        glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
+        glm::uvec4 reserved1;         // VK-300: meshletLod0 removed - reserved for future use
+        glm::uvec4 reserved2;         // VK-300: meshletLod1 removed - reserved for future use
+        glm::uvec4 reserved3;         // VK-300: meshletLod2 removed - reserved for future use
+        glm::uvec4 reserved4;         // VK-300: meshletLod3 removed - reserved for future use
 
         // =====================================================================
         // DAG Mode Accessors (when ObjectFlags::UseClusterDAG is set)
@@ -172,6 +170,7 @@ namespace render::gpudriven
         glm::vec3 aabbMax;
         glm::vec4 boundingSphere;
         std::array<LODStreamState, LOD_LEVEL_COUNT> lodStates{};
+        bool hasClusterDAGUploaded = false;  // VK-300: Track cluster DAG availability
 
         void calculateBoundingSphere()
         {
@@ -182,11 +181,8 @@ namespace render::gpudriven
 
         bool hasRenderableLOD() const
         {
-            for (const auto& state : lodStates)
-            {
-                if (state == LODStreamState::Ready) return true;
-            }
-            return false;
+            // VK-300: Check either meshlet data OR cluster DAG data
+            return hasMeshletData() || hasClusterDAGUploaded;
         }
 
         uint32_t getBestAvailableLOD(uint32_t requestedLOD) const

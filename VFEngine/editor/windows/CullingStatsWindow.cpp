@@ -72,19 +72,9 @@ namespace windows
 
                     ImGui::Separator();
 
-                    ImGui::Text("LOD Distribution:");
-                    uint32_t totalLOD = gpu.objectsLOD0 + gpu.objectsLOD1 + gpu.objectsLOD2 + gpu.objectsLOD3;
-                    if (totalLOD > 0)
-                    {
-                        ImGui::Text("  LOD0 (High):   %u", gpu.objectsLOD0);
-                        ImGui::Text("  LOD1 (Medium): %u", gpu.objectsLOD1);
-                        ImGui::Text("  LOD2 (Low):    %u", gpu.objectsLOD2);
-                        ImGui::Text("  LOD3 (Lowest): %u", gpu.objectsLOD3);
-                    }
-                    else
-                    {
-                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "  No LOD data available");
-                    }
+                    // VK-300: Discrete LOD removed - DAG cluster system now handles LOD
+                    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "LOD System: DAG Clusters");
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "  (Discrete LOD0-3 removed)");
 
                     ImGui::Separator();
 
