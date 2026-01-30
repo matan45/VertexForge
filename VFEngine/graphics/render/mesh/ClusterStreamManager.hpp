@@ -31,6 +31,74 @@ namespace render::gpudriven
 namespace render::mesh
 {
     // =========================================================================
+    // EvictionConfig - Configurable eviction parameters (VK-296)
+    // =========================================================================
+
+    struct EvictionConfig
+    {
+        // Recency threshold in frames (default ~1 second at 60fps)
+        uint32_t recencyProtectionFrames = 60;
+
+        // Weight factors for priority calculation (should sum to ~1.0)
+        float recencyWeight = 0.5f;        // How much recency matters (higher = more important)
+        float screenErrorWeight = 0.3f;    // Higher error = less important to keep
+        float memorySizeWeight = 0.2f;     // Larger = more valuable to evict
+
+        // Eviction behavior
+        float minEvictionPercent = 0.10f;  // Minimum % of budget to free when evicting
+        float targetEvictionPercent = 0.15f; // Target % to free for headroom
+
+        // Streaming unit grouping
+        bool enableGroupEviction = true;   // Evict entire streaming units together
+        bool respectDependencies = true;   // Never evict parent before children
+    };
+
+    // =========================================================================
+    // StreamingUnitState - Per-streaming-unit eviction tracking (VK-296)
+    // =========================================================================
+
+    struct StreamingUnitState
+    {
+        uint32_t unitIndex = 0;
+        uint64_t lastVisibleFrame = 0;
+        float lastScreenError = FLT_MAX;
+        size_t gpuMemoryUsed = 0;
+        uint32_t dependsOnUnit = 0xFFFFFFFF;  // Parent unit (INVALID if root)
+        bool isLoaded = false;
+    };
+
+    // =========================================================================
+    // EvictionCandidate - For sorting eviction candidates (VK-296)
+    // =========================================================================
+
+    struct EvictionCandidate
+    {
+        float priority = 0.0f;             // Lower = evict first
+        size_t memorySize = 0;
+        std::string meshPath;
+        std::string submeshKey;
+        uint32_t unitIndex = 0xFFFFFFFF;   // Specific unit or INVALID for whole DAG
+
+        bool operator<(const EvictionCandidate& other) const
+        {
+            return priority < other.priority;  // Sort ascending: lowest priority evicted first
+        }
+    };
+
+    // =========================================================================
+    // EvictionStats - Statistics for debugging/monitoring (VK-296)
+    // =========================================================================
+
+    struct EvictionStats
+    {
+        uint64_t totalEvictions = 0;
+        uint64_t groupEvictions = 0;
+        uint64_t dependencyBlocks = 0;     // Times eviction blocked by dependency
+        size_t totalBytesEvicted = 0;
+        float averageEvictionPriority = 0.0f;
+    };
+
+    // =========================================================================
     // ClusterStreamingRequest - Priority queue element for streaming
     // =========================================================================
 
@@ -76,6 +144,9 @@ namespace render::mesh
         float lastScreenError = FLT_MAX;
         size_t gpuMemoryUsed = 0;
         bool inQueue = false;  // Prevent duplicate queue entries
+
+        // VK-296: Per-streaming-unit tracking for granular eviction
+        std::vector<StreamingUnitState> unitStates;
     };
 
     // =========================================================================
@@ -143,6 +214,10 @@ namespace render::mesh
         // Frame tracking for LRU
         uint64_t currentFrame = 0;
 
+        // VK-296: Eviction configuration and statistics
+        EvictionConfig evictionConfig;
+        EvictionStats evictionStats;
+
     public:
         explicit ClusterStreamManager(core::Device& device, gpudriven::ClusterBuffer& clusterBuffer);
         ~ClusterStreamManager();
@@ -207,6 +282,20 @@ namespace render::mesh
         void setMaxPendingReads(uint32_t count) { maxPendingReads = count; }
         void setMaxPendingUploads(uint32_t count) { maxPendingUploads = count; }
 
+        // VK-296: Eviction configuration
+        void setEvictionConfig(const EvictionConfig& config) { evictionConfig = config; }
+        const EvictionConfig& getEvictionConfig() const { return evictionConfig; }
+        void setRecencyProtectionFrames(uint32_t frames) { evictionConfig.recencyProtectionFrames = frames; }
+        void setEvictionWeights(float recency, float screenError, float memorySize)
+        {
+            evictionConfig.recencyWeight = recency;
+            evictionConfig.screenErrorWeight = screenError;
+            evictionConfig.memorySizeWeight = memorySize;
+        }
+        void enableGroupEviction(bool enable) { evictionConfig.enableGroupEviction = enable; }
+        void enableDependencyRespect(bool enable) { evictionConfig.respectDependencies = enable; }
+        const EvictionStats& getEvictionStats() const { return evictionStats; }
+
         // =========================================================================
         // Statistics
         // =========================================================================
@@ -242,8 +331,16 @@ namespace render::mesh
         float calculatePriority(const ClusterStreamingRequest& request,
                                const glm::vec3& cameraPos) const;
 
-        // Eviction
+        // Eviction (VK-296: Enhanced with group strategy)
         void evictLRUClustersIfNeeded(size_t requiredBytes);
+        void evictWithGroupStrategy(size_t requiredBytes);
+        std::vector<EvictionCandidate> buildEvictionCandidates() const;
+        void filterByDependencies(std::vector<EvictionCandidate>& candidates) const;
+        std::vector<std::vector<EvictionCandidate>> groupAdjacentCandidates(
+            const std::vector<EvictionCandidate>& candidates) const;
+        size_t evictGroup(const std::vector<EvictionCandidate>& group);
+        float calculateEvictionPriority(const StreamingUnitState& state) const;
+        bool isProtectedFromEviction(const StreamingUnitState& state) const;
         std::vector<std::pair<std::string, std::string>> getLRUCandidates() const;
 
         // Async read

@@ -7,6 +7,7 @@
 #include "print/Logger.hpp"
 #include <algorithm>
 #include <chrono>
+#include <unordered_set>
 
 namespace render::mesh
 {
@@ -497,65 +498,8 @@ namespace render::mesh
 
     void ClusterStreamManager::evictLRUClustersIfNeeded(size_t requiredBytes)
     {
-        if (currentGPUMemoryUsed + requiredBytes <= maxGPUMemoryBudget)
-        {
-            return;  // No eviction needed
-        }
-
-        size_t bytesToFree = (currentGPUMemoryUsed + requiredBytes) - maxGPUMemoryBudget;
-        bytesToFree = std::max(bytesToFree, maxGPUMemoryBudget / 10);  // Free at least 10%
-
-        auto candidates = getLRUCandidates();
-
-        for (const auto& [meshPath, submeshKey] : candidates)
-        {
-            if (bytesToFree <= 0)
-            {
-                break;
-            }
-
-            std::lock_guard<std::mutex> lock(meshStatesMutex);
-
-            auto meshIt = meshStates.find(meshPath);
-            if (meshIt == meshStates.end())
-            {
-                continue;
-            }
-
-            auto& submeshState = meshIt->second.submeshStates[submeshKey];
-            if (submeshState.state != gpudriven::ClusterStreamState::Ready)
-            {
-                continue;
-            }
-
-            // Don't evict recently visible clusters (last 60 frames ~ 1 second at 60fps)
-            if (currentFrame - submeshState.lastVisibleFrame < 60)
-            {
-                continue;
-            }
-
-            // Parse submesh key
-            std::string submeshName;
-            uint32_t submeshIdx;
-            if (!parseSubmeshKey(submeshKey, submeshName, submeshIdx))
-            {
-                continue;
-            }
-
-            // Evict from GPU
-            if (clusterBuffer.evictClusterDAG(meshPath, submeshName, submeshIdx))
-            {
-                size_t freedBytes = submeshState.gpuMemoryUsed;
-                currentGPUMemoryUsed -= freedBytes;
-                bytesToFree -= std::min(bytesToFree, freedBytes);
-
-                submeshState.state = gpudriven::ClusterStreamState::Evicted;
-                submeshState.gpuMemoryUsed = 0;
-
-                loggerWarning("ClusterStreamManager: Evicted {}:{} (freed {} KB)",
-                           meshPath, submeshKey, freedBytes / 1024);
-            }
-        }
+        // VK-296: Delegate to enhanced group eviction strategy
+        evictWithGroupStrategy(requiredBytes);
     }
 
     std::vector<std::pair<std::string, std::string>> ClusterStreamManager::getLRUCandidates() const
@@ -588,6 +532,407 @@ namespace render::mesh
         }
 
         return result;
+    }
+
+    // =========================================================================
+    // VK-296: Enhanced Eviction with Multi-Factor Priority and Group Strategy
+    // =========================================================================
+
+    float ClusterStreamManager::calculateEvictionPriority(const StreamingUnitState& state) const
+    {
+        // Recency score: frames since last visible (normalized 0-1)
+        // Higher framesSinceVisible = higher eviction priority (more likely to evict)
+        uint64_t framesSinceVisible = currentFrame - state.lastVisibleFrame;
+        float recencyScore = std::min(1.0f,
+            static_cast<float>(framesSinceVisible) /
+            static_cast<float>(evictionConfig.recencyProtectionFrames * 4));
+
+        // Screen error score: higher error = less detailed = more likely to evict
+        // Normalize against typical error range (0 to 100 pixels)
+        float errorScore = std::min(1.0f, state.lastScreenError / 100.0f);
+
+        // Memory size score: larger allocations = more valuable to evict
+        // Normalize against typical streaming unit size (~100KB)
+        float memoryScore = std::min(1.0f,
+            static_cast<float>(state.gpuMemoryUsed) / (100.0f * 1024.0f));
+
+        // Combined priority: LOWER value = EVICT FIRST
+        // Invert recency: old (high recencyScore) = low priority value = evict first
+        // Use error directly: high error = high errorScore = we want to evict, so invert
+        // Use memory directly: large = high memoryScore = valuable to evict, so invert
+        float priority =
+            (1.0f - recencyScore) * evictionConfig.recencyWeight +
+            (1.0f - errorScore) * evictionConfig.screenErrorWeight +
+            (1.0f - memoryScore) * evictionConfig.memorySizeWeight;
+
+        return priority;  // Range 0-1, lower = evict first
+    }
+
+    bool ClusterStreamManager::isProtectedFromEviction(const StreamingUnitState& state) const
+    {
+        // Recently visible protection
+        if (currentFrame - state.lastVisibleFrame < evictionConfig.recencyProtectionFrames)
+        {
+            return true;
+        }
+
+        // Not loaded = nothing to evict
+        if (!state.isLoaded)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    std::vector<EvictionCandidate> ClusterStreamManager::buildEvictionCandidates() const
+    {
+        std::lock_guard<std::mutex> lock(meshStatesMutex);
+
+        std::vector<EvictionCandidate> candidates;
+
+        for (const auto& [meshPath, meshState] : meshStates)
+        {
+            for (const auto& [submeshKey, submeshState] : meshState.submeshStates)
+            {
+                // Only consider ready (loaded) submeshes
+                if (submeshState.state != gpudriven::ClusterStreamState::Ready)
+                {
+                    continue;
+                }
+
+                // Check if we have per-unit states
+                if (evictionConfig.enableGroupEviction && !submeshState.unitStates.empty())
+                {
+                    // Build candidates at streaming unit granularity
+                    for (const auto& unitState : submeshState.unitStates)
+                    {
+                        if (!unitState.isLoaded)
+                        {
+                            continue;
+                        }
+
+                        if (isProtectedFromEviction(unitState))
+                        {
+                            continue;
+                        }
+
+                        EvictionCandidate candidate;
+                        candidate.priority = calculateEvictionPriority(unitState);
+                        candidate.memorySize = unitState.gpuMemoryUsed;
+                        candidate.meshPath = meshPath;
+                        candidate.submeshKey = submeshKey;
+                        candidate.unitIndex = unitState.unitIndex;
+                        candidates.push_back(candidate);
+                    }
+                }
+                else
+                {
+                    // Fall back to whole-submesh eviction
+                    // Check recency protection
+                    if (currentFrame - submeshState.lastVisibleFrame < evictionConfig.recencyProtectionFrames)
+                    {
+                        continue;
+                    }
+
+                    // Create a temporary unit state for priority calculation
+                    StreamingUnitState tempState;
+                    tempState.lastVisibleFrame = submeshState.lastVisibleFrame;
+                    tempState.lastScreenError = submeshState.lastScreenError;
+                    tempState.gpuMemoryUsed = submeshState.gpuMemoryUsed;
+                    tempState.isLoaded = true;
+
+                    EvictionCandidate candidate;
+                    candidate.priority = calculateEvictionPriority(tempState);
+                    candidate.memorySize = submeshState.gpuMemoryUsed;
+                    candidate.meshPath = meshPath;
+                    candidate.submeshKey = submeshKey;
+                    candidate.unitIndex = 0xFFFFFFFF;  // Whole submesh
+                    candidates.push_back(candidate);
+                }
+            }
+        }
+
+        return candidates;
+    }
+
+    void ClusterStreamManager::filterByDependencies(std::vector<EvictionCandidate>& candidates) const
+    {
+        if (!evictionConfig.respectDependencies)
+        {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(meshStatesMutex);
+
+        // Build set of loaded unit indices per submesh
+        std::unordered_map<std::string, std::unordered_set<uint32_t>> loadedUnits;
+
+        for (const auto& [meshPath, meshState] : meshStates)
+        {
+            for (const auto& [submeshKey, submeshState] : meshState.submeshStates)
+            {
+                std::string fullKey = meshPath + ":" + submeshKey;
+                for (const auto& unitState : submeshState.unitStates)
+                {
+                    if (unitState.isLoaded)
+                    {
+                        loadedUnits[fullKey].insert(unitState.unitIndex);
+                    }
+                }
+            }
+        }
+
+        // Remove candidates whose children are still loaded
+        candidates.erase(
+            std::remove_if(candidates.begin(), candidates.end(),
+                [&](const EvictionCandidate& c) {
+                    // Whole-submesh eviction doesn't have dependencies to check
+                    if (c.unitIndex == 0xFFFFFFFF)
+                    {
+                        return false;
+                    }
+
+                    std::string fullKey = c.meshPath + ":" + c.submeshKey;
+
+                    // Find submesh state
+                    auto meshIt = meshStates.find(c.meshPath);
+                    if (meshIt == meshStates.end())
+                    {
+                        return false;
+                    }
+
+                    auto subIt = meshIt->second.submeshStates.find(c.submeshKey);
+                    if (subIt == meshIt->second.submeshStates.end())
+                    {
+                        return false;
+                    }
+
+                    // Check if any loaded unit depends on this candidate
+                    for (const auto& unitState : subIt->second.unitStates)
+                    {
+                        if (unitState.isLoaded &&
+                            unitState.dependsOnUnit == c.unitIndex)
+                        {
+                            // This unit has a loaded child - can't evict
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }),
+            candidates.end()
+        );
+    }
+
+    std::vector<std::vector<EvictionCandidate>> ClusterStreamManager::groupAdjacentCandidates(
+        const std::vector<EvictionCandidate>& candidates) const
+    {
+        std::vector<std::vector<EvictionCandidate>> groups;
+
+        if (candidates.empty())
+        {
+            return groups;
+        }
+
+        if (!evictionConfig.enableGroupEviction)
+        {
+            // No grouping - each candidate is its own group
+            for (const auto& c : candidates)
+            {
+                groups.push_back({c});
+            }
+            return groups;
+        }
+
+        // Group by meshPath + submeshKey, keeping adjacent unit indices together
+        std::unordered_map<std::string, std::vector<EvictionCandidate>> bySubmesh;
+
+        for (const auto& c : candidates)
+        {
+            std::string key = c.meshPath + ":" + c.submeshKey;
+            bySubmesh[key].push_back(c);
+        }
+
+        // For each submesh, sort by unit index and group adjacent units
+        for (auto& [key, submeshCandidates] : bySubmesh)
+        {
+            // Sort by unit index for spatial coherence
+            std::sort(submeshCandidates.begin(), submeshCandidates.end(),
+                [](const EvictionCandidate& a, const EvictionCandidate& b) {
+                    return a.unitIndex < b.unitIndex;
+                });
+
+            // Group adjacent units (gap of 1 is allowed)
+            std::vector<EvictionCandidate> currentGroup;
+            uint32_t lastIndex = 0xFFFFFFFF;
+
+            for (const auto& c : submeshCandidates)
+            {
+                bool adjacent = (lastIndex == 0xFFFFFFFF) ||
+                               (c.unitIndex <= lastIndex + 2);  // Allow gap of 1
+
+                if (adjacent)
+                {
+                    currentGroup.push_back(c);
+                }
+                else
+                {
+                    if (!currentGroup.empty())
+                    {
+                        groups.push_back(std::move(currentGroup));
+                        currentGroup.clear();
+                    }
+                    currentGroup.push_back(c);
+                }
+
+                lastIndex = c.unitIndex;
+            }
+
+            if (!currentGroup.empty())
+            {
+                groups.push_back(std::move(currentGroup));
+            }
+        }
+
+        // Sort groups by average priority (lowest first = evict first)
+        std::sort(groups.begin(), groups.end(),
+            [](const std::vector<EvictionCandidate>& a, const std::vector<EvictionCandidate>& b) {
+                float avgA = 0.0f, avgB = 0.0f;
+                for (const auto& c : a) avgA += c.priority;
+                for (const auto& c : b) avgB += c.priority;
+                avgA /= static_cast<float>(a.size());
+                avgB /= static_cast<float>(b.size());
+                return avgA < avgB;  // Lower priority = evict first
+            });
+
+        return groups;
+    }
+
+    size_t ClusterStreamManager::evictGroup(const std::vector<EvictionCandidate>& group)
+    {
+        size_t totalFreed = 0;
+
+        for (const auto& candidate : group)
+        {
+            std::string submeshName;
+            uint32_t submeshIdx;
+            if (!parseSubmeshKey(candidate.submeshKey, submeshName, submeshIdx))
+            {
+                continue;
+            }
+
+            // Evict from GPU (whole submesh for now - unit-level eviction requires ClusterBuffer changes)
+            if (clusterBuffer.evictClusterDAG(candidate.meshPath, submeshName, submeshIdx))
+            {
+                size_t freedBytes = candidate.memorySize;
+                currentGPUMemoryUsed -= freedBytes;
+                totalFreed += freedBytes;
+
+                // Update internal state
+                {
+                    std::lock_guard<std::mutex> lock(meshStatesMutex);
+                    auto meshIt = meshStates.find(candidate.meshPath);
+                    if (meshIt != meshStates.end())
+                    {
+                        auto& submeshState = meshIt->second.submeshStates[candidate.submeshKey];
+                        submeshState.state = gpudriven::ClusterStreamState::Evicted;
+                        submeshState.gpuMemoryUsed = 0;
+
+                        // Mark unit as not loaded if applicable
+                        if (candidate.unitIndex != 0xFFFFFFFF &&
+                            candidate.unitIndex < submeshState.unitStates.size())
+                        {
+                            submeshState.unitStates[candidate.unitIndex].isLoaded = false;
+                        }
+                    }
+                }
+
+                // Update statistics
+                evictionStats.totalEvictions++;
+                evictionStats.totalBytesEvicted += freedBytes;
+
+                loggerWarning("ClusterStreamManager: Evicted {}:{} unit {} (freed {} KB)",
+                           candidate.meshPath, candidate.submeshKey, candidate.unitIndex, freedBytes / 1024);
+            }
+        }
+
+        if (group.size() > 1)
+        {
+            evictionStats.groupEvictions++;
+        }
+
+        return totalFreed;
+    }
+
+    void ClusterStreamManager::evictWithGroupStrategy(size_t requiredBytes)
+    {
+        if (currentGPUMemoryUsed + requiredBytes <= maxGPUMemoryBudget)
+        {
+            return;  // No eviction needed
+        }
+
+        size_t bytesToFree = (currentGPUMemoryUsed + requiredBytes) - maxGPUMemoryBudget;
+        bytesToFree = std::max(bytesToFree,
+            static_cast<size_t>(maxGPUMemoryBudget * evictionConfig.minEvictionPercent));
+
+        // Step 1: Build candidates at streaming unit granularity
+        auto candidates = buildEvictionCandidates();
+
+        if (candidates.empty())
+        {
+            loggerWarning("ClusterStreamManager: No eviction candidates available, memory budget exceeded");
+            return;
+        }
+
+        // Step 2: Filter by dependencies (respect parent-before-children)
+        filterByDependencies(candidates);
+
+        if (candidates.empty())
+        {
+            evictionStats.dependencyBlocks++;
+            loggerWarning("ClusterStreamManager: All candidates blocked by dependencies");
+            return;
+        }
+
+        // Step 3: Sort by priority (lowest first = evict first)
+        std::sort(candidates.begin(), candidates.end());
+
+        // Step 4: Group adjacent candidates in same submesh
+        auto groups = groupAdjacentCandidates(candidates);
+
+        // Step 5: Evict groups until memory target met
+        size_t freedBytes = 0;
+        float prioritySum = 0.0f;
+        uint32_t evictCount = 0;
+
+        for (const auto& group : groups)
+        {
+            if (freedBytes >= bytesToFree)
+            {
+                break;
+            }
+
+            size_t groupFreed = evictGroup(group);
+            freedBytes += groupFreed;
+
+            for (const auto& c : group)
+            {
+                prioritySum += c.priority;
+                evictCount++;
+            }
+        }
+
+        // Update average eviction priority statistic
+        if (evictCount > 0)
+        {
+            evictionStats.averageEvictionPriority =
+                (evictionStats.averageEvictionPriority * 0.9f) +
+                (prioritySum / static_cast<float>(evictCount)) * 0.1f;
+        }
+
+        loggerWarning("ClusterStreamManager: Evicted {} KB to free {} KB required",
+                   freedBytes / 1024, bytesToFree / 1024);
     }
 
     // =========================================================================
