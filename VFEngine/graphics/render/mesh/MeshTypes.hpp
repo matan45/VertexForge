@@ -186,6 +186,7 @@ namespace render::mesh
         int highlightedSubMesh = -1;
 
         float lodBias = 0.0f;
+        float clusterErrorMultiplier = 1.0f;  // Multiplier for cluster DAG error threshold
         int forceLODLevel = -1;
 
         const SubMeshMaterialInfo* getMaterialForSubmesh(const std::string& submeshName) const

@@ -53,10 +53,10 @@ namespace render::gpudriven
         glm::uvec4 lod1Data;
         glm::uvec4 lod2Data;
         glm::uvec4 lod3Data;
-        glm::vec4 lodThresholds;
+        glm::vec4 lodThresholds;      // x,y,z = LOD thresholds, w = lodBias
         glm::vec4 albedo;
-        glm::vec4 materialParams;
-        glm::vec4 iblParams;
+        glm::vec4 materialParams;     // x = metallic, y = roughness, z = ao, w = emission
+        glm::vec4 iblParams;          // x = iblDiffuse, y = iblSpecular, z = clusterErrorMultiplier, w = reserved
         glm::uvec4 textureIndices0;
         glm::uvec4 textureIndices1;
         uint32_t flags;

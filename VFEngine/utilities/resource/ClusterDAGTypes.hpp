@@ -33,6 +33,37 @@ namespace resource
     // If screenError < threshold, can use this cluster instead of children
     constexpr float DEFAULT_SCREEN_ERROR_THRESHOLD = 1.0f;
 
+    // Default error multiplier for tuning transition distances
+    // Higher values = transitions happen farther from camera (more aggressive LOD)
+    // Lower values = transitions happen closer (higher quality)
+    constexpr float DEFAULT_ERROR_MULTIPLIER = 1.0f;
+
+    // =========================================================================
+    // ErrorConfig - Configurable error settings for LOD selection
+    // =========================================================================
+
+    struct ErrorConfig
+    {
+        // Screen-space error threshold in pixels
+        float screenErrorThreshold = DEFAULT_SCREEN_ERROR_THRESHOLD;
+
+        // Multiplier applied to computed screen error before threshold comparison
+        float errorMultiplier = DEFAULT_ERROR_MULTIPLIER;
+
+        // Apply multiplier to computed screen error
+        [[nodiscard]] float adjustedScreenError(float rawScreenError) const
+        {
+            return rawScreenError * errorMultiplier;
+        }
+
+        // Check if cluster should be selected (error below threshold)
+        // Returns true if this cluster's error is acceptable for rendering
+        [[nodiscard]] bool shouldSelectCluster(float screenError) const
+        {
+            return adjustedScreenError(screenError) < screenErrorThreshold;
+        }
+    };
+
     // =========================================================================
     // ClusterFlags - Bit flags for cluster state
     // =========================================================================
@@ -356,6 +387,61 @@ namespace resource
         if (distanceToCamera <= 0.0f) return 1e10f;
         return (geometricError / distanceToCamera) * projectionFactor;
     }
+
+    // =========================================================================
+    // ClusterLODSelector - Runtime helper for cluster LOD selection
+    // =========================================================================
+
+    class ClusterLODSelector
+    {
+    public:
+        ClusterLODSelector() = default;
+
+        // Initialize with camera/screen parameters (call once per frame)
+        void beginFrame(float screenHeight, float fovY, const ErrorConfig& config = {})
+        {
+            projectionFactor_ = computeProjectionFactor(screenHeight, fovY);
+            config_ = config;
+        }
+
+        // Compute raw screen error for a cluster (without multiplier)
+        [[nodiscard]] float computeScreenError(
+            float geometricError,
+            float distanceToCamera) const
+        {
+            return calculateScreenSpaceErrorFast(
+                geometricError, distanceToCamera, projectionFactor_);
+        }
+
+        // Determine if cluster should be rendered (vs drilling down to children)
+        // Returns true if this cluster's error is acceptable
+        [[nodiscard]] bool shouldRenderCluster(
+            float geometricError,
+            float distanceToCamera) const
+        {
+            float screenError = computeScreenError(geometricError, distanceToCamera);
+            return config_.shouldSelectCluster(screenError);
+        }
+
+        // Get the adjusted screen error for a cluster (with multiplier applied)
+        [[nodiscard]] float getAdjustedScreenError(
+            float geometricError,
+            float distanceToCamera) const
+        {
+            float screenError = computeScreenError(geometricError, distanceToCamera);
+            return config_.adjustedScreenError(screenError);
+        }
+
+        // Get current projection factor (for external use)
+        [[nodiscard]] float getProjectionFactor() const { return projectionFactor_; }
+
+        // Get current error config
+        [[nodiscard]] const ErrorConfig& getConfig() const { return config_; }
+
+    private:
+        float projectionFactor_ = 0.0f;
+        ErrorConfig config_;
+    };
 
 } // namespace resource
 
