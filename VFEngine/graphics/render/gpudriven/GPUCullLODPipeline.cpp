@@ -1,6 +1,7 @@
 #include "GPUCullLODPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/MemoryUtilities.hpp"
 #include "GPUDrivenTypes.hpp"
 #include "print/Logger.hpp"
 #include <array>
@@ -31,6 +32,7 @@ namespace render::gpudriven
         createComputePipeline();
         createDescriptorPool();
         allocateDescriptorSet();
+        createDummyObjectDrawIndexBuffer();
 
         initialized = true;
         loggerInfo("GPUCullLODPipeline: Initialized successfully");
@@ -76,6 +78,18 @@ namespace render::gpudriven
             shader.reset();
         }
 
+        if (dummyObjectDrawIndexBuffer)
+        {
+            vkDevice.destroyBuffer(dummyObjectDrawIndexBuffer);
+            dummyObjectDrawIndexBuffer = nullptr;
+        }
+
+        if (dummyObjectDrawIndexMemory)
+        {
+            vkDevice.freeMemory(dummyObjectDrawIndexMemory);
+            dummyObjectDrawIndexMemory = nullptr;
+        }
+
         initialized = false;
         loggerInfo("GPUCullLODPipeline: Cleaned up");
     }
@@ -92,7 +106,7 @@ namespace render::gpudriven
         // binding 4: DrawCountBuffer (storage, read-write for atomics)
         // binding 5: Hi-Z pyramid texture (combined image sampler)
 
-        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
 
         // Binding 0: Object buffer (GPUObjectData[])
         bindings[0].binding = 0;
@@ -129,6 +143,12 @@ namespace render::gpudriven
         bindings[5].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[5].descriptorCount = 1;
         bindings[5].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        // Binding 6: Object to draw index mapping (VK-293 cluster DAG)
+        bindings[6].binding = 6;
+        bindings[6].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[6].descriptorCount = 1;
+        bindings[6].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -188,7 +208,7 @@ namespace render::gpudriven
         std::array<vk::DescriptorPoolSize, 3> poolSizes{};
 
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 4;
+        poolSizes[0].descriptorCount = 5;  // Bindings 0, 2, 3, 4, 6
 
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
@@ -225,7 +245,8 @@ namespace render::gpudriven
         vk::Buffer cameraBuffer,
         vk::Buffer drawCommandBuffer,
         vk::Buffer perDrawDataBuffer,
-        vk::Buffer drawCountBuffer)
+        vk::Buffer drawCountBuffer,
+        vk::Buffer objectDrawIndexBuffer)
     {
         // Check if any buffer changed
         if (cachedObjectBuffer == objectBuffer &&
@@ -233,6 +254,7 @@ namespace render::gpudriven
             cachedDrawCommandBuffer == drawCommandBuffer &&
             cachedPerDrawDataBuffer == perDrawDataBuffer &&
             cachedDrawCountBuffer == drawCountBuffer &&
+            cachedObjectDrawIndexBuffer == objectDrawIndexBuffer &&
             !descriptorsNeedUpdate)
         {
             return;
@@ -244,6 +266,7 @@ namespace render::gpudriven
         cachedDrawCommandBuffer = drawCommandBuffer;
         cachedPerDrawDataBuffer = perDrawDataBuffer;
         cachedDrawCountBuffer = drawCountBuffer;
+        cachedObjectDrawIndexBuffer = objectDrawIndexBuffer;
 
         descriptorsNeedUpdate = true;
     }
@@ -294,6 +317,12 @@ namespace render::gpudriven
         drawCountInfo.offset = 0;
         drawCountInfo.range = VK_WHOLE_SIZE; // All batch stats
 
+        // VK-293: Object to draw index mapping buffer (use dummy if no real buffer provided)
+        vk::DescriptorBufferInfo objectDrawIndexInfo{};
+        objectDrawIndexInfo.buffer = cachedObjectDrawIndexBuffer ? cachedObjectDrawIndexBuffer : dummyObjectDrawIndexBuffer;
+        objectDrawIndexInfo.offset = 0;
+        objectDrawIndexInfo.range = VK_WHOLE_SIZE;
+
         vk::DescriptorImageInfo hiZInfo{};
         hiZInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         hiZInfo.imageView = cachedHiZView;
@@ -302,7 +331,7 @@ namespace render::gpudriven
         bool hasHiZ = cachedHiZView && cachedHiZSampler;
 
         std::vector<vk::WriteDescriptorSet> writes;
-        writes.reserve(hasHiZ ? 6 : 5);
+        writes.reserve(6 + (hasHiZ ? 1 : 0));  // Always include binding 6
 
         vk::WriteDescriptorSet objectWrite{};
         objectWrite.dstSet = descriptorSet;
@@ -361,11 +390,22 @@ namespace render::gpudriven
             writes.push_back(hiZWrite);
         }
 
+        // VK-293: Object to draw index mapping for cluster DAG (always bound, uses dummy if no real buffer)
+        vk::WriteDescriptorSet objectDrawIndexWrite{};
+        objectDrawIndexWrite.dstSet = descriptorSet;
+        objectDrawIndexWrite.dstBinding = 6;
+        objectDrawIndexWrite.dstArrayElement = 0;
+        objectDrawIndexWrite.descriptorCount = 1;
+        objectDrawIndexWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        objectDrawIndexWrite.pBufferInfo = &objectDrawIndexInfo;
+        writes.push_back(objectDrawIndexWrite);
+
         vkDevice.updateDescriptorSets(writes, {});
         descriptorsNeedUpdate = false;
         hiZDescriptorNeedsUpdate = false;
 
-        loggerWarning("GPUCullLODPipeline: Updated descriptors (Hi-Z: {})", hasHiZ ? "yes" : "no");
+        loggerWarning("GPUCullLODPipeline: Updated descriptors (Hi-Z: {}, ObjectDrawIndex: {})",
+                      hasHiZ ? "yes" : "no", cachedObjectDrawIndexBuffer ? "real" : "dummy");
     }
 
     void GPUCullLODPipeline::dispatch(vk::CommandBuffer cmd, uint32_t objectCount)
@@ -382,5 +422,36 @@ namespace render::gpudriven
 
         uint32_t groupCount = (objectCount + CULL_WORKGROUP_SIZE - 1) / CULL_WORKGROUP_SIZE;
         cmd.dispatch(groupCount, 1, 1);
+    }
+
+    void GPUCullLODPipeline::createDummyObjectDrawIndexBuffer()
+    {
+        // Create a small dummy buffer for binding 6 when no real objectDrawIndexBuffer is provided
+        // This is needed because the shader declares the binding even if not actively used in discrete LOD mode
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        constexpr vk::DeviceSize bufferSize = sizeof(uint32_t) * MAX_GPU_OBJECTS;
+
+        vk::BufferCreateInfo bufferInfo{};
+        bufferInfo.size = bufferSize;
+        bufferInfo.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        bufferInfo.sharingMode = vk::SharingMode::eExclusive;
+
+        dummyObjectDrawIndexBuffer = vkDevice.createBuffer(bufferInfo);
+
+        vk::MemoryRequirements memRequirements = vkDevice.getBufferMemoryRequirements(dummyObjectDrawIndexBuffer);
+
+        vk::MemoryAllocateInfo allocInfo{};
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
+            device.getPhysicalDevice(),
+            memRequirements.memoryTypeBits,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
+        dummyObjectDrawIndexMemory = vkDevice.allocateMemory(allocInfo);
+        vkDevice.bindBufferMemory(dummyObjectDrawIndexBuffer, dummyObjectDrawIndexMemory, 0);
+
+        loggerInfo("GPUCullLODPipeline: Created dummy objectDrawIndex buffer ({} bytes)", bufferSize);
     }
 }

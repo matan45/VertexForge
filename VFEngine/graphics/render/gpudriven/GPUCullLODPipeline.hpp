@@ -35,11 +35,16 @@ namespace render::gpudriven
         vk::Buffer cachedDrawCommandBuffer;
         vk::Buffer cachedPerDrawDataBuffer;
         vk::Buffer cachedDrawCountBuffer;
+        vk::Buffer cachedObjectDrawIndexBuffer;  // VK-293: Object to draw index mapping
 
         // Cached Hi-Z descriptor info
         vk::ImageView cachedHiZView;
         vk::Sampler cachedHiZSampler;
         bool hiZDescriptorNeedsUpdate = false;
+
+        // Dummy buffer for binding 6 when no real objectDrawIndexBuffer is provided
+        vk::Buffer dummyObjectDrawIndexBuffer;
+        vk::DeviceMemory dummyObjectDrawIndexMemory;
 
     public:
         explicit GPUCullLODPipeline(core::Device& device);
@@ -59,7 +64,8 @@ namespace render::gpudriven
             vk::Buffer cameraBuffer,
             vk::Buffer drawCommandBuffer,
             vk::Buffer perDrawDataBuffer,
-            vk::Buffer drawCountBuffer
+            vk::Buffer drawCountBuffer,
+            vk::Buffer objectDrawIndexBuffer = nullptr  // VK-293: Object to draw index mapping
         );
 
         void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);
@@ -73,5 +79,6 @@ namespace render::gpudriven
         void createDescriptorPool();
         void allocateDescriptorSet();
         void writeDescriptors();
+        void createDummyObjectDrawIndexBuffer();
     };
 }

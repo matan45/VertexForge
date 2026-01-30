@@ -11,7 +11,6 @@ const uint TASK_WORKGROUP_SIZE = 32;
 
 const uint FLAG_NO_CULL       = 1u << 6;
 const uint FLAG_NO_OCCLUDE    = 1u << 7;
-const uint FLAG_UNIFORM_SCALE = 1u << 9;
 
 layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
     GPUObjectData objects[];

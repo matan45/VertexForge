@@ -682,7 +682,7 @@ vec3 evaluateDirectionalLight(vec3 N, vec3 V, vec3 albedo,
 const float ALPHA_CUTOFF = 0.5;
 const float MAX_REFLECTION_LOD = 4.0;
 const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
-const uint FLAG_ALPHA_MASK = 1u << 4;
+// Note: FLAG_ALPHA_MASK is defined in gpu_types.glsl via #define
 
 bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
