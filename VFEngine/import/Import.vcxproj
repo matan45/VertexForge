@@ -114,6 +114,7 @@
     <ClInclude Include="pipeline\stages\HeaderReadingStage.hpp" />
     <ClInclude Include="types\Animation.hpp" />
     <ClInclude Include="types\Audio.hpp" />
+    <ClInclude Include="types\ClusterDAGBuilder.hpp" />
     <ClInclude Include="types\Font.hpp" />
     <ClInclude Include="types\Mesh.hpp" />
     <ClInclude Include="types\Texture.hpp" />
@@ -128,6 +129,7 @@
     <ClCompile Include="pipeline\stages\HeaderReadingStage.cpp" />
     <ClCompile Include="types\Animation.cpp" />
     <ClCompile Include="types\Audio.cpp" />
+    <ClCompile Include="types\ClusterDAGBuilder.cpp" />
     <ClCompile Include="types\Font.cpp" />
     <ClCompile Include="types\Mesh.cpp" />
     <ClCompile Include="types\Texture.cpp" />
