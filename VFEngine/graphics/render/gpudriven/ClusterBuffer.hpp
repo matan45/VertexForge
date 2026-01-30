@@ -104,11 +104,25 @@ namespace render::gpudriven
         vk::Buffer streamingUnitBuffer;              // GPUClusterStreamingUnit[] - streaming chunks
         vk::DeviceMemory streamingUnitBufferMemory;
 
+        // DAG Traversal buffers (VK-291)
+        vk::Buffer clusterChildBuffer;               // GPUClusterChildren[] - child indices for traversal
+        vk::DeviceMemory clusterChildBufferMemory;
+
+        vk::Buffer traversalStateBuffer;             // GPUDAGTraversalState - per-frame traversal state
+        vk::DeviceMemory traversalStateBufferMemory;
+
+        vk::Buffer workQueueBufferA;                 // uint[] - work queue A (ping-pong)
+        vk::DeviceMemory workQueueBufferAMemory;
+
+        vk::Buffer workQueueBufferB;                 // uint[] - work queue B (ping-pong)
+        vk::DeviceMemory workQueueBufferBMemory;
+
         // Capacity limits
         uint32_t maxClusterCount = 0;
         uint32_t maxDAGHeaderCount = 0;
         uint32_t maxSelectionCount = 0;
         uint32_t maxStreamingUnitCount = 0;
+        uint32_t maxWorkQueueCount = 0;
 
         // Current usage
         uint32_t currentClusterCount = 0;
@@ -141,7 +155,8 @@ namespace render::gpudriven
         void init(uint32_t maxClusters = MAX_GPU_CLUSTERS,
                   uint32_t maxDAGHeaders = MAX_CLUSTER_DAGS,
                   uint32_t maxSelections = MAX_CLUSTER_SELECTIONS_PER_FRAME,
-                  uint32_t maxStreamingUnits = MAX_STREAMING_UNITS);
+                  uint32_t maxStreamingUnits = MAX_STREAMING_UNITS,
+                  uint32_t maxWorkQueueEntries = MAX_WORK_QUEUE_ENTRIES);
 
         void cleanup();
 
@@ -205,6 +220,10 @@ namespace render::gpudriven
         vk::Buffer getDAGHeaderBuffer() const { return dagHeaderBuffer; }
         vk::Buffer getClusterSelectionBuffer() const { return clusterSelectionBuffer; }
         vk::Buffer getStreamingUnitBuffer() const { return streamingUnitBuffer; }
+        vk::Buffer getClusterChildBuffer() const { return clusterChildBuffer; }
+        vk::Buffer getTraversalStateBuffer() const { return traversalStateBuffer; }
+        vk::Buffer getWorkQueueBufferA() const { return workQueueBufferA; }
+        vk::Buffer getWorkQueueBufferB() const { return workQueueBufferB; }
 
         // =========================================================================
         // Size Queries
@@ -214,11 +233,16 @@ namespace render::gpudriven
         size_t getDAGHeaderBufferSize() const { return maxDAGHeaderCount * sizeof(GPUClusterDAGHeader); }
         size_t getClusterSelectionBufferSize() const { return maxSelectionCount * sizeof(GPUClusterSelection); }
         size_t getStreamingUnitBufferSize() const { return maxStreamingUnitCount * sizeof(GPUClusterStreamingUnit); }
+        size_t getClusterChildBufferSize() const { return maxClusterCount * sizeof(GPUClusterChildren); }
+        size_t getTraversalStateBufferSize() const { return sizeof(GPUDAGTraversalState); }
+        size_t getWorkQueueBufferSize() const { return maxWorkQueueCount * sizeof(uint32_t); }
 
         size_t getTotalBufferSize() const
         {
             return getClusterBufferSize() + getDAGHeaderBufferSize() +
-                   getClusterSelectionBufferSize() + getStreamingUnitBufferSize();
+                   getClusterSelectionBufferSize() + getStreamingUnitBufferSize() +
+                   getClusterChildBufferSize() + getTraversalStateBufferSize() +
+                   getWorkQueueBufferSize() * 2; // Two work queue buffers
         }
 
         uint32_t getCurrentClusterCount() const { return currentClusterCount; }
@@ -230,6 +254,9 @@ namespace render::gpudriven
 
         void flushPendingTransfers();
 
+        // Reset traversal state for new frame (clears all counters)
+        void resetTraversalState();
+
     private:
         void createBuffers();
         void destroyBuffers();
@@ -238,6 +265,11 @@ namespace render::gpudriven
         void uploadClustersAt(uint32_t offset, const GPUCluster* data, uint32_t count);
         void uploadDAGHeaderAt(uint32_t index, const GPUClusterDAGHeader& header);
         void uploadStreamingUnitsAt(uint32_t offset, const GPUClusterStreamingUnit* data, uint32_t count);
+        void uploadClusterChildrenAt(uint32_t offset, const GPUClusterChildren* data, uint32_t count);
+
+        // Child index building helper
+        void buildChildIndices(const std::vector<GPUCluster>& clusters,
+                               std::vector<GPUClusterChildren>& outChildren);
 
         // Allocation helpers
         bool allocateClusterSpace(ClusterDAGAllocation& alloc,

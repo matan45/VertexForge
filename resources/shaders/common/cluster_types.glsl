@@ -56,7 +56,7 @@ struct GPUClusterTraversalParams {
     uint targetTriangleCount;
     uint maxTriangleCount;
     uint currentSelectedCount;
-    uint padding0;
+    uint maxWorkQueueEntries;  // Work queue capacity for bounds checking
     vec4 reserved;
 };
 
@@ -70,6 +70,24 @@ struct GPUClusterStreamingUnit {
     float maxGeometricError;
     uint state;
     uint priority;
+};
+
+// Must match GPUClusterChildren in ClusterBufferTypes.hpp (8 bytes)
+struct GPUClusterChildren {
+    uint leftChild;   // INVALID_CLUSTER_INDEX if none
+    uint rightChild;  // INVALID_CLUSTER_INDEX if none
+};
+
+// Must match GPUDAGTraversalState in ClusterBufferTypes.hpp (32 bytes)
+struct GPUDAGTraversalState {
+    uint inputQueueCount;      // Items to process this pass
+    uint outputQueueCount;     // Items queued for next pass
+    uint selectedCount;        // Total selected clusters (atomic)
+    uint passIndex;            // Current pass number
+    uint totalProcessed;       // Statistics
+    uint totalSelected;        // Statistics
+    uint totalSubtreesCulled;  // Statistics
+    uint padding;
 };
 
 // =========================================================================

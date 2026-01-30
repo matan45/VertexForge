@@ -25,6 +25,9 @@ namespace render::gpudriven
     // Maximum streaming units
     constexpr uint32_t MAX_STREAMING_UNITS = 65536;
 
+    // Maximum work queue entries (for DAG traversal)
+    constexpr uint32_t MAX_WORK_QUEUE_ENTRIES = 512 * 1024;
+
     // Traversal modes
     constexpr uint32_t CLUSTER_TRAVERSE_TOP_DOWN = 0;
     constexpr uint32_t CLUSTER_TRAVERSE_BOTTOM_UP = 1;
@@ -89,7 +92,7 @@ namespace render::gpudriven
         uint32_t targetTriangleCount;// +32 Target triangle budget
         uint32_t maxTriangleCount;   // +36 Hard triangle limit
         uint32_t currentSelectedCount;// +40 Atomic counter output
-        uint32_t padding0;           // +44
+        uint32_t maxWorkQueueEntries;// +44 Work queue capacity for bounds checking
 
         // Reserved for future use
         glm::vec4 reserved;          // +48
@@ -119,5 +122,37 @@ namespace render::gpudriven
 
     static_assert(sizeof(GPUClusterStreamingUnit) == 32, "GPUClusterStreamingUnit must be 32 bytes");
     static_assert(alignof(GPUClusterStreamingUnit) == 16, "GPUClusterStreamingUnit must be 16-byte aligned");
+
+    // =========================================================================
+    // GPUClusterChildren - Child indices for DAG traversal (8 bytes)
+    // =========================================================================
+
+    struct GPUClusterChildren
+    {
+        uint32_t leftChild;   // +0 Index of left child (INVALID_GPU_CLUSTER_INDEX if none)
+        uint32_t rightChild;  // +4 Index of right child (INVALID_GPU_CLUSTER_INDEX if none)
+    };
+
+    static_assert(sizeof(GPUClusterChildren) == 8, "GPUClusterChildren must be 8 bytes");
+
+    // =========================================================================
+    // GPUDAGTraversalState - Per-frame traversal state for multi-pass (32 bytes)
+    // =========================================================================
+
+    struct alignas(16) GPUDAGTraversalState
+    {
+        uint32_t inputQueueCount;      // +0  Number of items to process this pass
+        uint32_t outputQueueCount;     // +4  Number of items queued for next pass
+        uint32_t selectedCount;        // +8  Total clusters selected (atomic)
+        uint32_t passIndex;            // +12 Current traversal pass number
+
+        uint32_t totalProcessed;       // +16 Statistics: total clusters processed
+        uint32_t totalSelected;        // +20 Statistics: total clusters selected
+        uint32_t totalSubtreesCulled;  // +24 Statistics: subtrees pruned by culling
+        uint32_t padding;              // +28 Padding for alignment
+    };
+
+    static_assert(sizeof(GPUDAGTraversalState) == 32, "GPUDAGTraversalState must be 32 bytes");
+    static_assert(alignof(GPUDAGTraversalState) == 16, "GPUDAGTraversalState must be 16-byte aligned");
 
 } // namespace render::gpudriven

@@ -329,6 +329,8 @@
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_types.glsl" />
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
+    <None Include="..\..\resources\shaders\gpudriven\cluster_dag_root_enqueue.glsl" />
+    <None Include="..\..\resources\shaders\gpudriven\cluster_dag_traverse.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_shader_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\task_gpudriven.glsl" />
