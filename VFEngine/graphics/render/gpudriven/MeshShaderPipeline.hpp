@@ -83,6 +83,12 @@ namespace render::gpudriven
         vk::DeviceMemory statsBufferMemory;
         MeshletCullingStats cachedStats{};
 
+        // VK-293: Dummy buffers for cluster bindings when no ClusterBuffer is available
+        vk::Buffer dummyClusterBuffer;
+        vk::DeviceMemory dummyClusterBufferMemory;
+        vk::Buffer dummyClusterSelectionBuffer;
+        vk::DeviceMemory dummyClusterSelectionBufferMemory;
+
         vk::DescriptorSet lightDataDescriptorSet;
         vk::DescriptorSet clusterGridDescriptorSet;
         vk::DescriptorSet cullingOutputDescriptorSet;
@@ -161,6 +167,7 @@ namespace render::gpudriven
         void createPerDrawDataDescriptor();
         void createMeshletDataDescriptor();
         void createVertexDataDescriptor();
+        void createDummyClusterBuffers();  // VK-293
         void createMeshShaderGraphicsPipeline(vk::DescriptorSetLayout iblLayout,
                                               vk::DescriptorSetLayout bindlessTextureLayout,
                                               vk::DescriptorSetLayout boneMatrixLayout,

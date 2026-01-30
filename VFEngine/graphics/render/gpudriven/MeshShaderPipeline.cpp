@@ -42,6 +42,7 @@ namespace render::gpudriven
         createStatsBuffer();
         createPerDrawDataDescriptor();
         createMeshletDataDescriptor();
+        createDummyClusterBuffers();  // VK-293: Initialize dummy buffers for bindings 4-5
         createVertexDataDescriptor();
         createMeshShaderGraphicsPipeline(iblLayout, bindlessTextureLayout, boneMatrixLayout,
                                          lightDataLayout, clusterGridLayout, cullingOutputLayout,
@@ -89,6 +90,10 @@ namespace render::gpudriven
         }
 
         core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
+
+        // VK-293: Cleanup dummy cluster buffers
+        core::BufferUtilities::destroyBuffer(vkDevice, dummyClusterBuffer, dummyClusterBufferMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, dummyClusterSelectionBuffer, dummyClusterSelectionBufferMemory);
 
         if (perDrawDataPool)
         {
@@ -404,6 +409,54 @@ namespace render::gpudriven
         vkDevice.updateDescriptorSets(statsWrite, {});
 
         loggerInfo("MeshShaderPipeline: Created meshlet data descriptor");
+    }
+
+    void MeshShaderPipeline::createDummyClusterBuffers()
+    {
+        // VK-293: Create dummy buffers for cluster descriptor bindings (4 and 5)
+        // These are used when no actual ClusterBuffer is available
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Dummy cluster buffer (binding 4)
+        constexpr vk::DeviceSize dummyBufferSize = 256;  // Minimal size
+
+        core::BufferInfoRequest clusterRequest(vkDevice, device.getPhysicalDevice());
+        clusterRequest.size = dummyBufferSize;
+        clusterRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        clusterRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::BufferUtilities::createBuffer(clusterRequest, dummyClusterBuffer, dummyClusterBufferMemory);
+
+        // Dummy selection buffer (binding 5)
+        core::BufferInfoRequest selectionRequest(vkDevice, device.getPhysicalDevice());
+        selectionRequest.size = dummyBufferSize;
+        selectionRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        selectionRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        core::BufferUtilities::createBuffer(selectionRequest, dummyClusterSelectionBuffer, dummyClusterSelectionBufferMemory);
+
+        // Update descriptor set with dummy buffers
+        std::array<vk::DescriptorBufferInfo, 2> bufferInfos{};
+        bufferInfos[0].buffer = dummyClusterBuffer;
+        bufferInfos[0].offset = 0;
+        bufferInfos[0].range = VK_WHOLE_SIZE;
+
+        bufferInfos[1].buffer = dummyClusterSelectionBuffer;
+        bufferInfos[1].offset = 0;
+        bufferInfos[1].range = VK_WHOLE_SIZE;
+
+        std::array<vk::WriteDescriptorSet, 2> writes{};
+        for (uint32_t i = 0; i < 2; i++)
+        {
+            writes[i].dstSet = meshletDataDescriptorSet;
+            writes[i].dstBinding = 4 + i;  // Bindings 4 and 5
+            writes[i].dstArrayElement = 0;
+            writes[i].descriptorCount = 1;
+            writes[i].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[i].pBufferInfo = &bufferInfos[i];
+        }
+
+        vkDevice.updateDescriptorSets(writes, {});
+
+        loggerInfo("MeshShaderPipeline: Created dummy cluster buffers for bindings 4-5");
     }
 
     void MeshShaderPipeline::createVertexDataDescriptor()

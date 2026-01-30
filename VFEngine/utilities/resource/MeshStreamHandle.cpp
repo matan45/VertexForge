@@ -374,6 +374,13 @@ namespace resource
         // Skip cluster data (64 bytes per cluster)
         file.seekg(dagInfo.clusterCount * 64, std::ios::cur);
 
+        // VK-295: Skip streaming units
+        // Header: streamingUnitCount (4 bytes) + rootStreamingUnit (4 bytes)
+        // Each unit: 48 bytes
+        uint32_t streamingUnitCount = endian::readLE<uint32_t>(file);
+        file.seekg(4, std::ios::cur);  // Skip rootStreamingUnit
+        file.seekg(streamingUnitCount * 48, std::ios::cur);  // Skip streaming unit data
+
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to parse cluster DAG data for submesh {}", meshIdx);

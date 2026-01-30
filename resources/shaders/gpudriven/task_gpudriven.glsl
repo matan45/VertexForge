@@ -163,11 +163,13 @@ void processDiscreteLOD() {
         payload.drawIndex = drawIndex;
         payload.meshletCount = visibleCount;
 
-        // VK-298: Set default debug values for discrete LOD mode
-        payload.debugClusterIndex = 0u;
-        payload.debugClusterLevel = drawData.lodLevel;  // Use mesh LOD as proxy
-        payload.debugScreenError = 0.0;
-        payload.debugStreamingState = 2u;  // Assume loaded in discrete mode
+        // VK-298: Set debug values for discrete LOD mode
+        // Use drawIndex + workgroup to create unique colors per draw call
+        payload.debugClusterIndex = drawIndex * 1000u + gl_WorkGroupID.x;
+        payload.debugClusterLevel = drawData.lodLevel;  // Use mesh LOD level (0-3)
+        // Estimate screen error from LOD level (higher LOD = lower detail = higher error)
+        payload.debugScreenError = float(drawData.lodLevel) * 2.5;  // 0, 2.5, 5.0, 7.5
+        payload.debugStreamingState = 2u;  // Always loaded in discrete mode
 
         for (uint i = 0; i < visibleCount; i++) {
             payload.meshletIndices[i] = sharedMeshletIndices[i];
