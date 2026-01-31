@@ -39,6 +39,27 @@ namespace controllers
         setupPipeline();
     }
 
+    void Import::requestCancel()
+    {
+        cancelRequested.store(true);
+        vfLogInfo("Import cancellation requested");
+    }
+
+    bool Import::isCancellationRequested()
+    {
+        return cancelRequested.load();
+    }
+
+    void Import::resetCancellation()
+    {
+        cancelRequested.store(false);
+    }
+
+    std::atomic<bool>* Import::getCancelFlag()
+    {
+        return &cancelRequested;
+    }
+
     void Import::setupPipeline()
     {
         importPipeline = std::make_unique<pipeline::ImportPipeline>();

@@ -15,6 +15,7 @@
 
 #define ENABLE_VHACD_IMPLEMENTATION 1
 #include <VHACD.h>
+#include "VHACDCallback.hpp"
 
 namespace
 {
@@ -35,6 +36,48 @@ namespace
         {
             buildNodeMap(node->mChildren[i], nodeMap);
         }
+    }
+
+    /**
+     * Apply V-HACD preset values if not using Custom preset.
+     * Preset values are tuned for different speed/quality tradeoffs.
+     */
+    importConfig::MeshImportConfig applyVHACDPreset(const importConfig::MeshImportConfig& config)
+    {
+        if (config.vhacdPreset == importConfig::VHACDPreset::Custom)
+        {
+            return config;
+        }
+
+        importConfig::MeshImportConfig result = config;
+
+        switch (config.vhacdPreset)
+        {
+            case importConfig::VHACDPreset::Fast:
+                result.vhacdResolution = 50000;
+                result.maxConvexHulls = 8;
+                result.maxVerticesPerHull = 32;
+                result.minVolumePercentError = 5.0f;
+                result.maxRecursionDepth = 8;
+                break;
+            case importConfig::VHACDPreset::Balanced:
+                result.vhacdResolution = 100000;
+                result.maxConvexHulls = 16;
+                result.maxVerticesPerHull = 64;
+                result.minVolumePercentError = 1.0f;
+                result.maxRecursionDepth = 10;
+                break;
+            case importConfig::VHACDPreset::Quality:
+                result.vhacdResolution = 200000;
+                result.maxConvexHulls = 32;
+                result.maxVerticesPerHull = 128;
+                result.minVolumePercentError = 0.5f;
+                result.maxRecursionDepth = 12;
+                break;
+            default:
+                break;
+        }
+        return result;
     }
 }
 
@@ -682,7 +725,9 @@ namespace types
 
     resource::ConvexDecompositionData Mesh::generateConvexDecomposition(
         const LODMeshData& meshData,
-        const importConfig::MeshImportConfig& config) const
+        const importConfig::MeshImportConfig& config,
+        ConvexProgressCallback progressCallback,
+        std::atomic<bool>* cancelFlag) const
     {
         resource::ConvexDecompositionData result;
 
@@ -691,7 +736,11 @@ namespace types
             return result;
         }
 
-        vfLogInfo("  Running V-HACD convex decomposition...");
+        // Apply preset if not using Custom
+        auto effectiveConfig = applyVHACDPreset(config);
+
+        vfLogInfo("  Running V-HACD convex decomposition (preset: {}, resolution: {})...",
+                  static_cast<int>(config.vhacdPreset), effectiveConfig.vhacdResolution);
 
         std::vector<double> points;
         points.reserve(meshData.vertices.size() * 3);
@@ -702,14 +751,23 @@ namespace types
             points.push_back(static_cast<double>(v.position.z));
         }
 
+        // Set up progress callback
+        VHACDCallback callback([&](float progress, std::string_view stage, std::string_view /*operation*/) {
+            if (progressCallback)
+            {
+                progressCallback(progress, stage);
+            }
+        });
+
         VHACD::IVHACD::Parameters params;
-        params.m_maxConvexHulls = config.maxConvexHulls;
-        params.m_resolution = config.vhacdResolution;
-        params.m_maxNumVerticesPerCH = config.maxVerticesPerHull;
-        params.m_minimumVolumePercentErrorAllowed = static_cast<double>(config.minVolumePercentError);
-        params.m_maxRecursionDepth = 10;
-        params.m_shrinkWrap = true;
-        params.m_asyncACD = false; // Synchronous for import pipeline
+        params.m_maxConvexHulls = effectiveConfig.maxConvexHulls;
+        params.m_resolution = effectiveConfig.vhacdResolution;
+        params.m_maxNumVerticesPerCH = effectiveConfig.maxVerticesPerHull;
+        params.m_minimumVolumePercentErrorAllowed = static_cast<double>(effectiveConfig.minVolumePercentError);
+        params.m_maxRecursionDepth = effectiveConfig.maxRecursionDepth;
+        params.m_shrinkWrap = effectiveConfig.shrinkWrap;
+        params.m_asyncACD = false; // Synchronous - we're already in background thread
+        params.m_callback = &callback;
 
         VHACD::IVHACD* vhacd = VHACD::CreateVHACD();
 
@@ -721,19 +779,28 @@ namespace types
             params
         );
 
+        // Check if cancelled
+        if (cancelFlag && cancelFlag->load())
+        {
+            vfLogInfo("  V-HACD decomposition cancelled");
+            vhacd->Release();
+            return result;
+        }
+
         if (success)
         {
             uint32_t numHulls = vhacd->GetNConvexHulls();
             vfLogInfo("  V-HACD generated {} convex hulls", numHulls);
 
             result.hasDecomposition = true;
-            result.params.maxConvexHulls = config.maxConvexHulls;
-            result.params.resolution = config.vhacdResolution;
-            result.params.maxVerticesPerHull = config.maxVerticesPerHull;
-            result.params.minVolumePercentError = config.minVolumePercentError;
+            result.params.maxConvexHulls = effectiveConfig.maxConvexHulls;
+            result.params.resolution = effectiveConfig.vhacdResolution;
+            result.params.maxVerticesPerHull = effectiveConfig.maxVerticesPerHull;
+            result.params.minVolumePercentError = effectiveConfig.minVolumePercentError;
+            result.params.maxRecursionDepth = effectiveConfig.maxRecursionDepth;
 
             constexpr uint32_t joltMaxVertices = 256;
-            const uint32_t effectiveMaxVertices = std::min(config.maxVerticesPerHull, joltMaxVertices);
+            const uint32_t effectiveMaxVertices = std::min(effectiveConfig.maxVerticesPerHull, joltMaxVertices);
 
             uint32_t skippedHulls = 0;
 

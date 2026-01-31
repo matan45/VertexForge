@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <functional>
+#include <atomic>
 #include "config/Config.hpp"
 #include "../pipeline/Pipeline.hpp"
 
@@ -39,12 +40,19 @@ namespace controllers
     private:
         inline static std::string location;
         inline static std::unique_ptr<pipeline::ImportPipeline> importPipeline;
+        inline static std::atomic<bool> cancelRequested{false};
 
     public:
         static ImportResult importFiles(const std::vector<importConfig::ImportFiles>& paths,
                                         ImportProgressCallback progressCallback = nullptr);
         static void setLocation(std::string_view newLocation);
         static void initialize();
+
+        // Cancellation support
+        static void requestCancel();
+        static bool isCancellationRequested();
+        static void resetCancellation();
+        static std::atomic<bool>* getCancelFlag();
 
     private:
         static void setupPipeline();
