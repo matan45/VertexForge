@@ -255,6 +255,31 @@ namespace controllers {
 		offScreenController->prepareFrameShadowDebug();
 	}
 
+	void OffScreen::setFrustumCullingEnabled(bool enabled)
+	{
+		offScreenController->setFrustumCullingEnabled(enabled);
+	}
+
+	void OffScreen::setOcclusionCullingEnabled(bool enabled)
+	{
+		offScreenController->setOcclusionCullingEnabled(enabled);
+	}
+
+	void OffScreen::setLODSelectionEnabled(bool enabled)
+	{
+		offScreenController->setLODSelectionEnabled(enabled);
+	}
+
+	void OffScreen::setMeshletFrustumCullingEnabled(bool enabled)
+	{
+		offScreenController->setMeshletFrustumCullingEnabled(enabled);
+	}
+
+	void OffScreen::setMeshletBackfaceCullingEnabled(bool enabled)
+	{
+		offScreenController->setMeshletBackfaceCullingEnabled(enabled);
+	}
+
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
 	{
 		offScreenController->setVFXRuntimeProvider(provider);

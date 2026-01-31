@@ -43,11 +43,12 @@ void unpackMeshletCounts(uint packed, out uint vertexCount, out uint primitiveCo
     primitiveCount = (packed >> 8) & 0xFFu;
 }
 
-// Must match GPUObjectData in GPUDrivenTypes.hpp (320 bytes)
+// Must match GPUObjectData in GPUDrivenTypes.hpp (336 bytes)
 struct GPUObjectData {
     mat4 modelMatrix;
 
-    vec4 boundingSphere;
+    vec4 aabbMin;  // .w unused (padding)
+    vec4 aabbMax;  // .w unused (padding)
 
     uvec4 lod0Data;
     uvec4 lod1Data;

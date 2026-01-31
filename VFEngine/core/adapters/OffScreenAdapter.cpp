@@ -262,6 +262,36 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setFrustumCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setOcclusionCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setOcclusionCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setLODSelectionEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setLODSelectionEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setMeshletFrustumCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setMeshletFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setMeshletBackfaceCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setMeshletBackfaceCullingEnabled(enabled);
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);

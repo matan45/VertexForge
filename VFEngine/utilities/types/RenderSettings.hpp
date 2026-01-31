@@ -97,9 +97,19 @@ namespace types
         ShadowAtlasConfig atlas;
     };
 
+    struct CullingSettings
+    {
+        bool frustumCullingEnabled = true;
+        bool occlusionCullingEnabled = true;
+        bool lodSelectionEnabled = true;
+        bool meshletFrustumCullingEnabled = true;
+        bool meshletBackfaceCullingEnabled = true;
+    };
+
     struct RenderSettings
     {
         ShadowSettings shadows;
+        CullingSettings culling;
 
         static RenderSettings createDefault()
         {

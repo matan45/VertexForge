@@ -152,6 +152,12 @@ namespace render
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;
 
+        void setFrustumCullingEnabled(bool enabled);
+        void setOcclusionCullingEnabled(bool enabled);
+        void setLODSelectionEnabled(bool enabled);
+        void setMeshletFrustumCullingEnabled(bool enabled);
+        void setMeshletBackfaceCullingEnabled(bool enabled);
+
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
         void removeCamera(occlusion::CameraId id);
         void setActiveCamera(occlusion::CameraId id);

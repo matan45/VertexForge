@@ -81,6 +81,12 @@ namespace core
         bool getShowShadowDebug() const override;
         void prepareFrameShadowDebug() override;
 
+        void setFrustumCullingEnabled(bool enabled) override;
+        void setOcclusionCullingEnabled(bool enabled) override;
+        void setLODSelectionEnabled(bool enabled) override;
+        void setMeshletFrustumCullingEnabled(bool enabled) override;
+        void setMeshletBackfaceCullingEnabled(bool enabled) override;
+
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;
 
     private:

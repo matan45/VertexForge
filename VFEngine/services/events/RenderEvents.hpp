@@ -188,4 +188,35 @@ namespace events::render {
         std::string_view getName() const override { return "GetShadowStats"; }
     };
 
+    // GPU Culling settings
+    struct SetFrustumCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetFrustumCulling"; }
+    };
+
+    struct SetOcclusionCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetOcclusionCulling"; }
+    };
+
+    struct SetLODSelectionCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetLODSelection"; }
+    };
+
+    struct SetMeshletFrustumCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetMeshletFrustumCulling"; }
+    };
+
+    struct SetMeshletBackfaceCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetMeshletBackfaceCulling"; }
+    };
+
 }

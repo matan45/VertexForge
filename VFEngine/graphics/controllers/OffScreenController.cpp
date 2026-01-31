@@ -241,6 +241,13 @@ namespace controllers
     void OffScreenController::setOcclusionCullingEnabled(bool enabled)
     {
         cameraController->setOcclusionCullingEnabled(enabled);
+
+        // Also set on GPU-driven renderer
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setOcclusionCullingEnabled(enabled);
+        }
     }
 
     bool OffScreenController::isOcclusionCullingEnabled() const
@@ -299,6 +306,13 @@ namespace controllers
         {
             lightBufferManager->setShadowIntensity(settings.shadows.shadowIntensity);
         }
+
+        // Apply culling settings
+        gpuDriven->setFrustumCullingEnabled(settings.culling.frustumCullingEnabled);
+        gpuDriven->setOcclusionCullingEnabled(settings.culling.occlusionCullingEnabled);
+        gpuDriven->setLODSelectionEnabled(settings.culling.lodSelectionEnabled);
+        gpuDriven->setMeshletFrustumCullingEnabled(settings.culling.meshletFrustumCullingEnabled);
+        gpuDriven->setMeshletBackfaceCullingEnabled(settings.culling.meshletBackfaceCullingEnabled);
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
@@ -518,6 +532,42 @@ namespace controllers
             return renderHandler->getViewMode();
         }
         return 0;
+    }
+
+    void OffScreenController::setFrustumCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setLODSelectionEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setLODSelectionEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setMeshletFrustumCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setMeshletFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setMeshletBackfaceCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setMeshletBackfaceCullingEnabled(enabled);
+        }
     }
 
     void OffScreenController::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)

@@ -11,6 +11,7 @@ namespace windows
         bool settingsLoaded = false;
         bool isDirty = false;
 
+        void drawCullingSection();
         void drawShadowSection();
         void loadFromScene();
         void saveToScene();

@@ -48,7 +48,8 @@ namespace render::gpudriven
     struct alignas(16) GPUObjectData
     {
         glm::mat4 modelMatrix;
-        glm::vec4 boundingSphere;
+        glm::vec4 aabbMin;  // .w unused (padding)
+        glm::vec4 aabbMax;  // .w unused (padding)
         glm::uvec4 lod0Data;
         glm::uvec4 lod1Data;
         glm::uvec4 lod2Data;
@@ -68,7 +69,7 @@ namespace render::gpudriven
         glm::uvec4 meshletLod2;
         glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
     };
-    static_assert(sizeof(GPUObjectData) == 320);
+    static_assert(sizeof(GPUObjectData) == 336);
 
 
     namespace ObjectFlags

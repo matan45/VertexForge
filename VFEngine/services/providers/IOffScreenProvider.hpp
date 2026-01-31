@@ -37,8 +37,8 @@ namespace services {
     // GPU-driven rendering statistics
     struct GPUDrivenDebugStats {
         bool enabled = false;
-        bool frustumCullingEnabled = false;
-        bool occlusionCullingEnabled = false;
+        bool frustumCullingEnabled = true;
+        bool occlusionCullingEnabled = true;
         bool lodSelectionEnabled = false;
         uint32_t hiZMipLevels = 0;
 
@@ -201,6 +201,13 @@ namespace services {
         virtual void setShowShadowDebug(bool show) = 0;
         virtual bool getShowShadowDebug() const = 0;
         virtual void prepareFrameShadowDebug() = 0;
+
+        // GPU Culling Settings API
+        virtual void setFrustumCullingEnabled(bool enabled) = 0;
+        virtual void setOcclusionCullingEnabled(bool enabled) = 0;
+        virtual void setLODSelectionEnabled(bool enabled) = 0;
+        virtual void setMeshletFrustumCullingEnabled(bool enabled) = 0;
+        virtual void setMeshletBackfaceCullingEnabled(bool enabled) = 0;
 
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;

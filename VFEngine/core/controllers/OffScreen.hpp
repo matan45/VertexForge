@@ -96,6 +96,12 @@ namespace controllers {
 		bool getShowShadowDebug() const;
 		void prepareFrameShadowDebug();
 
+		void setFrustumCullingEnabled(bool enabled);
+		void setOcclusionCullingEnabled(bool enabled);
+		void setLODSelectionEnabled(bool enabled);
+		void setMeshletFrustumCullingEnabled(bool enabled);
+		void setMeshletBackfaceCullingEnabled(bool enabled);
+
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 	};
 }
