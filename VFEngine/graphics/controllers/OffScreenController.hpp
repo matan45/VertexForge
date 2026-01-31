@@ -133,6 +133,11 @@ namespace controllers
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;
 
+        void setFrustumCullingEnabled(bool enabled);
+        void setLODSelectionEnabled(bool enabled);
+        void setMeshletFrustumCullingEnabled(bool enabled);
+        void setMeshletBackfaceCullingEnabled(bool enabled);
+
         void setShowClusterDebug(bool show) { showClusterDebug = show; }
         bool getShowClusterDebug() const { return showClusterDebug; }
         void prepareFrameClusterDebug();

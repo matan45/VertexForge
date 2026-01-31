@@ -202,6 +202,13 @@ namespace services {
         virtual bool getShowShadowDebug() const = 0;
         virtual void prepareFrameShadowDebug() = 0;
 
+        // GPU Culling Settings API
+        virtual void setFrustumCullingEnabled(bool enabled) = 0;
+        virtual void setOcclusionCullingEnabled(bool enabled) = 0;
+        virtual void setLODSelectionEnabled(bool enabled) = 0;
+        virtual void setMeshletFrustumCullingEnabled(bool enabled) = 0;
+        virtual void setMeshletBackfaceCullingEnabled(bool enabled) = 0;
+
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;
     };

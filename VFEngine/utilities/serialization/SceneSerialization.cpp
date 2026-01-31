@@ -1025,6 +1025,14 @@ namespace serialization
             {"shadowIntensity", settings.shadows.shadowIntensity}
         };
 
+        j["culling"] = {
+            {"frustumCullingEnabled", settings.culling.frustumCullingEnabled},
+            {"occlusionCullingEnabled", settings.culling.occlusionCullingEnabled},
+            {"lodSelectionEnabled", settings.culling.lodSelectionEnabled},
+            {"meshletFrustumCullingEnabled", settings.culling.meshletFrustumCullingEnabled},
+            {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled}
+        };
+
         return j;
     }
 
@@ -1052,6 +1060,21 @@ namespace serialization
                 settings.shadows.normalBias = shadows["normalBias"].get<float>();
             if (shadows.contains("shadowIntensity") && shadows["shadowIntensity"].is_number())
                 settings.shadows.shadowIntensity = shadows["shadowIntensity"].get<float>();
+        }
+
+        if (j.contains("culling") && j["culling"].is_object())
+        {
+            const auto& culling = j["culling"];
+            if (culling.contains("frustumCullingEnabled") && culling["frustumCullingEnabled"].is_boolean())
+                settings.culling.frustumCullingEnabled = culling["frustumCullingEnabled"].get<bool>();
+            if (culling.contains("occlusionCullingEnabled") && culling["occlusionCullingEnabled"].is_boolean())
+                settings.culling.occlusionCullingEnabled = culling["occlusionCullingEnabled"].get<bool>();
+            if (culling.contains("lodSelectionEnabled") && culling["lodSelectionEnabled"].is_boolean())
+                settings.culling.lodSelectionEnabled = culling["lodSelectionEnabled"].get<bool>();
+            if (culling.contains("meshletFrustumCullingEnabled") && culling["meshletFrustumCullingEnabled"].is_boolean())
+                settings.culling.meshletFrustumCullingEnabled = culling["meshletFrustumCullingEnabled"].get<bool>();
+            if (culling.contains("meshletBackfaceCullingEnabled") && culling["meshletBackfaceCullingEnabled"].is_boolean())
+                settings.culling.meshletBackfaceCullingEnabled = culling["meshletBackfaceCullingEnabled"].get<bool>();
         }
     }
 

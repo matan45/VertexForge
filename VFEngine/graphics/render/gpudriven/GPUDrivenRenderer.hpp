@@ -146,8 +146,10 @@ namespace render::gpudriven
         void setEnabled(bool enabled) { this->enabled = enabled; }
         bool isEnabled() const { return enabled; }
 
+        void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         bool isFrustumCullingEnabled() const { return frustumCullingEnabled; }
 
+        void setLODSelectionEnabled(bool enabled) { lodSelectionEnabled = enabled; }
         bool isLODSelectionEnabled() const { return lodSelectionEnabled; }
 
         void setOcclusionCullingEnabled(bool enabled) { occlusionCullingEnabled = enabled; }

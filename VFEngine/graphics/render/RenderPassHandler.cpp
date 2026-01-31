@@ -375,6 +375,46 @@ namespace render
         return 0;
     }
 
+    void RenderPassHandler::setFrustumCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setOcclusionCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setOcclusionCullingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setLODSelectionEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setLODSelectionEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setMeshletFrustumCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setMeshletFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setMeshletBackfaceCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setMeshletBackfaceCullingEnabled(enabled);
+        }
+    }
+
     void RenderPassHandler::updateGPUDrivenHiZ() const
     {
         if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)

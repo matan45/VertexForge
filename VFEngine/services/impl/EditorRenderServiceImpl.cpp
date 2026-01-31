@@ -455,6 +455,52 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShadowStats() : services::ShadowStats{};
             });
 
+        // GPU Culling settings
+        dispatcher.registerCommandHandler<events::render::SetFrustumCullingCommand>(
+            [this](const events::render::SetFrustumCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setFrustumCullingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetOcclusionCullingCommand>(
+            [this](const events::render::SetOcclusionCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setOcclusionCullingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetLODSelectionCommand>(
+            [this](const events::render::SetLODSelectionCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setLODSelectionEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetMeshletFrustumCullingCommand>(
+            [this](const events::render::SetMeshletFrustumCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setMeshletFrustumCullingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetMeshletBackfaceCullingCommand>(
+            [this](const events::render::SetMeshletBackfaceCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setMeshletBackfaceCullingEnabled(cmd.enabled);
+                }
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {

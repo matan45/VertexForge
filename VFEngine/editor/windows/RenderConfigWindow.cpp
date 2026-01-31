@@ -245,6 +245,85 @@ namespace windows
         }
     }
 
+    void RenderConfigWindow::drawCullingSection()
+    {
+        if (ImGui::CollapsingHeader("GPU Culling", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            ImGui::Text("Object-Level Culling");
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Frustum Culling", &settings.culling.frustumCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetFrustumCullingCommand cmd;
+                cmd.enabled = settings.culling.frustumCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull objects outside camera frustum using AABB test.");
+            }
+
+            if (ImGui::Checkbox("Occlusion Culling (Hi-Z)", &settings.culling.occlusionCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetOcclusionCullingCommand cmd;
+                cmd.enabled = settings.culling.occlusionCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull objects hidden behind other geometry using Hi-Z buffer.");
+            }
+
+            if (ImGui::Checkbox("LOD Selection", &settings.culling.lodSelectionEnabled))
+            {
+                isDirty = true;
+                events::render::SetLODSelectionCommand cmd;
+                cmd.enabled = settings.culling.lodSelectionEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Automatically select LOD level based on screen size.");
+            }
+
+            ImGui::Separator();
+            ImGui::Text("Meshlet-Level Culling");
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Meshlet Frustum Culling", &settings.culling.meshletFrustumCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetMeshletFrustumCullingCommand cmd;
+                cmd.enabled = settings.culling.meshletFrustumCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull individual meshlet clusters outside camera frustum.");
+            }
+
+            if (ImGui::Checkbox("Meshlet Backface Culling", &settings.culling.meshletBackfaceCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetMeshletBackfaceCullingCommand cmd;
+                cmd.enabled = settings.culling.meshletBackfaceCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull meshlet clusters facing away from camera using cone culling.");
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void RenderConfigWindow::draw()
     {
         if (!visible)
@@ -252,10 +331,11 @@ namespace windows
             return;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(400, 350), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(400, 450), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin("Render Configuration", &visible))
         {
+            drawCullingSection();
             drawShadowSection();
 
             ImGui::Spacing();
