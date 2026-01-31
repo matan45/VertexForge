@@ -469,7 +469,8 @@ namespace render::gpudriven
                                               float time)
     {
         obj.modelMatrix = meshRender.modelMatrix;
-        obj.boundingSphere = submeshLoc.boundingSphere;
+        obj.aabbMin = glm::vec4(submeshLoc.aabbMin, 0.0f);
+        obj.aabbMax = glm::vec4(submeshLoc.aabbMax, 0.0f);
 
         for (uint32_t i = 0; i < LOD_LEVEL_COUNT; ++i)
         {

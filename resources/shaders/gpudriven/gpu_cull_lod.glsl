@@ -62,6 +62,47 @@ vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     return vec4(worldCenter, worldRadius);
 }
 
+// Transform local AABB to world space
+void transformAABB(vec3 localMin, vec3 localMax, mat4 modelMatrix, out vec3 worldMin, out vec3 worldMax) {
+    vec3 corners[8];
+    corners[0] = (modelMatrix * vec4(localMin.x, localMin.y, localMin.z, 1.0)).xyz;
+    corners[1] = (modelMatrix * vec4(localMax.x, localMin.y, localMin.z, 1.0)).xyz;
+    corners[2] = (modelMatrix * vec4(localMin.x, localMax.y, localMin.z, 1.0)).xyz;
+    corners[3] = (modelMatrix * vec4(localMax.x, localMax.y, localMin.z, 1.0)).xyz;
+    corners[4] = (modelMatrix * vec4(localMin.x, localMin.y, localMax.z, 1.0)).xyz;
+    corners[5] = (modelMatrix * vec4(localMax.x, localMin.y, localMax.z, 1.0)).xyz;
+    corners[6] = (modelMatrix * vec4(localMin.x, localMax.y, localMax.z, 1.0)).xyz;
+    corners[7] = (modelMatrix * vec4(localMax.x, localMax.y, localMax.z, 1.0)).xyz;
+
+    worldMin = corners[0];
+    worldMax = corners[0];
+    for (int i = 1; i < 8; i++) {
+        worldMin = min(worldMin, corners[i]);
+        worldMax = max(worldMax, corners[i]);
+    }
+}
+
+// AABB frustum test using p-vertex method
+bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
+    for (int i = 0; i < 6; i++) {
+        vec3 planeNormal = frustumPlanes[i].xyz;
+        float planeD = frustumPlanes[i].w;
+
+        // Find the positive vertex (furthest along plane normal)
+        vec3 pVertex;
+        pVertex.x = (planeNormal.x >= 0.0) ? aabbMax.x : aabbMin.x;
+        pVertex.y = (planeNormal.y >= 0.0) ? aabbMax.y : aabbMin.y;
+        pVertex.z = (planeNormal.z >= 0.0) ? aabbMax.z : aabbMin.z;
+
+        float distance = dot(planeNormal, pVertex) + planeD;
+
+        if (distance < 0.0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
     for (int i = 0; i < 6; i++) {
         float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
@@ -170,15 +211,23 @@ void main() {
     }
 
     GPUObjectData obj = objects[objectIndex];
-    vec4 worldSphere = transformBoundingSphere(obj.boundingSphere, obj.modelMatrix);
 
     uint batchIndex = objectIndex % camera.batchCount;
     uint shaderGroup = obj.shaderGroupIndex;
     uint sectionIndex = getSectionIndex(batchIndex, shaderGroup);
     uint commandsPerSection = getCommandsPerSection();
 
+    // Transform AABB to world space (used for frustum culling and to derive bounding sphere)
+    vec3 worldAabbMin, worldAabbMax;
+    transformAABB(obj.aabbMin.xyz, obj.aabbMax.xyz, obj.modelMatrix, worldAabbMin, worldAabbMax);
+
+    // Compute world-space bounding sphere from AABB for occlusion/LOD
+    vec3 worldCenter = (worldAabbMin + worldAabbMax) * 0.5;
+    float worldRadius = length(worldAabbMax - worldCenter);
+    vec4 worldSphere = vec4(worldCenter, worldRadius);
+
     if (camera.enableFrustumCulling != 0u && (obj.flags & FLAG_NO_CULL) == 0u) {
-        if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
+        if (!aabbInFrustum(worldAabbMin, worldAabbMax, camera.frustumPlanes)) {
             atomicAdd(batchStats[sectionIndex].culledByFrustum, 1);
             return;
         }

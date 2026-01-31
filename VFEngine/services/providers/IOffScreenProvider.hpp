@@ -37,8 +37,8 @@ namespace services {
     // GPU-driven rendering statistics
     struct GPUDrivenDebugStats {
         bool enabled = false;
-        bool frustumCullingEnabled = false;
-        bool occlusionCullingEnabled = false;
+        bool frustumCullingEnabled = true;
+        bool occlusionCullingEnabled = true;
         bool lodSelectionEnabled = false;
         uint32_t hiZMipLevels = 0;
 
