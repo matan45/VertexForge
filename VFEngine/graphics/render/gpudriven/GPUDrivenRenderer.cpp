@@ -503,19 +503,19 @@ namespace render::gpudriven
             batchManager->getCombinedDrawCountBuffer()
         );
 
-        if (meshShaderPipeline && mergedBuffer->getObjectCount() > 0)
+        bool hasMeshes = mergedBuffer->getObjectCount() > 0;
+
+        // Always update meshlet and vertex descriptors - terrain uses these too
+        if (meshShaderPipeline)
         {
-            meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+        }
 
-            if (lightBufferManager && clusterGridManager && lightCullingPipeline)
-            {
-                meshShaderPipeline->updateLightingDescriptors(
-                    lightBufferManager->getDescriptorSet(),
-                    clusterGridManager->getDescriptorSet(),
-                    lightCullingPipeline->getDescriptorSet());
-            }
+        // Update per-draw and shadow descriptors only when we have meshes
+        if (meshShaderPipeline && hasMeshes)
+        {
+            meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
 
             if (shadowSystem && shadowSystem->isInitialized())
             {
@@ -523,6 +523,15 @@ namespace render::gpudriven
                     shadowSystem->getShadowDataDescSet(),
                     shadowSystem->getShadowTextureDescSet());
             }
+        }
+
+        // Always update lighting descriptors when terrain or meshes may need them
+        if (meshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
+        {
+            meshShaderPipeline->updateLightingDescriptors(
+                lightBufferManager->getDescriptorSet(),
+                clusterGridManager->getDescriptorSet(),
+                lightCullingPipeline->getDescriptorSet());
         }
     }
 
@@ -1169,6 +1178,7 @@ namespace render::gpudriven
         }
 
         // Upload new tiles to GPU buffers
+        uint32_t uploadedCount = 0;
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->isVisible)
@@ -1179,12 +1189,27 @@ namespace render::gpudriven
             TerrainTileKey key{tile->coord.x, tile->coord.z};
             if (!terrainAdapter->hasTile(key))
             {
-                terrainAdapter->uploadTile(*tile);
+                if (terrainAdapter->uploadTile(*tile))
+                {
+                    uploadedCount++;
+                }
             }
+        }
+
+        if (uploadedCount > 0)
+        {
+            loggerInfo("GPUDrivenRenderer: Uploaded {} terrain tiles", uploadedCount);
         }
 
         // Build GPU tile data for rendering
         terrainTileData = terrainAdapter->buildGPUTileData(visibleTiles);
+
+        static bool loggedOnce = false;
+        if (!terrainTileData.empty() && !loggedOnce)
+        {
+            loggerInfo("GPUDrivenRenderer: Built {} terrain tile GPU data for rendering", terrainTileData.size());
+            loggedOnce = true;
+        }
 
         // Upload to terrain pipeline
         if (!terrainTileData.empty())
@@ -1197,12 +1222,32 @@ namespace render::gpudriven
     {
         if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)
         {
+            static bool warnedInit = false;
+            if (!warnedInit)
+            {
+                loggerWarning("GPUDrivenRenderer::renderTerrainDraw: Early exit - initialized={}, enabled={}, hasPipeline={}, hasMeshShaderPipeline={}",
+                              initialized, terrainRenderingEnabled, (bool)terrainPipeline, (bool)meshShaderPipeline);
+                warnedInit = true;
+            }
             return;
         }
 
         if (terrainTileData.empty())
         {
+            static bool warnedOnce = false;
+            if (!warnedOnce)
+            {
+                loggerWarning("GPUDrivenRenderer: terrainTileData is empty, skipping terrain render");
+                warnedOnce = true;
+            }
             return;
+        }
+
+        static bool loggedCalled = false;
+        if (!loggedCalled)
+        {
+            loggerInfo("GPUDrivenRenderer::renderTerrainDraw: Called with {} tiles", terrainTileData.size());
+            loggedCalled = true;
         }
 
         // Update external descriptor sets for terrain pipeline

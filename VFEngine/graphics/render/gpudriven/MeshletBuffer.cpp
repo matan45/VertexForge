@@ -500,10 +500,11 @@ namespace render::gpudriven
             return nullptr;
         }
 
-        // Check if tile already has an allocation
-        if (allocationKeyToIndex.find(tileKey) != allocationKeyToIndex.end())
+        // Check if tile already has an allocation - use proper key format
+        std::string allocationKey = makeAllocationKey(tileKey, "terrain", 0);
+        if (allocationKeyToIndex.find(allocationKey) != allocationKeyToIndex.end())
         {
-            auto it = allocationKeyToIndex.find(tileKey);
+            auto it = allocationKeyToIndex.find(allocationKey);
             return &allocations[it->second];
         }
 
@@ -534,7 +535,7 @@ namespace render::gpudriven
             }
         }
 
-        // Store allocation
+        // Store allocation using proper key format
         size_t allocIndex;
         if (!freeAllocationSlots.empty())
         {
@@ -547,7 +548,7 @@ namespace render::gpudriven
             allocIndex = allocations.size();
             allocations.push_back(std::move(alloc));
         }
-        allocationKeyToIndex[tileKey] = allocIndex;
+        allocationKeyToIndex[allocationKey] = allocIndex;
 
         return &allocations[allocIndex];
     }
@@ -571,7 +572,8 @@ namespace render::gpudriven
             return false;
         }
 
-        auto it = allocationKeyToIndex.find(tileKey);
+        std::string allocationKey = makeAllocationKey(tileKey, "terrain", 0);
+        auto it = allocationKeyToIndex.find(allocationKey);
         if (it == allocationKeyToIndex.end())
         {
             vfLogError("MeshletBuffer: No allocation found for terrain tile {}", tileKey);
@@ -613,7 +615,8 @@ namespace render::gpudriven
 
     void MeshletBuffer::freeTerrainTile(const std::string& tileKey)
     {
-        auto it = allocationKeyToIndex.find(tileKey);
+        std::string allocationKey = makeAllocationKey(tileKey, "terrain", 0);
+        auto it = allocationKeyToIndex.find(allocationKey);
         if (it == allocationKeyToIndex.end())
         {
             return;

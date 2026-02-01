@@ -369,6 +369,13 @@ namespace render::gpudriven
         }
 
         currentTileCount = static_cast<uint32_t>(std::min(tiles.size(), static_cast<size_t>(maxTileCount)));
+
+        static bool loggedOnce = false;
+        if (!loggedOnce)
+        {
+            loggerInfo("TerrainMeshShaderPipeline::updateTileData: Setting currentTileCount={}", currentTileCount);
+            loggedOnce = true;
+        }
         vk::DeviceSize dataSize = currentTileCount * sizeof(TerrainTileGPUData);
 
         // Create staging buffer
@@ -446,7 +453,22 @@ namespace render::gpudriven
     {
         if (!initialized || !graphicsPipeline || currentTileCount == 0)
         {
+            static bool warnedOnce = false;
+            if (!warnedOnce)
+            {
+                loggerWarning("TerrainMeshShaderPipeline::dispatch: Early exit - initialized={}, hasPipeline={}, tileCount={}",
+                              initialized, (bool)graphicsPipeline, currentTileCount);
+                warnedOnce = true;
+            }
             return;
+        }
+
+        static bool loggedOnce = false;
+        if (!loggedOnce)
+        {
+            loggerInfo("TerrainMeshShaderPipeline::dispatch: {} tiles, viewMode={}, screen={}x{}",
+                       currentTileCount, viewMode, screenWidth, screenHeight);
+            loggedOnce = true;
         }
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -489,6 +511,15 @@ namespace render::gpudriven
         {
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 11,
                                    lightDataDescriptorSet, {});
+        }
+        else
+        {
+            static bool warnedOnce = false;
+            if (!warnedOnce)
+            {
+                loggerWarning("TerrainMeshShaderPipeline::dispatch: lightDataDescriptorSet is null - lighting will not work");
+                warnedOnce = true;
+            }
         }
 
         // Push constants

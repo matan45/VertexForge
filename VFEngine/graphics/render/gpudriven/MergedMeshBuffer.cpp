@@ -738,10 +738,11 @@ namespace render::gpudriven
             }
         }
 
-        // Store location
+        // Store location using proper submesh key format for consistency with getSubmeshLocation
         size_t locIndex = allSubmeshLocations.size();
         allSubmeshLocations.push_back(std::move(loc));
-        submeshKeyToIndex[tileKey] = locIndex;
+        std::string submeshKey = makeSubmeshKey(tileKey, "terrain", 0);
+        submeshKeyToIndex[submeshKey] = locIndex;
 
         // Also register as a "mesh" for updateObjects to find
         if (meshPathToIndex.find(tileKey) == meshPathToIndex.end())
@@ -772,7 +773,8 @@ namespace render::gpudriven
             return false;
         }
 
-        auto it = submeshKeyToIndex.find(tileKey);
+        std::string submeshKey = makeSubmeshKey(tileKey, "terrain", 0);
+        auto it = submeshKeyToIndex.find(submeshKey);
         if (it == submeshKeyToIndex.end())
         {
             loggerError("MergedMeshBuffer::uploadTerrainLOD: Tile not found: {}", tileKey);
@@ -810,7 +812,8 @@ namespace render::gpudriven
 
     void MergedMeshBuffer::freeTerrainTile(const std::string& tileKey)
     {
-        auto locIt = submeshKeyToIndex.find(tileKey);
+        std::string submeshKey = makeSubmeshKey(tileKey, "terrain", 0);
+        auto locIt = submeshKeyToIndex.find(submeshKey);
         if (locIt == submeshKeyToIndex.end())
         {
             return;

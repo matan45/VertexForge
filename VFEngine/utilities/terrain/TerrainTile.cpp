@@ -326,9 +326,15 @@ namespace terrain
 
     void TerrainTile::updateWorldBounds()
     {
+        // Minimum AABB height to prevent frustum culling issues with flat terrain
+        constexpr float MIN_AABB_HEIGHT = 1.0f;
+
         if (heightData.empty())
         {
-            worldBounds = math::AABB(worldOrigin, worldOrigin + glm::vec3(config.worldTileSize, 0.0f, config.worldTileSize));
+            worldBounds = math::AABB(
+                worldOrigin - glm::vec3(0.0f, MIN_AABB_HEIGHT, 0.0f),
+                worldOrigin + glm::vec3(config.worldTileSize, MIN_AABB_HEIGHT, config.worldTileSize)
+            );
             return;
         }
 
@@ -339,6 +345,14 @@ namespace terrain
         {
             minH = std::min(minH, h);
             maxH = std::max(maxH, h);
+        }
+
+        // Ensure minimum height for frustum culling stability
+        if (maxH - minH < MIN_AABB_HEIGHT)
+        {
+            float center = (minH + maxH) * 0.5f;
+            minH = center - MIN_AABB_HEIGHT * 0.5f;
+            maxH = center + MIN_AABB_HEIGHT * 0.5f;
         }
 
         worldBounds = math::AABB(

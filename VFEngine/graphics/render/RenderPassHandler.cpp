@@ -686,6 +686,12 @@ namespace render
             if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
             {
                 auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
+                static bool loggedTerrainOnce = false;
+                if (!visibleTiles.empty() && !loggedTerrainOnce)
+                {
+                    loggerInfo("RenderPassHandler: Got {} visible terrain tiles from provider", visibleTiles.size());
+                    loggedTerrainOnce = true;
+                }
                 gpuDrivenRenderer->updateTerrain(visibleTiles);
             }
         }
@@ -699,7 +705,12 @@ namespace render
                 vfxRuntimeProvider->recordComputeCommands(commandBuffer);
             }
 
-            if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+            // Enter GPU-driven render path if we have meshes OR terrain to render
+            bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled() &&
+                                      terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
+            bool hasMeshesToRender = !currentMeshDrawList.empty();
+
+            if ((hasMeshesToRender || hasTerrainToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
                 updateGPUDrivenHiZ();
 

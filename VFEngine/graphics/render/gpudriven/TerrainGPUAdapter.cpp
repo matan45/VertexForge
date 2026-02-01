@@ -316,17 +316,31 @@ namespace render::gpudriven
         std::vector<TerrainTileGPUData> result;
         result.reserve(tiles.size());
 
+        uint32_t skippedNull = 0, skippedNotVisible = 0, skippedNotFound = 0, skippedNotUploaded = 0;
+
         for (const terrain::TerrainTile* tile : tiles)
         {
-            if (!tile || !tile->isVisible)
+            if (!tile)
             {
+                skippedNull++;
+                continue;
+            }
+            if (!tile->isVisible)
+            {
+                skippedNotVisible++;
                 continue;
             }
 
             TerrainTileKey key{tile->coord.x, tile->coord.z};
             auto it = allocations_.find(key);
-            if (it == allocations_.end() || !it->second.isUploaded)
+            if (it == allocations_.end())
             {
+                skippedNotFound++;
+                continue;
+            }
+            if (!it->second.isUploaded)
+            {
+                skippedNotUploaded++;
                 continue;
             }
 
@@ -381,6 +395,19 @@ namespace render::gpudriven
             gpuTile.coordX = key.coordX;
             gpuTile.coordZ = key.coordZ;
 
+            // Debug: Log meshlet counts for first few tiles
+            static int debugCount = 0;
+            if (debugCount < 5)
+            {
+                vfLogInfo("TerrainGPUAdapter: Tile ({},{}) LOD0 meshlets={}, LOD1={}, LOD2={}, LOD3={}, bounds=[{:.1f},{:.1f},{:.1f}]-[{:.1f},{:.1f},{:.1f}]",
+                          key.coordX, key.coordZ,
+                          alloc.lodAllocs[0].meshletCount, alloc.lodAllocs[1].meshletCount,
+                          alloc.lodAllocs[2].meshletCount, alloc.lodAllocs[3].meshletCount,
+                          alloc.aabbMin.x, alloc.aabbMin.y, alloc.aabbMin.z,
+                          alloc.aabbMax.x, alloc.aabbMax.y, alloc.aabbMax.z);
+                debugCount++;
+            }
+
             // Flags - mark as terrain tile
             gpuTile.flags = ObjectFlags::TerrainTile;
 
@@ -388,6 +415,14 @@ namespace render::gpudriven
             gpuTile.materialIndex = 0;
 
             result.push_back(gpuTile);
+        }
+
+        static bool loggedOnce = false;
+        if (!loggedOnce && !tiles.empty())
+        {
+            vfLogInfo("TerrainGPUAdapter::buildGPUTileData: input={} tiles, output={} GPU tiles, skipped: null={}, notVisible={}, notFound={}, notUploaded={}",
+                      tiles.size(), result.size(), skippedNull, skippedNotVisible, skippedNotFound, skippedNotUploaded);
+            loggedOnce = true;
         }
 
         return result;
