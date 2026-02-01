@@ -258,6 +258,41 @@ namespace terrain
         return false;
     }
 
+    bool TerrainTile::hasActiveStitching() const
+    {
+        for (const auto& stitch : edgeStitchInfo)
+        {
+            if (stitch.needsSnapping)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    float TerrainTile::getStitchedEdgeHeight(TileEdge edge, uint32_t vertexIndex) const
+    {
+        uint8_t edgeIndex = static_cast<uint8_t>(edge);
+        if (edgeIndex >= 4)
+            return 0.0f;
+
+        const EdgeStitchInfo& stitch = edgeStitchInfo[edgeIndex];
+
+        // If no stitching needed or index out of range, return original height
+        if (!stitch.needsSnapping || vertexIndex >= stitch.snappedHeights.size())
+        {
+            // Return original edge vertex height from current LOD
+            const EdgeVertices& edgeVerts = edgeVertices[currentLOD][edgeIndex];
+            if (vertexIndex < edgeVerts.positions.size())
+            {
+                return edgeVerts.positions[vertexIndex].y;
+            }
+            return 0.0f;
+        }
+
+        return stitch.snappedHeights[vertexIndex];
+    }
+
     void TerrainTile::updateWorldBounds()
     {
         if (heightData.empty())

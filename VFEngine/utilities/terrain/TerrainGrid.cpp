@@ -243,6 +243,12 @@ namespace terrain
 
         // Update neighbor LOD references after all LODs are calculated
         updateAllNeighborReferences();
+
+        // Update edge stitching for LOD transitions between neighbors
+        for (auto& [coord, tile] : tiles_)
+        {
+            generator_->updateEdgeStitching(*tile);
+        }
     }
 
     void TerrainGrid::regenerateDirtyTiles(ProgressCallback progress)

@@ -51,6 +51,14 @@ namespace terrain
             const TerrainTile& tile
         ) const;
 
+        // Geometric error computation
+        [[nodiscard]] float computeGeometricError(const TerrainTile& tile, uint32_t lodLevel) const;
+        void computeAllLODErrors(TerrainTile& tile) const;
+
+        // Edge stitching for LOD transitions
+        void computeEdgeStitching(TerrainTile& tile, TileEdge edge, uint8_t neighborLOD) const;
+        void updateEdgeStitching(TerrainTile& tile) const;
+
         // LOD helpers
         [[nodiscard]] uint32_t getLODVertexCount(uint32_t lodLevel) const;
         [[nodiscard]] uint32_t getLODSkipFactor(uint32_t lodLevel) const;
