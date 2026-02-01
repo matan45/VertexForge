@@ -149,6 +149,11 @@ namespace render::gpudriven
                                 uint8_t targetLOD,
                                 uint8_t currentLOD) const;
 
+        // Priority calculation from distance (for streaming loop)
+        float calculatePriority(float distance,
+                                uint8_t targetLOD,
+                                uint8_t currentLOD) const;
+
         // LOD selection based on distance
         uint8_t selectTargetLOD(float distance) const;
 

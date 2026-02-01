@@ -28,63 +28,176 @@ namespace render::gpudriven
         stats_.bytesUploadedThisFrame = 0;
         stats_.tilesStreaming = 0;
 
-        // Upload all LODs for each visible tile immediately
-        // This ensures all tiles render without streaming delays
-        // For large terrains (256+ tiles), consider enabling per-LOD streaming
+        // Build tile map for quick lookup
+        std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash> tileMap;
+        for (terrain::TerrainTile* tile : visibleTiles)
+        {
+            if (tile && tile->isVisible)
+            {
+                tileMap[{tile->coord.x, tile->coord.z}] = tile;
+            }
+        }
+
+        // ============================================
+        // PHASE 1: Guaranteed fallback (LOD3) for all visible tiles
+        // No bandwidth limit - ensures tiles always render
+        // ============================================
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->isVisible)
                 continue;
 
             TerrainTileKey key{tile->coord.x, tile->coord.z};
-
-            // Check if already uploaded via adapter
-            if (adapter_.hasTile(key))
-            {
-                // Update access tracking for existing tiles
-                auto it = tileInfos_.find(key);
-                if (it != tileInfos_.end())
-                {
-                    glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
-                    it->second.distanceToCamera = glm::length(tileCenter - cameraPosition);
-                    it->second.targetLOD = selectTargetLOD(it->second.distanceToCamera);
-                    it->second.lastAccessFrame = currentFrame_;
-                }
-                continue;
-            }
-
-            // Calculate distance for tracking
             glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
             float distance = glm::length(tileCenter - cameraPosition);
 
-            // Upload all LODs - shader will select the best one
-            TerrainTileAllocation* alloc = adapter_.uploadTile(*tile);
-            if (alloc)
+            // Get or create tile info
+            auto infoIt = tileInfos_.find(key);
+            if (infoIt == tileInfos_.end())
             {
-                // Track in our info map
                 TerrainTileStreamInfo info;
                 info.key = key;
-                info.state = TerrainTileStreamState::FullyLoaded;
-                info.loadedLODMask = 0x0F; // All 4 LODs
-                info.currentLoadedLOD = 0;
+                info.state = TerrainTileStreamState::NotLoaded;
+                info.currentLoadedLOD = 255;
                 info.distanceToCamera = distance;
                 info.targetLOD = selectTargetLOD(distance);
                 info.lastAccessFrame = currentFrame_;
+                auto result = tileInfos_.emplace(key, info);
+                infoIt = result.first;
+            }
+            else
+            {
+                // Update tracking for existing tiles
+                infoIt->second.distanceToCamera = distance;
+                infoIt->second.targetLOD = selectTargetLOD(distance);
+                infoIt->second.lastAccessFrame = currentFrame_;
+            }
 
-                // Estimate memory usage for all LODs
-                size_t totalMemory = 0;
-                for (uint8_t lod = 0; lod < 4; ++lod)
+            // Upload LOD3 (fallback) if not already loaded
+            if (!infoIt->second.hasLODLoaded(3))
+            {
+                if (adapter_.uploadTileAddLOD(*tile, 3))
                 {
-                    totalMemory += estimateLODMemory(*tile, lod);
-                }
-                info.gpuMemoryUsage = totalMemory;
-                currentMemoryUsage_ += totalMemory;
+                    infoIt->second.setLODLoaded(3);
+                    if (infoIt->second.currentLoadedLOD == 255)
+                    {
+                        infoIt->second.currentLoadedLOD = 3;
+                    }
+                    infoIt->second.state = TerrainTileStreamState::FallbackOnly;
 
-                tileInfos_[key] = info;
-                stats_.uploadsThisFrame++;
-                stats_.bytesUploadedThisFrame += totalMemory;
+                    size_t lodMemory = estimateLODMemory(*tile, 3);
+                    infoIt->second.gpuMemoryUsage += lodMemory;
+                    currentMemoryUsage_ += lodMemory;
+                    stats_.uploadsThisFrame++;
+                    stats_.bytesUploadedThisFrame += lodMemory;
+                }
             }
         }
+
+        // ============================================
+        // PHASE 2: Stream higher detail LODs (0-2) with bandwidth limits
+        // Priority-based streaming for LOD upgrades
+        // ============================================
+
+        // Build priority queue for LOD 0-2 upgrades
+        while (!uploadQueue_.empty())
+        {
+            uploadQueue_.pop();
+        }
+
+        for (auto& [key, info] : tileInfos_)
+        {
+            // Skip if not accessed this frame (not visible)
+            if (info.lastAccessFrame != currentFrame_)
+                continue;
+
+            // Queue LOD 0-2 upgrades based on target LOD
+            uint8_t targetLOD = info.targetLOD;
+
+            // Only queue if we need a better LOD than what we have
+            for (uint8_t lod = 0; lod < 3; ++lod)
+            {
+                if (lod <= targetLOD && !info.hasLODLoaded(lod))
+                {
+                    float priority = calculatePriority(info.distanceToCamera, lod, info.currentLoadedLOD);
+                    uploadQueue_.push({key, lod, priority});
+                }
+            }
+        }
+
+        // Process upload queue with bandwidth limits
+        size_t bytesUploaded = 0;
+        uint32_t uploadsCount = 0;
+
+        while (!uploadQueue_.empty() &&
+               uploadsCount < config_.maxUploadsPerFrame &&
+               bytesUploaded < config_.maxBytesPerFrame)
+        {
+            // Check memory budget
+            if (currentMemoryUsage_ >= config_.memoryBudgetBytes * config_.evictionThreshold)
+            {
+                break;
+            }
+
+            StreamPriorityEntry entry = uploadQueue_.top();
+            uploadQueue_.pop();
+
+            // Find the tile
+            auto tileIt = tileMap.find(entry.key);
+            if (tileIt == tileMap.end())
+                continue;
+
+            terrain::TerrainTile* tile = tileIt->second;
+            if (!tile)
+                continue;
+
+            // Check if LOD is already loaded
+            auto infoIt = tileInfos_.find(entry.key);
+            if (infoIt == tileInfos_.end() || infoIt->second.hasLODLoaded(entry.targetLOD))
+                continue;
+
+            // Estimate memory for this LOD
+            size_t lodMemory = estimateLODMemory(*tile, entry.targetLOD);
+
+            // Check memory budget
+            if (currentMemoryUsage_ + lodMemory > config_.memoryBudgetBytes)
+                continue;
+
+            // Upload the LOD
+            if (adapter_.uploadTileAddLOD(*tile, entry.targetLOD))
+            {
+                infoIt->second.setLODLoaded(entry.targetLOD);
+
+                // Update current loaded LOD to finest available
+                if (entry.targetLOD < infoIt->second.currentLoadedLOD)
+                {
+                    infoIt->second.currentLoadedLOD = entry.targetLOD;
+                }
+
+                // Update state
+                if (infoIt->second.currentLoadedLOD == infoIt->second.targetLOD)
+                {
+                    infoIt->second.state = TerrainTileStreamState::FullyLoaded;
+                }
+                else
+                {
+                    infoIt->second.state = TerrainTileStreamState::Streaming;
+                    stats_.tilesStreaming++;
+                }
+
+                infoIt->second.gpuMemoryUsage += lodMemory;
+                currentMemoryUsage_ += lodMemory;
+                bytesUploaded += lodMemory;
+                uploadsCount++;
+                stats_.uploadsThisFrame++;
+                stats_.bytesUploadedThisFrame += lodMemory;
+            }
+        }
+
+        // ============================================
+        // PHASE 3: Eviction of unused tiles/LODs
+        // ============================================
+        processEvictions(cameraPosition);
 
         // Update statistics
         stats_.memoryUsedBytes = currentMemoryUsage_;
@@ -225,7 +338,13 @@ namespace render::gpudriven
     {
         glm::vec3 tileCenter = (tile.worldBounds.min + tile.worldBounds.max) * 0.5f;
         float distance = glm::length(tileCenter - cameraPosition);
+        return calculatePriority(distance, targetLOD, currentLOD);
+    }
 
+    float TerrainStreamManager::calculatePriority(float distance,
+                                                  uint8_t targetLOD,
+                                                  uint8_t currentLOD) const
+    {
         // Higher priority for closer tiles
         float distancePriority = 1.0f / (1.0f + distance * 0.01f);
 
@@ -373,49 +492,64 @@ namespace render::gpudriven
 
     bool TerrainStreamManager::uploadTileLOD(const terrain::TerrainTile& tile, uint8_t lodLevel)
     {
+        if (lodLevel >= 4)
+            return false;
+
         TerrainTileKey key{tile.coord.x, tile.coord.z};
 
-        // Check if already uploaded
+        // Check if this specific LOD is already uploaded
         auto infoIt = tileInfos_.find(key);
-        if (infoIt != tileInfos_.end() && infoIt->second.loadedLODMask != 0)
+        if (infoIt != tileInfos_.end() && infoIt->second.hasLODLoaded(lodLevel))
         {
             return true; // Already loaded
         }
 
-        // Upload all LODs (simpler approach that ensures shader has all options)
-        TerrainTileAllocation* alloc = adapter_.uploadTile(tile);
-        if (!alloc)
+        // Upload the specific LOD using per-LOD upload
+        if (!adapter_.uploadTileAddLOD(tile, lodLevel))
         {
             return false;
         }
 
-        // Calculate total memory for all LODs
-        size_t totalMemory = 0;
-        for (uint8_t lod = 0; lod < 4; ++lod)
-        {
-            totalMemory += estimateLODMemory(tile, lod);
-        }
+        // Calculate memory for this LOD
+        size_t lodMemory = estimateLODMemory(tile, lodLevel);
 
         if (infoIt == tileInfos_.end())
         {
             TerrainTileStreamInfo info;
             info.key = key;
-            info.loadedLODMask = 0x0F; // All LODs
-            info.currentLoadedLOD = 0;
-            info.state = TerrainTileStreamState::FullyLoaded;
+            info.setLODLoaded(lodLevel);
+            info.currentLoadedLOD = lodLevel;
+            info.state = (lodLevel == 3) ? TerrainTileStreamState::FallbackOnly :
+                         TerrainTileStreamState::Streaming;
             info.lastAccessFrame = currentFrame_;
-            info.gpuMemoryUsage = totalMemory;
-            currentMemoryUsage_ += totalMemory;
+            info.gpuMemoryUsage = lodMemory;
+            currentMemoryUsage_ += lodMemory;
 
             tileInfos_.emplace(key, info);
         }
         else
         {
-            infoIt->second.loadedLODMask = 0x0F;
-            infoIt->second.currentLoadedLOD = 0;
-            infoIt->second.state = TerrainTileStreamState::FullyLoaded;
-            currentMemoryUsage_ += totalMemory - infoIt->second.gpuMemoryUsage;
-            infoIt->second.gpuMemoryUsage = totalMemory;
+            infoIt->second.setLODLoaded(lodLevel);
+            if (lodLevel < infoIt->second.currentLoadedLOD)
+            {
+                infoIt->second.currentLoadedLOD = lodLevel;
+            }
+            infoIt->second.gpuMemoryUsage += lodMemory;
+            currentMemoryUsage_ += lodMemory;
+
+            // Update state
+            if (infoIt->second.currentLoadedLOD == infoIt->second.targetLOD)
+            {
+                infoIt->second.state = TerrainTileStreamState::FullyLoaded;
+            }
+            else if (infoIt->second.currentLoadedLOD == 3)
+            {
+                infoIt->second.state = TerrainTileStreamState::FallbackOnly;
+            }
+            else
+            {
+                infoIt->second.state = TerrainTileStreamState::Streaming;
+            }
         }
 
         return true;
@@ -431,30 +565,23 @@ namespace render::gpudriven
         if (!info.hasLODLoaded(lodLevel))
             return;
 
-        // Currently we can only evict entire tiles, not individual LODs
-        // This is a simplified approach - full per-LOD eviction requires buffer support
-        uint8_t remainingMask = info.loadedLODMask & ~(1 << lodLevel);
+        // Use adapter's per-LOD removal
+        adapter_.removeTileLOD(key, lodLevel);
 
-        if (remainingMask == 0)
+        size_t lodMemory = LOD_MEMORY_ESTIMATE[lodLevel];
+        currentMemoryUsage_ -= std::min(lodMemory, info.gpuMemoryUsage);
+        info.gpuMemoryUsage -= std::min(lodMemory, info.gpuMemoryUsage);
+        info.clearLODLoaded(lodLevel);
+
+        if (info.loadedLODMask == 0)
         {
-            // Evicting last LOD - remove entire tile
-            adapter_.removeTile(key);
-            currentMemoryUsage_ -= info.gpuMemoryUsage;
-            info.gpuMemoryUsage = 0;
-            info.loadedLODMask = 0;
+            // No LODs remaining - mark as not loaded
             info.currentLoadedLOD = 255;
             info.state = TerrainTileStreamState::NotLoaded;
         }
         else
         {
-            // For now, mark LOD as not loaded but keep tile
-            // Full per-LOD eviction would require adapter support
-            info.clearLODLoaded(lodLevel);
-            size_t lodMemory = LOD_MEMORY_ESTIMATE[lodLevel];
-            currentMemoryUsage_ -= std::min(lodMemory, info.gpuMemoryUsage);
-            info.gpuMemoryUsage -= std::min(lodMemory, info.gpuMemoryUsage);
-
-            // Update current loaded LOD
+            // Update current loaded LOD to finest available
             for (uint8_t lod = 0; lod < 4; ++lod)
             {
                 if (info.hasLODLoaded(lod))
@@ -462,6 +589,16 @@ namespace render::gpudriven
                     info.currentLoadedLOD = lod;
                     break;
                 }
+            }
+
+            // Update state
+            if (info.currentLoadedLOD == 3)
+            {
+                info.state = TerrainTileStreamState::FallbackOnly;
+            }
+            else
+            {
+                info.state = TerrainTileStreamState::Streaming;
             }
         }
     }
