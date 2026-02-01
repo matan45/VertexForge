@@ -159,6 +159,18 @@ namespace serialization
                 entity.getComponent<components::SpotLightComponent>());
         }
 
+        if (entity.hasComponent<components::TerrainComponent>())
+        {
+            componentsJson["terrain"] = serializeTerrain(
+                entity.getComponent<components::TerrainComponent>());
+        }
+
+        if (entity.hasComponent<components::TerrainTileComponent>())
+        {
+            componentsJson["terrainTile"] = serializeTerrainTile(
+                entity.getComponent<components::TerrainTileComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -1078,6 +1090,78 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeTerrain(const components::TerrainComponent& terrain)
+    {
+        json j;
+        j["resolution"] = terrain.resolution;
+        j["worldTileSize"] = terrain.worldTileSize;
+        j["maxHeight"] = terrain.maxHeight;
+        j["minHeight"] = terrain.minHeight;
+        j["gridMinX"] = terrain.gridMinX;
+        j["gridMinZ"] = terrain.gridMinZ;
+        j["gridMaxX"] = terrain.gridMaxX;
+        j["gridMaxZ"] = terrain.gridMaxZ;
+        j["lodDistances"] = json::array({
+            terrain.lodDistances[0], terrain.lodDistances[1],
+            terrain.lodDistances[2], terrain.lodDistances[3]
+        });
+        std::string cleanPath = terrain.heightmapPath;
+        cleanNullTerminators(cleanPath);
+        j["heightmapPath"] = cleanPath;
+        return j;
+    }
+
+    void SceneSerialization::deserializeTerrain(const json& j, components::TerrainComponent& terrain)
+    {
+        if (auto it = j.find("resolution"); it != j.end() && it->is_number_unsigned())
+            terrain.resolution = it->get<uint8_t>();
+        if (auto it = j.find("worldTileSize"); it != j.end() && it->is_number())
+            terrain.worldTileSize = it->get<float>();
+        if (auto it = j.find("maxHeight"); it != j.end() && it->is_number())
+            terrain.maxHeight = it->get<float>();
+        if (auto it = j.find("minHeight"); it != j.end() && it->is_number())
+            terrain.minHeight = it->get<float>();
+        if (auto it = j.find("gridMinX"); it != j.end() && it->is_number_integer())
+            terrain.gridMinX = it->get<int32_t>();
+        if (auto it = j.find("gridMinZ"); it != j.end() && it->is_number_integer())
+            terrain.gridMinZ = it->get<int32_t>();
+        if (auto it = j.find("gridMaxX"); it != j.end() && it->is_number_integer())
+            terrain.gridMaxX = it->get<int32_t>();
+        if (auto it = j.find("gridMaxZ"); it != j.end() && it->is_number_integer())
+            terrain.gridMaxZ = it->get<int32_t>();
+        if (auto it = j.find("lodDistances"); it != j.end() && it->is_array() && it->size() >= 4)
+        {
+            terrain.lodDistances[0] = (*it)[0].get<float>();
+            terrain.lodDistances[1] = (*it)[1].get<float>();
+            terrain.lodDistances[2] = (*it)[2].get<float>();
+            terrain.lodDistances[3] = (*it)[3].get<float>();
+        }
+        if (auto it = j.find("heightmapPath"); it != j.end() && it->is_string())
+            terrain.heightmapPath = it->get<std::string>();
+    }
+
+    json SceneSerialization::serializeTerrainTile(const components::TerrainTileComponent& tile)
+    {
+        json j;
+        j["tileX"] = tile.tileX;
+        j["tileZ"] = tile.tileZ;
+        j["currentLOD"] = tile.currentLOD;
+        j["isVisible"] = tile.isVisible;
+        return j;
+    }
+
+    void SceneSerialization::deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile)
+    {
+        if (auto it = j.find("tileX"); it != j.end() && it->is_number_integer())
+            tile.tileX = it->get<int32_t>();
+        if (auto it = j.find("tileZ"); it != j.end() && it->is_number_integer())
+            tile.tileZ = it->get<int32_t>();
+        if (auto it = j.find("currentLOD"); it != j.end() && it->is_number_unsigned())
+            tile.currentLOD = it->get<uint8_t>();
+        if (auto it = j.find("isVisible"); it != j.end() && it->is_boolean())
+            tile.isVisible = it->get<bool>();
+    }
+
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
                                                  scene::SceneGraphSystem& sceneGraph,
                                                  SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
@@ -1276,6 +1360,18 @@ namespace serialization
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                     billboard.iconType = components::BillboardIconType::SpotLight;
                 }
+            }
+
+            if (componentsJson.contains("terrain"))
+            {
+                auto& terrainComp = entity.addOrReplaceComponent<components::TerrainComponent>();
+                deserializeTerrain(componentsJson["terrain"], terrainComp);
+            }
+
+            if (componentsJson.contains("terrainTile"))
+            {
+                auto& tileComp = entity.addOrReplaceComponent<components::TerrainTileComponent>();
+                deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
             }
         }
 

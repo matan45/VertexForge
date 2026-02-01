@@ -7,6 +7,7 @@
 #include "AudioConfigWindow.hpp"
 #include "RenderConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
+#include "TerrainCreationWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -138,6 +139,10 @@ namespace windows
             }
             else if (ImGui::MenuItem("Terrain"))
             {
+                if (terrainCreationWindow)
+                {
+                    terrainCreationWindow->show();
+                }
             }
             ImGui::EndMenu();
         }

@@ -8,6 +8,7 @@
 #include "AudioConfigWindow.hpp"
 #include "RenderConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
+#include "TerrainCreationWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 
@@ -32,6 +33,7 @@ namespace windows
         AudioConfigWindow audioConfigWindow;
         RenderConfigWindow renderConfigWindow;
         ProjectSettingsWindow projectSettingsWindow;
+        TerrainCreationWindow terrainCreationWindow;
         MainMenuBar menuBar;
 
         // Event subscription
