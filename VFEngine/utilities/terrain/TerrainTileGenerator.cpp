@@ -255,10 +255,8 @@ namespace terrain
             {
                 resource::Vertex v{};
 
-                // Get height from tile's height data using skip factor
-                uint32_t heightX = x * skipFactor;
-                uint32_t heightZ = z * skipFactor;
-                float height = tile.getHeight(heightX, heightZ);
+                // Get height - applies edge stitching for edge/corner vertices
+                float height = getStitchedHeight(tile, x, z, vertCount, lodLevel);
 
                 // Position in tile-local space
                 v.position = glm::vec3(
@@ -704,6 +702,115 @@ namespace terrain
                 tile.edgeStitchInfo[i].clear();
             }
         }
+    }
+
+    bool TerrainTileGenerator::isEdgeVertex(uint32_t x, uint32_t z, uint32_t vertCount) const
+    {
+        return x == 0 || x == vertCount - 1 || z == 0 || z == vertCount - 1;
+    }
+
+    bool TerrainTileGenerator::isCornerVertex(uint32_t x, uint32_t z, uint32_t vertCount) const
+    {
+        bool onXEdge = (x == 0 || x == vertCount - 1);
+        bool onZEdge = (z == 0 || z == vertCount - 1);
+        return onXEdge && onZEdge;
+    }
+
+    TileEdge TerrainTileGenerator::getEdgeForVertex(uint32_t x, uint32_t z, uint32_t vertCount) const
+    {
+        // Priority: South > North > West > East (for non-corner vertices)
+        // For corners, this returns the primary edge
+        if (z == 0) return TileEdge::South;
+        if (z == vertCount - 1) return TileEdge::North;
+        if (x == 0) return TileEdge::West;
+        return TileEdge::East;
+    }
+
+    uint32_t TerrainTileGenerator::getEdgeVertexIndex(uint32_t x, uint32_t z, uint32_t vertCount, TileEdge edge) const
+    {
+        switch (edge)
+        {
+            case TileEdge::North: return x;                    // Top row: index by x
+            case TileEdge::South: return x;                    // Bottom row: index by x
+            case TileEdge::East:  return z;                    // Right column: index by z
+            case TileEdge::West:  return z;                    // Left column: index by z
+            default: return 0;
+        }
+    }
+
+    float TerrainTileGenerator::getStitchedHeight(
+        const TerrainTile& tile,
+        uint32_t x, uint32_t z,
+        uint32_t vertCount,
+        uint32_t lodLevel) const
+    {
+        // Get original height first
+        uint32_t skipFactor = getLODSkipFactor(lodLevel);
+        uint32_t heightX = x * skipFactor;
+        uint32_t heightZ = z * skipFactor;
+        float originalHeight = tile.getHeight(heightX, heightZ);
+
+        // Check if this is an edge vertex that needs stitching
+        if (!isEdgeVertex(x, z, vertCount))
+        {
+            return originalHeight;
+        }
+
+        // Handle corner vertices - check both edges
+        if (isCornerVertex(x, z, vertCount))
+        {
+            // Determine which two edges this corner touches
+            TileEdge edge1, edge2;
+            uint32_t idx1, idx2;
+
+            if (z == 0)  // South edge
+            {
+                edge1 = TileEdge::South;
+                idx1 = x;
+                edge2 = (x == 0) ? TileEdge::West : TileEdge::East;
+                idx2 = 0;  // Corner is at index 0 for the perpendicular edge
+            }
+            else  // North edge (z == vertCount - 1)
+            {
+                edge1 = TileEdge::North;
+                idx1 = x;
+                edge2 = (x == 0) ? TileEdge::West : TileEdge::East;
+                idx2 = vertCount - 1;  // Corner is at last index for the perpendicular edge
+            }
+
+            const auto& stitch1 = tile.edgeStitchInfo[static_cast<uint8_t>(edge1)];
+            const auto& stitch2 = tile.edgeStitchInfo[static_cast<uint8_t>(edge2)];
+
+            bool needs1 = stitch1.needsSnapping && idx1 < stitch1.snappedHeights.size();
+            bool needs2 = stitch2.needsSnapping && idx2 < stitch2.snappedHeights.size();
+
+            if (needs1 && needs2)
+            {
+                // Both edges need snapping - average the two snapped heights
+                return (stitch1.snappedHeights[idx1] + stitch2.snappedHeights[idx2]) * 0.5f;
+            }
+            else if (needs1)
+            {
+                return stitch1.snappedHeights[idx1];
+            }
+            else if (needs2)
+            {
+                return stitch2.snappedHeights[idx2];
+            }
+            return originalHeight;
+        }
+
+        // Regular edge vertex (not a corner)
+        TileEdge edge = getEdgeForVertex(x, z, vertCount);
+        uint32_t edgeIdx = getEdgeVertexIndex(x, z, vertCount, edge);
+        const auto& stitchInfo = tile.edgeStitchInfo[static_cast<uint8_t>(edge)];
+
+        if (stitchInfo.needsSnapping && edgeIdx < stitchInfo.snappedHeights.size())
+        {
+            return stitchInfo.snappedHeights[edgeIdx];
+        }
+
+        return originalHeight;
     }
 
 } // namespace terrain

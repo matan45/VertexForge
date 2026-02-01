@@ -293,6 +293,37 @@ namespace terrain
         return stitch.snappedHeights[vertexIndex];
     }
 
+    bool TerrainTile::stitchingChanged() const
+    {
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            const auto& current = edgeStitchInfo[i];
+            const auto& previous = previousStitchState[i];
+
+            // Check if needsSnapping status changed
+            if (current.needsSnapping != previous.needsSnapping)
+            {
+                return true;
+            }
+
+            // If both need snapping, check if neighbor LOD changed
+            if (current.needsSnapping && current.neighborLOD != previous.neighborLOD)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void TerrainTile::saveStitchState()
+    {
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            previousStitchState[i].needsSnapping = edgeStitchInfo[i].needsSnapping;
+            previousStitchState[i].neighborLOD = edgeStitchInfo[i].neighborLOD;
+        }
+    }
+
     void TerrainTile::updateWorldBounds()
     {
         if (heightData.empty())

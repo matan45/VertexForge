@@ -108,9 +108,12 @@ namespace windows
         {
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster", "Depth", "Shadow"};
+            const char* viewModeLabels[] = {
+                "Color", "Meshlet", "Mipmap", "Cluster", "Depth", "Shadow",
+                "DAG Cluster", "DAG Level", "Streaming", "Terrain Edge"
+            };
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 7))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 10))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);
