@@ -448,8 +448,6 @@ namespace render::gpudriven
         }
         else
         {
-            // TODO: Implement per-LOD eviction in TerrainGPUAdapter
-            // For now, mark as evicted but don't actually free (full tile stays)
             info.clearLODLoaded(lodLevel);
             size_t lodMemory = LOD_MEMORY_ESTIMATE[lodLevel];
             currentMemoryUsage_ -= lodMemory;
