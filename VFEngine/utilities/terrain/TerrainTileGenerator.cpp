@@ -627,7 +627,12 @@ namespace terrain
             }
         }
 
-        return maxError;
+        // For flat terrain (error = 0), use vertex spacing as minimum error
+        // This ensures LOD selection works based on distance even for flat terrain
+        float vertexSpacing = config_.getVertexSpacing() * static_cast<float>(thisSkip);
+        float minError = vertexSpacing * 0.5f;  // Half the vertex spacing at this LOD
+
+        return std::max(maxError, minError);
     }
 
     void TerrainTileGenerator::computeAllLODErrors(TerrainTile& tile) const
