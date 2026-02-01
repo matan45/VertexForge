@@ -34,14 +34,28 @@ struct FileExtension
 
 namespace importConfig
 {
+    // Quality preset for V-HACD convex decomposition
+    enum class VHACDPreset
+    {
+        Fast,      // Quick results, lower quality (~2-4x faster)
+        Balanced,  // Good balance of speed and quality (default)
+        Quality,   // High accuracy, slower processing
+        Custom     // User-defined parameters
+    };
+
     // Mesh-specific import settings for V-HACD convex decomposition
     struct MeshImportConfig
     {
         bool generateConvexDecomposition = false;
+        VHACDPreset vhacdPreset = VHACDPreset::Balanced;
+
+        // V-HACD parameters (editable when preset is Custom)
         uint32_t maxConvexHulls = 16;
         uint32_t vhacdResolution = 100000;
-        uint32_t maxVerticesPerHull = 32;
+        uint32_t maxVerticesPerHull = 64;  // V-HACD default, Jolt limit is 256
         float minVolumePercentError = 1.0f;
+        uint32_t maxRecursionDepth = 10;
+        bool shrinkWrap = true;  // Snap hull vertices to original mesh surface
     };
 
     struct ImportConfig

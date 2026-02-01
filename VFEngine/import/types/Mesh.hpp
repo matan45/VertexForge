@@ -2,6 +2,7 @@
 #include <fstream>
 #include <functional>
 #include <array>
+#include <atomic>
 #include <unordered_map>
 #include "config/Config.hpp"
 #include "resource/Types.hpp"
@@ -13,6 +14,7 @@ struct aiMesh;
 namespace types
 {
     using MeshProgressCallback = std::function<void(float progress)>;
+    using ConvexProgressCallback = std::function<void(float progress, std::string_view stage)>;
 
     struct LODMeshData
     {
@@ -66,7 +68,9 @@ namespace types
 
         resource::ConvexDecompositionData generateConvexDecomposition(
             const LODMeshData& meshData,
-            const importConfig::MeshImportConfig& config) const;
+            const importConfig::MeshImportConfig& config,
+            ConvexProgressCallback progressCallback = nullptr,
+            std::atomic<bool>* cancelFlag = nullptr) const;
         void writeConvexDecompositionData(std::ofstream& outFile,
                                           const resource::ConvexDecompositionData& decomposition) const;
 
