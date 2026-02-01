@@ -667,8 +667,12 @@ namespace render
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
+        // Check if terrain needs to render (used for both needsMeshPass and GPU-driven path)
+        bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled() &&
+                                  terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
+
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes ||
-            hasDebugItems || hasVFX);
+            hasDebugItems || hasVFX || hasTerrainToRender);
 
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
         {
@@ -706,8 +710,7 @@ namespace render
             }
 
             // Enter GPU-driven render path if we have meshes OR terrain to render
-            bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled() &&
-                                      terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
+            // (hasTerrainToRender is already computed above for needsMeshPass)
             bool hasMeshesToRender = !currentMeshDrawList.empty();
 
             if ((hasMeshesToRender || hasTerrainToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())

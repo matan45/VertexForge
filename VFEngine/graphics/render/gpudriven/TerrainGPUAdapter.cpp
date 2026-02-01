@@ -221,12 +221,21 @@ namespace render::gpudriven
 
         std::string tileKey = alloc.getMeshPath();
 
+        // Transform vertices from tile-local space to world space
+        // Terrain vertices are generated in local space (0 to tileSize)
+        // but need to be in world space for rendering with identity model matrix
+        std::vector<resource::Vertex> worldSpaceVertices = lodData.vertices;
+        for (auto& vertex : worldSpaceVertices)
+        {
+            vertex.position += worldOrigin;
+        }
+
         // Upload vertex/index data to MergedMeshBuffer
         bool meshSuccess = mergedBuffer_.uploadTerrainLOD(
             tileKey,
             lodLevel,
-            lodData.vertices.data(),
-            static_cast<uint32_t>(lodData.vertices.size()),
+            worldSpaceVertices.data(),
+            static_cast<uint32_t>(worldSpaceVertices.size()),
             lodData.indices.data(),
             static_cast<uint32_t>(lodData.indices.size())
         );
@@ -248,13 +257,18 @@ namespace render::gpudriven
 
             uint32_t baseVertexOffset = meshLoc->lods[lodLevel].vertexOffset;
 
-            // Convert meshlets to GPU format
+            // Convert meshlets to GPU format with world-space bounding spheres
             std::vector<GPUMeshlet> gpuMeshlets;
             gpuMeshlets.reserve(lodData.meshlets.size());
 
             for (const auto& srcMeshlet : lodData.meshlets)
             {
-                gpuMeshlets.push_back(convertMeshlet(srcMeshlet, baseVertexOffset));
+                GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
+                // Transform bounding sphere center from local space to world space
+                meshlet.boundingSphere.x += worldOrigin.x;
+                meshlet.boundingSphere.y += worldOrigin.y;
+                meshlet.boundingSphere.z += worldOrigin.z;
+                gpuMeshlets.push_back(meshlet);
             }
 
             // Get meshlet allocation to determine offsets

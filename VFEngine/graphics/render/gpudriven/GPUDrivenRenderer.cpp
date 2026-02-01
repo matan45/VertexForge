@@ -1179,6 +1179,7 @@ namespace render::gpudriven
 
         // Upload new tiles to GPU buffers
         uint32_t uploadedCount = 0;
+        uint32_t alreadyUploadedCount = 0;
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->isVisible)
@@ -1192,13 +1193,21 @@ namespace render::gpudriven
                 if (terrainAdapter->uploadTile(*tile))
                 {
                     uploadedCount++;
+                    loggerInfo("GPUDrivenRenderer: Uploaded terrain tile ({}, {}) - worldOrigin=[{:.1f},{:.1f},{:.1f}]",
+                               key.coordX, key.coordZ,
+                               tile->worldOrigin.x, tile->worldOrigin.y, tile->worldOrigin.z);
                 }
+            }
+            else
+            {
+                alreadyUploadedCount++;
             }
         }
 
         if (uploadedCount > 0)
         {
-            loggerInfo("GPUDrivenRenderer: Uploaded {} terrain tiles", uploadedCount);
+            loggerInfo("GPUDrivenRenderer: Uploaded {} new terrain tiles ({} already cached)",
+                       uploadedCount, alreadyUploadedCount);
         }
 
         // Build GPU tile data for rendering

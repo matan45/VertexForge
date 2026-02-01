@@ -355,9 +355,11 @@ namespace terrain
             maxH = center + MIN_AABB_HEIGHT * 0.5f;
         }
 
+        // Add worldOrigin.y to height values since heightData is relative to minHeight
+        // and vertices are transformed to world space (position + worldOrigin)
         worldBounds = math::AABB(
-            glm::vec3(worldOrigin.x, minH, worldOrigin.z),
-            glm::vec3(worldOrigin.x + config.worldTileSize, maxH, worldOrigin.z + config.worldTileSize)
+            glm::vec3(worldOrigin.x, worldOrigin.y + minH, worldOrigin.z),
+            glm::vec3(worldOrigin.x + config.worldTileSize, worldOrigin.y + maxH, worldOrigin.z + config.worldTileSize)
         );
     }
 
