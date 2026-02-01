@@ -1,6 +1,7 @@
 #include "TerrainTileGenerator.hpp"
 #include <algorithm>
 #include <cmath>
+#include <meshoptimizer.h>
 
 namespace terrain
 {
@@ -91,6 +92,9 @@ namespace terrain
         // Extract edge vertices for stitching
         extractEdgeVertices(tile, lodLevel);
 
+        // Generate meshlets for GPU mesh shading
+        generateMeshlets(lodData);
+
         tile.isDirty = false;
     }
 
@@ -113,11 +117,108 @@ namespace terrain
 
     void TerrainTileGenerator::generateMeshlets(TileLODData& lodData) const
     {
-        // Stub implementation - full meshlet generation will be in VK-196
-        // This would use meshoptimizer to build meshlets from the geometry
         lodData.meshlets.clear();
         lodData.meshletVertices.clear();
         lodData.meshletPrimitives.clear();
+
+        if (lodData.indices.empty() || lodData.vertices.empty())
+            return;
+
+        // 1. Calculate max meshlets needed
+        const size_t maxMeshlets = meshopt_buildMeshletsBound(
+            lodData.indices.size(),
+            resource::MAX_MESHLET_VERTICES,
+            resource::MAX_MESHLET_PRIMITIVES
+        );
+
+        // 2. Allocate temporary arrays for meshoptimizer
+        std::vector<meshopt_Meshlet> meshoptMeshlets(maxMeshlets);
+        std::vector<unsigned int> meshletVertexIndices(maxMeshlets * resource::MAX_MESHLET_VERTICES);
+        std::vector<unsigned char> meshletTriangleIndices(maxMeshlets * resource::MAX_MESHLET_PRIMITIVES * 3);
+
+        // 3. Build meshlets (cone_weight=0.0f for terrain - mostly planar surfaces)
+        size_t meshletCount = meshopt_buildMeshlets(
+            meshoptMeshlets.data(),
+            meshletVertexIndices.data(),
+            meshletTriangleIndices.data(),
+            lodData.indices.data(),
+            lodData.indices.size(),
+            reinterpret_cast<const float*>(lodData.vertices.data()),
+            lodData.vertices.size(),
+            sizeof(resource::Vertex),
+            resource::MAX_MESHLET_VERTICES,
+            resource::MAX_MESHLET_PRIMITIVES,
+            0.0f
+        );
+
+        if (meshletCount == 0)
+            return;
+
+        // 4. Trim arrays to actual size
+        const auto& lastMeshlet = meshoptMeshlets[meshletCount - 1];
+        size_t totalVertexIndices = lastMeshlet.vertex_offset + lastMeshlet.vertex_count;
+        size_t totalTriangleIndices = lastMeshlet.triangle_offset +
+            ((lastMeshlet.triangle_count * 3 + 3) & ~3);  // Round up to 4-byte alignment
+
+        meshoptMeshlets.resize(meshletCount);
+        meshletVertexIndices.resize(totalVertexIndices);
+        meshletTriangleIndices.resize(totalTriangleIndices);
+
+        // 5. Convert to engine format
+        lodData.meshlets.resize(meshletCount);
+        lodData.meshletVertices.resize(totalVertexIndices);
+        lodData.meshletPrimitives.reserve(meshletCount * resource::MAX_MESHLET_PRIMITIVES);
+
+        // Copy vertex indices
+        for (size_t i = 0; i < totalVertexIndices; ++i)
+        {
+            lodData.meshletVertices[i] = meshletVertexIndices[i];
+        }
+
+        // 6. Pack triangle indices and compute bounds for each meshlet
+        uint32_t primitiveOffset = 0;
+        for (size_t i = 0; i < meshletCount; ++i)
+        {
+            const auto& m = meshoptMeshlets[i];
+            auto& outMeshlet = lodData.meshlets[i];
+
+            // Pack 3×uint8 triangle indices into uint32
+            for (unsigned int t = 0; t < m.triangle_count; ++t)
+            {
+                size_t triOffset = m.triangle_offset + t * 3;
+                uint32_t packed =
+                    static_cast<uint32_t>(meshletTriangleIndices[triOffset]) |
+                    (static_cast<uint32_t>(meshletTriangleIndices[triOffset + 1]) << 8) |
+                    (static_cast<uint32_t>(meshletTriangleIndices[triOffset + 2]) << 16);
+                lodData.meshletPrimitives.push_back(packed);
+            }
+
+            // Fill descriptor
+            outMeshlet.descriptor.vertexOffset = m.vertex_offset;
+            outMeshlet.descriptor.primitiveOffset = primitiveOffset;
+            outMeshlet.descriptor.vertexCount = static_cast<uint8_t>(m.vertex_count);
+            outMeshlet.descriptor.primitiveCount = static_cast<uint8_t>(m.triangle_count);
+            outMeshlet.descriptor.padding = 0;
+            primitiveOffset += m.triangle_count;
+
+            // 7. Compute bounding sphere and cone for per-meshlet culling
+            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                &meshletVertexIndices[m.vertex_offset],
+                &meshletTriangleIndices[m.triangle_offset],
+                m.triangle_count,
+                reinterpret_cast<const float*>(lodData.vertices.data()),
+                lodData.vertices.size(),
+                sizeof(resource::Vertex)
+            );
+
+            outMeshlet.bounds.boundingSphere = glm::vec4(
+                bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius
+            );
+            outMeshlet.bounds.cone = glm::vec4(
+                bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2],
+                bounds.cone_cutoff
+            );
+        }
     }
 
     void TerrainTileGenerator::generateVertices(

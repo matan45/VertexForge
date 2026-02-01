@@ -350,7 +350,7 @@ namespace terrain
                              "Creating tile (" + std::to_string(x) + ", " + std::to_string(z) + ")");
                 }
 
-                getOrCreateTile(TileCoord(x, z));
+                (void)getOrCreateTile(TileCoord(x, z));
                 ++currentTile;
             }
         }
