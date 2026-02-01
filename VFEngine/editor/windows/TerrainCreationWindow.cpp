@@ -160,9 +160,7 @@ namespace windows
     void TerrainCreationWindow::browseHeightmap()
     {
         std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-            {L"Image Files (*.png;*.jpg;*.raw)", L"*.png;*.jpg;*.raw"},
-            {L"VF Image Files (*.vfImage)", L"*.vfImage"},
-            {L"All Files (*.*)", L"*.*"}
+            {L"Heightmap Files (*.vfImage;*.raw)", L"*.vfImage;*.raw"}
         };
 
         std::string selectedFile = fileDialog.openFileDialog(fileTypes);

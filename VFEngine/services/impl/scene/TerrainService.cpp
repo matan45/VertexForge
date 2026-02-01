@@ -5,6 +5,7 @@
 #include "components/Components.hpp"
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTypes.hpp"
+#include "terrain/HeightmapLoader.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
@@ -75,7 +76,15 @@ namespace services
             tileConfig.lodDistances[i] = config.lodDistances[i];
         }
 
-        // 2. Create the terrain grid
+        // 2. Calculate grid bounds (centered around origin)
+        int32_t halfX = config.tilesX / 2;
+        int32_t halfZ = config.tilesZ / 2;
+        int32_t minX = -halfX;
+        int32_t minZ = -halfZ;
+        int32_t maxX = config.tilesX - halfX - 1;
+        int32_t maxZ = config.tilesZ - halfZ - 1;
+
+        // 3. Create the terrain grid
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
 
         // Set height sampler (flat terrain if no heightmap, otherwise load heightmap)
@@ -88,21 +97,36 @@ namespace services
         }
         else
         {
-            // TODO: Load heightmap and create proper sampler
-            // For now, just use flat terrain
-            vfLogWarning("Heightmap loading not yet implemented, creating flat terrain");
-            grid->setHeightSampler([](float /*worldX*/, float /*worldZ*/) -> float {
-                return 0.0f;
-            });
-        }
+            // Load heightmap and create sampler
+            auto heightmapData = terrain::HeightmapLoader::load(config.heightmapPath);
+            if (heightmapData && heightmapData->isValid())
+            {
+                // Calculate terrain world bounds
+                float terrainMinX = static_cast<float>(minX) * config.worldTileSize;
+                float terrainMinZ = static_cast<float>(minZ) * config.worldTileSize;
+                float terrainWidth = static_cast<float>(config.tilesX) * config.worldTileSize;
+                float terrainDepth = static_cast<float>(config.tilesZ) * config.worldTileSize;
 
-        // 3. Calculate grid bounds (centered around origin)
-        int32_t halfX = config.tilesX / 2;
-        int32_t halfZ = config.tilesZ / 2;
-        int32_t minX = -halfX;
-        int32_t minZ = -halfZ;
-        int32_t maxX = config.tilesX - halfX - 1;
-        int32_t maxZ = config.tilesZ - halfZ - 1;
+                grid->setHeightSampler(terrain::createHeightSamplerFromMap(
+                    *heightmapData,
+                    terrainMinX,
+                    terrainMinZ,
+                    terrainWidth,
+                    terrainDepth,
+                    config.minHeight,
+                    config.maxHeight
+                ));
+
+                vfLogInfo("Loaded heightmap from: {}", config.heightmapPath);
+            }
+            else
+            {
+                vfLogWarning("Failed to load heightmap: {}, creating flat terrain", config.heightmapPath);
+                grid->setHeightSampler([](float /*worldX*/, float /*worldZ*/) -> float {
+                    return 0.0f;
+                });
+            }
+        }
 
         // 4. Create the grid tiles
         grid->createGrid(minX, minZ, maxX, maxZ, nullptr);
