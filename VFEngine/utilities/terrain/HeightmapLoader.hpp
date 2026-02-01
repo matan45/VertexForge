@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <functional>
-#include <optional>
+#include <memory>
 
 namespace terrain
 {
@@ -26,14 +26,15 @@ namespace terrain
     public:
         // Load heightmap from file path
         // Supported formats: .vfImage, .raw (16-bit)
-        static std::optional<HeightmapData> load(const std::string& filePath);
+        // Returns shared_ptr for efficient sharing without copying large data
+        static std::shared_ptr<HeightmapData> load(const std::string& filePath);
 
     private:
         // Load 16-bit RAW heightmap (assumes square, little-endian)
-        static std::optional<HeightmapData> loadRawHeightmap(const std::string& filePath);
+        static std::shared_ptr<HeightmapData> loadRawHeightmap(const std::string& filePath);
 
         // Load VF custom image format
-        static std::optional<HeightmapData> loadVFImage(const std::string& filePath);
+        static std::shared_ptr<HeightmapData> loadVFImage(const std::string& filePath);
 
         // Get file extension (lowercase)
         static std::string getExtension(const std::string& filePath);
@@ -44,7 +45,7 @@ namespace terrain
     using HeightSampler = std::function<float(float worldX, float worldZ)>;
 
     HeightSampler createHeightSamplerFromMap(
-        const HeightmapData& heightmap,
+        std::shared_ptr<const HeightmapData> heightmap,
         float terrainMinX,
         float terrainMinZ,
         float terrainWidth,

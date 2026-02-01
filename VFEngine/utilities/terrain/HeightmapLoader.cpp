@@ -47,7 +47,7 @@ namespace terrain
         return h0 * (1.0f - fracZ) + h1 * fracZ;
     }
 
-    std::optional<HeightmapData> HeightmapLoader::load(const std::string& filePath)
+    std::shared_ptr<HeightmapData> HeightmapLoader::load(const std::string& filePath)
     {
         std::string ext = getExtension(filePath);
 
@@ -62,17 +62,17 @@ namespace terrain
         else
         {
             vfLogError("HeightmapLoader: Unsupported file format: {}. Use .vfImage or .raw", ext);
-            return std::nullopt;
+            return nullptr;
         }
     }
 
-    std::optional<HeightmapData> HeightmapLoader::loadRawHeightmap(const std::string& filePath)
+    std::shared_ptr<HeightmapData> HeightmapLoader::loadRawHeightmap(const std::string& filePath)
     {
         std::ifstream file(filePath, std::ios::binary | std::ios::ate);
         if (!file.is_open())
         {
             vfLogError("HeightmapLoader: Failed to open RAW file: {}", filePath);
-            return std::nullopt;
+            return nullptr;
         }
 
         // Get file size
@@ -86,7 +86,7 @@ namespace terrain
         if (dimension * dimension * 2 != static_cast<size_t>(fileSize))
         {
             vfLogError("HeightmapLoader: RAW file size doesn't match square dimensions: {}", filePath);
-            return std::nullopt;
+            return nullptr;
         }
 
         // Read 16-bit data
@@ -94,28 +94,28 @@ namespace terrain
         file.read(reinterpret_cast<char*>(rawData.data()), fileSize);
         file.close();
 
-        HeightmapData result;
-        result.width = dimension;
-        result.height = dimension;
-        result.heights.resize(numPixels);
+        auto result = std::make_shared<HeightmapData>();
+        result->width = dimension;
+        result->height = dimension;
+        result->heights.resize(numPixels);
 
         // Convert 16-bit to normalized [0, 1]
         for (size_t i = 0; i < numPixels; ++i)
         {
-            result.heights[i] = static_cast<float>(rawData[i]) / 65535.0f;
+            result->heights[i] = static_cast<float>(rawData[i]) / 65535.0f;
         }
 
         vfLogInfo("HeightmapLoader: Loaded {}x{} RAW heightmap from {}", dimension, dimension, filePath);
         return result;
     }
 
-    std::optional<HeightmapData> HeightmapLoader::loadVFImage(const std::string& filePath)
+    std::shared_ptr<HeightmapData> HeightmapLoader::loadVFImage(const std::string& filePath)
     {
         std::ifstream file(filePath, std::ios::binary);
         if (!file.is_open())
         {
             vfLogError("HeightmapLoader: Failed to open vfImage file: {}", filePath);
-            return std::nullopt;
+            return nullptr;
         }
 
         // Read header
@@ -150,10 +150,10 @@ namespace terrain
         file.read(reinterpret_cast<char*>(pixelData.data()), static_cast<std::streamsize>(pixelData.size()));
         file.close();
 
-        HeightmapData result;
-        result.width = mipWidth;
-        result.height = mipHeight;
-        result.heights.resize(pixelCount);
+        auto result = std::make_shared<HeightmapData>();
+        result->width = mipWidth;
+        result->height = mipHeight;
+        result->heights.resize(pixelCount);
 
         // Convert BGRA to grayscale heights normalized to [0, 1]
         for (size_t i = 0; i < pixelCount; ++i)
@@ -164,7 +164,7 @@ namespace terrain
             float g = static_cast<float>(pixelData[idx + 1]) / 255.0f;
             float r = static_cast<float>(pixelData[idx + 2]) / 255.0f;
             // Use luminance formula
-            result.heights[i] = 0.299f * r + 0.587f * g + 0.114f * b;
+            result->heights[i] = 0.299f * r + 0.587f * g + 0.114f * b;
         }
 
         vfLogInfo("HeightmapLoader: Loaded {}x{} vfImage heightmap from {}", mipWidth, mipHeight, filePath);
@@ -184,7 +184,7 @@ namespace terrain
     }
 
     HeightSampler createHeightSamplerFromMap(
-        const HeightmapData& heightmap,
+        std::shared_ptr<const HeightmapData> heightmap,
         float terrainMinX,
         float terrainMinZ,
         float terrainWidth,
@@ -192,7 +192,7 @@ namespace terrain
         float minHeight,
         float maxHeight)
     {
-        // Capture heightmap by value to ensure it persists
+        // Capture shared_ptr - efficient, no large data copy
         return [heightmap, terrainMinX, terrainMinZ, terrainWidth, terrainDepth, minHeight, maxHeight]
             (float worldX, float worldZ) -> float
         {
@@ -201,7 +201,7 @@ namespace terrain
             float v = (worldZ - terrainMinZ) / terrainDepth;
 
             // Sample normalized height [0, 1]
-            float normalizedHeight = heightmap.sample(u, v);
+            float normalizedHeight = heightmap->sample(u, v);
 
             // Map to actual height range
             return minHeight + normalizedHeight * (maxHeight - minHeight);

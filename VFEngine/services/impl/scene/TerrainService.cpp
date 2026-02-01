@@ -20,6 +20,13 @@ namespace services
 
     TerrainService::~TerrainService()
     {
+        // Unregister event handlers to prevent dangling references
+        auto& dispatcher = events::EventDispatcher::instance();
+        dispatcher.unregisterCommandHandler<events::terrain::CreateTerrainCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
+
         terrainGrids.clear();
     }
 
@@ -108,7 +115,7 @@ namespace services
                 float terrainDepth = static_cast<float>(config.tilesZ) * config.worldTileSize;
 
                 grid->setHeightSampler(terrain::createHeightSamplerFromMap(
-                    *heightmapData,
+                    heightmapData,
                     terrainMinX,
                     terrainMinZ,
                     terrainWidth,
@@ -212,13 +219,9 @@ namespace services
         // Remove grid from our storage
         terrainGrids.erase(terrainEntity.id);
 
-        // Delete the entity and its children through scene graph
+        // Use scene graph's proper deletion (handles recursive child removal and parent cleanup)
         scene::Entity terrainEnt(entity);
-        for (auto& child : terrainEnt.getChildren())
-        {
-            registry.destroy(child.getHandle());
-        }
-        registry.destroy(entity);
+        sceneGraph->removeEntity(terrainEnt);
 
         return true;
     }
