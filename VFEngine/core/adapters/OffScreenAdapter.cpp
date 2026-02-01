@@ -298,4 +298,10 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setTerrainRenderProvider(services::ITerrainRenderProvider* provider) {
+        if (offScreen) {
+            offScreen->setTerrainRenderProvider(provider);
+        }
+    }
+
 }

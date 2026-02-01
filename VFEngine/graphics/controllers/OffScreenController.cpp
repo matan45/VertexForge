@@ -578,4 +578,13 @@ namespace controllers
             renderHandler->setVFXRuntimeProvider(provider);
         }
     }
+
+    void OffScreenController::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainRenderProvider(provider);
+        }
+    }
 }

@@ -14,6 +14,7 @@ namespace services {
     using types::MAIN_CAMERA_ID;
 
     class IVFXRuntimeProvider;
+    class ITerrainRenderProvider;
 
     struct MeshBounds {
         glm::vec3 min{0.0f};
@@ -211,6 +212,9 @@ namespace services {
 
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;
+
+        // Terrain Rendering API
+        virtual void setTerrainRenderProvider(ITerrainRenderProvider* provider) = 0;
     };
 
 }

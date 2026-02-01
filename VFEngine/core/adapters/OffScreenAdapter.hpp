@@ -88,6 +88,7 @@ namespace core
         void setMeshletBackfaceCullingEnabled(bool enabled) override;
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;
+        void setTerrainRenderProvider(services::ITerrainRenderProvider* provider) override;
 
     private:
         bool playModeActive = false;

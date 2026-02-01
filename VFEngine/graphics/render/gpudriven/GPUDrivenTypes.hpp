@@ -81,6 +81,41 @@ namespace render::gpudriven
         constexpr uint32_t TerrainTile = 1 << 12;
     }
 
+    // GPU data structure for terrain tiles - used by terrain mesh shader pipeline
+    struct alignas(16) TerrainTileGPUData
+    {
+        glm::mat4 modelMatrix;          // Usually identity for world-space terrain
+        glm::vec4 boundingSphere;       // xyz = world center, w = radius
+        glm::vec4 aabbMin;              // xyz = world AABB min, w = unused
+        glm::vec4 aabbMax;              // xyz = world AABB max, w = unused
+        glm::uvec4 lod0MeshletData;     // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
+        glm::uvec4 lod1MeshletData;     // Same layout
+        glm::uvec4 lod2MeshletData;     // Same layout
+        glm::uvec4 lod3MeshletData;     // Same layout
+        glm::vec4 lodGeometricErrors;   // Per-LOD geometric error thresholds (world units)
+        int32_t coordX;                 // Tile coordinate X
+        int32_t coordZ;                 // Tile coordinate Z
+        uint32_t flags;                 // Rendering flags
+        uint32_t materialIndex;         // Index into terrain material array
+    };
+    static_assert(sizeof(TerrainTileGPUData) == 208);
+
+    // Terrain culling statistics
+    struct alignas(16) TerrainCullingStats
+    {
+        uint32_t totalTiles;
+        uint32_t culledTiles;
+        uint32_t totalMeshlets;
+        uint32_t culledMeshlets;
+        uint32_t visibleMeshlets;
+        uint32_t lodCount0;
+        uint32_t lodCount1;
+        uint32_t lodCount2;
+        uint32_t lodCount3;
+        uint32_t padding[3];
+    };
+    static_assert(sizeof(TerrainCullingStats) == 48);
+
 
     struct alignas(16) PerDrawData
     {

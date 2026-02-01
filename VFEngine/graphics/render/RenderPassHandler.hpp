@@ -11,6 +11,7 @@
 namespace services
 {
     class IVFXRuntimeProvider;
+    class ITerrainRenderProvider;
 }
 
 namespace core
@@ -89,6 +90,7 @@ namespace render
         float currentTime = 0.0f;
 
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
+        services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
 
         mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
         material::CallbackId materialChangeCallbackId{};
@@ -148,6 +150,9 @@ namespace render
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         services::IVFXRuntimeProvider* getVFXRuntimeProvider() const { return vfxRuntimeProvider; }
+
+        void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+        services::ITerrainRenderProvider* getTerrainRenderProvider() const { return terrainRenderProvider; }
 
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;

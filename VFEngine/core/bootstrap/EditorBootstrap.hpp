@@ -15,6 +15,7 @@ namespace services
     class IScriptingProvider;
     class IPhysicsProvider;
     class IAnimatorProvider;
+    class ITerrainRenderProvider;
 }
 
 namespace window
@@ -46,6 +47,7 @@ namespace core
     class ScriptingAdapter;
     class PhysicsAdapter;
     class AnimatorAdapter;
+    class TerrainRenderAdapter;
 
     class EditorBootstrap
     {
@@ -64,6 +66,7 @@ namespace core
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
+        std::unique_ptr<TerrainRenderAdapter> terrainRenderAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -101,6 +104,11 @@ namespace core
         services::IPhysicsProvider* getPhysicsProvider();
 
         services::IAnimatorProvider* getAnimatorProvider();
+
+        services::ITerrainRenderProvider* getTerrainRenderProvider();
+
+        // For late binding - allows EditorHandler to connect TerrainService
+        TerrainRenderAdapter* getTerrainRenderAdapterInternal();
 
         // === Other Accessors ===
 

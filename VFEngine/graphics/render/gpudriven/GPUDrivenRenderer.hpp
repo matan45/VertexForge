@@ -7,6 +7,8 @@
 #include "GPUCullLODPipeline.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
 #include "MeshShaderPipeline.hpp"
+#include "TerrainMeshShaderPipeline.hpp"
+#include "TerrainGPUAdapter.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
@@ -48,6 +50,11 @@ namespace render::occlusion
     class HiZBuffer;
 }
 
+namespace terrain
+{
+    class TerrainTile;
+}
+
 namespace render::gpudriven
 {
     class GPUDrivenRenderer
@@ -69,6 +76,15 @@ namespace render::gpudriven
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
+
+        // Terrain rendering
+        std::unique_ptr<TerrainMeshShaderPipeline> terrainPipeline;
+        std::unique_ptr<TerrainGPUAdapter> terrainAdapter;
+        std::vector<TerrainTileGPUData> terrainTileData;
+        bool terrainRenderingEnabled = true;
+        float terrainLODBias = 1.0f;
+        float terrainErrorThreshold = 2.0f;
+        float terrainTextureScale = 0.1f;
 
         bool initialized = false;
         bool enabled = false;
@@ -212,6 +228,22 @@ namespace render::gpudriven
         uint32_t getLightsAfterHiZCull() const;
 
         void readBackLightOcclusionResults();
+
+        // Terrain rendering methods
+        void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles);
+        void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+
+        void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
+        bool isTerrainRenderingEnabled() const { return terrainRenderingEnabled; }
+        void setTerrainLODBias(float bias) { terrainLODBias = bias; }
+        float getTerrainLODBias() const { return terrainLODBias; }
+        void setTerrainErrorThreshold(float threshold) { terrainErrorThreshold = threshold; }
+        float getTerrainErrorThreshold() const { return terrainErrorThreshold; }
+        void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
+        float getTerrainTextureScale() const { return terrainTextureScale; }
+
+        TerrainGPUAdapter* getTerrainAdapter() const { return terrainAdapter.get(); }
+        TerrainCullingStats getTerrainCullingStats();
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);

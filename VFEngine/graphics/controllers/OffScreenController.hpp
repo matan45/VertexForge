@@ -27,6 +27,7 @@ namespace render
 namespace services
 {
     class IVFXRuntimeProvider;
+    class ITerrainRenderProvider;
 }
 
 namespace controllers::offscreen
@@ -147,5 +148,6 @@ namespace controllers
         void prepareFrameShadowDebug();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
+        void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
     };
 }

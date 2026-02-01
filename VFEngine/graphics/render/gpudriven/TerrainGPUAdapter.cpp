@@ -309,4 +309,87 @@ namespace render::gpudriven
         dst.cone = srcMeshlet.bounds.cone;
         return dst;
     }
+
+    std::vector<TerrainTileGPUData> TerrainGPUAdapter::buildGPUTileData(
+        const std::vector<terrain::TerrainTile*>& tiles) const
+    {
+        std::vector<TerrainTileGPUData> result;
+        result.reserve(tiles.size());
+
+        for (const terrain::TerrainTile* tile : tiles)
+        {
+            if (!tile || !tile->isVisible)
+            {
+                continue;
+            }
+
+            TerrainTileKey key{tile->coord.x, tile->coord.z};
+            auto it = allocations_.find(key);
+            if (it == allocations_.end() || !it->second.isUploaded)
+            {
+                continue;
+            }
+
+            const auto& alloc = it->second;
+
+            TerrainTileGPUData gpuTile{};
+
+            // Model matrix - identity for world-space terrain
+            gpuTile.modelMatrix = glm::mat4(1.0f);
+
+            // Bounding volumes
+            gpuTile.boundingSphere = alloc.boundingSphere;
+            gpuTile.aabbMin = glm::vec4(alloc.aabbMin, 0.0f);
+            gpuTile.aabbMax = glm::vec4(alloc.aabbMax, 0.0f);
+
+            // LOD meshlet data for each level
+            // Format: x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
+            gpuTile.lod0MeshletData = glm::uvec4(
+                alloc.lodAllocs[0].meshletOffset,
+                alloc.lodAllocs[0].meshletCount,
+                alloc.lodAllocs[0].vertexOffset,
+                0
+            );
+            gpuTile.lod1MeshletData = glm::uvec4(
+                alloc.lodAllocs[1].meshletOffset,
+                alloc.lodAllocs[1].meshletCount,
+                alloc.lodAllocs[1].vertexOffset,
+                0
+            );
+            gpuTile.lod2MeshletData = glm::uvec4(
+                alloc.lodAllocs[2].meshletOffset,
+                alloc.lodAllocs[2].meshletCount,
+                alloc.lodAllocs[2].vertexOffset,
+                0
+            );
+            gpuTile.lod3MeshletData = glm::uvec4(
+                alloc.lodAllocs[3].meshletOffset,
+                alloc.lodAllocs[3].meshletCount,
+                alloc.lodAllocs[3].vertexOffset,
+                0
+            );
+
+            // Geometric errors per LOD level
+            gpuTile.lodGeometricErrors = glm::vec4(
+                alloc.geometricErrors[0],
+                alloc.geometricErrors[1],
+                alloc.geometricErrors[2],
+                alloc.geometricErrors[3]
+            );
+
+            // Tile coordinates
+            gpuTile.coordX = key.coordX;
+            gpuTile.coordZ = key.coordZ;
+
+            // Flags - mark as terrain tile
+            gpuTile.flags = ObjectFlags::TerrainTile;
+
+            // Material index - default for now, will be set by terrain material system (VK-178)
+            gpuTile.materialIndex = 0;
+
+            result.push_back(gpuTile);
+        }
+
+        return result;
+    }
 }

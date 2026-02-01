@@ -137,6 +137,11 @@ namespace render::gpudriven
         // Clear all allocations
         void clear();
 
+        // Build GPU tile data for terrain mesh shader pipeline
+        // Converts TerrainTileAllocation + TerrainTile to TerrainTileGPUData format
+        std::vector<TerrainTileGPUData> buildGPUTileData(
+            const std::vector<terrain::TerrainTile*>& tiles) const;
+
     private:
         // Upload single LOD data to GPU buffers
         bool uploadLODData(

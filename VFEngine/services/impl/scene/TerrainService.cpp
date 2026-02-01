@@ -343,4 +343,45 @@ namespace services
             grid->updateLODs(cameraPosition);
         }
     }
+
+    std::vector<terrain::TerrainTile*> TerrainService::getRawVisibleTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        std::vector<terrain::TerrainTile*> result;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            // Update LODs first
+            grid->updateLODs(cameraPosition);
+
+            // Get visible tiles from this grid
+            auto visibleTiles = grid->getVisibleTiles(frustum);
+
+            // Filter to only tiles with valid geometry
+            for (terrain::TerrainTile* tile : visibleTiles)
+            {
+                if (tile && tile->isVisible)
+                {
+                    const auto& lodData = tile->getCurrentLODData();
+                    if (!lodData.isEmpty() && lodData.hasMeshlets())
+                    {
+                        result.push_back(tile);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    size_t TerrainService::getTotalTileCount() const
+    {
+        size_t count = 0;
+        for (const auto& [entityId, grid] : terrainGrids)
+        {
+            count += grid->getAllTiles().size();
+        }
+        return count;
+    }
 }

@@ -12,6 +12,7 @@
 namespace services
 {
 	class IVFXRuntimeProvider;
+	class ITerrainRenderProvider;
 }
 
 namespace controllers {
@@ -103,5 +104,6 @@ namespace controllers {
 		void setMeshletBackfaceCullingEnabled(bool enabled);
 
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
+		void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
 	};
 }

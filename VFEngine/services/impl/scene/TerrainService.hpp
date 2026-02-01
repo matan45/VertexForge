@@ -20,6 +20,7 @@ namespace events
 namespace terrain
 {
     class TerrainGrid;
+    class TerrainTile;
 }
 
 namespace services
@@ -51,6 +52,17 @@ namespace services
 
         // Update LODs for all terrain grids
         void updateAllTerrainLODs(const glm::vec3& cameraPosition);
+
+        // Get raw terrain tiles for GPU rendering (used by TerrainRenderAdapter)
+        std::vector<terrain::TerrainTile*> getRawVisibleTiles(
+            const math::Frustum& frustum,
+            const glm::vec3& cameraPosition);
+
+        // Check if any terrain grids exist
+        bool hasActiveTerrain() const { return !terrainGrids.empty(); }
+
+        // Get total tile count across all terrains
+        size_t getTotalTileCount() const;
 
     private:
         // Create child entities for each tile in the grid

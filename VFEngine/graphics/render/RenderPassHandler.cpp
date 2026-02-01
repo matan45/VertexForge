@@ -17,6 +17,8 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
+#include "../../services/providers/ITerrainRenderProvider.hpp"
+#include "terrain/TerrainTile.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
@@ -526,6 +528,11 @@ namespace render
         vfxRuntimeProvider = provider;
     }
 
+    void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
+    {
+        terrainRenderProvider = provider;
+    }
+
     void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
         currentView = view;
@@ -674,6 +681,13 @@ namespace render
                 currentFarPlane,
                 currentTime
             );
+
+            // Update terrain tiles for GPU-driven rendering
+            if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
+            {
+                auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
+                gpuDrivenRenderer->updateTerrain(visibleTiles);
+            }
         }
 
         if (needsMeshPass)
@@ -696,6 +710,12 @@ namespace render
                 meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+
+                // Render terrain using mesh shader pipeline
+                if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+                {
+                    gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+                }
 
                 if (hasCustomShaderMeshes)
                 {

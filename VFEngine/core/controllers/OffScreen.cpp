@@ -284,4 +284,9 @@ namespace controllers {
 	{
 		offScreenController->setVFXRuntimeProvider(provider);
 	}
+
+	void OffScreen::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
+	{
+		offScreenController->setTerrainRenderProvider(provider);
+	}
 }
