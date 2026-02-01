@@ -464,9 +464,80 @@ namespace render::gpudriven
         tileAllocations_.erase(it);
     }
 
+    bool TerrainMeshBuffer::allocateTileLOD(const std::string& tileKey,
+                                             uint32_t lodLevel,
+                                             uint32_t vertexCount,
+                                             uint32_t indexCount,
+                                             uint32_t meshletCount,
+                                             uint32_t meshletVertexCount,
+                                             uint32_t meshletPrimitiveCount,
+                                             const glm::vec3& aabbMin,
+                                             const glm::vec3& aabbMax)
+    {
+        if (!initialized_ || lodLevel >= LOD_LEVEL_COUNT)
+        {
+            return false;
+        }
+
+        auto it = tileAllocations_.find(tileKey);
+        if (it == tileAllocations_.end())
+        {
+            // Create new tile entry
+            TerrainTileGeometry tile;
+            tile.tileKey = tileKey;
+            tile.aabbMin = aabbMin;
+            tile.aabbMax = aabbMax;
+
+            glm::vec3 center = (aabbMin + aabbMax) * 0.5f;
+            float radius = glm::length(aabbMax - center);
+            tile.boundingSphere = glm::vec4(center, radius);
+
+            auto [insertIt, success] = tileAllocations_.emplace(tileKey, std::move(tile));
+            it = insertIt;
+        }
+
+        auto& lod = it->second.lods[lodLevel];
+        if (lod.isAllocated)
+        {
+            // Already allocated
+            return true;
+        }
+
+        std::string debugKey = tileKey + " LOD" + std::to_string(lodLevel);
+        return allocateLODSpace(lod, vertexCount, indexCount,
+                                meshletCount, meshletVertexCount,
+                                meshletPrimitiveCount, debugKey);
+    }
+
+    void TerrainMeshBuffer::freeTileLOD(const std::string& tileKey, uint32_t lodLevel)
+    {
+        if (lodLevel >= LOD_LEVEL_COUNT) return;
+
+        auto it = tileAllocations_.find(tileKey);
+        if (it == tileAllocations_.end()) return;
+
+        freeLODSpace(it->second.lods[lodLevel]);
+
+        // If no LODs remain, remove the tile entry
+        if (!it->second.hasAnyAllocation())
+        {
+            tileAllocations_.erase(it);
+        }
+    }
+
     bool TerrainMeshBuffer::hasTile(const std::string& tileKey) const
     {
         return tileAllocations_.find(tileKey) != tileAllocations_.end();
+    }
+
+    bool TerrainMeshBuffer::hasTileLOD(const std::string& tileKey, uint32_t lodLevel) const
+    {
+        if (lodLevel >= LOD_LEVEL_COUNT) return false;
+
+        auto it = tileAllocations_.find(tileKey);
+        if (it == tileAllocations_.end()) return false;
+
+        return it->second.lods[lodLevel].isAllocated;
     }
 
     const TerrainTileGeometry* TerrainMeshBuffer::getTileGeometry(const std::string& tileKey) const

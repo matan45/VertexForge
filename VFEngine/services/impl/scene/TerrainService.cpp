@@ -109,7 +109,6 @@ namespace services
         case 0: tileConfig.resolution = terrain::TileResolution::Low; break;
         case 1: tileConfig.resolution = terrain::TileResolution::Medium; break;
         case 2: tileConfig.resolution = terrain::TileResolution::High; break;
-        case 3: tileConfig.resolution = terrain::TileResolution::Ultra; break;
         default: tileConfig.resolution = terrain::TileResolution::Low; break;
         }
 

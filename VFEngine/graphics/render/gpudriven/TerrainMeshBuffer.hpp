@@ -63,6 +63,11 @@ namespace render::gpudriven
 
     // Dedicated buffer for terrain mesh data (vertices, indices, meshlets)
     // Separate from MergedMeshBuffer to avoid fragmentation with regular meshes
+    //
+    // SYNCHRONIZATION CONTRACT:
+    // Upload methods (uploadLODVertices, uploadLODIndices, uploadLODMeshlets) use async transfers.
+    // Callers MUST call flushPendingTransfers() before using the buffers for rendering.
+    // GPUDrivenRenderer::dispatchCompute() handles this automatically before terrain rendering.
     class TerrainMeshBuffer
     {
     private:
@@ -154,14 +159,33 @@ namespace render::gpudriven
         // Free a tile's allocation
         void freeTile(const std::string& tileKey);
 
+        // Allocate space for a single LOD on an existing tile
+        // Creates tile if it doesn't exist
+        bool allocateTileLOD(const std::string& tileKey,
+                             uint32_t lodLevel,
+                             uint32_t vertexCount,
+                             uint32_t indexCount,
+                             uint32_t meshletCount,
+                             uint32_t meshletVertexCount,
+                             uint32_t meshletPrimitiveCount,
+                             const glm::vec3& aabbMin,
+                             const glm::vec3& aabbMax);
+
+        // Free a single LOD from a tile
+        void freeTileLOD(const std::string& tileKey, uint32_t lodLevel);
+
         // Check if tile is allocated
         bool hasTile(const std::string& tileKey) const;
+
+        // Check if specific LOD is allocated
+        bool hasTileLOD(const std::string& tileKey, uint32_t lodLevel) const;
 
         // Get tile allocation
         const TerrainTileGeometry* getTileGeometry(const std::string& tileKey) const;
         TerrainTileGeometry* getTileGeometryMutable(const std::string& tileKey);
 
-        // Flush pending transfers
+        // Flush pending async transfers - MUST be called before rendering
+        // Blocks until all queued transfers complete
         void flushPendingTransfers();
 
         // Clear all allocations

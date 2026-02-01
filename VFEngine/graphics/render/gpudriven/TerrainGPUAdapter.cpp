@@ -213,6 +213,97 @@ namespace render::gpudriven
         return &it->second;
     }
 
+    bool TerrainGPUAdapter::uploadTileAddLOD(const terrain::TerrainTile& tile, uint32_t lodLevel)
+    {
+        if (lodLevel >= LOD_LEVEL_COUNT)
+        {
+            vfLogError("TerrainGPUAdapter: Invalid LOD level {}", lodLevel);
+            return false;
+        }
+
+        TerrainTileKey key{tile.coord.x, tile.coord.z};
+        std::string tileKeyStr = "terrain_" + std::to_string(key.coordX) + "_" + std::to_string(key.coordZ);
+
+        const auto& lodData = tile.lodLevels[lodLevel];
+        if (lodData.isEmpty())
+        {
+            vfLogWarning("TerrainGPUAdapter: LOD {} is empty for tile ({}, {})",
+                         lodLevel, key.coordX, key.coordZ);
+            return true; // Empty LOD is considered success
+        }
+
+        // Allocate space for this LOD in the buffer
+        if (!terrainBuffer_.allocateTileLOD(
+                tileKeyStr,
+                lodLevel,
+                static_cast<uint32_t>(lodData.vertices.size()),
+                static_cast<uint32_t>(lodData.indices.size()),
+                static_cast<uint32_t>(lodData.meshlets.size()),
+                static_cast<uint32_t>(lodData.meshletVertices.size()),
+                static_cast<uint32_t>(lodData.meshletPrimitives.size()),
+                tile.worldBounds.min,
+                tile.worldBounds.max))
+        {
+            vfLogError("TerrainGPUAdapter: Failed to allocate LOD {} for tile ({}, {})",
+                       lodLevel, key.coordX, key.coordZ);
+            return false;
+        }
+
+        // Get or create allocation entry
+        auto it = allocations_.find(key);
+        if (it == allocations_.end())
+        {
+            TerrainTileAllocation alloc;
+            alloc.key = key;
+            alloc.aabbMin = tile.worldBounds.min;
+            alloc.aabbMax = tile.worldBounds.max;
+
+            glm::vec3 center = (alloc.aabbMin + alloc.aabbMax) * 0.5f;
+            float radius = glm::length(alloc.aabbMax - center);
+            alloc.boundingSphere = glm::vec4(center, radius);
+
+            // Store geometric errors for all LODs
+            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+            {
+                alloc.geometricErrors[lod] = tile.lodLevels[lod].geometricError;
+            }
+
+            auto [insertIt, success] = allocations_.emplace(key, std::move(alloc));
+            it = insertIt;
+        }
+
+        // Upload the LOD data
+        if (!uploadLODData(it->second, lodData, lodLevel, tile.worldOrigin))
+        {
+            vfLogError("TerrainGPUAdapter: Failed to upload LOD {} data for tile ({}, {})",
+                       lodLevel, key.coordX, key.coordZ);
+            terrainBuffer_.freeTileLOD(tileKeyStr, lodLevel);
+            return false;
+        }
+
+        // Update allocation info from buffer
+        const TerrainTileGeometry* tileGeom = terrainBuffer_.getTileGeometry(tileKeyStr);
+        if (tileGeom)
+        {
+            const auto& geomLod = tileGeom->lods[lodLevel];
+            it->second.lodAllocs[lodLevel].vertexOffset = geomLod.vertexOffset;
+            it->second.lodAllocs[lodLevel].vertexCount = geomLod.vertexCount;
+            it->second.lodAllocs[lodLevel].indexOffset = geomLod.indexOffset;
+            it->second.lodAllocs[lodLevel].indexCount = geomLod.indexCount;
+            it->second.lodAllocs[lodLevel].meshletOffset = geomLod.meshletOffset;
+            it->second.lodAllocs[lodLevel].meshletCount = geomLod.meshletCount;
+            it->second.lodAllocs[lodLevel].meshletVertexOffset = geomLod.meshletVertexOffset;
+            it->second.lodAllocs[lodLevel].meshletVertexCount = geomLod.meshletVertexCount;
+            it->second.lodAllocs[lodLevel].meshletPrimitiveOffset = geomLod.meshletPrimitiveOffset;
+            it->second.lodAllocs[lodLevel].meshletPrimitiveCount = geomLod.meshletPrimitiveCount;
+            it->second.lodAllocs[lodLevel].isAllocated = geomLod.isAllocated;
+        }
+
+        it->second.isUploaded = it->second.hasAnyAllocation();
+
+        return true;
+    }
+
     void TerrainGPUAdapter::removeTile(const TerrainTileKey& key)
     {
         auto it = allocations_.find(key);
@@ -229,9 +320,45 @@ namespace render::gpudriven
         allocations_.erase(it);
     }
 
+    void TerrainGPUAdapter::removeTileLOD(const TerrainTileKey& key, uint32_t lodLevel)
+    {
+        if (lodLevel >= LOD_LEVEL_COUNT) return;
+
+        auto it = allocations_.find(key);
+        if (it == allocations_.end()) return;
+
+        std::string tileKeyStr = it->second.getMeshPath();
+
+        // Free from buffer
+        terrainBuffer_.freeTileLOD(tileKeyStr, lodLevel);
+
+        // Update allocation tracking
+        it->second.lodAllocs[lodLevel] = TerrainLODAllocation{};
+
+        // If no LODs remain, remove the allocation
+        if (!it->second.hasAnyAllocation())
+        {
+            allocations_.erase(it);
+        }
+        else
+        {
+            it->second.isUploaded = true;
+        }
+    }
+
     bool TerrainGPUAdapter::hasTile(const TerrainTileKey& key) const
     {
         return allocations_.find(key) != allocations_.end();
+    }
+
+    bool TerrainGPUAdapter::hasTileLOD(const TerrainTileKey& key, uint32_t lodLevel) const
+    {
+        if (lodLevel >= LOD_LEVEL_COUNT) return false;
+
+        auto it = allocations_.find(key);
+        if (it == allocations_.end()) return false;
+
+        return it->second.lodAllocs[lodLevel].isAllocated;
     }
 
     const TerrainTileAllocation* TerrainGPUAdapter::getAllocation(const TerrainTileKey& key) const

@@ -557,6 +557,10 @@ namespace render::gpudriven
         {
             meshletBuffer->flushPendingTransfers();
         }
+        if (terrainMeshBuffer)
+        {
+            terrainMeshBuffer->flushPendingTransfers();
+        }
 
         batchManager->resetAllBatches(cmd);
 

@@ -159,7 +159,11 @@ namespace terrain
         );
 
         if (meshletCount == 0)
+        {
+            vfLogWarning("TerrainTileGenerator: meshopt_buildMeshlets returned 0 meshlets for {} vertices, {} indices",
+                         lodData.vertices.size(), lodData.indices.size());
             return;
+        }
 
         // 4. Trim arrays to actual size
         const auto& lastMeshlet = meshoptMeshlets[meshletCount - 1];

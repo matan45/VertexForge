@@ -8,7 +8,7 @@
 
 const uint MESHLET_MAX_VERTICES = 64;
 const uint MESHLET_MAX_PRIMITIVES = 124;
-const uint MAX_MESHLETS_PER_PAYLOAD = 32;
+const uint MAX_MESHLETS_PER_PAYLOAD = 512; // Must match task shader!
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 64, max_primitives = 124) out;

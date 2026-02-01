@@ -26,9 +26,11 @@ namespace render::gpudriven
         // Reset per-frame stats
         stats_.uploadsThisFrame = 0;
         stats_.bytesUploadedThisFrame = 0;
+        stats_.tilesStreaming = 0;
 
-        // Upload all LODs for each visible tile
-        // For small terrains this is fine; single-LOD streaming only needed for 256+ tiles
+        // Upload all LODs for each visible tile immediately
+        // This ensures all tiles render without streaming delays
+        // For large terrains (256+ tiles), consider enabling per-LOD streaming
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->isVisible)
@@ -38,7 +40,18 @@ namespace render::gpudriven
 
             // Check if already uploaded via adapter
             if (adapter_.hasTile(key))
+            {
+                // Update access tracking for existing tiles
+                auto it = tileInfos_.find(key);
+                if (it != tileInfos_.end())
+                {
+                    glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
+                    it->second.distanceToCamera = glm::length(tileCenter - cameraPosition);
+                    it->second.targetLOD = selectTargetLOD(it->second.distanceToCamera);
+                    it->second.lastAccessFrame = currentFrame_;
+                }
                 continue;
+            }
 
             // Calculate distance for tracking
             glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
@@ -73,23 +86,6 @@ namespace render::gpudriven
             }
         }
 
-        // Update existing tile infos with current frame access
-        for (const terrain::TerrainTile* tile : visibleTiles)
-        {
-            if (!tile || !tile->isVisible)
-                continue;
-
-            TerrainTileKey key{tile->coord.x, tile->coord.z};
-            auto it = tileInfos_.find(key);
-            if (it != tileInfos_.end())
-            {
-                glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
-                it->second.distanceToCamera = glm::length(tileCenter - cameraPosition);
-                it->second.targetLOD = selectTargetLOD(it->second.distanceToCamera);
-                it->second.lastAccessFrame = currentFrame_;
-            }
-        }
-
         // Update statistics
         stats_.memoryUsedBytes = currentMemoryUsage_;
         stats_.memoryBudgetBytes = config_.memoryBudgetBytes;
@@ -100,6 +96,9 @@ namespace render::gpudriven
         stats_.fullDetailTiles = 0;
         for (const auto& [key, info] : tileInfos_)
         {
+            if (info.loadedLODMask == 0)
+                continue;
+
             if (info.currentLoadedLOD == 0)
                 stats_.fullDetailTiles++;
             else if (info.currentLoadedLOD == 3)
@@ -383,7 +382,7 @@ namespace render::gpudriven
             return true; // Already loaded
         }
 
-        // Upload all LODs (simpler approach that works reliably)
+        // Upload all LODs (simpler approach that ensures shader has all options)
         TerrainTileAllocation* alloc = adapter_.uploadTile(tile);
         if (!alloc)
         {
@@ -432,8 +431,8 @@ namespace render::gpudriven
         if (!info.hasLODLoaded(lodLevel))
             return;
 
-        // For now, we can only evict entire tiles, not individual LODs
-        // Check if this would remove the last LOD
+        // Currently we can only evict entire tiles, not individual LODs
+        // This is a simplified approach - full per-LOD eviction requires buffer support
         uint8_t remainingMask = info.loadedLODMask & ~(1 << lodLevel);
 
         if (remainingMask == 0)
@@ -448,10 +447,12 @@ namespace render::gpudriven
         }
         else
         {
+            // For now, mark LOD as not loaded but keep tile
+            // Full per-LOD eviction would require adapter support
             info.clearLODLoaded(lodLevel);
             size_t lodMemory = LOD_MEMORY_ESTIMATE[lodLevel];
-            currentMemoryUsage_ -= lodMemory;
-            info.gpuMemoryUsage -= lodMemory;
+            currentMemoryUsage_ -= std::min(lodMemory, info.gpuMemoryUsage);
+            info.gpuMemoryUsage -= std::min(lodMemory, info.gpuMemoryUsage);
 
             // Update current loaded LOD
             for (uint8_t lod = 0; lod < 4; ++lod)

@@ -35,10 +35,10 @@ namespace render::gpudriven
         size_t operator()(const TerrainTileKey& key) const
         {
             // Combine x and z coordinates into a single hash
-            return std::hash<int64_t>()(
-                (static_cast<int64_t>(key.coordX) << 32) |
-                static_cast<uint32_t>(key.coordZ)
-            );
+            // Use bit masking to handle negative coordinates correctly
+            uint64_t x = static_cast<uint32_t>(key.coordX);
+            uint64_t z = static_cast<uint32_t>(key.coordZ);
+            return std::hash<uint64_t>()((x << 32) | z);
         }
     };
 
@@ -118,11 +118,21 @@ namespace render::gpudriven
         // If tile doesn't exist, creates allocation. If exists, upgrades/downgrades LOD.
         TerrainTileAllocation* uploadTileSingleLOD(const terrain::TerrainTile& tile, uint32_t lodLevel);
 
+        // Upload an additional LOD to an existing tile (or create new tile with this LOD)
+        // Returns true if successful, false on failure
+        bool uploadTileAddLOD(const terrain::TerrainTile& tile, uint32_t lodLevel);
+
         // Remove a tile from GPU buffers
         void removeTile(const TerrainTileKey& key);
 
+        // Remove a single LOD from a tile (keeps other LODs)
+        void removeTileLOD(const TerrainTileKey& key, uint32_t lodLevel);
+
         // Check if tile is already uploaded
         bool hasTile(const TerrainTileKey& key) const;
+
+        // Check if specific LOD is uploaded for a tile
+        bool hasTileLOD(const TerrainTileKey& key, uint32_t lodLevel) const;
 
         // Get allocation for a tile
         const TerrainTileAllocation* getAllocation(const TerrainTileKey& key) const;
