@@ -549,6 +549,14 @@ namespace render
         terrainRenderProvider = provider;
     }
 
+    void RenderPassHandler::clearTerrainData()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearTerrainData();
+        }
+    }
+
     void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
         currentView = view;

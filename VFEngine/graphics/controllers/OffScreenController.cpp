@@ -17,6 +17,7 @@
 #include "offscreen/CullingStatsCollector.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/MaterialEvents.hpp"
+#include "../../services/events/TerrainEvents.hpp"
 #include "time/Timer.hpp"
 
 namespace controllers
@@ -33,6 +34,10 @@ namespace controllers
         if (materialSavedSubscription && materialSavedSubscription->isValid())
         {
             events::EventDispatcher::instance().unsubscribe(*materialSavedSubscription);
+        }
+        if (terrainDeletedSubscription && terrainDeletedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*terrainDeletedSubscription);
         }
     }
 
@@ -59,6 +64,18 @@ namespace controllers
                 framePreparation->invalidateMaterialCache(notification.materialPath);
             });
         materialSavedSubscription = std::make_unique<events::SubscriptionToken>(token);
+
+        // Subscribe to terrain deletion to clear GPU buffers
+        auto terrainToken = events::EventDispatcher::instance().subscribe<events::terrain::TerrainDeletedNotification>(
+            [this](const events::terrain::TerrainDeletedNotification&)
+            {
+                auto* renderHandler = offScreen->getRenderPassHandler();
+                if (renderHandler)
+                {
+                    renderHandler->clearTerrainData();
+                }
+            });
+        terrainDeletedSubscription = std::make_unique<events::SubscriptionToken>(terrainToken);
     }
 
     void OffScreenController::recreate()

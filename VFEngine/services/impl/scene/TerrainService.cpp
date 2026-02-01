@@ -247,6 +247,11 @@ namespace services
         scene::Entity terrainEnt(entity);
         sceneGraph->removeEntity(terrainEnt);
 
+        // Publish notification so graphics layer can clear GPU buffers
+        events::terrain::TerrainDeletedNotification notification;
+        notification.terrainEntity = terrainEntity;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
 

@@ -239,6 +239,7 @@ namespace render::gpudriven
         // Terrain rendering methods
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles);
         void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void clearTerrainData();
 
         void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
         bool isTerrainRenderingEnabled() const { return terrainRenderingEnabled; }

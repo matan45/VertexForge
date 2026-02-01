@@ -153,6 +153,7 @@ namespace render
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         services::ITerrainRenderProvider* getTerrainRenderProvider() const { return terrainRenderProvider; }
+        void clearTerrainData();
 
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;

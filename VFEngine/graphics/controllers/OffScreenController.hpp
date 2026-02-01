@@ -59,6 +59,7 @@ namespace controllers
         std::unique_ptr<offscreen::CullingStatsCollector> statsCollector;
 
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
+        std::unique_ptr<events::SubscriptionToken> terrainDeletedSubscription;
 
         bool showBillboardIcons = true;
         bool showDebugRendering = true;

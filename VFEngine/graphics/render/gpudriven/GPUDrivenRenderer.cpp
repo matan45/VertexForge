@@ -1196,8 +1196,6 @@ namespace render::gpudriven
         }
 
         // Upload new tiles to GPU buffers
-        uint32_t uploadedCount = 0;
-        uint32_t alreadyUploadedCount = 0;
         for (terrain::TerrainTile* tile : visibleTiles)
         {
             if (!tile || !tile->isVisible)
@@ -1208,35 +1206,12 @@ namespace render::gpudriven
             TerrainTileKey key{tile->coord.x, tile->coord.z};
             if (!terrainAdapter->hasTile(key))
             {
-                if (terrainAdapter->uploadTile(*tile))
-                {
-                    uploadedCount++;
-                    loggerInfo("GPUDrivenRenderer: Uploaded terrain tile ({}, {}) - worldOrigin=[{:.1f},{:.1f},{:.1f}]",
-                               key.coordX, key.coordZ,
-                               tile->worldOrigin.x, tile->worldOrigin.y, tile->worldOrigin.z);
-                }
+                terrainAdapter->uploadTile(*tile);
             }
-            else
-            {
-                alreadyUploadedCount++;
-            }
-        }
-
-        if (uploadedCount > 0)
-        {
-            loggerInfo("GPUDrivenRenderer: Uploaded {} new terrain tiles ({} already cached)",
-                       uploadedCount, alreadyUploadedCount);
         }
 
         // Build GPU tile data for rendering
         terrainTileData = terrainAdapter->buildGPUTileData(visibleTiles);
-
-        static bool loggedOnce = false;
-        if (!terrainTileData.empty() && !loggedOnce)
-        {
-            loggerInfo("GPUDrivenRenderer: Built {} terrain tile GPU data for rendering", terrainTileData.size());
-            loggedOnce = true;
-        }
 
         // Upload to terrain pipeline
         if (!terrainTileData.empty())
@@ -1245,36 +1220,25 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::clearTerrainData()
+    {
+        if (terrainAdapter)
+        {
+            terrainAdapter->clear();
+        }
+        terrainTileData.clear();
+    }
+
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
     {
         if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)
         {
-            static bool warnedInit = false;
-            if (!warnedInit)
-            {
-                loggerWarning("GPUDrivenRenderer::renderTerrainDraw: Early exit - initialized={}, enabled={}, hasPipeline={}, hasMeshShaderPipeline={}",
-                              initialized, terrainRenderingEnabled, (bool)terrainPipeline, (bool)meshShaderPipeline);
-                warnedInit = true;
-            }
             return;
         }
 
         if (terrainTileData.empty())
         {
-            static bool warnedOnce = false;
-            if (!warnedOnce)
-            {
-                loggerWarning("GPUDrivenRenderer: terrainTileData is empty, skipping terrain render");
-                warnedOnce = true;
-            }
             return;
-        }
-
-        static bool loggedCalled = false;
-        if (!loggedCalled)
-        {
-            loggerInfo("GPUDrivenRenderer::renderTerrainDraw: Called with {} tiles", terrainTileData.size());
-            loggedCalled = true;
         }
 
         // Update external descriptor sets for terrain pipeline

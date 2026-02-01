@@ -56,6 +56,13 @@ namespace events::terrain
         std::string_view getName() const override { return "TerrainCreated"; }
     };
 
+    // Notification when terrain is deleted
+    struct TerrainDeletedNotification : INotification {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "TerrainDeleted"; }
+    };
+
     // Query to get visible terrain tiles info
     // Graphics layer converts this to MeshRenderData
     struct GetVisibleTerrainTilesQuery : IQuery<std::vector<TerrainTileInfo>> {
