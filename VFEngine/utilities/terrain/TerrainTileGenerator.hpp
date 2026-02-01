@@ -95,6 +95,18 @@ namespace terrain
             uint32_t lodLevel,
             float skirtDepth
         ) const;
+
+        // Edge stitching helpers for vertex generation
+        [[nodiscard]] bool isEdgeVertex(uint32_t x, uint32_t z, uint32_t vertCount) const;
+        [[nodiscard]] bool isCornerVertex(uint32_t x, uint32_t z, uint32_t vertCount) const;
+        [[nodiscard]] TileEdge getEdgeForVertex(uint32_t x, uint32_t z, uint32_t vertCount) const;
+        [[nodiscard]] uint32_t getEdgeVertexIndex(uint32_t x, uint32_t z, uint32_t vertCount, TileEdge edge) const;
+        [[nodiscard]] float getStitchedHeight(
+            const TerrainTile& tile,
+            uint32_t x, uint32_t z,
+            uint32_t vertCount,
+            uint32_t lodLevel
+        ) const;
     };
 
 } // namespace terrain

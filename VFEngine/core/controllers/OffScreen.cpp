@@ -280,8 +280,23 @@ namespace controllers {
 		offScreenController->setMeshletBackfaceCullingEnabled(enabled);
 	}
 
+	void OffScreen::setTerrainFrustumCullingEnabled(bool enabled)
+	{
+		offScreenController->setTerrainFrustumCullingEnabled(enabled);
+	}
+
+	void OffScreen::setTerrainMeshletCullingEnabled(bool enabled)
+	{
+		offScreenController->setTerrainMeshletCullingEnabled(enabled);
+	}
+
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
 	{
 		offScreenController->setVFXRuntimeProvider(provider);
+	}
+
+	void OffScreen::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
+	{
+		offScreenController->setTerrainRenderProvider(provider);
 	}
 }

@@ -501,6 +501,25 @@ namespace services
                 }
             });
 
+        // Terrain culling settings
+        dispatcher.registerCommandHandler<events::render::SetTerrainFrustumCullingCommand>(
+            [this](const events::render::SetTerrainFrustumCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainFrustumCullingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainMeshletCullingCommand>(
+            [this](const events::render::SetTerrainMeshletCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainMeshletCullingEnabled(cmd.enabled);
+                }
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {

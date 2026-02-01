@@ -5,10 +5,12 @@
 #include "components/Components.hpp"
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTypes.hpp"
+#include "terrain/TerrainTile.hpp"
 #include "terrain/HeightmapLoader.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
+#include "../../events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace services
@@ -24,8 +26,17 @@ namespace services
         auto& dispatcher = events::EventDispatcher::instance();
         dispatcher.unregisterCommandHandler<events::terrain::CreateTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::UploadTerrainTilesCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::UpdateTerrainLODsCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetVisibleTerrainTilesQuery>();
+
+        // Unsubscribe from entity deletion
+        if (entityDeletedSubscription && entityDeletedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*entityDeletedSubscription);
+        }
 
         terrainGrids.clear();
     }
@@ -57,6 +68,34 @@ namespace services
             {
                 return hasTerrainComponent(query.entity);
             });
+
+        dispatcher.registerQueryHandler<events::terrain::GetVisibleTerrainTilesQuery>(
+            [this](const events::terrain::GetVisibleTerrainTilesQuery& query)
+            {
+                return collectVisibleTiles(query.frustum, query.cameraPosition);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::UpdateTerrainLODsCommand>(
+            [this](const events::terrain::UpdateTerrainLODsCommand& cmd)
+            {
+                updateAllTerrainLODs(cmd.cameraPosition);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::UploadTerrainTilesCommand>(
+            [this](const events::terrain::UploadTerrainTilesCommand& cmd)
+            {
+                // Terrain GPU upload is handled by the adapter in graphics layer
+                // This command exists for future use if needed
+                return true;
+            });
+
+        // Subscribe to entity deletion to clean up terrain when deleted via scene hierarchy
+        auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
+            [this](const events::scene::EntityDeletedNotification& notification)
+            {
+                onEntityDeleted(notification.entity);
+            });
+        entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(token);
     }
 
     EntityHandle TerrainService::createTerrain(const TerrainCreationData& config)
@@ -223,6 +262,11 @@ namespace services
         scene::Entity terrainEnt(entity);
         sceneGraph->removeEntity(terrainEnt);
 
+        // Publish notification so graphics layer can clear GPU buffers
+        events::terrain::TerrainDeletedNotification notification;
+        notification.terrainEntity = terrainEntity;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
 
@@ -270,5 +314,113 @@ namespace services
             return false;
 
         return registry.all_of<components::TerrainComponent>(ent);
+    }
+
+    std::vector<events::terrain::TerrainTileInfo> TerrainService::collectVisibleTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        std::vector<events::terrain::TerrainTileInfo> result;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            // First update LODs based on camera position
+            grid->updateLODs(cameraPosition);
+
+            // Get visible tiles
+            auto visibleTiles = grid->getVisibleTiles(frustum);
+
+            // Convert visible tiles to TerrainTileInfo
+            for (terrain::TerrainTile* tile : visibleTiles)
+            {
+                if (!tile || !tile->isVisible)
+                    continue;
+
+                // Check if tile has geometry data for current LOD
+                const auto& lodData = tile->getCurrentLODData();
+                if (lodData.isEmpty() || !lodData.hasMeshlets())
+                    continue;
+
+                events::terrain::TerrainTileInfo info;
+                info.coordX = tile->coord.x;
+                info.coordZ = tile->coord.z;
+                info.currentLOD = tile->currentLOD;
+                info.worldOrigin = tile->worldOrigin;
+                info.aabbMin = tile->worldBounds.min;
+                info.aabbMax = tile->worldBounds.max;
+
+                result.push_back(info);
+            }
+        }
+
+        return result;
+    }
+
+    void TerrainService::updateAllTerrainLODs(const glm::vec3& cameraPosition)
+    {
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            grid->updateLODs(cameraPosition);
+        }
+    }
+
+    std::vector<terrain::TerrainTile*> TerrainService::getRawVisibleTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        std::vector<terrain::TerrainTile*> result;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            // Update LODs first
+            grid->updateLODs(cameraPosition);
+
+            // Get visible tiles from this grid
+            auto visibleTiles = grid->getVisibleTiles(frustum);
+
+            // Filter to only tiles with valid geometry
+            for (terrain::TerrainTile* tile : visibleTiles)
+            {
+                if (tile && tile->isVisible)
+                {
+                    const auto& lodData = tile->getCurrentLODData();
+                    if (!lodData.isEmpty() && lodData.hasMeshlets())
+                    {
+                        result.push_back(tile);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    size_t TerrainService::getTotalTileCount() const
+    {
+        size_t count = 0;
+        for (const auto& [entityId, grid] : terrainGrids)
+        {
+            count += grid->getAllTiles().size();
+        }
+        return count;
+    }
+
+    void TerrainService::onEntityDeleted(EntityHandle entity)
+    {
+        if (!entity.isValid())
+            return;
+
+        // Check if this entity was a terrain parent
+        auto it = terrainGrids.find(entity.id);
+        if (it != terrainGrids.end())
+        {
+            // Remove the terrain grid
+            terrainGrids.erase(it);
+
+            // Publish notification so graphics layer can clear GPU buffers
+            events::terrain::TerrainDeletedNotification notification;
+            notification.terrainEntity = entity;
+            events::EventDispatcher::instance().publish(notification);
+        }
     }
 }

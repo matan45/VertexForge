@@ -104,6 +104,10 @@ namespace types
         bool lodSelectionEnabled = true;
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
+
+        // Terrain culling settings
+        bool terrainFrustumCullingEnabled = true;
+        bool terrainMeshletCullingEnabled = true;
     };
 
     struct RenderSettings

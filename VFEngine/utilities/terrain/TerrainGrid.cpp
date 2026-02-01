@@ -245,9 +245,17 @@ namespace terrain
         updateAllNeighborReferences();
 
         // Update edge stitching for LOD transitions between neighbors
+        // and mark tiles dirty if stitching requirements changed
         for (auto& [coord, tile] : tiles_)
         {
             generator_->updateEdgeStitching(*tile);
+
+            // Check if stitching changed - if so, mark tile for regeneration
+            if (tile->stitchingChanged())
+            {
+                tile->isDirty = true;
+                tile->saveStitchState();
+            }
         }
     }
 

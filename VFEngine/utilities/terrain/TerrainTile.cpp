@@ -293,11 +293,48 @@ namespace terrain
         return stitch.snappedHeights[vertexIndex];
     }
 
+    bool TerrainTile::stitchingChanged() const
+    {
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            const auto& current = edgeStitchInfo[i];
+            const auto& previous = previousStitchState[i];
+
+            // Check if needsSnapping status changed
+            if (current.needsSnapping != previous.needsSnapping)
+            {
+                return true;
+            }
+
+            // If both need snapping, check if neighbor LOD changed
+            if (current.needsSnapping && current.neighborLOD != previous.neighborLOD)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void TerrainTile::saveStitchState()
+    {
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            previousStitchState[i].needsSnapping = edgeStitchInfo[i].needsSnapping;
+            previousStitchState[i].neighborLOD = edgeStitchInfo[i].neighborLOD;
+        }
+    }
+
     void TerrainTile::updateWorldBounds()
     {
+        // Minimum AABB height to prevent frustum culling issues with flat terrain
+        constexpr float MIN_AABB_HEIGHT = 1.0f;
+
         if (heightData.empty())
         {
-            worldBounds = math::AABB(worldOrigin, worldOrigin + glm::vec3(config.worldTileSize, 0.0f, config.worldTileSize));
+            worldBounds = math::AABB(
+                worldOrigin - glm::vec3(0.0f, MIN_AABB_HEIGHT, 0.0f),
+                worldOrigin + glm::vec3(config.worldTileSize, MIN_AABB_HEIGHT, config.worldTileSize)
+            );
             return;
         }
 
@@ -310,6 +347,16 @@ namespace terrain
             maxH = std::max(maxH, h);
         }
 
+        // Ensure minimum height for frustum culling stability
+        if (maxH - minH < MIN_AABB_HEIGHT)
+        {
+            float center = (minH + maxH) * 0.5f;
+            minH = center - MIN_AABB_HEIGHT * 0.5f;
+            maxH = center + MIN_AABB_HEIGHT * 0.5f;
+        }
+
+        // Height values (minH, maxH) are already absolute world heights
+        // Only X and Z need worldOrigin offset
         worldBounds = math::AABB(
             glm::vec3(worldOrigin.x, minH, worldOrigin.z),
             glm::vec3(worldOrigin.x + config.worldTileSize, maxH, worldOrigin.z + config.worldTileSize)

@@ -17,6 +17,7 @@
 #include "impl/VFXRuntimeServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
+#include "../adapters/TerrainRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "time/Timer.hpp"
@@ -194,7 +195,14 @@ namespace handlers
 
         projectService = std::make_shared<services::ProjectServiceImpl>();
 
-        terrainService = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
+        auto terrainServiceImpl = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
+        terrainService = terrainServiceImpl;
+
+        // Wire TerrainService to TerrainRenderAdapter for GPU-driven terrain rendering
+        if (auto* terrainAdapter = bootstrap->getTerrainRenderAdapterInternal())
+        {
+            terrainAdapter->setTerrainService(terrainServiceImpl.get());
+        }
 
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();

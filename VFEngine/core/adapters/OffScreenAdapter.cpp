@@ -292,9 +292,27 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setTerrainFrustumCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setTerrainFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainMeshletCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setTerrainMeshletCullingEnabled(enabled);
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainRenderProvider(services::ITerrainRenderProvider* provider) {
+        if (offScreen) {
+            offScreen->setTerrainRenderProvider(provider);
         }
     }
 

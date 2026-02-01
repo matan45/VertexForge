@@ -128,6 +128,15 @@ namespace terrain
         // Used when neighbor has coarser LOD to snap edge vertex heights
         std::array<EdgeStitchInfo, 4> edgeStitchInfo;
 
+        // Previous stitching state for change detection
+        // Stores just the needsSnapping flag and neighborLOD per edge
+        struct StitchState
+        {
+            bool needsSnapping = false;
+            uint8_t neighborLOD = 0;
+        };
+        std::array<StitchState, 4> previousStitchState;
+
         // Height data (kept for runtime queries and modification)
         // Row-major order, size = vertexCount * vertexCount
         std::vector<float> heightData;
@@ -170,6 +179,10 @@ namespace terrain
         // Edge stitching helpers
         [[nodiscard]] bool hasActiveStitching() const;
         [[nodiscard]] float getStitchedEdgeHeight(TileEdge edge, uint32_t vertexIndex) const;
+
+        // Stitching change detection for regeneration triggers
+        [[nodiscard]] bool stitchingChanged() const;
+        void saveStitchState();
 
         // Bounds calculation
         void updateWorldBounds();

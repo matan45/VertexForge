@@ -219,4 +219,17 @@ namespace events::render {
         std::string_view getName() const override { return "SetMeshletBackfaceCulling"; }
     };
 
+    // Terrain culling commands
+    struct SetTerrainFrustumCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetTerrainFrustumCulling"; }
+    };
+
+    struct SetTerrainMeshletCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetTerrainMeshletCulling"; }
+    };
+
 }

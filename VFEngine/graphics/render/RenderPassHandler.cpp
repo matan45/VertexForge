@@ -17,6 +17,8 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
+#include "../../services/providers/ITerrainRenderProvider.hpp"
+#include "terrain/TerrainTile.hpp"
 #include "resource/ResourceManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "print/Logger.hpp"
@@ -415,6 +417,22 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setTerrainFrustumCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setTerrainMeshletCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainMeshletCullingEnabled(enabled);
+        }
+    }
+
     void RenderPassHandler::updateGPUDrivenHiZ() const
     {
         if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)
@@ -524,6 +542,19 @@ namespace render
     void RenderPassHandler::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
     {
         vfxRuntimeProvider = provider;
+    }
+
+    void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
+    {
+        terrainRenderProvider = provider;
+    }
+
+    void RenderPassHandler::clearTerrainData()
+    {
+        if (gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearTerrainData();
+        }
     }
 
     void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
@@ -660,8 +691,12 @@ namespace render
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
+        // Check if terrain needs to render (used for both needsMeshPass and GPU-driven path)
+        bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled() &&
+                                  terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
+
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes ||
-            hasDebugItems || hasVFX);
+            hasDebugItems || hasVFX || hasTerrainToRender);
 
         if (gpuDrivenRendererInitialized && meshPipelineInitialized)
         {
@@ -674,6 +709,19 @@ namespace render
                 currentFarPlane,
                 currentTime
             );
+
+            // Update terrain tiles for GPU-driven rendering
+            if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
+            {
+                auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
+                static bool loggedTerrainOnce = false;
+                if (!visibleTiles.empty() && !loggedTerrainOnce)
+                {
+                    loggerInfo("RenderPassHandler: Got {} visible terrain tiles from provider", visibleTiles.size());
+                    loggedTerrainOnce = true;
+                }
+                gpuDrivenRenderer->updateTerrain(visibleTiles);
+            }
         }
 
         if (needsMeshPass)
@@ -685,7 +733,11 @@ namespace render
                 vfxRuntimeProvider->recordComputeCommands(commandBuffer);
             }
 
-            if (!currentMeshDrawList.empty() && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+            // Enter GPU-driven render path if we have meshes OR terrain to render
+            // (hasTerrainToRender is already computed above for needsMeshPass)
+            bool hasMeshesToRender = !currentMeshDrawList.empty();
+
+            if ((hasMeshesToRender || hasTerrainToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             {
                 updateGPUDrivenHiZ();
 
@@ -696,6 +748,12 @@ namespace render
                 meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+
+                // Render terrain using mesh shader pipeline
+                if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+                {
+                    gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+                }
 
                 if (hasCustomShaderMeshes)
                 {

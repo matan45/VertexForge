@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "terrain/TerrainTile.hpp"
 #include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../mesh/MeshStreamManager.hpp"
@@ -157,6 +158,20 @@ namespace render::gpudriven
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());
                 loggerInfo("GPUDrivenRenderer: Meshlet streaming enabled");
             }
+
+            // Initialize terrain rendering pipeline
+            terrainAdapter = std::make_unique<TerrainGPUAdapter>(*mergedBuffer, *meshletBuffer);
+
+            terrainPipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
+            terrainPipeline->init(
+                iblDescriptorSetLayout,
+                bindlessTextures->getDescriptorSetLayout(),
+                meshShaderPipeline->getMeshletDataLayout(),
+                meshShaderPipeline->getVertexDataLayout(),
+                lightBufferManager->getDescriptorSetLayout(),
+                renderPass
+            );
+            loggerInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
         }
         else
         {
@@ -208,6 +223,7 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
+        if (terrainPipeline) terrainPipeline->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (shadowSystem) shadowSystem->cleanup();
@@ -223,6 +239,8 @@ namespace render::gpudriven
         if (mergedBuffer) mergedBuffer->cleanup();
 
         meshStreamManager.reset();
+        terrainAdapter.reset();
+        terrainPipeline.reset();
         lightOcclusionCulling.reset();
         meshShaderPipeline.reset();
         shadowSystem.reset();
@@ -485,19 +503,19 @@ namespace render::gpudriven
             batchManager->getCombinedDrawCountBuffer()
         );
 
-        if (meshShaderPipeline && mergedBuffer->getObjectCount() > 0)
+        bool hasMeshes = mergedBuffer->getObjectCount() > 0;
+
+        // Always update meshlet and vertex descriptors - terrain uses these too
+        if (meshShaderPipeline)
         {
-            meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+        }
 
-            if (lightBufferManager && clusterGridManager && lightCullingPipeline)
-            {
-                meshShaderPipeline->updateLightingDescriptors(
-                    lightBufferManager->getDescriptorSet(),
-                    clusterGridManager->getDescriptorSet(),
-                    lightCullingPipeline->getDescriptorSet());
-            }
+        // Update per-draw and shadow descriptors only when we have meshes
+        if (meshShaderPipeline && hasMeshes)
+        {
+            meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
 
             if (shadowSystem && shadowSystem->isInitialized())
             {
@@ -505,6 +523,15 @@ namespace render::gpudriven
                     shadowSystem->getShadowDataDescSet(),
                     shadowSystem->getShadowTextureDescSet());
             }
+        }
+
+        // Always update lighting descriptors when terrain or meshes may need them
+        if (meshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
+        {
+            meshShaderPipeline->updateLightingDescriptors(
+                lightBufferManager->getDescriptorSet(),
+                clusterGridManager->getDescriptorSet(),
+                lightCullingPipeline->getDescriptorSet());
         }
     }
 
@@ -1135,5 +1162,117 @@ namespace render::gpudriven
     uint32_t GPUDrivenRenderer::getLightsAfterHiZCull() const
     {
         return lightsAfterHiZCull;
+    }
+
+    void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)
+    {
+        terrainFrustumCullingEnabled = enabled;
+        if (terrainPipeline)
+        {
+            terrainPipeline->setFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void GPUDrivenRenderer::setTerrainMeshletCullingEnabled(bool enabled)
+    {
+        terrainMeshletCullingEnabled = enabled;
+        if (terrainPipeline)
+        {
+            terrainPipeline->setMeshletCullingEnabled(enabled);
+        }
+    }
+
+    void GPUDrivenRenderer::updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles)
+    {
+        if (!initialized || !terrainRenderingEnabled || !terrainAdapter || !terrainPipeline)
+        {
+            return;
+        }
+
+        if (visibleTiles.empty())
+        {
+            terrainTileData.clear();
+            return;
+        }
+
+        // Upload new tiles to GPU buffers
+        for (terrain::TerrainTile* tile : visibleTiles)
+        {
+            if (!tile || !tile->isVisible)
+            {
+                continue;
+            }
+
+            TerrainTileKey key{tile->coord.x, tile->coord.z};
+            if (!terrainAdapter->hasTile(key))
+            {
+                terrainAdapter->uploadTile(*tile);
+            }
+        }
+
+        // Build GPU tile data for rendering
+        terrainTileData = terrainAdapter->buildGPUTileData(visibleTiles);
+
+        // Upload to terrain pipeline
+        if (!terrainTileData.empty())
+        {
+            terrainPipeline->updateTileData(terrainTileData);
+        }
+    }
+
+    void GPUDrivenRenderer::clearTerrainData()
+    {
+        if (terrainAdapter)
+        {
+            terrainAdapter->clear();
+        }
+        terrainTileData.clear();
+    }
+
+    void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
+    {
+        if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)
+        {
+            return;
+        }
+
+        if (terrainTileData.empty())
+        {
+            return;
+        }
+
+        // Update external descriptor sets for terrain pipeline
+        terrainPipeline->updateExternalDescriptors(
+            iblDescriptorSet,
+            bindlessTextures->getDescriptorSet(),
+            meshShaderPipeline->getMeshletDataDescriptorSet(),
+            meshShaderPipeline->getVertexDataDescriptorSet(),
+            meshShaderPipeline->getLightDataDescriptorSet()
+        );
+
+        auto extent = swapChain.getSwapchainExtent();
+
+        uint32_t viewMode = currentViewMode;
+        if (meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;
+        if (meshletBackfaceCullingEnabled) viewMode |= TERRAIN_CULL_BACKFACE_BIT;
+
+        terrainPipeline->dispatch(
+            cmd,
+            viewMode,
+            static_cast<float>(extent.width),
+            static_cast<float>(extent.height),
+            terrainLODBias,
+            terrainErrorThreshold,
+            terrainTextureScale
+        );
+    }
+
+    TerrainCullingStats GPUDrivenRenderer::getTerrainCullingStats()
+    {
+        if (!terrainPipeline)
+        {
+            return TerrainCullingStats{};
+        }
+        return terrainPipeline->readStats();
     }
 }

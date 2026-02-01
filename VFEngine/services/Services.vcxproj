@@ -181,6 +181,7 @@
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
+    <ClInclude Include="providers\ITerrainRenderProvider.hpp" />
     <ClInclude Include="providers\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\IVFXRuntimeProvider.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />

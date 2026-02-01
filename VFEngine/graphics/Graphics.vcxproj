@@ -159,6 +159,8 @@
     <ClInclude Include="render\gpudriven\MeshShaderPipeline.hpp" />
     <ClInclude Include="render\gpudriven\MeshletBuffer.hpp" />
     <ClInclude Include="render\gpudriven\MeshletBufferTypes.hpp" />
+    <ClInclude Include="render\gpudriven\TerrainGPUAdapter.hpp" />
+    <ClInclude Include="render\gpudriven\TerrainMeshShaderPipeline.hpp" />
     <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
     <ClInclude Include="render\ibl\DefaultIBLTextureFactory.hpp" />
     <ClInclude Include="render\ibl\EnvironmentCubemapGenerator.hpp" />
@@ -273,6 +275,8 @@
     <ClCompile Include="render\gpudriven\MergedMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\MeshShaderPipeline.cpp" />
     <ClCompile Include="render\gpudriven\MeshletBuffer.cpp" />
+    <ClCompile Include="render\gpudriven\TerrainGPUAdapter.cpp" />
+    <ClCompile Include="render\gpudriven\TerrainMeshShaderPipeline.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
     <ClCompile Include="render\ibl\DefaultIBLTextureFactory.cpp" />
     <ClCompile Include="render\ibl\EnvironmentCubemapGenerator.cpp" />
@@ -327,7 +331,9 @@
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_shader_gpudriven.glsl" />
+    <None Include="..\..\resources\shaders\gpudriven\mesh_terrain.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\task_gpudriven.glsl" />
+    <None Include="..\..\resources\shaders\gpudriven\task_terrain.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_cull.glsl" />
     <None Include="..\..\resources\shaders\hiz\hiz_generate.glsl" />
     <None Include="..\..\resources\shaders\hiz\light_occlusion_cull.glsl" />

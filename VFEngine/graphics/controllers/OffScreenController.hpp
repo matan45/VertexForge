@@ -27,6 +27,7 @@ namespace render
 namespace services
 {
     class IVFXRuntimeProvider;
+    class ITerrainRenderProvider;
 }
 
 namespace controllers::offscreen
@@ -58,6 +59,7 @@ namespace controllers
         std::unique_ptr<offscreen::CullingStatsCollector> statsCollector;
 
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
+        std::unique_ptr<events::SubscriptionToken> terrainDeletedSubscription;
 
         bool showBillboardIcons = true;
         bool showDebugRendering = true;
@@ -137,6 +139,8 @@ namespace controllers
         void setLODSelectionEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
+        void setTerrainFrustumCullingEnabled(bool enabled);
+        void setTerrainMeshletCullingEnabled(bool enabled);
 
         void setShowClusterDebug(bool show) { showClusterDebug = show; }
         bool getShowClusterDebug() const { return showClusterDebug; }
@@ -147,5 +151,6 @@ namespace controllers
         void prepareFrameShadowDebug();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
+        void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
     };
 }
