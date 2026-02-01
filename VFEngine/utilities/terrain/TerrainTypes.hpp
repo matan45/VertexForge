@@ -14,15 +14,14 @@ namespace terrain
     {
         Low = 0,      // 33x33 vertices (32x32 quads) -> ~17 meshlets
         Medium = 1,   // 65x65 vertices (64x64 quads) -> ~66 meshlets
-        High = 2,     // 129x129 vertices (128x128 quads) -> ~264 meshlets
-        Ultra = 3     // 257x257 vertices (256x256 quads) -> ~1066 meshlets
+        High = 2      // 129x129 vertices (128x128 quads) -> ~264 meshlets
     };
 
     // Vertex counts per tile side for each resolution
-    constexpr std::array<uint32_t, 4> TILE_VERTEX_COUNTS = { 33, 65, 129, 257 };
+    constexpr std::array<uint32_t, 3> TILE_VERTEX_COUNTS = { 33, 65, 129 };
 
     // Quad counts per tile side for each resolution
-    constexpr std::array<uint32_t, 4> TILE_QUAD_COUNTS = { 32, 64, 128, 256 };
+    constexpr std::array<uint32_t, 3> TILE_QUAD_COUNTS = { 32, 64, 128 };
 
     // Maximum texture layers for weight-based terrain blending (RGBA8 = 4, can use multiple textures)
     constexpr uint32_t MAX_TERRAIN_LAYERS = 8;

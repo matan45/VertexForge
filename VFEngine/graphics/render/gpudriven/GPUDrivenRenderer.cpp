@@ -159,8 +159,12 @@ namespace render::gpudriven
                 loggerInfo("GPUDrivenRenderer: Meshlet streaming enabled");
             }
 
-            // Initialize terrain rendering pipeline
-            terrainAdapter = std::make_unique<TerrainGPUAdapter>(*mergedBuffer, *meshletBuffer);
+            // Initialize terrain rendering pipeline with dedicated buffers
+            terrainMeshBuffer = std::make_unique<TerrainMeshBuffer>(device);
+            terrainMeshBuffer->init();
+
+            terrainAdapter = std::make_unique<TerrainGPUAdapter>(*terrainMeshBuffer);
+            terrainStreamManager = std::make_unique<TerrainStreamManager>(*terrainMeshBuffer, *terrainAdapter);
 
             terrainPipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
             terrainPipeline->init(
@@ -224,6 +228,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         if (terrainPipeline) terrainPipeline->cleanup();
+        if (terrainMeshBuffer) terrainMeshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (shadowSystem) shadowSystem->cleanup();
@@ -239,8 +244,10 @@ namespace render::gpudriven
         if (mergedBuffer) mergedBuffer->cleanup();
 
         meshStreamManager.reset();
+        terrainStreamManager.reset();
         terrainAdapter.reset();
         terrainPipeline.reset();
+        terrainMeshBuffer.reset();
         lightOcclusionCulling.reset();
         meshShaderPipeline.reset();
         shadowSystem.reset();
@@ -549,6 +556,10 @@ namespace render::gpudriven
         if (meshletBuffer)
         {
             meshletBuffer->flushPendingTransfers();
+        }
+        if (terrainMeshBuffer)
+        {
+            terrainMeshBuffer->flushPendingTransfers();
         }
 
         batchManager->resetAllBatches(cmd);
@@ -1182,7 +1193,8 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles)
+    void GPUDrivenRenderer::updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                          const glm::vec3& cameraPosition)
     {
         if (!initialized || !terrainRenderingEnabled || !terrainAdapter || !terrainPipeline)
         {
@@ -1195,18 +1207,26 @@ namespace render::gpudriven
             return;
         }
 
-        // Upload new tiles to GPU buffers
-        for (terrain::TerrainTile* tile : visibleTiles)
+        // Use stream manager for memory-budgeted tile loading
+        if (terrainStreamManager)
         {
-            if (!tile || !tile->isVisible)
+            terrainStreamManager->update(visibleTiles, cameraPosition);
+        }
+        else
+        {
+            // Fallback: upload all tiles directly (legacy behavior)
+            for (terrain::TerrainTile* tile : visibleTiles)
             {
-                continue;
-            }
+                if (!tile || !tile->isVisible)
+                {
+                    continue;
+                }
 
-            TerrainTileKey key{tile->coord.x, tile->coord.z};
-            if (!terrainAdapter->hasTile(key))
-            {
-                terrainAdapter->uploadTile(*tile);
+                TerrainTileKey key{tile->coord.x, tile->coord.z};
+                if (!terrainAdapter->hasTile(key))
+                {
+                    terrainAdapter->uploadTile(*tile);
+                }
             }
         }
 
@@ -1222,7 +1242,11 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::clearTerrainData()
     {
-        if (terrainAdapter)
+        if (terrainStreamManager)
+        {
+            terrainStreamManager->clear();
+        }
+        else if (terrainAdapter)
         {
             terrainAdapter->clear();
         }
@@ -1241,12 +1265,13 @@ namespace render::gpudriven
             return;
         }
 
-        // Update external descriptor sets for terrain pipeline
-        terrainPipeline->updateExternalDescriptors(
+        // Update terrain-specific descriptors from dedicated terrain buffer
+        terrainPipeline->updateTerrainBufferDescriptors(*terrainMeshBuffer);
+
+        // Update shared descriptors (IBL, bindless textures, light data)
+        terrainPipeline->updateSharedDescriptors(
             iblDescriptorSet,
             bindlessTextures->getDescriptorSet(),
-            meshShaderPipeline->getMeshletDataDescriptorSet(),
-            meshShaderPipeline->getVertexDataDescriptorSet(),
             meshShaderPipeline->getLightDataDescriptorSet()
         );
 
@@ -1274,5 +1299,32 @@ namespace render::gpudriven
             return TerrainCullingStats{};
         }
         return terrainPipeline->readStats();
+    }
+
+    void GPUDrivenRenderer::setTerrainStreamingBudget(size_t bytes)
+    {
+        if (terrainStreamManager)
+        {
+            terrainStreamManager->setMemoryBudget(bytes);
+        }
+    }
+
+    size_t GPUDrivenRenderer::getTerrainStreamingBudget() const
+    {
+        if (terrainStreamManager)
+        {
+            return terrainStreamManager->getMemoryBudget();
+        }
+        return 0;
+    }
+
+    const TerrainStreamingStats& GPUDrivenRenderer::getTerrainStreamingStats() const
+    {
+        static TerrainStreamingStats emptyStats{};
+        if (terrainStreamManager)
+        {
+            return terrainStreamManager->getStats();
+        }
+        return emptyStats;
     }
 }

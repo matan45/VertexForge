@@ -160,7 +160,9 @@
     <ClInclude Include="render\gpudriven\MeshletBuffer.hpp" />
     <ClInclude Include="render\gpudriven\MeshletBufferTypes.hpp" />
     <ClInclude Include="render\gpudriven\TerrainGPUAdapter.hpp" />
+    <ClInclude Include="render\gpudriven\TerrainMeshBuffer.hpp" />
     <ClInclude Include="render\gpudriven\TerrainMeshShaderPipeline.hpp" />
+    <ClInclude Include="render\gpudriven\TerrainStreamManager.hpp" />
     <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
     <ClInclude Include="render\ibl\DefaultIBLTextureFactory.hpp" />
     <ClInclude Include="render\ibl\EnvironmentCubemapGenerator.hpp" />
@@ -276,7 +278,9 @@
     <ClCompile Include="render\gpudriven\MeshShaderPipeline.cpp" />
     <ClCompile Include="render\gpudriven\MeshletBuffer.cpp" />
     <ClCompile Include="render\gpudriven\TerrainGPUAdapter.cpp" />
+    <ClCompile Include="render\gpudriven\TerrainMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\TerrainMeshShaderPipeline.cpp" />
+    <ClCompile Include="render\gpudriven\TerrainStreamManager.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
     <ClCompile Include="render\ibl\DefaultIBLTextureFactory.cpp" />
     <ClCompile Include="render\ibl\EnvironmentCubemapGenerator.cpp" />

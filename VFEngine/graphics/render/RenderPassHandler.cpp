@@ -720,7 +720,7 @@ namespace render
                     loggerInfo("RenderPassHandler: Got {} visible terrain tiles from provider", visibleTiles.size());
                     loggedTerrainOnce = true;
                 }
-                gpuDrivenRenderer->updateTerrain(visibleTiles);
+                gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition);
             }
         }
 

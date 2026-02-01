@@ -8,7 +8,9 @@
 #include "GPUDrivenCameraBuffer.hpp"
 #include "MeshShaderPipeline.hpp"
 #include "TerrainMeshShaderPipeline.hpp"
+#include "TerrainMeshBuffer.hpp"
 #include "TerrainGPUAdapter.hpp"
+#include "TerrainStreamManager.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
@@ -78,8 +80,10 @@ namespace render::gpudriven
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
 
         // Terrain rendering
+        std::unique_ptr<TerrainMeshBuffer> terrainMeshBuffer;
         std::unique_ptr<TerrainMeshShaderPipeline> terrainPipeline;
         std::unique_ptr<TerrainGPUAdapter> terrainAdapter;
+        std::unique_ptr<TerrainStreamManager> terrainStreamManager;
         std::vector<TerrainTileGPUData> terrainTileData;
         bool terrainRenderingEnabled = true;
         float terrainLODBias = 1.0f;
@@ -237,7 +241,8 @@ namespace render::gpudriven
         void readBackLightOcclusionResults();
 
         // Terrain rendering methods
-        void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles);
+        void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                           const glm::vec3& cameraPosition);
         void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearTerrainData();
 
@@ -252,6 +257,12 @@ namespace render::gpudriven
 
         TerrainGPUAdapter* getTerrainAdapter() const { return terrainAdapter.get(); }
         TerrainCullingStats getTerrainCullingStats();
+
+        // Terrain streaming configuration
+        void setTerrainStreamingBudget(size_t bytes);
+        size_t getTerrainStreamingBudget() const;
+        const TerrainStreamingStats& getTerrainStreamingStats() const;
+        TerrainStreamManager* getTerrainStreamManager() const { return terrainStreamManager.get(); }
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);

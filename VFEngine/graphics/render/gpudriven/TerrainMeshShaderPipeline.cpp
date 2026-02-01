@@ -1,6 +1,5 @@
 #include "TerrainMeshShaderPipeline.hpp"
-#include "MeshletBuffer.hpp"
-#include "MergedMeshBuffer.hpp"
+#include "TerrainMeshBuffer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -76,6 +75,12 @@ namespace render::gpudriven
 
         core::BufferUtilities::destroyBuffer(vkDevice, tileDataBuffer, tileDataBufferMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
+
+        if (terrainBufferPool)
+        {
+            vkDevice.destroyDescriptorPool(terrainBufferPool);
+            terrainBufferPool = nullptr;
+        }
 
         if (terrainDataPool)
         {
@@ -430,16 +435,105 @@ namespace render::gpudriven
         core::BufferUtilities::destroyBuffer(vkDevice, stagingBuffer, stagingMemory);
     }
 
-    void TerrainMeshShaderPipeline::updateExternalDescriptors(vk::DescriptorSet iblDescSet,
-                                                               vk::DescriptorSet bindlessDescSet,
-                                                               vk::DescriptorSet meshletDescSet,
-                                                               vk::DescriptorSet vertexDescSet,
-                                                               vk::DescriptorSet lightDataDescSet)
+    void TerrainMeshShaderPipeline::updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer)
+    {
+        if (!initialized) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Create pool for terrain buffer descriptors if needed
+        if (!terrainBufferPool)
+        {
+            std::array<vk::DescriptorPoolSize, 1> poolSizes = {{
+                {vk::DescriptorType::eStorageBuffer, 6} // meshlets, vertices, primitives, vertex data, index
+            }};
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.maxSets = 2;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+
+            terrainBufferPool = vkDevice.createDescriptorPool(poolInfo);
+
+            // Allocate descriptor sets using cached layouts
+            std::array<vk::DescriptorSetLayout, 2> layouts = {
+                cachedMeshletLayout,
+                cachedVertexLayout
+            };
+
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = terrainBufferPool;
+            allocInfo.descriptorSetCount = 2;
+            allocInfo.pSetLayouts = layouts.data();
+
+            auto allocatedSets = vkDevice.allocateDescriptorSets(allocInfo);
+            terrainMeshletDescriptorSet = allocatedSets[0];
+            terrainVertexDescriptorSet = allocatedSets[1];
+        }
+
+        // Update meshlet descriptor set (set 3)
+        {
+            vk::DescriptorBufferInfo meshletInfo{};
+            meshletInfo.buffer = terrainBuffer.getMeshletBuffer();
+            meshletInfo.offset = 0;
+            meshletInfo.range = VK_WHOLE_SIZE;
+
+            vk::DescriptorBufferInfo vertexIndicesInfo{};
+            vertexIndicesInfo.buffer = terrainBuffer.getMeshletVertexBuffer();
+            vertexIndicesInfo.offset = 0;
+            vertexIndicesInfo.range = VK_WHOLE_SIZE;
+
+            vk::DescriptorBufferInfo primitivesInfo{};
+            primitivesInfo.buffer = terrainBuffer.getMeshletPrimitiveBuffer();
+            primitivesInfo.offset = 0;
+            primitivesInfo.range = VK_WHOLE_SIZE;
+
+            std::array<vk::WriteDescriptorSet, 3> writes{};
+            writes[0].dstSet = terrainMeshletDescriptorSet;
+            writes[0].dstBinding = 0;
+            writes[0].descriptorCount = 1;
+            writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[0].pBufferInfo = &meshletInfo;
+
+            writes[1].dstSet = terrainMeshletDescriptorSet;
+            writes[1].dstBinding = 1;
+            writes[1].descriptorCount = 1;
+            writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[1].pBufferInfo = &vertexIndicesInfo;
+
+            writes[2].dstSet = terrainMeshletDescriptorSet;
+            writes[2].dstBinding = 2;
+            writes[2].descriptorCount = 1;
+            writes[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[2].pBufferInfo = &primitivesInfo;
+
+            vkDevice.updateDescriptorSets(writes, {});
+        }
+
+        // Update vertex descriptor set (set 4)
+        {
+            vk::DescriptorBufferInfo vertexInfo{};
+            vertexInfo.buffer = terrainBuffer.getVertexBuffer();
+            vertexInfo.offset = 0;
+            vertexInfo.range = VK_WHOLE_SIZE;
+
+            vk::WriteDescriptorSet write{};
+            write.dstSet = terrainVertexDescriptorSet;
+            write.dstBinding = 0;
+            write.descriptorCount = 1;
+            write.descriptorType = vk::DescriptorType::eStorageBuffer;
+            write.pBufferInfo = &vertexInfo;
+
+            vkDevice.updateDescriptorSets(write, {});
+        }
+    }
+
+    void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,
+                                                            vk::DescriptorSet bindlessDescSet,
+                                                            vk::DescriptorSet lightDataDescSet)
     {
         iblDescriptorSet = iblDescSet;
         bindlessDescriptorSet = bindlessDescSet;
-        meshletDescriptorSet = meshletDescSet;
-        vertexDescriptorSet = vertexDescSet;
         lightDataDescriptorSet = lightDataDescSet;
     }
 
@@ -473,18 +567,7 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Bind descriptor sets
-        std::array<vk::DescriptorSet, 7> descriptorSets = {
-            iblDescriptorSet,           // Set 0
-            vk::DescriptorSet{},        // Set 1 (unused)
-            bindlessDescriptorSet,      // Set 2
-            meshletDescriptorSet,       // Set 3
-            vertexDescriptorSet,        // Set 4
-            vk::DescriptorSet{},        // Set 5 (unused)
-            terrainDataDescriptorSet    // Set 6
-        };
-
-        // Bind sets 0, 2-4, 6
+        // Bind descriptor sets individually
         if (iblDescriptorSet)
         {
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
@@ -495,15 +578,16 @@ namespace render::gpudriven
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 2,
                                    bindlessDescriptorSet, {});
         }
-        if (meshletDescriptorSet)
+        // Bind terrain-specific meshlet and vertex descriptors
+        if (terrainMeshletDescriptorSet)
         {
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 3,
-                                   meshletDescriptorSet, {});
+                                   terrainMeshletDescriptorSet, {});
         }
-        if (vertexDescriptorSet)
+        if (terrainVertexDescriptorSet)
         {
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 4,
-                                   vertexDescriptorSet, {});
+                                   terrainVertexDescriptorSet, {});
         }
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 6,
                                terrainDataDescriptorSet, {});

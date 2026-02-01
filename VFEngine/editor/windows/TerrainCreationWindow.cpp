@@ -27,8 +27,8 @@ namespace windows
             ImGui::Separator();
 
             // Resolution section
-            const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)", "Ultra (257x257)" };
-            ImGui::Combo("Tile Resolution", &resolutionIndex, resolutionNames, 4);
+            const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)" };
+            ImGui::Combo("Tile Resolution", &resolutionIndex, resolutionNames, 3);
 
             // Tile size
             ImGui::DragFloat("World Tile Size", &worldTileSize, 1.0f, 8.0f, 256.0f, "%.1f");

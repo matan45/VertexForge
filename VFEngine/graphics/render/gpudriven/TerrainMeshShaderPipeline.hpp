@@ -14,8 +14,7 @@ namespace core
 
 namespace render::gpudriven
 {
-    class MeshletBuffer;
-    class MergedMeshBuffer;
+    class TerrainMeshBuffer;
 
     // Push constants for terrain mesh shader pipeline
     struct TerrainPushConstants
@@ -70,12 +69,15 @@ namespace render::gpudriven
         vk::DescriptorSetLayout cachedVertexLayout;
         vk::DescriptorSetLayout cachedLightDataLayout;
 
-        // External descriptor sets (owned elsewhere)
+        // Shared descriptor sets (owned elsewhere)
         vk::DescriptorSet iblDescriptorSet;
         vk::DescriptorSet bindlessDescriptorSet;
-        vk::DescriptorSet meshletDescriptorSet;
-        vk::DescriptorSet vertexDescriptorSet;
         vk::DescriptorSet lightDataDescriptorSet;
+
+        // Terrain-specific descriptor sets (owned by this pipeline)
+        vk::DescriptorPool terrainBufferPool;
+        vk::DescriptorSet terrainMeshletDescriptorSet;
+        vk::DescriptorSet terrainVertexDescriptorSet;
 
         bool initialized = false;
 
@@ -105,12 +107,13 @@ namespace render::gpudriven
         // Update terrain tile data on GPU
         void updateTileData(const std::vector<TerrainTileGPUData>& tiles);
 
-        // Update external descriptor sets
-        void updateExternalDescriptors(vk::DescriptorSet iblDescSet,
-                                       vk::DescriptorSet bindlessDescSet,
-                                       vk::DescriptorSet meshletDescSet,
-                                       vk::DescriptorSet vertexDescSet,
-                                       vk::DescriptorSet lightDataDescSet);
+        // Update descriptors from dedicated terrain buffer
+        void updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer);
+
+        // Update IBL, bindless and light descriptors (terrain buffer handles meshlet/vertex)
+        void updateSharedDescriptors(vk::DescriptorSet iblDescSet,
+                                     vk::DescriptorSet bindlessDescSet,
+                                     vk::DescriptorSet lightDataDescSet);
 
         // Dispatch terrain rendering
         void dispatch(vk::CommandBuffer cmd,
