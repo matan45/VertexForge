@@ -2,6 +2,7 @@
 #include "../../interfaces/ITerrainService.hpp"
 #include "../../data/EntityHandle.hpp"
 #include "../../events/TerrainEvents.hpp"
+#include "../../events/EventDispatcher.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -10,11 +11,6 @@
 namespace scene
 {
     class SceneGraphSystem;
-}
-
-namespace events
-{
-    class EventDispatcher;
 }
 
 namespace terrain
@@ -33,6 +29,9 @@ namespace services
         // Active terrain grids (owned by this service)
         // Key: terrain parent entity handle value
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainGrid>> terrainGrids;
+
+        // Subscription for entity deletion events
+        std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -67,5 +66,8 @@ namespace services
     private:
         // Create child entities for each tile in the grid
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
+
+        // Handle entity deletion - clean up if it's a terrain
+        void onEntityDeleted(EntityHandle entity);
     };
 }

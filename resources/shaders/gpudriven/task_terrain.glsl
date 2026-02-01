@@ -119,22 +119,24 @@ bool coneCullTest(vec4 cone, mat4 modelMatrix, vec3 cameraPos, vec3 meshletCente
 uint selectLODByGeometricError(TerrainTileGPUData tile, float distance, float screenHeight) {
     // Avoid division by zero
     if (distance < 0.01) {
-        return 0; // Closest LOD
+        return 0; // Closest LOD (highest detail)
     }
 
     float lodBias = pc.lodBias > 0.0 ? pc.lodBias : 1.0;
     float threshold = pc.errorThreshold > 0.0 ? pc.errorThreshold : 2.0; // Default 2 pixels
 
-    // Calculate screen-space error for each LOD
-    // error_screen = error_world * (screenHeight / (2.0 * distance * tan(fov/2)))
-    // Simplified: error_screen ~= error_world * screenHeight / distance
+    // Calculate screen-space error factor
+    // error_screen = error_world * screenHeight / distance
+    // Higher lodBias = stricter quality (prefer finer LODs)
     float screenFactor = screenHeight / distance * lodBias;
 
-    // Select the coarsest LOD where projected error is below threshold
-    if (tile.lodGeometricErrors.x * screenFactor < threshold) return 0;
-    if (tile.lodGeometricErrors.y * screenFactor < threshold) return 1;
+    // Select the COARSEST LOD where projected error is below threshold
+    // Check from coarsest (LOD 3) to finest (LOD 0)
+    // LOD 3 has the highest geometric error
+    if (tile.lodGeometricErrors.w * screenFactor < threshold) return 3;
     if (tile.lodGeometricErrors.z * screenFactor < threshold) return 2;
-    return 3;
+    if (tile.lodGeometricErrors.y * screenFactor < threshold) return 1;
+    return 0; // Default to highest detail
 }
 
 void main() {

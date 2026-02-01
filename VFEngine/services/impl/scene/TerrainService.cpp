@@ -10,6 +10,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
+#include "../../events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
 
 namespace services
@@ -30,6 +31,12 @@ namespace services
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetVisibleTerrainTilesQuery>();
+
+        // Unsubscribe from entity deletion
+        if (entityDeletedSubscription && entityDeletedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*entityDeletedSubscription);
+        }
 
         terrainGrids.clear();
     }
@@ -81,6 +88,14 @@ namespace services
                 // This command exists for future use if needed
                 return true;
             });
+
+        // Subscribe to entity deletion to clean up terrain when deleted via scene hierarchy
+        auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
+            [this](const events::scene::EntityDeletedNotification& notification)
+            {
+                onEntityDeleted(notification.entity);
+            });
+        entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(token);
     }
 
     EntityHandle TerrainService::createTerrain(const TerrainCreationData& config)
@@ -388,5 +403,24 @@ namespace services
             count += grid->getAllTiles().size();
         }
         return count;
+    }
+
+    void TerrainService::onEntityDeleted(EntityHandle entity)
+    {
+        if (!entity.isValid())
+            return;
+
+        // Check if this entity was a terrain parent
+        auto it = terrainGrids.find(entity.id);
+        if (it != terrainGrids.end())
+        {
+            // Remove the terrain grid
+            terrainGrids.erase(it);
+
+            // Publish notification so graphics layer can clear GPU buffers
+            events::terrain::TerrainDeletedNotification notification;
+            notification.terrainEntity = entity;
+            events::EventDispatcher::instance().publish(notification);
+        }
     }
 }
