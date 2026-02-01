@@ -1,4 +1,5 @@
 #include "TerrainTileGenerator.hpp"
+#include "../print/EditorLogger.hpp"
 #include <algorithm>
 #include <cmath>
 #include <meshoptimizer.h>
@@ -192,6 +193,15 @@ namespace terrain
             for (unsigned int t = 0; t < m.triangle_count; ++t)
             {
                 size_t triOffset = m.triangle_offset + t * 3;
+
+                // Bounds check to prevent buffer overflow if meshoptimizer returns unexpected data
+                if (triOffset + 2 >= meshletTriangleIndices.size())
+                {
+                    vfLogWarning("Meshlet triangle index out of bounds: offset {} >= size {}",
+                                  triOffset + 2, meshletTriangleIndices.size());
+                    break;
+                }
+
                 uint32_t packed =
                     static_cast<uint32_t>(meshletTriangleIndices[triOffset]) |
                     (static_cast<uint32_t>(meshletTriangleIndices[triOffset + 1]) << 8) |
