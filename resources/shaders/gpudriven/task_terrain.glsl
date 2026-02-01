@@ -9,7 +9,7 @@
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 const uint TASK_WORKGROUP_SIZE = 32;
-const uint MAX_MESHLETS_PER_PAYLOAD = 32;
+const uint MAX_MESHLETS_PER_PAYLOAD = 512; // For High (129x129) tiles
 
 // Camera data
 layout(set = 0, binding = 0) uniform CameraUBO {
@@ -63,7 +63,8 @@ struct TerrainMeshletPayload {
 taskPayloadSharedEXT TerrainMeshletPayload payload;
 
 shared uint sharedVisibleCount;
-shared uint sharedMeshletIndices[TASK_WORKGROUP_SIZE];
+shared uint sharedMeshletIndices[MAX_MESHLETS_PER_PAYLOAD];
+shared uint sharedTileData[8]; // For broadcasting tile visibility/LOD data
 
 // Test if AABB is inside frustum
 bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
@@ -139,6 +140,23 @@ uint selectLODByGeometricError(TerrainTileGPUData tile, float distance, float sc
     return 0; // Default to highest detail
 }
 
+// Find the best available LOD (one that has meshlets loaded)
+// Tries the ideal LOD first, then searches for alternatives
+uint findBestAvailableLOD(TerrainTileGPUData tile, uint idealLOD) {
+    // First try the ideal LOD
+    uvec4 data = getTerrainLODMeshletData(tile, idealLOD);
+    if (data.y > 0) return idealLOD; // meshletCount > 0
+
+    // Try finer LODs first (lower indices = higher detail)
+    for (uint lod = 0; lod < 4; lod++) {
+        uvec4 lodData = getTerrainLODMeshletData(tile, lod);
+        if (lodData.y > 0) return lod;
+    }
+
+    // Nothing available
+    return idealLOD; // Return ideal even if empty (will result in 0 meshlets)
+}
+
 void main() {
     uint tileIndex = gl_WorkGroupID.x;
 
@@ -180,7 +198,10 @@ void main() {
         if (tileVisible) {
             // Stage 2: GPU LOD selection based on geometric error
             float distance = length(tile.boundingSphere.xyz - camera.cameraPos);
-            selectedLOD = selectLODByGeometricError(tile, distance, pc.screenHeight);
+            uint idealLOD = selectLODByGeometricError(tile, distance, pc.screenHeight);
+
+            // Find the best available LOD (handles streaming where only one LOD is loaded)
+            selectedLOD = findBestAvailableLOD(tile, idealLOD);
 
             // Track LOD distribution
             if (selectedLOD == 0) atomicAdd(stats.lodCount0, 1);
@@ -198,23 +219,22 @@ void main() {
 
     // Broadcast tile visibility and LOD data to all threads
     barrier();
-    // Use shared memory to broadcast
+    // Use dedicated shared memory for tile data broadcast
     if (gl_LocalInvocationID.x == 0) {
-        // Store data for other threads
-        sharedMeshletIndices[0] = tileVisible ? 1 : 0;
-        sharedMeshletIndices[1] = selectedLOD;
-        sharedMeshletIndices[2] = meshletOffset;
-        sharedMeshletIndices[3] = meshletCount;
-        sharedMeshletIndices[4] = baseVertexOffset;
+        sharedTileData[0] = tileVisible ? 1 : 0;
+        sharedTileData[1] = selectedLOD;
+        sharedTileData[2] = meshletOffset;
+        sharedTileData[3] = meshletCount;
+        sharedTileData[4] = baseVertexOffset;
     }
     barrier();
 
     // All threads read the broadcast data
-    tileVisible = sharedMeshletIndices[0] != 0;
-    selectedLOD = sharedMeshletIndices[1];
-    meshletOffset = sharedMeshletIndices[2];
-    meshletCount = sharedMeshletIndices[3];
-    baseVertexOffset = sharedMeshletIndices[4];
+    tileVisible = sharedTileData[0] != 0;
+    selectedLOD = sharedTileData[1];
+    meshletOffset = sharedTileData[2];
+    meshletCount = sharedTileData[3];
+    baseVertexOffset = sharedTileData[4];
 
     // Reset shared visible count
     if (gl_LocalInvocationID.x == 0) {

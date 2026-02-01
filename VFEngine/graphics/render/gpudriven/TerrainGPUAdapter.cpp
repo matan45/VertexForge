@@ -1,15 +1,12 @@
 #include "TerrainGPUAdapter.hpp"
-#include "MergedMeshBuffer.hpp"
-#include "MeshletBuffer.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "print/EditorLogger.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace render::gpudriven
 {
-    TerrainGPUAdapter::TerrainGPUAdapter(MergedMeshBuffer& mergedBuffer, MeshletBuffer& meshletBuffer)
-        : mergedBuffer_(mergedBuffer)
-        , meshletBuffer_(meshletBuffer)
+    TerrainGPUAdapter::TerrainGPUAdapter(TerrainMeshBuffer& terrainBuffer)
+        : terrainBuffer_(terrainBuffer)
     {
     }
 
@@ -61,34 +58,21 @@ namespace render::gpudriven
 
         std::string tileKey = alloc.getMeshPath();
 
-        // Allocate vertex/index space in MergedMeshBuffer
-        SubmeshLocation* meshLoc = mergedBuffer_.allocateTerrainTile(
+        // Allocate space in TerrainMeshBuffer
+        TerrainTileGeometry* tileGeom = terrainBuffer_.allocateTile(
             tileKey,
             vertexCounts,
             indexCounts,
+            meshletCounts,
+            meshletVertexCounts,
+            meshletPrimitiveCounts,
             alloc.aabbMin,
             alloc.aabbMax
         );
 
-        if (!meshLoc)
+        if (!tileGeom)
         {
-            vfLogError("TerrainGPUAdapter: Failed to allocate mesh buffer for tile ({}, {})",
-                       key.coordX, key.coordZ);
-            return nullptr;
-        }
-
-        // Allocate meshlet space in MeshletBuffer
-        MeshletAllocation* meshletAlloc = meshletBuffer_.allocateTerrainTile(
-            tileKey,
-            meshletCounts,
-            meshletVertexCounts,
-            meshletPrimitiveCounts
-        );
-
-        if (!meshletAlloc)
-        {
-            mergedBuffer_.freeTerrainTile(tileKey);
-            vfLogError("TerrainGPUAdapter: Failed to allocate meshlet buffer for tile ({}, {})",
+            vfLogError("TerrainGPUAdapter: Failed to allocate buffer for tile ({}, {})",
                        key.coordX, key.coordZ);
             return nullptr;
         }
@@ -104,24 +88,123 @@ namespace render::gpudriven
             }
         }
 
-        // Copy allocation info from buffers
+        // Copy allocation info from buffer
         for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
         {
-            alloc.lodAllocs[lod].vertexOffset = meshLoc->lods[lod].vertexOffset;
-            alloc.lodAllocs[lod].vertexCount = meshLoc->lods[lod].vertexCount;
-            alloc.lodAllocs[lod].indexOffset = meshLoc->lods[lod].indexOffset;
-            alloc.lodAllocs[lod].indexCount = meshLoc->lods[lod].indexCount;
+            const auto& geomLod = tileGeom->lods[lod];
+            alloc.lodAllocs[lod].vertexOffset = geomLod.vertexOffset;
+            alloc.lodAllocs[lod].vertexCount = geomLod.vertexCount;
+            alloc.lodAllocs[lod].indexOffset = geomLod.indexOffset;
+            alloc.lodAllocs[lod].indexCount = geomLod.indexCount;
+            alloc.lodAllocs[lod].meshletOffset = geomLod.meshletOffset;
+            alloc.lodAllocs[lod].meshletCount = geomLod.meshletCount;
+            alloc.lodAllocs[lod].meshletVertexOffset = geomLod.meshletVertexOffset;
+            alloc.lodAllocs[lod].meshletVertexCount = geomLod.meshletVertexCount;
+            alloc.lodAllocs[lod].meshletPrimitiveOffset = geomLod.meshletPrimitiveOffset;
+            alloc.lodAllocs[lod].meshletPrimitiveCount = geomLod.meshletPrimitiveCount;
+            alloc.lodAllocs[lod].isAllocated = geomLod.isAllocated;
+        }
 
-            if (meshletAlloc->lods[lod].isAllocated)
-            {
-                alloc.lodAllocs[lod].meshletOffset = meshletAlloc->lods[lod].meshletOffset;
-                alloc.lodAllocs[lod].meshletCount = meshletAlloc->lods[lod].meshletCount;
-                alloc.lodAllocs[lod].meshletVertexOffset = meshletAlloc->lods[lod].vertexOffset;
-                alloc.lodAllocs[lod].meshletVertexCount = meshletAlloc->lods[lod].vertexCount;
-                alloc.lodAllocs[lod].meshletPrimitiveOffset = meshletAlloc->lods[lod].primitiveOffset;
-                alloc.lodAllocs[lod].meshletPrimitiveCount = meshletAlloc->lods[lod].primitiveCount;
-                alloc.lodAllocs[lod].isAllocated = true;
-            }
+        alloc.isUploaded = true;
+
+        auto [it, inserted] = allocations_.emplace(key, std::move(alloc));
+        return &it->second;
+    }
+
+    TerrainTileAllocation* TerrainGPUAdapter::uploadTileSingleLOD(
+        const terrain::TerrainTile& tile, uint32_t lodLevel)
+    {
+        if (lodLevel >= LOD_LEVEL_COUNT)
+        {
+            vfLogError("TerrainGPUAdapter: Invalid LOD level {}", lodLevel);
+            return nullptr;
+        }
+
+        TerrainTileKey key{tile.coord.x, tile.coord.z};
+
+        // Check if already uploaded
+        auto existingIt = allocations_.find(key);
+        if (existingIt != allocations_.end())
+        {
+            // Already have this tile - return existing allocation
+            return &existingIt->second;
+        }
+
+        TerrainTileAllocation alloc;
+        alloc.key = key;
+        alloc.aabbMin = tile.worldBounds.min;
+        alloc.aabbMax = tile.worldBounds.max;
+
+        // Calculate bounding sphere
+        glm::vec3 center = (alloc.aabbMin + alloc.aabbMax) * 0.5f;
+        float radius = glm::length(alloc.aabbMax - center);
+        alloc.boundingSphere = glm::vec4(center, radius);
+
+        // Store geometric errors for all LODs (needed for GPU LOD selection)
+        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        {
+            alloc.geometricErrors[lod] = tile.lodLevels[lod].geometricError;
+        }
+
+        // Only collect counts for the requested LOD - zero for others
+        std::array<uint32_t, LOD_LEVEL_COUNT> vertexCounts{};
+        std::array<uint32_t, LOD_LEVEL_COUNT> indexCounts{};
+        std::array<uint32_t, LOD_LEVEL_COUNT> meshletCounts{};
+        std::array<uint32_t, LOD_LEVEL_COUNT> meshletVertexCounts{};
+        std::array<uint32_t, LOD_LEVEL_COUNT> meshletPrimitiveCounts{};
+
+        const auto& lodData = tile.lodLevels[lodLevel];
+        vertexCounts[lodLevel] = static_cast<uint32_t>(lodData.vertices.size());
+        indexCounts[lodLevel] = static_cast<uint32_t>(lodData.indices.size());
+        meshletCounts[lodLevel] = static_cast<uint32_t>(lodData.meshlets.size());
+        meshletVertexCounts[lodLevel] = static_cast<uint32_t>(lodData.meshletVertices.size());
+        meshletPrimitiveCounts[lodLevel] = static_cast<uint32_t>(lodData.meshletPrimitives.size());
+
+        std::string tileKey = alloc.getMeshPath();
+
+        // Allocate space only for the requested LOD
+        TerrainTileGeometry* tileGeom = terrainBuffer_.allocateTile(
+            tileKey,
+            vertexCounts,
+            indexCounts,
+            meshletCounts,
+            meshletVertexCounts,
+            meshletPrimitiveCounts,
+            alloc.aabbMin,
+            alloc.aabbMax
+        );
+
+        if (!tileGeom)
+        {
+            vfLogError("TerrainGPUAdapter: Failed to allocate buffer for tile ({}, {}) LOD {}",
+                       key.coordX, key.coordZ, lodLevel);
+            return nullptr;
+        }
+
+        // Upload only the requested LOD
+        if (!uploadLODData(alloc, lodData, lodLevel, tile.worldOrigin))
+        {
+            vfLogError("TerrainGPUAdapter: Failed to upload LOD {} for tile ({}, {})",
+                       lodLevel, key.coordX, key.coordZ);
+            terrainBuffer_.freeTile(tileKey);
+            return nullptr;
+        }
+
+        // Copy allocation info from buffer
+        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        {
+            const auto& geomLod = tileGeom->lods[lod];
+            alloc.lodAllocs[lod].vertexOffset = geomLod.vertexOffset;
+            alloc.lodAllocs[lod].vertexCount = geomLod.vertexCount;
+            alloc.lodAllocs[lod].indexOffset = geomLod.indexOffset;
+            alloc.lodAllocs[lod].indexCount = geomLod.indexCount;
+            alloc.lodAllocs[lod].meshletOffset = geomLod.meshletOffset;
+            alloc.lodAllocs[lod].meshletCount = geomLod.meshletCount;
+            alloc.lodAllocs[lod].meshletVertexOffset = geomLod.meshletVertexOffset;
+            alloc.lodAllocs[lod].meshletVertexCount = geomLod.meshletVertexCount;
+            alloc.lodAllocs[lod].meshletPrimitiveOffset = geomLod.meshletPrimitiveOffset;
+            alloc.lodAllocs[lod].meshletPrimitiveCount = geomLod.meshletPrimitiveCount;
+            alloc.lodAllocs[lod].isAllocated = geomLod.isAllocated;
         }
 
         alloc.isUploaded = true;
@@ -140,9 +223,8 @@ namespace render::gpudriven
 
         std::string tileKey = it->second.getMeshPath();
 
-        // Free from both buffers
-        mergedBuffer_.freeTerrainTile(tileKey);
-        meshletBuffer_.freeTerrainTile(tileKey);
+        // Free from buffer
+        terrainBuffer_.freeTile(tileKey);
 
         allocations_.erase(it);
     }
@@ -202,8 +284,7 @@ namespace render::gpudriven
         for (auto& [key, alloc] : allocations_)
         {
             std::string tileKey = alloc.getMeshPath();
-            mergedBuffer_.freeTerrainTile(tileKey);
-            meshletBuffer_.freeTerrainTile(tileKey);
+            terrainBuffer_.freeTile(tileKey);
         }
         allocations_.clear();
     }
@@ -222,8 +303,6 @@ namespace render::gpudriven
         std::string tileKey = alloc.getMeshPath();
 
         // Transform vertices from tile-local space to world space
-        // Terrain vertices are generated in local space (0 to tileSize for X/Z)
-        // Height (Y) values are already absolute world heights - don't add worldOrigin.y
         std::vector<resource::Vertex> worldSpaceVertices = lodData.vertices;
         for (auto& vertex : worldSpaceVertices)
         {
@@ -232,17 +311,18 @@ namespace render::gpudriven
             vertex.position.z += worldOrigin.z;
         }
 
-        // Upload vertex/index data to MergedMeshBuffer
-        bool meshSuccess = mergedBuffer_.uploadTerrainLOD(
-            tileKey,
-            lodLevel,
-            worldSpaceVertices.data(),
-            static_cast<uint32_t>(worldSpaceVertices.size()),
-            lodData.indices.data(),
-            static_cast<uint32_t>(lodData.indices.size())
-        );
+        // Upload vertex data
+        if (!terrainBuffer_.uploadLODVertices(tileKey, lodLevel,
+                                               worldSpaceVertices.data(),
+                                               static_cast<uint32_t>(worldSpaceVertices.size())))
+        {
+            return false;
+        }
 
-        if (!meshSuccess)
+        // Upload index data
+        if (!terrainBuffer_.uploadLODIndices(tileKey, lodLevel,
+                                              lodData.indices.data(),
+                                              static_cast<uint32_t>(lodData.indices.size())))
         {
             return false;
         }
@@ -251,13 +331,15 @@ namespace render::gpudriven
         if (!lodData.meshlets.empty())
         {
             // Get the allocation to determine base vertex offset
-            const SubmeshLocation* meshLoc = mergedBuffer_.getSubmeshLocation(tileKey, "terrain", 0);
-            if (!meshLoc)
+            const TerrainTileGeometry* tileGeom = terrainBuffer_.getTileGeometry(tileKey);
+            if (!tileGeom)
             {
                 return false;
             }
 
-            uint32_t baseVertexOffset = meshLoc->lods[lodLevel].vertexOffset;
+            uint32_t baseVertexOffset = tileGeom->lods[lodLevel].vertexOffset;
+            uint32_t meshletVertexOffset = tileGeom->lods[lodLevel].meshletVertexOffset;
+            uint32_t meshletPrimitiveOffset = tileGeom->lods[lodLevel].meshletPrimitiveOffset;
 
             // Convert meshlets to GPU format with world-space bounding spheres
             std::vector<GPUMeshlet> gpuMeshlets;
@@ -266,43 +348,25 @@ namespace render::gpudriven
             for (const auto& srcMeshlet : lodData.meshlets)
             {
                 GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
+
                 // Transform bounding sphere center from local space to world space
-                // Only X and Z need offset - Y (height) is already absolute
                 meshlet.boundingSphere.x += worldOrigin.x;
-                // meshlet.boundingSphere.y is already absolute height - leave as-is
                 meshlet.boundingSphere.z += worldOrigin.z;
+
+                // Update offsets to use allocated positions
+                meshlet.vertexOffset += meshletVertexOffset;
+                meshlet.primitiveOffset += meshletPrimitiveOffset;
+
                 gpuMeshlets.push_back(meshlet);
             }
 
-            // Get meshlet allocation to determine offsets
-            const MeshletAllocation* meshletAlloc = meshletBuffer_.getAllocation(tileKey, "terrain", 0);
-            if (!meshletAlloc || !meshletAlloc->lods[lodLevel].isAllocated)
-            {
-                return false;
-            }
-
-            const auto& lodAlloc = meshletAlloc->lods[lodLevel];
-
-            // Offset vertex indices and primitive indices for this LOD's allocation
-            std::vector<uint32_t> vertexIndices = lodData.meshletVertices;
-            std::vector<uint32_t> primitives = lodData.meshletPrimitives;
-
-            // Update meshlet offsets to use allocated positions
-            for (size_t i = 0; i < gpuMeshlets.size(); ++i)
-            {
-                gpuMeshlets[i].vertexOffset += lodAlloc.vertexOffset;
-                gpuMeshlets[i].primitiveOffset += lodAlloc.primitiveOffset;
-            }
-
-            bool meshletSuccess = meshletBuffer_.uploadTerrainMeshletLOD(
-                tileKey,
-                lodLevel,
-                gpuMeshlets,
-                vertexIndices,
-                primitives
-            );
-
-            if (!meshletSuccess)
+            if (!terrainBuffer_.uploadLODMeshlets(tileKey, lodLevel,
+                                                   gpuMeshlets.data(),
+                                                   static_cast<uint32_t>(gpuMeshlets.size()),
+                                                   lodData.meshletVertices.data(),
+                                                   static_cast<uint32_t>(lodData.meshletVertices.size()),
+                                                   lodData.meshletPrimitives.data(),
+                                                   static_cast<uint32_t>(lodData.meshletPrimitives.size())))
             {
                 return false;
             }
@@ -401,7 +465,7 @@ namespace render::gpudriven
             // Flags - mark as terrain tile
             gpuTile.flags = ObjectFlags::TerrainTile;
 
-            // Material index - default for now, will be set by terrain material system (VK-178)
+            // Material index - default for now
             gpuTile.materialIndex = 0;
 
             result.push_back(gpuTile);

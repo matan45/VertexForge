@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GPUDrivenTypes.hpp"
-#include "MeshletBufferTypes.hpp"
+#include "TerrainMeshBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "resource/MeshletTypes.hpp"
 #include <glm/glm.hpp>
@@ -18,9 +18,6 @@ namespace terrain
 
 namespace render::gpudriven
 {
-    class MergedMeshBuffer;
-    class MeshletBuffer;
-
     // Unique key for terrain tiles in GPU buffers
     struct TerrainTileKey
     {
@@ -48,13 +45,13 @@ namespace render::gpudriven
     // Per-LOD allocation info for a terrain tile
     struct TerrainLODAllocation
     {
-        // Vertex/index allocation in MergedMeshBuffer
+        // Vertex/index allocation
         uint32_t vertexOffset = 0;
         uint32_t vertexCount = 0;
         uint32_t indexOffset = 0;
         uint32_t indexCount = 0;
 
-        // Meshlet allocation in MeshletBuffer
+        // Meshlet allocation
         uint32_t meshletOffset = 0;
         uint32_t meshletCount = 0;
         uint32_t meshletVertexOffset = 0;
@@ -98,24 +95,28 @@ namespace render::gpudriven
     };
 
     // Adapter that converts terrain tiles to GPU-compatible format
+    // Uses dedicated TerrainMeshBuffer for terrain geometry
     class TerrainGPUAdapter
     {
     private:
-        MergedMeshBuffer& mergedBuffer_;
-        MeshletBuffer& meshletBuffer_;
+        TerrainMeshBuffer& terrainBuffer_;
 
         std::unordered_map<TerrainTileKey, TerrainTileAllocation, TerrainTileKeyHash> allocations_;
 
     public:
-        TerrainGPUAdapter(MergedMeshBuffer& mergedBuffer, MeshletBuffer& meshletBuffer);
+        explicit TerrainGPUAdapter(TerrainMeshBuffer& terrainBuffer);
         ~TerrainGPUAdapter();
 
         TerrainGPUAdapter(const TerrainGPUAdapter&) = delete;
         TerrainGPUAdapter& operator=(const TerrainGPUAdapter&) = delete;
 
-        // Upload a terrain tile's geometry to GPU buffers
+        // Upload a terrain tile's geometry to GPU buffers (all LODs)
         // Returns allocation info for tracking, nullptr on failure
         TerrainTileAllocation* uploadTile(const terrain::TerrainTile& tile);
+
+        // Upload only a single LOD level for a tile (memory efficient)
+        // If tile doesn't exist, creates allocation. If exists, upgrades/downgrades LOD.
+        TerrainTileAllocation* uploadTileSingleLOD(const terrain::TerrainTile& tile, uint32_t lodLevel);
 
         // Remove a tile from GPU buffers
         void removeTile(const TerrainTileKey& key);
@@ -141,6 +142,10 @@ namespace render::gpudriven
         // Converts TerrainTileAllocation + TerrainTile to TerrainTileGPUData format
         std::vector<TerrainTileGPUData> buildGPUTileData(
             const std::vector<terrain::TerrainTile*>& tiles) const;
+
+        // Access to underlying buffer for descriptor binding
+        TerrainMeshBuffer& getTerrainBuffer() { return terrainBuffer_; }
+        const TerrainMeshBuffer& getTerrainBuffer() const { return terrainBuffer_; }
 
     private:
         // Upload single LOD data to GPU buffers
