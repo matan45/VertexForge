@@ -38,6 +38,12 @@ namespace events {
         template<typename TQuery>
         void registerQueryHandler(std::function<typename TQuery::ResultType(const TQuery&)> handler);
 
+        template<typename TCommand>
+        void unregisterCommandHandler();
+
+        template<typename TQuery>
+        void unregisterQueryHandler();
+
         // Notification subscription - returns token for unsubscribing
         template<typename TNotification>
         SubscriptionToken subscribe(std::function<void(const TNotification&)> handler);
@@ -132,6 +138,18 @@ namespace events {
             vfLogWarning("Query handler for '{}' is being replaced. This may indicate duplicate registration.", typeid(TQuery).name());
         }
         queryHandlers[typeIdx] = std::move(handler);
+    }
+
+    template<typename TCommand>
+    void EventDispatcher::unregisterCommandHandler() {
+        std::unique_lock lock(mutex);
+        commandHandlers.erase(std::type_index(typeid(TCommand)));
+    }
+
+    template<typename TQuery>
+    void EventDispatcher::unregisterQueryHandler() {
+        std::unique_lock lock(mutex);
+        queryHandlers.erase(std::type_index(typeid(TQuery)));
     }
 
     template<typename TNotification>

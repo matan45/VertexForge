@@ -138,6 +138,7 @@
     <ClInclude Include="windows\ProjectSettingsWindow.hpp" />
     <ClInclude Include="windows\RenderConfigWindow.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
+    <ClInclude Include="windows\TerrainCreationWindow.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
     <ClInclude Include="windows\ViewPortGizmo.hpp" />
     <ClInclude Include="windows\ViewPortOverlay.hpp" />
@@ -217,6 +218,7 @@
     <ClCompile Include="windows\ProjectSettingsWindow.cpp" />
     <ClCompile Include="windows\RenderConfigWindow.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
+    <ClCompile Include="windows\TerrainCreationWindow.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
     <ClCompile Include="windows\ViewPortGizmo.cpp" />
     <ClCompile Include="windows\ViewPortOverlay.cpp" />

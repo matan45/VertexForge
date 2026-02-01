@@ -16,6 +16,7 @@
 #include "impl/VFXPlayModeHandler.hpp"
 #include "impl/VFXRuntimeServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
+#include "impl/scene/TerrainService.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
 #include "time/Timer.hpp"
@@ -111,6 +112,7 @@ namespace handlers
         renderService.reset();
         sceneService.reset();
 
+        terrainService.reset();
         projectService.reset();
         fileOperationsService.reset();
         undoRedoService.reset();
@@ -192,6 +194,8 @@ namespace handlers
 
         projectService = std::make_shared<services::ProjectServiceImpl>();
 
+        terrainService = std::make_shared<services::TerrainService>(bootstrap->getSceneGraphSystem());
+
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
@@ -204,6 +208,7 @@ namespace handlers
         fileOperationsService->registerEventHandlers();
         physicsService->registerEventHandlers();
         projectService->registerEventHandlers();
+        terrainService->registerEventHandlers();
 
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
