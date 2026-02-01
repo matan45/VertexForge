@@ -1,6 +1,8 @@
 #include "TerrainTileGenerator.hpp"
+#include "../print/EditorLogger.hpp"
 #include <algorithm>
 #include <cmath>
+#include <meshoptimizer.h>
 
 namespace terrain
 {
@@ -91,6 +93,9 @@ namespace terrain
         // Extract edge vertices for stitching
         extractEdgeVertices(tile, lodLevel);
 
+        // Generate meshlets for GPU mesh shading
+        generateMeshlets(lodData);
+
         tile.isDirty = false;
     }
 
@@ -100,12 +105,18 @@ namespace terrain
         {
             if (progress)
             {
-                float lodProgress = 0.2f + (static_cast<float>(lod) / TERRAIN_LOD_COUNT) * 0.7f;
+                float lodProgress = 0.2f + (static_cast<float>(lod) / TERRAIN_LOD_COUNT) * 0.6f;
                 progress(lodProgress, "Generating LOD " + std::to_string(lod));
             }
 
             generateLODGeometry(tile, lod);
         }
+
+        // Compute geometric error metrics for each LOD level
+        if (progress)
+            progress(0.85f, "Computing error metrics");
+
+        computeAllLODErrors(tile);
 
         if (progress)
             progress(0.9f, "Finalizing");
@@ -113,11 +124,117 @@ namespace terrain
 
     void TerrainTileGenerator::generateMeshlets(TileLODData& lodData) const
     {
-        // Stub implementation - full meshlet generation will be in VK-196
-        // This would use meshoptimizer to build meshlets from the geometry
         lodData.meshlets.clear();
         lodData.meshletVertices.clear();
         lodData.meshletPrimitives.clear();
+
+        if (lodData.indices.empty() || lodData.vertices.empty())
+            return;
+
+        // 1. Calculate max meshlets needed
+        const size_t maxMeshlets = meshopt_buildMeshletsBound(
+            lodData.indices.size(),
+            resource::MAX_MESHLET_VERTICES,
+            resource::MAX_MESHLET_PRIMITIVES
+        );
+
+        // 2. Allocate temporary arrays for meshoptimizer
+        std::vector<meshopt_Meshlet> meshoptMeshlets(maxMeshlets);
+        std::vector<unsigned int> meshletVertexIndices(maxMeshlets * resource::MAX_MESHLET_VERTICES);
+        std::vector<unsigned char> meshletTriangleIndices(maxMeshlets * resource::MAX_MESHLET_PRIMITIVES * 3);
+
+        // 3. Build meshlets (cone_weight=0.0f for terrain - mostly planar surfaces)
+        size_t meshletCount = meshopt_buildMeshlets(
+            meshoptMeshlets.data(),
+            meshletVertexIndices.data(),
+            meshletTriangleIndices.data(),
+            lodData.indices.data(),
+            lodData.indices.size(),
+            reinterpret_cast<const float*>(lodData.vertices.data()),
+            lodData.vertices.size(),
+            sizeof(resource::Vertex),
+            resource::MAX_MESHLET_VERTICES,
+            resource::MAX_MESHLET_PRIMITIVES,
+            0.0f
+        );
+
+        if (meshletCount == 0)
+            return;
+
+        // 4. Trim arrays to actual size
+        const auto& lastMeshlet = meshoptMeshlets[meshletCount - 1];
+        size_t totalVertexIndices = lastMeshlet.vertex_offset + lastMeshlet.vertex_count;
+        size_t totalTriangleIndices = lastMeshlet.triangle_offset +
+            ((lastMeshlet.triangle_count * 3 + 3) & ~3);  // Round up to 4-byte alignment
+
+        meshoptMeshlets.resize(meshletCount);
+        meshletVertexIndices.resize(totalVertexIndices);
+        meshletTriangleIndices.resize(totalTriangleIndices);
+
+        // 5. Convert to engine format
+        lodData.meshlets.resize(meshletCount);
+        lodData.meshletVertices.resize(totalVertexIndices);
+        lodData.meshletPrimitives.reserve(meshletCount * resource::MAX_MESHLET_PRIMITIVES);
+
+        // Copy vertex indices
+        for (size_t i = 0; i < totalVertexIndices; ++i)
+        {
+            lodData.meshletVertices[i] = meshletVertexIndices[i];
+        }
+
+        // 6. Pack triangle indices and compute bounds for each meshlet
+        uint32_t primitiveOffset = 0;
+        for (size_t i = 0; i < meshletCount; ++i)
+        {
+            const auto& m = meshoptMeshlets[i];
+            auto& outMeshlet = lodData.meshlets[i];
+
+            // Pack 3×uint8 triangle indices into uint32
+            for (unsigned int t = 0; t < m.triangle_count; ++t)
+            {
+                size_t triOffset = m.triangle_offset + t * 3;
+
+                // Bounds check to prevent buffer overflow if meshoptimizer returns unexpected data
+                if (triOffset + 2 >= meshletTriangleIndices.size())
+                {
+                    vfLogWarning("Meshlet triangle index out of bounds: offset {} >= size {}",
+                                  triOffset + 2, meshletTriangleIndices.size());
+                    break;
+                }
+
+                uint32_t packed =
+                    static_cast<uint32_t>(meshletTriangleIndices[triOffset]) |
+                    (static_cast<uint32_t>(meshletTriangleIndices[triOffset + 1]) << 8) |
+                    (static_cast<uint32_t>(meshletTriangleIndices[triOffset + 2]) << 16);
+                lodData.meshletPrimitives.push_back(packed);
+            }
+
+            // Fill descriptor
+            outMeshlet.descriptor.vertexOffset = m.vertex_offset;
+            outMeshlet.descriptor.primitiveOffset = primitiveOffset;
+            outMeshlet.descriptor.vertexCount = static_cast<uint8_t>(m.vertex_count);
+            outMeshlet.descriptor.primitiveCount = static_cast<uint8_t>(m.triangle_count);
+            outMeshlet.descriptor.padding = 0;
+            primitiveOffset += m.triangle_count;
+
+            // 7. Compute bounding sphere and cone for per-meshlet culling
+            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                &meshletVertexIndices[m.vertex_offset],
+                &meshletTriangleIndices[m.triangle_offset],
+                m.triangle_count,
+                reinterpret_cast<const float*>(lodData.vertices.data()),
+                lodData.vertices.size(),
+                sizeof(resource::Vertex)
+            );
+
+            outMeshlet.bounds.boundingSphere = glm::vec4(
+                bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius
+            );
+            outMeshlet.bounds.cone = glm::vec4(
+                bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2],
+                bounds.cone_cutoff
+            );
+        }
     }
 
     void TerrainTileGenerator::generateVertices(
@@ -460,6 +577,133 @@ namespace terrain
     uint32_t TerrainTileGenerator::getLODSkipFactor(uint32_t lodLevel) const
     {
         return 1u << lodLevel;  // 1, 2, 4, 8
+    }
+
+    float TerrainTileGenerator::computeGeometricError(
+        const TerrainTile& tile, uint32_t lodLevel) const
+    {
+        if (lodLevel == 0)
+            return 0.0f;  // Highest detail has no error
+
+        uint32_t thisSkip = getLODSkipFactor(lodLevel);
+        uint32_t prevSkip = getLODSkipFactor(lodLevel - 1);
+        uint32_t baseVertCount = config_.getVertexCount();
+
+        float maxError = 0.0f;
+
+        // Sample all vertices at current LOD resolution and compare against
+        // what the previous LOD would interpolate at those positions
+        for (uint32_t z = 0; z < baseVertCount; z += thisSkip)
+        {
+            for (uint32_t x = 0; x < baseVertCount; x += thisSkip)
+            {
+                float actualHeight = tile.getHeight(x, z);
+
+                // Find the enclosing quad in the previous LOD grid
+                uint32_t prevX0 = (x / prevSkip) * prevSkip;
+                uint32_t prevZ0 = (z / prevSkip) * prevSkip;
+                uint32_t prevX1 = std::min(prevX0 + prevSkip, baseVertCount - 1);
+                uint32_t prevZ1 = std::min(prevZ0 + prevSkip, baseVertCount - 1);
+
+                // Compute interpolation factors
+                float fx = (prevX1 != prevX0) ?
+                    static_cast<float>(x - prevX0) / static_cast<float>(prevX1 - prevX0) : 0.0f;
+                float fz = (prevZ1 != prevZ0) ?
+                    static_cast<float>(z - prevZ0) / static_cast<float>(prevZ1 - prevZ0) : 0.0f;
+
+                // Get heights at the four corners of the enclosing quad
+                float h00 = tile.getHeight(prevX0, prevZ0);
+                float h10 = tile.getHeight(prevX1, prevZ0);
+                float h01 = tile.getHeight(prevX0, prevZ1);
+                float h11 = tile.getHeight(prevX1, prevZ1);
+
+                // Bilinear interpolation
+                float interpolatedHeight =
+                    h00 * (1.0f - fx) * (1.0f - fz) +
+                    h10 * fx * (1.0f - fz) +
+                    h01 * (1.0f - fx) * fz +
+                    h11 * fx * fz;
+
+                float error = std::abs(actualHeight - interpolatedHeight);
+                maxError = std::max(maxError, error);
+            }
+        }
+
+        return maxError;
+    }
+
+    void TerrainTileGenerator::computeAllLODErrors(TerrainTile& tile) const
+    {
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            TileLODData& lodData = tile.getLODData(lod);
+            lodData.geometricError = computeGeometricError(tile, lod);
+        }
+    }
+
+    void TerrainTileGenerator::computeEdgeStitching(
+        TerrainTile& tile, TileEdge edge, uint8_t neighborLOD) const
+    {
+        uint8_t currentLOD = tile.currentLOD;
+        uint8_t edgeIndex = static_cast<uint8_t>(edge);
+        EdgeStitchInfo& info = tile.edgeStitchInfo[edgeIndex];
+
+        // Only stitch if neighbor has coarser (higher numbered) LOD
+        if (neighborLOD <= currentLOD)
+        {
+            info.clear();
+            return;
+        }
+
+        info.needsSnapping = true;
+        info.neighborLOD = neighborLOD;
+
+        // Get edge vertices for current and neighbor LOD levels
+        const EdgeVertices& currentEdge = tile.edgeVertices[currentLOD][edgeIndex];
+        const EdgeVertices& neighborEdge = tile.edgeVertices[neighborLOD][edgeIndex];
+
+        if (currentEdge.positions.empty() || neighborEdge.positions.empty())
+        {
+            info.clear();
+            return;
+        }
+
+        uint32_t currentCount = static_cast<uint32_t>(currentEdge.positions.size());
+        uint32_t neighborCount = static_cast<uint32_t>(neighborEdge.positions.size());
+
+        info.snappedHeights.resize(currentCount);
+
+        // Map current edge vertices to interpolated positions on neighbor's coarser edge
+        float ratio = static_cast<float>(neighborCount - 1) / static_cast<float>(currentCount - 1);
+
+        for (uint32_t i = 0; i < currentCount; ++i)
+        {
+            float neighborIdx = static_cast<float>(i) * ratio;
+            uint32_t idx0 = static_cast<uint32_t>(neighborIdx);
+            uint32_t idx1 = std::min(idx0 + 1, neighborCount - 1);
+            float t = neighborIdx - static_cast<float>(idx0);
+
+            // Interpolate Y (height) from neighbor's edge
+            float y0 = neighborEdge.positions[idx0].y;
+            float y1 = neighborEdge.positions[idx1].y;
+            info.snappedHeights[i] = glm::mix(y0, y1, t);
+        }
+    }
+
+    void TerrainTileGenerator::updateEdgeStitching(TerrainTile& tile) const
+    {
+        for (uint8_t i = 0; i < 4; ++i)
+        {
+            const NeighborInfo& neighbor = tile.neighbors[i];
+            if (neighbor.exists)
+            {
+                computeEdgeStitching(tile, static_cast<TileEdge>(i), neighbor.lodLevel);
+            }
+            else
+            {
+                tile.edgeStitchInfo[i].clear();
+            }
+        }
     }
 
 } // namespace terrain

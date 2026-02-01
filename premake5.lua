@@ -278,10 +278,11 @@ project "Utilities"
       "dependencies/spdlog/include",
       "dependencies/glm",
 	  "dependencies/entt/single_include",
-	  "dependencies/json/single_include"
+	  "dependencies/json/single_include",
+	  "dependencies/meshoptimizer/src"  -- meshoptimizer for terrain meshlet generation
    }
 
-   links { "spdLog" }
+   links { "spdLog", "meshoptimizer" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }

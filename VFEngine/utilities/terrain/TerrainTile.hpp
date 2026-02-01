@@ -25,6 +25,10 @@ namespace terrain
         math::AABB aabb;
         glm::vec4 boundingSphere{0.0f};  // xyz = center (local space), w = radius
 
+        // Geometric error: max vertical deviation from previous LOD (world units)
+        // LOD 0 = 0.0 (highest detail), LOD N = max deviation from LOD N-1
+        float geometricError = 0.0f;
+
         [[nodiscard]] bool isEmpty() const { return vertices.empty(); }
         [[nodiscard]] bool hasMeshlets() const { return !meshlets.empty(); }
 
@@ -52,6 +56,21 @@ namespace terrain
         {
             indices.clear();
             positions.clear();
+        }
+    };
+
+    // Edge stitching info for LOD transitions between neighboring tiles
+    struct EdgeStitchInfo
+    {
+        bool needsSnapping = false;        // True if this edge needs vertex height snapping
+        uint8_t neighborLOD = 0;           // LOD level of the neighbor tile
+        std::vector<float> snappedHeights; // Snapped Y values for edge vertices
+
+        void clear()
+        {
+            needsSnapping = false;
+            neighborLOD = 0;
+            snappedHeights.clear();
         }
     };
 
@@ -105,6 +124,10 @@ namespace terrain
         // [lodLevel][edge] -> EdgeVertices
         std::array<std::array<EdgeVertices, 4>, TERRAIN_LOD_COUNT> edgeVertices;
 
+        // Edge stitching info per edge (indexed by TileEdge)
+        // Used when neighbor has coarser LOD to snap edge vertex heights
+        std::array<EdgeStitchInfo, 4> edgeStitchInfo;
+
         // Height data (kept for runtime queries and modification)
         // Row-major order, size = vertexCount * vertexCount
         std::vector<float> heightData;
@@ -143,6 +166,10 @@ namespace terrain
         void clearNeighbor(TileEdge edge);
         [[nodiscard]] bool hasNeighbor(TileEdge edge) const;
         [[nodiscard]] bool needsStitching() const;
+
+        // Edge stitching helpers
+        [[nodiscard]] bool hasActiveStitching() const;
+        [[nodiscard]] float getStitchedEdgeHeight(TileEdge edge, uint32_t vertexIndex) const;
 
         // Bounds calculation
         void updateWorldBounds();
