@@ -162,6 +162,8 @@ namespace render
         void setLODSelectionEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
+        void setTerrainFrustumCullingEnabled(bool enabled);
+        void setTerrainMeshletCullingEnabled(bool enabled);
 
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
         void removeCamera(occlusion::CameraId id);

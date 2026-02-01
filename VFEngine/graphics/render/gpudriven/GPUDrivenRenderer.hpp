@@ -94,6 +94,8 @@ namespace render::gpudriven
 
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
+        bool terrainFrustumCullingEnabled = true;
+        bool terrainMeshletCullingEnabled = true;
         bool meshShaderSupported = false;
         uint32_t currentViewMode = 0;
 
@@ -175,6 +177,11 @@ namespace render::gpudriven
         bool isMeshletFrustumCullingEnabled() const { return meshletFrustumCullingEnabled; }
         void setMeshletBackfaceCullingEnabled(bool enabled) { meshletBackfaceCullingEnabled = enabled; }
         bool isMeshletBackfaceCullingEnabled() const { return meshletBackfaceCullingEnabled; }
+
+        void setTerrainFrustumCullingEnabled(bool enabled);
+        bool isTerrainFrustumCullingEnabled() const { return terrainFrustumCullingEnabled; }
+        void setTerrainMeshletCullingEnabled(bool enabled);
+        bool isTerrainMeshletCullingEnabled() const { return terrainMeshletCullingEnabled; }
 
         void setViewMode(uint32_t mode) { currentViewMode = mode; }
         uint32_t getViewMode() const { return currentViewMode; }

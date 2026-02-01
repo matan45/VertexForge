@@ -86,6 +86,8 @@ namespace core
         void setLODSelectionEnabled(bool enabled) override;
         void setMeshletFrustumCullingEnabled(bool enabled) override;
         void setMeshletBackfaceCullingEnabled(bool enabled) override;
+        void setTerrainFrustumCullingEnabled(bool enabled) override;
+        void setTerrainMeshletCullingEnabled(bool enabled) override;
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider) override;

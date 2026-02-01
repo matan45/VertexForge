@@ -138,6 +138,8 @@ namespace controllers
         void setLODSelectionEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
+        void setTerrainFrustumCullingEnabled(bool enabled);
+        void setTerrainMeshletCullingEnabled(bool enabled);
 
         void setShowClusterDebug(bool show) { showClusterDebug = show; }
         bool getShowClusterDebug() const { return showClusterDebug; }

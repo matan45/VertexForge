@@ -133,7 +133,16 @@ namespace render::gpudriven
         uint32_t getCurrentTileCount() const { return currentTileCount; }
         bool isInitialized() const { return initialized; }
 
+        // Culling settings
+        void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
+        bool isFrustumCullingEnabled() const { return frustumCullingEnabled; }
+        void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
+        bool isMeshletCullingEnabled() const { return meshletCullingEnabled; }
+
     private:
+        bool frustumCullingEnabled = true;
+        bool meshletCullingEnabled = true;
+
         void createTileDataBuffer();
         void createStatsBuffer();
         void createTerrainDataDescriptor();

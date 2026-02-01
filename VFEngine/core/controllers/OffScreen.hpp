@@ -102,6 +102,8 @@ namespace controllers {
 		void setLODSelectionEnabled(bool enabled);
 		void setMeshletFrustumCullingEnabled(bool enabled);
 		void setMeshletBackfaceCullingEnabled(bool enabled);
+		void setTerrainFrustumCullingEnabled(bool enabled);
+		void setTerrainMeshletCullingEnabled(bool enabled);
 
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 		void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);

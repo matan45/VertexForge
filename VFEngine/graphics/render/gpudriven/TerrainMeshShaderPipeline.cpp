@@ -525,7 +525,18 @@ namespace render::gpudriven
         // Push constants
         TerrainPushConstants pushConstants{};
         pushConstants.tileCount = currentTileCount;
-        pushConstants.viewMode = viewMode;
+
+        // Add culling bits to viewMode based on enabled settings
+        uint32_t effectiveViewMode = viewMode;
+        if (frustumCullingEnabled)
+        {
+            effectiveViewMode |= TERRAIN_CULL_FRUSTUM_BIT;
+        }
+        if (meshletCullingEnabled)
+        {
+            effectiveViewMode |= TERRAIN_CULL_BACKFACE_BIT;
+        }
+        pushConstants.viewMode = effectiveViewMode;
         pushConstants.screenWidth = screenWidth;
         pushConstants.screenHeight = screenHeight;
         pushConstants.lodBias = lodBias;

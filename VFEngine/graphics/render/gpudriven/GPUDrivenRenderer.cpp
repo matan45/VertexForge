@@ -1164,6 +1164,24 @@ namespace render::gpudriven
         return lightsAfterHiZCull;
     }
 
+    void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)
+    {
+        terrainFrustumCullingEnabled = enabled;
+        if (terrainPipeline)
+        {
+            terrainPipeline->setFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void GPUDrivenRenderer::setTerrainMeshletCullingEnabled(bool enabled)
+    {
+        terrainMeshletCullingEnabled = enabled;
+        if (terrainPipeline)
+        {
+            terrainPipeline->setMeshletCullingEnabled(enabled);
+        }
+    }
+
     void GPUDrivenRenderer::updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles)
     {
         if (!initialized || !terrainRenderingEnabled || !terrainAdapter || !terrainPipeline)

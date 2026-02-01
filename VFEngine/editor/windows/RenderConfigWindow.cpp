@@ -320,6 +320,34 @@ namespace windows
                 ImGui::SetTooltip("Cull meshlet clusters facing away from camera using cone culling.");
             }
 
+            ImGui::Separator();
+            ImGui::Text("Terrain Culling");
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Terrain Frustum Culling", &settings.culling.terrainFrustumCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetTerrainFrustumCullingCommand cmd;
+                cmd.enabled = settings.culling.terrainFrustumCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull terrain tiles outside camera frustum.");
+            }
+
+            if (ImGui::Checkbox("Terrain Meshlet Culling", &settings.culling.terrainMeshletCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetTerrainMeshletCullingCommand cmd;
+                cmd.enabled = settings.culling.terrainMeshletCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Cull individual terrain meshlets for finer-grained culling.");
+            }
+
             ImGui::Unindent(10.0f);
         }
     }

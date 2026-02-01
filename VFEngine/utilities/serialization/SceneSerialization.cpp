@@ -1042,7 +1042,9 @@ namespace serialization
             {"occlusionCullingEnabled", settings.culling.occlusionCullingEnabled},
             {"lodSelectionEnabled", settings.culling.lodSelectionEnabled},
             {"meshletFrustumCullingEnabled", settings.culling.meshletFrustumCullingEnabled},
-            {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled}
+            {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled},
+            {"terrainFrustumCullingEnabled", settings.culling.terrainFrustumCullingEnabled},
+            {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled}
         };
 
         return j;
@@ -1087,6 +1089,10 @@ namespace serialization
                 settings.culling.meshletFrustumCullingEnabled = culling["meshletFrustumCullingEnabled"].get<bool>();
             if (culling.contains("meshletBackfaceCullingEnabled") && culling["meshletBackfaceCullingEnabled"].is_boolean())
                 settings.culling.meshletBackfaceCullingEnabled = culling["meshletBackfaceCullingEnabled"].get<bool>();
+            if (culling.contains("terrainFrustumCullingEnabled") && culling["terrainFrustumCullingEnabled"].is_boolean())
+                settings.culling.terrainFrustumCullingEnabled = culling["terrainFrustumCullingEnabled"].get<bool>();
+            if (culling.contains("terrainMeshletCullingEnabled") && culling["terrainMeshletCullingEnabled"].is_boolean())
+                settings.culling.terrainMeshletCullingEnabled = culling["terrainMeshletCullingEnabled"].get<bool>();
         }
     }
 

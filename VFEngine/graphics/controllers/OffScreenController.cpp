@@ -313,6 +313,8 @@ namespace controllers
         gpuDriven->setLODSelectionEnabled(settings.culling.lodSelectionEnabled);
         gpuDriven->setMeshletFrustumCullingEnabled(settings.culling.meshletFrustumCullingEnabled);
         gpuDriven->setMeshletBackfaceCullingEnabled(settings.culling.meshletBackfaceCullingEnabled);
+        gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
+        gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
@@ -567,6 +569,24 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setMeshletBackfaceCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setTerrainFrustumCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setTerrainMeshletCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainMeshletCullingEnabled(enabled);
         }
     }
 

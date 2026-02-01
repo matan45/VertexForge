@@ -222,12 +222,14 @@ namespace render::gpudriven
         std::string tileKey = alloc.getMeshPath();
 
         // Transform vertices from tile-local space to world space
-        // Terrain vertices are generated in local space (0 to tileSize)
-        // but need to be in world space for rendering with identity model matrix
+        // Terrain vertices are generated in local space (0 to tileSize for X/Z)
+        // Height (Y) values are already absolute world heights - don't add worldOrigin.y
         std::vector<resource::Vertex> worldSpaceVertices = lodData.vertices;
         for (auto& vertex : worldSpaceVertices)
         {
-            vertex.position += worldOrigin;
+            vertex.position.x += worldOrigin.x;
+            // vertex.position.y is already the absolute height - leave as-is
+            vertex.position.z += worldOrigin.z;
         }
 
         // Upload vertex/index data to MergedMeshBuffer
@@ -265,8 +267,9 @@ namespace render::gpudriven
             {
                 GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
                 // Transform bounding sphere center from local space to world space
+                // Only X and Z need offset - Y (height) is already absolute
                 meshlet.boundingSphere.x += worldOrigin.x;
-                meshlet.boundingSphere.y += worldOrigin.y;
+                // meshlet.boundingSphere.y is already absolute height - leave as-is
                 meshlet.boundingSphere.z += worldOrigin.z;
                 gpuMeshlets.push_back(meshlet);
             }

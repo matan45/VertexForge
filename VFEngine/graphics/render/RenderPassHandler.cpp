@@ -417,6 +417,22 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setTerrainFrustumCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setTerrainMeshletCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainMeshletCullingEnabled(enabled);
+        }
+    }
+
     void RenderPassHandler::updateGPUDrivenHiZ() const
     {
         if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)

@@ -210,6 +210,10 @@ namespace services {
         virtual void setMeshletFrustumCullingEnabled(bool enabled) = 0;
         virtual void setMeshletBackfaceCullingEnabled(bool enabled) = 0;
 
+        // Terrain Culling Settings API
+        virtual void setTerrainFrustumCullingEnabled(bool enabled) = 0;
+        virtual void setTerrainMeshletCullingEnabled(bool enabled) = 0;
+
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;
 
