@@ -76,6 +76,9 @@ namespace render::gpudriven
     {
         constexpr uint32_t AlphaMask = 1 << 4;
         constexpr uint32_t UniformScale = 1 << 9;
+        constexpr uint32_t UseClusterDAG = 1 << 10;
+        constexpr uint32_t DAGFullyLoaded = 1 << 11;
+        constexpr uint32_t TerrainTile = 1 << 12;
     }
 
 

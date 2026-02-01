@@ -5,6 +5,7 @@
 #include "components/Components.hpp"
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTypes.hpp"
+#include "terrain/TerrainTile.hpp"
 #include "terrain/HeightmapLoader.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -24,8 +25,11 @@ namespace services
         auto& dispatcher = events::EventDispatcher::instance();
         dispatcher.unregisterCommandHandler<events::terrain::CreateTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::UploadTerrainTilesCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::UpdateTerrainLODsCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetVisibleTerrainTilesQuery>();
 
         terrainGrids.clear();
     }
@@ -56,6 +60,26 @@ namespace services
             [this](const events::terrain::HasTerrainComponentQuery& query)
             {
                 return hasTerrainComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::GetVisibleTerrainTilesQuery>(
+            [this](const events::terrain::GetVisibleTerrainTilesQuery& query)
+            {
+                return collectVisibleTiles(query.frustum, query.cameraPosition);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::UpdateTerrainLODsCommand>(
+            [this](const events::terrain::UpdateTerrainLODsCommand& cmd)
+            {
+                updateAllTerrainLODs(cmd.cameraPosition);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::UploadTerrainTilesCommand>(
+            [this](const events::terrain::UploadTerrainTilesCommand& cmd)
+            {
+                // Terrain GPU upload is handled by the adapter in graphics layer
+                // This command exists for future use if needed
+                return true;
             });
     }
 
@@ -270,5 +294,53 @@ namespace services
             return false;
 
         return registry.all_of<components::TerrainComponent>(ent);
+    }
+
+    std::vector<events::terrain::TerrainTileInfo> TerrainService::collectVisibleTiles(
+        const math::Frustum& frustum,
+        const glm::vec3& cameraPosition)
+    {
+        std::vector<events::terrain::TerrainTileInfo> result;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            // First update LODs based on camera position
+            grid->updateLODs(cameraPosition);
+
+            // Get visible tiles
+            auto visibleTiles = grid->getVisibleTiles(frustum);
+
+            // Convert visible tiles to TerrainTileInfo
+            for (terrain::TerrainTile* tile : visibleTiles)
+            {
+                if (!tile || !tile->isVisible)
+                    continue;
+
+                // Check if tile has geometry data for current LOD
+                const auto& lodData = tile->getCurrentLODData();
+                if (lodData.isEmpty() || !lodData.hasMeshlets())
+                    continue;
+
+                events::terrain::TerrainTileInfo info;
+                info.coordX = tile->coord.x;
+                info.coordZ = tile->coord.z;
+                info.currentLOD = tile->currentLOD;
+                info.worldOrigin = tile->worldOrigin;
+                info.aabbMin = tile->worldBounds.min;
+                info.aabbMax = tile->worldBounds.max;
+
+                result.push_back(info);
+            }
+        }
+
+        return result;
+    }
+
+    void TerrainService::updateAllTerrainLODs(const glm::vec3& cameraPosition)
+    {
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            grid->updateLODs(cameraPosition);
+        }
     }
 }

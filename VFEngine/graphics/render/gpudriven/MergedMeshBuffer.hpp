@@ -148,6 +148,25 @@ namespace render::gpudriven
 
         void flushPendingTransfers();
 
+        // Terrain-specific allocation methods
+        // Allocate space for terrain tile geometry (all LODs)
+        SubmeshLocation* allocateTerrainTile(
+            const std::string& tileKey,
+            const std::array<uint32_t, 4>& vertexCounts,
+            const std::array<uint32_t, 4>& indexCounts,
+            const glm::vec3& aabbMin,
+            const glm::vec3& aabbMax);
+
+        // Upload terrain vertex/index data for a specific LOD
+        bool uploadTerrainLOD(
+            const std::string& tileKey,
+            uint32_t lodLevel,
+            const resource::Vertex* vertexData, uint32_t vertexCount,
+            const uint32_t* indexData, uint32_t indexCount);
+
+        // Free terrain tile allocation
+        void freeTerrainTile(const std::string& tileKey);
+
     private:
         void createBuffers();
         void destroyBuffers();

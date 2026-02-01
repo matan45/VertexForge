@@ -1,7 +1,11 @@
 #pragma once
 #include "../../interfaces/ITerrainService.hpp"
 #include "../../data/EntityHandle.hpp"
+#include "../../events/TerrainEvents.hpp"
+#include "math/Frustum.hpp"
+#include <glm/glm.hpp>
 #include <memory>
+#include <vector>
 
 namespace scene
 {
@@ -39,6 +43,14 @@ namespace services
         bool deleteTerrain(EntityHandle terrainEntity) override;
         std::optional<TerrainData> getTerrainData(EntityHandle entity) const override;
         bool hasTerrainComponent(EntityHandle entity) const override;
+
+        // Collect visible terrain tiles info
+        std::vector<::events::terrain::TerrainTileInfo> collectVisibleTiles(
+            const math::Frustum& frustum,
+            const glm::vec3& cameraPosition);
+
+        // Update LODs for all terrain grids
+        void updateAllTerrainLODs(const glm::vec3& cameraPosition);
 
     private:
         // Create child entities for each tile in the grid
