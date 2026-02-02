@@ -230,14 +230,18 @@ namespace terrain
         }
     }
 
-    void TerrainGrid::updateLODs(const glm::vec3& cameraPosition)
+    std::vector<TileCoord> TerrainGrid::updateLODs(const glm::vec3& cameraPosition)
     {
+        std::vector<TileCoord> changedTiles;
+        changedTiles.reserve(tiles_.size() / 4); // Estimate ~25% tiles change per frame
+
         for (auto& [coord, tile] : tiles_)
         {
             uint32_t newLOD = generator_->calculateLOD(cameraPosition, *tile);
             if (newLOD != tile->currentLOD)
             {
                 tile->currentLOD = static_cast<uint8_t>(newLOD);
+                changedTiles.push_back(coord);
             }
         }
 
@@ -255,8 +259,16 @@ namespace terrain
             {
                 tile->isDirty = true;
                 tile->saveStitchState();
+
+                // Add to changed list if not already there (LOD didn't change but stitching did)
+                if (std::find(changedTiles.begin(), changedTiles.end(), coord) == changedTiles.end())
+                {
+                    changedTiles.push_back(coord);
+                }
             }
         }
+
+        return changedTiles;
     }
 
     void TerrainGrid::regenerateDirtyTiles(ProgressCallback progress)

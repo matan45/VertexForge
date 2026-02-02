@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
+#include <array>
 #include "GPUDrivenTypes.hpp"
 
 namespace core
@@ -92,6 +93,11 @@ namespace render::gpudriven
         vk::DescriptorPool terrainBufferPool;
         vk::DescriptorSet terrainMeshletDescriptorSet;
         vk::DescriptorSet terrainVertexDescriptorSet;
+
+        // Descriptor binding tracking - tracks last bound sets per command buffer
+        // Reset when pipeline is bound, used to skip redundant bindings
+        vk::CommandBuffer lastBoundCommandBuffer;
+        std::array<vk::DescriptorSet, 12> lastBoundSets{};
 
         bool initialized = false;
 

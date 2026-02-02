@@ -12,6 +12,7 @@
 #include "../../events/TerrainEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include <unordered_set>
 
 namespace services
 {
@@ -446,12 +447,16 @@ namespace services
     {
         for (auto& [entityId, grid] : terrainGrids)
         {
-            grid->updateLODs(cameraPosition);
+            // Get list of tiles that actually changed
+            auto changedTiles = grid->updateLODs(cameraPosition);
 
-            // Sync ECS components after LOD update
+            // Only sync changed tiles (O(K) instead of O(N) where K << N typically)
             EntityHandle handle;
             handle.id = entityId;
-            syncTileComponents(handle);
+            if (!changedTiles.empty())
+            {
+                syncChangedTiles(handle, changedTiles);
+            }
         }
     }
 
@@ -547,6 +552,10 @@ namespace services
 
         for (entt::entity childEntity : children.children)
         {
+            // Validate entity still exists before accessing components
+            if (!registry.valid(childEntity))
+                continue;
+
             if (!registry.all_of<components::TerrainTileComponent>(childEntity))
                 continue;
 
@@ -576,6 +585,72 @@ namespace services
         }
     }
 
+    void TerrainService::syncChangedTiles(EntityHandle terrainEntity, const std::vector<terrain::TileCoord>& changedTiles)
+    {
+        if (!terrainEntity.isValid() || changedTiles.empty())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity entity = internal::fromHandle(terrainEntity);
+
+        if (!registry.valid(entity))
+            return;
+
+        auto* grid = getTerrainGrid(terrainEntity.id);
+        if (!grid)
+            return;
+
+        if (!registry.all_of<components::ChildrenComponent>(entity))
+            return;
+
+        const auto& children = registry.get<components::ChildrenComponent>(entity);
+
+        // Build a set for O(1) lookup of changed coordinates
+        std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> changedSet(
+            changedTiles.begin(), changedTiles.end());
+
+        uint32_t visibleCount = 0;
+
+        // Only iterate children that might have changed
+        for (entt::entity childEntity : children.children)
+        {
+            if (!registry.valid(childEntity))
+                continue;
+
+            if (!registry.all_of<components::TerrainTileComponent>(childEntity))
+                continue;
+
+            auto& tileComp = registry.get<components::TerrainTileComponent>(childEntity);
+            terrain::TileCoord coord{tileComp.tileX, tileComp.tileZ};
+
+            // Always count visibility for accurate parent stats
+            const auto* tile = grid->getTile(coord);
+            if (tile && tile->isVisible)
+                visibleCount++;
+
+            // Only update component if this tile changed
+            if (changedSet.find(coord) == changedSet.end())
+                continue;
+
+            if (tile)
+            {
+                tileComp.currentLOD = tile->currentLOD;
+                tileComp.isVisible = tile->isVisible;
+                tileComp.isDirty = tile->isDirty;
+                tileComp.isWeightMapDirty = tile->isWeightMapDirty;
+                tileComp.boundingMinY = tile->worldBounds.min.y;
+                tileComp.boundingMaxY = tile->worldBounds.max.y;
+            }
+        }
+
+        // Update visible count on parent
+        if (registry.all_of<components::TerrainComponent>(entity))
+        {
+            auto& terrainComp = registry.get<components::TerrainComponent>(entity);
+            terrainComp.visibleTileCount = visibleCount;
+        }
+    }
+
     void TerrainService::setTilesGPUResident(EntityHandle terrainEntity, bool resident)
     {
         if (!terrainEntity.isValid())
@@ -594,6 +669,10 @@ namespace services
 
         for (entt::entity childEntity : children.children)
         {
+            // Validate entity still exists before accessing components
+            if (!registry.valid(childEntity))
+                continue;
+
             if (!registry.all_of<components::TerrainTileComponent>(childEntity))
                 continue;
 

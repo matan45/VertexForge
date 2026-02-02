@@ -318,6 +318,10 @@ layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;
 layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades;
 layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
 
+// Shadow constants (must match ShadowTypes.hpp)
+const int MAX_SHADOW_VIEWS = 272;       // MAX_TOTAL_SHADOW_VIEWS
+const int MAX_POINT_SHADOW_CUBES = 32;  // MAX_POINT_SHADOW_CASTERS
+
 const float LIGHTING_PI = 3.14159265359;
 
 const uint SPOT_LIGHT_FLAG = 0x80000000u;
@@ -372,7 +376,8 @@ float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float co
 }
 
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    if (shadowIndex < 0) return 1.0;
+    // Bounds validation to prevent GPU crash from invalid indices
+    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowData[shadowIndex];
 
@@ -412,6 +417,9 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 }
 
 float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    // Bounds validation to prevent GPU crash from invalid indices
+    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
     ShadowData sd = shadowData[shadowIndex];
 
     vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
@@ -449,10 +457,17 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 }
 
 float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
-    if (baseShadowIndex < 0) return 1.0;
+    // Bounds validation to prevent GPU crash from invalid indices
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
     cascadeCount = clamp(cascadeCount, 1, 4);
+
+    // Ensure we don't access beyond buffer bounds with cascades
+    if (baseShadowIndex + cascadeCount > MAX_SHADOW_VIEWS) {
+        cascadeCount = MAX_SHADOW_VIEWS - baseShadowIndex;
+        if (cascadeCount <= 0) return 1.0;
+    }
 
     int cascadeIdx = 0;
     for (int i = 0; i < cascadeCount; ++i) {
@@ -483,12 +498,14 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
 }
 
 float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 lightPos, float lightRadius) {
-    if (shadowIndex < 0) return 1.0;
+    // Bounds validation to prevent GPU crash from invalid indices
+    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = shadowData[shadowIndex];
 
     int cubeMapIndex = int(sd.pcfParams.w);
-    if (cubeMapIndex < 0) return 1.0;
+    // Validate cubemap index bounds
+    if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
     vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
     vec3 lightToFrag = biasedPos - lightPos;

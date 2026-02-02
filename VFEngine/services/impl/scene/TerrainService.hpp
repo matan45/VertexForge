@@ -17,6 +17,7 @@ namespace terrain
 {
     class TerrainGrid;
     class TerrainTile;
+    struct TileCoord;
 }
 
 namespace services
@@ -67,8 +68,11 @@ namespace services
         // Get total tile count across all terrains
         size_t getTotalTileCount() const;
 
-        // Sync ECS components from TerrainTile data
+        // Sync ECS components from TerrainTile data (full sync - O(N) for all tiles)
         void syncTileComponents(EntityHandle terrainEntity);
+
+        // Sync only specific tiles that changed (optimized - O(K) for K changed tiles)
+        void syncChangedTiles(EntityHandle terrainEntity, const std::vector<terrain::TileCoord>& changedTiles);
 
         // Mark tiles as GPU resident (called after GPU upload)
         void setTilesGPUResident(EntityHandle terrainEntity, bool resident);
