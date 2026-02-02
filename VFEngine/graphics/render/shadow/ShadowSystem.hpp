@@ -6,6 +6,7 @@
 #include "ShadowPassPipeline.hpp"
 #include "ShadowGPUDataManager.hpp"
 #include "ShadowPassRecorder.hpp"
+#include "TerrainShadowPipeline.hpp"
 #include "types/RenderSettings.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -38,6 +39,7 @@ namespace render
             std::unique_ptr<ShadowAtlasManager> atlasManager;
             std::unique_ptr<ShadowResourcePool> resourcePool;
             std::unique_ptr<ShadowPassPipeline> shadowPassPipeline;
+            std::unique_ptr<TerrainShadowPipeline> terrainShadowPipeline;
             std::unique_ptr<ShadowGPUDataManager> gpuDataManager;
             std::unique_ptr<ShadowPassRecorder> passRecorder;
 
@@ -80,6 +82,10 @@ namespace render
                                 vk::DescriptorSetLayout vertexDataLayout,
                                 vk::DescriptorSetLayout boneMatrixLayout);
 
+            void initTerrainShadowPass(vk::DescriptorSetLayout terrainDataLayout,
+                                        vk::DescriptorSetLayout terrainMeshletLayout,
+                                        vk::DescriptorSetLayout terrainVertexLayout);
+
             // ===== Light Shadow Registration =====
 
             [[nodiscard]] bool registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings = {});
@@ -103,7 +109,9 @@ namespace render
 
             // ===== Shadow Pass Recording =====
 
-            void recordShadowPass(vk::CommandBuffer cmd, const ShadowPassParams& params);
+            void recordShadowPass(vk::CommandBuffer cmd,
+                                   const ShadowPassParams& params,
+                                   const TerrainShadowPassParams* terrainParams = nullptr);
 
             // ===== Descriptor Access =====
 

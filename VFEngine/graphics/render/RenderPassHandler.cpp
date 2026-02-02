@@ -433,6 +433,46 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setTerrainRenderingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainRenderingEnabled(enabled);
+        }
+    }
+
+    void RenderPassHandler::setTerrainLODBias(float bias)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainLODBias(bias);
+        }
+    }
+
+    void RenderPassHandler::setTerrainErrorThreshold(float threshold)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainErrorThreshold(threshold);
+        }
+    }
+
+    void RenderPassHandler::setTerrainTextureScale(float scale)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainTextureScale(scale);
+        }
+    }
+
+    void RenderPassHandler::setTerrainShadowLOD(uint32_t lod)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setTerrainShadowLOD(lod);
+        }
+    }
+
     void RenderPassHandler::updateGPUDrivenHiZ() const
     {
         if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)

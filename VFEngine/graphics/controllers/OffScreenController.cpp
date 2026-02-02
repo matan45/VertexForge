@@ -332,6 +332,13 @@ namespace controllers
         gpuDriven->setMeshletBackfaceCullingEnabled(settings.culling.meshletBackfaceCullingEnabled);
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
+
+        // Apply terrain rendering settings
+        gpuDriven->setTerrainRenderingEnabled(settings.terrain.enabled);
+        gpuDriven->setTerrainLODBias(settings.terrain.lodBias);
+        gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
+        gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
+        gpuDriven->setTerrainShadowLOD(settings.terrain.shadowLOD);
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
@@ -604,6 +611,51 @@ namespace controllers
         if (renderHandler)
         {
             renderHandler->setTerrainMeshletCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setTerrainRenderingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainRenderingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setTerrainLODBias(float bias)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainLODBias(bias);
+        }
+    }
+
+    void OffScreenController::setTerrainErrorThreshold(float threshold)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainErrorThreshold(threshold);
+        }
+    }
+
+    void OffScreenController::setTerrainTextureScale(float scale)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainTextureScale(scale);
+        }
+    }
+
+    void OffScreenController::setTerrainShadowLOD(uint32_t lod)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainShadowLOD(lod);
         }
     }
 

@@ -142,6 +142,12 @@ namespace controllers
         void setTerrainFrustumCullingEnabled(bool enabled);
         void setTerrainMeshletCullingEnabled(bool enabled);
 
+        void setTerrainRenderingEnabled(bool enabled);
+        void setTerrainLODBias(float bias);
+        void setTerrainErrorThreshold(float threshold);
+        void setTerrainTextureScale(float scale);
+        void setTerrainShadowLOD(uint32_t lod);
+
         void setShowClusterDebug(bool show) { showClusterDebug = show; }
         bool getShowClusterDebug() const { return showClusterDebug; }
         void prepareFrameClusterDebug();

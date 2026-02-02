@@ -100,6 +100,13 @@ namespace render::shadow
             shadowPassPipeline.reset();
         }
 
+        // Cleanup terrain shadow pipeline
+        if (terrainShadowPipeline)
+        {
+            terrainShadowPipeline->cleanup();
+            terrainShadowPipeline.reset();
+        }
+
         // Cleanup GPU data manager
         if (gpuDataManager)
         {
@@ -166,6 +173,35 @@ namespace render::shadow
             atlasManager->getAtlasWidth(),
             atlasManager->getAtlasHeight()
         );
+    }
+
+    void ShadowSystem::initTerrainShadowPass(vk::DescriptorSetLayout terrainDataLayout,
+                                              vk::DescriptorSetLayout terrainMeshletLayout,
+                                              vk::DescriptorSetLayout terrainVertexLayout)
+    {
+        if (!initialized)
+        {
+            loggerError("ShadowSystem::initTerrainShadowPass() called before init()");
+            return;
+        }
+
+        if (!shadowPassPipeline || !shadowPassPipeline->isInitialized())
+        {
+            loggerError("ShadowSystem::initTerrainShadowPass() called before initShadowPass()");
+            return;
+        }
+
+        if (terrainShadowPipeline)
+        {
+            loggerWarning("ShadowSystem::initTerrainShadowPass() called when already initialized");
+            return;
+        }
+
+        terrainShadowPipeline = std::make_unique<TerrainShadowPipeline>(device);
+        terrainShadowPipeline->init(terrainDataLayout, terrainMeshletLayout, terrainVertexLayout,
+                                     shadowPassPipeline->getRenderPass());
+
+        loggerInfo("ShadowSystem: Terrain shadow pass initialized");
     }
 
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
@@ -775,13 +811,16 @@ namespace render::shadow
         needsUpdate = false;
     }
 
-    void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd, const ShadowPassParams& params)
+    void ShadowSystem::recordShadowPass(vk::CommandBuffer cmd,
+                                         const ShadowPassParams& params,
+                                         const TerrainShadowPassParams* terrainParams)
     {
         if (!passRecorder)
             return;
 
-        passRecorder->recordShadowPass(cmd, params, atlasManager.get(), resourcePool.get(),
-            shadowPassPipeline.get(), directionalShadowViews, spotShadowViews, lightShadowData, shadowsEnabled);
+        passRecorder->recordShadowPass(cmd, params, terrainParams, atlasManager.get(), resourcePool.get(),
+            shadowPassPipeline.get(), terrainShadowPipeline.get(),
+            directionalShadowViews, spotShadowViews, lightShadowData, shadowsEnabled);
     }
 
     vk::DescriptorSetLayout ShadowSystem::getAtlasDescriptorLayout() const

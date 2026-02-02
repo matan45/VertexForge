@@ -203,6 +203,7 @@
     <ClInclude Include="render\shadow\ShadowSystem.hpp" />
     <ClInclude Include="render\shadow\ShadowTypes.hpp" />
     <ClInclude Include="render\shadow\SpotShadowCalculator.hpp" />
+    <ClInclude Include="render\shadow\TerrainShadowPipeline.hpp" />
     <ClInclude Include="render\tools\AABBDebugRenderer.hpp" />
     <ClInclude Include="render\tools\AudioSphereDebugRenderer.hpp" />
     <ClInclude Include="render\tools\ClusterDebugRenderer.hpp" />
@@ -314,6 +315,7 @@
     <ClCompile Include="render\shadow\ShadowSamplers.cpp" />
     <ClCompile Include="render\shadow\ShadowSystem.cpp" />
     <ClCompile Include="render\shadow\SpotShadowCalculator.cpp" />
+    <ClCompile Include="render\shadow\TerrainShadowPipeline.cpp" />
     <ClCompile Include="render\tools\AABBDebugRenderer.cpp" />
     <ClCompile Include="render\tools\AudioSphereDebugRenderer.cpp" />
     <ClCompile Include="render\tools\ClusterDebugRenderer.cpp" />
@@ -356,6 +358,7 @@
     <None Include="..\..\resources\shaders\mesh\mesh.glsl" />
     <None Include="..\..\resources\shaders\mesh\skinned_mesh.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
+    <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\clusterWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />

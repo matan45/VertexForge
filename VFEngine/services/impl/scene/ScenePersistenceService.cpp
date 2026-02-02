@@ -10,6 +10,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/RenderEvents.hpp"
+#include "../../events/TerrainEvents.hpp"
 #include "../../events/PhysicsSettingsEvents.hpp"
 #include "../../events/AudioSettingsEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -108,6 +109,10 @@ namespace services
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
+        // Clear terrain GPU data before clearing scene
+        events::terrain::TerrainDeletedNotification terrainNotif;
+        dispatcher.publish(terrainNotif);
+
         sceneGraph->clearScene();
 
         // Reset physics settings to defaults for new scene
@@ -172,6 +177,10 @@ namespace services
 
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
+
+        // Clear terrain GPU data before loading new scene
+        events::terrain::TerrainDeletedNotification terrainNotif;
+        dispatcher.publish(terrainNotif);
 
         if (entityStateService)
         {

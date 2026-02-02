@@ -304,6 +304,36 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setTerrainRenderingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setTerrainRenderingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainLODBias(float bias) {
+        if (offScreen) {
+            offScreen->setTerrainLODBias(bias);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainErrorThreshold(float threshold) {
+        if (offScreen) {
+            offScreen->setTerrainErrorThreshold(threshold);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainTextureScale(float scale) {
+        if (offScreen) {
+            offScreen->setTerrainTextureScale(scale);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainShadowLOD(uint32_t lod) {
+        if (offScreen) {
+            offScreen->setTerrainShadowLOD(lod);
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);

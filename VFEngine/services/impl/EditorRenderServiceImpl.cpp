@@ -520,6 +520,52 @@ namespace services
                 }
             });
 
+        // Terrain rendering settings
+        dispatcher.registerCommandHandler<events::render::SetTerrainRenderingEnabledCommand>(
+            [this](const events::render::SetTerrainRenderingEnabledCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainRenderingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainLODBiasCommand>(
+            [this](const events::render::SetTerrainLODBiasCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainLODBias(cmd.bias);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainErrorThresholdCommand>(
+            [this](const events::render::SetTerrainErrorThresholdCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainErrorThreshold(cmd.threshold);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainTextureScaleCommand>(
+            [this](const events::render::SetTerrainTextureScaleCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainTextureScale(cmd.scale);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainShadowLODCommand>(
+            [this](const events::render::SetTerrainShadowLODCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainShadowLOD(cmd.lod);
+                }
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {

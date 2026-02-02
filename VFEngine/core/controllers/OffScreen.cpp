@@ -290,6 +290,31 @@ namespace controllers {
 		offScreenController->setTerrainMeshletCullingEnabled(enabled);
 	}
 
+	void OffScreen::setTerrainRenderingEnabled(bool enabled)
+	{
+		offScreenController->setTerrainRenderingEnabled(enabled);
+	}
+
+	void OffScreen::setTerrainLODBias(float bias)
+	{
+		offScreenController->setTerrainLODBias(bias);
+	}
+
+	void OffScreen::setTerrainErrorThreshold(float threshold)
+	{
+		offScreenController->setTerrainErrorThreshold(threshold);
+	}
+
+	void OffScreen::setTerrainTextureScale(float scale)
+	{
+		offScreenController->setTerrainTextureScale(scale);
+	}
+
+	void OffScreen::setTerrainShadowLOD(uint32_t lod)
+	{
+		offScreenController->setTerrainShadowLOD(lod);
+	}
+
 	void OffScreen::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
 	{
 		offScreenController->setVFXRuntimeProvider(provider);
