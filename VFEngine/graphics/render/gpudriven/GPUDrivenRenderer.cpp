@@ -1310,6 +1310,18 @@ namespace render::gpudriven
             terrainAdapter->clear();
         }
         terrainTileData.clear();
+
+        // Reset terrain pipeline tile count to prevent rendering stale data
+        if (terrainPipeline)
+        {
+            terrainPipeline->updateTileData({});
+        }
+
+        // Clear terrain mesh buffer to release GPU resources
+        if (terrainMeshBuffer)
+        {
+            terrainMeshBuffer->clear();
+        }
     }
 
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)

@@ -43,6 +43,12 @@ namespace services
             dispatcher.unsubscribe(*entityDeletedSubscription);
         }
 
+        // Unsubscribe from scene cleared
+        if (sceneClearedSubscription && sceneClearedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*sceneClearedSubscription);
+        }
+
         terrainGrids.clear();
     }
 
@@ -125,6 +131,14 @@ namespace services
                 onEntityDeleted(notification.entity);
             });
         entityDeletedSubscription = std::make_unique<events::SubscriptionToken>(token);
+
+        // Subscribe to scene cleared to clean up all terrains
+        auto sceneToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&)
+            {
+                onSceneCleared();
+            });
+        sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneToken);
     }
 
     EntityHandle TerrainService::createTerrain(const TerrainCreationData& config)
@@ -689,5 +703,21 @@ namespace services
             return it->second.get();
         }
         return nullptr;
+    }
+
+    void TerrainService::onSceneCleared()
+    {
+        if (terrainGrids.empty())
+            return;
+
+        // Publish notification so graphics layer can clear GPU buffers
+        // We only need to publish once since all terrains are being cleared
+        events::terrain::TerrainDeletedNotification notification;
+        events::EventDispatcher::instance().publish(notification);
+
+        // Clear all terrain grids
+        terrainGrids.clear();
+
+        vfLogInfo("TerrainService: Cleared all terrains on scene clear");
     }
 }

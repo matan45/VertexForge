@@ -34,6 +34,9 @@ namespace services
         // Subscription for entity deletion events
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
 
+        // Subscription for scene cleared events
+        std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
+
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~TerrainService() override;
@@ -86,5 +89,8 @@ namespace services
 
         // Handle entity deletion - clean up if it's a terrain
         void onEntityDeleted(EntityHandle entity);
+
+        // Handle scene cleared - clean up all terrains
+        void onSceneCleared();
     };
 }
