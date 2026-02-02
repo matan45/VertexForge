@@ -27,6 +27,10 @@ namespace render::gpudriven
                                           vk::DescriptorSetLayout meshletDataLayout,
                                           vk::DescriptorSetLayout vertexDataLayout,
                                           vk::DescriptorSetLayout lightDataLayout,
+                                          vk::DescriptorSetLayout clusterGridLayout,
+                                          vk::DescriptorSetLayout cullingOutputLayout,
+                                          vk::DescriptorSetLayout shadowDataLayout,
+                                          vk::DescriptorSetLayout shadowTextureLayout,
                                           vk::RenderPass renderPass)
     {
         cachedIBLLayout = iblLayout;
@@ -34,6 +38,10 @@ namespace render::gpudriven
         cachedMeshletLayout = meshletDataLayout;
         cachedVertexLayout = vertexDataLayout;
         cachedLightDataLayout = lightDataLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedCullingOutputLayout = cullingOutputLayout;
+        cachedShadowDataLayout = shadowDataLayout;
+        cachedShadowTextureLayout = shadowTextureLayout;
 
         // Create command pool for immediate transfers
         vk::CommandPoolCreateInfo poolInfo{};
@@ -41,11 +49,38 @@ namespace render::gpudriven
         poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
         transferCommandPool = device.getLogicalDevice().createCommandPool(poolInfo);
 
+        // Create empty descriptor set layout and sets for unused sets (1 and 5)
+        vk::Device vkDevice = device.getLogicalDevice();
+        vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
+        emptyLayoutInfo.bindingCount = 0;
+        emptyLayoutInfo.pBindings = nullptr;
+        emptyLayout = vkDevice.createDescriptorSetLayout(emptyLayoutInfo);
+
+        // Create pool for empty descriptor sets
+        vk::DescriptorPoolCreateInfo emptyPoolInfo{};
+        emptyPoolInfo.maxSets = 2;
+        emptyPoolInfo.poolSizeCount = 0;
+        emptyPoolInfo.pPoolSizes = nullptr;
+        emptyPoolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        emptyDescriptorPool = vkDevice.createDescriptorPool(emptyPoolInfo);
+
+        // Allocate empty descriptor sets
+        std::array<vk::DescriptorSetLayout, 2> emptyLayouts = {emptyLayout, emptyLayout};
+        vk::DescriptorSetAllocateInfo emptyAllocInfo{};
+        emptyAllocInfo.descriptorPool = emptyDescriptorPool;
+        emptyAllocInfo.descriptorSetCount = 2;
+        emptyAllocInfo.pSetLayouts = emptyLayouts.data();
+        auto emptySets = vkDevice.allocateDescriptorSets(emptyAllocInfo);
+        emptyDescriptorSet1 = emptySets[0];
+        emptyDescriptorSet5 = emptySets[1];
+
         createTileDataBuffer();
         createStatsBuffer();
         createTerrainDataDescriptor();
         createTerrainGraphicsPipeline(iblLayout, bindlessTextureLayout, meshletDataLayout,
-                                      vertexDataLayout, lightDataLayout, renderPass);
+                                      vertexDataLayout, lightDataLayout,
+                                      clusterGridLayout, cullingOutputLayout,
+                                      shadowDataLayout, shadowTextureLayout, renderPass);
 
         initialized = true;
         loggerInfo("TerrainMeshShaderPipeline: Initialized successfully");
@@ -82,6 +117,18 @@ namespace render::gpudriven
             terrainBufferPool = nullptr;
         }
 
+        if (emptyDescriptorPool)
+        {
+            vkDevice.destroyDescriptorPool(emptyDescriptorPool);
+            emptyDescriptorPool = nullptr;
+        }
+
+        if (emptyLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(emptyLayout);
+            emptyLayout = nullptr;
+        }
+
         if (terrainDataPool)
         {
             vkDevice.destroyDescriptorPool(terrainDataPool);
@@ -107,6 +154,10 @@ namespace render::gpudriven
                                               vk::DescriptorSetLayout meshletDataLayout,
                                               vk::DescriptorSetLayout vertexDataLayout,
                                               vk::DescriptorSetLayout lightDataLayout,
+                                              vk::DescriptorSetLayout clusterGridLayout,
+                                              vk::DescriptorSetLayout cullingOutputLayout,
+                                              vk::DescriptorSetLayout shadowDataLayout,
+                                              vk::DescriptorSetLayout shadowTextureLayout,
                                               vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -117,6 +168,10 @@ namespace render::gpudriven
         cachedMeshletLayout = meshletDataLayout;
         cachedVertexLayout = vertexDataLayout;
         cachedLightDataLayout = lightDataLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedCullingOutputLayout = cullingOutputLayout;
+        cachedShadowDataLayout = shadowDataLayout;
+        cachedShadowTextureLayout = shadowTextureLayout;
 
         if (graphicsPipeline)
         {
@@ -136,7 +191,9 @@ namespace render::gpudriven
         }
 
         createTerrainGraphicsPipeline(iblLayout, bindlessTextureLayout, meshletDataLayout,
-                                      vertexDataLayout, lightDataLayout, renderPass);
+                                      vertexDataLayout, lightDataLayout,
+                                      clusterGridLayout, cullingOutputLayout,
+                                      shadowDataLayout, shadowTextureLayout, renderPass);
     }
 
     void TerrainMeshShaderPipeline::createTileDataBuffer()
@@ -255,6 +312,10 @@ namespace render::gpudriven
         vk::DescriptorSetLayout meshletDataLayout,
         vk::DescriptorSetLayout vertexDataLayout,
         vk::DescriptorSetLayout lightDataLayout,
+        vk::DescriptorSetLayout clusterGridLayout,
+        vk::DescriptorSetLayout cullingOutputLayout,
+        vk::DescriptorSetLayout shadowDataLayout,
+        vk::DescriptorSetLayout shadowTextureLayout,
         vk::RenderPass renderPass)
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -286,36 +347,34 @@ namespace render::gpudriven
             return;
         }
 
-        // Layout order (matching shader bindings):
+        // Layout order (matching mesh_shader_gpudriven.glsl for sets 0-10):
         // Set 0: IBL/Camera
         // Set 1: (unused - reserved for per-draw)
         // Set 2: Bindless textures
         // Set 3: Meshlet data
         // Set 4: Vertex data
         // Set 5: (unused - reserved for bones)
-        // Set 6: Terrain tile data
-        // ... Sets 7-10 unused for now
-        // Set 11: Light data
+        // Set 6: Light data (same as mesh shader!)
+        // Set 7: Cluster grid params
+        // Set 8: Cluster culling output
+        // Set 9: Shadow data
+        // Set 10: Shadow textures
+        // Set 11: Terrain tile data (terrain-specific)
 
-        // Create empty descriptor set layouts for unused sets
-        vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
-        emptyLayoutInfo.bindingCount = 0;
-        emptyLayoutInfo.pBindings = nullptr;
-        vk::DescriptorSetLayout emptyLayout = vkDevice.createDescriptorSetLayout(emptyLayoutInfo);
-
+        // Use the member emptyLayout for unused sets (created in init())
         std::array<vk::DescriptorSetLayout, 12> setLayouts = {
             iblLayout,              // Set 0: IBL/Camera
-            emptyLayout,            // Set 1: (unused)
+            emptyLayout,            // Set 1: (unused) - member variable
             bindlessTextureLayout,  // Set 2: Bindless textures
             meshletDataLayout,      // Set 3: Meshlet data
             vertexDataLayout,       // Set 4: Vertex data
-            emptyLayout,            // Set 5: (unused - bones)
-            terrainDataLayout,      // Set 6: Terrain tile data
-            emptyLayout,            // Set 7: (unused)
-            emptyLayout,            // Set 8: (unused)
-            emptyLayout,            // Set 9: (unused)
-            emptyLayout,            // Set 10: (unused)
-            lightDataLayout         // Set 11: Light data
+            emptyLayout,            // Set 5: (unused - bones) - member variable
+            lightDataLayout,        // Set 6: Light data (same as mesh shader)
+            clusterGridLayout,      // Set 7: Cluster grid params
+            cullingOutputLayout,    // Set 8: Cluster culling output
+            shadowDataLayout,       // Set 9: Shadow data
+            shadowTextureLayout,    // Set 10: Shadow textures
+            terrainDataLayout       // Set 11: Terrain tile data
         };
 
         vk::PushConstantRange pushConstantRange{};
@@ -333,8 +392,7 @@ namespace render::gpudriven
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
 
-        // Cleanup empty layout
-        vkDevice.destroyDescriptorSetLayout(emptyLayout);
+        // Note: emptyLayout is a member variable, cleaned up in cleanup()
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
@@ -530,11 +588,19 @@ namespace render::gpudriven
 
     void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                                             vk::DescriptorSet bindlessDescSet,
-                                                            vk::DescriptorSet lightDataDescSet)
+                                                            vk::DescriptorSet lightDataDescSet,
+                                                            vk::DescriptorSet clusterGridDescSet,
+                                                            vk::DescriptorSet cullingOutputDescSet,
+                                                            vk::DescriptorSet shadowDataDescSet,
+                                                            vk::DescriptorSet shadowTextureDescSet)
     {
         iblDescriptorSet = iblDescSet;
         bindlessDescriptorSet = bindlessDescSet;
         lightDataDescriptorSet = lightDataDescSet;
+        clusterGridDescriptorSet = clusterGridDescSet;
+        cullingOutputDescriptorSet = cullingOutputDescSet;
+        shadowDataDescriptorSet = shadowDataDescSet;
+        shadowTextureDescriptorSet = shadowTextureDescSet;
     }
 
     void TerrainMeshShaderPipeline::dispatch(vk::CommandBuffer cmd,
@@ -567,44 +633,66 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Bind descriptor sets individually
-        if (iblDescriptorSet)
-        {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
-                                   iblDescriptorSet, {});
+        // Bind descriptor sets individually to avoid issues with null descriptors
+        // Set 0: IBL/Camera
+        if (iblDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, iblDescriptorSet, {});
         }
-        if (bindlessDescriptorSet)
-        {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 2,
-                                   bindlessDescriptorSet, {});
+
+        // Set 1: Empty (use member empty set)
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, emptyDescriptorSet1, {});
+
+        // Set 2: Bindless textures
+        if (bindlessDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 2, bindlessDescriptorSet, {});
         }
-        // Bind terrain-specific meshlet and vertex descriptors
-        if (terrainMeshletDescriptorSet)
-        {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 3,
-                                   terrainMeshletDescriptorSet, {});
+
+        // Set 3: Meshlet data
+        if (terrainMeshletDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 3, terrainMeshletDescriptorSet, {});
         }
-        if (terrainVertexDescriptorSet)
-        {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 4,
-                                   terrainVertexDescriptorSet, {});
+
+        // Set 4: Vertex data
+        if (terrainVertexDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 4, terrainVertexDescriptorSet, {});
         }
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 6,
-                               terrainDataDescriptorSet, {});
-        if (lightDataDescriptorSet)
-        {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 11,
-                                   lightDataDescriptorSet, {});
-        }
-        else
-        {
+
+        // Set 5: Empty (use member empty set)
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 5, emptyDescriptorSet5, {});
+
+        // Set 6: Light data - CRITICAL
+        if (lightDataDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 6, lightDataDescriptorSet, {});
+        } else {
             static bool warnedOnce = false;
-            if (!warnedOnce)
-            {
-                loggerWarning("TerrainMeshShaderPipeline::dispatch: lightDataDescriptorSet is null - lighting will not work");
+            if (!warnedOnce) {
+                loggerWarning("TerrainMeshShaderPipeline: lightDataDescriptorSet is NULL!");
                 warnedOnce = true;
             }
         }
+
+        // Set 7: Cluster grid
+        if (clusterGridDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 7, clusterGridDescriptorSet, {});
+        }
+
+        // Set 8: Culling output
+        if (cullingOutputDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 8, cullingOutputDescriptorSet, {});
+        }
+
+        // Set 9: Shadow data (may be null)
+        if (shadowDataDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 9, shadowDataDescriptorSet, {});
+        }
+
+        // Set 10: Shadow textures (may be null)
+        if (shadowTextureDescriptorSet) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 10, shadowTextureDescriptorSet, {});
+        }
+
+        // Set 11: Terrain tile data
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 11, terrainDataDescriptorSet, {});
 
         // Push constants
         TerrainPushConstants pushConstants{};

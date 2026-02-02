@@ -16,8 +16,8 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
 };
 
-// Terrain tile data
-layout(std430, set = 6, binding = 0) readonly buffer TerrainTileBuffer {
+// Terrain tile data (Set 11 - terrain-specific data)
+layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
 
@@ -27,7 +27,7 @@ layout(std430, set = 3, binding = 0) readonly buffer MeshletBuffer {
 };
 
 // Terrain culling statistics
-layout(std430, set = 6, binding = 1) buffer TerrainStatsBuffer {
+layout(std430, set = 11, binding = 1) buffer TerrainStatsBuffer {
     uint totalTiles;
     uint culledTiles;
     uint totalMeshlets;

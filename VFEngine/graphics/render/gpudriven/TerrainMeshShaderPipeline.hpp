@@ -68,11 +68,25 @@ namespace render::gpudriven
         vk::DescriptorSetLayout cachedMeshletLayout;
         vk::DescriptorSetLayout cachedVertexLayout;
         vk::DescriptorSetLayout cachedLightDataLayout;
+        vk::DescriptorSetLayout cachedClusterGridLayout;
+        vk::DescriptorSetLayout cachedCullingOutputLayout;
+        vk::DescriptorSetLayout cachedShadowDataLayout;
+        vk::DescriptorSetLayout cachedShadowTextureLayout;
+
+        // Empty descriptor set layout and sets for unused sets (1 and 5)
+        vk::DescriptorSetLayout emptyLayout;
+        vk::DescriptorPool emptyDescriptorPool;
+        vk::DescriptorSet emptyDescriptorSet1;  // For Set 1
+        vk::DescriptorSet emptyDescriptorSet5;  // For Set 5
 
         // Shared descriptor sets (owned elsewhere)
         vk::DescriptorSet iblDescriptorSet;
         vk::DescriptorSet bindlessDescriptorSet;
         vk::DescriptorSet lightDataDescriptorSet;
+        vk::DescriptorSet clusterGridDescriptorSet;
+        vk::DescriptorSet cullingOutputDescriptorSet;
+        vk::DescriptorSet shadowDataDescriptorSet;
+        vk::DescriptorSet shadowTextureDescriptorSet;
 
         // Terrain-specific descriptor sets (owned by this pipeline)
         vk::DescriptorPool terrainBufferPool;
@@ -93,6 +107,10 @@ namespace render::gpudriven
                   vk::DescriptorSetLayout meshletDataLayout,
                   vk::DescriptorSetLayout vertexDataLayout,
                   vk::DescriptorSetLayout lightDataLayout,
+                  vk::DescriptorSetLayout clusterGridLayout,
+                  vk::DescriptorSetLayout cullingOutputLayout,
+                  vk::DescriptorSetLayout shadowDataLayout,
+                  vk::DescriptorSetLayout shadowTextureLayout,
                   vk::RenderPass renderPass);
 
         void cleanup();
@@ -102,6 +120,10 @@ namespace render::gpudriven
                       vk::DescriptorSetLayout meshletDataLayout,
                       vk::DescriptorSetLayout vertexDataLayout,
                       vk::DescriptorSetLayout lightDataLayout,
+                      vk::DescriptorSetLayout clusterGridLayout,
+                      vk::DescriptorSetLayout cullingOutputLayout,
+                      vk::DescriptorSetLayout shadowDataLayout,
+                      vk::DescriptorSetLayout shadowTextureLayout,
                       vk::RenderPass renderPass);
 
         // Update terrain tile data on GPU
@@ -110,10 +132,14 @@ namespace render::gpudriven
         // Update descriptors from dedicated terrain buffer
         void updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer);
 
-        // Update IBL, bindless and light descriptors (terrain buffer handles meshlet/vertex)
+        // Update IBL, bindless, light, cluster, and shadow descriptors (terrain buffer handles meshlet/vertex)
         void updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                      vk::DescriptorSet bindlessDescSet,
-                                     vk::DescriptorSet lightDataDescSet);
+                                     vk::DescriptorSet lightDataDescSet,
+                                     vk::DescriptorSet clusterGridDescSet,
+                                     vk::DescriptorSet cullingOutputDescSet,
+                                     vk::DescriptorSet shadowDataDescSet,
+                                     vk::DescriptorSet shadowTextureDescSet);
 
         // Dispatch terrain rendering
         void dispatch(vk::CommandBuffer cmd,
@@ -154,6 +180,10 @@ namespace render::gpudriven
                                            vk::DescriptorSetLayout meshletDataLayout,
                                            vk::DescriptorSetLayout vertexDataLayout,
                                            vk::DescriptorSetLayout lightDataLayout,
+                                           vk::DescriptorSetLayout clusterGridLayout,
+                                           vk::DescriptorSetLayout cullingOutputLayout,
+                                           vk::DescriptorSetLayout shadowDataLayout,
+                                           vk::DescriptorSetLayout shadowTextureLayout,
                                            vk::RenderPass renderPass);
     };
 }
