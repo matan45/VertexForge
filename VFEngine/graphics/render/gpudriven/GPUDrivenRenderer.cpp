@@ -668,12 +668,22 @@ namespace render::gpudriven
             lightBufferManager->uploadToGPU(cmd);
         }
 
-        // Early return if no mesh objects to render
-        if (stats.totalObjects == 0)
+        // Check if we have anything to render
+        bool hasMeshObjects = stats.totalObjects > 0;
+        bool hasTerrainTiles = terrainRenderingEnabled && terrainPipeline &&
+                               terrainPipeline->getCurrentTileCount() > 0;
+
+        // Early return if nothing to render (no mesh objects AND no terrain)
+        if (!hasMeshObjects && !hasTerrainTiles)
         {
             return;
         }
-        mergedBuffer->uploadObjects(cmd);
+
+        // Upload mesh object data only if we have mesh objects
+        if (hasMeshObjects)
+        {
+            mergedBuffer->uploadObjects(cmd);
+        }
 
         if (boneMatrixManager)
         {
