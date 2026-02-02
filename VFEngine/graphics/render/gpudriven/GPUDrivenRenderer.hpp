@@ -89,6 +89,7 @@ namespace render::gpudriven
         float terrainLODBias = 1.0f;
         float terrainErrorThreshold = 2.0f;
         float terrainTextureScale = 0.1f;
+        uint32_t terrainShadowLOD = 2;  // LOD level for terrain shadow rendering (0=highest detail, 3=lowest)
 
         bool initialized = false;
         bool enabled = false;
@@ -254,6 +255,8 @@ namespace render::gpudriven
         float getTerrainErrorThreshold() const { return terrainErrorThreshold; }
         void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
         float getTerrainTextureScale() const { return terrainTextureScale; }
+        void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
+        uint32_t getTerrainShadowLOD() const { return terrainShadowLOD; }
 
         TerrainGPUAdapter* getTerrainAdapter() const { return terrainAdapter.get(); }
         TerrainCullingStats getTerrainCullingStats();

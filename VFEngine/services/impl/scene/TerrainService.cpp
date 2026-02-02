@@ -412,7 +412,7 @@ namespace services
         for (auto& [entityId, grid] : terrainGrids)
         {
             // First update LODs based on camera position
-            grid->updateLODs(cameraPosition);
+            (void)grid->updateLODs(cameraPosition);
 
             // Get visible tiles
             auto visibleTiles = grid->getVisibleTiles(frustum);
@@ -469,7 +469,7 @@ namespace services
         for (auto& [entityId, grid] : terrainGrids)
         {
             // Update LODs first
-            grid->updateLODs(cameraPosition);
+            (void)grid->updateLODs(cameraPosition);
 
             // Get visible tiles from this grid
             auto visibleTiles = grid->getVisibleTiles(frustum);

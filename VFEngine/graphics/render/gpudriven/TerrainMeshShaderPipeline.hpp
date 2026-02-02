@@ -165,6 +165,10 @@ namespace render::gpudriven
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
         vk::DescriptorSetLayout getTerrainDataLayout() const { return terrainDataLayout; }
         vk::DescriptorSet getTerrainDataDescriptorSet() const { return terrainDataDescriptorSet; }
+        vk::DescriptorSet getTerrainMeshletDescriptorSet() const { return terrainMeshletDescriptorSet; }
+        vk::DescriptorSet getTerrainVertexDescriptorSet() const { return terrainVertexDescriptorSet; }
+        vk::DescriptorSetLayout getCachedMeshletLayout() const { return cachedMeshletLayout; }
+        vk::DescriptorSetLayout getCachedVertexLayout() const { return cachedVertexLayout; }
         uint32_t getCurrentTileCount() const { return currentTileCount; }
         bool isInitialized() const { return initialized; }
 

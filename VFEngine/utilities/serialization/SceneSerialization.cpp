@@ -1047,6 +1047,14 @@ namespace serialization
             {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled}
         };
 
+        j["terrain"] = {
+            {"enabled", settings.terrain.enabled},
+            {"lodBias", settings.terrain.lodBias},
+            {"errorThreshold", settings.terrain.errorThreshold},
+            {"textureScale", settings.terrain.textureScale},
+            {"shadowLOD", settings.terrain.shadowLOD}
+        };
+
         return j;
     }
 
@@ -1093,6 +1101,26 @@ namespace serialization
                 settings.culling.terrainFrustumCullingEnabled = culling["terrainFrustumCullingEnabled"].get<bool>();
             if (culling.contains("terrainMeshletCullingEnabled") && culling["terrainMeshletCullingEnabled"].is_boolean())
                 settings.culling.terrainMeshletCullingEnabled = culling["terrainMeshletCullingEnabled"].get<bool>();
+        }
+
+        if (j.contains("terrain") && j["terrain"].is_object())
+        {
+            const auto& terrain = j["terrain"];
+            if (terrain.contains("enabled") && terrain["enabled"].is_boolean())
+                settings.terrain.enabled = terrain["enabled"].get<bool>();
+            if (terrain.contains("lodBias") && terrain["lodBias"].is_number())
+                settings.terrain.lodBias = terrain["lodBias"].get<float>();
+            if (terrain.contains("errorThreshold") && terrain["errorThreshold"].is_number())
+                settings.terrain.errorThreshold = terrain["errorThreshold"].get<float>();
+            if (terrain.contains("textureScale") && terrain["textureScale"].is_number())
+                settings.terrain.textureScale = terrain["textureScale"].get<float>();
+            if (terrain.contains("shadowLOD") && terrain["shadowLOD"].is_number_unsigned())
+                settings.terrain.shadowLOD = std::min(terrain["shadowLOD"].get<uint32_t>(), 3u);
+        }
+        else
+        {
+            // Initialize terrain settings with defaults for old scene files
+            settings.terrain = types::TerrainSettings{};
         }
     }
 

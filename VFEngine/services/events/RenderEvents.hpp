@@ -232,4 +232,35 @@ namespace events::render {
         std::string_view getName() const override { return "SetTerrainMeshletCulling"; }
     };
 
+    // Terrain rendering settings
+    struct SetTerrainRenderingEnabledCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetTerrainRenderingEnabled"; }
+    };
+
+    struct SetTerrainLODBiasCommand : ICommand<> {
+        float bias;
+
+        std::string_view getName() const override { return "SetTerrainLODBias"; }
+    };
+
+    struct SetTerrainErrorThresholdCommand : ICommand<> {
+        float threshold;
+
+        std::string_view getName() const override { return "SetTerrainErrorThreshold"; }
+    };
+
+    struct SetTerrainTextureScaleCommand : ICommand<> {
+        float scale;
+
+        std::string_view getName() const override { return "SetTerrainTextureScale"; }
+    };
+
+    struct SetTerrainShadowLODCommand : ICommand<> {
+        uint32_t lod;
+
+        std::string_view getName() const override { return "SetTerrainShadowLOD"; }
+    };
+
 }

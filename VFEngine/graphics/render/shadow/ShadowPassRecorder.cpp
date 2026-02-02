@@ -2,6 +2,7 @@
 #include "ShadowAtlasManager.hpp"
 #include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
+#include "TerrainShadowPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "print/Logger.hpp"
 
@@ -15,9 +16,11 @@ namespace render::shadow
     void ShadowPassRecorder::recordShadowPass(
         vk::CommandBuffer cmd,
         const ShadowPassParams& params,
+        const TerrainShadowPassParams* terrainParams,
         ShadowAtlasManager* atlasManager,
         ShadowResourcePool* resourcePool,
         ShadowPassPipeline* shadowPassPipeline,
+        TerrainShadowPipeline* terrainShadowPipeline,
         const std::vector<ShadowView>& directionalShadowViews,
         const std::vector<ShadowView>& spotShadowViews,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
@@ -30,6 +33,12 @@ namespace render::shadow
                          shadowPassPipeline ? shadowPassPipeline->isInitialized() : false);
             return;
         }
+
+        // Check if terrain shadow rendering is available
+        bool hasTerrainShadows = terrainParams != nullptr &&
+                                  terrainParams->tileCount > 0 &&
+                                  terrainShadowPipeline != nullptr &&
+                                  terrainShadowPipeline->isInitialized();
 
         std::vector<const ShadowView*> allViews;
         for (const auto& view : spotShadowViews)
@@ -189,6 +198,22 @@ namespace render::shadow
                         );
                     }
                 }
+
+                // Render terrain shadows for this view
+                if (hasTerrainShadows)
+                {
+                    terrainShadowPipeline->dispatch(
+                        cmd,
+                        terrainParams->terrainDataDescSet,
+                        terrainParams->terrainMeshletDescSet,
+                        terrainParams->terrainVertexDescSet,
+                        view->viewProjectionMatrix,
+                        terrainParams->tileCount,
+                        terrainParams->shadowLOD,
+                        view->depthBias,
+                        view->slopeBias
+                    );
+                }
             }
 
             cmd.endRenderPass();
@@ -223,18 +248,27 @@ namespace render::shadow
         }
 
         // Point light cube shadow rendering
-        renderPointLightCubeShadows(cmd, params, resourcePool, shadowPassPipeline, lightShadowData);
+        renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool, shadowPassPipeline,
+                                     terrainShadowPipeline, lightShadowData);
     }
 
     void ShadowPassRecorder::renderPointLightCubeShadows(
         vk::CommandBuffer cmd,
         const ShadowPassParams& params,
+        const TerrainShadowPassParams* terrainParams,
         ShadowResourcePool* resourcePool,
         ShadowPassPipeline* shadowPassPipeline,
+        TerrainShadowPipeline* terrainShadowPipeline,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData)
     {
         if (!resourcePool || !shadowPassPipeline)
             return;
+
+        // Check if terrain shadow rendering is available
+        bool hasTerrainShadows = terrainParams != nullptr &&
+                                  terrainParams->tileCount > 0 &&
+                                  terrainShadowPipeline != nullptr &&
+                                  terrainShadowPipeline->isInitialized();
 
         const auto& logicalDevice = device.getLogicalDevice();
 
@@ -355,6 +389,22 @@ namespace render::shadow
                             sizeof(vk::DrawMeshTasksIndirectCommandEXT)
                         );
                     }
+                }
+
+                // Render terrain shadows for this cube face
+                if (hasTerrainShadows)
+                {
+                    terrainShadowPipeline->dispatch(
+                        cmd,
+                        terrainParams->terrainDataDescSet,
+                        terrainParams->terrainMeshletDescSet,
+                        terrainParams->terrainVertexDescSet,
+                        view.viewProjectionMatrix,
+                        terrainParams->tileCount,
+                        terrainParams->shadowLOD,
+                        view.depthBias,
+                        view.slopeBias
+                    );
                 }
 
                 cmd.endRenderPass();

@@ -280,4 +280,16 @@ namespace render::shadow
             );
         }
     };
+
+    // ============================================
+    // Terrain shadow pass parameters
+    // ============================================
+    struct TerrainShadowPassParams
+    {
+        vk::DescriptorSet terrainDataDescSet;    // Terrain tile GPU data buffer
+        vk::DescriptorSet terrainMeshletDescSet; // Terrain meshlet buffer
+        vk::DescriptorSet terrainVertexDescSet;  // Terrain vertex buffer
+        uint32_t tileCount = 0;
+        uint32_t shadowLOD = 2;  // Default to LOD 2 (coarse) for shadows
+    };
 }

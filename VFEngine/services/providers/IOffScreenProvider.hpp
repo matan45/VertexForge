@@ -214,6 +214,13 @@ namespace services {
         virtual void setTerrainFrustumCullingEnabled(bool enabled) = 0;
         virtual void setTerrainMeshletCullingEnabled(bool enabled) = 0;
 
+        // Terrain Rendering Settings API
+        virtual void setTerrainRenderingEnabled(bool enabled) = 0;
+        virtual void setTerrainLODBias(float bias) = 0;
+        virtual void setTerrainErrorThreshold(float threshold) = 0;
+        virtual void setTerrainTextureScale(float scale) = 0;
+        virtual void setTerrainShadowLOD(uint32_t lod) = 0;
+
         // VFX Runtime API
         virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;
 

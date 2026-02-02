@@ -180,6 +180,14 @@ namespace render::gpudriven
                 renderPass
             );
             loggerInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
+
+            // Initialize terrain shadow pass after terrain pipeline is ready
+            shadowSystem->initTerrainShadowPass(
+                terrainPipeline->getTerrainDataLayout(),
+                terrainPipeline->getCachedMeshletLayout(),
+                terrainPipeline->getCachedVertexLayout()
+            );
+            loggerInfo("GPUDrivenRenderer: Terrain shadow pass initialized");
         }
         else
         {
@@ -781,7 +789,21 @@ namespace render::gpudriven
             shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
             shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
 
-            shadowSystem->recordShadowPass(cmd, shadowParams);
+            // Build terrain shadow params if terrain rendering is enabled
+            shadow::TerrainShadowPassParams terrainShadowParams{};
+            shadow::TerrainShadowPassParams* terrainShadowParamsPtr = nullptr;
+
+            if (terrainRenderingEnabled && terrainPipeline && terrainPipeline->getCurrentTileCount() > 0)
+            {
+                terrainShadowParams.terrainDataDescSet = terrainPipeline->getTerrainDataDescriptorSet();
+                terrainShadowParams.terrainMeshletDescSet = terrainPipeline->getTerrainMeshletDescriptorSet();
+                terrainShadowParams.terrainVertexDescSet = terrainPipeline->getTerrainVertexDescriptorSet();
+                terrainShadowParams.tileCount = terrainPipeline->getCurrentTileCount();
+                terrainShadowParams.shadowLOD = terrainShadowLOD;
+                terrainShadowParamsPtr = &terrainShadowParams;
+            }
+
+            shadowSystem->recordShadowPass(cmd, shadowParams, terrainShadowParamsPtr);
         }
     }
 

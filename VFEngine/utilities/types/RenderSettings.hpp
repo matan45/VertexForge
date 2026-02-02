@@ -110,10 +110,20 @@ namespace types
         bool terrainMeshletCullingEnabled = true;
     };
 
+    struct TerrainSettings
+    {
+        bool enabled = true;
+        float lodBias = 1.0f;
+        float errorThreshold = 2.0f;
+        float textureScale = 0.1f;
+        uint32_t shadowLOD = 2;  // LOD level for terrain shadows (0=highest, 3=lowest)
+    };
+
     struct RenderSettings
     {
         ShadowSettings shadows;
         CullingSettings culling;
+        TerrainSettings terrain;
 
         static RenderSettings createDefault()
         {

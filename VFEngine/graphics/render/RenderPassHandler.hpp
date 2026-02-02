@@ -166,6 +166,12 @@ namespace render
         void setTerrainFrustumCullingEnabled(bool enabled);
         void setTerrainMeshletCullingEnabled(bool enabled);
 
+        void setTerrainRenderingEnabled(bool enabled);
+        void setTerrainLODBias(float bias);
+        void setTerrainErrorThreshold(float threshold);
+        void setTerrainTextureScale(float scale);
+        void setTerrainShadowLOD(uint32_t lod);
+
         occlusion::CameraRenderData* createCamera(occlusion::CameraId id, bool enableOcclusion = true);
         void removeCamera(occlusion::CameraId id);
         void setActiveCamera(occlusion::CameraId id);
