@@ -44,6 +44,10 @@ namespace services
         std::optional<TerrainData> getTerrainData(EntityHandle entity) const override;
         bool hasTerrainComponent(EntityHandle entity) const override;
 
+        // Terrain tile queries
+        bool hasTerrainTileComponent(EntityHandle entity) const;
+        std::optional<TerrainTileData> getTerrainTileData(EntityHandle entity) const;
+
         // Collect visible terrain tiles info
         std::vector<::events::terrain::TerrainTileInfo> collectVisibleTiles(
             const math::Frustum& frustum,
@@ -62,6 +66,15 @@ namespace services
 
         // Get total tile count across all terrains
         size_t getTotalTileCount() const;
+
+        // Sync ECS components from TerrainTile data
+        void syncTileComponents(EntityHandle terrainEntity);
+
+        // Mark tiles as GPU resident (called after GPU upload)
+        void setTilesGPUResident(EntityHandle terrainEntity, bool resident);
+
+        // Get terrain grid for an entity (internal use)
+        terrain::TerrainGrid* getTerrainGrid(uint64_t entityId);
 
     private:
         // Create child entities for each tile in the grid

@@ -430,14 +430,34 @@ namespace components
 
         // Heightmap source path (for regeneration/serialization)
         std::string heightmapPath;
+
+        // State flags
+        bool isActive = true;       // Global terrain enable/disable
+        bool isDirty = false;       // Config changed, needs regeneration
+
+        // Runtime statistics (read-only - updated by TerrainService)
+        uint32_t activeTileCount = 0;
+        uint32_t visibleTileCount = 0;
     };
 
     // Terrain tile component - attached to each tile child entity
     struct TerrainTileComponent
     {
+        // Tile identity
         int32_t tileX = 0;
         int32_t tileZ = 0;
+
+        // State
         uint8_t currentLOD = 0;
         bool isVisible = true;
+
+        // State flags
+        bool isDirty = false;           // Needs geometry regeneration
+        bool isWeightMapDirty = false;  // Needs weight map GPU update
+        bool isGPUResident = false;     // Currently uploaded to GPU
+
+        // Cached bounds for inspector display
+        float boundingMinY = 0.0f;
+        float boundingMaxY = 0.0f;
     };
 }

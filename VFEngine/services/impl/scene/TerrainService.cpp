@@ -28,8 +28,12 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::UploadTerrainTilesCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::UpdateTerrainLODsCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SyncTerrainComponentsCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::SetTilesGPUResidentCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainTileDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetVisibleTerrainTilesQuery>();
 
         // Unsubscribe from entity deletion
@@ -69,6 +73,18 @@ namespace services
                 return hasTerrainComponent(query.entity);
             });
 
+        dispatcher.registerQueryHandler<events::terrain::HasTerrainTileComponentQuery>(
+            [this](const events::terrain::HasTerrainTileComponentQuery& query)
+            {
+                return hasTerrainTileComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainTileDataQuery>(
+            [this](const events::terrain::GetTerrainTileDataQuery& query)
+            {
+                return getTerrainTileData(query.entity);
+            });
+
         dispatcher.registerQueryHandler<events::terrain::GetVisibleTerrainTilesQuery>(
             [this](const events::terrain::GetVisibleTerrainTilesQuery& query)
             {
@@ -87,6 +103,18 @@ namespace services
                 // Terrain GPU upload is handled by the adapter in graphics layer
                 // This command exists for future use if needed
                 return true;
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SyncTerrainComponentsCommand>(
+            [this](const events::terrain::SyncTerrainComponentsCommand& cmd)
+            {
+                syncTileComponents(cmd.terrainEntity);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTilesGPUResidentCommand>(
+            [this](const events::terrain::SetTilesGPUResidentCommand& cmd)
+            {
+                setTilesGPUResident(cmd.terrainEntity, cmd.resident);
             });
 
         // Subscribe to entity deletion to clean up terrain when deleted via scene hierarchy
@@ -192,6 +220,11 @@ namespace services
         terrainComp.gridMaxZ = maxZ;
         terrainComp.lodDistances = config.lodDistances;
         terrainComp.heightmapPath = config.heightmapPath;
+        // State flags
+        terrainComp.isActive = true;
+        terrainComp.isDirty = false;
+        terrainComp.activeTileCount = static_cast<uint32_t>(config.tilesX * config.tilesZ);
+        terrainComp.visibleTileCount = 0;  // Will be updated after culling
 
         EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
 
@@ -231,6 +264,11 @@ namespace services
             tileComp.tileZ = tile->coord.z;
             tileComp.currentLOD = tile->currentLOD;
             tileComp.isVisible = tile->isVisible;
+            tileComp.isDirty = tile->isDirty;
+            tileComp.isWeightMapDirty = tile->isWeightMapDirty;
+            tileComp.isGPUResident = false;  // Not yet uploaded
+            tileComp.boundingMinY = tile->worldBounds.min.y;
+            tileComp.boundingMaxY = tile->worldBounds.max.y;
 
             // Set tile entity position based on world origin
             auto& transform = tileEntity.getComponent<components::TransformComponent>();
@@ -297,6 +335,11 @@ namespace services
         data.heightmapPath = comp.heightmapPath;
         data.tileCount = static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
                                                 (comp.gridMaxZ - comp.gridMinZ + 1));
+        // State flags
+        data.isActive = comp.isActive;
+        data.isDirty = comp.isDirty;
+        data.activeTileCount = comp.activeTileCount;
+        data.visibleTileCount = comp.visibleTileCount;
 
         return data;
     }
@@ -313,6 +356,50 @@ namespace services
             return false;
 
         return registry.all_of<components::TerrainComponent>(ent);
+    }
+
+    bool TerrainService::hasTerrainTileComponent(EntityHandle entity) const
+    {
+        if (!entity.isValid())
+            return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+
+        if (!registry.valid(ent))
+            return false;
+
+        return registry.all_of<components::TerrainTileComponent>(ent);
+    }
+
+    std::optional<TerrainTileData> TerrainService::getTerrainTileData(EntityHandle entity) const
+    {
+        if (!entity.isValid())
+            return std::nullopt;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+
+        if (!registry.valid(ent))
+            return std::nullopt;
+
+        if (!registry.all_of<components::TerrainTileComponent>(ent))
+            return std::nullopt;
+
+        const auto& comp = registry.get<components::TerrainTileComponent>(ent);
+
+        TerrainTileData data;
+        data.tileX = comp.tileX;
+        data.tileZ = comp.tileZ;
+        data.currentLOD = comp.currentLOD;
+        data.isVisible = comp.isVisible;
+        data.isDirty = comp.isDirty;
+        data.isWeightMapDirty = comp.isWeightMapDirty;
+        data.isGPUResident = comp.isGPUResident;
+        data.boundingMinY = comp.boundingMinY;
+        data.boundingMaxY = comp.boundingMaxY;
+
+        return data;
     }
 
     std::vector<events::terrain::TerrainTileInfo> TerrainService::collectVisibleTiles(
@@ -360,6 +447,11 @@ namespace services
         for (auto& [entityId, grid] : terrainGrids)
         {
             grid->updateLODs(cameraPosition);
+
+            // Sync ECS components after LOD update
+            EntityHandle handle;
+            handle.id = entityId;
+            syncTileComponents(handle);
         }
     }
 
@@ -421,5 +513,102 @@ namespace services
             notification.terrainEntity = entity;
             events::EventDispatcher::instance().publish(notification);
         }
+    }
+
+    void TerrainService::syncTileComponents(EntityHandle terrainEntity)
+    {
+        if (!terrainEntity.isValid())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity entity = internal::fromHandle(terrainEntity);
+
+        if (!registry.valid(entity))
+            return;
+
+        auto* grid = getTerrainGrid(terrainEntity.id);
+        if (!grid)
+            return;
+
+        uint32_t visibleCount = 0;
+
+        // Update parent component stats
+        if (registry.all_of<components::TerrainComponent>(entity))
+        {
+            auto& terrainComp = registry.get<components::TerrainComponent>(entity);
+            terrainComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
+        }
+
+        // Sync each tile child
+        if (!registry.all_of<components::ChildrenComponent>(entity))
+            return;
+
+        const auto& children = registry.get<components::ChildrenComponent>(entity);
+
+        for (entt::entity childEntity : children.children)
+        {
+            if (!registry.all_of<components::TerrainTileComponent>(childEntity))
+                continue;
+
+            auto& tileComp = registry.get<components::TerrainTileComponent>(childEntity);
+            terrain::TileCoord coord{tileComp.tileX, tileComp.tileZ};
+            const auto* tile = grid->getTile(coord);
+
+            if (tile)
+            {
+                tileComp.currentLOD = tile->currentLOD;
+                tileComp.isVisible = tile->isVisible;
+                tileComp.isDirty = tile->isDirty;
+                tileComp.isWeightMapDirty = tile->isWeightMapDirty;
+                tileComp.boundingMinY = tile->worldBounds.min.y;
+                tileComp.boundingMaxY = tile->worldBounds.max.y;
+
+                if (tileComp.isVisible)
+                    visibleCount++;
+            }
+        }
+
+        // Update visible count on parent
+        if (registry.all_of<components::TerrainComponent>(entity))
+        {
+            auto& terrainComp = registry.get<components::TerrainComponent>(entity);
+            terrainComp.visibleTileCount = visibleCount;
+        }
+    }
+
+    void TerrainService::setTilesGPUResident(EntityHandle terrainEntity, bool resident)
+    {
+        if (!terrainEntity.isValid())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity entity = internal::fromHandle(terrainEntity);
+
+        if (!registry.valid(entity))
+            return;
+
+        if (!registry.all_of<components::ChildrenComponent>(entity))
+            return;
+
+        const auto& children = registry.get<components::ChildrenComponent>(entity);
+
+        for (entt::entity childEntity : children.children)
+        {
+            if (!registry.all_of<components::TerrainTileComponent>(childEntity))
+                continue;
+
+            auto& tileComp = registry.get<components::TerrainTileComponent>(childEntity);
+            tileComp.isGPUResident = resident;
+        }
+    }
+
+    terrain::TerrainGrid* TerrainService::getTerrainGrid(uint64_t entityId)
+    {
+        auto it = terrainGrids.find(entityId);
+        if (it != terrainGrids.end())
+        {
+            return it->second.get();
+        }
+        return nullptr;
     }
 }

@@ -87,6 +87,10 @@ namespace windows
         bool hasPointLight = pointLightDrawer.draw(handle);
         bool hasSpotLight = spotLightDrawer.draw(handle);
 
+        // Terrain components (read-only display)
+        terrainDrawer.draw(handle);
+        terrainTileDrawer.draw(handle);
+
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
                                hasCollider, hasRigidBody, hasVFX,
                                hasDirectionalLight, hasPointLight, hasSpotLight);
