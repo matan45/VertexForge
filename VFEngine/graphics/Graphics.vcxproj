@@ -332,7 +332,10 @@
   <ItemGroup>
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
+    <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
+    <None Include="..\..\resources\shaders\common\lighting_functions.glsl" />
+    <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_shader_gpudriven.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_terrain.glsl" />

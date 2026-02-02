@@ -173,6 +173,10 @@ namespace render::gpudriven
                 meshShaderPipeline->getMeshletDataLayout(),
                 meshShaderPipeline->getVertexDataLayout(),
                 lightBufferManager->getDescriptorSetLayout(),
+                clusterGridManager->getDescriptorSetLayout(),
+                lightCullingPipeline->getDescriptorSetLayout(),
+                shadowSystem->getShadowDataLayout(),
+                shadowSystem->getShadowTextureLayout(),
                 renderPass
             );
             loggerInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
@@ -587,17 +591,8 @@ namespace render::gpudriven
             lightsAfterHiZCull = lightsAfterBVHCull;
         }
 
-        if (stats.totalObjects == 0)
-        {
-            return;
-        }
-        mergedBuffer->uploadObjects(cmd);
-
-        if (boneMatrixManager)
-        {
-            boneMatrixManager->uploadToGPU(cmd);
-        }
-
+        // Light buffer must be updated even if there are no mesh objects,
+        // because terrain rendering also needs light data.
         // Shadow system must update before light buffer manager so shadow indices are available
         if (shadowSystem && shadowSystem->isInitialized())
         {
@@ -663,6 +658,18 @@ namespace render::gpudriven
                 lightBufferManager->updateFromScene();
             }
             lightBufferManager->uploadToGPU(cmd);
+        }
+
+        // Early return if no mesh objects to render
+        if (stats.totalObjects == 0)
+        {
+            return;
+        }
+        mergedBuffer->uploadObjects(cmd);
+
+        if (boneMatrixManager)
+        {
+            boneMatrixManager->uploadToGPU(cmd);
         }
 
         if (useLightOcclusionCulling && lightOcclusionCulling && lightOcclusionCulling->isInitialized())
@@ -1268,11 +1275,15 @@ namespace render::gpudriven
         // Update terrain-specific descriptors from dedicated terrain buffer
         terrainPipeline->updateTerrainBufferDescriptors(*terrainMeshBuffer);
 
-        // Update shared descriptors (IBL, bindless textures, light data)
+        // Update shared descriptors (IBL, bindless textures, light data, cluster, shadow)
         terrainPipeline->updateSharedDescriptors(
             iblDescriptorSet,
             bindlessTextures->getDescriptorSet(),
-            meshShaderPipeline->getLightDataDescriptorSet()
+            lightBufferManager->getDescriptorSet(),
+            clusterGridManager->getDescriptorSet(),
+            lightCullingPipeline->getDescriptorSet(),
+            shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
+            shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{}
         );
 
         auto extent = swapChain.getSwapchainExtent();

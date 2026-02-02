@@ -40,5 +40,25 @@ namespace services
         int32_t gridMaxZ = 0;
         std::string heightmapPath;
         uint32_t tileCount = 0;
+
+        // State flags
+        bool isActive = true;
+        bool isDirty = false;
+        uint32_t activeTileCount = 0;
+        uint32_t visibleTileCount = 0;
+    };
+
+    // Read-only terrain tile data for queries
+    struct TerrainTileData
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        uint8_t currentLOD = 0;
+        bool isVisible = true;
+        bool isDirty = false;
+        bool isWeightMapDirty = false;
+        bool isGPUResident = false;
+        float boundingMinY = 0.0f;
+        float boundingMaxY = 0.0f;
     };
 }

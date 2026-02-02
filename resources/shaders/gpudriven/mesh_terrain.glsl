@@ -27,8 +27,8 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
 };
 
-// Terrain tile data
-layout(std430, set = 6, binding = 0) readonly buffer TerrainTileBuffer {
+// Terrain tile data (Set 11 - terrain-specific data)
+layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
 
@@ -183,6 +183,9 @@ void main() {
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/lighting_functions.glsl"
+#include "../common/shadow_sampling.glsl"
+#include "../common/cluster_culling.glsl"
 
 // Input varyings
 layout(location = 0) in vec3 fragWorldPos;
@@ -218,119 +221,232 @@ layout(push_constant) uniform PushConstants {
     float padding;
 } pc;
 
-// Matches GPUDirectionalLight in GPULightTypes.hpp
-struct DirectionalLight {
-    vec3 direction;
-    float intensity;
-    vec3 color;
-    int shadowIndex;
-};
-
-layout(std430, set = 11, binding = 0) readonly buffer DirectionalLightBuffer {
+// Light buffers (Set 6 - same as mesh shader)
+layout(std430, set = 6, binding = 0) readonly buffer DirectionalLightBuffer {
     DirectionalLight directionalLights[];
 };
 
-// Matches GPUPointLight in GPULightTypes.hpp
-struct PointLight {
-    vec3 position;
-    float radius;
-    vec3 color;
-    float intensity;
-    int shadowIndex;
-    uint padding0;
-    uint padding1;
-    uint padding2;
-};
-
-layout(std430, set = 11, binding = 1) readonly buffer PointLightBuffer {
+layout(std430, set = 6, binding = 1) readonly buffer PointLightBuffer {
     PointLight pointLights[];
 };
 
-// Matches GPUSpotLight in GPULightTypes.hpp
-struct SpotLight {
-    vec3 position;
-    float range;
-    vec3 direction;
-    float intensity;
-    vec3 color;
-    float cosInnerAngle;
-    float cosOuterAngle;
-    int shadowIndex;
-    uint padding0;
-    uint padding1;
-};
-
-layout(std430, set = 11, binding = 2) readonly buffer SpotLightBuffer {
+layout(std430, set = 6, binding = 2) readonly buffer SpotLightBuffer {
     SpotLight spotLights[];
 };
 
-struct LightCounts {
-    uint directionalCount;
-    uint pointCount;
-    uint spotCount;
-    float shadowIntensity;
-};
-
-layout(std140, set = 11, binding = 3) uniform LightCountsUBO {
+layout(std140, set = 6, binding = 3) uniform LightCountsUBO {
     LightCounts lightCounts;
 };
 
-const float LIGHTING_PI = 3.14159265359;
-const float MAX_REFLECTION_LOD = 4.0;
+// Cluster grid params (Set 7)
+layout(std140, set = 7, binding = 0) uniform ClusterParamsUBO {
+    ClusterGridParams clusterParams;
+};
 
-float distributionGGX(float NdotH, float roughness) {
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float NdotH2 = NdotH * NdotH;
-    float denom = NdotH2 * (a2 - 1.0) + 1.0;
-    return a2 / (LIGHTING_PI * denom * denom);
+// Cluster culling output (Set 8)
+layout(std430, set = 8, binding = 0) readonly buffer ClusterLightGridBuffer {
+    ClusterLightData clusterLightGrid[];
+};
+
+layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer {
+    uint lightIndexList[];
+};
+
+// Shadow data (Set 9)
+layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
+    ShadowData shadowDataArray[];
+};
+
+// Shadow textures (Set 10)
+layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;
+layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades;
+layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
+
+//-----------------------------------------------------------------------------
+// Shadow Constants (must match ShadowTypes.hpp)
+//-----------------------------------------------------------------------------
+const int MAX_SHADOW_VIEWS = 272;       // MAX_TOTAL_SHADOW_VIEWS
+const int MAX_POINT_SHADOW_CUBES = 32;  // MAX_POINT_SHADOW_CASTERS
+
+//-----------------------------------------------------------------------------
+// Shadow Sampling Functions
+//-----------------------------------------------------------------------------
+
+float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    // Bounds validation to prevent GPU crash from invalid indices
+    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    ShadowData sd = shadowDataArray[shadowIndex];
+
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+    projCoords.xy = sd.atlasViewport.xy + projCoords.xy * sd.atlasViewport.zw;
+
+    if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
+    if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
+
+    bool filterEnabled = sd.pcfParams.z > 0.5;
+    int kernelSize = int(sd.pcfParams.x);
+
+    if (!filterEnabled || kernelSize == 0) {
+        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
+    }
+
+    float shadow = 0.0;
+    float texelSize = sd.biasParams.w;
+    float softness = sd.pcfParams.y;
+    float spread = texelSize * softness;
+    int sampleCount = 0;
+    int size = kernelSize + 1;
+    float halfSize = float(size) * 0.5;
+
+    for (int x = 0; x < size; ++x) {
+        for (int y = 0; y < size; ++y) {
+            vec2 offset = (vec2(float(x), float(y)) - halfSize + 0.5) * spread;
+            shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
+            sampleCount++;
+        }
+    }
+    return shadow / float(sampleCount);
 }
 
-float geometrySchlickGGX(float NdotV, float roughness) {
-    float r = roughness + 1.0;
-    float k = (r * r) / 8.0;
-    return NdotV / (NdotV * (1.0 - k) + k);
+float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    // Bounds validation to prevent GPU crash from invalid indices
+    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    ShadowData sd = shadowDataArray[shadowIndex];
+
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
+
+    if (lightSpacePos.w <= 0.0) return 1.0;
+
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    vec2 texCoords = projCoords.xy * 0.5 + 0.5;
+    texCoords = clamp(texCoords, 0.0, 1.0);
+    projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
+    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
+
+    bool filterEnabled = sd.pcfParams.z > 0.5;
+    int kernelSize = int(sd.pcfParams.x);
+
+    if (!filterEnabled || kernelSize == 0) {
+        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
+    }
+
+    float shadow = 0.0;
+    float spread = sd.biasParams.w * sd.pcfParams.y;
+    int sampleCount = 0;
+    int size = kernelSize + 1;
+    float halfSize = float(size) * 0.5;
+
+    for (int x = 0; x < size; ++x) {
+        for (int y = 0; y < size; ++y) {
+            vec2 offset = (vec2(float(x), float(y)) - halfSize + 0.5) * spread;
+            shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
+            sampleCount++;
+        }
+    }
+    return shadow / float(sampleCount);
 }
 
-float geometrySmith(float NdotV, float NdotL, float roughness) {
-    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
+    // Bounds validation to prevent GPU crash from invalid indices
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    int cascadeCount = int(shadowDataArray[baseShadowIndex].rangeParams.z);
+    cascadeCount = clamp(cascadeCount, 1, 4);
+
+    // Ensure we don't access beyond buffer bounds with cascades
+    if (baseShadowIndex + cascadeCount > MAX_SHADOW_VIEWS) {
+        cascadeCount = MAX_SHADOW_VIEWS - baseShadowIndex;
+        if (cascadeCount <= 0) return 1.0;
+    }
+
+    int cascadeIdx = 0;
+    for (int i = 0; i < cascadeCount; ++i) {
+        if (viewZ < shadowDataArray[baseShadowIndex + i].rangeParams.y) {
+            cascadeIdx = i;
+            break;
+        }
+        cascadeIdx = i;
+    }
+
+    int shadowIndex = baseShadowIndex + cascadeIdx;
+    float cascadeFar = shadowDataArray[shadowIndex].rangeParams.y;
+
+    float shadow = sampleCascadeShadow(shadowIndex, worldPos, worldNormal);
+
+    float blendZoneStart = cascadeFar * 0.9;
+    if (viewZ > blendZoneStart && cascadeIdx < cascadeCount - 1) {
+        float nextShadow = sampleCascadeShadow(shadowIndex + 1, worldPos, worldNormal);
+        float blendFactor = smoothstep(blendZoneStart, cascadeFar, viewZ);
+        shadow = mix(shadow, nextShadow, blendFactor);
+    }
+
+    float maxDistance = shadowDataArray[baseShadowIndex + cascadeCount - 1].rangeParams.y;
+    float fadeStart = maxDistance * 0.85;
+    float fadeFactor = 1.0 - smoothstep(fadeStart, maxDistance, viewZ);
+
+    return mix(1.0, shadow, fadeFactor);
 }
 
-vec3 fresnelSchlickDirect(float cosTheta, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
+float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
+                        vec3 lightPos, float lightRadius) {
+    // Bounds validation to prevent GPU crash from invalid indices
+    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
-vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
+    ShadowData sd = shadowDataArray[shadowIndex];
 
-vec3 evaluateDirectionalLight(vec3 N, vec3 V, vec3 albedo,
-                              float metallic, float roughness, vec3 F0,
-                              DirectionalLight light) {
-    vec3 L = -normalize(light.direction);
+    int cubeMapIndex = int(sd.pcfParams.w);
+    // Validate cubemap index bounds
+    if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
-    float NdotL = dot(N, L);
-    if (NdotL <= 0.0) return vec3(0.0);
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    vec3 lightToFrag = biasedPos - lightPos;
+    float linearDepth = length(lightToFrag);
+    vec3 sampleDir = normalize(lightToFrag);
 
-    vec3 H = normalize(V + L);
+    float near = sd.rangeParams.x;
+    float far = sd.rangeParams.y;
 
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotH = max(dot(N, H), 0.0);
-    float HdotV = max(dot(H, V), 0.0);
+    float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
+    float viewSpaceZ = linearDepth * majorComponent;
+    float perspectiveDepth = (far * (viewSpaceZ - near)) / (viewSpaceZ * (far - near));
 
-    vec3 radiance = light.color * light.intensity;
+    bool filterEnabled = sd.pcfParams.z > 0.5;
+    int kernelSize = int(sd.pcfParams.x);
 
-    float D = distributionGGX(NdotH, roughness);
-    float G = geometrySmith(NdotV, NdotL, roughness);
-    vec3 F = fresnelSchlickDirect(HdotV, F0);
+    if (!filterEnabled || kernelSize == 0) {
+        return texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(sampleDir, perspectiveDepth));
+    }
 
-    vec3 numerator = D * G * F;
-    float denominator = 4.0 * NdotV * NdotL + 0.0001;
-    vec3 specularBRDF = numerator / denominator;
+    float softness = sd.pcfParams.y;
+    float spread = softness * 0.01;
 
-    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+    vec3 tangent = abs(sampleDir.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+    vec3 bitangent = normalize(cross(sampleDir, tangent));
+    tangent = normalize(cross(bitangent, sampleDir));
 
-    return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
+    float shadow = 0.0;
+    int sampleCount = 0;
+    int size = kernelSize + 1;
+    float halfSize = float(size) * 0.5;
+
+    for (int x = 0; x < size; ++x) {
+        for (int y = 0; y < size; ++y) {
+            float fx = float(x) - halfSize + 0.5;
+            float fy = float(y) - halfSize + 0.5;
+            vec3 offset = tangent * fx * spread + bitangent * fy * spread;
+            vec3 offsetDir = normalize(sampleDir + offset);
+            shadow += texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(offsetDir, perspectiveDepth));
+            sampleCount++;
+        }
+    }
+    return shadow / float(sampleCount);
 }
 
 void main() {
@@ -361,13 +477,72 @@ void main() {
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
-    // Direct lighting
+    // Direct lighting with shadows
     vec3 directLighting = vec3(0.0);
+    float minShadow = 1.0;
 
+    // Linearize depth for cluster lookup and shadow cascades
+    float linearZ = linearizeDepth(clusterParams, gl_FragCoord.z);
+
+    // Cache cluster index - used for lighting and debug visualization
+    uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, linearZ);
+
+    // Cluster-based point and spot light evaluation
+    if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
+        ClusterLightData clusterData = clusterLightGrid[clusterIdx];
+        uint clusterPointCount = getClusterPointLightCount(clusterData);
+        uint clusterSpotCount = getClusterSpotLightCount(clusterData);
+        uint lightOffset = clusterData.offset;
+
+        // Evaluate point lights in cluster
+        for (uint i = 0u; i < clusterPointCount; ++i) {
+            uint lightIdx = lightIndexList[lightOffset + i];
+            PointLight light = pointLights[lightIdx];
+
+            // Sample point light shadow
+            float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N,
+                                             light.position, light.radius);
+            minShadow = min(minShadow, shadow);
+
+            directLighting += evaluatePointLight(fragWorldPos, N, V, albedo,
+                                                 metallic, roughness, F0, light) * shadow;
+        }
+
+        // Evaluate spot lights in cluster
+        for (uint i = 0u; i < clusterSpotCount; ++i) {
+            uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
+            uint lightIdx = extractLightIndex(packedIdx);
+            SpotLight light = spotLights[lightIdx];
+
+            // Sample spot light shadow
+            float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
+            minShadow = min(minShadow, shadow);
+
+            directLighting += evaluateSpotLight(fragWorldPos, N, V, albedo,
+                                                metallic, roughness, F0, light) * shadow;
+        }
+    }
+
+    // Directional lights with CSM shadows
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
-        directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light);
+
+        // Sample directional light shadow (CSM) - only if shadow system is available
+        float shadow = 1.0;
+        if (light.shadowIndex >= 0) {
+            shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
+        }
+        minShadow = min(minShadow, shadow);
+
+        vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light);
+        directLighting += lightContrib * shadow;
     }
+
+    // Apply shadow intensity to ambient
+    float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;
+    float adjustedShadow = pow(minShadow, shadowContrast);
+    float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
+    ambient *= ambientShadowFactor;
 
     vec3 color = ambient + directLighting;
 
@@ -406,6 +581,82 @@ void main() {
         color = mix(color, lodColors[lod], 0.5);
     }
 
+    if (viewModeValue == 4u) {
+        // Cluster visualization (uses cached clusterIdx)
+        uint h = clusterIdx;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = (h >> 16) ^ h;
+
+        vec3 clusterColor = vec3(
+            float((h >> 0) & 0xFFu) / 255.0,
+            float((h >> 8) & 0xFFu) / 255.0,
+            float((h >> 16) & 0xFFu) / 255.0
+        );
+        clusterColor = normalize(clusterColor + 0.1) * 0.8;
+        color = clusterColor;
+    }
+
+    if (viewModeValue == 5u) {
+        // Depth slice visualization
+        float near = clusterParams.depthParams.x;
+        float far = clusterParams.depthParams.y;
+        float normalizedDepth = clamp((linearZ - near) / (far - near), 0.0, 1.0);
+
+        vec3 depthColors[5] = vec3[5](
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 1.0, 1.0),
+            vec3(0.0, 1.0, 0.0),
+            vec3(1.0, 1.0, 0.0),
+            vec3(1.0, 0.0, 0.0)
+        );
+        float t = normalizedDepth * 4.0;
+        int idx = clamp(int(floor(t)), 0, 3);
+        color = mix(depthColors[idx], depthColors[idx + 1], fract(t));
+    }
+
+    if (viewModeValue == 6u) {
+        // Shadow visualization
+        float totalShadow = 1.0;
+
+        for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
+            DirectionalLight light = directionalLights[i];
+            float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
+            totalShadow = min(totalShadow, shadow);
+        }
+
+        if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
+            // Use cached clusterIdx from earlier calculation
+            ClusterLightData clusterData = clusterLightGrid[clusterIdx];
+            uint clusterPointCount = getClusterPointLightCount(clusterData);
+            uint clusterSpotCount = getClusterSpotLightCount(clusterData);
+            uint lightOffset = clusterData.offset;
+
+            for (uint i = 0u; i < clusterPointCount; ++i) {
+                uint lightIdx = lightIndexList[lightOffset + i];
+                PointLight light = pointLights[lightIdx];
+                if (light.shadowIndex >= 0) {
+                    float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N,
+                                                     light.position, light.radius);
+                    totalShadow = min(totalShadow, shadow);
+                }
+            }
+
+            for (uint i = 0u; i < clusterSpotCount; ++i) {
+                uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
+                uint lightIdx = extractLightIndex(packedIdx);
+                SpotLight light = spotLights[lightIdx];
+                if (light.shadowIndex >= 0) {
+                    float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
+                    totalShadow = min(totalShadow, shadow);
+                }
+            }
+        }
+
+        vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
+        color = shadowColor;
+    }
+
     if (viewModeValue == 7u) {
         // Tile visualization
         uint h = fragTileIndex;
@@ -425,6 +676,40 @@ void main() {
     if (viewModeValue == 8u) {
         // World UV visualization
         color = vec3(fract(fragWorldUV.x), fract(fragWorldUV.y), 0.5);
+    }
+
+    if (viewModeValue == 9u) {
+        // Debug: Light count visualization
+        // Red = directional count, Green = point count, Blue = spot count
+        float dirCount = float(lightCounts.directionalCount) / 4.0;
+        float pointCount = float(lightCounts.pointCount) / 32.0;
+        float spotCount = float(lightCounts.spotCount) / 32.0;
+        color = vec3(dirCount, pointCount, spotCount);
+    }
+
+    if (viewModeValue == 10u) {
+        // Debug: Show direct lighting contribution only (no ambient)
+        color = directLighting;
+        // Boost for visibility
+        color = color * 2.0;
+        color = color / (color + vec3(1.0));
+    }
+
+    if (viewModeValue == 11u) {
+        // Debug: Normal visualization (N * 0.5 + 0.5 to map [-1,1] to [0,1])
+        color = N * 0.5 + 0.5;
+    }
+
+    if (viewModeValue == 12u) {
+        // Debug: First directional light direction (if exists)
+        if (lightCounts.directionalCount > 0u) {
+            DirectionalLight light = directionalLights[0];
+            vec3 L = -normalize(light.direction);
+            float NdotL = max(dot(N, L), 0.0);
+            color = vec3(NdotL);  // White = fully lit, black = no light
+        } else {
+            color = vec3(1.0, 0.0, 1.0);  // Magenta = no directional lights
+        }
     }
 
     outColor = vec4(color, 1.0);

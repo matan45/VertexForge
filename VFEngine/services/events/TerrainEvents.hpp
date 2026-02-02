@@ -48,6 +48,20 @@ namespace events::terrain
         std::string_view getName() const override { return "HasTerrainComponent"; }
     };
 
+    // Query to check if entity has terrain tile component
+    struct HasTerrainTileComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasTerrainTileComponent"; }
+    };
+
+    // Query to get terrain tile data from entity
+    struct GetTerrainTileDataQuery : IQuery<std::optional<services::TerrainTileData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetTerrainTileData"; }
+    };
+
     // Notification when terrain is created
     struct TerrainCreatedNotification : INotification {
         services::EntityHandle terrainEntity;
@@ -84,5 +98,20 @@ namespace events::terrain
         glm::vec3 cameraPosition{0.0f};
 
         std::string_view getName() const override { return "UpdateTerrainLODs"; }
+    };
+
+    // Command to sync ECS components from TerrainTile data
+    struct SyncTerrainComponentsCommand : ICommand<void> {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "SyncTerrainComponents"; }
+    };
+
+    // Command to mark terrain tiles as GPU resident
+    struct SetTilesGPUResidentCommand : ICommand<void> {
+        services::EntityHandle terrainEntity;
+        bool resident = true;
+
+        std::string_view getName() const override { return "SetTilesGPUResident"; }
     };
 }

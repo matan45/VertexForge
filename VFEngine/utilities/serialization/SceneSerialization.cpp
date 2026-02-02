@@ -1114,6 +1114,8 @@ namespace serialization
         std::string cleanPath = terrain.heightmapPath;
         cleanNullTerminators(cleanPath);
         j["heightmapPath"] = cleanPath;
+        // State flags
+        j["isActive"] = terrain.isActive;
         return j;
     }
 
@@ -1144,6 +1146,9 @@ namespace serialization
         }
         if (auto it = j.find("heightmapPath"); it != j.end() && it->is_string())
             terrain.heightmapPath = it->get<std::string>();
+        // State flags (with backward-compatible defaults)
+        if (auto it = j.find("isActive"); it != j.end() && it->is_boolean())
+            terrain.isActive = it->get<bool>();
     }
 
     json SceneSerialization::serializeTerrainTile(const components::TerrainTileComponent& tile)
@@ -1153,6 +1158,13 @@ namespace serialization
         j["tileZ"] = tile.tileZ;
         j["currentLOD"] = tile.currentLOD;
         j["isVisible"] = tile.isVisible;
+        // State flags
+        j["isDirty"] = tile.isDirty;
+        j["isWeightMapDirty"] = tile.isWeightMapDirty;
+        j["isGPUResident"] = tile.isGPUResident;
+        // Cached bounds
+        j["boundingMinY"] = tile.boundingMinY;
+        j["boundingMaxY"] = tile.boundingMaxY;
         return j;
     }
 
@@ -1166,6 +1178,18 @@ namespace serialization
             tile.currentLOD = it->get<uint8_t>();
         if (auto it = j.find("isVisible"); it != j.end() && it->is_boolean())
             tile.isVisible = it->get<bool>();
+        // State flags (with backward-compatible defaults)
+        if (auto it = j.find("isDirty"); it != j.end() && it->is_boolean())
+            tile.isDirty = it->get<bool>();
+        if (auto it = j.find("isWeightMapDirty"); it != j.end() && it->is_boolean())
+            tile.isWeightMapDirty = it->get<bool>();
+        if (auto it = j.find("isGPUResident"); it != j.end() && it->is_boolean())
+            tile.isGPUResident = it->get<bool>();
+        // Cached bounds
+        if (auto it = j.find("boundingMinY"); it != j.end() && it->is_number())
+            tile.boundingMinY = it->get<float>();
+        if (auto it = j.find("boundingMaxY"); it != j.end() && it->is_number())
+            tile.boundingMaxY = it->get<float>();
     }
 
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,

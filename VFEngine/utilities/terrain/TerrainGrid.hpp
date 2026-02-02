@@ -57,7 +57,8 @@ namespace terrain
         void updateAllNeighborReferences();
 
         // LOD updates based on camera position
-        void updateLODs(const glm::vec3& cameraPosition);
+        // Returns coordinates of tiles whose state changed (LOD, visibility, dirty flags)
+        [[nodiscard]] std::vector<TileCoord> updateLODs(const glm::vec3& cameraPosition);
 
         // Regenerate dirty tiles
         void regenerateDirtyTiles(ProgressCallback progress = nullptr);

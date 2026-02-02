@@ -169,6 +169,8 @@
     <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
     <ClInclude Include="windows\details\SpotLightDrawer.hpp" />
+    <ClInclude Include="windows\details\TerrainDrawer.hpp" />
+    <ClInclude Include="windows\details\TerrainTileDrawer.hpp" />
     <ClInclude Include="windows\details\TransformDrawer.hpp" />
     <ClInclude Include="windows\details\VFXDrawer.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
@@ -248,6 +250,8 @@
     <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />
     <ClCompile Include="windows\details\SpotLightDrawer.cpp" />
+    <ClCompile Include="windows\details\TerrainDrawer.cpp" />
+    <ClCompile Include="windows\details\TerrainTileDrawer.cpp" />
     <ClCompile Include="windows\details\TransformDrawer.cpp" />
     <ClCompile Include="windows\details\VFXDrawer.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />
