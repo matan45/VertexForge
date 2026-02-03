@@ -80,7 +80,6 @@ namespace render::gpudriven
         vk::Device vkDevice = device_.getLogicalDevice();
         vk::PhysicalDevice physicalDevice = device_.getPhysicalDevice();
 
-        // Vertex buffer
         {
             core::BufferInfoRequest request(vkDevice, physicalDevice);
             request.size = maxVertexCount_ * VERTEX_STRIDE;
@@ -91,7 +90,6 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, vertexBuffer_, vertexBufferMemory_);
         }
 
-        // Index buffer
         {
             core::BufferInfoRequest request(vkDevice, physicalDevice);
             request.size = maxIndexCount_ * sizeof(uint32_t);
@@ -102,7 +100,6 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, indexBuffer_, indexBufferMemory_);
         }
 
-        // Meshlet buffer
         {
             core::BufferInfoRequest request(vkDevice, physicalDevice);
             request.size = maxMeshletCount_ * sizeof(GPUMeshlet);
@@ -112,7 +109,6 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, meshletBuffer_, meshletBufferMemory_);
         }
 
-        // Meshlet vertex buffer
         {
             core::BufferInfoRequest request(vkDevice, physicalDevice);
             request.size = maxMeshletVertexCount_ * sizeof(uint32_t);
@@ -122,7 +118,6 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, meshletVertexBuffer_, meshletVertexBufferMemory_);
         }
 
-        // Meshlet primitive buffer
         {
             core::BufferInfoRequest request(vkDevice, physicalDevice);
             request.size = maxMeshletPrimitiveCount_ * sizeof(uint32_t);
@@ -189,7 +184,6 @@ namespace render::gpudriven
             return nullptr;
         }
 
-        // Check if already allocated
         auto it = tileAllocations_.find(tileKey);
         if (it != tileAllocations_.end())
         {
@@ -201,12 +195,10 @@ namespace render::gpudriven
         tile.aabbMin = aabbMin;
         tile.aabbMax = aabbMax;
 
-        // Calculate bounding sphere
         glm::vec3 center = (aabbMin + aabbMax) * 0.5f;
         float radius = glm::length(aabbMax - center);
         tile.boundingSphere = glm::vec4(center, radius);
 
-        // Allocate space for each LOD
         for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
         {
             if (vertexCounts[lod] > 0)
@@ -238,7 +230,6 @@ namespace render::gpudriven
                                               uint32_t meshletPrimitiveCount,
                                               const std::string& debugKey)
     {
-        // Allocate vertex space
         uint32_t vertexOffset = vertexAllocator_.allocate(vertexCount);
         if (vertexOffset == FreeListAllocator::ALLOCATION_FAILED)
         {
@@ -246,7 +237,6 @@ namespace render::gpudriven
             return false;
         }
 
-        // Allocate index space
         uint32_t indexOffset = indexAllocator_.allocate(indexCount);
         if (indexOffset == FreeListAllocator::ALLOCATION_FAILED)
         {
@@ -255,7 +245,6 @@ namespace render::gpudriven
             return false;
         }
 
-        // Allocate meshlet space
         uint32_t meshletOffset = 0;
         uint32_t meshletVertexOffset = 0;
         uint32_t meshletPrimitiveOffset = 0;
@@ -482,7 +471,6 @@ namespace render::gpudriven
         auto it = tileAllocations_.find(tileKey);
         if (it == tileAllocations_.end())
         {
-            // Create new tile entry
             TerrainTileGeometry tile;
             tile.tileKey = tileKey;
             tile.aabbMin = aabbMin;
@@ -499,7 +487,6 @@ namespace render::gpudriven
         auto& lod = it->second.lods[lodLevel];
         if (lod.isAllocated)
         {
-            // Already allocated
             return true;
         }
 
@@ -525,28 +512,7 @@ namespace render::gpudriven
         }
     }
 
-    bool TerrainMeshBuffer::hasTile(const std::string& tileKey) const
-    {
-        return tileAllocations_.find(tileKey) != tileAllocations_.end();
-    }
-
-    bool TerrainMeshBuffer::hasTileLOD(const std::string& tileKey, uint32_t lodLevel) const
-    {
-        if (lodLevel >= LOD_LEVEL_COUNT) return false;
-
-        auto it = tileAllocations_.find(tileKey);
-        if (it == tileAllocations_.end()) return false;
-
-        return it->second.lods[lodLevel].isAllocated;
-    }
-
     const TerrainTileGeometry* TerrainMeshBuffer::getTileGeometry(const std::string& tileKey) const
-    {
-        auto it = tileAllocations_.find(tileKey);
-        return (it != tileAllocations_.end()) ? &it->second : nullptr;
-    }
-
-    TerrainTileGeometry* TerrainMeshBuffer::getTileGeometryMutable(const std::string& tileKey)
     {
         auto it = tileAllocations_.find(tileKey);
         return (it != tileAllocations_.end()) ? &it->second : nullptr;
@@ -572,12 +538,4 @@ namespace render::gpudriven
         tileAllocations_.clear();
     }
 
-    size_t TerrainMeshBuffer::getTotalBufferSize() const
-    {
-        return getVertexBufferSize() +
-               getIndexBufferSize() +
-               getMeshletBufferSize() +
-               maxMeshletVertexCount_ * sizeof(uint32_t) +
-               maxMeshletPrimitiveCount_ * sizeof(uint32_t);
-    }
 }

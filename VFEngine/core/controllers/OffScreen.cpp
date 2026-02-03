@@ -85,34 +85,9 @@ namespace controllers {
 		offScreenController->prepareFrameMeshes();
 	}
 
-	void OffScreen::rebuildBVH()
-	{
-		offScreenController->rebuildBVH();
-	}
-
-	void OffScreen::markBVHDirty()
-	{
-		offScreenController->markBVHDirty();
-	}
-
-	void OffScreen::createCamera(CameraId id, bool enableOcclusion)
-	{
-		offScreenController->createCamera(id, enableOcclusion);
-	}
-
 	void OffScreen::removeCamera(CameraId id)
 	{
 		offScreenController->removeCamera(id);
-	}
-
-	void OffScreen::setActiveCamera(CameraId id)
-	{
-		offScreenController->setActiveCamera(id);
-	}
-
-	CameraId OffScreen::getActiveCameraId() const
-	{
-		return offScreenController->getActiveCameraId();
 	}
 
 	void OffScreen::prepareFrameCameraFrustums()
@@ -168,11 +143,6 @@ namespace controllers {
 	void OffScreen::setPlayMode(bool playMode)
 	{
 		offScreenController->setPlayMode(playMode);
-	}
-
-	bool OffScreen::isPlayMode() const
-	{
-		return offScreenController->isPlayMode();
 	}
 
 	void OffScreen::setShowDebugRendering(bool show)

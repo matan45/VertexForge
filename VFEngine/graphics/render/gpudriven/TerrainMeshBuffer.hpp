@@ -24,7 +24,6 @@ namespace resource
 
 namespace render::gpudriven
 {
-    // Per-LOD allocation for terrain tile geometry
     struct TerrainLODGeometry
     {
         uint32_t vertexOffset = 0;
@@ -42,7 +41,6 @@ namespace render::gpudriven
         bool isAllocated = false;
     };
 
-    // Complete allocation for a terrain tile (all 4 LODs)
     struct TerrainTileGeometry
     {
         std::string tileKey;
@@ -74,13 +72,11 @@ namespace render::gpudriven
         core::Device& device_;
         std::unique_ptr<core::TransferManager> transferManager_;
 
-        // Vertex/Index buffers
         vk::Buffer vertexBuffer_;
         vk::DeviceMemory vertexBufferMemory_;
         vk::Buffer indexBuffer_;
         vk::DeviceMemory indexBufferMemory_;
 
-        // Meshlet buffers
         vk::Buffer meshletBuffer_;
         vk::DeviceMemory meshletBufferMemory_;
         vk::Buffer meshletVertexBuffer_;
@@ -88,28 +84,24 @@ namespace render::gpudriven
         vk::Buffer meshletPrimitiveBuffer_;
         vk::DeviceMemory meshletPrimitiveBufferMemory_;
 
-        // Capacity limits
         uint32_t maxVertexCount_ = 0;
         uint32_t maxIndexCount_ = 0;
         uint32_t maxMeshletCount_ = 0;
         uint32_t maxMeshletVertexCount_ = 0;
         uint32_t maxMeshletPrimitiveCount_ = 0;
 
-        // Current usage
         uint32_t currentVertexCount_ = 0;
         uint32_t currentIndexCount_ = 0;
         uint32_t currentMeshletCount_ = 0;
         uint32_t currentMeshletVertexCount_ = 0;
         uint32_t currentMeshletPrimitiveCount_ = 0;
 
-        // Free list allocators
         FreeListAllocator vertexAllocator_;
         FreeListAllocator indexAllocator_;
         FreeListAllocator meshletAllocator_;
         FreeListAllocator meshletVertexAllocator_;
         FreeListAllocator meshletPrimitiveAllocator_;
 
-        // Tile allocations
         std::unordered_map<std::string, TerrainTileGeometry> tileAllocations_;
 
         bool initialized_ = false;
@@ -135,7 +127,6 @@ namespace render::gpudriven
 
         void cleanup();
 
-        // Allocate space for a terrain tile (all 4 LODs)
         TerrainTileGeometry* allocateTile(
             const std::string& tileKey,
             const std::array<uint32_t, LOD_LEVEL_COUNT>& vertexCounts,
@@ -146,7 +137,6 @@ namespace render::gpudriven
             const glm::vec3& aabbMin,
             const glm::vec3& aabbMax);
 
-        // Upload geometry data for a specific LOD
         bool uploadLODVertices(const std::string& tileKey, uint32_t lodLevel,
                                const resource::Vertex* vertices, uint32_t count);
         bool uploadLODIndices(const std::string& tileKey, uint32_t lodLevel,
@@ -156,10 +146,8 @@ namespace render::gpudriven
                                const uint32_t* meshletVertices, uint32_t meshletVertexCount,
                                const uint32_t* meshletPrimitives, uint32_t meshletPrimitiveCount);
 
-        // Free a tile's allocation
         void freeTile(const std::string& tileKey);
 
-        // Allocate space for a single LOD on an existing tile
         // Creates tile if it doesn't exist
         bool allocateTileLOD(const std::string& tileKey,
                              uint32_t lodLevel,
@@ -171,44 +159,19 @@ namespace render::gpudriven
                              const glm::vec3& aabbMin,
                              const glm::vec3& aabbMax);
 
-        // Free a single LOD from a tile
         void freeTileLOD(const std::string& tileKey, uint32_t lodLevel);
 
-        // Check if tile is allocated
-        bool hasTile(const std::string& tileKey) const;
-
-        // Check if specific LOD is allocated
-        bool hasTileLOD(const std::string& tileKey, uint32_t lodLevel) const;
-
-        // Get tile allocation
         const TerrainTileGeometry* getTileGeometry(const std::string& tileKey) const;
-        TerrainTileGeometry* getTileGeometryMutable(const std::string& tileKey);
 
-        // Flush pending async transfers - MUST be called before rendering
-        // Blocks until all queued transfers complete
+        // MUST be called before rendering
         void flushPendingTransfers();
 
-        // Clear all allocations
         void clear();
 
-        // Buffer accessors
         vk::Buffer getVertexBuffer() const { return vertexBuffer_; }
-        vk::Buffer getIndexBuffer() const { return indexBuffer_; }
         vk::Buffer getMeshletBuffer() const { return meshletBuffer_; }
         vk::Buffer getMeshletVertexBuffer() const { return meshletVertexBuffer_; }
         vk::Buffer getMeshletPrimitiveBuffer() const { return meshletPrimitiveBuffer_; }
-
-        // Size accessors
-        size_t getVertexBufferSize() const { return maxVertexCount_ * VERTEX_STRIDE; }
-        size_t getIndexBufferSize() const { return maxIndexCount_ * sizeof(uint32_t); }
-        size_t getMeshletBufferSize() const { return maxMeshletCount_ * sizeof(GPUMeshlet); }
-        size_t getTotalBufferSize() const;
-
-        // Usage stats
-        uint32_t getAllocatedTileCount() const { return static_cast<uint32_t>(tileAllocations_.size()); }
-        uint32_t getCurrentVertexCount() const { return currentVertexCount_; }
-        uint32_t getCurrentIndexCount() const { return currentIndexCount_; }
-        uint32_t getCurrentMeshletCount() const { return currentMeshletCount_; }
 
         bool isInitialized() const { return initialized_; }
 

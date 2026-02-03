@@ -16,7 +16,6 @@ namespace windows
             ImGui::Text("Terrain Configuration");
             ImGui::Separator();
 
-            // Grid size section
             ImGui::Text("Grid Size (Tiles):");
             ImGui::SliderInt("Tiles X", &tilesX, 1, 16);
             ImGui::SliderInt("Tiles Z", &tilesZ, 1, 16);
@@ -26,11 +25,9 @@ namespace windows
 
             ImGui::Separator();
 
-            // Resolution section
             const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)" };
             ImGui::Combo("Tile Resolution", &resolutionIndex, resolutionNames, 3);
 
-            // Tile size
             ImGui::DragFloat("World Tile Size", &worldTileSize, 1.0f, 8.0f, 256.0f, "%.1f");
 
             float totalWorldSizeX = static_cast<float>(tilesX) * worldTileSize;
@@ -40,12 +37,10 @@ namespace windows
 
             ImGui::Separator();
 
-            // Height range section
             ImGui::Text("Height Range:");
             ImGui::DragFloat("Max Height", &maxHeight, 1.0f, 0.0f, 500.0f, "%.1f");
             ImGui::DragFloat("Min Height", &minHeight, 1.0f, -100.0f, 0.0f, "%.1f");
 
-            // Ensure min < max
             if (minHeight >= maxHeight)
             {
                 minHeight = maxHeight - 1.0f;
@@ -53,7 +48,6 @@ namespace windows
 
             ImGui::Separator();
 
-            // LOD distances (collapsible)
             if (ImGui::TreeNode("LOD Distances"))
             {
                 ImGui::DragFloat("LOD 0 Distance", &lodDistances[0], 10.0f, 10.0f, 1000.0f, "%.0f");
@@ -65,7 +59,6 @@ namespace windows
 
             ImGui::Separator();
 
-            // Heightmap section (optional)
             ImGui::Text("Heightmap (optional):");
 
             if (ImGui::Button("Browse..."))
@@ -80,7 +73,6 @@ namespace windows
             }
             else
             {
-                // Show just filename for brevity
                 size_t lastSlash = heightmapPath.find_last_of("/\\");
                 std::string filename = (lastSlash != std::string::npos)
                     ? heightmapPath.substr(lastSlash + 1)
@@ -96,7 +88,6 @@ namespace windows
             ImGui::Separator();
             ImGui::Spacing();
 
-            // Action buttons
             float buttonWidth = 120.0f;
             float availableWidth = ImGui::GetContentRegionAvail().x;
             float spacing = availableWidth - buttonWidth * 2;

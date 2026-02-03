@@ -41,7 +41,6 @@ namespace windows::details {
 
             const auto& terrain = *terrainOpt;
 
-            // Resolution
             const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)", "Ultra (257x257)" };
             int resIndex = static_cast<int>(terrain.resolution);
             if (resIndex >= 0 && resIndex < 4)
@@ -49,7 +48,6 @@ namespace windows::details {
                 ImGui::Text("Resolution: %s", resolutionNames[resIndex]);
             }
 
-            // Grid info
             ImGui::Text("Tile Size: %.1f units", terrain.worldTileSize);
             ImGui::Text("Height Range: %.1f to %.1f", terrain.minHeight, terrain.maxHeight);
 
@@ -60,17 +58,14 @@ namespace windows::details {
 
             ImGui::Separator();
 
-            // State flags
             ImGui::Text("Active: %s", terrain.isActive ? "Yes" : "No");
             ImGui::Text("Dirty: %s", terrain.isDirty ? "Yes" : "No");
 
             ImGui::Separator();
 
-            // Runtime stats
             ImGui::Text("Active Tiles: %u", terrain.activeTileCount);
             ImGui::Text("Visible Tiles: %u", terrain.visibleTileCount);
 
-            // Heightmap path
             if (!terrain.heightmapPath.empty())
             {
                 ImGui::Separator();

@@ -24,7 +24,6 @@ namespace windows
     private:
         int windowFlags;
 
-        // Sub-windows
         CullingStatsWindow cullingStatsWindow;
         EditorCameraWindow editorCameraWindow;
         IBLWindow iblWindow;
@@ -36,7 +35,6 @@ namespace windows
         TerrainCreationWindow terrainCreationWindow;
         MainMenuBar menuBar;
 
-        // Event subscription
         events::SubscriptionToken sceneClearedToken;
         events::SubscriptionToken openImportDialogToken;
 

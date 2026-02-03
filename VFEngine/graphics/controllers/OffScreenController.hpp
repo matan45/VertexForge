@@ -100,16 +100,9 @@ namespace controllers
         bool getShowBillboardIcons() const { return showBillboardIcons; }
         bool loadBillboardAtlas(const std::string& atlasPath);
 
-        void rebuildBVH();
-        void markBVHDirty();
-
         void setOcclusionCullingEnabled(bool enabled);
-        bool isOcclusionCullingEnabled() const;
 
-        void createCamera(render::occlusion::CameraId id, bool enableOcclusion = false);
         void removeCamera(render::occlusion::CameraId id);
-        void setActiveCamera(render::occlusion::CameraId id);
-        render::occlusion::CameraId getActiveCameraId() const;
 
         void* render();
 
@@ -119,7 +112,6 @@ namespace controllers
         services::ShadowStats getShadowStats() const;
 
         void setPlayMode(bool playMode);
-        bool isPlayMode() const { return playModeActive; }
 
         void setShowDebugRendering(bool show) { showDebugRendering = show; }
         bool getShowDebugRendering() const { return showDebugRendering; }

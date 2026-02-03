@@ -184,9 +184,7 @@ namespace render::gpudriven
         bool isMeshletBackfaceCullingEnabled() const { return meshletBackfaceCullingEnabled; }
 
         void setTerrainFrustumCullingEnabled(bool enabled);
-        bool isTerrainFrustumCullingEnabled() const { return terrainFrustumCullingEnabled; }
         void setTerrainMeshletCullingEnabled(bool enabled);
-        bool isTerrainMeshletCullingEnabled() const { return terrainMeshletCullingEnabled; }
 
         void setViewMode(uint32_t mode) { currentViewMode = mode; }
         uint32_t getViewMode() const { return currentViewMode; }
@@ -210,7 +208,6 @@ namespace render::gpudriven
         uint32_t getRegisteredMeshCount() const;
         uint32_t getRegisteredTextureCount() const;
 
-
         uint32_t getBatchCount() const;
         uint32_t getCommandsPerBatch() const;
         uint32_t getTotalCapacity() const;
@@ -221,7 +218,6 @@ namespace render::gpudriven
 
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
-        lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
@@ -231,9 +227,7 @@ namespace render::gpudriven
         bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
 
         void initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer);
-        void setLightOcclusionCullingEnabled(bool enabled) { useLightOcclusionCulling = enabled; }
         bool isLightOcclusionCullingEnabled() const { return useLightOcclusionCulling; }
-        occlusion::LightOcclusionCulling* getLightOcclusionCulling() const { return lightOcclusionCulling.get(); }
 
         uint32_t getTotalSceneLights() const;
         uint32_t getLightsAfterBVHCull() const;
@@ -241,7 +235,6 @@ namespace render::gpudriven
 
         void readBackLightOcclusionResults();
 
-        // Terrain rendering methods
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
                            const glm::vec3& cameraPosition);
         void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
@@ -250,22 +243,9 @@ namespace render::gpudriven
         void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
         bool isTerrainRenderingEnabled() const { return terrainRenderingEnabled; }
         void setTerrainLODBias(float bias) { terrainLODBias = bias; }
-        float getTerrainLODBias() const { return terrainLODBias; }
         void setTerrainErrorThreshold(float threshold) { terrainErrorThreshold = threshold; }
-        float getTerrainErrorThreshold() const { return terrainErrorThreshold; }
         void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
-        float getTerrainTextureScale() const { return terrainTextureScale; }
         void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
-        uint32_t getTerrainShadowLOD() const { return terrainShadowLOD; }
-
-        TerrainGPUAdapter* getTerrainAdapter() const { return terrainAdapter.get(); }
-        TerrainCullingStats getTerrainCullingStats();
-
-        // Terrain streaming configuration
-        void setTerrainStreamingBudget(size_t bytes);
-        size_t getTerrainStreamingBudget() const;
-        const TerrainStreamingStats& getTerrainStreamingStats() const;
-        TerrainStreamManager* getTerrainStreamManager() const { return terrainStreamManager.get(); }
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);

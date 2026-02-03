@@ -159,7 +159,6 @@ namespace render::gpudriven
                 loggerInfo("GPUDrivenRenderer: Meshlet streaming enabled");
             }
 
-            // Initialize terrain rendering pipeline with dedicated buffers
             terrainMeshBuffer = std::make_unique<TerrainMeshBuffer>(device);
             terrainMeshBuffer->init();
 
@@ -181,7 +180,6 @@ namespace render::gpudriven
             );
             loggerInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
 
-            // Initialize terrain shadow pass after terrain pipeline is ready
             shadowSystem->initTerrainShadowPass(
                 terrainPipeline->getTerrainDataLayout(),
                 terrainPipeline->getCachedMeshletLayout(),
@@ -531,7 +529,6 @@ namespace render::gpudriven
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
         }
 
-        // Update per-draw and shadow descriptors only when we have meshes
         if (meshShaderPipeline && hasMeshes)
         {
             meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
@@ -553,7 +550,6 @@ namespace render::gpudriven
                 lightCullingPipeline->getDescriptorSet());
         }
 
-        // Update terrain buffer descriptors if terrain is enabled
         if (terrainRenderingEnabled && terrainPipeline && terrainMeshBuffer &&
             terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
         {
@@ -675,18 +671,15 @@ namespace render::gpudriven
             lightBufferManager->uploadToGPU(cmd);
         }
 
-        // Check if we have anything to render
         bool hasMeshObjects = stats.totalObjects > 0;
         bool hasTerrainTiles = terrainRenderingEnabled && terrainPipeline &&
                                terrainPipeline->getCurrentTileCount() > 0;
 
-        // Early return if nothing to render (no mesh objects AND no terrain)
         if (!hasMeshObjects && !hasTerrainTiles)
         {
             return;
         }
 
-        // Upload mesh object data only if we have mesh objects
         if (hasMeshObjects)
         {
             mergedBuffer->uploadObjects(cmd);
@@ -793,7 +786,6 @@ namespace render::gpudriven
         {
             shadowSystem->uploadToGPU(cmd);
 
-            // Build mesh shadow params only if we have mesh objects and valid pipeline
             shadow::ShadowPassParams shadowParams{};
             if (hasMeshObjects && meshShaderPipeline && boneMatrixManager && batchManager)
             {
@@ -809,7 +801,6 @@ namespace render::gpudriven
                 shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
             }
 
-            // Build terrain shadow params if terrain rendering is enabled
             shadow::TerrainShadowPassParams terrainShadowParams{};
             shadow::TerrainShadowPassParams* terrainShadowParamsPtr = nullptr;
 
@@ -1266,7 +1257,6 @@ namespace render::gpudriven
             return;
         }
 
-        // Use stream manager for memory-budgeted tile loading
         if (terrainStreamManager)
         {
             terrainStreamManager->update(visibleTiles, cameraPosition);
@@ -1289,10 +1279,8 @@ namespace render::gpudriven
             }
         }
 
-        // Build GPU tile data for rendering
         terrainTileData = terrainAdapter->buildGPUTileData(visibleTiles);
 
-        // Upload to terrain pipeline
         if (!terrainTileData.empty())
         {
             terrainPipeline->updateTileData(terrainTileData);
@@ -1317,7 +1305,6 @@ namespace render::gpudriven
             terrainPipeline->updateTileData({});
         }
 
-        // Clear terrain mesh buffer to release GPU resources
         if (terrainMeshBuffer)
         {
             terrainMeshBuffer->clear();
@@ -1337,7 +1324,6 @@ namespace render::gpudriven
         }
 
         // Terrain buffer descriptors are already updated in updatePipelineDescriptors()
-        // Update shared descriptors (IBL, bindless textures, light data, cluster, shadow)
         terrainPipeline->updateSharedDescriptors(
             iblDescriptorSet,
             bindlessTextures->getDescriptorSet(),
@@ -1365,39 +1351,4 @@ namespace render::gpudriven
         );
     }
 
-    TerrainCullingStats GPUDrivenRenderer::getTerrainCullingStats()
-    {
-        if (!terrainPipeline)
-        {
-            return TerrainCullingStats{};
-        }
-        return terrainPipeline->readStats();
-    }
-
-    void GPUDrivenRenderer::setTerrainStreamingBudget(size_t bytes)
-    {
-        if (terrainStreamManager)
-        {
-            terrainStreamManager->setMemoryBudget(bytes);
-        }
-    }
-
-    size_t GPUDrivenRenderer::getTerrainStreamingBudget() const
-    {
-        if (terrainStreamManager)
-        {
-            return terrainStreamManager->getMemoryBudget();
-        }
-        return 0;
-    }
-
-    const TerrainStreamingStats& GPUDrivenRenderer::getTerrainStreamingStats() const
-    {
-        static TerrainStreamingStats emptyStats{};
-        if (terrainStreamManager)
-        {
-            return terrainStreamManager->getStats();
-        }
-        return emptyStats;
-    }
 }

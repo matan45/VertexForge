@@ -117,37 +117,17 @@ namespace render::gpudriven
         vk::Buffer getMeshletVertexBuffer() const { return meshletVertexBuffer; }
         vk::Buffer getMeshletPrimitiveBuffer() const { return meshletPrimitiveBuffer; }
         
+        void flushPendingTransfers();
+
+    private:
         size_t getMeshletBufferSize() const { return maxMeshletCount * sizeof(GPUMeshlet); }
         size_t getMeshletVertexBufferSize() const { return maxVertexIndexCount * sizeof(uint32_t); }
         size_t getMeshletPrimitiveBufferSize() const { return maxPrimitiveCount * sizeof(uint32_t); }
-
         size_t getTotalBufferSize() const
         {
             return getMeshletBufferSize() + getMeshletVertexBufferSize() + getMeshletPrimitiveBufferSize();
         }
-        
-        void flushPendingTransfers();
 
-        // Terrain-specific allocation methods
-        // Allocate space for terrain tile meshlets (all LODs)
-        MeshletAllocation* allocateTerrainTile(
-            const std::string& tileKey,
-            const std::array<uint32_t, 4>& meshletCounts,
-            const std::array<uint32_t, 4>& vertexIndexCounts,
-            const std::array<uint32_t, 4>& primitiveCounts);
-
-        // Upload terrain meshlet data for a specific LOD
-        bool uploadTerrainMeshletLOD(
-            const std::string& tileKey,
-            uint32_t lodLevel,
-            const std::vector<GPUMeshlet>& meshlets,
-            const std::vector<uint32_t>& vertexIndices,
-            const std::vector<uint32_t>& primitives);
-
-        // Free terrain tile allocation
-        void freeTerrainTile(const std::string& tileKey);
-
-    private:
         void createBuffers();
         void destroyBuffers();
         

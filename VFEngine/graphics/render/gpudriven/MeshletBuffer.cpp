@@ -38,7 +38,6 @@ namespace render::gpudriven
         maxVertexIndexCount = maxVertexIndices;
         maxPrimitiveCount = maxPrimitives;
 
-        // Initialize allocators
         meshletAllocator.reset(maxMeshletCount);
         vertexIndexAllocator.reset(maxVertexIndexCount);
         primitiveAllocator.reset(maxPrimitiveCount);
@@ -76,7 +75,6 @@ namespace render::gpudriven
     {
         auto logicalDevice = device.getLogicalDevice();
 
-        // Create meshlet buffer (GPUMeshlet[])
         core::BufferUtilities::createBuffer(
             core::BufferInfoRequest{
                 logicalDevice, device.getPhysicalDevice(),
@@ -88,7 +86,6 @@ namespace render::gpudriven
             meshletBufferMemory
         );
 
-        // Create meshlet vertex index buffer (uint32_t[])
         core::BufferUtilities::createBuffer(
             core::BufferInfoRequest{
                 logicalDevice, device.getPhysicalDevice(),
@@ -100,7 +97,6 @@ namespace render::gpudriven
             meshletVertexBufferMemory
         );
 
-        // Create meshlet primitive buffer (uint32_t[])
         core::BufferUtilities::createBuffer(
             core::BufferInfoRequest{
                 logicalDevice, device.getPhysicalDevice(),
@@ -160,7 +156,6 @@ namespace render::gpudriven
             return nullptr;
         }
 
-        // Track all allocations made during this call for cleanup on failure
         std::vector<std::string> allocatedKeys;
 
         for (uint32_t submeshIdx = 0; submeshIdx < header.numSubmeshes; ++submeshIdx)
@@ -368,7 +363,6 @@ namespace render::gpudriven
 
         const auto& lodInfo = meshletData.lodLevels[lodLevel];
 
-        // Build GPU meshlet data with global vertex offsets
         std::vector<GPUMeshlet> gpuMeshlets(lodAlloc.meshletCount);
 
         uint32_t localMeshletStart = lodInfo.meshletOffset;
@@ -488,152 +482,4 @@ namespace render::gpudriven
         }
     }
 
-    MeshletAllocation* MeshletBuffer::allocateTerrainTile(
-        const std::string& tileKey,
-        const std::array<uint32_t, 4>& meshletCounts,
-        const std::array<uint32_t, 4>& vertexIndexCounts,
-        const std::array<uint32_t, 4>& primitiveCounts)
-    {
-        if (!initialized)
-        {
-            vfLogError("MeshletBuffer: Not initialized");
-            return nullptr;
-        }
-
-        // Check if tile already has an allocation - use proper key format
-        std::string allocationKey = makeAllocationKey(tileKey, "terrain", 0);
-        if (allocationKeyToIndex.find(allocationKey) != allocationKeyToIndex.end())
-        {
-            auto it = allocationKeyToIndex.find(allocationKey);
-            return &allocations[it->second];
-        }
-
-        MeshletAllocation alloc;
-        alloc.meshPath = tileKey;
-        alloc.submeshName = "terrain";
-        alloc.submeshIndex = 0;
-
-        // Allocate space for each LOD
-        for (uint32_t lod = 0; lod < 4; ++lod)
-        {
-            if (meshletCounts[lod] > 0)
-            {
-                if (!allocateLODMeshletSpace(alloc.lods[lod],
-                                              meshletCounts[lod],
-                                              vertexIndexCounts[lod],
-                                              primitiveCounts[lod],
-                                              tileKey + " LOD" + std::to_string(lod)))
-                {
-                    // Failed, free previously allocated LODs
-                    for (uint32_t prevLod = 0; prevLod < lod; ++prevLod)
-                    {
-                        freeLODMeshletSpace(alloc.lods[prevLod]);
-                    }
-                    vfLogError("MeshletBuffer: Failed to allocate terrain tile {}", tileKey);
-                    return nullptr;
-                }
-            }
-        }
-
-        // Store allocation using proper key format
-        size_t allocIndex;
-        if (!freeAllocationSlots.empty())
-        {
-            allocIndex = freeAllocationSlots.back();
-            freeAllocationSlots.pop_back();
-            allocations[allocIndex] = std::move(alloc);
-        }
-        else
-        {
-            allocIndex = allocations.size();
-            allocations.push_back(std::move(alloc));
-        }
-        allocationKeyToIndex[allocationKey] = allocIndex;
-
-        return &allocations[allocIndex];
-    }
-
-    bool MeshletBuffer::uploadTerrainMeshletLOD(
-        const std::string& tileKey,
-        uint32_t lodLevel,
-        const std::vector<GPUMeshlet>& meshlets,
-        const std::vector<uint32_t>& vertexIndices,
-        const std::vector<uint32_t>& primitives)
-    {
-        if (!initialized)
-        {
-            vfLogError("MeshletBuffer: Not initialized");
-            return false;
-        }
-
-        if (lodLevel >= 4)
-        {
-            vfLogError("MeshletBuffer: Invalid LOD level {}", lodLevel);
-            return false;
-        }
-
-        std::string allocationKey = makeAllocationKey(tileKey, "terrain", 0);
-        auto it = allocationKeyToIndex.find(allocationKey);
-        if (it == allocationKeyToIndex.end())
-        {
-            vfLogError("MeshletBuffer: No allocation found for terrain tile {}", tileKey);
-            return false;
-        }
-
-        auto& alloc = allocations[it->second];
-        auto& lodAlloc = alloc.lods[lodLevel];
-
-        if (!lodAlloc.isAllocated)
-        {
-            vfLogError("MeshletBuffer: LOD {} not allocated for terrain tile {}", lodLevel, tileKey);
-            return false;
-        }
-
-        // Validate counts match allocation
-        if (meshlets.size() != lodAlloc.meshletCount ||
-            vertexIndices.size() != lodAlloc.vertexCount ||
-            primitives.size() != lodAlloc.primitiveCount)
-        {
-            vfLogError("MeshletBuffer: Data size mismatch for terrain tile {} LOD{}", tileKey, lodLevel);
-            return false;
-        }
-
-        // Upload meshlet descriptors
-        uploadMeshletDataAt(lodAlloc.meshletOffset, meshlets.data(),
-                           static_cast<uint32_t>(meshlets.size()));
-
-        // Upload vertex indices
-        uploadVertexIndicesAt(lodAlloc.vertexOffset, vertexIndices.data(),
-                             static_cast<uint32_t>(vertexIndices.size()));
-
-        // Upload primitives
-        uploadPrimitivesAt(lodAlloc.primitiveOffset, primitives.data(),
-                          static_cast<uint32_t>(primitives.size()));
-
-        return true;
-    }
-
-    void MeshletBuffer::freeTerrainTile(const std::string& tileKey)
-    {
-        std::string allocationKey = makeAllocationKey(tileKey, "terrain", 0);
-        auto it = allocationKeyToIndex.find(allocationKey);
-        if (it == allocationKeyToIndex.end())
-        {
-            return;
-        }
-
-        size_t allocIndex = it->second;
-        auto& alloc = allocations[allocIndex];
-
-        // Free all LOD allocations
-        for (auto& lodAlloc : alloc.lods)
-        {
-            freeLODMeshletSpace(lodAlloc);
-        }
-
-        // Clear and mark slot as free
-        alloc = MeshletAllocation{};
-        freeAllocationSlots.push_back(allocIndex);
-        allocationKeyToIndex.erase(it);
-    }
 }

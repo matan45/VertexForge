@@ -37,7 +37,6 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Query current selection from global state
         events::scene::GetSelectedEntityQuery selectedQuery;
         auto selectedHandle = dispatcher.query(selectedQuery).value_or(services::EntityHandle::invalid());
 
@@ -66,7 +65,6 @@ namespace windows
         drawEntityActiveCheckbox(handle, entityDataOpt->isActive);
         ImGui::Separator();
 
-        // Draw all components using dedicated drawers
         transformDrawer.draw(handle);
         bool hasCamera = cameraDrawer.draw(handle);
         iblDrawer.draw(handle);

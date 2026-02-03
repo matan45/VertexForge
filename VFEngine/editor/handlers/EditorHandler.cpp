@@ -218,7 +218,6 @@ namespace handlers
         projectService->registerEventHandlers();
         terrainService->registerEventHandlers();
 
-
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
         events::EventDispatcher::instance().execute(atlasCmd);

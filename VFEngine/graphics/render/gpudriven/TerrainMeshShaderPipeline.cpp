@@ -43,21 +43,18 @@ namespace render::gpudriven
         cachedShadowDataLayout = shadowDataLayout;
         cachedShadowTextureLayout = shadowTextureLayout;
 
-        // Create command pool for immediate transfers
         vk::CommandPoolCreateInfo poolInfo{};
         poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
         poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
         transferCommandPool = device.getLogicalDevice().createCommandPool(poolInfo);
 
-        // Create empty descriptor set layout and sets for unused sets (1 and 5)
         vk::Device vkDevice = device.getLogicalDevice();
         vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
         emptyLayoutInfo.bindingCount = 0;
         emptyLayoutInfo.pBindings = nullptr;
         emptyLayout = vkDevice.createDescriptorSetLayout(emptyLayoutInfo);
 
-        // Create pool for empty descriptor sets
-        // Note: Some Vulkan implementations require at least one pool size even for empty sets
+        // Some Vulkan implementations require at least one pool size even for empty sets
         vk::DescriptorPoolSize dummyPoolSize{};
         dummyPoolSize.type = vk::DescriptorType::eUniformBuffer;
         dummyPoolSize.descriptorCount = 1;
@@ -69,7 +66,6 @@ namespace render::gpudriven
         emptyPoolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
         emptyDescriptorPool = vkDevice.createDescriptorPool(emptyPoolInfo);
 
-        // Allocate empty descriptor sets
         std::array<vk::DescriptorSetLayout, 2> emptyLayouts = {emptyLayout, emptyLayout};
         vk::DescriptorSetAllocateInfo emptyAllocInfo{};
         emptyAllocInfo.descriptorPool = emptyDescriptorPool;
@@ -159,53 +155,6 @@ namespace render::gpudriven
         initialized = false;
     }
 
-    void TerrainMeshShaderPipeline::recreate(vk::DescriptorSetLayout iblLayout,
-                                              vk::DescriptorSetLayout bindlessTextureLayout,
-                                              vk::DescriptorSetLayout meshletDataLayout,
-                                              vk::DescriptorSetLayout vertexDataLayout,
-                                              vk::DescriptorSetLayout lightDataLayout,
-                                              vk::DescriptorSetLayout clusterGridLayout,
-                                              vk::DescriptorSetLayout cullingOutputLayout,
-                                              vk::DescriptorSetLayout shadowDataLayout,
-                                              vk::DescriptorSetLayout shadowTextureLayout,
-                                              vk::RenderPass renderPass)
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-        vkDevice.waitIdle();
-
-        cachedIBLLayout = iblLayout;
-        cachedBindlessLayout = bindlessTextureLayout;
-        cachedMeshletLayout = meshletDataLayout;
-        cachedVertexLayout = vertexDataLayout;
-        cachedLightDataLayout = lightDataLayout;
-        cachedClusterGridLayout = clusterGridLayout;
-        cachedCullingOutputLayout = cullingOutputLayout;
-        cachedShadowDataLayout = shadowDataLayout;
-        cachedShadowTextureLayout = shadowTextureLayout;
-
-        if (graphicsPipeline)
-        {
-            vkDevice.destroyPipeline(graphicsPipeline);
-            graphicsPipeline = nullptr;
-        }
-
-        if (pipelineLayout)
-        {
-            vkDevice.destroyPipelineLayout(pipelineLayout);
-            pipelineLayout = nullptr;
-        }
-
-        if (terrainShader)
-        {
-            terrainShader->cleanUp();
-        }
-
-        createTerrainGraphicsPipeline(iblLayout, bindlessTextureLayout, meshletDataLayout,
-                                      vertexDataLayout, lightDataLayout,
-                                      clusterGridLayout, cullingOutputLayout,
-                                      shadowDataLayout, shadowTextureLayout, renderPass);
-    }
-
     void TerrainMeshShaderPipeline::createTileDataBuffer()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -284,7 +233,6 @@ namespace render::gpudriven
         auto sets = vkDevice.allocateDescriptorSets(allocInfo);
         terrainDataDescriptorSet = sets[0];
 
-        // Update descriptor with tile data buffer
         std::array<vk::DescriptorBufferInfo, 2> bufferInfos{};
 
         bufferInfos[0].buffer = tileDataBuffer;
@@ -371,7 +319,6 @@ namespace render::gpudriven
         // Set 10: Shadow textures
         // Set 11: Terrain tile data (terrain-specific)
 
-        // Use the member emptyLayout for unused sets (created in init())
         std::array<vk::DescriptorSetLayout, 12> setLayouts = {
             iblLayout,              // Set 0: IBL/Camera
             emptyLayout,            // Set 1: (unused) - member variable
@@ -401,8 +348,6 @@ namespace render::gpudriven
         layoutCreateInfo.pPushConstantRanges = &pushConstantRange;
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
-
-        // Note: emptyLayout is a member variable, cleaned up in cleanup()
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
@@ -451,7 +396,6 @@ namespace render::gpudriven
         }
         vk::DeviceSize dataSize = currentTileCount * sizeof(TerrainTileGPUData);
 
-        // Create staging buffer
         vk::Device vkDevice = device.getLogicalDevice();
         vk::Buffer stagingBuffer;
         vk::DeviceMemory stagingMemory;
@@ -464,12 +408,10 @@ namespace render::gpudriven
 
         core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
 
-        // Copy data to staging buffer
         void* data = vkDevice.mapMemory(stagingMemory, 0, dataSize);
         std::memcpy(data, tiles.data(), dataSize);
         vkDevice.unmapMemory(stagingMemory);
 
-        // Copy to device-local buffer using single-time command buffer
         vk::CommandBufferAllocateInfo allocInfo{};
         allocInfo.commandPool = transferCommandPool;
         allocInfo.level = vk::CommandBufferLevel::ePrimary;
@@ -499,7 +441,6 @@ namespace render::gpudriven
 
         vkDevice.freeCommandBuffers(transferCommandPool, cmd);
 
-        // Cleanup staging buffer
         core::BufferUtilities::destroyBuffer(vkDevice, stagingBuffer, stagingMemory);
     }
 
@@ -509,7 +450,6 @@ namespace render::gpudriven
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Create pool for terrain buffer descriptors if needed
         if (!terrainBufferPool)
         {
             std::array<vk::DescriptorPoolSize, 1> poolSizes = {{
@@ -523,7 +463,6 @@ namespace render::gpudriven
 
             terrainBufferPool = vkDevice.createDescriptorPool(poolInfo);
 
-            // Allocate descriptor sets using cached layouts
             std::array<vk::DescriptorSetLayout, 2> layouts = {
                 cachedMeshletLayout,
                 cachedVertexLayout
@@ -679,7 +618,6 @@ namespace render::gpudriven
 
         warnedMissing = true;
 
-        // Cannot render without all descriptor sets - shader statically uses all of them
         if (hasCriticalMissing)
         {
             static bool warnedAbort = false;
@@ -720,7 +658,6 @@ namespace render::gpudriven
                 continue;
             }
 
-            // Start new batch if needed
             if (batch.empty())
             {
                 batchStart = i;
@@ -729,11 +666,9 @@ namespace render::gpudriven
         }
         flushBatch();
 
-        // Push constants
         TerrainPushConstants pushConstants{};
         pushConstants.tileCount = currentTileCount;
 
-        // Add culling bits to viewMode based on enabled settings
         uint32_t effectiveViewMode = viewMode;
         if (frustumCullingEnabled)
         {
@@ -759,28 +694,6 @@ namespace render::gpudriven
 
         // Dispatch mesh tasks - one workgroup per tile
         cmd.drawMeshTasksEXT(currentTileCount, 1, 1);
-    }
-
-    void TerrainMeshShaderPipeline::resetStats(vk::CommandBuffer cmd)
-    {
-        cmd.fillBuffer(statsBuffer, 0, sizeof(TerrainCullingStats), 0);
-
-        vk::BufferMemoryBarrier barrier{};
-        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.buffer = statsBuffer;
-        barrier.offset = 0;
-        barrier.size = sizeof(TerrainCullingStats);
-
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eTransfer,
-            vk::PipelineStageFlagBits::eTaskShaderEXT,
-            {},
-            {},
-            barrier,
-            {});
     }
 
     TerrainCullingStats TerrainMeshShaderPipeline::readStats()

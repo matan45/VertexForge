@@ -65,7 +65,6 @@ namespace controllers
             });
         materialSavedSubscription = std::make_unique<events::SubscriptionToken>(token);
 
-        // Subscribe to terrain deletion to clear GPU buffers
         auto terrainToken = events::EventDispatcher::instance().subscribe<events::terrain::TerrainDeletedNotification>(
             [this](const events::terrain::TerrainDeletedNotification&)
             {
@@ -245,21 +244,10 @@ namespace controllers
         return billboardPipeline->loadAtlas(atlasPath);
     }
 
-    void OffScreenController::rebuildBVH()
-    {
-        bvhManager->rebuild();
-    }
-
-    void OffScreenController::markBVHDirty()
-    {
-        bvhManager->markDirty();
-    }
-
     void OffScreenController::setOcclusionCullingEnabled(bool enabled)
     {
         cameraController->setOcclusionCullingEnabled(enabled);
 
-        // Also set on GPU-driven renderer
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (renderHandler)
         {
@@ -267,29 +255,9 @@ namespace controllers
         }
     }
 
-    bool OffScreenController::isOcclusionCullingEnabled() const
-    {
-        return cameraController->isOcclusionCullingEnabled();
-    }
-
-    void OffScreenController::createCamera(render::occlusion::CameraId id, bool enableOcclusion)
-    {
-        cameraController->create(id, enableOcclusion);
-    }
-
     void OffScreenController::removeCamera(render::occlusion::CameraId id)
     {
         cameraController->remove(id);
-    }
-
-    void OffScreenController::setActiveCamera(render::occlusion::CameraId id)
-    {
-        cameraController->setActive(id);
-    }
-
-    render::occlusion::CameraId OffScreenController::getActiveCameraId() const
-    {
-        return cameraController->getActiveId();
     }
 
     void* OffScreenController::render()
@@ -324,7 +292,6 @@ namespace controllers
             lightBufferManager->setShadowIntensity(settings.shadows.shadowIntensity);
         }
 
-        // Apply culling settings
         gpuDriven->setFrustumCullingEnabled(settings.culling.frustumCullingEnabled);
         gpuDriven->setOcclusionCullingEnabled(settings.culling.occlusionCullingEnabled);
         gpuDriven->setLODSelectionEnabled(settings.culling.lodSelectionEnabled);
@@ -333,7 +300,6 @@ namespace controllers
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
 
-        // Apply terrain rendering settings
         gpuDriven->setTerrainRenderingEnabled(settings.terrain.enabled);
         gpuDriven->setTerrainLODBias(settings.terrain.lodBias);
         gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);

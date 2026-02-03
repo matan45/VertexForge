@@ -51,13 +51,7 @@ namespace controllers {
 		std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 		void prepareFrameMeshes();
 
-		void rebuildBVH();
-		void markBVHDirty();
-
-		void createCamera(CameraId id, bool enableOcclusion = false);
 		void removeCamera(CameraId id);
-		void setActiveCamera(CameraId id);
-		CameraId getActiveCameraId() const;
 		void prepareFrameCameraFrustums();
 		void prepareFrameAudioSpheres();
 		void prepareFrameLightGizmos();
@@ -73,7 +67,6 @@ namespace controllers {
 		services::ShadowStats getShadowStats() const;
 
 		void setPlayMode(bool playMode);
-		bool isPlayMode() const;
 
 		void setShowDebugRendering(bool show);
 		bool getShowDebugRendering() const;

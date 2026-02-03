@@ -27,7 +27,6 @@ namespace windows
     private:
         events::SubscriptionToken sceneClearedToken;
 
-        // Component drawers
         details::TransformDrawer transformDrawer;
         details::CameraDrawer cameraDrawer;
         details::IBLDrawer iblDrawer;

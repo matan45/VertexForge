@@ -41,25 +41,18 @@ namespace windows::details {
 
             const auto& tile = *tileOpt;
 
-            // Tile coordinates
             ImGui::Text("Coordinates: (%d, %d)", tile.tileX, tile.tileZ);
-
-            // LOD info
             ImGui::Text("Current LOD: %u", tile.currentLOD);
-
-            // Visibility
             ImGui::Text("Visible: %s", tile.isVisible ? "Yes" : "No");
 
             ImGui::Separator();
 
-            // State flags
             ImGui::Text("Dirty: %s", tile.isDirty ? "Yes" : "No");
             ImGui::Text("WeightMap Dirty: %s", tile.isWeightMapDirty ? "Yes" : "No");
             ImGui::Text("GPU Resident: %s", tile.isGPUResident ? "Yes" : "No");
 
             ImGui::Separator();
 
-            // Bounds
             ImGui::Text("Height Range: %.2f to %.2f", tile.boundingMinY, tile.boundingMaxY);
 
             ImGui::Unindent(10.0f);

@@ -17,7 +17,6 @@ namespace render::gpudriven
 {
     class TerrainMeshBuffer;
 
-    // Push constants for terrain mesh shader pipeline
     struct TerrainPushConstants
     {
         uint32_t tileCount;
@@ -44,26 +43,21 @@ namespace render::gpudriven
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
-        // Terrain tile data descriptor (set 6)
         vk::DescriptorSetLayout terrainDataLayout;
         vk::DescriptorPool terrainDataPool;
         vk::DescriptorSet terrainDataDescriptorSet;
 
-        // Terrain tile data buffer
         vk::Buffer tileDataBuffer;
         vk::DeviceMemory tileDataBufferMemory;
         uint32_t maxTileCount = 4096;
         uint32_t currentTileCount = 0;
 
-        // Stats buffer
         vk::Buffer statsBuffer;
         vk::DeviceMemory statsBufferMemory;
         TerrainCullingStats cachedStats{};
 
-        // Command pool for immediate transfers
         vk::CommandPool transferCommandPool;
 
-        // Cached descriptor set layouts from external sources
         vk::DescriptorSetLayout cachedIBLLayout;
         vk::DescriptorSetLayout cachedBindlessLayout;
         vk::DescriptorSetLayout cachedMeshletLayout;
@@ -121,24 +115,10 @@ namespace render::gpudriven
 
         void cleanup();
 
-        void recreate(vk::DescriptorSetLayout iblLayout,
-                      vk::DescriptorSetLayout bindlessTextureLayout,
-                      vk::DescriptorSetLayout meshletDataLayout,
-                      vk::DescriptorSetLayout vertexDataLayout,
-                      vk::DescriptorSetLayout lightDataLayout,
-                      vk::DescriptorSetLayout clusterGridLayout,
-                      vk::DescriptorSetLayout cullingOutputLayout,
-                      vk::DescriptorSetLayout shadowDataLayout,
-                      vk::DescriptorSetLayout shadowTextureLayout,
-                      vk::RenderPass renderPass);
-
-        // Update terrain tile data on GPU
         void updateTileData(const std::vector<TerrainTileGPUData>& tiles);
 
-        // Update descriptors from dedicated terrain buffer
         void updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer);
 
-        // Update IBL, bindless, light, cluster, and shadow descriptors (terrain buffer handles meshlet/vertex)
         void updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                      vk::DescriptorSet bindlessDescSet,
                                      vk::DescriptorSet lightDataDescSet,
@@ -147,7 +127,6 @@ namespace render::gpudriven
                                      vk::DescriptorSet shadowDataDescSet,
                                      vk::DescriptorSet shadowTextureDescSet);
 
-        // Dispatch terrain rendering
         void dispatch(vk::CommandBuffer cmd,
                       uint32_t viewMode,
                       float screenWidth,
@@ -156,13 +135,8 @@ namespace render::gpudriven
                       float errorThreshold = 2.0f,
                       float textureScale = 0.1f);
 
-        // Reset and read statistics
-        void resetStats(vk::CommandBuffer cmd);
         TerrainCullingStats readStats();
 
-        // Getters
-        vk::Pipeline getPipeline() const { return graphicsPipeline; }
-        vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
         vk::DescriptorSetLayout getTerrainDataLayout() const { return terrainDataLayout; }
         vk::DescriptorSet getTerrainDataDescriptorSet() const { return terrainDataDescriptorSet; }
         vk::DescriptorSet getTerrainMeshletDescriptorSet() const { return terrainMeshletDescriptorSet; }
@@ -170,13 +144,9 @@ namespace render::gpudriven
         vk::DescriptorSetLayout getCachedMeshletLayout() const { return cachedMeshletLayout; }
         vk::DescriptorSetLayout getCachedVertexLayout() const { return cachedVertexLayout; }
         uint32_t getCurrentTileCount() const { return currentTileCount; }
-        bool isInitialized() const { return initialized; }
 
-        // Culling settings
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
-        bool isFrustumCullingEnabled() const { return frustumCullingEnabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
-        bool isMeshletCullingEnabled() const { return meshletCullingEnabled; }
 
     private:
         bool frustumCullingEnabled = true;
