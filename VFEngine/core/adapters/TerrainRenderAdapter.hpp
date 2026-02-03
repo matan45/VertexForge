@@ -10,8 +10,7 @@ namespace services
 
 namespace core
 {
-    // Adapter that implements ITerrainRenderProvider by wrapping TerrainService.
-    // Provides access to raw terrain tiles for GPU-driven rendering.
+    // Provides access to raw terrain tiles for GPU-driven rendering
     class TerrainRenderAdapter : public services::ITerrainRenderProvider
     {
     private:

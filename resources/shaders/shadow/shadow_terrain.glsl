@@ -18,12 +18,10 @@ layout(push_constant) uniform TerrainShadowPushConstants {
     float slopeBias;
 } pc;
 
-// Terrain tile data
 layout(std430, set = 0, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
 
-// Meshlet data
 layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
@@ -43,7 +41,6 @@ shared uint sharedMeshletIndices[MAX_MESHLETS_PER_PAYLOAD];
 shared vec4 sharedFrustumPlanes[6];
 shared uint sharedTileData[5];
 
-// Test if AABB is inside frustum
 bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
     for (int i = 0; i < 6; i++) {
         vec3 positive = vec3(
@@ -59,7 +56,6 @@ bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
     return true;
 }
 
-// Test if sphere is inside frustum
 bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
     for (int i = 0; i < 6; i++) {
         float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
@@ -70,7 +66,6 @@ bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
     return true;
 }
 
-// Transform bounding sphere by model matrix
 vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
     float scaleX = length(modelMatrix[0].xyz);
@@ -126,7 +121,6 @@ void main() {
     }
     barrier();
 
-    // Check if tile index is valid
     if (tileIndex >= pc.tileCount) {
         if (gl_LocalInvocationID.x == 0) {
             payload.meshletCount = 0;
@@ -153,7 +147,6 @@ void main() {
             uint targetLOD = min(pc.shadowLOD, 3u);
             selectedLOD = findBestAvailableLOD(tile, targetLOD);
 
-            // Get meshlet data for selected LOD
             uvec4 meshletData = getTerrainLODMeshletData(tile, selectedLOD);
             meshletOffset = meshletData.x;
             meshletCount = meshletData.y;
@@ -178,13 +171,11 @@ void main() {
     meshletCount = sharedTileData[3];
     baseVertexOffset = sharedTileData[4];
 
-    // Reset visible count
     if (gl_LocalInvocationID.x == 0) {
         sharedVisibleCount = 0;
     }
     barrier();
 
-    // Early exit if tile is culled or has no meshlets
     if (!tileVisible || meshletCount == 0) {
         if (gl_LocalInvocationID.x == 0) {
             payload.meshletCount = 0;
@@ -256,12 +247,10 @@ layout(push_constant) uniform TerrainShadowPushConstants {
     float slopeBias;
 } pc;
 
-// Terrain tile data
 layout(std430, set = 0, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
 
-// Meshlet data
 layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
@@ -274,7 +263,6 @@ layout(std430, set = 1, binding = 2) readonly buffer MeshletPrimitiveBuffer {
     uint meshletPrimitives[];
 };
 
-// Vertex data
 layout(std430, set = 2, binding = 0) readonly buffer VertexBuffer {
     float vertexData[];
 };
@@ -316,7 +304,6 @@ void main() {
     SetMeshOutputsEXT(vertexCount, primitiveCount);
 
     mat4 modelMatrix = tile.modelMatrix;
-    mat4 mvp = pc.lightViewProjection * modelMatrix;
 
     // First pass: Load vertex positions into shared memory
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;

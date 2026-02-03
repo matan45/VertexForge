@@ -11,22 +11,19 @@ layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 const uint TASK_WORKGROUP_SIZE = 32;
 const uint MAX_MESHLETS_PER_PAYLOAD = 512; // For High (129x129) tiles
 
-// Camera data
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
 };
 
-// Terrain tile data (Set 11 - terrain-specific data)
+// Set 11 - terrain-specific data
 layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
 
-// Meshlet data
 layout(std430, set = 3, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
 
-// Terrain culling statistics
 layout(std430, set = 11, binding = 1) buffer TerrainStatsBuffer {
     uint totalTiles;
     uint culledTiles;
@@ -66,7 +63,6 @@ shared uint sharedVisibleCount;
 shared uint sharedMeshletIndices[MAX_MESHLETS_PER_PAYLOAD];
 shared uint sharedTileData[8]; // For broadcasting tile visibility/LOD data
 
-// Test if AABB is inside frustum
 bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
     for (int i = 0; i < 6; i++) {
         vec3 positive = vec3(
@@ -82,7 +78,6 @@ bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
     return true;
 }
 
-// Test if sphere is inside frustum
 bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
     for (int i = 0; i < 6; i++) {
         float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
@@ -93,7 +88,6 @@ bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
     return true;
 }
 
-// Transform bounding sphere by model matrix
 vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
     float scaleX = length(modelMatrix[0].xyz);
@@ -104,7 +98,6 @@ vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
     return vec4(worldCenter, worldRadius);
 }
 
-// Backface cone culling test
 bool coneCullTest(vec4 cone, mat4 modelMatrix, vec3 cameraPos, vec3 meshletCenter) {
     if (cone.w >= 1.0) {
         return true; // No valid cone, pass the test
@@ -115,10 +108,8 @@ bool coneCullTest(vec4 cone, mat4 modelMatrix, vec3 cameraPos, vec3 meshletCente
     return dotProduct < cone.w;
 }
 
-// Select LOD based on screen-space geometric error
-// Returns the coarsest LOD level where error is still acceptable
+// Returns the coarsest LOD level where screen-space error is still acceptable
 uint selectLODByGeometricError(TerrainTileGPUData tile, float distance, float screenHeight) {
-    // Avoid division by zero
     if (distance < 0.01) {
         return 0; // Closest LOD (highest detail)
     }
@@ -140,10 +131,8 @@ uint selectLODByGeometricError(TerrainTileGPUData tile, float distance, float sc
     return 0; // Default to highest detail
 }
 
-// Find the best available LOD (one that has meshlets loaded)
 // Tries the ideal LOD first, then searches for alternatives
 uint findBestAvailableLOD(TerrainTileGPUData tile, uint idealLOD) {
-    // First try the ideal LOD
     uvec4 data = getTerrainLODMeshletData(tile, idealLOD);
     if (data.y > 0) return idealLOD; // meshletCount > 0
 
@@ -160,13 +149,11 @@ uint findBestAvailableLOD(TerrainTileGPUData tile, uint idealLOD) {
 void main() {
     uint tileIndex = gl_WorkGroupID.x;
 
-    // Initialize shared memory
     if (gl_LocalInvocationID.x == 0) {
         sharedVisibleCount = 0;
     }
     barrier();
 
-    // Check if tile index is valid
     if (tileIndex >= pc.tileCount) {
         if (gl_LocalInvocationID.x == 0) {
             payload.meshletCount = 0;
@@ -209,7 +196,6 @@ void main() {
             else if (selectedLOD == 2) atomicAdd(stats.lodCount2, 1);
             else atomicAdd(stats.lodCount3, 1);
 
-            // Get meshlet data for selected LOD
             uvec4 meshletData = getTerrainLODMeshletData(tile, selectedLOD);
             meshletOffset = meshletData.x;
             meshletCount = meshletData.y;
@@ -219,7 +205,6 @@ void main() {
 
     // Broadcast tile visibility and LOD data to all threads
     barrier();
-    // Use dedicated shared memory for tile data broadcast
     if (gl_LocalInvocationID.x == 0) {
         sharedTileData[0] = tileVisible ? 1 : 0;
         sharedTileData[1] = selectedLOD;
@@ -236,13 +221,11 @@ void main() {
     meshletCount = sharedTileData[3];
     baseVertexOffset = sharedTileData[4];
 
-    // Reset shared visible count
     if (gl_LocalInvocationID.x == 0) {
         sharedVisibleCount = 0;
     }
     barrier();
 
-    // Early exit if tile is culled or has no meshlets
     if (!tileVisible || meshletCount == 0) {
         if (gl_LocalInvocationID.x == 0) {
             payload.meshletCount = 0;

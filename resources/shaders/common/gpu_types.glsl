@@ -111,20 +111,11 @@ struct TerrainTileGPUData {
     uint materialIndex;         // Index into terrain material array
 };
 
-// Helper to get meshlet data for a specific LOD level
 uvec4 getTerrainLODMeshletData(TerrainTileGPUData tile, uint lodLevel) {
     if (lodLevel == 0) return tile.lod0MeshletData;
     if (lodLevel == 1) return tile.lod1MeshletData;
     if (lodLevel == 2) return tile.lod2MeshletData;
     return tile.lod3MeshletData;
-}
-
-// Helper to get geometric error for a specific LOD level
-float getTerrainLODError(TerrainTileGPUData tile, uint lodLevel) {
-    if (lodLevel == 0) return tile.lodGeometricErrors.x;
-    if (lodLevel == 1) return tile.lodGeometricErrors.y;
-    if (lodLevel == 2) return tile.lodGeometricErrors.z;
-    return tile.lodGeometricErrors.w;
 }
 
 #endif // GPU_TYPES_GLSL

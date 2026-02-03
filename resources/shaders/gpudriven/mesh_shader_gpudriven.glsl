@@ -324,7 +324,6 @@ const int MAX_POINT_SHADOW_CUBES = 32;  // MAX_POINT_SHADOW_CASTERS
 
 const float LIGHTING_PI = 3.14159265359;
 
-const uint SPOT_LIGHT_FLAG = 0x80000000u;
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;
 
 float linearizeDepth(float windowZ) {
@@ -504,7 +503,6 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 l
     ShadowData sd = shadowData[shadowIndex];
 
     int cubeMapIndex = int(sd.pcfParams.w);
-    // Validate cubemap index bounds
     if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
     vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;

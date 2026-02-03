@@ -8,7 +8,6 @@
 // Constants
 //-----------------------------------------------------------------------------
 
-const uint SPOT_LIGHT_FLAG = 0x80000000u;
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;
 
 //-----------------------------------------------------------------------------
@@ -57,24 +56,16 @@ uint getClusterIndex(ClusterGridParams params, vec2 fragCoord, float viewZ) {
            slice * params.gridDimensions.x * params.gridDimensions.y;
 }
 
-// Unpack point light count from cluster data
 uint getClusterPointLightCount(ClusterLightData clusterData) {
     return clusterData.counts & 0xFFFFu;
 }
 
-// Unpack spot light count from cluster data
 uint getClusterSpotLightCount(ClusterLightData clusterData) {
     return clusterData.counts >> 16u;
 }
 
-// Extract light index from packed value (removes spot light flag)
 uint extractLightIndex(uint packedIndex) {
     return packedIndex & LIGHT_INDEX_MASK;
-}
-
-// Check if packed index represents a spot light
-bool isSpotLight(uint packedIndex) {
-    return (packedIndex & SPOT_LIGHT_FLAG) != 0u;
 }
 
 #endif // CLUSTER_CULLING_GLSL

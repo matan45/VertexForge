@@ -13,7 +13,6 @@ const uint MAX_MESHLETS_PER_PAYLOAD = 512; // Must match task shader!
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 64, max_primitives = 124) out;
 
-// Output varyings
 layout(location = 0) out vec3 fragWorldPos[];
 layout(location = 1) out vec3 fragNormal[];
 layout(location = 2) out vec2 fragTexCoord[];
@@ -22,17 +21,15 @@ layout(location = 4) flat out uint fragMeshletIndex[];
 layout(location = 5) flat out uint fragLODLevel[];
 layout(location = 6) out vec2 fragWorldUV[];  // For terrain texture tiling
 
-// Camera data
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
 };
 
-// Terrain tile data (Set 11 - terrain-specific data)
+// Set 11 - terrain-specific data
 layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
 
-// Meshlet data
 layout(std430, set = 3, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
 };
@@ -45,7 +42,6 @@ layout(std430, set = 3, binding = 2) readonly buffer MeshletPrimitiveBuffer {
     uint meshletPrimitives[];
 };
 
-// Vertex data
 layout(std430, set = 4, binding = 0) readonly buffer VertexBuffer {
     float vertexData[];
 };
@@ -108,7 +104,6 @@ void main() {
     mat3 normalMatrix = mat3(modelMatrix);  // For orthonormal transforms
     mat4 viewProjection = camera.projection * camera.view;
 
-    // Texture scale for world-space tiling
     float textureScale = pc.terrainTextureScale > 0.0 ? pc.terrainTextureScale : 0.1;
 
     // Load vertices into shared memory
@@ -157,7 +152,6 @@ void main() {
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
             fragLODLevel[localVertexIndex] = lodLevel;
 
-            // World-space UV for terrain texture tiling
             fragWorldUV[localVertexIndex] = worldPos.xz * textureScale;
 
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * worldPos;
@@ -187,7 +181,6 @@ void main() {
 #include "../common/shadow_sampling.glsl"
 #include "../common/cluster_culling.glsl"
 
-// Input varyings
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
@@ -198,7 +191,6 @@ layout(location = 6) in vec2 fragWorldUV;
 
 layout(location = 0) out vec4 outColor;
 
-// Camera data
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
 };
@@ -207,7 +199,6 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
-// Bindless textures
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
 layout(push_constant) uniform PushConstants {
@@ -402,7 +393,6 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
     ShadowData sd = shadowDataArray[shadowIndex];
 
     int cubeMapIndex = int(sd.pcfParams.w);
-    // Validate cubemap index bounds
     if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
     vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
@@ -494,12 +484,10 @@ void main() {
         uint clusterSpotCount = getClusterSpotLightCount(clusterData);
         uint lightOffset = clusterData.offset;
 
-        // Evaluate point lights in cluster
         for (uint i = 0u; i < clusterPointCount; ++i) {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
 
-            // Sample point light shadow
             float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N,
                                              light.position, light.radius);
             minShadow = min(minShadow, shadow);
@@ -508,13 +496,11 @@ void main() {
                                                  metallic, roughness, F0, light) * shadow;
         }
 
-        // Evaluate spot lights in cluster
         for (uint i = 0u; i < clusterSpotCount; ++i) {
             uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
             uint lightIdx = extractLightIndex(packedIdx);
             SpotLight light = spotLights[lightIdx];
 
-            // Sample spot light shadow
             float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
             minShadow = min(minShadow, shadow);
 

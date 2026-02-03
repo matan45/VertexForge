@@ -71,7 +71,6 @@ namespace core
         explicit EditorBootstrap();
         ~EditorBootstrap();
 
-        // Non-copyable
         EditorBootstrap(const EditorBootstrap&) = delete;
         EditorBootstrap& operator=(const EditorBootstrap&) = delete;
 
@@ -105,8 +104,6 @@ namespace core
 
         services::IAnimatorProvider* getAnimatorProvider();
 
-        services::ITerrainRenderProvider* getTerrainRenderProvider();
-
         // For late binding - allows EditorHandler to connect TerrainService
         TerrainRenderAdapter* getTerrainRenderAdapterInternal();
 
@@ -118,10 +115,7 @@ namespace core
 
         // === Frame Callbacks ===
 
-        // Set callback to be called each frame (for service updates)
         void setFrameCallback(std::function<void()> callback);
-
-        // Trigger window resize handling
         void triggerResize();
     };
 }

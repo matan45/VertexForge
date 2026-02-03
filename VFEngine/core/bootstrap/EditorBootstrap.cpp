@@ -168,11 +168,6 @@ namespace core
         return animatorAdapter.get();
     }
 
-    services::ITerrainRenderProvider* EditorBootstrap::getTerrainRenderProvider()
-    {
-        return terrainRenderAdapter.get();
-    }
-
     TerrainRenderAdapter* EditorBootstrap::getTerrainRenderAdapterInternal()
     {
         return terrainRenderAdapter.get();
