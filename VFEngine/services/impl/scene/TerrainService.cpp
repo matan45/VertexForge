@@ -25,6 +25,7 @@ namespace services
         auto& dispatcher = events::EventDispatcher::instance();
         dispatcher.unregisterCommandHandler<events::terrain::CreateTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::RemapTerrainEntitiesCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -57,6 +58,12 @@ namespace services
             [this](const events::terrain::DeleteTerrainCommand& cmd)
             {
                 return deleteTerrain(cmd.terrainEntity);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::RemapTerrainEntitiesCommand>(
+            [this](const events::terrain::RemapTerrainEntitiesCommand&)
+            {
+                remapTerrainEntities();
             });
 
         dispatcher.registerQueryHandler<events::terrain::GetTerrainDataQuery>(
@@ -375,6 +382,35 @@ namespace services
         }
 
         return result;
+    }
+
+    void TerrainService::remapTerrainEntities()
+    {
+        if (terrainGrids.empty())
+            return;
+
+        // Collect existing grids (keyed by stale entity IDs)
+        std::vector<std::unique_ptr<terrain::TerrainGrid>> grids;
+        for (auto& [id, grid] : terrainGrids)
+        {
+            grids.push_back(std::move(grid));
+        }
+        terrainGrids.clear();
+
+        // Find restored entities with TerrainComponent and re-associate
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::TerrainComponent>();
+
+        size_t gridIndex = 0;
+        for (auto entity : view)
+        {
+            if (gridIndex >= grids.size())
+                break;
+
+            uint64_t newId = internal::toHandle(entity).id;
+            terrainGrids[newId] = std::move(grids[gridIndex]);
+            gridIndex++;
+        }
     }
 
     void TerrainService::onEntityDeleted(EntityHandle entity)

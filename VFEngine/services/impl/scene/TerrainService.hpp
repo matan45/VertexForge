@@ -54,6 +54,7 @@ namespace services
 
     private:
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
+        void remapTerrainEntities();
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
     };

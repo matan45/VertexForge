@@ -42,6 +42,10 @@ namespace events::terrain
         std::string_view getName() const override { return "GetTerrainTileData"; }
     };
 
+    struct RemapTerrainEntitiesCommand : ICommand<void> {
+        std::string_view getName() const override { return "RemapTerrainEntities"; }
+    };
+
     struct TerrainCreatedNotification : INotification {
         services::EntityHandle terrainEntity;
         services::TerrainCreationData config;
