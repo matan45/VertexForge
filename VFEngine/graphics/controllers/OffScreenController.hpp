@@ -27,6 +27,7 @@ namespace render
 namespace services
 {
     class IVFXRuntimeProvider;
+    class ITerrainRenderProvider;
 }
 
 namespace controllers::offscreen
@@ -58,6 +59,7 @@ namespace controllers
         std::unique_ptr<offscreen::CullingStatsCollector> statsCollector;
 
         std::unique_ptr<events::SubscriptionToken> materialSavedSubscription;
+        std::unique_ptr<events::SubscriptionToken> terrainDeletedSubscription;
 
         bool showBillboardIcons = true;
         bool showDebugRendering = true;
@@ -98,16 +100,9 @@ namespace controllers
         bool getShowBillboardIcons() const { return showBillboardIcons; }
         bool loadBillboardAtlas(const std::string& atlasPath);
 
-        void rebuildBVH();
-        void markBVHDirty();
-
         void setOcclusionCullingEnabled(bool enabled);
-        bool isOcclusionCullingEnabled() const;
 
-        void createCamera(render::occlusion::CameraId id, bool enableOcclusion = false);
         void removeCamera(render::occlusion::CameraId id);
-        void setActiveCamera(render::occlusion::CameraId id);
-        render::occlusion::CameraId getActiveCameraId() const;
 
         void* render();
 
@@ -117,7 +112,6 @@ namespace controllers
         services::ShadowStats getShadowStats() const;
 
         void setPlayMode(bool playMode);
-        bool isPlayMode() const { return playModeActive; }
 
         void setShowDebugRendering(bool show) { showDebugRendering = show; }
         bool getShowDebugRendering() const { return showDebugRendering; }
@@ -137,6 +131,14 @@ namespace controllers
         void setLODSelectionEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
+        void setTerrainFrustumCullingEnabled(bool enabled);
+        void setTerrainMeshletCullingEnabled(bool enabled);
+
+        void setTerrainRenderingEnabled(bool enabled);
+        void setTerrainLODBias(float bias);
+        void setTerrainErrorThreshold(float threshold);
+        void setTerrainTextureScale(float scale);
+        void setTerrainShadowLOD(uint32_t lod);
 
         void setShowClusterDebug(bool show) { showClusterDebug = show; }
         bool getShowClusterDebug() const { return showClusterDebug; }
@@ -147,5 +149,6 @@ namespace controllers
         void prepareFrameShadowDebug();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
+        void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
     };
 }

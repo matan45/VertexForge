@@ -17,6 +17,7 @@
 #include "offscreen/CullingStatsCollector.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/MaterialEvents.hpp"
+#include "../../services/events/TerrainEvents.hpp"
 #include "time/Timer.hpp"
 
 namespace controllers
@@ -33,6 +34,10 @@ namespace controllers
         if (materialSavedSubscription && materialSavedSubscription->isValid())
         {
             events::EventDispatcher::instance().unsubscribe(*materialSavedSubscription);
+        }
+        if (terrainDeletedSubscription && terrainDeletedSubscription->isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(*terrainDeletedSubscription);
         }
     }
 
@@ -59,6 +64,17 @@ namespace controllers
                 framePreparation->invalidateMaterialCache(notification.materialPath);
             });
         materialSavedSubscription = std::make_unique<events::SubscriptionToken>(token);
+
+        auto terrainToken = events::EventDispatcher::instance().subscribe<events::terrain::TerrainDeletedNotification>(
+            [this](const events::terrain::TerrainDeletedNotification&)
+            {
+                auto* renderHandler = offScreen->getRenderPassHandler();
+                if (renderHandler)
+                {
+                    renderHandler->clearTerrainData();
+                }
+            });
+        terrainDeletedSubscription = std::make_unique<events::SubscriptionToken>(terrainToken);
     }
 
     void OffScreenController::recreate()
@@ -228,21 +244,10 @@ namespace controllers
         return billboardPipeline->loadAtlas(atlasPath);
     }
 
-    void OffScreenController::rebuildBVH()
-    {
-        bvhManager->rebuild();
-    }
-
-    void OffScreenController::markBVHDirty()
-    {
-        bvhManager->markDirty();
-    }
-
     void OffScreenController::setOcclusionCullingEnabled(bool enabled)
     {
         cameraController->setOcclusionCullingEnabled(enabled);
 
-        // Also set on GPU-driven renderer
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (renderHandler)
         {
@@ -250,29 +255,9 @@ namespace controllers
         }
     }
 
-    bool OffScreenController::isOcclusionCullingEnabled() const
-    {
-        return cameraController->isOcclusionCullingEnabled();
-    }
-
-    void OffScreenController::createCamera(render::occlusion::CameraId id, bool enableOcclusion)
-    {
-        cameraController->create(id, enableOcclusion);
-    }
-
     void OffScreenController::removeCamera(render::occlusion::CameraId id)
     {
         cameraController->remove(id);
-    }
-
-    void OffScreenController::setActiveCamera(render::occlusion::CameraId id)
-    {
-        cameraController->setActive(id);
-    }
-
-    render::occlusion::CameraId OffScreenController::getActiveCameraId() const
-    {
-        return cameraController->getActiveId();
     }
 
     void* OffScreenController::render()
@@ -307,12 +292,19 @@ namespace controllers
             lightBufferManager->setShadowIntensity(settings.shadows.shadowIntensity);
         }
 
-        // Apply culling settings
         gpuDriven->setFrustumCullingEnabled(settings.culling.frustumCullingEnabled);
         gpuDriven->setOcclusionCullingEnabled(settings.culling.occlusionCullingEnabled);
         gpuDriven->setLODSelectionEnabled(settings.culling.lodSelectionEnabled);
         gpuDriven->setMeshletFrustumCullingEnabled(settings.culling.meshletFrustumCullingEnabled);
         gpuDriven->setMeshletBackfaceCullingEnabled(settings.culling.meshletBackfaceCullingEnabled);
+        gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
+        gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
+
+        gpuDriven->setTerrainRenderingEnabled(settings.terrain.enabled);
+        gpuDriven->setTerrainLODBias(settings.terrain.lodBias);
+        gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
+        gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
+        gpuDriven->setTerrainShadowLOD(settings.terrain.shadowLOD);
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
@@ -570,12 +562,84 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setTerrainFrustumCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setTerrainMeshletCullingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainMeshletCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setTerrainRenderingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainRenderingEnabled(enabled);
+        }
+    }
+
+    void OffScreenController::setTerrainLODBias(float bias)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainLODBias(bias);
+        }
+    }
+
+    void OffScreenController::setTerrainErrorThreshold(float threshold)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainErrorThreshold(threshold);
+        }
+    }
+
+    void OffScreenController::setTerrainTextureScale(float scale)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainTextureScale(scale);
+        }
+    }
+
+    void OffScreenController::setTerrainShadowLOD(uint32_t lod)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainShadowLOD(lod);
+        }
+    }
+
     void OffScreenController::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (renderHandler)
         {
             renderHandler->setVFXRuntimeProvider(provider);
+        }
+    }
+
+    void OffScreenController::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setTerrainRenderProvider(provider);
         }
     }
 }

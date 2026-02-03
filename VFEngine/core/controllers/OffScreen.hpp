@@ -12,6 +12,7 @@
 namespace services
 {
 	class IVFXRuntimeProvider;
+	class ITerrainRenderProvider;
 }
 
 namespace controllers {
@@ -50,13 +51,7 @@ namespace controllers {
 		std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const;
 		void prepareFrameMeshes();
 
-		void rebuildBVH();
-		void markBVHDirty();
-
-		void createCamera(CameraId id, bool enableOcclusion = false);
 		void removeCamera(CameraId id);
-		void setActiveCamera(CameraId id);
-		CameraId getActiveCameraId() const;
 		void prepareFrameCameraFrustums();
 		void prepareFrameAudioSpheres();
 		void prepareFrameLightGizmos();
@@ -72,7 +67,6 @@ namespace controllers {
 		services::ShadowStats getShadowStats() const;
 
 		void setPlayMode(bool playMode);
-		bool isPlayMode() const;
 
 		void setShowDebugRendering(bool show);
 		bool getShowDebugRendering() const;
@@ -101,7 +95,16 @@ namespace controllers {
 		void setLODSelectionEnabled(bool enabled);
 		void setMeshletFrustumCullingEnabled(bool enabled);
 		void setMeshletBackfaceCullingEnabled(bool enabled);
+		void setTerrainFrustumCullingEnabled(bool enabled);
+		void setTerrainMeshletCullingEnabled(bool enabled);
+
+		void setTerrainRenderingEnabled(bool enabled);
+		void setTerrainLODBias(float bias);
+		void setTerrainErrorThreshold(float threshold);
+		void setTerrainTextureScale(float scale);
+		void setTerrainShadowLOD(uint32_t lod);
 
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
+		void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
 	};
 }

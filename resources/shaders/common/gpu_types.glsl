@@ -94,4 +94,28 @@ struct MeshTasksCommand {
     uint groupCountZ;
 };
 
+// Must match TerrainTileGPUData in GPUDrivenTypes.hpp (208 bytes)
+struct TerrainTileGPUData {
+    mat4 modelMatrix;           // Usually identity for world-space terrain
+    vec4 boundingSphere;        // xyz = world center, w = radius
+    vec4 aabbMin;               // xyz = world AABB min, w = unused
+    vec4 aabbMax;               // xyz = world AABB max, w = unused
+    uvec4 lod0MeshletData;      // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
+    uvec4 lod1MeshletData;      // Same layout
+    uvec4 lod2MeshletData;      // Same layout
+    uvec4 lod3MeshletData;      // Same layout
+    vec4 lodGeometricErrors;    // Per-LOD geometric error thresholds (world units)
+    int coordX;                 // Tile coordinate X
+    int coordZ;                 // Tile coordinate Z
+    uint flags;                 // Rendering flags
+    uint materialIndex;         // Index into terrain material array
+};
+
+uvec4 getTerrainLODMeshletData(TerrainTileGPUData tile, uint lodLevel) {
+    if (lodLevel == 0) return tile.lod0MeshletData;
+    if (lodLevel == 1) return tile.lod1MeshletData;
+    if (lodLevel == 2) return tile.lod2MeshletData;
+    return tile.lod3MeshletData;
+}
+
 #endif // GPU_TYPES_GLSL

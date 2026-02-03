@@ -40,15 +40,12 @@ namespace services
         std::optional<EntityHandle> loadPrefab(const std::string& filePath,
                                                std::optional<EntityHandle> parent = std::nullopt);
 
-        // Physics settings (stored at scene level)
         types::PhysicsSettings getPhysicsSettings() const;
         bool setPhysicsSettings(const types::PhysicsSettings& settings);
 
-        // Audio settings (stored at scene level)
         types::AudioSettings getAudioSettings() const;
         bool setAudioSettings(const types::AudioSettings& settings);
 
-        // Render settings (stored at scene level)
         types::RenderSettings getRenderSettings() const;
         bool setRenderSettings(const types::RenderSettings& settings);
     };

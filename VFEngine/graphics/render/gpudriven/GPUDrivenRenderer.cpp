@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "terrain/TerrainTile.hpp"
 #include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../mesh/MeshStreamManager.hpp"
@@ -157,6 +158,34 @@ namespace render::gpudriven
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());
                 loggerInfo("GPUDrivenRenderer: Meshlet streaming enabled");
             }
+
+            terrainMeshBuffer = std::make_unique<TerrainMeshBuffer>(device);
+            terrainMeshBuffer->init();
+
+            terrainAdapter = std::make_unique<TerrainGPUAdapter>(*terrainMeshBuffer);
+            terrainStreamManager = std::make_unique<TerrainStreamManager>(*terrainMeshBuffer, *terrainAdapter);
+
+            terrainPipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
+            terrainPipeline->init(
+                iblDescriptorSetLayout,
+                bindlessTextures->getDescriptorSetLayout(),
+                meshShaderPipeline->getMeshletDataLayout(),
+                meshShaderPipeline->getVertexDataLayout(),
+                lightBufferManager->getDescriptorSetLayout(),
+                clusterGridManager->getDescriptorSetLayout(),
+                lightCullingPipeline->getDescriptorSetLayout(),
+                shadowSystem->getShadowDataLayout(),
+                shadowSystem->getShadowTextureLayout(),
+                renderPass
+            );
+            loggerInfo("GPUDrivenRenderer: Terrain mesh shader pipeline initialized");
+
+            shadowSystem->initTerrainShadowPass(
+                terrainPipeline->getTerrainDataLayout(),
+                terrainPipeline->getCachedMeshletLayout(),
+                terrainPipeline->getCachedVertexLayout()
+            );
+            loggerInfo("GPUDrivenRenderer: Terrain shadow pass initialized");
         }
         else
         {
@@ -208,6 +237,8 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
+        if (terrainPipeline) terrainPipeline->cleanup();
+        if (terrainMeshBuffer) terrainMeshBuffer->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
         if (meshShaderPipeline) meshShaderPipeline->cleanup();
         if (shadowSystem) shadowSystem->cleanup();
@@ -223,6 +254,10 @@ namespace render::gpudriven
         if (mergedBuffer) mergedBuffer->cleanup();
 
         meshStreamManager.reset();
+        terrainStreamManager.reset();
+        terrainAdapter.reset();
+        terrainPipeline.reset();
+        terrainMeshBuffer.reset();
         lightOcclusionCulling.reset();
         meshShaderPipeline.reset();
         shadowSystem.reset();
@@ -485,19 +520,18 @@ namespace render::gpudriven
             batchManager->getCombinedDrawCountBuffer()
         );
 
-        if (meshShaderPipeline && mergedBuffer->getObjectCount() > 0)
+        bool hasMeshes = mergedBuffer->getObjectCount() > 0;
+
+        // Always update meshlet and vertex descriptors - terrain uses these too
+        if (meshShaderPipeline)
         {
-            meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
             meshShaderPipeline->updateMeshletDescriptors(*meshletBuffer);
             meshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
+        }
 
-            if (lightBufferManager && clusterGridManager && lightCullingPipeline)
-            {
-                meshShaderPipeline->updateLightingDescriptors(
-                    lightBufferManager->getDescriptorSet(),
-                    clusterGridManager->getDescriptorSet(),
-                    lightCullingPipeline->getDescriptorSet());
-            }
+        if (meshShaderPipeline && hasMeshes)
+        {
+            meshShaderPipeline->updatePerDrawDescriptor(batchManager->getCombinedPerDrawDataBuffer());
 
             if (shadowSystem && shadowSystem->isInitialized())
             {
@@ -505,6 +539,21 @@ namespace render::gpudriven
                     shadowSystem->getShadowDataDescSet(),
                     shadowSystem->getShadowTextureDescSet());
             }
+        }
+
+        // Always update lighting descriptors when terrain or meshes may need them
+        if (meshShaderPipeline && lightBufferManager && clusterGridManager && lightCullingPipeline)
+        {
+            meshShaderPipeline->updateLightingDescriptors(
+                lightBufferManager->getDescriptorSet(),
+                clusterGridManager->getDescriptorSet(),
+                lightCullingPipeline->getDescriptorSet());
+        }
+
+        if (terrainRenderingEnabled && terrainPipeline && terrainMeshBuffer &&
+            terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
+        {
+            terrainPipeline->updateTerrainBufferDescriptors(*terrainMeshBuffer);
         }
     }
 
@@ -522,6 +571,10 @@ namespace render::gpudriven
         if (meshletBuffer)
         {
             meshletBuffer->flushPendingTransfers();
+        }
+        if (terrainMeshBuffer)
+        {
+            terrainMeshBuffer->flushPendingTransfers();
         }
 
         batchManager->resetAllBatches(cmd);
@@ -549,17 +602,8 @@ namespace render::gpudriven
             lightsAfterHiZCull = lightsAfterBVHCull;
         }
 
-        if (stats.totalObjects == 0)
-        {
-            return;
-        }
-        mergedBuffer->uploadObjects(cmd);
-
-        if (boneMatrixManager)
-        {
-            boneMatrixManager->uploadToGPU(cmd);
-        }
-
+        // Light buffer must be updated even if there are no mesh objects,
+        // because terrain rendering also needs light data.
         // Shadow system must update before light buffer manager so shadow indices are available
         if (shadowSystem && shadowSystem->isInitialized())
         {
@@ -625,6 +669,25 @@ namespace render::gpudriven
                 lightBufferManager->updateFromScene();
             }
             lightBufferManager->uploadToGPU(cmd);
+        }
+
+        bool hasMeshObjects = stats.totalObjects > 0;
+        bool hasTerrainTiles = terrainRenderingEnabled && terrainPipeline &&
+                               terrainPipeline->getCurrentTileCount() > 0;
+
+        if (!hasMeshObjects && !hasTerrainTiles)
+        {
+            return;
+        }
+
+        if (hasMeshObjects)
+        {
+            mergedBuffer->uploadObjects(cmd);
+        }
+
+        if (boneMatrixManager)
+        {
+            boneMatrixManager->uploadToGPU(cmd);
         }
 
         if (useLightOcclusionCulling && lightOcclusionCulling && lightOcclusionCulling->isInitialized())
@@ -719,24 +782,49 @@ namespace render::gpudriven
         cullPipeline->dispatch(cmd, stats.totalObjects);
         batchManager->insertBarriersAfterCompute(cmd);
 
-        if (shadowSystem && shadowSystem->isShadowsEnabled() &&
-            meshShaderPipeline && boneMatrixManager && batchManager)
+        if (shadowSystem && shadowSystem->isShadowsEnabled())
         {
             shadowSystem->uploadToGPU(cmd);
 
             shadow::ShadowPassParams shadowParams{};
-            shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
-            shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
-            shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
-            shadowParams.boneMatrixDescSet = boneMatrixManager->getDescriptorSet();
-            shadowParams.drawCommandBuffer = batchManager->getCombinedDrawCommandBuffer();
-            shadowParams.drawCountBuffer = batchManager->getCombinedDrawCountBuffer();
-            shadowParams.batchCount = batchManager->getBatchCount();
-            shadowParams.commandsPerSection = batchManager->getCommandsPerSection();
-            shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
-            shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
+            if (hasMeshObjects && meshShaderPipeline && boneMatrixManager && batchManager)
+            {
+                shadowParams.perDrawDataDescSet = meshShaderPipeline->getPerDrawDataDescriptorSet();
+                shadowParams.meshletDataDescSet = meshShaderPipeline->getMeshletDataDescriptorSet();
+                shadowParams.vertexDataDescSet = meshShaderPipeline->getVertexDataDescriptorSet();
+                shadowParams.boneMatrixDescSet = boneMatrixManager->getDescriptorSet();
+                shadowParams.drawCommandBuffer = batchManager->getCombinedDrawCommandBuffer();
+                shadowParams.drawCountBuffer = batchManager->getCombinedDrawCountBuffer();
+                shadowParams.batchCount = batchManager->getBatchCount();
+                shadowParams.commandsPerSection = batchManager->getCommandsPerSection();
+                shadowParams.shaderGroupCount = batchManager->getShaderGroupCount();
+                shadowParams.drawCountStructSize = sizeof(BatchDrawStats);
+            }
 
-            shadowSystem->recordShadowPass(cmd, shadowParams);
+            shadow::TerrainShadowPassParams terrainShadowParams{};
+            shadow::TerrainShadowPassParams* terrainShadowParamsPtr = nullptr;
+
+            if (terrainRenderingEnabled && terrainPipeline && terrainMeshBuffer &&
+                terrainMeshBuffer->isInitialized() && terrainPipeline->getCurrentTileCount() > 0)
+            {
+                // Terrain buffer descriptors are already updated in updatePipelineDescriptors()
+                // Just verify descriptor sets are valid before using them
+                vk::DescriptorSet terrainDataSet = terrainPipeline->getTerrainDataDescriptorSet();
+                vk::DescriptorSet terrainMeshletSet = terrainPipeline->getTerrainMeshletDescriptorSet();
+                vk::DescriptorSet terrainVertexSet = terrainPipeline->getTerrainVertexDescriptorSet();
+
+                if (terrainDataSet && terrainMeshletSet && terrainVertexSet)
+                {
+                    terrainShadowParams.terrainDataDescSet = terrainDataSet;
+                    terrainShadowParams.terrainMeshletDescSet = terrainMeshletSet;
+                    terrainShadowParams.terrainVertexDescSet = terrainVertexSet;
+                    terrainShadowParams.tileCount = terrainPipeline->getCurrentTileCount();
+                    terrainShadowParams.shadowLOD = terrainShadowLOD;
+                    terrainShadowParamsPtr = &terrainShadowParams;
+                }
+            }
+
+            shadowSystem->recordShadowPass(cmd, shadowParams, terrainShadowParamsPtr);
         }
     }
 
@@ -1136,4 +1224,131 @@ namespace render::gpudriven
     {
         return lightsAfterHiZCull;
     }
+
+    void GPUDrivenRenderer::setTerrainFrustumCullingEnabled(bool enabled)
+    {
+        terrainFrustumCullingEnabled = enabled;
+        if (terrainPipeline)
+        {
+            terrainPipeline->setFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void GPUDrivenRenderer::setTerrainMeshletCullingEnabled(bool enabled)
+    {
+        terrainMeshletCullingEnabled = enabled;
+        if (terrainPipeline)
+        {
+            terrainPipeline->setMeshletCullingEnabled(enabled);
+        }
+    }
+
+    void GPUDrivenRenderer::updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                          const glm::vec3& cameraPosition)
+    {
+        if (!initialized || !terrainRenderingEnabled || !terrainAdapter || !terrainPipeline)
+        {
+            return;
+        }
+
+        if (visibleTiles.empty())
+        {
+            terrainTileData.clear();
+            return;
+        }
+
+        if (terrainStreamManager)
+        {
+            terrainStreamManager->update(visibleTiles, cameraPosition);
+        }
+        else
+        {
+            // Fallback: upload all tiles directly (legacy behavior)
+            for (terrain::TerrainTile* tile : visibleTiles)
+            {
+                if (!tile || !tile->isVisible)
+                {
+                    continue;
+                }
+
+                TerrainTileKey key{tile->coord.x, tile->coord.z};
+                if (!terrainAdapter->hasTile(key))
+                {
+                    terrainAdapter->uploadTile(*tile);
+                }
+            }
+        }
+
+        terrainTileData = terrainAdapter->buildGPUTileData(visibleTiles);
+
+        if (!terrainTileData.empty())
+        {
+            terrainPipeline->updateTileData(terrainTileData);
+        }
+    }
+
+    void GPUDrivenRenderer::clearTerrainData()
+    {
+        if (terrainStreamManager)
+        {
+            terrainStreamManager->clear();
+        }
+        else if (terrainAdapter)
+        {
+            terrainAdapter->clear();
+        }
+        terrainTileData.clear();
+
+        // Reset terrain pipeline tile count to prevent rendering stale data
+        if (terrainPipeline)
+        {
+            terrainPipeline->updateTileData({});
+        }
+
+        if (terrainMeshBuffer)
+        {
+            terrainMeshBuffer->clear();
+        }
+    }
+
+    void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
+    {
+        if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)
+        {
+            return;
+        }
+
+        if (terrainTileData.empty())
+        {
+            return;
+        }
+
+        // Terrain buffer descriptors are already updated in updatePipelineDescriptors()
+        terrainPipeline->updateSharedDescriptors(
+            iblDescriptorSet,
+            bindlessTextures->getDescriptorSet(),
+            lightBufferManager->getDescriptorSet(),
+            clusterGridManager->getDescriptorSet(),
+            lightCullingPipeline->getDescriptorSet(),
+            shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
+            shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{}
+        );
+
+        auto extent = swapChain.getSwapchainExtent();
+
+        uint32_t viewMode = currentViewMode;
+        if (meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;
+        if (meshletBackfaceCullingEnabled) viewMode |= TERRAIN_CULL_BACKFACE_BIT;
+
+        terrainPipeline->dispatch(
+            cmd,
+            viewMode,
+            static_cast<float>(extent.width),
+            static_cast<float>(extent.height),
+            terrainLODBias,
+            terrainErrorThreshold,
+            terrainTextureScale
+        );
+    }
+
 }

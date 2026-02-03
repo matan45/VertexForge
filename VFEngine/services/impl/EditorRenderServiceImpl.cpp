@@ -403,21 +403,6 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getViewMode() : 0u;
             });
 
-        dispatcher.registerCommandHandler<events::render::SetShowClusterDebugCommand>(
-            [this](const events::render::SetShowClusterDebugCommand& cmd)
-            {
-                if (offScreenProvider)
-                {
-                    offScreenProvider->setShowClusterDebug(cmd.show);
-                }
-            });
-
-        dispatcher.registerQueryHandler<events::render::GetShowClusterDebugQuery>(
-            [this](const events::render::GetShowClusterDebugQuery&)
-            {
-                return offScreenProvider ? offScreenProvider->getShowClusterDebug() : false;
-            });
-
         dispatcher.registerCommandHandler<events::render::SetShowShadowDebugCommand>(
             [this](const events::render::SetShowShadowDebugCommand& cmd)
             {
@@ -439,7 +424,6 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
             });
 
-        // Shadow settings
         dispatcher.registerCommandHandler<events::render::ApplyShadowSettingsCommand>(
             [this](const events::render::ApplyShadowSettingsCommand& cmd)
             {
@@ -455,7 +439,6 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShadowStats() : services::ShadowStats{};
             });
 
-        // GPU Culling settings
         dispatcher.registerCommandHandler<events::render::SetFrustumCullingCommand>(
             [this](const events::render::SetFrustumCullingCommand& cmd)
             {
@@ -501,6 +484,69 @@ namespace services
                 }
             });
 
+        dispatcher.registerCommandHandler<events::render::SetTerrainFrustumCullingCommand>(
+            [this](const events::render::SetTerrainFrustumCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainFrustumCullingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainMeshletCullingCommand>(
+            [this](const events::render::SetTerrainMeshletCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainMeshletCullingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainRenderingEnabledCommand>(
+            [this](const events::render::SetTerrainRenderingEnabledCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainRenderingEnabled(cmd.enabled);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainLODBiasCommand>(
+            [this](const events::render::SetTerrainLODBiasCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainLODBias(cmd.bias);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainErrorThresholdCommand>(
+            [this](const events::render::SetTerrainErrorThresholdCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainErrorThreshold(cmd.threshold);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainTextureScaleCommand>(
+            [this](const events::render::SetTerrainTextureScaleCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainTextureScale(cmd.scale);
+                }
+            });
+
+        dispatcher.registerCommandHandler<events::render::SetTerrainShadowLODCommand>(
+            [this](const events::render::SetTerrainShadowLODCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setTerrainShadowLOD(cmd.lod);
+                }
+            });
+
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
             {
@@ -530,14 +576,6 @@ namespace services
         return offScreenProvider->meshLoad(meshPath);
     }
 
-    void EditorRenderServiceImpl::unloadMesh(const std::string& meshId)
-    {
-        if (offScreenProvider)
-        {
-            offScreenProvider->meshUnload(meshId);
-        }
-    }
-
     void EditorRenderServiceImpl::updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
                                                    const glm::vec3& cameraPos, float time)
     {
@@ -550,15 +588,6 @@ namespace services
     bool EditorRenderServiceImpl::isMeshLoaded(const std::string& meshPath) const
     {
         return offScreenProvider && offScreenProvider->isMeshLoaded(meshPath);
-    }
-
-    std::vector<std::string> EditorRenderServiceImpl::getLoadedMeshes() const
-    {
-        if (!offScreenProvider)
-        {
-            return {};
-        }
-        return offScreenProvider->getLoadedMeshes();
     }
 
     void EditorRenderServiceImpl::prepareCameras()

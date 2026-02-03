@@ -138,6 +138,7 @@
     <ClInclude Include="windows\ProjectSettingsWindow.hpp" />
     <ClInclude Include="windows\RenderConfigWindow.hpp" />
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
+    <ClInclude Include="windows\TerrainCreationWindow.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
     <ClInclude Include="windows\ViewPortGizmo.hpp" />
     <ClInclude Include="windows\ViewPortOverlay.hpp" />
@@ -168,6 +169,8 @@
     <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
     <ClInclude Include="windows\details\SpotLightDrawer.hpp" />
+    <ClInclude Include="windows\details\TerrainDrawer.hpp" />
+    <ClInclude Include="windows\details\TerrainTileDrawer.hpp" />
     <ClInclude Include="windows\details\TransformDrawer.hpp" />
     <ClInclude Include="windows\details\VFXDrawer.hpp" />
     <ClInclude Include="windows\material\MaterialGraphEvaluator.hpp" />
@@ -217,6 +220,7 @@
     <ClCompile Include="windows\ProjectSettingsWindow.cpp" />
     <ClCompile Include="windows\RenderConfigWindow.cpp" />
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
+    <ClCompile Include="windows\TerrainCreationWindow.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
     <ClCompile Include="windows\ViewPortGizmo.cpp" />
     <ClCompile Include="windows\ViewPortOverlay.cpp" />
@@ -246,6 +250,8 @@
     <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />
     <ClCompile Include="windows\details\SpotLightDrawer.cpp" />
+    <ClCompile Include="windows\details\TerrainDrawer.cpp" />
+    <ClCompile Include="windows\details\TerrainTileDrawer.cpp" />
     <ClCompile Include="windows\details\TransformDrawer.cpp" />
     <ClCompile Include="windows\details\VFXDrawer.cpp" />
     <ClCompile Include="windows\material\MaterialGraphEvaluator.cpp" />

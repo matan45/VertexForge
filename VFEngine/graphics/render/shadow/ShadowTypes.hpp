@@ -9,9 +9,6 @@
 
 namespace render::shadow
 {
-    // ============================================
-    // Shadow System Constants
-    // ============================================
     namespace ShadowConstants
     {
         inline constexpr uint32_t CUBE_FACE_COUNT = 6;
@@ -20,7 +17,6 @@ namespace render::shadow
 
         inline constexpr uint32_t MAX_POINT_SHADOW_CASTERS = 32;
 
-        inline constexpr uint32_t MAX_CSM_CASCADES = 4;
         inline constexpr uint32_t DEFAULT_CSM_CASCADES = 4;
 
         inline constexpr uint32_t RESOLUTION_LOW = 512;
@@ -37,9 +33,6 @@ namespace render::shadow
         inline constexpr uint32_t MAX_TOTAL_SHADOW_VIEWS = 272;
     }
 
-    // ============================================
-    // Enums
-    // ============================================
     enum class ShadowMapType : uint8_t
     {
         None = 0,
@@ -73,9 +66,6 @@ namespace render::shadow
         Cube
     };
 
-    // ============================================
-    // Handle for dedicated shadow resources (Array/Cube)
-    // ============================================
     struct ShadowResourceHandle
     {
         ShadowResourceType resourceType = ShadowResourceType::Atlas;
@@ -98,9 +88,6 @@ namespace render::shadow
         [[nodiscard]] bool isCube() const { return resourceType == ShadowResourceType::Cube; }
     };
 
-    // ============================================
-    // Handle for referencing shadow maps in atlas
-    // ============================================
     struct ShadowMapHandle
     {
         uint32_t atlasIndex = std::numeric_limits<uint32_t>::max();
@@ -123,9 +110,6 @@ namespace render::shadow
         }
     };
 
-    // ============================================
-    // Per-light shadow configuration
-    // ============================================
     struct ShadowSettings
     {
         uint32_t resolution = ShadowConstants::DEFAULT_SPOT_RESOLUTION;
@@ -146,24 +130,8 @@ namespace render::shadow
 
         bool enabled = true;
         bool castShadows = true;
-
-        [[nodiscard]] static uint32_t getResolutionForQuality(ShadowQuality q)
-        {
-            switch (q)
-            {
-                case ShadowQuality::Off:    return 0;
-                case ShadowQuality::Low:    return ShadowConstants::RESOLUTION_LOW;
-                case ShadowQuality::Medium: return ShadowConstants::RESOLUTION_MEDIUM;
-                case ShadowQuality::High:   return ShadowConstants::RESOLUTION_HIGH;
-                case ShadowQuality::Ultra:  return ShadowConstants::RESOLUTION_ULTRA;
-                default: return ShadowConstants::RESOLUTION_HIGH;
-            }
-        }
     };
 
-    // ============================================
-    // View matrix and projection for shadow rendering
-    // ============================================
     struct ShadowView
     {
         glm::mat4 viewMatrix{1.0f};
@@ -197,9 +165,6 @@ namespace render::shadow
         }
     };
 
-    // ============================================
-    // Per-light shadow metadata (stored per entity)
-    // ============================================
     struct LightShadowData
     {
         ShadowSettings settings;
@@ -229,9 +194,6 @@ namespace render::shadow
         }
     };
 
-    // ============================================
-    // GPU-aligned shadow data for shader consumption
-    // ============================================
     struct alignas(16) GPUShadowData
     {
         glm::mat4 viewProjection;
@@ -242,9 +204,6 @@ namespace render::shadow
     };
     static_assert(sizeof(GPUShadowData) == 128, "GPUShadowData must be 128 bytes");
 
-    // ============================================
-    // Debug visualization info
-    // ============================================
     struct ShadowDebugInfo
     {
         ShadowMapType type = ShadowMapType::None;
@@ -257,9 +216,6 @@ namespace render::shadow
         float farPlane = 100.0f;
     };
 
-    // ============================================
-    // Atlas tile allocation info
-    // ============================================
     struct ShadowAtlasTile
     {
         uint32_t x = 0;
@@ -279,5 +235,14 @@ namespace render::shadow
                 static_cast<float>(height) / static_cast<float>(atlasHeight)
             );
         }
+    };
+
+    struct TerrainShadowPassParams
+    {
+        vk::DescriptorSet terrainDataDescSet;    // Terrain tile GPU data buffer
+        vk::DescriptorSet terrainMeshletDescSet; // Terrain meshlet buffer
+        vk::DescriptorSet terrainVertexDescSet;  // Terrain vertex buffer
+        uint32_t tileCount = 0;
+        uint32_t shadowLOD = 2;  // Default to LOD 2 (coarse) for shadows
     };
 }

@@ -6,6 +6,12 @@ namespace controllers
     class OffScreen;
 }
 
+namespace services
+{
+    class IVFXRuntimeProvider;
+    class ITerrainRenderProvider;
+}
+
 namespace core
 {
     class OffScreenAdapter : public services::IOffScreenProvider
@@ -16,9 +22,10 @@ namespace core
     public:
         explicit OffScreenAdapter(controllers::OffScreen* offScreen);
         ~OffScreenAdapter() override = default;
-        
-        void init() override;
-        void cleanUp() override;
+
+        void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
+        void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+
         void* render() override;
 
         void iblSet(std::string_view iblPath) override;
@@ -35,13 +42,7 @@ namespace core
         std::optional<services::MeshBounds> getMeshBoundingBox(const std::string& meshPath) const override;
         void prepareFrameMeshes() override;
 
-        void rebuildBVH() override;
-        void markBVHDirty() override;
-
-        void createCamera(services::CameraId id, bool enableOcclusion = false) override;
         void removeCamera(services::CameraId id) override;
-        void setActiveCamera(services::CameraId id) override;
-        services::CameraId getActiveCameraId() const override;
         void prepareFrameCameraFrustums() override;
         void prepareFrameAudioSpheres() override;
         void prepareFrameLightGizmos() override;
@@ -57,7 +58,6 @@ namespace core
         services::ShadowStats getShadowStats() const override;
 
         void setPlayMode(bool playMode) override;
-        bool isPlayMode() const override;
 
         void setShowDebugRendering(bool show) override;
         bool getShowDebugRendering() const override;
@@ -86,10 +86,13 @@ namespace core
         void setLODSelectionEnabled(bool enabled) override;
         void setMeshletFrustumCullingEnabled(bool enabled) override;
         void setMeshletBackfaceCullingEnabled(bool enabled) override;
+        void setTerrainFrustumCullingEnabled(bool enabled) override;
+        void setTerrainMeshletCullingEnabled(bool enabled) override;
 
-        void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) override;
-
-    private:
-        bool playModeActive = false;
+        void setTerrainRenderingEnabled(bool enabled) override;
+        void setTerrainLODBias(float bias) override;
+        void setTerrainErrorThreshold(float threshold) override;
+        void setTerrainTextureScale(float scale) override;
+        void setTerrainShadowLOD(uint32_t lod) override;
     };
 }

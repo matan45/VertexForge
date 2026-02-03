@@ -10,6 +10,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "../../events/RenderEvents.hpp"
+#include "../../events/TerrainEvents.hpp"
 #include "../../events/PhysicsSettingsEvents.hpp"
 #include "../../events/AudioSettingsEvents.hpp"
 #include "print/EditorLogger.hpp"
@@ -56,7 +57,6 @@ namespace services
                 return loadPrefab(cmd.filePath, cmd.parent);
             });
 
-        // Physics settings handlers
         dispatcher.registerQueryHandler<events::scene::GetPhysicsSettingsQuery>(
             [this](const events::scene::GetPhysicsSettingsQuery&)
             {
@@ -69,7 +69,6 @@ namespace services
                 return setPhysicsSettings(cmd.settings);
             });
 
-        // Audio settings handlers
         dispatcher.registerQueryHandler<events::scene::GetAudioSettingsQuery>(
             [this](const events::scene::GetAudioSettingsQuery&)
             {
@@ -108,21 +107,21 @@ namespace services
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
 
+        events::terrain::TerrainDeletedNotification terrainNotif;
+        dispatcher.publish(terrainNotif);
+
         sceneGraph->clearScene();
 
-        // Reset physics settings to defaults for new scene
         sceneGraph->setPhysicsSettings(types::PhysicsSettings::createDefault());
         events::physics::ApplyPhysicsSettingsCommand physicsCmd;
         physicsCmd.settings = sceneGraph->getPhysicsSettings();
         dispatcher.execute(physicsCmd);
 
-        // Reset audio settings to defaults for new scene
         sceneGraph->setAudioSettings(types::AudioSettings::createDefault());
         events::audio::ApplyAudioSettingsCommand audioCmd;
         audioCmd.settings = sceneGraph->getAudioSettings();
         dispatcher.execute(audioCmd);
 
-        // Reset render settings to defaults for new scene
         sceneGraph->setRenderSettings(types::RenderSettings::createDefault());
 
         if (entityStateService)
@@ -172,6 +171,9 @@ namespace services
 
         events::render::RemoveIBLCommand removeIblCmd;
         dispatcher.execute(removeIblCmd);
+
+        events::terrain::TerrainDeletedNotification terrainNotif;
+        dispatcher.publish(terrainNotif);
 
         if (entityStateService)
         {
@@ -230,17 +232,14 @@ namespace services
                 }
             }
 
-            // Apply physics settings from the loaded scene
             events::physics::ApplyPhysicsSettingsCommand physicsCmd;
             physicsCmd.settings = sceneGraph->getPhysicsSettings();
             dispatcher.execute(physicsCmd);
 
-            // Apply audio settings from the loaded scene
             events::audio::ApplyAudioSettingsCommand audioCmd;
             audioCmd.settings = sceneGraph->getAudioSettings();
             dispatcher.execute(audioCmd);
 
-            // Apply render/shadow settings from the loaded scene
             events::render::ApplyShadowSettingsCommand renderCmd;
             renderCmd.settings = sceneGraph->getRenderSettings();
             dispatcher.execute(renderCmd);

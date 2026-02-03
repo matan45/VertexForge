@@ -37,7 +37,6 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Query current selection from global state
         events::scene::GetSelectedEntityQuery selectedQuery;
         auto selectedHandle = dispatcher.query(selectedQuery).value_or(services::EntityHandle::invalid());
 
@@ -66,7 +65,6 @@ namespace windows
         drawEntityActiveCheckbox(handle, entityDataOpt->isActive);
         ImGui::Separator();
 
-        // Draw all components using dedicated drawers
         transformDrawer.draw(handle);
         bool hasCamera = cameraDrawer.draw(handle);
         iblDrawer.draw(handle);
@@ -86,6 +84,10 @@ namespace windows
         bool hasDirectionalLight = directionalLightDrawer.draw(handle);
         bool hasPointLight = pointLightDrawer.draw(handle);
         bool hasSpotLight = spotLightDrawer.draw(handle);
+
+        // Terrain components (read-only display)
+        terrainDrawer.draw(handle);
+        terrainTileDrawer.draw(handle);
 
         addComponentPopup.draw(handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
                                hasCollider, hasRigidBody, hasVFX,

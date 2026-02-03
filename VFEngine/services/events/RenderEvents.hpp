@@ -105,12 +105,6 @@ namespace events::render {
         std::string_view getName() const override { return "SetViewMode"; }
     };
 
-    struct SetShowClusterDebugCommand : ICommand<> {
-        bool show;
-
-        std::string_view getName() const override { return "SetShowClusterDebug"; }
-    };
-
     struct LoadBillboardAtlasCommand : ICommand<bool> {
         std::string atlasPath;
 
@@ -159,10 +153,6 @@ namespace events::render {
         std::string_view getName() const override { return "GetViewMode"; }
     };
 
-    struct GetShowClusterDebugQuery : IQuery<bool> {
-        std::string_view getName() const override { return "GetShowClusterDebug"; }
-    };
-
     struct SetShowShadowDebugCommand : ICommand<> {
         bool show;
 
@@ -177,7 +167,6 @@ namespace events::render {
         std::string_view getName() const override { return "GetCullingStats"; }
     };
 
-    // Shadow settings
     struct ApplyShadowSettingsCommand : ICommand<> {
         types::RenderSettings settings;
 
@@ -188,7 +177,6 @@ namespace events::render {
         std::string_view getName() const override { return "GetShadowStats"; }
     };
 
-    // GPU Culling settings
     struct SetFrustumCullingCommand : ICommand<> {
         bool enabled;
 
@@ -217,6 +205,48 @@ namespace events::render {
         bool enabled;
 
         std::string_view getName() const override { return "SetMeshletBackfaceCulling"; }
+    };
+
+    struct SetTerrainFrustumCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetTerrainFrustumCulling"; }
+    };
+
+    struct SetTerrainMeshletCullingCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetTerrainMeshletCulling"; }
+    };
+
+    struct SetTerrainRenderingEnabledCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetTerrainRenderingEnabled"; }
+    };
+
+    struct SetTerrainLODBiasCommand : ICommand<> {
+        float bias;
+
+        std::string_view getName() const override { return "SetTerrainLODBias"; }
+    };
+
+    struct SetTerrainErrorThresholdCommand : ICommand<> {
+        float threshold;
+
+        std::string_view getName() const override { return "SetTerrainErrorThreshold"; }
+    };
+
+    struct SetTerrainTextureScaleCommand : ICommand<> {
+        float scale;
+
+        std::string_view getName() const override { return "SetTerrainTextureScale"; }
+    };
+
+    struct SetTerrainShadowLODCommand : ICommand<> {
+        uint32_t lod;
+
+        std::string_view getName() const override { return "SetTerrainShadowLOD"; }
     };
 
 }

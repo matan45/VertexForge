@@ -8,6 +8,7 @@
 #include "AudioConfigWindow.hpp"
 #include "RenderConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
+#include "TerrainCreationWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 
@@ -23,7 +24,6 @@ namespace windows
     private:
         int windowFlags;
 
-        // Sub-windows
         CullingStatsWindow cullingStatsWindow;
         EditorCameraWindow editorCameraWindow;
         IBLWindow iblWindow;
@@ -32,9 +32,9 @@ namespace windows
         AudioConfigWindow audioConfigWindow;
         RenderConfigWindow renderConfigWindow;
         ProjectSettingsWindow projectSettingsWindow;
+        TerrainCreationWindow terrainCreationWindow;
         MainMenuBar menuBar;
 
-        // Event subscription
         events::SubscriptionToken sceneClearedToken;
         events::SubscriptionToken openImportDialogToken;
 

@@ -14,9 +14,9 @@ namespace windows
         window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
         windowFlags = window_flags;
 
-        // Wire up menu bar to sub-windows
         menuBar.setWindows(&iblWindow, &editorCameraWindow, &cullingStatsWindow, &importDialog, &physicsConfigWindow, &audioConfigWindow, &renderConfigWindow);
         menuBar.setProjectSettingsWindow(&projectSettingsWindow);
+        menuBar.setTerrainCreationWindow(&terrainCreationWindow);
 
         subscribeToEvents();
     }
@@ -71,6 +71,7 @@ namespace windows
             audioConfigWindow.draw();
             renderConfigWindow.draw();
             projectSettingsWindow.draw();
+            terrainCreationWindow.draw();
         }
         ImGui::End();
     }

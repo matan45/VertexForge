@@ -1,6 +1,8 @@
 #pragma once
 
+#ifndef ENABLE_VHACD_IMPLEMENTATION
 #define ENABLE_VHACD_IMPLEMENTATION 0
+#endif
 #include <VHACD.h>
 
 #include <functional>

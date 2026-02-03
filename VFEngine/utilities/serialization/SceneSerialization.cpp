@@ -159,6 +159,18 @@ namespace serialization
                 entity.getComponent<components::SpotLightComponent>());
         }
 
+        if (entity.hasComponent<components::TerrainComponent>())
+        {
+            componentsJson["terrain"] = serializeTerrain(
+                entity.getComponent<components::TerrainComponent>());
+        }
+
+        if (entity.hasComponent<components::TerrainTileComponent>())
+        {
+            componentsJson["terrainTile"] = serializeTerrainTile(
+                entity.getComponent<components::TerrainTileComponent>());
+        }
+
         entityJson["components"] = componentsJson;
 
         json childrenJson = json::array();
@@ -1030,7 +1042,17 @@ namespace serialization
             {"occlusionCullingEnabled", settings.culling.occlusionCullingEnabled},
             {"lodSelectionEnabled", settings.culling.lodSelectionEnabled},
             {"meshletFrustumCullingEnabled", settings.culling.meshletFrustumCullingEnabled},
-            {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled}
+            {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled},
+            {"terrainFrustumCullingEnabled", settings.culling.terrainFrustumCullingEnabled},
+            {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled}
+        };
+
+        j["terrain"] = {
+            {"enabled", settings.terrain.enabled},
+            {"lodBias", settings.terrain.lodBias},
+            {"errorThreshold", settings.terrain.errorThreshold},
+            {"textureScale", settings.terrain.textureScale},
+            {"shadowLOD", settings.terrain.shadowLOD}
         };
 
         return j;
@@ -1075,7 +1097,127 @@ namespace serialization
                 settings.culling.meshletFrustumCullingEnabled = culling["meshletFrustumCullingEnabled"].get<bool>();
             if (culling.contains("meshletBackfaceCullingEnabled") && culling["meshletBackfaceCullingEnabled"].is_boolean())
                 settings.culling.meshletBackfaceCullingEnabled = culling["meshletBackfaceCullingEnabled"].get<bool>();
+            if (culling.contains("terrainFrustumCullingEnabled") && culling["terrainFrustumCullingEnabled"].is_boolean())
+                settings.culling.terrainFrustumCullingEnabled = culling["terrainFrustumCullingEnabled"].get<bool>();
+            if (culling.contains("terrainMeshletCullingEnabled") && culling["terrainMeshletCullingEnabled"].is_boolean())
+                settings.culling.terrainMeshletCullingEnabled = culling["terrainMeshletCullingEnabled"].get<bool>();
         }
+
+        if (j.contains("terrain") && j["terrain"].is_object())
+        {
+            const auto& terrain = j["terrain"];
+            if (terrain.contains("enabled") && terrain["enabled"].is_boolean())
+                settings.terrain.enabled = terrain["enabled"].get<bool>();
+            if (terrain.contains("lodBias") && terrain["lodBias"].is_number())
+                settings.terrain.lodBias = terrain["lodBias"].get<float>();
+            if (terrain.contains("errorThreshold") && terrain["errorThreshold"].is_number())
+                settings.terrain.errorThreshold = terrain["errorThreshold"].get<float>();
+            if (terrain.contains("textureScale") && terrain["textureScale"].is_number())
+                settings.terrain.textureScale = terrain["textureScale"].get<float>();
+            if (terrain.contains("shadowLOD") && terrain["shadowLOD"].is_number_unsigned())
+                settings.terrain.shadowLOD = std::min(terrain["shadowLOD"].get<uint32_t>(), 3u);
+        }
+        else
+        {
+            // Initialize terrain settings with defaults for old scene files
+            settings.terrain = types::TerrainSettings{};
+        }
+    }
+
+    json SceneSerialization::serializeTerrain(const components::TerrainComponent& terrain)
+    {
+        json j;
+        j["resolution"] = terrain.resolution;
+        j["worldTileSize"] = terrain.worldTileSize;
+        j["maxHeight"] = terrain.maxHeight;
+        j["minHeight"] = terrain.minHeight;
+        j["gridMinX"] = terrain.gridMinX;
+        j["gridMinZ"] = terrain.gridMinZ;
+        j["gridMaxX"] = terrain.gridMaxX;
+        j["gridMaxZ"] = terrain.gridMaxZ;
+        j["lodDistances"] = json::array({
+            terrain.lodDistances[0], terrain.lodDistances[1],
+            terrain.lodDistances[2], terrain.lodDistances[3]
+        });
+        std::string cleanPath = terrain.heightmapPath;
+        cleanNullTerminators(cleanPath);
+        j["heightmapPath"] = cleanPath;
+        // State flags
+        j["isActive"] = terrain.isActive;
+        return j;
+    }
+
+    void SceneSerialization::deserializeTerrain(const json& j, components::TerrainComponent& terrain)
+    {
+        if (auto it = j.find("resolution"); it != j.end() && it->is_number_unsigned())
+            terrain.resolution = it->get<uint8_t>();
+        if (auto it = j.find("worldTileSize"); it != j.end() && it->is_number())
+            terrain.worldTileSize = it->get<float>();
+        if (auto it = j.find("maxHeight"); it != j.end() && it->is_number())
+            terrain.maxHeight = it->get<float>();
+        if (auto it = j.find("minHeight"); it != j.end() && it->is_number())
+            terrain.minHeight = it->get<float>();
+        if (auto it = j.find("gridMinX"); it != j.end() && it->is_number_integer())
+            terrain.gridMinX = it->get<int32_t>();
+        if (auto it = j.find("gridMinZ"); it != j.end() && it->is_number_integer())
+            terrain.gridMinZ = it->get<int32_t>();
+        if (auto it = j.find("gridMaxX"); it != j.end() && it->is_number_integer())
+            terrain.gridMaxX = it->get<int32_t>();
+        if (auto it = j.find("gridMaxZ"); it != j.end() && it->is_number_integer())
+            terrain.gridMaxZ = it->get<int32_t>();
+        if (auto it = j.find("lodDistances"); it != j.end() && it->is_array() && it->size() >= 4)
+        {
+            terrain.lodDistances[0] = (*it)[0].get<float>();
+            terrain.lodDistances[1] = (*it)[1].get<float>();
+            terrain.lodDistances[2] = (*it)[2].get<float>();
+            terrain.lodDistances[3] = (*it)[3].get<float>();
+        }
+        if (auto it = j.find("heightmapPath"); it != j.end() && it->is_string())
+            terrain.heightmapPath = it->get<std::string>();
+        // State flags (with backward-compatible defaults)
+        if (auto it = j.find("isActive"); it != j.end() && it->is_boolean())
+            terrain.isActive = it->get<bool>();
+    }
+
+    json SceneSerialization::serializeTerrainTile(const components::TerrainTileComponent& tile)
+    {
+        json j;
+        j["tileX"] = tile.tileX;
+        j["tileZ"] = tile.tileZ;
+        j["currentLOD"] = tile.currentLOD;
+        j["isVisible"] = tile.isVisible;
+        // State flags
+        j["isDirty"] = tile.isDirty;
+        j["isWeightMapDirty"] = tile.isWeightMapDirty;
+        j["isGPUResident"] = tile.isGPUResident;
+        // Cached bounds
+        j["boundingMinY"] = tile.boundingMinY;
+        j["boundingMaxY"] = tile.boundingMaxY;
+        return j;
+    }
+
+    void SceneSerialization::deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile)
+    {
+        if (auto it = j.find("tileX"); it != j.end() && it->is_number_integer())
+            tile.tileX = it->get<int32_t>();
+        if (auto it = j.find("tileZ"); it != j.end() && it->is_number_integer())
+            tile.tileZ = it->get<int32_t>();
+        if (auto it = j.find("currentLOD"); it != j.end() && it->is_number_unsigned())
+            tile.currentLOD = it->get<uint8_t>();
+        if (auto it = j.find("isVisible"); it != j.end() && it->is_boolean())
+            tile.isVisible = it->get<bool>();
+        // State flags (with backward-compatible defaults)
+        if (auto it = j.find("isDirty"); it != j.end() && it->is_boolean())
+            tile.isDirty = it->get<bool>();
+        if (auto it = j.find("isWeightMapDirty"); it != j.end() && it->is_boolean())
+            tile.isWeightMapDirty = it->get<bool>();
+        if (auto it = j.find("isGPUResident"); it != j.end() && it->is_boolean())
+            tile.isGPUResident = it->get<bool>();
+        // Cached bounds
+        if (auto it = j.find("boundingMinY"); it != j.end() && it->is_number())
+            tile.boundingMinY = it->get<float>();
+        if (auto it = j.find("boundingMaxY"); it != j.end() && it->is_number())
+            tile.boundingMaxY = it->get<float>();
     }
 
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
@@ -1276,6 +1418,18 @@ namespace serialization
                     auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                     billboard.iconType = components::BillboardIconType::SpotLight;
                 }
+            }
+
+            if (componentsJson.contains("terrain"))
+            {
+                auto& terrainComp = entity.addOrReplaceComponent<components::TerrainComponent>();
+                deserializeTerrain(componentsJson["terrain"], terrainComp);
+            }
+
+            if (componentsJson.contains("terrainTile"))
+            {
+                auto& tileComp = entity.addOrReplaceComponent<components::TerrainTileComponent>();
+                deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
             }
         }
 

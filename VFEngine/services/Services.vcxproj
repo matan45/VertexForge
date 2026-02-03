@@ -98,6 +98,7 @@
     <ClInclude Include="data\EntityHandle.hpp" />
     <ClInclude Include="data\FileOperationsTypes.hpp" />
     <ClInclude Include="data\ScriptTypes.hpp" />
+    <ClInclude Include="data\TerrainData.hpp" />
     <ClInclude Include="data\UndoTypes.hpp" />
     <ClInclude Include="data\VFXTypes.hpp" />
     <ClInclude Include="events\AnimationPreviewEvents.hpp" />
@@ -120,6 +121,7 @@
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
     <ClInclude Include="events\ScriptingEvents.hpp" />
+    <ClInclude Include="events\TerrainEvents.hpp" />
     <ClInclude Include="events\UndoRedoEvents.hpp" />
     <ClInclude Include="events\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\VFXRuntimeEvents.hpp" />
@@ -152,6 +154,7 @@
     <ClInclude Include="impl\scene\EntityStateService.hpp" />
     <ClInclude Include="impl\scene\HierarchyService.hpp" />
     <ClInclude Include="impl\scene\ScenePersistenceService.hpp" />
+    <ClInclude Include="impl\scene\TerrainService.hpp" />
     <ClInclude Include="impl\scene\TransformComponentService.hpp" />
     <ClInclude Include="interfaces\IAnimationService.hpp" />
     <ClInclude Include="interfaces\IAudioService.hpp" />
@@ -165,6 +168,7 @@
     <ClInclude Include="interfaces\IRenderService.hpp" />
     <ClInclude Include="interfaces\ISceneService.hpp" />
     <ClInclude Include="interfaces\IScriptingService.hpp" />
+    <ClInclude Include="interfaces\ITerrainService.hpp" />
     <ClInclude Include="interfaces\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\IWindowStateService.hpp" />
     <ClInclude Include="providers\IAnimationPreviewProvider.hpp" />
@@ -177,6 +181,7 @@
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
+    <ClInclude Include="providers\ITerrainRenderProvider.hpp" />
     <ClInclude Include="providers\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\IVFXRuntimeProvider.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
@@ -212,6 +217,7 @@
     <ClCompile Include="impl\scene\EntityStateService.cpp" />
     <ClCompile Include="impl\scene\HierarchyService.cpp" />
     <ClCompile Include="impl\scene\ScenePersistenceService.cpp" />
+    <ClCompile Include="impl\scene\TerrainService.cpp" />
     <ClCompile Include="impl\scene\TransformComponentService.cpp" />
   </ItemGroup>
   <ItemGroup>

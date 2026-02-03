@@ -20,15 +20,12 @@ namespace events {
         EventDispatcher(const EventDispatcher&) = delete;
         EventDispatcher& operator=(const EventDispatcher&) = delete;
 
-        // Command execution - synchronous with result
         template<typename TCommand>
         typename TCommand::ResultType execute(const TCommand& command);
 
-        // Query execution - always returns result
         template<typename TQuery>
         typename TQuery::ResultType query(const TQuery& queryObj);
 
-        // Notification publishing - fire and forget (synchronous broadcast)
         template<typename TNotification>
         void publish(const TNotification& notification);
 
@@ -38,20 +35,23 @@ namespace events {
         template<typename TQuery>
         void registerQueryHandler(std::function<typename TQuery::ResultType(const TQuery&)> handler);
 
-        // Notification subscription - returns token for unsubscribing
+        template<typename TCommand>
+        void unregisterCommandHandler();
+
+        template<typename TQuery>
+        void unregisterQueryHandler();
+
         template<typename TNotification>
         SubscriptionToken subscribe(std::function<void(const TNotification&)> handler);
 
         void unsubscribe(SubscriptionToken token);
 
-        // Clear all handlers (useful for testing or shutdown)
         void clear();
 
     private:
         EventDispatcher() = default;
         ~EventDispatcher() = default;
 
-        // Type-erased handler storage
         std::unordered_map<std::type_index, std::any> commandHandlers;
         std::unordered_map<std::type_index, std::any> queryHandlers;
 
@@ -109,7 +109,6 @@ namespace events {
                 handler(notification);
             }
             catch (const std::exception&) {
-                // Silently ignore notification handler exceptions
             }
         }
     }
@@ -134,6 +133,18 @@ namespace events {
         queryHandlers[typeIdx] = std::move(handler);
     }
 
+    template<typename TCommand>
+    void EventDispatcher::unregisterCommandHandler() {
+        std::unique_lock lock(mutex);
+        commandHandlers.erase(std::type_index(typeid(TCommand)));
+    }
+
+    template<typename TQuery>
+    void EventDispatcher::unregisterQueryHandler() {
+        std::unique_lock lock(mutex);
+        queryHandlers.erase(std::type_index(typeid(TQuery)));
+    }
+
     template<typename TNotification>
     SubscriptionToken EventDispatcher::subscribe(std::function<void(const TNotification&)> handler) {
         std::unique_lock lock(mutex);
@@ -146,8 +157,6 @@ namespace events {
         return token;
     }
 
-    // RAII wrapper for automatic subscription cleanup
-    // Automatically unsubscribes when destroyed, preventing leaks from exceptions or forgotten cleanup
     class ScopedSubscription
     {
     public:
@@ -183,7 +192,6 @@ namespace events {
             unsubscribe();
         }
 
-        // Manual unsubscribe (also called by destructor)
         void unsubscribe()
         {
             if (token.isValid())
@@ -194,14 +202,6 @@ namespace events {
         }
 
         bool isValid() const { return token.isValid(); }
-
-        // Release ownership without unsubscribing (use with caution)
-        SubscriptionToken release()
-        {
-            SubscriptionToken t = token;
-            token = {};
-            return t;
-        }
 
     private:
         SubscriptionToken token;

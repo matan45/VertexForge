@@ -38,7 +38,6 @@ namespace render::gpudriven
         maxVertexIndexCount = maxVertexIndices;
         maxPrimitiveCount = maxPrimitives;
 
-        // Initialize allocators
         meshletAllocator.reset(maxMeshletCount);
         vertexIndexAllocator.reset(maxVertexIndexCount);
         primitiveAllocator.reset(maxPrimitiveCount);
@@ -76,7 +75,6 @@ namespace render::gpudriven
     {
         auto logicalDevice = device.getLogicalDevice();
 
-        // Create meshlet buffer (GPUMeshlet[])
         core::BufferUtilities::createBuffer(
             core::BufferInfoRequest{
                 logicalDevice, device.getPhysicalDevice(),
@@ -88,7 +86,6 @@ namespace render::gpudriven
             meshletBufferMemory
         );
 
-        // Create meshlet vertex index buffer (uint32_t[])
         core::BufferUtilities::createBuffer(
             core::BufferInfoRequest{
                 logicalDevice, device.getPhysicalDevice(),
@@ -100,7 +97,6 @@ namespace render::gpudriven
             meshletVertexBufferMemory
         );
 
-        // Create meshlet primitive buffer (uint32_t[])
         core::BufferUtilities::createBuffer(
             core::BufferInfoRequest{
                 logicalDevice, device.getPhysicalDevice(),
@@ -160,7 +156,6 @@ namespace render::gpudriven
             return nullptr;
         }
 
-        // Track all allocations made during this call for cleanup on failure
         std::vector<std::string> allocatedKeys;
 
         for (uint32_t submeshIdx = 0; submeshIdx < header.numSubmeshes; ++submeshIdx)
@@ -368,7 +363,6 @@ namespace render::gpudriven
 
         const auto& lodInfo = meshletData.lodLevels[lodLevel];
 
-        // Build GPU meshlet data with global vertex offsets
         std::vector<GPUMeshlet> gpuMeshlets(lodAlloc.meshletCount);
 
         uint32_t localMeshletStart = lodInfo.meshletOffset;
@@ -487,4 +481,5 @@ namespace render::gpudriven
             transferManager->waitAll();
         }
     }
+
 }

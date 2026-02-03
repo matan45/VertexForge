@@ -13,8 +13,6 @@ namespace services {
     using types::CameraId;
     using types::MAIN_CAMERA_ID;
 
-    class IVFXRuntimeProvider;
-
     struct MeshBounds {
         glm::vec3 min{0.0f};
         glm::vec3 max{0.0f};
@@ -124,10 +122,6 @@ namespace services {
     public:
         virtual ~IOffScreenProvider() = default;
 
-        // Lifecycle
-        virtual void init() = 0;
-        virtual void cleanUp() = 0;
-
         virtual void* render() = 0;
 
         virtual void iblSet(std::string_view iblPath) = 0;
@@ -144,73 +138,60 @@ namespace services {
         virtual std::optional<MeshBounds> getMeshBoundingBox(const std::string& meshPath) const = 0;
         virtual void prepareFrameMeshes() = 0;
 
-        // BVH spatial culling
-        virtual void rebuildBVH() = 0;
-        virtual void markBVHDirty() = 0;
-
-        // Multi-camera occlusion culling
-        virtual void createCamera(CameraId id, bool enableOcclusion = false) = 0;
         virtual void removeCamera(CameraId id) = 0;
-        virtual void setActiveCamera(CameraId id) = 0;
-        virtual CameraId getActiveCameraId() const = 0;
         virtual void prepareFrameCameraFrustums() = 0;
         virtual void prepareFrameAudioSpheres() = 0;
         virtual void prepareFrameLightGizmos() = 0;
 
-        // Billboard API
         virtual void prepareFrameBillboards() = 0;
         virtual void setShowBillboardIcons(bool show) = 0;
         virtual bool getShowBillboardIcons() const = 0;
         virtual bool loadBillboardAtlas(const std::string& atlasPath) = 0;
 
-        // Debug/Stats API
         virtual CullingDebugStats getCullingStats() const = 0;
 
-        // Shadow Settings API
         virtual void applyShadowSettings(const types::RenderSettings& settings) = 0;
         virtual ShadowStats getShadowStats() const = 0;
 
-        // Editor Mode API
         virtual void setPlayMode(bool playMode) = 0;
-        virtual bool isPlayMode() const = 0;
 
-        // Debug Rendering API
         virtual void setShowDebugRendering(bool show) = 0;
         virtual bool getShowDebugRendering() const = 0;
 
-        // Grid API
         virtual void setShowGrid(bool show) = 0;
         virtual bool getShowGrid() const = 0;
         virtual void prepareGrid() = 0;
 
-        // Physics Debug API
         virtual void setShowPhysicsDebug(bool show) = 0;
         virtual bool getShowPhysicsDebug() const = 0;
         virtual void prepareFramePhysicsColliders() = 0;
 
-        // View Mode API
         virtual void setViewMode(uint32_t mode) = 0;
         virtual uint32_t getViewMode() const = 0;
 
-        // Cluster Debug API
         virtual void setShowClusterDebug(bool show) = 0;
         virtual bool getShowClusterDebug() const = 0;
         virtual void prepareFrameClusterDebug() = 0;
 
-        // Shadow Debug API
         virtual void setShowShadowDebug(bool show) = 0;
         virtual bool getShowShadowDebug() const = 0;
         virtual void prepareFrameShadowDebug() = 0;
 
-        // GPU Culling Settings API
         virtual void setFrustumCullingEnabled(bool enabled) = 0;
         virtual void setOcclusionCullingEnabled(bool enabled) = 0;
         virtual void setLODSelectionEnabled(bool enabled) = 0;
         virtual void setMeshletFrustumCullingEnabled(bool enabled) = 0;
         virtual void setMeshletBackfaceCullingEnabled(bool enabled) = 0;
 
-        // VFX Runtime API
-        virtual void setVFXRuntimeProvider(IVFXRuntimeProvider* provider) = 0;
+        virtual void setTerrainFrustumCullingEnabled(bool enabled) = 0;
+        virtual void setTerrainMeshletCullingEnabled(bool enabled) = 0;
+
+        virtual void setTerrainRenderingEnabled(bool enabled) = 0;
+        virtual void setTerrainLODBias(float bias) = 0;
+        virtual void setTerrainErrorThreshold(float threshold) = 0;
+        virtual void setTerrainTextureScale(float scale) = 0;
+        virtual void setTerrainShadowLOD(uint32_t lod) = 0;
     };
 
 }
+

@@ -15,6 +15,7 @@ namespace services
     class IScriptingProvider;
     class IPhysicsProvider;
     class IAnimatorProvider;
+    class ITerrainRenderProvider;
 }
 
 namespace window
@@ -46,6 +47,7 @@ namespace core
     class ScriptingAdapter;
     class PhysicsAdapter;
     class AnimatorAdapter;
+    class TerrainRenderAdapter;
 
     class EditorBootstrap
     {
@@ -64,11 +66,11 @@ namespace core
         std::unique_ptr<ScriptingAdapter> scriptingAdapter;
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
+        std::unique_ptr<TerrainRenderAdapter> terrainRenderAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
 
-        // Non-copyable
         EditorBootstrap(const EditorBootstrap&) = delete;
         EditorBootstrap& operator=(const EditorBootstrap&) = delete;
 
@@ -102,6 +104,9 @@ namespace core
 
         services::IAnimatorProvider* getAnimatorProvider();
 
+        // For late binding - allows EditorHandler to connect TerrainService
+        TerrainRenderAdapter* getTerrainRenderAdapterInternal();
+
         // === Other Accessors ===
 
         window::Window* getWindow();
@@ -110,10 +115,7 @@ namespace core
 
         // === Frame Callbacks ===
 
-        // Set callback to be called each frame (for service updates)
         void setFrameCallback(std::function<void()> callback);
-
-        // Trigger window resize handling
         void triggerResize();
     };
 }

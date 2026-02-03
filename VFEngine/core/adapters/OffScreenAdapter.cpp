@@ -6,18 +6,6 @@ namespace core {
     OffScreenAdapter::OffScreenAdapter(controllers::OffScreen* offScreen)
         : offScreen(offScreen) {}
 
-    void OffScreenAdapter::init() {
-        if (offScreen) {
-            offScreen->init();
-        }
-    }
-
-    void OffScreenAdapter::cleanUp() {
-        if (offScreen) {
-            offScreen->cleanUp();
-        }
-    }
-
     void* OffScreenAdapter::render() {
         return offScreen ? offScreen->render() : nullptr;
     }
@@ -119,38 +107,10 @@ namespace core {
         return offScreen && offScreen->loadBillboardAtlas(atlasPath);
     }
 
-    void OffScreenAdapter::rebuildBVH() {
-        if (offScreen) {
-            offScreen->rebuildBVH();
-        }
-    }
-
-    void OffScreenAdapter::markBVHDirty() {
-        if (offScreen) {
-            offScreen->markBVHDirty();
-        }
-    }
-
-    void OffScreenAdapter::createCamera(services::CameraId id, bool enableOcclusion) {
-        if (offScreen) {
-            offScreen->createCamera(id, enableOcclusion);
-        }
-    }
-
     void OffScreenAdapter::removeCamera(services::CameraId id) {
         if (offScreen) {
             offScreen->removeCamera(id);
         }
-    }
-
-    void OffScreenAdapter::setActiveCamera(services::CameraId id) {
-        if (offScreen) {
-            offScreen->setActiveCamera(id);
-        }
-    }
-
-    services::CameraId OffScreenAdapter::getActiveCameraId() const {
-        return offScreen ? offScreen->getActiveCameraId() : services::MAIN_CAMERA_ID;
     }
 
     services::CullingDebugStats OffScreenAdapter::getCullingStats() const {
@@ -168,14 +128,9 @@ namespace core {
     }
 
     void OffScreenAdapter::setPlayMode(bool playMode) {
-        playModeActive = playMode;
         if (offScreen) {
             offScreen->setPlayMode(playMode);
         }
-    }
-
-    bool OffScreenAdapter::isPlayMode() const {
-        return playModeActive;
     }
 
     void OffScreenAdapter::setShowDebugRendering(bool show) {
@@ -292,9 +247,57 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setTerrainFrustumCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setTerrainFrustumCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainMeshletCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setTerrainMeshletCullingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainRenderingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setTerrainRenderingEnabled(enabled);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainLODBias(float bias) {
+        if (offScreen) {
+            offScreen->setTerrainLODBias(bias);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainErrorThreshold(float threshold) {
+        if (offScreen) {
+            offScreen->setTerrainErrorThreshold(threshold);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainTextureScale(float scale) {
+        if (offScreen) {
+            offScreen->setTerrainTextureScale(scale);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainShadowLOD(uint32_t lod) {
+        if (offScreen) {
+            offScreen->setTerrainShadowLOD(lod);
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainRenderProvider(services::ITerrainRenderProvider* provider) {
+        if (offScreen) {
+            offScreen->setTerrainRenderProvider(provider);
         }
     }
 

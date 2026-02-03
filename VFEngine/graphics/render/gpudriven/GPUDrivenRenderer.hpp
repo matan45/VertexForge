@@ -7,6 +7,10 @@
 #include "GPUCullLODPipeline.hpp"
 #include "GPUDrivenCameraBuffer.hpp"
 #include "MeshShaderPipeline.hpp"
+#include "TerrainMeshShaderPipeline.hpp"
+#include "TerrainMeshBuffer.hpp"
+#include "TerrainGPUAdapter.hpp"
+#include "TerrainStreamManager.hpp"
 #include "MeshletBuffer.hpp"
 #include "BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
@@ -48,6 +52,11 @@ namespace render::occlusion
     class HiZBuffer;
 }
 
+namespace terrain
+{
+    class TerrainTile;
+}
+
 namespace render::gpudriven
 {
     class GPUDrivenRenderer
@@ -70,6 +79,18 @@ namespace render::gpudriven
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
 
+        // Terrain rendering
+        std::unique_ptr<TerrainMeshBuffer> terrainMeshBuffer;
+        std::unique_ptr<TerrainMeshShaderPipeline> terrainPipeline;
+        std::unique_ptr<TerrainGPUAdapter> terrainAdapter;
+        std::unique_ptr<TerrainStreamManager> terrainStreamManager;
+        std::vector<TerrainTileGPUData> terrainTileData;
+        bool terrainRenderingEnabled = true;
+        float terrainLODBias = 1.0f;
+        float terrainErrorThreshold = 2.0f;
+        float terrainTextureScale = 0.1f;
+        uint32_t terrainShadowLOD = 2;  // LOD level for terrain shadow rendering (0=highest detail, 3=lowest)
+
         bool initialized = false;
         bool enabled = false;
         bool frustumCullingEnabled = true;
@@ -78,6 +99,8 @@ namespace render::gpudriven
 
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
+        bool terrainFrustumCullingEnabled = true;
+        bool terrainMeshletCullingEnabled = true;
         bool meshShaderSupported = false;
         uint32_t currentViewMode = 0;
 
@@ -160,6 +183,9 @@ namespace render::gpudriven
         void setMeshletBackfaceCullingEnabled(bool enabled) { meshletBackfaceCullingEnabled = enabled; }
         bool isMeshletBackfaceCullingEnabled() const { return meshletBackfaceCullingEnabled; }
 
+        void setTerrainFrustumCullingEnabled(bool enabled);
+        void setTerrainMeshletCullingEnabled(bool enabled);
+
         void setViewMode(uint32_t mode) { currentViewMode = mode; }
         uint32_t getViewMode() const { return currentViewMode; }
 
@@ -182,7 +208,6 @@ namespace render::gpudriven
         uint32_t getRegisteredMeshCount() const;
         uint32_t getRegisteredTextureCount() const;
 
-
         uint32_t getBatchCount() const;
         uint32_t getCommandsPerBatch() const;
         uint32_t getTotalCapacity() const;
@@ -193,7 +218,6 @@ namespace render::gpudriven
 
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
-        lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
@@ -203,15 +227,25 @@ namespace render::gpudriven
         bool isBVHLightCullingEnabled() const { return useBVHLightCulling; }
 
         void initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer);
-        void setLightOcclusionCullingEnabled(bool enabled) { useLightOcclusionCulling = enabled; }
         bool isLightOcclusionCullingEnabled() const { return useLightOcclusionCulling; }
-        occlusion::LightOcclusionCulling* getLightOcclusionCulling() const { return lightOcclusionCulling.get(); }
 
         uint32_t getTotalSceneLights() const;
         uint32_t getLightsAfterBVHCull() const;
         uint32_t getLightsAfterHiZCull() const;
 
         void readBackLightOcclusionResults();
+
+        void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                           const glm::vec3& cameraPosition);
+        void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void clearTerrainData();
+
+        void setTerrainRenderingEnabled(bool enabled) { terrainRenderingEnabled = enabled; }
+        bool isTerrainRenderingEnabled() const { return terrainRenderingEnabled; }
+        void setTerrainLODBias(float bias) { terrainLODBias = bias; }
+        void setTerrainErrorThreshold(float threshold) { terrainErrorThreshold = threshold; }
+        void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
+        void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);

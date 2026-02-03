@@ -7,6 +7,7 @@
 #include "AudioConfigWindow.hpp"
 #include "RenderConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
+#include "TerrainCreationWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/RenderEvents.hpp"
@@ -138,6 +139,10 @@ namespace windows
             }
             else if (ImGui::MenuItem("Terrain"))
             {
+                if (terrainCreationWindow)
+                {
+                    terrainCreationWindow->show();
+                }
             }
             ImGui::EndMenu();
         }
@@ -224,14 +229,12 @@ namespace windows
         auto currentMode = dispatcher.query(events::editor::GetEditorModeQuery{});
         bool isScriptsCompiled = dispatcher.query(events::scripting::IsScriptsCompiledQuery{});
 
-        // Calculate center position
         float menuBarWidth = ImGui::GetWindowWidth();
         float buttonWidth = 60.0f;
         float totalWidth = buttonWidth + 10.0f; // Button + spacing for indicator
         float centerX = (menuBarWidth - totalWidth) * 0.5f;
         ImGui::SetCursorPosX(centerX);
 
-        // Show build status indicator before Play button
         if (!isScriptsCompiled && currentMode == services::EditorMode::Edit)
         {
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "[!]");

@@ -108,9 +108,19 @@ namespace windows
         {
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
-            const char* viewModeLabels[] = {"Color", "Meshlet", "LOD", "Mipmap", "Cluster", "Depth", "Shadow"};
+            const char* viewModeLabels[] = {
+                "Color",        // 0: Normal rendering
+                "Meshlet",      // 1: Meshlet visualization
+                "LOD",          // 2: LOD level colors
+                "Mipmap",       // 3: Texture mip level
+                "Cluster",      // 4: Light cluster visualization
+                "Depth",        // 5: Depth visualization
+                "Shadow",       // 6: Shadow visualization
+                "Terrain Tile", // 7: Terrain tile visualization (color per tile)
+                "Terrain UV"    // 8: Terrain world UV visualization
+            };
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 7))
+            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 9))
             {
                 events::render::SetViewModeCommand cmd;
                 cmd.mode = static_cast<uint32_t>(currentViewMode);

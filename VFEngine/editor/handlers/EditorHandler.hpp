@@ -15,6 +15,7 @@
 #include "interfaces/IFileOperationsService.hpp"
 #include "interfaces/IPhysicsService.hpp"
 #include "interfaces/IProjectService.hpp"
+#include "interfaces/ITerrainService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -53,6 +54,7 @@ namespace handlers {
 		std::shared_ptr<services::IFileOperationsService> fileOperationsService;
 		std::shared_ptr<services::IPhysicsService> physicsService;
 		std::shared_ptr<services::IProjectService> projectService;
+		std::shared_ptr<services::ITerrainService> terrainService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;

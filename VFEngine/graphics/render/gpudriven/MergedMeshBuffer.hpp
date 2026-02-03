@@ -102,7 +102,9 @@ namespace render::gpudriven
         MergedMeshBuffer(const MergedMeshBuffer&) = delete;
         MergedMeshBuffer& operator=(const MergedMeshBuffer&) = delete;
 
-        void init(uint32_t maxVertices = 15000000, uint32_t maxIndices = 45000000);
+        // Note: Large terrains (16x16 Ultra) may need ~100M+ indices
+        // Default increased to support larger terrain configurations
+        void init(uint32_t maxVertices = 25000000, uint32_t maxIndices = 100000000);
 
         void cleanup();
 

@@ -13,6 +13,7 @@ namespace windows
 
         void drawCullingSection();
         void drawShadowSection();
+        void drawTerrainSection();
         void loadFromScene();
         void saveToScene();
         void resetToDefaults();

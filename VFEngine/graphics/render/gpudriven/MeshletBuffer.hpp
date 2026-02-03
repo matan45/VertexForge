@@ -117,18 +117,17 @@ namespace render::gpudriven
         vk::Buffer getMeshletVertexBuffer() const { return meshletVertexBuffer; }
         vk::Buffer getMeshletPrimitiveBuffer() const { return meshletPrimitiveBuffer; }
         
+        void flushPendingTransfers();
+
+    private:
         size_t getMeshletBufferSize() const { return maxMeshletCount * sizeof(GPUMeshlet); }
         size_t getMeshletVertexBufferSize() const { return maxVertexIndexCount * sizeof(uint32_t); }
         size_t getMeshletPrimitiveBufferSize() const { return maxPrimitiveCount * sizeof(uint32_t); }
-
         size_t getTotalBufferSize() const
         {
             return getMeshletBufferSize() + getMeshletVertexBufferSize() + getMeshletPrimitiveBufferSize();
         }
-        
-        void flushPendingTransfers();
 
-    private:
         void createBuffers();
         void destroyBuffers();
         
