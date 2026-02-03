@@ -413,25 +413,21 @@ namespace components
     // Terrain component - attached to parent terrain entity
     struct TerrainComponent
     {
-        // Grid configuration
         uint8_t resolution = 0;  // 0=Low(33x33), 1=Medium(65x65), 2=High(129x129), 3=Ultra(257x257)
         float worldTileSize = 32.0f;
         float maxHeight = 100.0f;
         float minHeight = -10.0f;
 
-        // Grid dimensions (tile coordinates)
         int32_t gridMinX = 0;
         int32_t gridMinZ = 0;
         int32_t gridMaxX = 0;
         int32_t gridMaxZ = 0;
 
-        // LOD distances
         std::array<float, 4> lodDistances = { 100.0f, 300.0f, 600.0f, 1200.0f };
 
         // Heightmap source path (for regeneration/serialization)
         std::string heightmapPath;
 
-        // State flags
         bool isActive = true;       // Global terrain enable/disable
         bool isDirty = false;       // Config changed, needs regeneration
 
@@ -443,15 +439,12 @@ namespace components
     // Terrain tile component - attached to each tile child entity
     struct TerrainTileComponent
     {
-        // Tile identity
         int32_t tileX = 0;
         int32_t tileZ = 0;
 
-        // State
         uint8_t currentLOD = 0;
         bool isVisible = true;
 
-        // State flags
         bool isDirty = false;           // Needs geometry regeneration
         bool isWeightMapDirty = false;  // Needs weight map GPU update
         bool isGPUResident = false;     // Currently uploaded to GPU

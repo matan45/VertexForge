@@ -7,34 +7,34 @@
 namespace terrain
 {
     TerrainTileGenerator::TerrainTileGenerator(const TerrainTileConfig& config)
-        : config_(config)
+        : config(config)
     {
     }
 
-    void TerrainTileGenerator::setConfig(const TerrainTileConfig& config)
+    void TerrainTileGenerator::setConfig(const TerrainTileConfig& config_)
     {
-        config_ = config;
+        config = config_;
     }
 
     void TerrainTileGenerator::setHeightSampler(HeightSampler sampler)
     {
-        heightSampler_ = std::move(sampler);
+        heightSampler = std::move(sampler);
     }
 
     std::unique_ptr<TerrainTile> TerrainTileGenerator::generateTile(
         const TileCoord& coord,
         ProgressCallback progress) const
     {
-        auto tile = std::make_unique<TerrainTile>(coord, config_);
+        auto tile = std::make_unique<TerrainTile>(coord, config);
 
         if (progress)
             progress(0.0f, "Sampling heights");
 
         // If we have a height sampler, use it to populate height data
-        if (heightSampler_)
+        if (heightSampler)
         {
-            uint32_t vertexCount = config_.getVertexCount();
-            float spacing = config_.getVertexSpacing();
+            uint32_t vertexCount = config.getVertexCount();
+            float spacing = config.getVertexSpacing();
             glm::vec3 origin = tile->computeWorldOrigin();
 
             std::vector<float> heights(static_cast<size_t>(vertexCount) * vertexCount);
@@ -45,7 +45,7 @@ namespace terrain
                 {
                     float worldX = origin.x + static_cast<float>(x) * spacing;
                     float worldZ = origin.z + static_cast<float>(z) * spacing;
-                    heights[static_cast<size_t>(z) * vertexCount + x] = heightSampler_(worldX, worldZ);
+                    heights[static_cast<size_t>(z) * vertexCount + x] = heightSampler(worldX, worldZ);
                 }
             }
 
@@ -82,9 +82,9 @@ namespace terrain
         calculateNormals(lodData.vertices, lodData.indices);
 
         // Generate skirts for LOD crack prevention
-        if (config_.skirtDepth > 0.0f)
+        if (config.skirtDepth > 0.0f)
         {
-            generateSkirts(lodData.vertices, lodData.indices, lodLevel, config_.skirtDepth);
+            generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth);
         }
 
         // Calculate bounds
@@ -169,7 +169,7 @@ namespace terrain
         const auto& lastMeshlet = meshoptMeshlets[meshletCount - 1];
         size_t totalVertexIndices = lastMeshlet.vertex_offset + lastMeshlet.vertex_count;
         size_t totalTriangleIndices = lastMeshlet.triangle_offset +
-            ((lastMeshlet.triangle_count * 3 + 3) & ~3);  // Round up to 4-byte alignment
+            ((lastMeshlet.triangle_count * 3 + 3) & ~3); // Round up to 4-byte alignment
 
         meshoptMeshlets.resize(meshletCount);
         meshletVertexIndices.resize(totalVertexIndices);
@@ -202,7 +202,7 @@ namespace terrain
                 if (triOffset + 2 >= meshletTriangleIndices.size())
                 {
                     vfLogWarning("Meshlet triangle index out of bounds: offset {} >= size {}",
-                                  triOffset + 2, meshletTriangleIndices.size());
+                                 triOffset + 2, meshletTriangleIndices.size());
                     break;
                 }
 
@@ -248,7 +248,7 @@ namespace terrain
     {
         uint32_t vertCount = getLODVertexCount(lodLevel);
         uint32_t skipFactor = getLODSkipFactor(lodLevel);
-        float spacing = config_.getVertexSpacing() * static_cast<float>(skipFactor);
+        float spacing = config.getVertexSpacing() * static_cast<float>(skipFactor);
 
         vertices.clear();
         vertices.reserve(static_cast<size_t>(vertCount) * vertCount);
@@ -438,18 +438,18 @@ namespace terrain
             uint32_t idx = 0;
             switch (edge)
             {
-                case TileEdge::North:  // Top edge (z = vertCount-1)
-                    idx = (vertCount - 1) * vertCount + i;
-                    break;
-                case TileEdge::South:  // Bottom edge (z = 0)
-                    idx = i;
-                    break;
-                case TileEdge::East:   // Right edge (x = vertCount-1)
-                    idx = i * vertCount + (vertCount - 1);
-                    break;
-                case TileEdge::West:   // Left edge (x = 0)
-                    idx = i * vertCount;
-                    break;
+            case TileEdge::North: // Top edge (z = vertCount-1)
+                idx = (vertCount - 1) * vertCount + i;
+                break;
+            case TileEdge::South: // Bottom edge (z = 0)
+                idx = i;
+                break;
+            case TileEdge::East: // Right edge (x = vertCount-1)
+                idx = i * vertCount + (vertCount - 1);
+                break;
+            case TileEdge::West: // Left edge (x = 0)
+                idx = i * vertCount;
+                break;
             }
             edgeIndices.push_back(idx);
         }
@@ -476,27 +476,27 @@ namespace terrain
             // Winding depends on edge direction to maintain consistent facing
             switch (edge)
             {
-                case TileEdge::North:
-                case TileEdge::East:
-                    indices.push_back(topCurrent);
-                    indices.push_back(topNext);
-                    indices.push_back(bottomCurrent);
+            case TileEdge::North:
+            case TileEdge::East:
+                indices.push_back(topCurrent);
+                indices.push_back(topNext);
+                indices.push_back(bottomCurrent);
 
-                    indices.push_back(bottomCurrent);
-                    indices.push_back(topNext);
-                    indices.push_back(bottomNext);
-                    break;
+                indices.push_back(bottomCurrent);
+                indices.push_back(topNext);
+                indices.push_back(bottomNext);
+                break;
 
-                case TileEdge::South:
-                case TileEdge::West:
-                    indices.push_back(topCurrent);
-                    indices.push_back(bottomCurrent);
-                    indices.push_back(topNext);
+            case TileEdge::South:
+            case TileEdge::West:
+                indices.push_back(topCurrent);
+                indices.push_back(bottomCurrent);
+                indices.push_back(topNext);
 
-                    indices.push_back(topNext);
-                    indices.push_back(bottomCurrent);
-                    indices.push_back(bottomNext);
-                    break;
+                indices.push_back(topNext);
+                indices.push_back(bottomCurrent);
+                indices.push_back(bottomNext);
+                break;
             }
         }
     }
@@ -526,18 +526,18 @@ namespace terrain
                 uint32_t idx = 0;
                 switch (edge)
                 {
-                    case TileEdge::North:
-                        idx = (vertCount - 1) * vertCount + i;
-                        break;
-                    case TileEdge::South:
-                        idx = i;
-                        break;
-                    case TileEdge::East:
-                        idx = i * vertCount + (vertCount - 1);
-                        break;
-                    case TileEdge::West:
-                        idx = i * vertCount;
-                        break;
+                case TileEdge::North:
+                    idx = (vertCount - 1) * vertCount + i;
+                    break;
+                case TileEdge::South:
+                    idx = i;
+                    break;
+                case TileEdge::East:
+                    idx = i * vertCount + (vertCount - 1);
+                    break;
+                case TileEdge::West:
+                    idx = i * vertCount;
+                    break;
                 }
 
                 edgeVerts.indices.push_back(idx);
@@ -560,36 +560,36 @@ namespace terrain
         // Find appropriate LOD level based on distance thresholds
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
-            if (distance < config_.lodDistances[lod])
+            if (distance < config.lodDistances[lod])
             {
                 return lod;
             }
         }
 
-        return TERRAIN_LOD_COUNT - 1;  // Lowest detail
+        return TERRAIN_LOD_COUNT - 1; // Lowest detail
     }
 
     uint32_t TerrainTileGenerator::getLODVertexCount(uint32_t lodLevel) const
     {
-        uint32_t baseVerts = config_.getVertexCount();
-        uint32_t skip = 1u << lodLevel;  // 1, 2, 4, 8
+        uint32_t baseVerts = config.getVertexCount();
+        uint32_t skip = 1u << lodLevel; // 1, 2, 4, 8
         return (baseVerts - 1) / skip + 1;
     }
 
     uint32_t TerrainTileGenerator::getLODSkipFactor(uint32_t lodLevel) const
     {
-        return 1u << lodLevel;  // 1, 2, 4, 8
+        return 1u << lodLevel; // 1, 2, 4, 8
     }
 
     float TerrainTileGenerator::computeGeometricError(
         const TerrainTile& tile, uint32_t lodLevel) const
     {
         if (lodLevel == 0)
-            return 0.0f;  // Highest detail has no error
+            return 0.0f; // Highest detail has no error
 
         uint32_t thisSkip = getLODSkipFactor(lodLevel);
         uint32_t prevSkip = getLODSkipFactor(lodLevel - 1);
-        uint32_t baseVertCount = config_.getVertexCount();
+        uint32_t baseVertCount = config.getVertexCount();
 
         float maxError = 0.0f;
 
@@ -608,10 +608,12 @@ namespace terrain
                 uint32_t prevZ1 = std::min(prevZ0 + prevSkip, baseVertCount - 1);
 
                 // Compute interpolation factors
-                float fx = (prevX1 != prevX0) ?
-                    static_cast<float>(x - prevX0) / static_cast<float>(prevX1 - prevX0) : 0.0f;
-                float fz = (prevZ1 != prevZ0) ?
-                    static_cast<float>(z - prevZ0) / static_cast<float>(prevZ1 - prevZ0) : 0.0f;
+                float fx = (prevX1 != prevX0)
+                               ? static_cast<float>(x - prevX0) / static_cast<float>(prevX1 - prevX0)
+                               : 0.0f;
+                float fz = (prevZ1 != prevZ0)
+                               ? static_cast<float>(z - prevZ0) / static_cast<float>(prevZ1 - prevZ0)
+                               : 0.0f;
 
                 // Get heights at the four corners of the enclosing quad
                 float h00 = tile.getHeight(prevX0, prevZ0);
@@ -633,8 +635,8 @@ namespace terrain
 
         // For flat terrain (error = 0), use vertex spacing as minimum error
         // This ensures LOD selection works based on distance even for flat terrain
-        float vertexSpacing = config_.getVertexSpacing() * static_cast<float>(thisSkip);
-        float minError = vertexSpacing * 0.5f;  // Half the vertex spacing at this LOD
+        float vertexSpacing = config.getVertexSpacing() * static_cast<float>(thisSkip);
+        float minError = vertexSpacing * 0.5f; // Half the vertex spacing at this LOD
 
         return std::max(maxError, minError);
     }
@@ -739,11 +741,11 @@ namespace terrain
     {
         switch (edge)
         {
-            case TileEdge::North: return x;                    // Top row: index by x
-            case TileEdge::South: return x;                    // Bottom row: index by x
-            case TileEdge::East:  return z;                    // Right column: index by z
-            case TileEdge::West:  return z;                    // Left column: index by z
-            default: return 0;
+        case TileEdge::North: return x; // Top row: index by x
+        case TileEdge::South: return x; // Bottom row: index by x
+        case TileEdge::East: return z; // Right column: index by z
+        case TileEdge::West: return z; // Left column: index by z
+        default: return 0;
         }
     }
 
@@ -772,19 +774,19 @@ namespace terrain
             TileEdge edge1, edge2;
             uint32_t idx1, idx2;
 
-            if (z == 0)  // South edge
+            if (z == 0) // South edge
             {
                 edge1 = TileEdge::South;
                 idx1 = x;
                 edge2 = (x == 0) ? TileEdge::West : TileEdge::East;
-                idx2 = 0;  // Corner is at index 0 for the perpendicular edge
+                idx2 = 0; // Corner is at index 0 for the perpendicular edge
             }
-            else  // North edge (z == vertCount - 1)
+            else // North edge (z == vertCount - 1)
             {
                 edge1 = TileEdge::North;
                 idx1 = x;
                 edge2 = (x == 0) ? TileEdge::West : TileEdge::East;
-                idx2 = vertCount - 1;  // Corner is at last index for the perpendicular edge
+                idx2 = vertCount - 1; // Corner is at last index for the perpendicular edge
             }
 
             const auto& stitch1 = tile.edgeStitchInfo[static_cast<uint8_t>(edge1)];
@@ -821,5 +823,4 @@ namespace terrain
 
         return originalHeight;
     }
-
-} // namespace terrain
+}

@@ -58,7 +58,6 @@ namespace render::shadow
             bool shadowsEnabled);
 
         void resetAtlasFirstUse() { atlasFirstUse = true; }
-        [[nodiscard]] bool isAtlasFirstUse() const { return atlasFirstUse; }
 
     private:
         void renderPointLightCubeShadows(

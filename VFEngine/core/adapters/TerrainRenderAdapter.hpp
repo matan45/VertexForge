@@ -21,18 +21,12 @@ namespace core
         TerrainRenderAdapter() = default;
         ~TerrainRenderAdapter() override = default;
 
-        // Late binding - called after TerrainService is created
         void setTerrainService(services::TerrainService* service) { terrainService = service; }
 
-        // ITerrainRenderProvider implementation
         std::vector<terrain::TerrainTile*> getVisibleTiles(
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition) override;
 
-        void updateLODs(const glm::vec3& cameraPosition) override;
-
         bool hasActiveTerrain() const override;
-
-        size_t getTotalTileCount() const override;
     };
 }

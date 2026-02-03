@@ -6,10 +6,10 @@ namespace types
     enum class ShadowQuality : uint8_t
     {
         Off = 0,
-        Low,      // 512px
-        Medium,   // 1024px
-        High,     // 2048px
-        Ultra     // 4096px
+        Low, // 512px
+        Medium, // 1024px
+        High, // 2048px
+        Ultra // 4096px
     };
 
     enum class CascadeSplitMode : uint8_t
@@ -21,9 +21,9 @@ namespace types
 
     enum class PCFKernelSize : uint8_t
     {
-        x1 = 0,  // 1x1 - Hard shadows
-        x3 = 2,  // 3x3
-        x5 = 4   // 5x5
+        x1 = 0, // 1x1 - Hard shadows
+        x3 = 2, // 3x3
+        x5 = 4 // 5x5
     };
 
     struct ShadowAtlasConfig
@@ -38,36 +38,36 @@ namespace types
             ShadowAtlasConfig config;
             switch (quality)
             {
-                case ShadowQuality::Off:
-                    config.atlasSize = 0;
-                    config.directionalResolution = 0;
-                    config.spotResolution = 0;
-                    config.pointResolution = 0;
-                    break;
-                case ShadowQuality::Low:
-                    config.atlasSize = 2048;
-                    config.directionalResolution = 512;
-                    config.spotResolution = 256;
-                    config.pointResolution = 256;
-                    break;
-                case ShadowQuality::Medium:
-                    config.atlasSize = 4096;
-                    config.directionalResolution = 1024;
-                    config.spotResolution = 512;
-                    config.pointResolution = 512;
-                    break;
-                case ShadowQuality::High:
-                    config.atlasSize = 4096;
-                    config.directionalResolution = 2048;
-                    config.spotResolution = 1024;
-                    config.pointResolution = 512;
-                    break;
-                case ShadowQuality::Ultra:
-                    config.atlasSize = 8192;
-                    config.directionalResolution = 4096;
-                    config.spotResolution = 2048;
-                    config.pointResolution = 1024;
-                    break;
+            case ShadowQuality::Off:
+                config.atlasSize = 0;
+                config.directionalResolution = 0;
+                config.spotResolution = 0;
+                config.pointResolution = 0;
+                break;
+            case ShadowQuality::Low:
+                config.atlasSize = 2048;
+                config.directionalResolution = 512;
+                config.spotResolution = 256;
+                config.pointResolution = 256;
+                break;
+            case ShadowQuality::Medium:
+                config.atlasSize = 4096;
+                config.directionalResolution = 1024;
+                config.spotResolution = 512;
+                config.pointResolution = 512;
+                break;
+            case ShadowQuality::High:
+                config.atlasSize = 4096;
+                config.directionalResolution = 2048;
+                config.spotResolution = 1024;
+                config.pointResolution = 512;
+                break;
+            case ShadowQuality::Ultra:
+                config.atlasSize = 8192;
+                config.directionalResolution = 4096;
+                config.spotResolution = 2048;
+                config.pointResolution = 1024;
+                break;
             }
             return config;
         }
@@ -105,7 +105,6 @@ namespace types
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
 
-        // Terrain culling settings
         bool terrainFrustumCullingEnabled = true;
         bool terrainMeshletCullingEnabled = true;
     };
@@ -116,7 +115,7 @@ namespace types
         float lodBias = 1.0f;
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
-        uint32_t shadowLOD = 2;  // LOD level for terrain shadows (0=highest, 3=lowest)
+        uint32_t shadowLOD = 2; // LOD level for terrain shadows (0=highest, 3=lowest)
     };
 
     struct RenderSettings

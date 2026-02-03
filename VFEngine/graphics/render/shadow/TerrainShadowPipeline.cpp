@@ -201,10 +201,8 @@ namespace render::shadow
         if (!initialized || tileCount == 0)
             return;
 
-        // Bind terrain shadow pipeline
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, terrainShadowPipeline);
 
-        // Bind descriptor sets
         std::array<vk::DescriptorSet, 3> descriptorSets = {
             terrainDataDescSet,
             meshletDescSet,
@@ -221,7 +219,6 @@ namespace render::shadow
             nullptr
         );
 
-        // Set push constants
         TerrainShadowPushConstants pushConstants{};
         pushConstants.lightViewProjection = lightViewProjection;
         pushConstants.tileCount = tileCount;
@@ -237,10 +234,9 @@ namespace render::shadow
             &pushConstants
         );
 
-        // Set depth bias
         cmd.setDepthBias(depthBias, 0.0f, slopeBias);
 
-        // Dispatch terrain shadow rendering - one task workgroup per tile
+        // One task workgroup per tile
         cmd.drawMeshTasksEXT(tileCount, 1, 1);
     }
 }

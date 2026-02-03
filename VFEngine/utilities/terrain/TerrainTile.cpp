@@ -14,7 +14,6 @@ namespace terrain
 
         weights.resize(static_cast<size_t>(w) * h);
 
-        // Initialize with first layer at full weight
         for (auto& pixelWeights : weights)
         {
             pixelWeights.fill(0);
@@ -48,7 +47,6 @@ namespace terrain
 
         auto& pixelWeights = weights[static_cast<size_t>(y) * width + x];
 
-        // Calculate sum of all weights
         uint32_t sum = 0;
         for (uint32_t i = 0; i < layerCount; ++i)
         {
@@ -57,22 +55,20 @@ namespace terrain
 
         if (sum == 0)
         {
-            // If all weights are zero, set first layer to full
             pixelWeights[0] = 255;
             return;
         }
 
         if (sum == 255)
-            return;  // Already normalized
+            return;
 
-        // Scale weights to sum to 255
         uint32_t newSum = 0;
         for (uint32_t i = 0; i < layerCount - 1; ++i)
         {
             pixelWeights[i] = static_cast<uint8_t>((pixelWeights[i] * 255) / sum);
             newSum += pixelWeights[i];
         }
-        // Last layer gets the remainder to ensure exact sum of 255
+        // Last layer gets remainder to ensure exact sum of 255
         pixelWeights[layerCount - 1] = static_cast<uint8_t>(255 - newSum);
     }
 
@@ -113,7 +109,6 @@ namespace terrain
 
         if (heights.size() != expectedSize)
         {
-            // Invalid size, initialize flat
             initializeFlat(0.0f);
             return;
         }
@@ -132,18 +127,6 @@ namespace terrain
         );
     }
 
-    glm::vec3 TerrainTile::getWorldVertexPosition(uint32_t x, uint32_t z) const
-    {
-        float height = getHeight(x, z);
-        float spacing = config.getVertexSpacing();
-
-        return glm::vec3(
-            worldOrigin.x + static_cast<float>(x) * spacing,
-            height,
-            worldOrigin.z + static_cast<float>(z) * spacing
-        );
-    }
-
     bool TerrainTile::containsWorldPosition(float worldX, float worldZ) const
     {
         float minX = worldOrigin.x;
@@ -159,24 +142,20 @@ namespace terrain
         if (heightData.empty())
             return 0.0f;
 
-        // Clamp UV to [0, 1]
         u = std::clamp(u, 0.0f, 1.0f);
         v = std::clamp(v, 0.0f, 1.0f);
 
         uint32_t vertexCount = config.getVertexCount();
         float maxIndex = static_cast<float>(vertexCount - 1);
 
-        // Convert UV to grid coordinates
         float fx = u * maxIndex;
         float fz = v * maxIndex;
 
-        // Get integer grid coordinates
         uint32_t x0 = static_cast<uint32_t>(fx);
         uint32_t z0 = static_cast<uint32_t>(fz);
         uint32_t x1 = std::min(x0 + 1, vertexCount - 1);
         uint32_t z1 = std::min(z0 + 1, vertexCount - 1);
 
-        // Get fractional parts for interpolation
         float fracX = fx - static_cast<float>(x0);
         float fracZ = fz - static_cast<float>(z0);
 
@@ -197,20 +176,10 @@ namespace terrain
         if (!containsWorldPosition(worldX, worldZ))
             return 0.0f;
 
-        // Convert world position to UV
         float u = (worldX - worldOrigin.x) / config.worldTileSize;
         float v = (worldZ - worldOrigin.z) / config.worldTileSize;
 
         return sampleHeight(u, v);
-    }
-
-    void TerrainTile::setHeight(uint32_t x, uint32_t z, float height)
-    {
-        if (!isValidHeightIndex(x, z))
-            return;
-
-        heightData[getHeightIndex(x, z)] = std::clamp(height, config.minHeight, config.maxHeight);
-        isDirty = true;
     }
 
     float TerrainTile::getHeight(uint32_t x, uint32_t z) const
@@ -239,60 +208,6 @@ namespace terrain
         }
     }
 
-    bool TerrainTile::hasNeighbor(TileEdge edge) const
-    {
-        uint8_t edgeIndex = static_cast<uint8_t>(edge);
-        return edgeIndex < 4 && neighbors[edgeIndex].exists;
-    }
-
-    bool TerrainTile::needsStitching() const
-    {
-        // Check if any neighbor has a different LOD level
-        for (const auto& neighbor : neighbors)
-        {
-            if (neighbor.exists && neighbor.lodLevel != currentLOD)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    bool TerrainTile::hasActiveStitching() const
-    {
-        for (const auto& stitch : edgeStitchInfo)
-        {
-            if (stitch.needsSnapping)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    float TerrainTile::getStitchedEdgeHeight(TileEdge edge, uint32_t vertexIndex) const
-    {
-        uint8_t edgeIndex = static_cast<uint8_t>(edge);
-        if (edgeIndex >= 4)
-            return 0.0f;
-
-        const EdgeStitchInfo& stitch = edgeStitchInfo[edgeIndex];
-
-        // If no stitching needed or index out of range, return original height
-        if (!stitch.needsSnapping || vertexIndex >= stitch.snappedHeights.size())
-        {
-            // Return original edge vertex height from current LOD
-            const EdgeVertices& edgeVerts = edgeVertices[currentLOD][edgeIndex];
-            if (vertexIndex < edgeVerts.positions.size())
-            {
-                return edgeVerts.positions[vertexIndex].y;
-            }
-            return 0.0f;
-        }
-
-        return stitch.snappedHeights[vertexIndex];
-    }
-
     bool TerrainTile::stitchingChanged() const
     {
         for (uint8_t i = 0; i < 4; ++i)
@@ -300,13 +215,11 @@ namespace terrain
             const auto& current = edgeStitchInfo[i];
             const auto& previous = previousStitchState[i];
 
-            // Check if needsSnapping status changed
             if (current.needsSnapping != previous.needsSnapping)
             {
                 return true;
             }
 
-            // If both need snapping, check if neighbor LOD changed
             if (current.needsSnapping && current.neighborLOD != previous.neighborLOD)
             {
                 return true;
@@ -338,7 +251,6 @@ namespace terrain
             return;
         }
 
-        // Find min/max heights
         float minH = heightData[0];
         float maxH = heightData[0];
         for (float h : heightData)
@@ -347,7 +259,6 @@ namespace terrain
             maxH = std::max(maxH, h);
         }
 
-        // Ensure minimum height for frustum culling stability
         if (maxH - minH < MIN_AABB_HEIGHT)
         {
             float center = (minH + maxH) * 0.5f;
@@ -355,8 +266,8 @@ namespace terrain
             maxH = center + MIN_AABB_HEIGHT * 0.5f;
         }
 
-        // Height values (minH, maxH) are already absolute world heights
-        // Only X and Z need worldOrigin offset
+        // Height values are already absolute world heights;
+        // only X and Z need worldOrigin offset
         worldBounds = math::AABB(
             glm::vec3(worldOrigin.x, minH, worldOrigin.z),
             glm::vec3(worldOrigin.x + config.worldTileSize, maxH, worldOrigin.z + config.worldTileSize)
@@ -383,24 +294,6 @@ namespace terrain
         return lodLevels[std::min(level, TERRAIN_LOD_COUNT - 1)];
     }
 
-    void TerrainTile::clearGeometry()
-    {
-        for (auto& lod : lodLevels)
-        {
-            lod.clear();
-        }
-
-        for (auto& lodEdges : edgeVertices)
-        {
-            for (auto& edge : lodEdges)
-            {
-                edge.clear();
-            }
-        }
-
-        isDirty = true;
-    }
-
     bool TerrainTile::isValidHeightIndex(uint32_t x, uint32_t z) const
     {
         uint32_t vertexCount = config.getVertexCount();
@@ -411,5 +304,4 @@ namespace terrain
     {
         return static_cast<size_t>(z) * config.getVertexCount() + x;
     }
-
-} // namespace terrain
+}

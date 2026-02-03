@@ -34,7 +34,6 @@ namespace render::shadow
             return;
         }
 
-        // Check if terrain shadow rendering is available
         bool hasTerrainShadows = terrainParams != nullptr &&
                                   terrainParams->tileCount > 0 &&
                                   terrainShadowPipeline != nullptr &&
@@ -62,20 +61,16 @@ namespace render::shadow
         if (!hasAtlasViews && !hasPointShadows)
             return;
 
-        // Check if we have mesh batches to render
         bool hasMeshBatches = params.batchCount > 0 &&
                               params.commandsPerSection > 0 &&
                               params.drawCommandBuffer &&
                               params.drawCountBuffer;
 
-        // If no mesh batches AND no terrain shadows, nothing to render
         if (!hasMeshBatches && !hasTerrainShadows)
             return;
 
-        // Atlas rendering (spot and directional lights)
         if (hasAtlasViews)
         {
-            // Transition atlas to depth attachment
             {
                 vk::ImageMemoryBarrier barrier{};
                 barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
@@ -113,7 +108,6 @@ namespace render::shadow
                 );
             }
 
-            // Begin render pass
             vk::ClearValue clearValue{};
             clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
 
@@ -129,7 +123,6 @@ namespace render::shadow
 
             cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-            // Only bind mesh shadow pipeline and descriptors if we have mesh batches
             if (hasMeshBatches)
             {
                 cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
@@ -150,7 +143,6 @@ namespace render::shadow
                 );
             }
 
-            // Render each shadow view
             for (const auto* view : allViews)
             {
                 if (!view->handle.isValid())
@@ -167,7 +159,6 @@ namespace render::shadow
 
                 cmd.setDepthBias(view->depthBias, 0.0f, view->slopeBias);
 
-                // Render mesh shadows for this view
                 if (hasMeshBatches)
                 {
                     ShadowPushConstants pc{};
@@ -208,7 +199,6 @@ namespace render::shadow
                     }
                 }
 
-                // Render terrain shadows for this view
                 if (hasTerrainShadows)
                 {
                     terrainShadowPipeline->dispatch(
@@ -227,7 +217,6 @@ namespace render::shadow
 
             cmd.endRenderPass();
 
-            // Transition atlas back to shader read
             {
                 vk::ImageMemoryBarrier barrier{};
                 barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
@@ -256,7 +245,6 @@ namespace render::shadow
             atlasFirstUse = false;
         }
 
-        // Point light cube shadow rendering
         renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool, shadowPassPipeline,
                                      terrainShadowPipeline, lightShadowData);
     }
@@ -273,7 +261,6 @@ namespace render::shadow
         if (!resourcePool || !shadowPassPipeline)
             return;
 
-        // Check if terrain shadow rendering is available
         bool hasTerrainShadows = terrainParams != nullptr &&
                                   terrainParams->tileCount > 0 &&
                                   terrainShadowPipeline != nullptr &&
@@ -300,13 +287,11 @@ namespace render::shadow
         if (pointLightsToRender.empty())
             return;
 
-        // Check if we have mesh batches to render
         bool hasMeshBatches = params.batchCount > 0 &&
                               params.commandsPerSection > 0 &&
                               params.drawCommandBuffer &&
                               params.drawCountBuffer;
 
-        // If no mesh batches AND no terrain shadows, nothing to render for point lights
         if (!hasMeshBatches && !hasTerrainShadows)
             return;
 
@@ -363,7 +348,6 @@ namespace render::shadow
                 cmd.setScissor(0, 1, &scissor);
                 cmd.setDepthBias(view.depthBias, 0.0f, view.slopeBias);
 
-                // Render mesh shadows for this cube face
                 if (hasMeshBatches)
                 {
                     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
@@ -413,7 +397,6 @@ namespace render::shadow
                     }
                 }
 
-                // Render terrain shadows for this cube face
                 if (hasTerrainShadows)
                 {
                     terrainShadowPipeline->dispatch(

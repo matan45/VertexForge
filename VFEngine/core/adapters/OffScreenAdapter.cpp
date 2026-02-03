@@ -6,18 +6,6 @@ namespace core {
     OffScreenAdapter::OffScreenAdapter(controllers::OffScreen* offScreen)
         : offScreen(offScreen) {}
 
-    void OffScreenAdapter::init() {
-        if (offScreen) {
-            offScreen->init();
-        }
-    }
-
-    void OffScreenAdapter::cleanUp() {
-        if (offScreen) {
-            offScreen->cleanUp();
-        }
-    }
-
     void* OffScreenAdapter::render() {
         return offScreen ? offScreen->render() : nullptr;
     }
@@ -119,38 +107,10 @@ namespace core {
         return offScreen && offScreen->loadBillboardAtlas(atlasPath);
     }
 
-    void OffScreenAdapter::rebuildBVH() {
-        if (offScreen) {
-            offScreen->rebuildBVH();
-        }
-    }
-
-    void OffScreenAdapter::markBVHDirty() {
-        if (offScreen) {
-            offScreen->markBVHDirty();
-        }
-    }
-
-    void OffScreenAdapter::createCamera(services::CameraId id, bool enableOcclusion) {
-        if (offScreen) {
-            offScreen->createCamera(id, enableOcclusion);
-        }
-    }
-
     void OffScreenAdapter::removeCamera(services::CameraId id) {
         if (offScreen) {
             offScreen->removeCamera(id);
         }
-    }
-
-    void OffScreenAdapter::setActiveCamera(services::CameraId id) {
-        if (offScreen) {
-            offScreen->setActiveCamera(id);
-        }
-    }
-
-    services::CameraId OffScreenAdapter::getActiveCameraId() const {
-        return offScreen ? offScreen->getActiveCameraId() : services::MAIN_CAMERA_ID;
     }
 
     services::CullingDebugStats OffScreenAdapter::getCullingStats() const {
@@ -168,14 +128,9 @@ namespace core {
     }
 
     void OffScreenAdapter::setPlayMode(bool playMode) {
-        playModeActive = playMode;
         if (offScreen) {
             offScreen->setPlayMode(playMode);
         }
-    }
-
-    bool OffScreenAdapter::isPlayMode() const {
-        return playModeActive;
     }
 
     void OffScreenAdapter::setShowDebugRendering(bool show) {

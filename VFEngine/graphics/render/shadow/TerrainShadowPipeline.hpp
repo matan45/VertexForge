@@ -60,8 +60,6 @@ namespace render::shadow
                       float depthBias,
                       float slopeBias);
 
-        [[nodiscard]] vk::Pipeline getPipeline() const { return terrainShadowPipeline; }
-        [[nodiscard]] vk::PipelineLayout getPipelineLayout() const { return terrainShadowPipelineLayout; }
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
     private:

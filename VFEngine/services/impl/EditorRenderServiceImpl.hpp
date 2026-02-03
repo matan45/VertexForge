@@ -40,20 +40,18 @@ namespace services
         std::optional<std::string> getIBLPath() const override;
 
         EditorTextureHandle loadEditorTexture(const std::string& path) override;
-        EditorTextureHandle loadEditorTextureFromData(resource::TextureData&& textureData);
         void releaseEditorTexture(const EditorTextureHandle& handle) override;
 
-        // Render State
         bool isReady() const override;
         uint64_t getFrameNumber() const override;
 
     private:
+        EditorTextureHandle loadEditorTextureFromData(resource::TextureData&& textureData);
+
         std::string loadMesh(const std::string& meshPath);
-        void unloadMesh(const std::string& meshId);
         void updateMeshCamera(const glm::mat4& view, const glm::mat4& projection,
                               const glm::vec3& cameraPos, float time = 0.0f);
         bool isMeshLoaded(const std::string& meshPath) const;
-        std::vector<std::string> getLoadedMeshes() const;
         std::optional<MeshBoundingBox> getMeshBoundingBox(const std::string& meshPath) const;
         
         void prepareCameras();

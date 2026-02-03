@@ -731,7 +731,6 @@ namespace render
         {
             vfxRuntimeProvider->setCamera(currentView, currentProjection, currentCameraPosition, currentTime);
         }
-        // Check if terrain needs to render (used for both needsMeshPass and GPU-driven path)
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled() &&
                                   terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 
@@ -750,7 +749,6 @@ namespace render
                 currentTime
             );
 
-            // Update terrain tiles for GPU-driven rendering
             if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
             {
                 auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
@@ -773,8 +771,6 @@ namespace render
                 vfxRuntimeProvider->recordComputeCommands(commandBuffer);
             }
 
-            // Enter GPU-driven render path if we have meshes OR terrain to render
-            // (hasTerrainToRender is already computed above for needsMeshPass)
             bool hasMeshesToRender = !currentMeshDrawList.empty();
 
             if ((hasMeshesToRender || hasTerrainToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
@@ -789,7 +785,6 @@ namespace render
 
                 gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
-                // Render terrain using mesh shader pipeline
                 if (gpuDrivenRenderer->isTerrainRenderingEnabled())
                 {
                     gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
