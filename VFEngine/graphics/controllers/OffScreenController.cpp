@@ -657,4 +657,9 @@ namespace controllers
     {
         return offScreen->getTerrainHitResult();
     }
+
+    void OffScreenController::setBrushOverlayParams(float radius, float falloff)
+    {
+        offScreen->setBrushOverlayParams(radius, falloff);
+    }
 }

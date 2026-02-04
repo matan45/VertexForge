@@ -81,6 +81,7 @@ namespace render
 
         renderPassHandler->readBackLightOcclusionResults();
         renderPassHandler->readBackTerrainRaycastResults();
+        renderPassHandler->updateBrushOverlayFromHitResult();
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
@@ -267,5 +268,10 @@ namespace render
     terrain::TerrainHitResult OffScreenViewPort::getTerrainHitResult() const
     {
         return renderPassHandler->getTerrainHitResult();
+    }
+
+    void OffScreenViewPort::setBrushOverlayParams(float radius, float falloff)
+    {
+        renderPassHandler->setBrushOverlayParams(radius, falloff);
     }
 }

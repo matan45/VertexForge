@@ -1311,6 +1311,14 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::setBrushOverlay(const glm::vec2& center, float radius, float falloff)
+    {
+        if (terrainPipeline)
+        {
+            terrainPipeline->setBrushOverlay(center, radius, falloff);
+        }
+    }
+
     void GPUDrivenRenderer::renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet)
     {
         if (!initialized || !terrainRenderingEnabled || !terrainPipeline || !meshShaderPipeline)

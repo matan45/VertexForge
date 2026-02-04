@@ -27,6 +27,10 @@ namespace render::gpudriven
         float errorThreshold;    // Screen-space error threshold in pixels
         float terrainTextureScale; // Scale for world-space UV tiling
         float padding;
+        // Brush overlay (16 bytes)
+        glm::vec2 brushCenter;   // XZ world position
+        float brushRadius;       // World-space radius (0.0 = inactive)
+        float brushFalloff;      // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
     };
 
     // Terrain culling bits (same as regular mesh shader bits)
@@ -95,6 +99,11 @@ namespace render::gpudriven
 
         bool initialized = false;
 
+        // Brush overlay state
+        glm::vec2 brushCenter_{0.0f};
+        float brushRadius_ = 0.0f;
+        float brushFalloff_ = 0.0f;
+
     public:
         explicit TerrainMeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
         ~TerrainMeshShaderPipeline();
@@ -147,6 +156,13 @@ namespace render::gpudriven
 
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
+
+        void setBrushOverlay(const glm::vec2& center, float radius, float falloff)
+        {
+            brushCenter_ = center;
+            brushRadius_ = radius;
+            brushFalloff_ = falloff;
+        }
 
     private:
         bool frustumCullingEnabled = true;

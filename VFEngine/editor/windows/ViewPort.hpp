@@ -45,5 +45,6 @@ namespace windows
         void updateRendererCameras(const CameraState& camera);
         void handlePrefabDrop();
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleSculptBrush(glm::vec2 viewportPos, glm::vec2 viewportSize);
     };
 }

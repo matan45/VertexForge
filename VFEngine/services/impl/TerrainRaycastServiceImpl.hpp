@@ -13,6 +13,7 @@ namespace services
         bool sculptModeActive = false;
 
         ::events::SubscriptionToken sculptModeToken;
+        ::events::SubscriptionToken brushParamsToken;
 
     public:
         explicit TerrainRaycastServiceImpl(ITerrainRaycastProvider* provider);

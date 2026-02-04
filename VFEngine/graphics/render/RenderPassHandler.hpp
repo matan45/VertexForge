@@ -99,6 +99,9 @@ namespace render
         material::CallbackId materialChangeCallbackId{};
         mutable bool lightOcclusionInitialized = false;
 
+        float brushOverlayRadius_ = 0.0f;
+        float brushOverlayFalloff_ = 0.0f;
+
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
                                    core::OffscreenResources& offscreenResources);
@@ -155,6 +158,9 @@ namespace render
         void setRaycastCursorUV(const glm::vec2& uv);
         void clearRaycastCursor();
         terrain::TerrainHitResult getTerrainHitResult() const;
+
+        void setBrushOverlayParams(float radius, float falloff);
+        void updateBrushOverlayFromHitResult();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         services::IVFXRuntimeProvider* getVFXRuntimeProvider() const { return vfxRuntimeProvider; }

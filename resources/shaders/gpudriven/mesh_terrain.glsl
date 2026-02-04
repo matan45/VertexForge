@@ -66,6 +66,11 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;
     float terrainTextureScale;  // Scale for world-space UV tiling
     float padding;
+    // Brush overlay
+    float brushCenterX;
+    float brushCenterZ;
+    float brushRadius;
+    float brushFalloff;
 } pc;
 
 // Shared memory for vertex caching
@@ -210,6 +215,11 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;
     float terrainTextureScale;
     float padding;
+    // Brush overlay
+    float brushCenterX;
+    float brushCenterZ;
+    float brushRadius;
+    float brushFalloff;
 } pc;
 
 // Light buffers (Set 6 - same as mesh shader)
@@ -695,6 +705,35 @@ void main() {
             color = vec3(NdotL);  // White = fully lit, black = no light
         } else {
             color = vec3(1.0, 0.0, 1.0);  // Magenta = no directional lights
+        }
+    }
+
+    // Brush overlay visualization
+    if (pc.brushRadius > 0.0) {
+        vec2 brushCenter = vec2(pc.brushCenterX, pc.brushCenterZ);
+        float dist = distance(fragWorldPos.xz, brushCenter);
+
+        if (dist <= pc.brushRadius) {
+            float t = dist / pc.brushRadius;
+            float falloffValue;
+            uint falloffType = uint(pc.brushFalloff);
+
+            if (falloffType == 0u) { falloffValue = 1.0; }           // Constant
+            else if (falloffType == 1u) { falloffValue = 1.0 - t; }   // Linear
+            else if (falloffType == 2u) { falloffValue = 1.0 - t*t*(3.0-2.0*t); } // Smooth
+            else { falloffValue = pow(1.0 - t, 3.0); }                // Sharp
+
+            vec3 brushColor = vec3(0.2, 0.6, 1.0);
+            color = mix(color, brushColor, falloffValue * 0.3);
+        }
+
+        // Edge ring
+        float edgeWidth = max(pc.brushRadius * 0.02, 0.05);
+        float edgeDist = abs(dist - pc.brushRadius);
+        if (edgeDist < edgeWidth) {
+            float edgeAlpha = 1.0 - (edgeDist / edgeWidth);
+            vec3 brushColor = vec3(0.2, 0.6, 1.0);
+            color = mix(color, brushColor, edgeAlpha * 0.8);
         }
     }
 
