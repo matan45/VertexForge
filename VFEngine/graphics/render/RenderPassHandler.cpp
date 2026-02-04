@@ -401,6 +401,58 @@ namespace render
         return {};
     }
 
+    void RenderPassHandler::setBrushOverlayParams(float radius, float falloff)
+    {
+        brushOverlayRadius_ = radius;
+        brushOverlayFalloff_ = falloff;
+    }
+
+    void RenderPassHandler::updateBrushOverlayFromHitResult()
+    {
+        if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)
+        {
+            return;
+        }
+
+        auto hitResult = getTerrainHitResult();
+        if (hitResult.hit && brushOverlayRadius_ > 0.0f)
+        {
+            auto extent = swapChain.getSwapchainExtent();
+            float w = static_cast<float>(extent.width);
+            float h = static_cast<float>(extent.height);
+            glm::mat4 vp = currentProjection * currentView;
+
+            // Project brush center to screen pixels (gl_FragCoord space)
+            glm::vec4 centerClip = vp * glm::vec4(hitResult.position, 1.0f);
+            if (centerClip.w > 0.0001f)
+            {
+                glm::vec2 centerNDC = glm::vec2(centerClip) / centerClip.w;
+                glm::vec2 centerPixels = (centerNDC * 0.5f + 0.5f) * glm::vec2(w, h);
+
+                // Project edge point to compute screen-space radius
+                glm::vec3 edgePos = hitResult.position + glm::vec3(brushOverlayRadius_, 0.0f, 0.0f);
+                glm::vec4 edgeClip = vp * glm::vec4(edgePos, 1.0f);
+                float screenRadius = 0.0f;
+                if (edgeClip.w > 0.0001f)
+                {
+                    glm::vec2 edgeNDC = glm::vec2(edgeClip) / edgeClip.w;
+                    glm::vec2 edgePixels = (edgeNDC * 0.5f + 0.5f) * glm::vec2(w, h);
+                    screenRadius = glm::distance(centerPixels, edgePixels);
+                }
+
+                gpuDrivenRenderer->setBrushOverlay(centerPixels, screenRadius, brushOverlayFalloff_);
+            }
+            else
+            {
+                gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f);
+            }
+        }
+        else
+        {
+            gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f);
+        }
+    }
+
     void RenderPassHandler::setViewMode(uint32_t mode)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
@@ -900,10 +952,54 @@ namespace render
 
             if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
             {
+                // Transition depth image to shader-read for the raycast compute shader.
+                // generateHiZ() transitions it back to attachment layout, so we must re-transition.
+                vk::ImageMemoryBarrier toShaderRead{};
+                toShaderRead.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                toShaderRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                toShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toShaderRead.image = offscreenResources.depthImage.depthImage;
+                toShaderRead.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
+                    vk::ImageAspectFlagBits::eStencil;
+                toShaderRead.subresourceRange.baseMipLevel = 0;
+                toShaderRead.subresourceRange.levelCount = 1;
+                toShaderRead.subresourceRange.baseArrayLayer = 0;
+                toShaderRead.subresourceRange.layerCount = 1;
+                toShaderRead.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+                toShaderRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eLateFragmentTests,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, {}, {}, toShaderRead);
+
                 glm::mat4 invViewProjection = glm::inverse(currentProjection * currentView);
                 auto extent = swapChain.getSwapchainExtent();
                 terrainRaycastPipeline->dispatch(commandBuffer, invViewProjection, extent.width, extent.height);
                 terrainRaycastPipeline->copyResultsToStaging(commandBuffer);
+
+                // Transition depth image back to attachment layout
+                vk::ImageMemoryBarrier toAttachment{};
+                toAttachment.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                toAttachment.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                toAttachment.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toAttachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toAttachment.image = offscreenResources.depthImage.depthImage;
+                toAttachment.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
+                    vk::ImageAspectFlagBits::eStencil;
+                toAttachment.subresourceRange.baseMipLevel = 0;
+                toAttachment.subresourceRange.levelCount = 1;
+                toAttachment.subresourceRange.baseArrayLayer = 0;
+                toAttachment.subresourceRange.layerCount = 1;
+                toAttachment.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                toAttachment.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                    vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eEarlyFragmentTests,
+                    {}, {}, {}, toAttachment);
             }
         }
     }

@@ -3,6 +3,7 @@
 #include "../events/EventDispatcher.hpp"
 #include "../events/TerrainRaycastEvents.hpp"
 #include "../events/SculptModeEvents.hpp"
+#include "../events/BrushEvents.hpp"
 
 namespace services
 {
@@ -18,6 +19,11 @@ namespace services
         if (sculptModeToken.isValid())
         {
             dispatcher.unsubscribe(sculptModeToken);
+        }
+
+        if (brushParamsToken.isValid())
+        {
+            dispatcher.unsubscribe(brushParamsToken);
         }
     }
 
@@ -62,6 +68,14 @@ namespace services
                 if (n.isActive)
                 {
                     sculptModeActive = true;
+                    if (provider)
+                    {
+                        auto brushParams = events::EventDispatcher::instance().query(
+                            events::brush::GetBrushParamsQuery{});
+                        provider->setBrushOverlayParams(
+                            brushParams.radius,
+                            static_cast<float>(brushParams.falloff));
+                    }
                 }
                 else
                 {
@@ -69,7 +83,19 @@ namespace services
                     if (provider)
                     {
                         provider->clearRaycastCursor();
+                        provider->setBrushOverlayParams(0.0f, 0.0f);
                     }
+                }
+            });
+
+        brushParamsToken = dispatcher.subscribe<events::brush::BrushParamsChangedNotification>(
+            [this](const events::brush::BrushParamsChangedNotification& n)
+            {
+                if (sculptModeActive && provider)
+                {
+                    provider->setBrushOverlayParams(
+                        n.params.radius,
+                        static_cast<float>(n.params.falloff));
                 }
             });
     }

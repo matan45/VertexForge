@@ -66,6 +66,11 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;
     float terrainTextureScale;  // Scale for world-space UV tiling
     float padding;
+    // Brush overlay (screen pixel space)
+    float brushScreenX;
+    float brushScreenY;
+    float brushScreenRadius;
+    float brushFalloff;
 } pc;
 
 // Shared memory for vertex caching
@@ -210,6 +215,11 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;
     float terrainTextureScale;
     float padding;
+    // Brush overlay (screen pixel space)
+    float brushScreenX;
+    float brushScreenY;
+    float brushScreenRadius;
+    float brushFalloff;
 } pc;
 
 // Light buffers (Set 6 - same as mesh shader)
@@ -695,6 +705,38 @@ void main() {
             color = vec3(NdotL);  // White = fully lit, black = no light
         } else {
             color = vec3(1.0, 0.0, 1.0);  // Magenta = no directional lights
+        }
+    }
+
+    // Brush overlay visualization
+    // Uses screen pixel coordinates computed on the CPU to avoid
+    // camera projection mismatches between render target and viewport.
+    if (pc.brushScreenRadius > 0.0) {
+        vec2 brushPos = vec2(pc.brushScreenX, pc.brushScreenY);
+        float dist = distance(gl_FragCoord.xy, brushPos);
+
+        // Falloff fill
+        if (dist <= pc.brushScreenRadius) {
+            float t = dist / pc.brushScreenRadius;
+            float falloffValue;
+            uint falloffType = uint(pc.brushFalloff);
+
+            if (falloffType == 0u) { falloffValue = 1.0; }
+            else if (falloffType == 1u) { falloffValue = 1.0 - t; }
+            else if (falloffType == 2u) { falloffValue = 1.0 - t*t*(3.0-2.0*t); }
+            else { falloffValue = pow(1.0 - t, 3.0); }
+
+            vec3 brushColor = vec3(0.2, 0.6, 1.0);
+            color = mix(color, brushColor, falloffValue * 0.3);
+        }
+
+        // Edge ring
+        float edgeWidth = max(pc.brushScreenRadius * 0.02, 1.5);
+        float edgeDist = abs(dist - pc.brushScreenRadius);
+        if (edgeDist < edgeWidth) {
+            float edgeAlpha = 1.0 - (edgeDist / edgeWidth);
+            vec3 brushColor = vec3(0.2, 0.6, 1.0);
+            color = mix(color, brushColor, edgeAlpha * 0.8);
         }
     }
 

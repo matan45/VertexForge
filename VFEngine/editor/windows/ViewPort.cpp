@@ -4,6 +4,7 @@
 #include "events/SceneEvents.hpp"
 #include "events/EditorModeEvents.hpp"
 #include "events/SculptModeEvents.hpp"
+#include "events/TerrainRaycastEvents.hpp"
 #include "events/AudioEvents.hpp"
 #include "time/Timer.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -71,6 +72,7 @@ namespace windows
             }
 
             handleEntityPicking(isPlayMode, vp, vs);
+            handleSculptBrush(vp, vs);
         }
         ImGui::End();
     }
@@ -295,5 +297,25 @@ namespace windows
         {
             isFirstMouseInput = true;
         }
+    }
+
+    void ViewPort::handleSculptBrush(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+
+        if (!sculptActive || !ImGui::IsWindowHovered())
+        {
+            dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
+            return;
+        }
+
+        ImVec2 mousePos = ImGui::GetMousePos();
+        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
+        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
+
+        events::terrainRaycast::SetCursorPositionCommand cmd;
+        cmd.cursorUV = uv;
+        dispatcher.execute(cmd);
     }
 }

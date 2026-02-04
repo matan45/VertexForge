@@ -22,4 +22,9 @@ namespace core
     {
         return offScreen.getTerrainHitResult();
     }
+
+    void TerrainRaycastAdapter::setBrushOverlayParams(float radius, float falloff)
+    {
+        offScreen.setBrushOverlayParams(radius, falloff);
+    }
 }

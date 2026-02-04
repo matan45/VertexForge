@@ -111,5 +111,7 @@ namespace controllers {
 		void setRaycastCursorUV(const glm::vec2& uv);
 		void clearRaycastCursor();
 		terrain::TerrainHitResult getTerrainHitResult() const;
+
+		void setBrushOverlayParams(float radius, float falloff);
 	};
 }

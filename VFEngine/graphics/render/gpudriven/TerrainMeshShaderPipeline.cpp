@@ -685,6 +685,9 @@ namespace render::gpudriven
         pushConstants.errorThreshold = errorThreshold;
         pushConstants.terrainTextureScale = textureScale;
         pushConstants.padding = 0.0f;
+        pushConstants.brushScreenPos = brushScreenPos_;
+        pushConstants.brushScreenRadius = brushScreenRadius_;
+        pushConstants.brushFalloff = brushFalloff_;
 
         cmd.pushConstants(pipelineLayout,
                           vk::ShaderStageFlagBits::eTaskEXT |
