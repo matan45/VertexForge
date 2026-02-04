@@ -17,6 +17,7 @@
 #include "impl/VFXRuntimeServiceImpl.hpp"
 #include "impl/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
+#include "impl/SculptModeServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
@@ -124,6 +125,7 @@ namespace handlers
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
+        sculptModeService.reset();
         editorModeService.reset();
         windowStateService.reset();
         inputService.reset();
@@ -217,6 +219,9 @@ namespace handlers
         physicsService->registerEventHandlers();
         projectService->registerEventHandlers();
         terrainService->registerEventHandlers();
+
+        sculptModeService = std::make_shared<services::SculptModeServiceImpl>();
+        sculptModeService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

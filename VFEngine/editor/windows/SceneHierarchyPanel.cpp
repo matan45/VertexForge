@@ -1,6 +1,7 @@
 #include "SceneHierarchyPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/SceneEvents.hpp"
+#include "events/SculptModeEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -147,15 +148,19 @@ namespace windows
 
         bool nodeOpen = ImGui::TreeNodeEx((void*)handle.id, flags, "%s", entityName.c_str());
 
-        // Select the entity when clicked
+        // Select the entity when clicked (blocked during sculpt mode)
         if (ImGui::IsItemClicked())
         {
-            selectedHandle = handle;
+            bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            if (!isSculptMode)
+            {
+                selectedHandle = handle;
 
-            // Publish selection through command
-            events::scene::SelectEntityCommand cmd;
-            cmd.entity = handle;
-            dispatcher.execute(cmd);
+                // Publish selection through command
+                events::scene::SelectEntityCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
         }
 
         if (ImGui::BeginDragDropSource())

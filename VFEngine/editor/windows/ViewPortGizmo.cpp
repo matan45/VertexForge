@@ -2,6 +2,7 @@
 #include "../camera/EditorCamera.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/EditorModeEvents.hpp"
+#include "events/SculptModeEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -12,8 +13,9 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Skip in play mode or if no operation selected
+        // Skip in play mode, sculpt mode, or if no operation selected
         if (dispatcher.query(events::editor::IsPlayModeQuery{})) return;
+        if (dispatcher.query(events::sculpt::IsSculptModeActiveQuery{})) return;
         if (currentGizmoOp == GizmoOperation::None) return;
 
         auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});

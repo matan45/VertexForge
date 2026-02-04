@@ -121,6 +121,7 @@
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
     <ClInclude Include="events\ScriptingEvents.hpp" />
+    <ClInclude Include="events\SculptModeEvents.hpp" />
     <ClInclude Include="events\TerrainEvents.hpp" />
     <ClInclude Include="events\UndoRedoEvents.hpp" />
     <ClInclude Include="events\VFXPreviewEvents.hpp" />
@@ -137,6 +138,7 @@
     <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
     <ClInclude Include="impl\ScriptingServiceImpl.hpp" />
+    <ClInclude Include="impl\SculptModeServiceImpl.hpp" />
     <ClInclude Include="impl\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\VFXRuntimeServiceImpl.hpp" />
@@ -168,6 +170,7 @@
     <ClInclude Include="interfaces\IRenderService.hpp" />
     <ClInclude Include="interfaces\ISceneService.hpp" />
     <ClInclude Include="interfaces\IScriptingService.hpp" />
+    <ClInclude Include="interfaces\ISculptModeService.hpp" />
     <ClInclude Include="interfaces\ITerrainService.hpp" />
     <ClInclude Include="interfaces\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\IWindowStateService.hpp" />
@@ -200,6 +203,7 @@
     <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
     <ClCompile Include="impl\ScriptingServiceImpl.cpp" />
+    <ClCompile Include="impl\SculptModeServiceImpl.cpp" />
     <ClCompile Include="impl\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\VFXRuntimeServiceImpl.cpp" />

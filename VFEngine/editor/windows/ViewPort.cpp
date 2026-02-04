@@ -3,6 +3,7 @@
 #include "events/RenderEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/EditorModeEvents.hpp"
+#include "events/SculptModeEvents.hpp"
 #include "events/AudioEvents.hpp"
 #include "time/Timer.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -224,6 +225,10 @@ namespace windows
     void ViewPort::handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         if (isPlayMode) return;
+
+        auto& sculptDispatcher = events::EventDispatcher::instance();
+        if (sculptDispatcher.query(events::sculpt::IsSculptModeActiveQuery{})) return;
+
         if (!ImGui::IsWindowHovered()) return;
         if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
         if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) return;
