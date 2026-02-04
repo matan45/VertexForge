@@ -124,6 +124,7 @@
     <ClInclude Include="events\ScriptingEvents.hpp" />
     <ClInclude Include="events\SculptModeEvents.hpp" />
     <ClInclude Include="events\TerrainEvents.hpp" />
+    <ClInclude Include="events\TerrainRaycastEvents.hpp" />
     <ClInclude Include="events\UndoRedoEvents.hpp" />
     <ClInclude Include="events\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\VFXRuntimeEvents.hpp" />
@@ -141,6 +142,7 @@
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
     <ClInclude Include="impl\ScriptingServiceImpl.hpp" />
     <ClInclude Include="impl\SculptModeServiceImpl.hpp" />
+    <ClInclude Include="impl\TerrainRaycastServiceImpl.hpp" />
     <ClInclude Include="impl\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\VFXRuntimeServiceImpl.hpp" />
@@ -174,6 +176,7 @@
     <ClInclude Include="interfaces\ISceneService.hpp" />
     <ClInclude Include="interfaces\IScriptingService.hpp" />
     <ClInclude Include="interfaces\ISculptModeService.hpp" />
+    <ClInclude Include="interfaces\ITerrainRaycastService.hpp" />
     <ClInclude Include="interfaces\ITerrainService.hpp" />
     <ClInclude Include="interfaces\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\IWindowStateService.hpp" />
@@ -187,6 +190,7 @@
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
+    <ClInclude Include="providers\ITerrainRaycastProvider.hpp" />
     <ClInclude Include="providers\ITerrainRenderProvider.hpp" />
     <ClInclude Include="providers\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\IVFXRuntimeProvider.hpp" />
@@ -208,6 +212,7 @@
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
     <ClCompile Include="impl\ScriptingServiceImpl.cpp" />
     <ClCompile Include="impl\SculptModeServiceImpl.cpp" />
+    <ClCompile Include="impl\TerrainRaycastServiceImpl.cpp" />
     <ClCompile Include="impl\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\VFXRuntimeServiceImpl.cpp" />

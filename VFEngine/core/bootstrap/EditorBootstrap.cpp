@@ -13,6 +13,7 @@
 #include "../adapters/PhysicsAdapter.hpp"
 #include "../adapters/AnimatorAdapter.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
+#include "../adapters/TerrainRaycastAdapter.hpp"
 #include "../adapters/NativeAPIRegistry.hpp"
 #include "scene/LevelHandler.hpp"
 #include "types/PhysicsTypes.hpp"
@@ -43,6 +44,7 @@ namespace core
         physicsAdapter = std::make_unique<PhysicsAdapter>();
         animatorAdapter = std::make_unique<AnimatorAdapter>();
         terrainRenderAdapter = std::make_unique<TerrainRenderAdapter>();
+        terrainRaycastAdapter = std::make_unique<TerrainRaycastAdapter>(*offScreen);
 
         offScreen->init();
         audioAdapter->init();
@@ -106,6 +108,7 @@ namespace core
         physicsAdapter.reset();
         animatorAdapter.reset();
         terrainRenderAdapter.reset();
+        terrainRaycastAdapter.reset();
 
         if (coreInterface)
         {
@@ -171,6 +174,11 @@ namespace core
     TerrainRenderAdapter* EditorBootstrap::getTerrainRenderAdapterInternal()
     {
         return terrainRenderAdapter.get();
+    }
+
+    services::ITerrainRaycastProvider* EditorBootstrap::getTerrainRaycastProvider()
+    {
+        return terrainRaycastAdapter.get();
     }
 
     window::Window* EditorBootstrap::getWindow()

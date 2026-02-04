@@ -19,6 +19,7 @@
 #include "impl/scene/TerrainService.hpp"
 #include "impl/SculptModeServiceImpl.hpp"
 #include "impl/BrushServiceImpl.hpp"
+#include "impl/TerrainRaycastServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
@@ -126,6 +127,7 @@ namespace handlers
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
+        terrainRaycastService.reset();
         brushService.reset();
         sculptModeService.reset();
         editorModeService.reset();
@@ -227,6 +229,10 @@ namespace handlers
 
         brushService = std::make_shared<services::BrushServiceImpl>();
         brushService->registerEventHandlers();
+
+        terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
+            bootstrap->getTerrainRaycastProvider());
+        terrainRaycastService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";

@@ -80,6 +80,7 @@ namespace render
         device.getGraphicsQueue().waitIdle();
 
         renderPassHandler->readBackLightOcclusionResults();
+        renderPassHandler->readBackTerrainRaycastResults();
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
@@ -251,5 +252,20 @@ namespace render
         samplerInfo.compareOp = vk::CompareOp::eAlways;
 
         sampler = device.getLogicalDevice().createSampler(samplerInfo);
+    }
+
+    void OffScreenViewPort::setRaycastCursorUV(const glm::vec2& uv)
+    {
+        renderPassHandler->setRaycastCursorUV(uv);
+    }
+
+    void OffScreenViewPort::clearRaycastCursor()
+    {
+        renderPassHandler->clearRaycastCursor();
+    }
+
+    terrain::TerrainHitResult OffScreenViewPort::getTerrainHitResult() const
+    {
+        return renderPassHandler->getTerrainHitResult();
     }
 }

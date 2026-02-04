@@ -642,4 +642,19 @@ namespace controllers
             renderHandler->setTerrainRenderProvider(provider);
         }
     }
+
+    void OffScreenController::setRaycastCursorUV(const glm::vec2& uv)
+    {
+        offScreen->setRaycastCursorUV(uv);
+    }
+
+    void OffScreenController::clearRaycastCursor()
+    {
+        offScreen->clearRaycastCursor();
+    }
+
+    terrain::TerrainHitResult OffScreenController::getTerrainHitResult() const
+    {
+        return offScreen->getTerrainHitResult();
+    }
 }

@@ -8,6 +8,7 @@
 #include <optional>
 #include "providers/IOffScreenProvider.hpp"
 #include "types/CameraTypes.hpp"
+#include "terrain/TerrainHitResult.hpp"
 
 namespace services
 {
@@ -106,5 +107,9 @@ namespace controllers {
 
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 		void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+
+		void setRaycastCursorUV(const glm::vec2& uv);
+		void clearRaycastCursor();
+		terrain::TerrainHitResult getTerrainHitResult() const;
 	};
 }
