@@ -417,11 +417,35 @@ namespace render
         auto hitResult = getTerrainHitResult();
         if (hitResult.hit && brushOverlayRadius_ > 0.0f)
         {
-            gpuDrivenRenderer->setBrushOverlay(
-                glm::vec2(hitResult.position.x, hitResult.position.z),
-                brushOverlayRadius_,
-                brushOverlayFalloff_
-            );
+            auto extent = swapChain.getSwapchainExtent();
+            float w = static_cast<float>(extent.width);
+            float h = static_cast<float>(extent.height);
+            glm::mat4 vp = currentProjection * currentView;
+
+            // Project brush center to screen pixels (gl_FragCoord space)
+            glm::vec4 centerClip = vp * glm::vec4(hitResult.position, 1.0f);
+            if (centerClip.w > 0.0001f)
+            {
+                glm::vec2 centerNDC = glm::vec2(centerClip) / centerClip.w;
+                glm::vec2 centerPixels = (centerNDC * 0.5f + 0.5f) * glm::vec2(w, h);
+
+                // Project edge point to compute screen-space radius
+                glm::vec3 edgePos = hitResult.position + glm::vec3(brushOverlayRadius_, 0.0f, 0.0f);
+                glm::vec4 edgeClip = vp * glm::vec4(edgePos, 1.0f);
+                float screenRadius = 0.0f;
+                if (edgeClip.w > 0.0001f)
+                {
+                    glm::vec2 edgeNDC = glm::vec2(edgeClip) / edgeClip.w;
+                    glm::vec2 edgePixels = (edgeNDC * 0.5f + 0.5f) * glm::vec2(w, h);
+                    screenRadius = glm::distance(centerPixels, edgePixels);
+                }
+
+                gpuDrivenRenderer->setBrushOverlay(centerPixels, screenRadius, brushOverlayFalloff_);
+            }
+            else
+            {
+                gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f);
+            }
         }
         else
         {

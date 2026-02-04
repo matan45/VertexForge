@@ -66,10 +66,10 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;
     float terrainTextureScale;  // Scale for world-space UV tiling
     float padding;
-    // Brush overlay
-    float brushCenterX;
-    float brushCenterZ;
-    float brushRadius;
+    // Brush overlay (screen pixel space)
+    float brushScreenX;
+    float brushScreenY;
+    float brushScreenRadius;
     float brushFalloff;
 } pc;
 
@@ -215,10 +215,10 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;
     float terrainTextureScale;
     float padding;
-    // Brush overlay
-    float brushCenterX;
-    float brushCenterZ;
-    float brushRadius;
+    // Brush overlay (screen pixel space)
+    float brushScreenX;
+    float brushScreenY;
+    float brushScreenRadius;
     float brushFalloff;
 } pc;
 
@@ -709,27 +709,30 @@ void main() {
     }
 
     // Brush overlay visualization
-    if (pc.brushRadius > 0.0) {
-        vec2 brushCenter = vec2(pc.brushCenterX, pc.brushCenterZ);
-        float dist = distance(fragWorldPos.xz, brushCenter);
+    // Uses screen pixel coordinates computed on the CPU to avoid
+    // camera projection mismatches between render target and viewport.
+    if (pc.brushScreenRadius > 0.0) {
+        vec2 brushPos = vec2(pc.brushScreenX, pc.brushScreenY);
+        float dist = distance(gl_FragCoord.xy, brushPos);
 
-        if (dist <= pc.brushRadius) {
-            float t = dist / pc.brushRadius;
+        // Falloff fill
+        if (dist <= pc.brushScreenRadius) {
+            float t = dist / pc.brushScreenRadius;
             float falloffValue;
             uint falloffType = uint(pc.brushFalloff);
 
-            if (falloffType == 0u) { falloffValue = 1.0; }           // Constant
-            else if (falloffType == 1u) { falloffValue = 1.0 - t; }   // Linear
-            else if (falloffType == 2u) { falloffValue = 1.0 - t*t*(3.0-2.0*t); } // Smooth
-            else { falloffValue = pow(1.0 - t, 3.0); }                // Sharp
+            if (falloffType == 0u) { falloffValue = 1.0; }
+            else if (falloffType == 1u) { falloffValue = 1.0 - t; }
+            else if (falloffType == 2u) { falloffValue = 1.0 - t*t*(3.0-2.0*t); }
+            else { falloffValue = pow(1.0 - t, 3.0); }
 
             vec3 brushColor = vec3(0.2, 0.6, 1.0);
             color = mix(color, brushColor, falloffValue * 0.3);
         }
 
         // Edge ring
-        float edgeWidth = max(pc.brushRadius * 0.02, 0.05);
-        float edgeDist = abs(dist - pc.brushRadius);
+        float edgeWidth = max(pc.brushScreenRadius * 0.02, 1.5);
+        float edgeDist = abs(dist - pc.brushScreenRadius);
         if (edgeDist < edgeWidth) {
             float edgeAlpha = 1.0 - (edgeDist / edgeWidth);
             vec3 brushColor = vec3(0.2, 0.6, 1.0);

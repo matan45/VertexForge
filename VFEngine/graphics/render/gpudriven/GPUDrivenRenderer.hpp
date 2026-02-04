@@ -247,7 +247,7 @@ namespace render::gpudriven
         void setTerrainTextureScale(float scale) { terrainTextureScale = scale; }
         void setTerrainShadowLOD(uint32_t lod) { terrainShadowLOD = std::min(lod, 3u); }
 
-        void setBrushOverlay(const glm::vec2& center, float radius, float falloff);
+        void setBrushOverlay(const glm::vec2& screenPos, float screenRadius, float falloff);
 
     private:
         bool registerMaterialTextures(const std::string& materialPath);
