@@ -18,6 +18,7 @@
 #include "impl/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
 #include "impl/SculptModeServiceImpl.hpp"
+#include "impl/BrushServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "events/EventDispatcher.hpp"
@@ -125,6 +126,7 @@ namespace handlers
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
+        brushService.reset();
         sculptModeService.reset();
         editorModeService.reset();
         windowStateService.reset();
@@ -222,6 +224,9 @@ namespace handlers
 
         sculptModeService = std::make_shared<services::SculptModeServiceImpl>();
         sculptModeService->registerEventHandlers();
+
+        brushService = std::make_shared<services::BrushServiceImpl>();
+        brushService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = "../../resources/editor/billboardAtlas.vfImage";
