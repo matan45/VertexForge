@@ -225,7 +225,7 @@ namespace render::gpudriven
         vk::CommandBuffer cmd,
         const BrushPushConstants& constants)
     {
-        if (!initialized || constants.vertexCount == 0)
+        if (!initialized || constants.verticesPerSide == 0)
         {
             return;
         }
@@ -239,8 +239,8 @@ namespace render::gpudriven
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
                           0, sizeof(BrushPushConstants), &constants);
 
-        uint32_t groupsX = (constants.vertexCount + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
-        uint32_t groupsY = (constants.vertexCount + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+        uint32_t groupsX = (constants.verticesPerSide + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+        uint32_t groupsY = (constants.verticesPerSide + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
 
         cmd.dispatch(groupsX, groupsY, 1);
     }

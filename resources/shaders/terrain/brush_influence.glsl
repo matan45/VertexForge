@@ -20,7 +20,7 @@ layout(push_constant) uniform PushConstants
     float brushRadius;
     float brushStrength;
     float vertexSpacing;
-    uint vertexCount;
+    uint verticesPerSide;
     uint falloffType;
     uint shapeType;
 } pc;
@@ -42,12 +42,12 @@ void main()
     uint x = gl_GlobalInvocationID.x;
     uint z = gl_GlobalInvocationID.y;
 
-    if (x >= pc.vertexCount || z >= pc.vertexCount)
+    if (x >= pc.verticesPerSide || z >= pc.verticesPerSide)
     {
         return;
     }
 
-    uint idx = z * pc.vertexCount + x;
+    uint idx = z * pc.verticesPerSide + x;
 
     vec2 worldPos = pc.tileWorldOrigin + vec2(float(x), float(z)) * pc.vertexSpacing;
     vec2 delta = worldPos - pc.brushCenter;

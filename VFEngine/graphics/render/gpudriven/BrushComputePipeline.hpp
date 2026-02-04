@@ -20,7 +20,7 @@ namespace render::gpudriven
         float brushRadius;
         float brushStrength;
         float vertexSpacing;
-        uint32_t vertexCount;
+        uint32_t verticesPerSide;
         uint32_t falloffType;
         uint32_t shapeType;
     };
