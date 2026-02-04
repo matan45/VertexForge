@@ -140,6 +140,7 @@
     <ClInclude Include="terrain\BrushTypes.hpp" />
     <ClInclude Include="terrain\HeightmapLoader.hpp" />
     <ClInclude Include="terrain\TerrainGrid.hpp" />
+    <ClInclude Include="terrain\TerrainHitResult.hpp" />
     <ClInclude Include="terrain\TerrainTile.hpp" />
     <ClInclude Include="terrain\TerrainTileGenerator.hpp" />
     <ClInclude Include="terrain\TerrainTypes.hpp" />

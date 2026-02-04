@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include "../../services/providers/IOffScreenProvider.hpp"
 #include "../render/occlusion/CameraOcclusionManager.hpp"
+#include "terrain/TerrainHitResult.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
@@ -150,5 +151,9 @@ namespace controllers
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+
+        void setRaycastCursorUV(const glm::vec2& uv);
+        void clearRaycastCursor();
+        terrain::TerrainHitResult getTerrainHitResult() const;
     };
 }

@@ -15,6 +15,7 @@
 #include "tools/LightGizmoDebugRenderer.hpp"
 #include "tools/ClusterDebugRenderer.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
+#include "gpudriven/TerrainRaycastPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/ITerrainRenderProvider.hpp"
@@ -37,6 +38,7 @@ namespace render
         , cameraOcclusionManager{std::make_unique<occlusion::CameraOcclusionManager>(device, swapChain)}
         , debugRenderer{std::make_unique<DebugRenderer>(device, swapChain)}
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
+        , terrainRaycastPipeline{std::make_unique<gpudriven::TerrainRaycastPipeline>(device)}
     {
     }
 
@@ -51,6 +53,12 @@ namespace render
     void RenderPassHandler::init()
     {
         clearColor->init();
+
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->init();
+            terrainRaycastPipeline->updateDepthImageView(offscreenResources.depthImage.depthImageView);
+        }
 
         if (!materialChangeCallbackId)
         {
@@ -358,6 +366,39 @@ namespace render
         {
             gpuDrivenRenderer->readBackLightOcclusionResults();
         }
+    }
+
+    void RenderPassHandler::readBackTerrainRaycastResults()
+    {
+        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+        {
+            terrainRaycastPipeline->readBackResults();
+        }
+    }
+
+    void RenderPassHandler::setRaycastCursorUV(const glm::vec2& uv)
+    {
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->setCursorUV(uv);
+        }
+    }
+
+    void RenderPassHandler::clearRaycastCursor()
+    {
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->clearCursor();
+        }
+    }
+
+    terrain::TerrainHitResult RenderPassHandler::getTerrainHitResult() const
+    {
+        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+        {
+            return terrainRaycastPipeline->getLastResult();
+        }
+        return {};
     }
 
     void RenderPassHandler::setViewMode(uint32_t mode)
@@ -682,10 +723,20 @@ namespace render
                     swapChain.getSwapchainDepthStencilFormat());
             }
         }
+
+        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+        {
+            terrainRaycastPipeline->updateDepthImageView(offscreenResources.depthImage.depthImageView);
+        }
     }
 
     void RenderPassHandler::cleanUp() const
     {
+        if (terrainRaycastPipeline)
+        {
+            terrainRaycastPipeline->cleanup();
+        }
+
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->cleanup();
@@ -845,6 +896,14 @@ namespace render
             if (cameraOcclusionManager->isOcclusionInitialized(activeCameraId))
             {
                 cameraOcclusionManager->runOcclusionCulling(activeCameraId, commandBuffer);
+            }
+
+            if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+            {
+                glm::mat4 invViewProjection = glm::inverse(currentProjection * currentView);
+                auto extent = swapChain.getSwapchainExtent();
+                terrainRaycastPipeline->dispatch(commandBuffer, invViewProjection, extent.width, extent.height);
+                terrainRaycastPipeline->copyResultsToStaging(commandBuffer);
             }
         }
     }

@@ -163,6 +163,7 @@
     <ClInclude Include="render\gpudriven\TerrainGPUAdapter.hpp" />
     <ClInclude Include="render\gpudriven\TerrainMeshBuffer.hpp" />
     <ClInclude Include="render\gpudriven\TerrainMeshShaderPipeline.hpp" />
+    <ClInclude Include="render\gpudriven\TerrainRaycastPipeline.hpp" />
     <ClInclude Include="render\gpudriven\TerrainStreamManager.hpp" />
     <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
     <ClInclude Include="render\ibl\DefaultIBLTextureFactory.hpp" />
@@ -283,6 +284,7 @@
     <ClCompile Include="render\gpudriven\TerrainGPUAdapter.cpp" />
     <ClCompile Include="render\gpudriven\TerrainMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\TerrainMeshShaderPipeline.cpp" />
+    <ClCompile Include="render\gpudriven\TerrainRaycastPipeline.cpp" />
     <ClCompile Include="render\gpudriven\TerrainStreamManager.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
     <ClCompile Include="render\ibl\DefaultIBLTextureFactory.cpp" />
@@ -362,6 +364,7 @@
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_influence.glsl" />
+    <None Include="..\..\resources\shaders\terrain\terrain_depth_sample.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\clusterWireframe.glsl" />
     <None Include="..\..\resources\shaders\tools\gridOverlay.glsl" />
