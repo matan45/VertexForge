@@ -10,9 +10,9 @@ namespace windows
         bool visible = false;
         types::PhysicsSettings settings = types::PhysicsSettings::createDefault();
         bool settingsLoaded = false;
-        
+
         char newLayerName[64] = "";
-        
+
         bool isDirty = false;
 
         void drawGravitySection();
