@@ -8,6 +8,7 @@ namespace services
     {
     private:
         terrain::BrushParams currentParams;
+        terrain::BrushType currentBrushType = terrain::BrushType::Raise;
         bool sculptModeActive = false;
 
         ::events::SubscriptionToken sculptModeToken;
@@ -23,7 +24,11 @@ namespace services
         void setStrength(float strength) override;
         terrain::BrushParams getParams() const override;
 
+        void setBrushType(terrain::BrushType type) override;
+        terrain::BrushType getBrushType() const override;
+
     private:
         void publishParamsChanged();
+        void publishTypeChanged();
     };
 }

@@ -270,8 +270,8 @@ namespace render
         return renderPassHandler->getTerrainHitResult();
     }
 
-    void OffScreenViewPort::setBrushOverlayParams(float radius, float falloff)
+    void OffScreenViewPort::setBrushOverlayParams(float radius, float falloff, float shape)
     {
-        renderPassHandler->setBrushOverlayParams(radius, falloff);
+        renderPassHandler->setBrushOverlayParams(radius, falloff, shape);
     }
 }

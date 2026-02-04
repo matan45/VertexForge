@@ -7,9 +7,12 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/HeightmapLoader.hpp"
+#include "terrain/BrushSampler.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
+#include "../../events/BrushEvents.hpp"
+#include "../../events/SculptModeEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
 
@@ -26,6 +29,7 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::CreateTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::RemapTerrainEntitiesCommand>();
+        dispatcher.unregisterCommandHandler<events::brush::ApplyBrushCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -88,6 +92,12 @@ namespace services
             [this](const events::terrain::GetTerrainTileDataQuery& query)
             {
                 return getTerrainTileData(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::brush::ApplyBrushCommand>(
+            [this](const events::brush::ApplyBrushCommand& cmd)
+            {
+                applyBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
             });
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
@@ -440,5 +450,180 @@ namespace services
         terrainGrids.clear();
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
+    }
+
+    void TerrainService::applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Get the sculpt target terrain entity
+        auto targetEntity = dispatcher.query(events::sculpt::GetSculptTargetEntityQuery{});
+        if (!targetEntity.has_value())
+        {
+            return;
+        }
+
+        // Look up the terrain grid
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end())
+        {
+            return;
+        }
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+
+        // Get brush type and params
+        auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
+        auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
+
+        // Get the brush strategy
+        terrain::brushes::ISculptBrush* brush = brushRegistry.getBrush(brushType);
+        if (!brush)
+        {
+            return;
+        }
+
+        // For Raise/Lower: the BrushType already encodes direction,
+        // but we also support Shift-invert
+        bool effectiveInvert = invert;
+        if (brushType == terrain::BrushType::Lower)
+        {
+            effectiveInvert = !invert; // Lower inverts by default, Shift un-inverts
+        }
+
+        // For Flatten: capture target height on first click
+        if (brushType == terrain::BrushType::Flatten)
+        {
+            if (isFirstApplication)
+            {
+                flattenTargetCaptured = true;
+                flattenTargetHeight = worldPosition.y;
+            }
+        }
+        else
+        {
+            flattenTargetCaptured = false;
+        }
+
+        // Find affected tiles
+        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
+        float worldTileSize = 32.0f;
+        const auto& allTiles = grid->getAllTiles();
+        if (!allTiles.empty())
+        {
+            worldTileSize = allTiles[0]->config.worldTileSize;
+        }
+        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
+            brushCenter, brushParams.radius, worldTileSize);
+
+        // Build brush context
+        terrain::brushes::BrushContext context;
+        context.brushCenter = brushCenter;
+        context.params = brushParams;
+        context.deltaTime = deltaTime;
+        context.invert = effectiveInvert;
+        context.targetHeight = flattenTargetHeight;
+        context.sampleWorldHeight = [grid, worldTileSize](float worldX, float worldZ) -> float
+        {
+            // Find which tile contains this world position
+            int32_t tx = static_cast<int32_t>(std::floor(worldX / worldTileSize));
+            int32_t tz = static_cast<int32_t>(std::floor(worldZ / worldTileSize));
+            terrain::TerrainTile* tile = grid->getTile(terrain::TileCoord(tx, tz));
+            if (tile)
+            {
+                return tile->sampleHeightWorld(worldX, worldZ);
+            }
+            return 0.0f;
+        };
+
+        // Apply brush to each affected tile
+        std::vector<terrain::TileCoord> modifiedTiles;
+        for (const auto& coord : affectedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
+            {
+                continue;
+            }
+
+            brush->apply(*tile, context);
+            tile->isDirty = true;
+            modifiedTiles.push_back(coord);
+        }
+
+        // Sync shared edge vertices between adjacent modified tiles
+        if (modifiedTiles.size() > 1)
+        {
+            syncTileEdges(modifiedTiles, *grid);
+        }
+
+        // Publish notification
+        events::brush::BrushAppliedNotification notification;
+        notification.position = worldPosition;
+        notification.type = brushType;
+        dispatcher.publish(notification);
+    }
+
+    void TerrainService::syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid)
+    {
+        for (const auto& coord : modifiedTiles)
+        {
+            terrain::TerrainTile* tile = grid.getTile(coord);
+            if (!tile)
+            {
+                continue;
+            }
+
+            uint32_t vertexCount = tile->config.getVertexCount();
+
+            for (uint8_t edgeIdx = 0; edgeIdx < 4; ++edgeIdx)
+            {
+                terrain::TileEdge edge = static_cast<terrain::TileEdge>(edgeIdx);
+                terrain::TileCoord neighborCoord = coord + terrain::TileCoord::getNeighborOffset(edge);
+                terrain::TerrainTile* neighbor = grid.getTile(neighborCoord);
+                if (!neighbor)
+                {
+                    continue;
+                }
+
+                // Sync shared edge vertices: average the heights at the boundary
+                for (uint32_t i = 0; i < vertexCount; ++i)
+                {
+                    uint32_t tileX = 0, tileZ = 0;
+                    uint32_t neighborX = 0, neighborZ = 0;
+
+                    switch (edge)
+                    {
+                    case terrain::TileEdge::North: // +Z: tile z=max, neighbor z=0
+                        tileX = i; tileZ = vertexCount - 1;
+                        neighborX = i; neighborZ = 0;
+                        break;
+                    case terrain::TileEdge::East: // +X: tile x=max, neighbor x=0
+                        tileX = vertexCount - 1; tileZ = i;
+                        neighborX = 0; neighborZ = i;
+                        break;
+                    case terrain::TileEdge::South: // -Z: tile z=0, neighbor z=max
+                        tileX = i; tileZ = 0;
+                        neighborX = i; neighborZ = vertexCount - 1;
+                        break;
+                    case terrain::TileEdge::West: // -X: tile x=0, neighbor x=max
+                        tileX = 0; tileZ = i;
+                        neighborX = vertexCount - 1; neighborZ = i;
+                        break;
+                    }
+
+                    size_t tileIdx = static_cast<size_t>(tileZ) * vertexCount + tileX;
+                    size_t neighborIdx = static_cast<size_t>(neighborZ) * vertexCount + neighborX;
+
+                    // Average the shared edge heights
+                    float avgHeight = (tile->heightData[tileIdx] + neighbor->heightData[neighborIdx]) * 0.5f;
+                    tile->heightData[tileIdx] = avgHeight;
+                    neighbor->heightData[neighborIdx] = avgHeight;
+
+                    // Mark neighbor as dirty too since its edge was modified
+                    neighbor->isDirty = true;
+                }
+            }
+        }
     }
 }

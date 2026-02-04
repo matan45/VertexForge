@@ -74,7 +74,8 @@ namespace services
                             events::brush::GetBrushParamsQuery{});
                         provider->setBrushOverlayParams(
                             brushParams.radius,
-                            static_cast<float>(brushParams.falloff));
+                            static_cast<float>(brushParams.falloff),
+                            static_cast<float>(brushParams.shape));
                     }
                 }
                 else
@@ -83,7 +84,7 @@ namespace services
                     if (provider)
                     {
                         provider->clearRaycastCursor();
-                        provider->setBrushOverlayParams(0.0f, 0.0f);
+                        provider->setBrushOverlayParams(0.0f, 0.0f, 0.0f);
                     }
                 }
             });
@@ -95,7 +96,8 @@ namespace services
                 {
                     provider->setBrushOverlayParams(
                         n.params.radius,
-                        static_cast<float>(n.params.falloff));
+                        static_cast<float>(n.params.falloff),
+                        static_cast<float>(n.params.shape));
                 }
             });
     }

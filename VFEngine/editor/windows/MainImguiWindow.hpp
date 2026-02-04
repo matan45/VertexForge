@@ -9,6 +9,7 @@
 #include "RenderConfigWindow.hpp"
 #include "ProjectSettingsWindow.hpp"
 #include "TerrainCreationWindow.hpp"
+#include "SculptToolPanel.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 
@@ -33,6 +34,7 @@ namespace windows
         RenderConfigWindow renderConfigWindow;
         ProjectSettingsWindow projectSettingsWindow;
         TerrainCreationWindow terrainCreationWindow;
+        SculptToolPanel sculptToolPanel;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;

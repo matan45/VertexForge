@@ -61,10 +61,22 @@ namespace services
                 publishParamsChanged();
             });
 
+        dispatcher.registerCommandHandler<events::brush::SetBrushTypeCommand>(
+            [this](const events::brush::SetBrushTypeCommand& cmd)
+            {
+                setBrushType(cmd.type);
+            });
+
         dispatcher.registerQueryHandler<events::brush::GetBrushParamsQuery>(
             [this](const events::brush::GetBrushParamsQuery&)
             {
                 return getParams();
+            });
+
+        dispatcher.registerQueryHandler<events::brush::GetBrushTypeQuery>(
+            [this](const events::brush::GetBrushTypeQuery&)
+            {
+                return getBrushType();
             });
 
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
@@ -78,7 +90,9 @@ namespace services
                 {
                     sculptModeActive = false;
                     currentParams = terrain::BrushParams{};
+                    currentBrushType = terrain::BrushType::Raise;
                     publishParamsChanged();
+                    publishTypeChanged();
                 }
             });
     }
@@ -124,10 +138,33 @@ namespace services
         return currentParams;
     }
 
+    void BrushServiceImpl::setBrushType(terrain::BrushType type)
+    {
+        if (!sculptModeActive)
+        {
+            return;
+        }
+
+        currentBrushType = type;
+        publishTypeChanged();
+    }
+
+    terrain::BrushType BrushServiceImpl::getBrushType() const
+    {
+        return currentBrushType;
+    }
+
     void BrushServiceImpl::publishParamsChanged()
     {
         events::brush::BrushParamsChangedNotification notification;
         notification.params = currentParams;
+        events::EventDispatcher::instance().publish(notification);
+    }
+
+    void BrushServiceImpl::publishTypeChanged()
+    {
+        events::brush::BrushTypeChangedNotification notification;
+        notification.type = currentBrushType;
         events::EventDispatcher::instance().publish(notification);
     }
 }

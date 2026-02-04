@@ -5,6 +5,15 @@
 
 namespace terrain
 {
+    enum class BrushType : uint8_t
+    {
+        Raise = 0,
+        Lower = 1,
+        Smooth = 2,
+        Flatten = 3,
+        Noise = 4
+    };
+
     enum class BrushFalloff : uint8_t
     {
         Constant = 0,

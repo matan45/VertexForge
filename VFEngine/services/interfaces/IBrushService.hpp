@@ -14,5 +14,8 @@ namespace services
         virtual void setRadius(float radius) = 0;
         virtual void setStrength(float strength) = 0;
         virtual terrain::BrushParams getParams() const = 0;
+
+        virtual void setBrushType(terrain::BrushType type) = 0;
+        virtual terrain::BrushType getBrushType() const = 0;
     };
 }
