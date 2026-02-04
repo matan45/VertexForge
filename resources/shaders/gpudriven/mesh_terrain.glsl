@@ -71,6 +71,7 @@ layout(push_constant) uniform PushConstants {
     float brushScreenY;
     float brushScreenRadius;
     float brushFalloff;
+    float brushShape;
 } pc;
 
 // Shared memory for vertex caching
@@ -220,6 +221,7 @@ layout(push_constant) uniform PushConstants {
     float brushScreenY;
     float brushScreenRadius;
     float brushFalloff;
+    float brushShape;
 } pc;
 
 // Light buffers (Set 6 - same as mesh shader)
@@ -713,7 +715,18 @@ void main() {
     // camera projection mismatches between render target and viewport.
     if (pc.brushScreenRadius > 0.0) {
         vec2 brushPos = vec2(pc.brushScreenX, pc.brushScreenY);
-        float dist = distance(gl_FragCoord.xy, brushPos);
+        vec2 delta = gl_FragCoord.xy - brushPos;
+        uint shapeType = uint(pc.brushShape);
+
+        // Compute normalized distance based on shape
+        float dist;
+        if (shapeType == 1u) {
+            // Square: use Chebyshev distance (max of abs components)
+            dist = max(abs(delta.x), abs(delta.y));
+        } else {
+            // Circle: use Euclidean distance
+            dist = length(delta);
+        }
 
         // Falloff fill
         if (dist <= pc.brushScreenRadius) {
@@ -730,7 +743,7 @@ void main() {
             color = mix(color, brushColor, falloffValue * 0.3);
         }
 
-        // Edge ring
+        // Edge ring/border
         float edgeWidth = max(pc.brushScreenRadius * 0.02, 1.5);
         float edgeDist = abs(dist - pc.brushScreenRadius);
         if (edgeDist < edgeWidth) {

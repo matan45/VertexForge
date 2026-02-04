@@ -31,6 +31,9 @@ namespace windows
         float lastMouseX = 0.0f;
         float lastMouseY = 0.0f;
 
+        // Sculpt brush dragging state
+        bool sculptDragging = false;
+
     public:
         explicit ViewPort();
         ~ViewPort() override = default;

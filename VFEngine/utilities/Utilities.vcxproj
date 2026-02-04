@@ -144,6 +144,12 @@
     <ClInclude Include="terrain\TerrainTile.hpp" />
     <ClInclude Include="terrain\TerrainTileGenerator.hpp" />
     <ClInclude Include="terrain\TerrainTypes.hpp" />
+    <ClInclude Include="terrain\brushes\BrushRegistry.hpp" />
+    <ClInclude Include="terrain\brushes\FlattenBrush.hpp" />
+    <ClInclude Include="terrain\brushes\ISculptBrush.hpp" />
+    <ClInclude Include="terrain\brushes\NoiseBrush.hpp" />
+    <ClInclude Include="terrain\brushes\RaiseLowerBrush.hpp" />
+    <ClInclude Include="terrain\brushes\SmoothBrush.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Timer.hpp" />
@@ -194,6 +200,11 @@
     <ClCompile Include="terrain\TerrainGrid.cpp" />
     <ClCompile Include="terrain\TerrainTile.cpp" />
     <ClCompile Include="terrain\TerrainTileGenerator.cpp" />
+    <ClCompile Include="terrain\brushes\BrushRegistry.cpp" />
+    <ClCompile Include="terrain\brushes\FlattenBrush.cpp" />
+    <ClCompile Include="terrain\brushes\NoiseBrush.cpp" />
+    <ClCompile Include="terrain\brushes\RaiseLowerBrush.cpp" />
+    <ClCompile Include="terrain\brushes\SmoothBrush.cpp" />
     <ClCompile Include="texture\OrmTexturePacker.cpp" />
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vfx\VFXAsset.cpp" />

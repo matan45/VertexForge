@@ -21,6 +21,6 @@ namespace core
         void setRaycastCursorUV(const glm::vec2& uv) override;
         void clearRaycastCursor() override;
         terrain::TerrainHitResult getTerrainHitResult() const override;
-        void setBrushOverlayParams(float radius, float falloff) override;
+        void setBrushOverlayParams(float radius, float falloff, float shape) override;
     };
 }

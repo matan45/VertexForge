@@ -5,6 +5,7 @@
 #include "events/EditorModeEvents.hpp"
 #include "events/SculptModeEvents.hpp"
 #include "events/TerrainRaycastEvents.hpp"
+#include "events/BrushEvents.hpp"
 #include "events/AudioEvents.hpp"
 #include "time/Timer.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -307,6 +308,7 @@ namespace windows
         if (!sculptActive || !ImGui::IsWindowHovered())
         {
             dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
+            sculptDragging = false;
             return;
         }
 
@@ -317,5 +319,29 @@ namespace windows
         events::terrainRaycast::SetCursorPositionCommand cmd;
         cmd.cursorUV = uv;
         dispatcher.execute(cmd);
+
+        // Apply brush on left-click/drag
+        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        bool shiftHeld = ImGui::GetIO().KeyShift;
+
+        if (leftDown)
+        {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                events::brush::ApplyBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                applyCmd.invert = shiftHeld;
+                applyCmd.isFirstApplication = !sculptDragging;
+                dispatcher.execute(applyCmd);
+
+                sculptDragging = true;
+            }
+        }
+        else
+        {
+            sculptDragging = false;
+        }
     }
 }

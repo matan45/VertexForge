@@ -47,7 +47,7 @@ namespace render
         void clearRaycastCursor();
         terrain::TerrainHitResult getTerrainHitResult() const;
 
-        void setBrushOverlayParams(float radius, float falloff);
+        void setBrushOverlayParams(float radius, float falloff, float shape);
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer) const;

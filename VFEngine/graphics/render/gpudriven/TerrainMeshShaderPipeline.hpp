@@ -27,10 +27,11 @@ namespace render::gpudriven
         float errorThreshold;    // Screen-space error threshold in pixels
         float terrainTextureScale; // Scale for world-space UV tiling
         float padding;
-        // Brush overlay in screen pixel space (16 bytes)
+        // Brush overlay in screen pixel space
         glm::vec2 brushScreenPos;  // Screen pixel position (gl_FragCoord space)
         float brushScreenRadius;   // Screen pixel radius (0.0 = inactive)
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
+        float brushShape;          // Shape (0=circle, 1=square)
     };
 
     // Terrain culling bits (same as regular mesh shader bits)
@@ -103,6 +104,7 @@ namespace render::gpudriven
         glm::vec2 brushScreenPos_{0.0f};
         float brushScreenRadius_ = 0.0f;
         float brushFalloff_ = 0.0f;
+        float brushShape_ = 0.0f;
 
     public:
         explicit TerrainMeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -157,11 +159,12 @@ namespace render::gpudriven
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
 
-        void setBrushOverlay(const glm::vec2& screenPos, float screenRadius, float falloff)
+        void setBrushOverlay(const glm::vec2& screenPos, float screenRadius, float falloff, float shape)
         {
             brushScreenPos_ = screenPos;
             brushScreenRadius_ = screenRadius;
             brushFalloff_ = falloff;
+            brushShape_ = shape;
         }
 
     private:

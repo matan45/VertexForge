@@ -401,10 +401,11 @@ namespace render
         return {};
     }
 
-    void RenderPassHandler::setBrushOverlayParams(float radius, float falloff)
+    void RenderPassHandler::setBrushOverlayParams(float radius, float falloff, float shape)
     {
         brushOverlayRadius_ = radius;
         brushOverlayFalloff_ = falloff;
+        brushOverlayShape_ = shape;
     }
 
     void RenderPassHandler::updateBrushOverlayFromHitResult()
@@ -440,16 +441,16 @@ namespace render
                     screenRadius = glm::distance(centerPixels, edgePixels);
                 }
 
-                gpuDrivenRenderer->setBrushOverlay(centerPixels, screenRadius, brushOverlayFalloff_);
+                gpuDrivenRenderer->setBrushOverlay(centerPixels, screenRadius, brushOverlayFalloff_, brushOverlayShape_);
             }
             else
             {
-                gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f);
+                gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f, 0.0f);
             }
         }
         else
         {
-            gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f);
+            gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f, 0.0f);
         }
     }
 

@@ -7,11 +7,15 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/HeightmapLoader.hpp"
+#include "terrain/BrushSampler.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
+#include "../../events/BrushEvents.hpp"
+#include "../../events/SculptModeEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
+#include <unordered_set>
 
 namespace services
 {
@@ -26,6 +30,7 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::CreateTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::RemapTerrainEntitiesCommand>();
+        dispatcher.unregisterCommandHandler<events::brush::ApplyBrushCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -88,6 +93,12 @@ namespace services
             [this](const events::terrain::GetTerrainTileDataQuery& query)
             {
                 return getTerrainTileData(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::brush::ApplyBrushCommand>(
+            [this](const events::brush::ApplyBrushCommand& cmd)
+            {
+                applyBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
             });
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
@@ -440,5 +451,272 @@ namespace services
         terrainGrids.clear();
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
+    }
+
+    void TerrainService::applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Get the sculpt target terrain entity
+        auto targetEntity = dispatcher.query(events::sculpt::GetSculptTargetEntityQuery{});
+        if (!targetEntity.has_value())
+        {
+            return;
+        }
+
+        // Look up the terrain grid
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end())
+        {
+            return;
+        }
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+
+        // Get brush type and params
+        auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
+        auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
+
+        // Get the brush strategy
+        terrain::brushes::ISculptBrush* brush = brushRegistry.getBrush(brushType);
+        if (!brush)
+        {
+            return;
+        }
+
+        // For Raise/Lower: the BrushType already encodes direction,
+        // but we also support Shift-invert
+        bool effectiveInvert = invert;
+        if (brushType == terrain::BrushType::Lower)
+        {
+            effectiveInvert = !invert; // Lower inverts by default, Shift un-inverts
+        }
+
+        // For Flatten: capture target height on first click
+        if (brushType == terrain::BrushType::Flatten)
+        {
+            if (isFirstApplication)
+            {
+                flattenTargetCaptured = true;
+                flattenTargetHeight = worldPosition.y;
+            }
+        }
+        else
+        {
+            flattenTargetCaptured = false;
+        }
+
+        // Find affected tiles
+        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
+        float worldTileSize = 32.0f;
+        const auto& allTiles = grid->getAllTiles();
+        if (!allTiles.empty())
+        {
+            worldTileSize = allTiles[0]->config.worldTileSize;
+        }
+        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
+            brushCenter, brushParams.radius, worldTileSize);
+
+        // Build brush context
+        terrain::brushes::BrushContext context;
+        context.brushCenter = brushCenter;
+        context.params = brushParams;
+        context.deltaTime = deltaTime;
+        context.invert = effectiveInvert;
+        context.targetHeight = flattenTargetHeight;
+        context.sampleWorldHeight = [grid, worldTileSize](float worldX, float worldZ) -> float
+        {
+            // Find which tile contains this world position
+            int32_t tx = static_cast<int32_t>(std::floor(worldX / worldTileSize));
+            int32_t tz = static_cast<int32_t>(std::floor(worldZ / worldTileSize));
+            terrain::TerrainTile* tile = grid->getTile(terrain::TileCoord(tx, tz));
+            if (tile)
+            {
+                return tile->sampleHeightWorld(worldX, worldZ);
+            }
+            return 0.0f;
+        };
+
+        // Apply brush to each affected tile
+        std::vector<terrain::TileCoord> modifiedTiles;
+        for (const auto& coord : affectedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
+            {
+                continue;
+            }
+
+            brush->apply(*tile, context);
+            tile->isDirty = true;
+            modifiedTiles.push_back(coord);
+        }
+
+        // Sync shared edge vertices between modified tiles and their neighbors
+        if (!modifiedTiles.empty())
+        {
+            syncTileEdges(modifiedTiles, *grid);
+        }
+
+        // Publish notification
+        events::brush::BrushAppliedNotification notification;
+        notification.position = worldPosition;
+        notification.type = brushType;
+        dispatcher.publish(notification);
+    }
+
+    void TerrainService::syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid)
+    {
+        if (modifiedTiles.empty())
+        {
+            return;
+        }
+
+        auto* sampleTile = grid.getTile(modifiedTiles[0]);
+        if (!sampleTile)
+        {
+            return;
+        }
+
+        uint32_t vertexCount = sampleTile->config.getVertexCount();
+        uint32_t lastVertex = vertexCount - 1;
+
+        // World-space vertex coordinate: for tile at grid coord (tx,tz),
+        // local vertex (lx,lz) maps to (tx * lastVertex + lx, tz * lastVertex + lz).
+        // This gives a unique key per shared vertex position, so corners
+        // shared by up to 4 tiles naturally group together.
+        struct WorldVertex
+        {
+            int64_t x, z;
+            bool operator==(const WorldVertex& o) const { return x == o.x && z == o.z; }
+        };
+
+        struct WorldVertexHash
+        {
+            size_t operator()(const WorldVertex& v) const
+            {
+                return std::hash<int64_t>{}(v.x) ^ (std::hash<int64_t>{}(v.z) * 2654435761ULL);
+            }
+        };
+
+        struct TileVertexRef
+        {
+            terrain::TerrainTile* tile;
+            size_t bufferIndex;
+        };
+
+        std::unordered_map<WorldVertex, std::vector<TileVertexRef>, WorldVertexHash> sharedVertices;
+        std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> modifiedSet(
+            modifiedTiles.begin(), modifiedTiles.end());
+        std::unordered_set<terrain::TerrainTile*> neighborTilesToDirty;
+
+        // Phase 1: Collect all shared boundary vertices without modifying any height data.
+        // Each edge vertex is mapped to its world-space position, deduplicating
+        // so that corner vertices shared by multiple edges are grouped correctly.
+        for (const auto& coord : modifiedTiles)
+        {
+            terrain::TerrainTile* tile = grid.getTile(coord);
+            if (!tile)
+            {
+                continue;
+            }
+
+            for (uint8_t edgeIdx = 0; edgeIdx < 4; ++edgeIdx)
+            {
+                terrain::TileEdge edge = static_cast<terrain::TileEdge>(edgeIdx);
+                terrain::TileCoord neighborCoord = coord + terrain::TileCoord::getNeighborOffset(edge);
+                terrain::TerrainTile* neighbor = grid.getTile(neighborCoord);
+                if (!neighbor)
+                {
+                    continue;
+                }
+
+                if (!modifiedSet.count(neighborCoord))
+                {
+                    neighborTilesToDirty.insert(neighbor);
+                }
+
+                for (uint32_t i = 0; i < vertexCount; ++i)
+                {
+                    uint32_t tileLocalX = 0, tileLocalZ = 0;
+                    uint32_t neighborLocalX = 0, neighborLocalZ = 0;
+
+                    switch (edge)
+                    {
+                    case terrain::TileEdge::North: // +Z: tile z=max, neighbor z=0
+                        tileLocalX = i; tileLocalZ = lastVertex;
+                        neighborLocalX = i; neighborLocalZ = 0;
+                        break;
+                    case terrain::TileEdge::East: // +X: tile x=max, neighbor x=0
+                        tileLocalX = lastVertex; tileLocalZ = i;
+                        neighborLocalX = 0; neighborLocalZ = i;
+                        break;
+                    case terrain::TileEdge::South: // -Z: tile z=0, neighbor z=max
+                        tileLocalX = i; tileLocalZ = 0;
+                        neighborLocalX = i; neighborLocalZ = lastVertex;
+                        break;
+                    case terrain::TileEdge::West: // -X: tile x=0, neighbor x=max
+                        tileLocalX = 0; tileLocalZ = i;
+                        neighborLocalX = lastVertex; neighborLocalZ = i;
+                        break;
+                    }
+
+                    WorldVertex wv{
+                        static_cast<int64_t>(coord.x) * lastVertex + tileLocalX,
+                        static_cast<int64_t>(coord.z) * lastVertex + tileLocalZ
+                    };
+
+                    size_t tileIdx = static_cast<size_t>(tileLocalZ) * vertexCount + tileLocalX;
+                    size_t neighborIdx = static_cast<size_t>(neighborLocalZ) * vertexCount + neighborLocalX;
+
+                    auto& refs = sharedVertices[wv];
+
+                    // Add refs with deduplication (refs is small: 2 for edges, up to 4 for corners)
+                    auto addRef = [&refs](terrain::TerrainTile* t, size_t idx)
+                    {
+                        for (const auto& r : refs)
+                        {
+                            if (r.tile == t && r.bufferIndex == idx)
+                            {
+                                return;
+                            }
+                        }
+                        refs.push_back({t, idx});
+                    };
+
+                    addRef(tile, tileIdx);
+                    addRef(neighbor, neighborIdx);
+                }
+            }
+        }
+
+        // Phase 2: Compute averaged heights and apply atomically.
+        // Each world vertex group is independent (maps to distinct buffer indices),
+        // so all reads use unmodified post-brush data.
+        for (const auto& [wv, refs] : sharedVertices)
+        {
+            if (refs.size() <= 1)
+            {
+                continue;
+            }
+
+            float sum = 0.0f;
+            for (const auto& ref : refs)
+            {
+                sum += ref.tile->heightData[ref.bufferIndex];
+            }
+            float avg = sum / static_cast<float>(refs.size());
+
+            for (const auto& ref : refs)
+            {
+                ref.tile->heightData[ref.bufferIndex] = avg;
+            }
+        }
+
+        // Mark non-modified neighbor tiles as dirty since their edge data changed
+        for (auto* neighbor : neighborTilesToDirty)
+        {
+            neighbor->isDirty = true;
+        }
     }
 }

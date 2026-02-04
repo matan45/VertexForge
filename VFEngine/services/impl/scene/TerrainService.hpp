@@ -3,6 +3,8 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../events/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "terrain/brushes/BrushRegistry.hpp"
+#include "terrain/TerrainTypes.hpp"
 #include "math/Frustum.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -32,6 +34,10 @@ namespace services
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
 
+        terrain::brushes::BrushRegistry brushRegistry;
+        float flattenTargetHeight = 0.0f;
+        bool flattenTargetCaptured = false;
+
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~TerrainService() override;
@@ -52,10 +58,13 @@ namespace services
 
         bool hasActiveTerrain() const { return !terrainGrids.empty(); }
 
+        void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
+
     private:
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
         void remapTerrainEntities();
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+        void syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid);
     };
 }

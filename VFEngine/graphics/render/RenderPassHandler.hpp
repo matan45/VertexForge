@@ -101,6 +101,7 @@ namespace render
 
         float brushOverlayRadius_ = 0.0f;
         float brushOverlayFalloff_ = 0.0f;
+        float brushOverlayShape_ = 0.0f;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -159,7 +160,7 @@ namespace render
         void clearRaycastCursor();
         terrain::TerrainHitResult getTerrainHitResult() const;
 
-        void setBrushOverlayParams(float radius, float falloff);
+        void setBrushOverlayParams(float radius, float falloff, float shape);
         void updateBrushOverlayFromHitResult();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
