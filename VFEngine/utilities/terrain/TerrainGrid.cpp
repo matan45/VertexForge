@@ -53,6 +53,28 @@ namespace terrain
         );
     }
 
+    void TerrainGrid::regenerateDirtyTiles(const glm::vec3& cameraPosition)
+    {
+        for (auto& [coord, tile] : tiles)
+        {
+            if (!tile->isDirty)
+                continue;
+
+            uint32_t activeLOD = generator->calculateLOD(cameraPosition, *tile);
+
+            if (tile->isLODDirty(activeLOD))
+            {
+                generator->regenerateLOD(*tile, activeLOD);
+            }
+
+            // Always keep fallback LOD 3 up to date
+            if (activeLOD != 3 && tile->isLODDirty(3))
+            {
+                generator->regenerateLOD(*tile, 3);
+            }
+        }
+    }
+
     std::vector<TerrainTile*> TerrainGrid::getVisibleTiles(const math::Frustum& frustum)
     {
         std::vector<TerrainTile*> result;

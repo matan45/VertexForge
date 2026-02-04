@@ -377,6 +377,9 @@ namespace services
         {
             (void)grid->updateLODs(cameraPosition);
 
+            // Regenerate meshlets for tiles modified by brush sculpting
+            grid->regenerateDirtyTiles(cameraPosition);
+
             auto visibleTiles = grid->getVisibleTiles(frustum);
 
             for (terrain::TerrainTile* tile : visibleTiles)
@@ -549,6 +552,7 @@ namespace services
 
             brush->apply(*tile, context);
             tile->isDirty = true;
+            tile->setAllLODsDirty();
             modifiedTiles.push_back(coord);
         }
 
@@ -556,6 +560,16 @@ namespace services
         if (!modifiedTiles.empty())
         {
             syncTileEdges(modifiedTiles, *grid);
+        }
+
+        // Update world bounds for modified tiles (heights may have changed AABB)
+        for (const auto& coord : modifiedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (tile)
+            {
+                tile->updateWorldBounds();
+            }
         }
 
         // Publish notification
@@ -717,6 +731,7 @@ namespace services
         for (auto* neighbor : neighborTilesToDirty)
         {
             neighbor->isDirty = true;
+            neighbor->setAllLODsDirty();
         }
     }
 }
