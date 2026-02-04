@@ -480,13 +480,9 @@ namespace services
         auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
         auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
 
-        // For Raise/Lower: the BrushType already encodes direction,
-        // but we also support Shift-invert
+        // The GPU compute shader handles direction per brush type,
+        // Shift-invert is passed through directly.
         bool effectiveInvert = invert;
-        if (brushType == terrain::BrushType::Lower)
-        {
-            effectiveInvert = !invert; // Lower inverts by default, Shift un-inverts
-        }
 
         // For Flatten: capture target height on first click
         if (brushType == terrain::BrushType::Flatten)
