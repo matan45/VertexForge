@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <cstdint>
+#include <vector>
 
 namespace core
 {
@@ -13,7 +14,7 @@ namespace core
 
 namespace render::gpudriven
 {
-    struct BrushPushConstants
+    struct BrushComputePushConstants
     {
         glm::vec2 brushCenter;
         glm::vec2 tileWorldOrigin;
@@ -23,8 +24,14 @@ namespace render::gpudriven
         uint32_t verticesPerSide;
         uint32_t falloffType;
         uint32_t shapeType;
+        uint32_t brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise
+        float deltaTime;
+        float targetHeight;
+        float minHeight;
+        float maxHeight;
+        uint32_t invertFlag;    // 0 or 1
     };
-    static_assert(sizeof(BrushPushConstants) == 40, "BrushPushConstants must be 40 bytes");
+    static_assert(sizeof(BrushComputePushConstants) == 64, "BrushComputePushConstants must be 64 bytes");
 
     class BrushComputePipeline
     {
@@ -39,11 +46,23 @@ namespace render::gpudriven
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSet;
 
-        bool initialized = false;
-        bool descriptorsNeedUpdate = true;
+        // GPU buffers for height data
+        vk::Buffer heightInputBuffer;
+        vk::DeviceMemory heightInputMemory;
+        vk::Buffer heightOutputBuffer;
+        vk::DeviceMemory heightOutputMemory;
 
-        vk::Buffer cachedHeightmapBuffer;
-        vk::Buffer cachedInfluenceBuffer;
+        // Host-visible staging buffers for upload/readback
+        vk::Buffer stagingUploadBuffer;
+        vk::DeviceMemory stagingUploadMemory;
+        vk::Buffer stagingReadbackBuffer;
+        vk::DeviceMemory stagingReadbackMemory;
+
+        // Command pool for synchronous compute dispatches
+        vk::CommandPool computeCommandPool;
+
+        bool initialized = false;
+        vk::DeviceSize currentBufferSize = 0;
 
         static constexpr uint32_t WORKGROUP_SIZE = 8;
 
@@ -58,18 +77,11 @@ namespace render::gpudriven
         void cleanup();
         bool isInitialized() const { return initialized; }
 
-        void updateDescriptors(vk::Buffer heightmapBuffer, vk::Buffer influenceBuffer);
-
-        void dispatch(vk::CommandBuffer cmd, const BrushPushConstants& constants);
-
-        void insertBarriersBeforeCompute(
-            vk::CommandBuffer cmd,
-            vk::Buffer heightmapBuffer,
-            vk::Buffer influenceBuffer);
-
-        void insertBarriersAfterCompute(
-            vk::CommandBuffer cmd,
-            vk::Buffer influenceBuffer);
+        // Synchronous GPU brush application:
+        // Uploads heightData, dispatches compute shader, reads back modified heights.
+        // Returns true on success, heightData is modified in-place.
+        bool applyBrush(std::vector<float>& heightData,
+                        const BrushComputePushConstants& constants);
 
     private:
         void createDescriptorSetLayout();
@@ -77,6 +89,8 @@ namespace render::gpudriven
         void createComputePipeline();
         void createDescriptorPool();
         void allocateDescriptorSet();
-        void writeDescriptors();
+        void createCommandPool();
+        void ensureBufferCapacity(vk::DeviceSize requiredSize);
+        void destroyHeightBuffers();
     };
 }

@@ -480,13 +480,6 @@ namespace services
         auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
         auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
 
-        // Get the brush strategy
-        terrain::brushes::ISculptBrush* brush = brushRegistry.getBrush(brushType);
-        if (!brush)
-        {
-            return;
-        }
-
         // For Raise/Lower: the BrushType already encodes direction,
         // but we also support Shift-invert
         bool effectiveInvert = invert;
@@ -520,26 +513,6 @@ namespace services
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
 
-        // Build brush context
-        terrain::brushes::BrushContext context;
-        context.brushCenter = brushCenter;
-        context.params = brushParams;
-        context.deltaTime = deltaTime;
-        context.invert = effectiveInvert;
-        context.targetHeight = flattenTargetHeight;
-        context.sampleWorldHeight = [grid, worldTileSize](float worldX, float worldZ) -> float
-        {
-            // Find which tile contains this world position
-            int32_t tx = static_cast<int32_t>(std::floor(worldX / worldTileSize));
-            int32_t tz = static_cast<int32_t>(std::floor(worldZ / worldTileSize));
-            terrain::TerrainTile* tile = grid->getTile(terrain::TileCoord(tx, tz));
-            if (tile)
-            {
-                return tile->sampleHeightWorld(worldX, worldZ);
-            }
-            return 0.0f;
-        };
-
         // Apply brush to each affected tile
         std::vector<terrain::TileCoord> modifiedTiles;
         for (const auto& coord : affectedTiles)
@@ -550,7 +523,32 @@ namespace services
                 continue;
             }
 
-            brush->apply(*tile, context);
+            if (!brushComputeProvider)
+            {
+                continue;
+            }
+
+            glm::vec2 tileWorldOrigin(
+                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+
+            brushComputeProvider->applyBrushGPU(
+                tile->heightData,
+                brushCenter,
+                tileWorldOrigin,
+                brushParams.radius,
+                brushParams.strength,
+                tile->config.getVertexSpacing(),
+                tile->config.getVertexCount(),
+                brushParams.falloff,
+                brushParams.shape,
+                brushType,
+                deltaTime,
+                flattenTargetHeight,
+                tile->config.minHeight,
+                tile->config.maxHeight,
+                effectiveInvert);
+
             tile->isDirty = true;
             tile->setAllLODsDirty();
             modifiedTiles.push_back(coord);

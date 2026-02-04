@@ -9,6 +9,7 @@
 #include "providers/IOffScreenProvider.hpp"
 #include "types/CameraTypes.hpp"
 #include "terrain/TerrainHitResult.hpp"
+#include "terrain/BrushTypes.hpp"
 
 namespace services
 {
@@ -113,5 +114,22 @@ namespace controllers {
 		terrain::TerrainHitResult getTerrainHitResult() const;
 
 		void setBrushOverlayParams(float radius, float falloff, float shape);
+
+		bool applyBrushGPU(
+			std::vector<float>& heightData,
+			const glm::vec2& brushCenter,
+			const glm::vec2& tileWorldOrigin,
+			float brushRadius,
+			float brushStrength,
+			float vertexSpacing,
+			uint32_t verticesPerSide,
+			terrain::BrushFalloff falloff,
+			terrain::BrushShape shape,
+			terrain::BrushType brushType,
+			float deltaTime,
+			float targetHeight,
+			float minHeight,
+			float maxHeight,
+			bool invert);
 	};
 }

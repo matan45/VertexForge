@@ -38,7 +38,7 @@ namespace terrain
         void validate()
         {
             radius = std::max(radius, 0.1f);
-            strength = std::clamp(strength, 0.0f, 1.0f);
+            strength = std::clamp(strength, 0.0f, 100.0f);
         }
     };
 }

@@ -363,6 +363,7 @@
     <None Include="..\..\resources\shaders\mesh\skinned_mesh.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
+    <None Include="..\..\resources\shaders\terrain\brush_compute.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_influence.glsl" />
     <None Include="..\..\resources\shaders\terrain\terrain_depth_sample.glsl" />
     <None Include="..\..\resources\shaders\tools\aabbWireframe.glsl" />
