@@ -717,9 +717,10 @@ namespace services
             }
         }
 
-        // Phase 2: Compute averaged heights and apply atomically.
-        // Each world vertex group is independent (maps to distinct buffer indices),
-        // so all reads use unmodified post-brush data.
+        // Phase 2: Synchronize boundary heights.
+        // Average only among MODIFIED tiles' heights, then propagate to all refs.
+        // This prevents creases at boundaries when the brush doesn't cross into the neighbor:
+        // the modified tile's boundary height is preserved (not pulled toward the unmodified neighbor).
         for (const auto& [wv, refs] : sharedVertices)
         {
             if (refs.size() <= 1)
@@ -727,16 +728,37 @@ namespace services
                 continue;
             }
 
-            float sum = 0.0f;
+            float modifiedSum = 0.0f;
+            uint32_t modifiedCount = 0;
             for (const auto& ref : refs)
             {
-                sum += ref.tile->heightData[ref.bufferIndex];
+                if (modifiedSet.count(ref.tile->coord))
+                {
+                    modifiedSum += ref.tile->heightData[ref.bufferIndex];
+                    ++modifiedCount;
+                }
             }
-            float avg = sum / static_cast<float>(refs.size());
+
+            float targetHeight;
+            if (modifiedCount > 0)
+            {
+                // Use average of modified tiles' heights only (preserves brush curve at boundary)
+                targetHeight = modifiedSum / static_cast<float>(modifiedCount);
+            }
+            else
+            {
+                // Fallback: average all
+                float sum = 0.0f;
+                for (const auto& ref : refs)
+                {
+                    sum += ref.tile->heightData[ref.bufferIndex];
+                }
+                targetHeight = sum / static_cast<float>(refs.size());
+            }
 
             for (const auto& ref : refs)
             {
-                ref.tile->heightData[ref.bufferIndex] = avg;
+                ref.tile->heightData[ref.bufferIndex] = targetHeight;
             }
         }
 

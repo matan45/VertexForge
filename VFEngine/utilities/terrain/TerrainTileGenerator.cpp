@@ -85,6 +85,7 @@ namespace terrain
         float spacing = config.getVertexSpacing() * static_cast<float>(skipFactor);
         TileNeighborContext neighborCtx = collectNeighborContext(tile, lodLevel, getTile);
         calculateNormals(lodData.vertices, lodData.indices, vertCount, spacing, neighborCtx);
+        overrideBoundaryNormals(lodData.vertices, tile, lodLevel, vertCount, getTile);
 
         // Generate skirts for LOD crack prevention
         if (config.skirtDepth > 0.0f)
@@ -132,6 +133,7 @@ namespace terrain
         float spacing = config.getVertexSpacing() * static_cast<float>(skipFactor);
         TileNeighborContext neighborCtx = collectNeighborContext(tile, lodLevel, getTile);
         calculateNormals(lodData.vertices, lodData.indices, vertCount, spacing, neighborCtx);
+        overrideBoundaryNormals(lodData.vertices, tile, lodLevel, vertCount, getTile);
 
         if (config.skirtDepth > 0.0f)
         {
@@ -695,6 +697,101 @@ namespace terrain
             else
             {
                 v.normal = glm::vec3(0.0f, 1.0f, 0.0f);
+            }
+        }
+    }
+
+    void TerrainTileGenerator::overrideBoundaryNormals(
+        std::vector<resource::Vertex>& vertices,
+        const TerrainTile& tile,
+        uint32_t lodLevel,
+        uint32_t vertCount,
+        const TileLookup& getTile) const
+    {
+        if (!getTile || vertices.empty())
+            return;
+
+        uint32_t skipFactor = getLODSkipFactor(lodLevel);
+        uint32_t baseVertCount = config.getVertexCount();
+        float gridSpacing = config.getVertexSpacing();
+
+        // Sample height from full-resolution heightData, crossing into neighbors for out-of-bounds
+        auto sampleHeight = [&](int32_t hx, int32_t hz) -> float
+        {
+            if (hx >= 0 && hx < static_cast<int32_t>(baseVertCount) &&
+                hz >= 0 && hz < static_cast<int32_t>(baseVertCount))
+            {
+                return tile.getHeight(static_cast<uint32_t>(hx), static_cast<uint32_t>(hz));
+            }
+
+            if (hz >= static_cast<int32_t>(baseVertCount))
+            {
+                TileCoord nc = tile.coord + TileCoord::getNeighborOffset(TileEdge::North);
+                const TerrainTile* n = getTile(nc);
+                uint32_t clampedX = static_cast<uint32_t>(std::clamp(hx, 0, static_cast<int32_t>(baseVertCount) - 1));
+                uint32_t neighborHz = static_cast<uint32_t>(hz - static_cast<int32_t>(baseVertCount) + 1);
+                return n ? n->getHeight(clampedX, std::min(neighborHz, baseVertCount - 1))
+                         : tile.getHeight(clampedX, baseVertCount - 1);
+            }
+
+            if (hz < 0)
+            {
+                TileCoord nc = tile.coord + TileCoord::getNeighborOffset(TileEdge::South);
+                const TerrainTile* n = getTile(nc);
+                uint32_t clampedX = static_cast<uint32_t>(std::clamp(hx, 0, static_cast<int32_t>(baseVertCount) - 1));
+                uint32_t neighborHz = static_cast<uint32_t>(static_cast<int32_t>(baseVertCount) - 1 + hz);
+                return n ? n->getHeight(clampedX, std::min(neighborHz, baseVertCount - 1))
+                         : tile.getHeight(clampedX, 0);
+            }
+
+            if (hx >= static_cast<int32_t>(baseVertCount))
+            {
+                TileCoord nc = tile.coord + TileCoord::getNeighborOffset(TileEdge::East);
+                const TerrainTile* n = getTile(nc);
+                uint32_t clampedZ = static_cast<uint32_t>(std::clamp(hz, 0, static_cast<int32_t>(baseVertCount) - 1));
+                uint32_t neighborHx = static_cast<uint32_t>(hx - static_cast<int32_t>(baseVertCount) + 1);
+                return n ? n->getHeight(std::min(neighborHx, baseVertCount - 1), clampedZ)
+                         : tile.getHeight(baseVertCount - 1, clampedZ);
+            }
+
+            if (hx < 0)
+            {
+                TileCoord nc = tile.coord + TileCoord::getNeighborOffset(TileEdge::West);
+                const TerrainTile* n = getTile(nc);
+                uint32_t clampedZ = static_cast<uint32_t>(std::clamp(hz, 0, static_cast<int32_t>(baseVertCount) - 1));
+                uint32_t neighborHx = static_cast<uint32_t>(static_cast<int32_t>(baseVertCount) - 1 + hx);
+                return n ? n->getHeight(std::min(neighborHx, baseVertCount - 1), clampedZ)
+                         : tile.getHeight(0, clampedZ);
+            }
+
+            return 0.0f;
+        };
+
+        for (uint32_t z = 0; z < vertCount; ++z)
+        {
+            for (uint32_t x = 0; x < vertCount; ++x)
+            {
+                if (!isEdgeVertex(x, z, vertCount))
+                    continue;
+
+                uint32_t idx = z * vertCount + x;
+                int32_t hx = static_cast<int32_t>(x * skipFactor);
+                int32_t hz = static_cast<int32_t>(z * skipFactor);
+
+                float hL = sampleHeight(hx - 1, hz);
+                float hR = sampleHeight(hx + 1, hz);
+                float hD = sampleHeight(hx, hz - 1);
+                float hU = sampleHeight(hx, hz + 1);
+
+                glm::vec3 normal(hL - hR, 2.0f * gridSpacing, hD - hU);
+
+                float len = glm::length(normal);
+                if (len > 1e-6f)
+                    normal /= len;
+                else
+                    normal = glm::vec3(0.0f, 1.0f, 0.0f);
+
+                vertices[idx].normal = normal;
             }
         }
     }

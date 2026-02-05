@@ -127,6 +127,16 @@ namespace terrain
             uint32_t vertCount,
             uint32_t lodLevel
         ) const;
+
+        // Override boundary vertex normals with analytical central differences
+        // from full-resolution heightData to guarantee matching normals across tiles
+        void overrideBoundaryNormals(
+            std::vector<resource::Vertex>& vertices,
+            const TerrainTile& tile,
+            uint32_t lodLevel,
+            uint32_t vertCount,
+            const TileLookup& getTile
+        ) const;
     };
 
 }
