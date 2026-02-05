@@ -52,6 +52,12 @@ namespace windows
 
             ImVec2 viewportPos = ImGui::GetCursorScreenPos();
 
+            glm::vec2 vp(viewportPos.x, viewportPos.y);
+            glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
+
+            // Update sculpt cursor UV BEFORE render so raycast uses current mouse position
+            updateSculptCursorUV(vp, vs);
+
             events::render::GetViewportTextureQuery query;
             auto texture = dispatcher.query(query);
             if (texture.isValid())
@@ -63,9 +69,6 @@ namespace windows
             overlay.draw(gizmo);
             gizmo.draw(*editorCamera);
 
-            glm::vec2 vp(viewportPos.x, viewportPos.y);
-            glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
-
             if (!isPlayMode)
             {
                 picker.updateBillboardScreenPositions(*editorCamera, vp, vs);
@@ -73,7 +76,8 @@ namespace windows
             }
 
             handleEntityPicking(isPlayMode, vp, vs);
-            handleSculptBrush(vp, vs);
+            handleSculptBrush();
+            drawSculptDebugOverlay(vp, vs);
         }
         ImGui::End();
     }
@@ -300,7 +304,7 @@ namespace windows
         }
     }
 
-    void ViewPort::handleSculptBrush(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    void ViewPort::updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         auto& dispatcher = events::EventDispatcher::instance();
         bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
@@ -308,7 +312,6 @@ namespace windows
         if (!sculptActive || !ImGui::IsWindowHovered())
         {
             dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
-            sculptDragging = false;
             return;
         }
 
@@ -319,6 +322,18 @@ namespace windows
         events::terrainRaycast::SetCursorPositionCommand cmd;
         cmd.cursorUV = uv;
         dispatcher.execute(cmd);
+    }
+
+    void ViewPort::handleSculptBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+
+        if (!sculptActive || !ImGui::IsWindowHovered())
+        {
+            sculptDragging = false;
+            return;
+        }
 
         // Apply brush on left-click/drag
         bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
@@ -342,6 +357,113 @@ namespace windows
         else
         {
             sculptDragging = false;
+        }
+    }
+
+    void ViewPort::drawSculptDebugOverlay(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+        if (!sculptActive)
+        {
+            return;
+        }
+
+        // Draw checkbox at top-right of viewport
+        ImGui::SetCursorScreenPos(ImVec2(viewportPos.x + viewportSize.x - 150.0f, viewportPos.y + 5.0f));
+        ImGui::Checkbox("Sculpt Debug", &showSculptDebug);
+
+        if (!showSculptDebug)
+        {
+            return;
+        }
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImVec2 mousePos = ImGui::GetMousePos();
+
+        // Red crosshair: raw mouse position
+        float crossSize = 10.0f;
+        ImU32 redColor = IM_COL32(255, 0, 0, 255);
+        drawList->AddLine(
+            ImVec2(mousePos.x - crossSize, mousePos.y),
+            ImVec2(mousePos.x + crossSize, mousePos.y), redColor, 2.0f);
+        drawList->AddLine(
+            ImVec2(mousePos.x, mousePos.y - crossSize),
+            ImVec2(mousePos.x, mousePos.y + crossSize), redColor, 2.0f);
+
+        // Green circle: projected terrain hit position
+        auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+        if (hitResult.hit)
+        {
+            glm::mat4 viewProj = editorCamera->getProjectionMatrix() * editorCamera->getViewMatrix();
+            glm::vec4 clipPos = viewProj * glm::vec4(hitResult.position, 1.0f);
+
+            if (clipPos.w > 0.0f)
+            {
+                glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+
+                // NDC to viewport screen position
+                float screenX = viewportPos.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x;
+                float screenY = viewportPos.y + (ndc.y * 0.5f + 0.5f) * viewportSize.y;
+
+                ImU32 greenColor = IM_COL32(0, 255, 0, 255);
+                drawList->AddCircle(ImVec2(screenX, screenY), 8.0f, greenColor, 0, 2.0f);
+                drawList->AddLine(
+                    ImVec2(screenX - crossSize, screenY),
+                    ImVec2(screenX + crossSize, screenY), greenColor, 2.0f);
+                drawList->AddLine(
+                    ImVec2(screenX, screenY - crossSize),
+                    ImVec2(screenX, screenY + crossSize), greenColor, 2.0f);
+
+                // Text info with background - anchored to bottom-left of viewport
+                ImU32 bgColor = IM_COL32(0, 0, 0, 180);
+                ImU32 textColor = IM_COL32(255, 255, 255, 255);
+                float textX = viewportPos.x + 10.0f;
+                float bottomY = viewportPos.y + viewportSize.y;
+
+                char buf[128];
+
+                snprintf(buf, sizeof(buf), "Red = Mouse | Green = Raycast Hit");
+                ImVec2 textSize = ImGui::CalcTextSize(buf);
+                float textY = bottomY - 18.0f * 3 - 6.0f;
+                drawList->AddRectFilled(
+                    ImVec2(textX - 2, textY - 2),
+                    ImVec2(textX + 4 + textSize.x, textY + textSize.y + 2), bgColor, 3.0f);
+                drawList->AddText(ImVec2(textX, textY),
+                                  IM_COL32(200, 200, 200, 255), buf);
+                textY += 18.0f;
+
+                snprintf(buf, sizeof(buf), "Hit: (%.1f, %.1f, %.1f)",
+                         hitResult.position.x, hitResult.position.y, hitResult.position.z);
+                textSize = ImGui::CalcTextSize(buf);
+                drawList->AddRectFilled(
+                    ImVec2(textX - 2, textY - 2),
+                    ImVec2(textX + 4 + textSize.x, textY + textSize.y + 2), bgColor, 3.0f);
+                drawList->AddText(ImVec2(textX, textY), textColor, buf);
+                textY += 18.0f;
+
+                float dx = screenX - mousePos.x;
+                float dy = screenY - mousePos.y;
+                float offset = std::sqrt(dx * dx + dy * dy);
+                snprintf(buf, sizeof(buf), "Offset: %.1f px", offset);
+                textSize = ImGui::CalcTextSize(buf);
+                drawList->AddRectFilled(
+                    ImVec2(textX - 2, textY - 2),
+                    ImVec2(textX + 4 + textSize.x, textY + textSize.y + 2), bgColor, 3.0f);
+                drawList->AddText(ImVec2(textX, textY), textColor, buf);
+            }
+        }
+        else
+        {
+            float textY = viewportPos.y + viewportSize.y - 24.0f;
+            ImU32 bgColor = IM_COL32(0, 0, 0, 180);
+            const char* msg = "No terrain hit";
+            ImVec2 textSize = ImGui::CalcTextSize(msg);
+            drawList->AddRectFilled(
+                ImVec2(viewportPos.x + 8, textY - 2),
+                ImVec2(viewportPos.x + 14 + textSize.x, textY + textSize.y + 2), bgColor, 3.0f);
+            drawList->AddText(ImVec2(viewportPos.x + 10, textY),
+                              IM_COL32(255, 100, 100, 255), msg);
         }
     }
 }

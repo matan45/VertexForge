@@ -55,6 +55,12 @@ namespace render
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
+        // Read back previous frame's results and update brush overlay BEFORE rendering
+        // so the overlay position matches the current raycast hit in this frame's render
+        renderPassHandler->readBackLightOcclusionResults();
+        renderPassHandler->readBackTerrainRaycastResults();
+        renderPassHandler->updateBrushOverlayFromHitResult();
+
         if (preRenderCallback)
         {
             preRenderCallback();
@@ -78,10 +84,6 @@ namespace render
         device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
 
         device.getGraphicsQueue().waitIdle();
-
-        renderPassHandler->readBackLightOcclusionResults();
-        renderPassHandler->readBackTerrainRaycastResults();
-        renderPassHandler->updateBrushOverlayFromHitResult();
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }

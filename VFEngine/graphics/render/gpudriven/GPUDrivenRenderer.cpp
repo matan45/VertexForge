@@ -330,6 +330,11 @@ namespace render::gpudriven
         cachedCameraNear = nearPlane;
         cachedCameraFar = farPlane;
 
+        if (terrainPipeline)
+        {
+            terrainPipeline->setInvViewProjection(glm::inverse(projection * view));
+        }
+
         updateClusterGrid(projection, nearPlane, farPlane);
         updatePipelineDescriptors();
 

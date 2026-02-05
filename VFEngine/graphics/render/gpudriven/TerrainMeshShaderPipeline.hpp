@@ -32,6 +32,8 @@ namespace render::gpudriven
         float brushWorldRadius;    // World-space radius (0.0 = inactive)
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
         float brushShape;          // Shape (0=circle, 1=square)
+        float _pad1, _pad2, _pad3; // Align mat4 to 16-byte boundary (offset 64)
+        glm::mat4 brushInvViewProj; // Inverse view-projection for depth-based world reconstruction
     };
 
     // Terrain culling bits (same as regular mesh shader bits)
@@ -105,6 +107,7 @@ namespace render::gpudriven
         float brushWorldRadius_ = 0.0f;
         float brushFalloff_ = 0.0f;
         float brushShape_ = 0.0f;
+        glm::mat4 brushInvViewProj_{1.0f};
 
     public:
         explicit TerrainMeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
@@ -165,6 +168,11 @@ namespace render::gpudriven
             brushWorldRadius_ = worldRadius;
             brushFalloff_ = falloff;
             brushShape_ = shape;
+        }
+
+        void setInvViewProjection(const glm::mat4& invViewProj)
+        {
+            brushInvViewProj_ = invViewProj;
         }
 
     private:

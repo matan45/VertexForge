@@ -241,18 +241,10 @@ namespace render::gpudriven
 
         std::string tileKey = alloc.getMeshPath();
 
-        // Transform vertices from tile-local space to world space
-        std::vector<resource::Vertex> worldSpaceVertices = lodData.vertices;
-        for (auto& vertex : worldSpaceVertices)
-        {
-            vertex.position.x += worldOrigin.x;
-            // vertex.position.y is already the absolute height - leave as-is
-            vertex.position.z += worldOrigin.z;
-        }
-
+        // Upload vertices in tile-local space (model matrix handles world transform)
         if (!terrainBuffer_.uploadLODVertices(tileKey, lodLevel,
-                                               worldSpaceVertices.data(),
-                                               static_cast<uint32_t>(worldSpaceVertices.size())))
+                                               lodData.vertices.data(),
+                                               static_cast<uint32_t>(lodData.vertices.size())))
         {
             return false;
         }
@@ -283,9 +275,7 @@ namespace render::gpudriven
             {
                 GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
 
-                // Transform bounding sphere center from local space to world space
-                meshlet.boundingSphere.x += worldOrigin.x;
-                meshlet.boundingSphere.z += worldOrigin.z;
+                // Bounding sphere stays in local space; task shader transforms via modelMatrix
 
                 // Update offsets to use allocated positions
                 meshlet.vertexOffset += meshletVertexOffset;
@@ -349,8 +339,9 @@ namespace render::gpudriven
 
             TerrainTileGPUData gpuTile{};
 
-            // Model matrix - identity for world-space terrain
-            gpuTile.modelMatrix = glm::mat4(1.0f);
+            // Model matrix translates tile-local vertices to world space
+            gpuTile.modelMatrix = glm::translate(glm::mat4(1.0f),
+                glm::vec3(tile->worldOrigin.x, 0.0f, tile->worldOrigin.z));
 
             gpuTile.boundingSphere = alloc.boundingSphere;
             gpuTile.aabbMin = glm::vec4(alloc.aabbMin, 0.0f);

@@ -72,6 +72,8 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
+    float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
+    mat4 brushInvViewProj;       // Inverse view-projection for depth-based world reconstruction
 } pc;
 
 // Shared memory for vertex caching
@@ -222,6 +224,8 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
+    float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
+    mat4 brushInvViewProj;       // Inverse view-projection for depth-based world reconstruction
 } pc;
 
 // Light buffers (Set 6 - same as mesh shader)
@@ -710,20 +714,23 @@ void main() {
         }
     }
 
-    // Brush overlay visualization (world space)
-    // Computes distance in world XZ plane so the brush conforms to terrain geometry.
+    // Brush overlay visualization (depth-based world reconstruction)
     if (pc.brushWorldRadius > 0.0) {
+        // Reconstruct world position from screen coords + depth
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
+        vec4 ndc = vec4(screenUV * 2.0 - 1.0, gl_FragCoord.z, 1.0);
+        vec4 worldPosH = pc.brushInvViewProj * ndc;
+        vec3 reconstructedPos = worldPosH.xyz / worldPosH.w;
+
         vec2 brushPos = vec2(pc.brushWorldX, pc.brushWorldZ);
-        vec2 delta = fragWorldPos.xz - brushPos;
+        vec2 delta = reconstructedPos.xz - brushPos;
         uint shapeType = uint(pc.brushShape);
 
         // Compute normalized distance based on shape
         float dist;
         if (shapeType == 1u) {
-            // Square: use Chebyshev distance (max of abs components)
             dist = max(abs(delta.x), abs(delta.y)) / pc.brushWorldRadius;
         } else {
-            // Circle: use Euclidean distance
             dist = length(delta) / pc.brushWorldRadius;
         }
 

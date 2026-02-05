@@ -33,6 +33,7 @@ namespace windows
 
         // Sculpt brush dragging state
         bool sculptDragging = false;
+        bool showSculptDebug = true;
 
     public:
         explicit ViewPort();
@@ -48,6 +49,8 @@ namespace windows
         void updateRendererCameras(const CameraState& camera);
         void handlePrefabDrop();
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
-        void handleSculptBrush(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleSculptBrush();
+        void drawSculptDebugOverlay(glm::vec2 viewportPos, glm::vec2 viewportSize);
     };
 }

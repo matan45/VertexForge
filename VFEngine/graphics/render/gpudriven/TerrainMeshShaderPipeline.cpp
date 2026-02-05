@@ -689,6 +689,10 @@ namespace render::gpudriven
         pushConstants.brushWorldRadius = brushWorldRadius_;
         pushConstants.brushFalloff = brushFalloff_;
         pushConstants.brushShape = brushShape_;
+        pushConstants._pad1 = 0.0f;
+        pushConstants._pad2 = 0.0f;
+        pushConstants._pad3 = 0.0f;
+        pushConstants.brushInvViewProj = brushInvViewProj_;
 
         cmd.pushConstants(pipelineLayout,
                           vk::ShaderStageFlagBits::eTaskEXT |
