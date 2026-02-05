@@ -315,6 +315,8 @@ namespace windows
             return;
         }
 
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+
         ImVec2 mousePos = ImGui::GetMousePos();
         glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
         uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
