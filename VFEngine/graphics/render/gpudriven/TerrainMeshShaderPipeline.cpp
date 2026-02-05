@@ -678,6 +678,10 @@ namespace render::gpudriven
         {
             effectiveViewMode |= TERRAIN_CULL_BACKFACE_BIT;
         }
+        if (debugForceLOD0)
+        {
+            effectiveViewMode |= TERRAIN_DEBUG_FORCE_LOD0_BIT;
+        }
         pushConstants.viewMode = effectiveViewMode;
         pushConstants.screenWidth = screenWidth;
         pushConstants.screenHeight = screenHeight;

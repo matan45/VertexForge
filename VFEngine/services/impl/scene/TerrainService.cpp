@@ -524,26 +524,25 @@ namespace services
                 continue;
             }
 
-            glm::vec2 tileWorldOrigin(
+            terrain::BrushGPUParams gpuParams;
+            gpuParams.brushCenter = brushCenter;
+            gpuParams.tileWorldOrigin = glm::vec2(
                 static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
                 static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+            gpuParams.brushRadius = brushParams.radius;
+            gpuParams.brushStrength = brushParams.strength;
+            gpuParams.vertexSpacing = tile->config.getVertexSpacing();
+            gpuParams.verticesPerSide = tile->config.getVertexCount();
+            gpuParams.falloff = brushParams.falloff;
+            gpuParams.shape = brushParams.shape;
+            gpuParams.brushType = brushType;
+            gpuParams.deltaTime = deltaTime;
+            gpuParams.targetHeight = flattenTargetHeight;
+            gpuParams.minHeight = tile->config.minHeight;
+            gpuParams.maxHeight = tile->config.maxHeight;
+            gpuParams.invert = effectiveInvert;
 
-            brushComputeProvider->applyBrushGPU(
-                tile->heightData,
-                brushCenter,
-                tileWorldOrigin,
-                brushParams.radius,
-                brushParams.strength,
-                tile->config.getVertexSpacing(),
-                tile->config.getVertexCount(),
-                brushParams.falloff,
-                brushParams.shape,
-                brushType,
-                deltaTime,
-                flattenTargetHeight,
-                tile->config.minHeight,
-                tile->config.maxHeight,
-                effectiveInvert);
+            brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams);
 
             tile->isDirty = true;
             tile->setAllLODsDirty();
@@ -551,9 +550,23 @@ namespace services
         }
 
         // Sync shared edge vertices between modified tiles and their neighbors
+        std::vector<terrain::TerrainTile*> edgeSyncedNeighbors;
         if (!modifiedTiles.empty())
         {
-            syncTileEdges(modifiedTiles, *grid);
+            edgeSyncedNeighbors = syncTileEdges(modifiedTiles, *grid);
+        }
+
+        // Mark directly modified tiles for priority regeneration (Pass 0, unbounded)
+        // so they regenerate in the same frame as their edge-synced neighbors.
+        // Without this, modified tiles go through the budgeted Pass 1 and may lag
+        // behind already-regenerated neighbors, causing boundary cracks.
+        for (const auto& coord : modifiedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (tile)
+            {
+                tile->edgeSyncDirty = true;
+            }
         }
 
         // Update world bounds for modified tiles (heights may have changed AABB)
@@ -566,6 +579,12 @@ namespace services
             }
         }
 
+        // Update world bounds for edge-synced neighbors too
+        for (auto* neighbor : edgeSyncedNeighbors)
+        {
+            neighbor->updateWorldBounds();
+        }
+
         // Publish notification
         events::brush::BrushAppliedNotification notification;
         notification.position = worldPosition;
@@ -573,17 +592,17 @@ namespace services
         dispatcher.publish(notification);
     }
 
-    void TerrainService::syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid)
+    std::vector<terrain::TerrainTile*> TerrainService::syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid)
     {
         if (modifiedTiles.empty())
         {
-            return;
+            return {};
         }
 
         auto* sampleTile = grid.getTile(modifiedTiles[0]);
         if (!sampleTile)
         {
-            return;
+            return {};
         }
 
         uint32_t vertexCount = sampleTile->config.getVertexCount();
@@ -698,9 +717,10 @@ namespace services
             }
         }
 
-        // Phase 2: Compute averaged heights and apply atomically.
-        // Each world vertex group is independent (maps to distinct buffer indices),
-        // so all reads use unmodified post-brush data.
+        // Phase 2: Synchronize boundary heights.
+        // Average only among MODIFIED tiles' heights, then propagate to all refs.
+        // This prevents creases at boundaries when the brush doesn't cross into the neighbor:
+        // the modified tile's boundary height is preserved (not pulled toward the unmodified neighbor).
         for (const auto& [wv, refs] : sharedVertices)
         {
             if (refs.size() <= 1)
@@ -708,25 +728,48 @@ namespace services
                 continue;
             }
 
-            float sum = 0.0f;
+            float modifiedSum = 0.0f;
+            uint32_t modifiedCount = 0;
             for (const auto& ref : refs)
             {
-                sum += ref.tile->heightData[ref.bufferIndex];
+                if (modifiedSet.count(ref.tile->coord))
+                {
+                    modifiedSum += ref.tile->heightData[ref.bufferIndex];
+                    ++modifiedCount;
+                }
             }
-            float avg = sum / static_cast<float>(refs.size());
+
+            float targetHeight;
+            if (modifiedCount > 0)
+            {
+                // Use average of modified tiles' heights only (preserves brush curve at boundary)
+                targetHeight = modifiedSum / static_cast<float>(modifiedCount);
+            }
+            else
+            {
+                // Fallback: average all
+                float sum = 0.0f;
+                for (const auto& ref : refs)
+                {
+                    sum += ref.tile->heightData[ref.bufferIndex];
+                }
+                targetHeight = sum / static_cast<float>(refs.size());
+            }
 
             for (const auto& ref : refs)
             {
-                ref.tile->heightData[ref.bufferIndex] = avg;
+                ref.tile->heightData[ref.bufferIndex] = targetHeight;
             }
         }
 
         // Mark non-modified neighbor tiles as dirty since their edge data changed
-        // Only dirty the currently active LOD - other LODs will catch up when they become active
+        // Dirty all LODs so that LOD switches don't render stale heights
         for (auto* neighbor : neighborTilesToDirty)
         {
-            neighbor->isDirty = true;
-            neighbor->dirtyLODMask |= (1 << neighbor->currentLOD);
+            neighbor->setAllLODsDirty();
+            neighbor->edgeSyncDirty = true;
         }
+
+        return {neighborTilesToDirty.begin(), neighborTilesToDirty.end()};
     }
 }

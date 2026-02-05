@@ -56,13 +56,11 @@ namespace terrain
     {
         bool needsSnapping = false;
         uint8_t neighborLOD = 0;
-        std::vector<float> snappedHeights;
 
         void clear()
         {
             needsSnapping = false;
             neighborLOD = 0;
-            snappedHeights.clear();
         }
     };
 
@@ -117,6 +115,10 @@ namespace terrain
         bool isDirty = true;
         bool isWeightMapDirty = true;
         bool isVisible = true;
+
+        // Set when only edge heights changed (neighbor of a sculpted tile).
+        // These tiles get priority regeneration to prevent frame-lag cracks.
+        bool edgeSyncDirty = false;
 
         // Per-LOD dirty tracking for incremental sculpt updates
         // Bit N = LOD N needs CPU meshlet regeneration from heightData

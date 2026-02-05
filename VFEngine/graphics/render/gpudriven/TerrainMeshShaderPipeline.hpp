@@ -39,6 +39,7 @@ namespace render::gpudriven
     // Terrain culling bits (same as regular mesh shader bits)
     constexpr uint32_t TERRAIN_CULL_FRUSTUM_BIT = 0x100;
     constexpr uint32_t TERRAIN_CULL_BACKFACE_BIT = 0x200;
+    constexpr uint32_t TERRAIN_DEBUG_FORCE_LOD0_BIT = 0x400;
 
     class TerrainMeshShaderPipeline
     {
@@ -161,6 +162,7 @@ namespace render::gpudriven
 
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
+        void setDebugForceLOD0(bool enabled) { debugForceLOD0 = enabled; }
 
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
         {
@@ -178,6 +180,7 @@ namespace render::gpudriven
     private:
         bool frustumCullingEnabled = true;
         bool meshletCullingEnabled = true;
+        bool debugForceLOD0 = false;
 
         void createTileDataBuffer();
         void createStatsBuffer();

@@ -672,20 +672,7 @@ namespace controllers
 
     bool OffScreenController::applyBrushGPU(
         std::vector<float>& heightData,
-        const glm::vec2& brushCenter,
-        const glm::vec2& tileWorldOrigin,
-        float brushRadius,
-        float brushStrength,
-        float vertexSpacing,
-        uint32_t verticesPerSide,
-        terrain::BrushFalloff falloff,
-        terrain::BrushShape shape,
-        terrain::BrushType brushType,
-        float deltaTime,
-        float targetHeight,
-        float minHeight,
-        float maxHeight,
-        bool invert)
+        const terrain::BrushGPUParams& params)
     {
         if (!brushComputePipeline)
         {
@@ -694,20 +681,20 @@ namespace controllers
         }
 
         render::gpudriven::BrushComputePushConstants constants{};
-        constants.brushCenter = brushCenter;
-        constants.tileWorldOrigin = tileWorldOrigin;
-        constants.brushRadius = brushRadius;
-        constants.brushStrength = brushStrength;
-        constants.vertexSpacing = vertexSpacing;
-        constants.verticesPerSide = verticesPerSide;
-        constants.falloffType = static_cast<uint32_t>(falloff);
-        constants.shapeType = static_cast<uint32_t>(shape);
-        constants.brushType = static_cast<uint32_t>(brushType);
-        constants.deltaTime = deltaTime;
-        constants.targetHeight = targetHeight;
-        constants.minHeight = minHeight;
-        constants.maxHeight = maxHeight;
-        constants.invertFlag = invert ? 1u : 0u;
+        constants.brushCenter = params.brushCenter;
+        constants.tileWorldOrigin = params.tileWorldOrigin;
+        constants.brushRadius = params.brushRadius;
+        constants.brushStrength = params.brushStrength;
+        constants.vertexSpacing = params.vertexSpacing;
+        constants.verticesPerSide = params.verticesPerSide;
+        constants.falloffType = static_cast<uint32_t>(params.falloff);
+        constants.shapeType = static_cast<uint32_t>(params.shape);
+        constants.brushType = static_cast<uint32_t>(params.brushType);
+        constants.deltaTime = params.deltaTime;
+        constants.targetHeight = params.targetHeight;
+        constants.minHeight = params.minHeight;
+        constants.maxHeight = params.maxHeight;
+        constants.invertFlag = params.invert ? 1u : 0u;
 
         return brushComputePipeline->applyBrush(heightData, constants);
     }

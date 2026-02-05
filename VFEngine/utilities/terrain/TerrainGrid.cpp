@@ -55,44 +55,56 @@ namespace terrain
 
     void TerrainGrid::regenerateDirtyTiles(const glm::vec3& cameraPosition)
     {
-        constexpr uint32_t MAX_ACTIVE_LOD_REGEN = 8;
-        constexpr uint32_t MAX_BACKGROUND_LOD_REGEN = 2;
-        uint32_t activeRegenCount = 0;
-        uint32_t backgroundRegenCount = 0;
+        constexpr uint32_t MAX_TILE_REGEN = 8;
+        uint32_t tileRegenCount = 0;
 
-        // First pass: regenerate active LODs (visual priority, budgeted)
+        auto getTile = [this](const TileCoord& coord) -> const TerrainTile* {
+            return this->getTile(coord);
+        };
+
+        // Pass 0: Force-regenerate edge-synced neighbor tiles (unbounded).
+        // These tiles had their boundary heights changed by syncTileEdges() and must
+        // regenerate this frame to prevent cracks. Count is naturally bounded (typically 2-6).
+        // Regenerate ALL dirty LODs so the GPU task shader can safely select any LOD.
         for (auto& [coord, tile] : tiles)
         {
-            if (!tile->isDirty)
+            if (!tile->edgeSyncDirty)
                 continue;
-
-            uint32_t activeLOD = generator->calculateLOD(cameraPosition, *tile);
-
-            if (tile->isLODDirty(activeLOD))
-            {
-                if (activeRegenCount >= MAX_ACTIVE_LOD_REGEN)
-                    continue;
-
-                generator->regenerateLOD(*tile, activeLOD);
-                ++activeRegenCount;
-            }
-        }
-
-        // Second pass: amortize non-active dirty LODs when budget allows
-        for (auto& [coord, tile] : tiles)
-        {
-            if (!tile->isDirty || backgroundRegenCount >= MAX_BACKGROUND_LOD_REGEN)
-                break;
 
             for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
             {
                 if (tile->isLODDirty(lod))
                 {
-                    generator->regenerateLOD(*tile, lod);
-                    ++backgroundRegenCount;
-                    break;
+                    generator->regenerateLOD(*tile, lod, getTile);
                 }
             }
+
+            tile->edgeSyncDirty = false;
+        }
+
+        // Pass 1: regenerate dirty tiles (budgeted per-tile).
+        // Regenerate ALL dirty LODs per tile so the GPU task shader can select any LOD
+        // without encountering stale pre-sculpt geometry.
+        for (auto& [coord, tile] : tiles)
+        {
+            if (!tile->isDirty)
+                continue;
+
+            if (tileRegenCount >= MAX_TILE_REGEN)
+                continue;
+
+            bool anyRegenerated = false;
+            for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+            {
+                if (tile->isLODDirty(lod))
+                {
+                    generator->regenerateLOD(*tile, lod, getTile);
+                    anyRegenerated = true;
+                }
+            }
+
+            if (anyRegenerated)
+                ++tileRegenCount;
         }
     }
 
