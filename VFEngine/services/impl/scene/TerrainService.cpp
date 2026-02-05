@@ -551,9 +551,20 @@ namespace services
         }
 
         // Sync shared edge vertices between modified tiles and their neighbors
+        std::vector<terrain::TerrainTile*> edgeSyncedNeighbors;
         if (!modifiedTiles.empty())
         {
-            syncTileEdges(modifiedTiles, *grid);
+            edgeSyncedNeighbors = syncTileEdges(modifiedTiles, *grid);
+        }
+
+        // Clear edgeSyncDirty for directly modified tiles (they use normal regen budget)
+        for (const auto& coord : modifiedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (tile)
+            {
+                tile->edgeSyncDirty = false;
+            }
         }
 
         // Update world bounds for modified tiles (heights may have changed AABB)
@@ -566,6 +577,12 @@ namespace services
             }
         }
 
+        // Update world bounds for edge-synced neighbors too
+        for (auto* neighbor : edgeSyncedNeighbors)
+        {
+            neighbor->updateWorldBounds();
+        }
+
         // Publish notification
         events::brush::BrushAppliedNotification notification;
         notification.position = worldPosition;
@@ -573,17 +590,17 @@ namespace services
         dispatcher.publish(notification);
     }
 
-    void TerrainService::syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid)
+    std::vector<terrain::TerrainTile*> TerrainService::syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid)
     {
         if (modifiedTiles.empty())
         {
-            return;
+            return {};
         }
 
         auto* sampleTile = grid.getTile(modifiedTiles[0]);
         if (!sampleTile)
         {
-            return;
+            return {};
         }
 
         uint32_t vertexCount = sampleTile->config.getVertexCount();
@@ -722,11 +739,13 @@ namespace services
         }
 
         // Mark non-modified neighbor tiles as dirty since their edge data changed
-        // Only dirty the currently active LOD - other LODs will catch up when they become active
+        // Dirty all LODs so that LOD switches don't render stale heights
         for (auto* neighbor : neighborTilesToDirty)
         {
-            neighbor->isDirty = true;
-            neighbor->dirtyLODMask |= (1 << neighbor->currentLOD);
+            neighbor->setAllLODsDirty();
+            neighbor->edgeSyncDirty = true;
         }
+
+        return {neighborTilesToDirty.begin(), neighborTilesToDirty.end()};
     }
 }

@@ -552,6 +552,113 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
+    // View mode debug visualization
+    uint viewModeValue = pc.viewMode & 0xFFu;
+
+    if (viewModeValue == 1u) {
+        // Meshlet visualization
+        uint h = fragMeshletIndex;
+        h = ((h >> 16) ^ h) * 0x45d9f3bu;
+        h = ((h >> 16) ^ h) * 0x45d9f3bu;
+        h = (h >> 16) ^ h;
+        vec3 meshletColor = vec3(
+            float((h >> 0) & 0xFFu) / 255.0,
+            float((h >> 8) & 0xFFu) / 255.0,
+            float((h >> 16) & 0xFFu) / 255.0
+        );
+        meshletColor = normalize(meshletColor + 0.1) * 0.8;
+        color = meshletColor;
+    }
+
+    if (viewModeValue == 2u) {
+        // LOD visualization
+        vec3 lodColors[4] = vec3[4](
+            vec3(0.0, 1.0, 0.0),
+            vec3(1.0, 1.0, 0.0),
+            vec3(1.0, 0.5, 0.0),
+            vec3(1.0, 0.0, 0.0)
+        );
+        uint lod = min(fragLODLevel, 3u);
+        color = mix(color, lodColors[lod], 0.5);
+    }
+
+    if (viewModeValue == 3u) {
+        // Mipmap visualization (using world UV derivatives)
+        vec2 uvDx = dFdx(fragWorldUV);
+        vec2 uvDy = dFdy(fragWorldUV);
+        float dx = max(length(uvDx), length(uvDy));
+        float mipLevel = log2(max(dx * 1024.0, 1.0));
+        mipLevel = clamp(mipLevel, 0.0, 10.0);
+        vec3 mipColors[5] = vec3[5](
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 1.0, 1.0),
+            vec3(0.0, 1.0, 0.0),
+            vec3(1.0, 1.0, 0.0),
+            vec3(1.0, 0.0, 0.0)
+        );
+        float t = mipLevel / 2.0;
+        int idx = clamp(int(floor(t)), 0, 3);
+        color = mix(mipColors[idx], mipColors[idx + 1], fract(t));
+    }
+
+    if (viewModeValue == 4u) {
+        // Cluster visualization
+        uint h = clusterIdx;
+        h = ((h >> 16) ^ h) * 0x45d9f3bu;
+        h = ((h >> 16) ^ h) * 0x45d9f3bu;
+        h = (h >> 16) ^ h;
+        vec3 clusterColor = vec3(
+            float((h >> 0) & 0xFFu) / 255.0,
+            float((h >> 8) & 0xFFu) / 255.0,
+            float((h >> 16) & 0xFFu) / 255.0
+        );
+        clusterColor = normalize(clusterColor + 0.1) * 0.8;
+        color = clusterColor;
+    }
+
+    if (viewModeValue == 5u) {
+        // Depth visualization
+        float near = clusterParams.depthParams.x;
+        float far = clusterParams.depthParams.y;
+        float normalizedDepth = clamp((linearZ - near) / (far - near), 0.0, 1.0);
+        vec3 depthColors[5] = vec3[5](
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 1.0, 1.0),
+            vec3(0.0, 1.0, 0.0),
+            vec3(1.0, 1.0, 0.0),
+            vec3(1.0, 0.0, 0.0)
+        );
+        float t = normalizedDepth * 4.0;
+        int idx = clamp(int(floor(t)), 0, 3);
+        color = mix(depthColors[idx], depthColors[idx + 1], fract(t));
+    }
+
+    if (viewModeValue == 6u) {
+        // Shadow visualization
+        vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), minShadow);
+        color = shadowColor;
+    }
+
+    if (viewModeValue == 7u) {
+        // Terrain Tile visualization
+        uint h = fragTileIndex;
+        h = ((h >> 16) ^ h) * 0x45d9f3bu;
+        h = ((h >> 16) ^ h) * 0x45d9f3bu;
+        h = (h >> 16) ^ h;
+        vec3 tileColor = vec3(
+            float((h >> 0) & 0xFFu) / 255.0,
+            float((h >> 8) & 0xFFu) / 255.0,
+            float((h >> 16) & 0xFFu) / 255.0
+        );
+        tileColor = normalize(tileColor + 0.1) * 0.8;
+        color = tileColor;
+    }
+
+    if (viewModeValue == 8u) {
+        // Terrain UV visualization
+        color = vec3(fract(fragWorldUV.x), fract(fragWorldUV.y), 0.0);
+    }
+
     // Brush overlay visualization
     if (pc.brushWorldRadius > 0.0) {
         vec2 brushPos = vec2(pc.brushWorldX, pc.brushWorldZ);

@@ -60,6 +60,28 @@ namespace terrain
         uint32_t activeRegenCount = 0;
         uint32_t backgroundRegenCount = 0;
 
+        auto getTile = [this](const TileCoord& coord) -> const TerrainTile* {
+            return this->getTile(coord);
+        };
+
+        // Pass 0: Force-regenerate edge-synced neighbor tiles (unbounded).
+        // These tiles had their boundary heights changed by syncTileEdges() and must
+        // regenerate this frame to prevent cracks. Count is naturally bounded (typically 2-6).
+        for (auto& [coord, tile] : tiles)
+        {
+            if (!tile->edgeSyncDirty)
+                continue;
+
+            uint32_t activeLOD = generator->calculateLOD(cameraPosition, *tile);
+
+            if (tile->isLODDirty(activeLOD))
+            {
+                generator->regenerateLOD(*tile, activeLOD, getTile);
+            }
+
+            tile->edgeSyncDirty = false;
+        }
+
         // First pass: regenerate active LODs (visual priority, budgeted)
         for (auto& [coord, tile] : tiles)
         {
@@ -73,7 +95,7 @@ namespace terrain
                 if (activeRegenCount >= MAX_ACTIVE_LOD_REGEN)
                     continue;
 
-                generator->regenerateLOD(*tile, activeLOD);
+                generator->regenerateLOD(*tile, activeLOD, getTile);
                 ++activeRegenCount;
             }
         }
@@ -88,7 +110,7 @@ namespace terrain
             {
                 if (tile->isLODDirty(lod))
                 {
-                    generator->regenerateLOD(*tile, lod);
+                    generator->regenerateLOD(*tile, lod, getTile);
                     ++backgroundRegenCount;
                     break;
                 }

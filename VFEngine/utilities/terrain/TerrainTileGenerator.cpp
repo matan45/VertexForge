@@ -64,7 +64,8 @@ namespace terrain
         return tile;
     }
 
-    void TerrainTileGenerator::generateLODGeometry(TerrainTile& tile, uint32_t lodLevel) const
+    void TerrainTileGenerator::generateLODGeometry(TerrainTile& tile, uint32_t lodLevel,
+                                                    const TileLookup& getTile) const
     {
         if (lodLevel >= TERRAIN_LOD_COUNT)
             return;
@@ -78,8 +79,12 @@ namespace terrain
         // Generate indices
         generateIndices(lodData.indices, lodLevel);
 
-        // Calculate normals
-        calculateNormals(lodData.vertices, lodData.indices);
+        // Calculate normals with cross-boundary ghost row data
+        uint32_t vertCount = getLODVertexCount(lodLevel);
+        uint32_t skipFactor = getLODSkipFactor(lodLevel);
+        float spacing = config.getVertexSpacing() * static_cast<float>(skipFactor);
+        TileNeighborContext neighborCtx = collectNeighborContext(tile, lodLevel, getTile);
+        calculateNormals(lodData.vertices, lodData.indices, vertCount, spacing, neighborCtx);
 
         // Generate skirts for LOD crack prevention
         if (config.skirtDepth > 0.0f)
@@ -103,7 +108,8 @@ namespace terrain
         }
     }
 
-    void TerrainTileGenerator::generateLODGeometryFast(TerrainTile& tile, uint32_t lodLevel) const
+    void TerrainTileGenerator::generateLODGeometryFast(TerrainTile& tile, uint32_t lodLevel,
+                                                        const TileLookup& getTile) const
     {
         if (lodLevel >= TERRAIN_LOD_COUNT)
             return;
@@ -120,7 +126,12 @@ namespace terrain
         // Regenerate geometry with updated heights
         generateVertices(lodData.vertices, tile, lodLevel);
         generateIndices(lodData.indices, lodLevel);
-        calculateNormals(lodData.vertices, lodData.indices);
+
+        uint32_t vertCount = getLODVertexCount(lodLevel);
+        uint32_t skipFactor = getLODSkipFactor(lodLevel);
+        float spacing = config.getVertexSpacing() * static_cast<float>(skipFactor);
+        TileNeighborContext neighborCtx = collectNeighborContext(tile, lodLevel, getTile);
+        calculateNormals(lodData.vertices, lodData.indices, vertCount, spacing, neighborCtx);
 
         if (config.skirtDepth > 0.0f)
         {
@@ -188,7 +199,8 @@ namespace terrain
         }
     }
 
-    void TerrainTileGenerator::regenerateLOD(TerrainTile& tile, uint32_t lodLevel) const
+    void TerrainTileGenerator::regenerateLOD(TerrainTile& tile, uint32_t lodLevel,
+                                              const TileLookup& getTile) const
     {
         if (lodLevel >= TERRAIN_LOD_COUNT)
             return;
@@ -198,19 +210,20 @@ namespace terrain
         if (lodData.hasMeshlets())
         {
             // Fast path: meshlet topology unchanged, only heights changed
-            generateLODGeometryFast(tile, lodLevel);
+            generateLODGeometryFast(tile, lodLevel, getTile);
         }
         else
         {
             // Full path: first generation or topology change
-            generateLODGeometry(tile, lodLevel);
+            generateLODGeometry(tile, lodLevel, getTile);
         }
 
         lodData.geometricError = computeGeometricError(tile, lodLevel);
         tile.setLODGPUDirty(lodLevel);
     }
 
-    void TerrainTileGenerator::generateAllLODs(TerrainTile& tile, ProgressCallback progress) const
+    void TerrainTileGenerator::generateAllLODs(TerrainTile& tile, ProgressCallback progress,
+                                                const TileLookup& getTile) const
     {
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
@@ -220,7 +233,7 @@ namespace terrain
                 progress(lodProgress, "Generating LOD " + std::to_string(lod));
             }
 
-            generateLODGeometry(tile, lod);
+            generateLODGeometry(tile, lod, getTile);
         }
 
         // Compute geometric error metrics for each LOD level
@@ -430,9 +443,95 @@ namespace terrain
         }
     }
 
+    TileNeighborContext TerrainTileGenerator::collectNeighborContext(
+        const TerrainTile& tile,
+        uint32_t lodLevel,
+        const TileLookup& getTile) const
+    {
+        TileNeighborContext ctx;
+
+        if (!getTile)
+            return ctx;
+
+        uint32_t vertCount = getLODVertexCount(lodLevel);
+        uint32_t skipFactor = getLODSkipFactor(lodLevel);
+        uint32_t baseVertCount = config.getVertexCount();
+
+        // North neighbor: tile's z=max corresponds to neighbor's z=0
+        // We need neighbor's first interior row (z = 1 * skipFactor)
+        TileCoord northCoord = tile.coord + TileCoord::getNeighborOffset(TileEdge::North);
+        const TerrainTile* northTile = getTile(northCoord);
+        if (northTile)
+        {
+            ctx.edges[0].heights.resize(vertCount);
+            ctx.edges[0].available = true;
+            uint32_t neighborZ = std::min(1u * skipFactor, baseVertCount - 1);
+            for (uint32_t i = 0; i < vertCount; ++i)
+            {
+                uint32_t neighborX = std::min(i * skipFactor, baseVertCount - 1);
+                ctx.edges[0].heights[i] = northTile->getHeight(neighborX, neighborZ);
+            }
+        }
+
+        // East neighbor: tile's x=max corresponds to neighbor's x=0
+        // We need neighbor's first interior column (x = 1 * skipFactor)
+        TileCoord eastCoord = tile.coord + TileCoord::getNeighborOffset(TileEdge::East);
+        const TerrainTile* eastTile = getTile(eastCoord);
+        if (eastTile)
+        {
+            ctx.edges[1].heights.resize(vertCount);
+            ctx.edges[1].available = true;
+            uint32_t neighborX = std::min(1u * skipFactor, baseVertCount - 1);
+            for (uint32_t i = 0; i < vertCount; ++i)
+            {
+                uint32_t neighborZ = std::min(i * skipFactor, baseVertCount - 1);
+                ctx.edges[1].heights[i] = eastTile->getHeight(neighborX, neighborZ);
+            }
+        }
+
+        // South neighbor: tile's z=0 corresponds to neighbor's z=max
+        // We need neighbor's last interior row (z = (baseVertCount-1) - 1*skipFactor)
+        TileCoord southCoord = tile.coord + TileCoord::getNeighborOffset(TileEdge::South);
+        const TerrainTile* southTile = getTile(southCoord);
+        if (southTile)
+        {
+            ctx.edges[2].heights.resize(vertCount);
+            ctx.edges[2].available = true;
+            uint32_t neighborZ = (baseVertCount - 1) >= skipFactor
+                ? (baseVertCount - 1) - skipFactor : 0;
+            for (uint32_t i = 0; i < vertCount; ++i)
+            {
+                uint32_t neighborX = std::min(i * skipFactor, baseVertCount - 1);
+                ctx.edges[2].heights[i] = southTile->getHeight(neighborX, neighborZ);
+            }
+        }
+
+        // West neighbor: tile's x=0 corresponds to neighbor's x=max
+        // We need neighbor's last interior column (x = (baseVertCount-1) - 1*skipFactor)
+        TileCoord westCoord = tile.coord + TileCoord::getNeighborOffset(TileEdge::West);
+        const TerrainTile* westTile = getTile(westCoord);
+        if (westTile)
+        {
+            ctx.edges[3].heights.resize(vertCount);
+            ctx.edges[3].available = true;
+            uint32_t neighborX = (baseVertCount - 1) >= skipFactor
+                ? (baseVertCount - 1) - skipFactor : 0;
+            for (uint32_t i = 0; i < vertCount; ++i)
+            {
+                uint32_t neighborZ = std::min(i * skipFactor, baseVertCount - 1);
+                ctx.edges[3].heights[i] = westTile->getHeight(neighborX, neighborZ);
+            }
+        }
+
+        return ctx;
+    }
+
     void TerrainTileGenerator::calculateNormals(
         std::vector<resource::Vertex>& vertices,
-        const std::vector<uint32_t>& indices) const
+        const std::vector<uint32_t>& indices,
+        uint32_t vertCount,
+        float spacing,
+        const TileNeighborContext& neighborCtx) const
     {
         if (vertices.empty() || indices.empty())
             return;
@@ -443,7 +542,7 @@ namespace terrain
             v.normal = glm::vec3(0.0f);
         }
 
-        // Accumulate face normals
+        // Phase 1: Accumulate face normals from tile's own triangles
         for (size_t i = 0; i < indices.size(); i += 3)
         {
             uint32_t i0 = indices[i];
@@ -464,7 +563,128 @@ namespace terrain
             vertices[i2].normal += faceNormal;
         }
 
-        // Normalize all normals
+        // Phase 2: Add ghost triangle contributions for edge vertices.
+        // For each edge with neighbor data, construct virtual quads between
+        // the tile's edge vertices and the neighbor's first interior row,
+        // then accumulate their face normals onto edge vertices only.
+
+        // North edge (z = vertCount-1): ghost extends in +Z direction
+        if (neighborCtx.edges[0].available)
+        {
+            uint32_t z = vertCount - 1;
+            float ghostZ = static_cast<float>(z + 1) * spacing;
+
+            for (uint32_t x = 0; x < vertCount - 1; ++x)
+            {
+                uint32_t idxBL = z * vertCount + x;
+                uint32_t idxBR = z * vertCount + (x + 1);
+
+                glm::vec3 pBL = vertices[idxBL].position;
+                glm::vec3 pBR = vertices[idxBR].position;
+
+                glm::vec3 pTL(static_cast<float>(x) * spacing,
+                              neighborCtx.edges[0].heights[x], ghostZ);
+                glm::vec3 pTR(static_cast<float>(x + 1) * spacing,
+                              neighborCtx.edges[0].heights[x + 1], ghostZ);
+
+                // Ghost triangle 1: BL -> TL -> BR
+                glm::vec3 fn1 = glm::cross(pTL - pBL, pBR - pBL);
+                // Ghost triangle 2: BR -> TL -> TR
+                glm::vec3 fn2 = glm::cross(pTL - pBR, pTR - pBR);
+
+                vertices[idxBL].normal += fn1;
+                vertices[idxBR].normal += fn1 + fn2;
+            }
+        }
+
+        // East edge (x = vertCount-1): ghost extends in +X direction
+        if (neighborCtx.edges[1].available)
+        {
+            uint32_t x = vertCount - 1;
+            float ghostX = static_cast<float>(x + 1) * spacing;
+
+            for (uint32_t z = 0; z < vertCount - 1; ++z)
+            {
+                uint32_t idxBL = z * vertCount + x;
+                uint32_t idxTL = (z + 1) * vertCount + x;
+
+                glm::vec3 pBL = vertices[idxBL].position;
+                glm::vec3 pTL = vertices[idxTL].position;
+
+                glm::vec3 pBR(ghostX, neighborCtx.edges[1].heights[z],
+                              static_cast<float>(z) * spacing);
+                glm::vec3 pTR(ghostX, neighborCtx.edges[1].heights[z + 1],
+                              static_cast<float>(z + 1) * spacing);
+
+                // Ghost triangle 1: BL -> BR -> TL
+                glm::vec3 fn1 = glm::cross(pBR - pBL, pTL - pBL);
+                // Ghost triangle 2: TL -> BR -> TR
+                glm::vec3 fn2 = glm::cross(pBR - pTL, pTR - pTL);
+
+                vertices[idxBL].normal += fn1;
+                vertices[idxTL].normal += fn1 + fn2;
+            }
+        }
+
+        // South edge (z = 0): ghost extends in -Z direction
+        if (neighborCtx.edges[2].available)
+        {
+            uint32_t z = 0;
+            float ghostZ = -spacing;
+
+            for (uint32_t x = 0; x < vertCount - 1; ++x)
+            {
+                uint32_t idxTL = z * vertCount + x;
+                uint32_t idxTR = z * vertCount + (x + 1);
+
+                glm::vec3 pTL = vertices[idxTL].position;
+                glm::vec3 pTR = vertices[idxTR].position;
+
+                glm::vec3 pBL(static_cast<float>(x) * spacing,
+                              neighborCtx.edges[2].heights[x], ghostZ);
+                glm::vec3 pBR(static_cast<float>(x + 1) * spacing,
+                              neighborCtx.edges[2].heights[x + 1], ghostZ);
+
+                // Ghost triangle 1: TL -> TR -> BL
+                glm::vec3 fn1 = glm::cross(pTR - pTL, pBL - pTL);
+                // Ghost triangle 2: TR -> BR -> BL
+                glm::vec3 fn2 = glm::cross(pBR - pTR, pBL - pTR);
+
+                vertices[idxTL].normal += fn1;
+                vertices[idxTR].normal += fn1 + fn2;
+            }
+        }
+
+        // West edge (x = 0): ghost extends in -X direction
+        if (neighborCtx.edges[3].available)
+        {
+            uint32_t x = 0;
+            float ghostX = -spacing;
+
+            for (uint32_t z = 0; z < vertCount - 1; ++z)
+            {
+                uint32_t idxBR = z * vertCount + x;
+                uint32_t idxTR = (z + 1) * vertCount + x;
+
+                glm::vec3 pBR = vertices[idxBR].position;
+                glm::vec3 pTR = vertices[idxTR].position;
+
+                glm::vec3 pBL(ghostX, neighborCtx.edges[3].heights[z],
+                              static_cast<float>(z) * spacing);
+                glm::vec3 pTL(ghostX, neighborCtx.edges[3].heights[z + 1],
+                              static_cast<float>(z + 1) * spacing);
+
+                // Ghost triangle 1: BR -> TR -> BL
+                glm::vec3 fn1 = glm::cross(pTR - pBR, pBL - pBR);
+                // Ghost triangle 2: TR -> TL -> BL
+                glm::vec3 fn2 = glm::cross(pTL - pTR, pBL - pTR);
+
+                vertices[idxBR].normal += fn1;
+                vertices[idxTR].normal += fn1 + fn2;
+            }
+        }
+
+        // Phase 3: Normalize all normals
         for (auto& v : vertices)
         {
             float length = glm::length(v.normal);

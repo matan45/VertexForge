@@ -2,9 +2,26 @@
 
 #include "TerrainTile.hpp"
 #include <memory>
+#include <functional>
 
 namespace terrain
 {
+    // Callback to look up a neighbor tile by coordinate
+    using TileLookup = std::function<const TerrainTile*(const TileCoord&)>;
+
+    // Heights from a single neighbor edge (one row just beyond the shared boundary)
+    struct NeighborEdgeHeights
+    {
+        std::vector<float> heights;  // vertexCount elements along the shared edge
+        bool available = false;
+    };
+
+    // Neighbor height data for all four edges, used for cross-boundary normal calculation
+    struct TileNeighborContext
+    {
+        std::array<NeighborEdgeHeights, 4> edges;  // North, East, South, West
+    };
+
     class TerrainTileGenerator
     {
     private:
@@ -23,10 +40,12 @@ namespace terrain
             ProgressCallback progress = nullptr
         ) const;
 
-        void generateAllLODs(TerrainTile& tile, ProgressCallback progress = nullptr) const;
+        void generateAllLODs(TerrainTile& tile, ProgressCallback progress = nullptr,
+                             const TileLookup& getTile = nullptr) const;
 
         // Regenerate a single LOD from current heightData (for incremental sculpt updates)
-        void regenerateLOD(TerrainTile& tile, uint32_t lodLevel) const;
+        void regenerateLOD(TerrainTile& tile, uint32_t lodLevel,
+                           const TileLookup& getTile = nullptr) const;
 
         [[nodiscard]] uint32_t calculateLOD(
             const glm::vec3& cameraPosition,
@@ -36,10 +55,12 @@ namespace terrain
         void updateEdgeStitching(TerrainTile& tile) const;
 
     private:
-        void generateLODGeometry(TerrainTile& tile, uint32_t lodLevel) const;
+        void generateLODGeometry(TerrainTile& tile, uint32_t lodLevel,
+                                 const TileLookup& getTile = nullptr) const;
 
         // Fast path: regenerate vertices/normals/bounds but reuse existing meshlet topology
-        void generateLODGeometryFast(TerrainTile& tile, uint32_t lodLevel) const;
+        void generateLODGeometryFast(TerrainTile& tile, uint32_t lodLevel,
+                                     const TileLookup& getTile = nullptr) const;
 
         void generateMeshlets(TileLODData& lodData) const;
         void updateMeshletBounds(TileLODData& lodData) const;
@@ -73,7 +94,16 @@ namespace terrain
 
         void calculateNormals(
             std::vector<resource::Vertex>& vertices,
-            const std::vector<uint32_t>& indices
+            const std::vector<uint32_t>& indices,
+            uint32_t vertCount,
+            float spacing,
+            const TileNeighborContext& neighborCtx
+        ) const;
+
+        [[nodiscard]] TileNeighborContext collectNeighborContext(
+            const TerrainTile& tile,
+            uint32_t lodLevel,
+            const TileLookup& getTile
         ) const;
 
         void calculateBounds(TileLODData& lodData) const;
