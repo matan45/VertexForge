@@ -103,13 +103,110 @@ namespace terrain
         }
     }
 
+    void TerrainTileGenerator::generateLODGeometryFast(TerrainTile& tile, uint32_t lodLevel) const
+    {
+        if (lodLevel >= TERRAIN_LOD_COUNT)
+            return;
+
+        TileLODData& lodData = tile.getLODData(lodLevel);
+
+        // Save meshlet topology (clustering doesn't change when only heights change)
+        auto meshlets = std::move(lodData.meshlets);
+        auto meshletVertices = std::move(lodData.meshletVertices);
+        auto meshletPrimitives = std::move(lodData.meshletPrimitives);
+
+        lodData.clear();
+
+        // Regenerate geometry with updated heights
+        generateVertices(lodData.vertices, tile, lodLevel);
+        generateIndices(lodData.indices, lodLevel);
+        calculateNormals(lodData.vertices, lodData.indices);
+
+        if (config.skirtDepth > 0.0f)
+        {
+            generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth);
+        }
+
+        calculateBounds(lodData);
+        extractEdgeVertices(tile, lodLevel);
+
+        // Restore meshlet topology and update only the bounds
+        lodData.meshlets = std::move(meshlets);
+        lodData.meshletVertices = std::move(meshletVertices);
+        lodData.meshletPrimitives = std::move(meshletPrimitives);
+
+        updateMeshletBounds(lodData);
+
+        tile.clearLODDirty(lodLevel);
+        if (tile.dirtyLODMask == 0)
+        {
+            tile.isDirty = false;
+        }
+    }
+
+    void TerrainTileGenerator::updateMeshletBounds(TileLODData& lodData) const
+    {
+        if (lodData.meshlets.empty() || lodData.vertices.empty())
+            return;
+
+        // Temporary buffer for unpacking triangle indices
+        std::vector<unsigned char> triangleIndices;
+        triangleIndices.reserve(resource::MAX_MESHLET_PRIMITIVES * 3);
+
+        for (auto& meshlet : lodData.meshlets)
+        {
+            uint32_t vertexOffset = meshlet.descriptor.vertexOffset;
+            uint32_t primitiveOffset = meshlet.descriptor.primitiveOffset;
+            uint32_t primitiveCount = meshlet.descriptor.primitiveCount;
+
+            // Unpack triangle indices from packed uint32_t format
+            triangleIndices.clear();
+            for (uint32_t t = 0; t < primitiveCount; ++t)
+            {
+                uint32_t packed = lodData.meshletPrimitives[primitiveOffset + t];
+                triangleIndices.push_back(static_cast<unsigned char>(packed & 0xFF));
+                triangleIndices.push_back(static_cast<unsigned char>((packed >> 8) & 0xFF));
+                triangleIndices.push_back(static_cast<unsigned char>((packed >> 16) & 0xFF));
+            }
+
+            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                &lodData.meshletVertices[vertexOffset],
+                triangleIndices.data(),
+                primitiveCount,
+                reinterpret_cast<const float*>(lodData.vertices.data()),
+                lodData.vertices.size(),
+                sizeof(resource::Vertex)
+            );
+
+            meshlet.bounds.boundingSphere = glm::vec4(
+                bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius
+            );
+            meshlet.bounds.cone = glm::vec4(
+                bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2],
+                bounds.cone_cutoff
+            );
+        }
+    }
+
     void TerrainTileGenerator::regenerateLOD(TerrainTile& tile, uint32_t lodLevel) const
     {
         if (lodLevel >= TERRAIN_LOD_COUNT)
             return;
 
-        generateLODGeometry(tile, lodLevel);
-        tile.getLODData(lodLevel).geometricError = computeGeometricError(tile, lodLevel);
+        TileLODData& lodData = tile.getLODData(lodLevel);
+
+        if (lodData.hasMeshlets())
+        {
+            // Fast path: meshlet topology unchanged, only heights changed
+            generateLODGeometryFast(tile, lodLevel);
+        }
+        else
+        {
+            // Full path: first generation or topology change
+            generateLODGeometry(tile, lodLevel);
+        }
+
+        lodData.geometricError = computeGeometricError(tile, lodLevel);
         tile.setLODGPUDirty(lodLevel);
     }
 

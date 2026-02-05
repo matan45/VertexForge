@@ -37,7 +37,12 @@ namespace terrain
 
     private:
         void generateLODGeometry(TerrainTile& tile, uint32_t lodLevel) const;
+
+        // Fast path: regenerate vertices/normals/bounds but reuse existing meshlet topology
+        void generateLODGeometryFast(TerrainTile& tile, uint32_t lodLevel) const;
+
         void generateMeshlets(TileLODData& lodData) const;
+        void updateMeshletBounds(TileLODData& lodData) const;
 
         void generateSkirts(
             std::vector<resource::Vertex>& vertices,

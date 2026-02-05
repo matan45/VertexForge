@@ -722,10 +722,11 @@ namespace services
         }
 
         // Mark non-modified neighbor tiles as dirty since their edge data changed
+        // Only dirty the currently active LOD - other LODs will catch up when they become active
         for (auto* neighbor : neighborTilesToDirty)
         {
             neighbor->isDirty = true;
-            neighbor->setAllLODsDirty();
+            neighbor->dirtyLODMask |= (1 << neighbor->currentLOD);
         }
     }
 }

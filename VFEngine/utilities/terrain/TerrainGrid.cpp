@@ -55,6 +55,12 @@ namespace terrain
 
     void TerrainGrid::regenerateDirtyTiles(const glm::vec3& cameraPosition)
     {
+        constexpr uint32_t MAX_ACTIVE_LOD_REGEN = 8;
+        constexpr uint32_t MAX_BACKGROUND_LOD_REGEN = 2;
+        uint32_t activeRegenCount = 0;
+        uint32_t backgroundRegenCount = 0;
+
+        // First pass: regenerate active LODs (visual priority, budgeted)
         for (auto& [coord, tile] : tiles)
         {
             if (!tile->isDirty)
@@ -64,13 +70,28 @@ namespace terrain
 
             if (tile->isLODDirty(activeLOD))
             {
-                generator->regenerateLOD(*tile, activeLOD);
-            }
+                if (activeRegenCount >= MAX_ACTIVE_LOD_REGEN)
+                    continue;
 
-            // Always keep fallback LOD 3 up to date
-            if (activeLOD != 3 && tile->isLODDirty(3))
+                generator->regenerateLOD(*tile, activeLOD);
+                ++activeRegenCount;
+            }
+        }
+
+        // Second pass: amortize non-active dirty LODs when budget allows
+        for (auto& [coord, tile] : tiles)
+        {
+            if (!tile->isDirty || backgroundRegenCount >= MAX_BACKGROUND_LOD_REGEN)
+                break;
+
+            for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
             {
-                generator->regenerateLOD(*tile, 3);
+                if (tile->isLODDirty(lod))
+                {
+                    generator->regenerateLOD(*tile, lod);
+                    ++backgroundRegenCount;
+                    break;
+                }
             }
         }
     }
