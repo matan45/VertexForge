@@ -33,7 +33,6 @@ namespace windows
 
         // Sculpt brush dragging state
         bool sculptDragging = false;
-        bool showSculptDebug = true;
 
     public:
         explicit ViewPort();

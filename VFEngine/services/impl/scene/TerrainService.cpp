@@ -528,15 +528,6 @@ namespace services
                 static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
                 static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
 
-            // Debug: Print brush compute coordinates to verify mapping
-            vfLogInfo("BrushDebug: center=({:.2f},{:.2f}) tileOrigin=({:.2f},{:.2f}) "
-                      "spacing={:.4f} verts={} tileCoord=({},{})",
-                      brushCenter.x, brushCenter.y,
-                      tileWorldOrigin.x, tileWorldOrigin.y,
-                      tile->config.getVertexSpacing(),
-                      tile->config.getVertexCount(),
-                      tile->coord.x, tile->coord.z);
-
             brushComputeProvider->applyBrushGPU(
                 tile->heightData,
                 brushCenter,
