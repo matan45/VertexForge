@@ -556,13 +556,16 @@ namespace services
             edgeSyncedNeighbors = syncTileEdges(modifiedTiles, *grid);
         }
 
-        // Clear edgeSyncDirty for directly modified tiles (they use normal regen budget)
+        // Mark directly modified tiles for priority regeneration (Pass 0, unbounded)
+        // so they regenerate in the same frame as their edge-synced neighbors.
+        // Without this, modified tiles go through the budgeted Pass 1 and may lag
+        // behind already-regenerated neighbors, causing boundary cracks.
         for (const auto& coord : modifiedTiles)
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (tile)
             {
-                tile->edgeSyncDirty = false;
+                tile->edgeSyncDirty = true;
             }
         }
 

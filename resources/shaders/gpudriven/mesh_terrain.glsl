@@ -659,6 +659,20 @@ void main() {
         color = vec3(fract(fragWorldUV.x), fract(fragWorldUV.y), 0.0);
     }
 
+    if (viewModeValue == 9u) {
+        // Tile boundary debug: highlight pixels near tile edges
+        // fragTexCoord goes 0..1 across each tile
+        float edgeDist = min(
+            min(fragTexCoord.x, 1.0 - fragTexCoord.x),
+            min(fragTexCoord.y, 1.0 - fragTexCoord.y)
+        );
+        float edgeWidth = 0.01;
+        if (edgeDist < edgeWidth) {
+            float t = 1.0 - (edgeDist / edgeWidth);
+            color = mix(color, vec3(1.0, 0.0, 0.0), t * 0.9);
+        }
+    }
+
     // Brush overlay visualization
     if (pc.brushWorldRadius > 0.0) {
         vec2 brushPos = vec2(pc.brushWorldX, pc.brushWorldZ);

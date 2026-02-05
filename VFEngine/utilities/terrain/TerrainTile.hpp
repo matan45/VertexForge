@@ -56,13 +56,11 @@ namespace terrain
     {
         bool needsSnapping = false;
         uint8_t neighborLOD = 0;
-        std::vector<float> snappedHeights;
 
         void clear()
         {
             needsSnapping = false;
             neighborLOD = 0;
-            snappedHeights.clear();
         }
     };
 

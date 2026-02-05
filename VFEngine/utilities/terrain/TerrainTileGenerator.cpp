@@ -995,39 +995,10 @@ namespace terrain
             return;
         }
 
+        // Store metadata only - actual snapped heights are computed inline
+        // in getStitchedHeight() from tile.heightData for per-LOD correctness
         info.needsSnapping = true;
         info.neighborLOD = neighborLOD;
-
-        // Get edge vertices for current and neighbor LOD levels
-        const EdgeVertices& currentEdge = tile.edgeVertices[currentLOD][edgeIndex];
-        const EdgeVertices& neighborEdge = tile.edgeVertices[neighborLOD][edgeIndex];
-
-        if (currentEdge.positions.empty() || neighborEdge.positions.empty())
-        {
-            info.clear();
-            return;
-        }
-
-        uint32_t currentCount = static_cast<uint32_t>(currentEdge.positions.size());
-        uint32_t neighborCount = static_cast<uint32_t>(neighborEdge.positions.size());
-
-        info.snappedHeights.resize(currentCount);
-
-        // Map current edge vertices to interpolated positions on neighbor's coarser edge
-        float ratio = static_cast<float>(neighborCount - 1) / static_cast<float>(currentCount - 1);
-
-        for (uint32_t i = 0; i < currentCount; ++i)
-        {
-            float neighborIdx = static_cast<float>(i) * ratio;
-            uint32_t idx0 = static_cast<uint32_t>(neighborIdx);
-            uint32_t idx1 = std::min(idx0 + 1, neighborCount - 1);
-            float t = neighborIdx - static_cast<float>(idx0);
-
-            // Interpolate Y (height) from neighbor's edge
-            float y0 = neighborEdge.positions[idx0].y;
-            float y1 = neighborEdge.positions[idx1].y;
-            info.snappedHeights[i] = glm::mix(y0, y1, t);
-        }
     }
 
     void TerrainTileGenerator::updateEdgeStitching(TerrainTile& tile) const
@@ -1086,22 +1057,80 @@ namespace terrain
         uint32_t vertCount,
         uint32_t lodLevel) const
     {
-        // Get original height first
+        // Get original height from heightData (always current after syncTileEdges)
         uint32_t skipFactor = getLODSkipFactor(lodLevel);
         uint32_t heightX = x * skipFactor;
         uint32_t heightZ = z * skipFactor;
         float originalHeight = tile.getHeight(heightX, heightZ);
 
-        // Check if this is an edge vertex that needs stitching
         if (!isEdgeVertex(x, z, vertCount))
         {
             return originalHeight;
         }
 
-        // Handle corner vertices - check both edges
+        uint32_t baseVertCount = config.getVertexCount();
+
+        // Compute snapped height for one edge by sampling this tile's own heightData
+        // at the neighbor's coarser LOD grid positions along the shared boundary.
+        // Since syncTileEdges() ensures identical boundary heights between tiles,
+        // we can sample from our own heightData instead of the neighbor's.
+        auto snapForEdge = [&](TileEdge edge, uint32_t edgeIdx) -> std::pair<bool, float>
+        {
+            const NeighborInfo& ni = tile.neighbors[static_cast<uint8_t>(edge)];
+            if (!ni.exists)
+                return {false, 0.0f};
+
+            // Per-LOD check: only snap if neighbor is coarser than the LOD being generated
+            if (ni.lodLevel <= lodLevel)
+                return {false, 0.0f};
+
+            uint32_t neighborSkip = getLODSkipFactor(ni.lodLevel);
+            uint32_t neighborVertCount = getLODVertexCount(ni.lodLevel);
+
+            if (neighborVertCount < 2)
+                return {false, 0.0f};
+
+            // Map this LOD's edge vertex to the neighbor's coarser grid
+            float ratio = static_cast<float>(neighborVertCount - 1)
+                        / static_cast<float>(vertCount - 1);
+            float nIdx = static_cast<float>(edgeIdx) * ratio;
+            uint32_t j0 = static_cast<uint32_t>(nIdx);
+            uint32_t j1 = std::min(j0 + 1, neighborVertCount - 1);
+            float t = nIdx - static_cast<float>(j0);
+
+            // Sample heights along the shared boundary at the coarser grid positions
+            uint32_t pos0 = std::min(j0 * neighborSkip, baseVertCount - 1);
+            uint32_t pos1 = std::min(j1 * neighborSkip, baseVertCount - 1);
+
+            float h0, h1;
+            switch (edge)
+            {
+            case TileEdge::North: // z = max, boundary row
+                h0 = tile.getHeight(pos0, baseVertCount - 1);
+                h1 = tile.getHeight(pos1, baseVertCount - 1);
+                break;
+            case TileEdge::South: // z = 0, boundary row
+                h0 = tile.getHeight(pos0, 0);
+                h1 = tile.getHeight(pos1, 0);
+                break;
+            case TileEdge::East: // x = max, boundary column
+                h0 = tile.getHeight(baseVertCount - 1, pos0);
+                h1 = tile.getHeight(baseVertCount - 1, pos1);
+                break;
+            case TileEdge::West: // x = 0, boundary column
+                h0 = tile.getHeight(0, pos0);
+                h1 = tile.getHeight(0, pos1);
+                break;
+            default:
+                return {false, 0.0f};
+            }
+
+            return {true, glm::mix(h0, h1, t)};
+        };
+
+        // Handle corner vertices (lie on two edges)
         if (isCornerVertex(x, z, vertCount))
         {
-            // Determine which two edges this corner touches
             TileEdge edge1, edge2;
             uint32_t idx1, idx2;
 
@@ -1110,48 +1139,34 @@ namespace terrain
                 edge1 = TileEdge::South;
                 idx1 = x;
                 edge2 = (x == 0) ? TileEdge::West : TileEdge::East;
-                idx2 = 0; // Corner is at index 0 for the perpendicular edge
+                idx2 = 0;
             }
             else // North edge (z == vertCount - 1)
             {
                 edge1 = TileEdge::North;
                 idx1 = x;
                 edge2 = (x == 0) ? TileEdge::West : TileEdge::East;
-                idx2 = vertCount - 1; // Corner is at last index for the perpendicular edge
+                idx2 = vertCount - 1;
             }
 
-            const auto& stitch1 = tile.edgeStitchInfo[static_cast<uint8_t>(edge1)];
-            const auto& stitch2 = tile.edgeStitchInfo[static_cast<uint8_t>(edge2)];
-
-            bool needs1 = stitch1.needsSnapping && idx1 < stitch1.snappedHeights.size();
-            bool needs2 = stitch2.needsSnapping && idx2 < stitch2.snappedHeights.size();
+            auto [needs1, snap1] = snapForEdge(edge1, idx1);
+            auto [needs2, snap2] = snapForEdge(edge2, idx2);
 
             if (needs1 && needs2)
-            {
-                // Both edges need snapping - average the two snapped heights
-                return (stitch1.snappedHeights[idx1] + stitch2.snappedHeights[idx2]) * 0.5f;
-            }
-            else if (needs1)
-            {
-                return stitch1.snappedHeights[idx1];
-            }
-            else if (needs2)
-            {
-                return stitch2.snappedHeights[idx2];
-            }
+                return (snap1 + snap2) * 0.5f;
+            if (needs1)
+                return snap1;
+            if (needs2)
+                return snap2;
+
             return originalHeight;
         }
 
         // Regular edge vertex (not a corner)
         TileEdge edge = getEdgeForVertex(x, z, vertCount);
         uint32_t edgeIdx = getEdgeVertexIndex(x, z, vertCount, edge);
-        const auto& stitchInfo = tile.edgeStitchInfo[static_cast<uint8_t>(edge)];
+        auto [needs, snapped] = snapForEdge(edge, edgeIdx);
 
-        if (stitchInfo.needsSnapping && edgeIdx < stitchInfo.snappedHeights.size())
-        {
-            return stitchInfo.snappedHeights[edgeIdx];
-        }
-
-        return originalHeight;
+        return needs ? snapped : originalHeight;
     }
 }
