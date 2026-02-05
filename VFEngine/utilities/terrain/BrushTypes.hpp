@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <algorithm>
+#include <glm/glm.hpp>
 
 namespace terrain
 {
@@ -40,5 +41,23 @@ namespace terrain
             radius = std::max(radius, 0.1f);
             strength = std::clamp(strength, 0.0f, 100.0f);
         }
+    };
+
+    struct BrushGPUParams
+    {
+        glm::vec2 brushCenter{0.0f};
+        glm::vec2 tileWorldOrigin{0.0f};
+        float brushRadius = 0.0f;
+        float brushStrength = 0.0f;
+        float vertexSpacing = 0.0f;
+        uint32_t verticesPerSide = 0;
+        BrushFalloff falloff = BrushFalloff::Smooth;
+        BrushShape shape = BrushShape::Circle;
+        BrushType brushType = BrushType::Raise;
+        float deltaTime = 0.0f;
+        float targetHeight = 0.0f;
+        float minHeight = 0.0f;
+        float maxHeight = 0.0f;
+        bool invert = false;
     };
 }

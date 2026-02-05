@@ -524,26 +524,25 @@ namespace services
                 continue;
             }
 
-            glm::vec2 tileWorldOrigin(
+            terrain::BrushGPUParams gpuParams;
+            gpuParams.brushCenter = brushCenter;
+            gpuParams.tileWorldOrigin = glm::vec2(
                 static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
                 static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+            gpuParams.brushRadius = brushParams.radius;
+            gpuParams.brushStrength = brushParams.strength;
+            gpuParams.vertexSpacing = tile->config.getVertexSpacing();
+            gpuParams.verticesPerSide = tile->config.getVertexCount();
+            gpuParams.falloff = brushParams.falloff;
+            gpuParams.shape = brushParams.shape;
+            gpuParams.brushType = brushType;
+            gpuParams.deltaTime = deltaTime;
+            gpuParams.targetHeight = flattenTargetHeight;
+            gpuParams.minHeight = tile->config.minHeight;
+            gpuParams.maxHeight = tile->config.maxHeight;
+            gpuParams.invert = effectiveInvert;
 
-            brushComputeProvider->applyBrushGPU(
-                tile->heightData,
-                brushCenter,
-                tileWorldOrigin,
-                brushParams.radius,
-                brushParams.strength,
-                tile->config.getVertexSpacing(),
-                tile->config.getVertexCount(),
-                brushParams.falloff,
-                brushParams.shape,
-                brushType,
-                deltaTime,
-                flattenTargetHeight,
-                tile->config.minHeight,
-                tile->config.maxHeight,
-                effectiveInvert);
+            brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams);
 
             tile->isDirty = true;
             tile->setAllLODsDirty();

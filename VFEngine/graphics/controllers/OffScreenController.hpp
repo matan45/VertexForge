@@ -166,20 +166,7 @@ namespace controllers
 
         bool applyBrushGPU(
             std::vector<float>& heightData,
-            const glm::vec2& brushCenter,
-            const glm::vec2& tileWorldOrigin,
-            float brushRadius,
-            float brushStrength,
-            float vertexSpacing,
-            uint32_t verticesPerSide,
-            terrain::BrushFalloff falloff,
-            terrain::BrushShape shape,
-            terrain::BrushType brushType,
-            float deltaTime,
-            float targetHeight,
-            float minHeight,
-            float maxHeight,
-            bool invert);
+            const terrain::BrushGPUParams& params);
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
