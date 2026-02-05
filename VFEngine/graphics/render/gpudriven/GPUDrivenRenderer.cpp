@@ -332,7 +332,7 @@ namespace render::gpudriven
 
         if (terrainPipeline)
         {
-            terrainPipeline->setInvViewProjection(glm::inverse(projection * view));
+            terrainPipeline->setViewProjection(projection * view);
         }
 
         updateClusterGrid(projection, nearPlane, farPlane);

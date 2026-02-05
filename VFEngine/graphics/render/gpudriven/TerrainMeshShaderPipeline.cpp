@@ -692,7 +692,7 @@ namespace render::gpudriven
         pushConstants._pad1 = 0.0f;
         pushConstants._pad2 = 0.0f;
         pushConstants._pad3 = 0.0f;
-        pushConstants.brushInvViewProj = brushInvViewProj_;
+        pushConstants.viewProjection = viewProjection_;
 
         cmd.pushConstants(pipelineLayout,
                           vk::ShaderStageFlagBits::eTaskEXT |

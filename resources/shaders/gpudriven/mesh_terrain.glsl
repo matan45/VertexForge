@@ -73,7 +73,7 @@ layout(push_constant) uniform PushConstants {
     float brushFalloff;
     float brushShape;
     float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
-    mat4 brushInvViewProj;       // Inverse view-projection for depth-based world reconstruction
+    mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
 // Shared memory for vertex caching
@@ -110,7 +110,7 @@ void main() {
     // For terrain, model matrix is usually identity, but support transforms
     mat4 modelMatrix = tile.modelMatrix;
     mat3 normalMatrix = mat3(modelMatrix);  // For orthonormal transforms
-    mat4 viewProjection = camera.projection * camera.view;
+    mat4 viewProjection = pc.viewProjection;
 
     float textureScale = pc.terrainTextureScale > 0.0 ? pc.terrainTextureScale : 0.1;
 
@@ -225,7 +225,7 @@ layout(push_constant) uniform PushConstants {
     float brushFalloff;
     float brushShape;
     float _pad1, _pad2, _pad3;  // Align mat4 to 16-byte boundary
-    mat4 brushInvViewProj;       // Inverse view-projection for depth-based world reconstruction
+    mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
 // Light buffers (Set 6 - same as mesh shader)
@@ -552,178 +552,10 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 
-    // Debug view modes
-    uint viewModeValue = pc.viewMode & 0xFFu;
-
-    if (viewModeValue == 1u) {
-        // Meshlet visualization
-        uint h = fragMeshletIndex;
-        h = ((h >> 16) ^ h) * 0x45d9f3b;
-        h = ((h >> 16) ^ h) * 0x45d9f3b;
-        h = (h >> 16) ^ h;
-
-        vec3 meshletColor = vec3(
-            float((h >> 0) & 0xFFu) / 255.0,
-            float((h >> 8) & 0xFFu) / 255.0,
-            float((h >> 16) & 0xFFu) / 255.0
-        );
-        meshletColor = normalize(meshletColor + 0.1) * 0.8;
-        color = meshletColor;
-    }
-
-    if (viewModeValue == 2u) {
-        // LOD visualization
-        vec3 lodColors[4] = vec3[4](
-            vec3(0.0, 1.0, 0.0),   // LOD 0 - Green (highest detail)
-            vec3(1.0, 1.0, 0.0),   // LOD 1 - Yellow
-            vec3(1.0, 0.5, 0.0),   // LOD 2 - Orange
-            vec3(1.0, 0.0, 0.0)    // LOD 3 - Red (lowest detail)
-        );
-        uint lod = min(fragLODLevel, 3u);
-        color = mix(color, lodColors[lod], 0.5);
-    }
-
-    if (viewModeValue == 4u) {
-        // Cluster visualization (uses cached clusterIdx)
-        uint h = clusterIdx;
-        h = ((h >> 16) ^ h) * 0x45d9f3b;
-        h = ((h >> 16) ^ h) * 0x45d9f3b;
-        h = (h >> 16) ^ h;
-
-        vec3 clusterColor = vec3(
-            float((h >> 0) & 0xFFu) / 255.0,
-            float((h >> 8) & 0xFFu) / 255.0,
-            float((h >> 16) & 0xFFu) / 255.0
-        );
-        clusterColor = normalize(clusterColor + 0.1) * 0.8;
-        color = clusterColor;
-    }
-
-    if (viewModeValue == 5u) {
-        // Depth slice visualization
-        float near = clusterParams.depthParams.x;
-        float far = clusterParams.depthParams.y;
-        float normalizedDepth = clamp((linearZ - near) / (far - near), 0.0, 1.0);
-
-        vec3 depthColors[5] = vec3[5](
-            vec3(0.0, 0.0, 1.0),
-            vec3(0.0, 1.0, 1.0),
-            vec3(0.0, 1.0, 0.0),
-            vec3(1.0, 1.0, 0.0),
-            vec3(1.0, 0.0, 0.0)
-        );
-        float t = normalizedDepth * 4.0;
-        int idx = clamp(int(floor(t)), 0, 3);
-        color = mix(depthColors[idx], depthColors[idx + 1], fract(t));
-    }
-
-    if (viewModeValue == 6u) {
-        // Shadow visualization
-        float totalShadow = 1.0;
-
-        for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
-            DirectionalLight light = directionalLights[i];
-            float shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
-            totalShadow = min(totalShadow, shadow);
-        }
-
-        if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
-            // Use cached clusterIdx from earlier calculation
-            ClusterLightData clusterData = clusterLightGrid[clusterIdx];
-            uint clusterPointCount = getClusterPointLightCount(clusterData);
-            uint clusterSpotCount = getClusterSpotLightCount(clusterData);
-            uint lightOffset = clusterData.offset;
-
-            for (uint i = 0u; i < clusterPointCount; ++i) {
-                uint lightIdx = lightIndexList[lightOffset + i];
-                PointLight light = pointLights[lightIdx];
-                if (light.shadowIndex >= 0) {
-                    float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N,
-                                                     light.position, light.radius);
-                    totalShadow = min(totalShadow, shadow);
-                }
-            }
-
-            for (uint i = 0u; i < clusterSpotCount; ++i) {
-                uint packedIdx = lightIndexList[lightOffset + clusterPointCount + i];
-                uint lightIdx = extractLightIndex(packedIdx);
-                SpotLight light = spotLights[lightIdx];
-                if (light.shadowIndex >= 0) {
-                    float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
-                    totalShadow = min(totalShadow, shadow);
-                }
-            }
-        }
-
-        vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
-        color = shadowColor;
-    }
-
-    if (viewModeValue == 7u) {
-        // Tile visualization
-        uint h = fragTileIndex;
-        h = ((h >> 16) ^ h) * 0x45d9f3b;
-        h = ((h >> 16) ^ h) * 0x45d9f3b;
-        h = (h >> 16) ^ h;
-
-        vec3 tileColor = vec3(
-            float((h >> 0) & 0xFFu) / 255.0,
-            float((h >> 8) & 0xFFu) / 255.0,
-            float((h >> 16) & 0xFFu) / 255.0
-        );
-        tileColor = normalize(tileColor + 0.1) * 0.8;
-        color = tileColor;
-    }
-
-    if (viewModeValue == 8u) {
-        // World UV visualization
-        color = vec3(fract(fragWorldUV.x), fract(fragWorldUV.y), 0.5);
-    }
-
-    if (viewModeValue == 9u) {
-        // Debug: Light count visualization
-        // Red = directional count, Green = point count, Blue = spot count
-        float dirCount = float(lightCounts.directionalCount) / 4.0;
-        float pointCount = float(lightCounts.pointCount) / 32.0;
-        float spotCount = float(lightCounts.spotCount) / 32.0;
-        color = vec3(dirCount, pointCount, spotCount);
-    }
-
-    if (viewModeValue == 10u) {
-        // Debug: Show direct lighting contribution only (no ambient)
-        color = directLighting;
-        // Boost for visibility
-        color = color * 2.0;
-        color = color / (color + vec3(1.0));
-    }
-
-    if (viewModeValue == 11u) {
-        // Debug: Normal visualization (N * 0.5 + 0.5 to map [-1,1] to [0,1])
-        color = N * 0.5 + 0.5;
-    }
-
-    if (viewModeValue == 12u) {
-        // Debug: First directional light direction (if exists)
-        if (lightCounts.directionalCount > 0u) {
-            DirectionalLight light = directionalLights[0];
-            vec3 L = -normalize(light.direction);
-            float NdotL = max(dot(N, L), 0.0);
-            color = vec3(NdotL);  // White = fully lit, black = no light
-        } else {
-            color = vec3(1.0, 0.0, 1.0);  // Magenta = no directional lights
-        }
-    }
-
-    // Brush overlay visualization (depth-based world reconstruction)
+    // Brush overlay visualization
     if (pc.brushWorldRadius > 0.0) {
-        // Reconstruct world position from screen coords + depth
-        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
-        vec4 ndc = vec4(screenUV * 2.0 - 1.0, gl_FragCoord.z, 1.0);
-        vec4 worldPosH = pc.brushInvViewProj * ndc;
-        vec3 reconstructedPos = worldPosH.xyz / worldPosH.w;
-
         vec2 brushPos = vec2(pc.brushWorldX, pc.brushWorldZ);
-        vec2 delta = reconstructedPos.xz - brushPos;
+        vec2 delta = fragWorldPos.xz - brushPos;
         uint shapeType = uint(pc.brushShape);
 
         // Compute normalized distance based on shape
