@@ -10,7 +10,7 @@ namespace windows
         bool visible = false;
         int selectedBrushType = 0;
         float brushRadius = 5.0f;
-        float brushStrength = 0.5f;
+        float brushStrength = 10.0f;
         int falloffIndex = 2;
         int shapeIndex = 0;
 
