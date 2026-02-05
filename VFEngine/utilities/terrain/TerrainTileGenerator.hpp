@@ -9,19 +9,6 @@ namespace terrain
     // Callback to look up a neighbor tile by coordinate
     using TileLookup = std::function<const TerrainTile*(const TileCoord&)>;
 
-    // Heights from a single neighbor edge (one row just beyond the shared boundary)
-    struct NeighborEdgeHeights
-    {
-        std::vector<float> heights;  // vertexCount elements along the shared edge
-        bool available = false;
-    };
-
-    // Neighbor height data for all four edges, used for cross-boundary normal calculation
-    struct TileNeighborContext
-    {
-        std::array<NeighborEdgeHeights, 4> edges;  // North, East, South, West
-    };
-
     class TerrainTileGenerator
     {
     private:
@@ -95,15 +82,7 @@ namespace terrain
         void calculateNormals(
             std::vector<resource::Vertex>& vertices,
             const std::vector<uint32_t>& indices,
-            uint32_t vertCount,
-            float spacing,
-            const TileNeighborContext& neighborCtx
-        ) const;
-
-        [[nodiscard]] TileNeighborContext collectNeighborContext(
-            const TerrainTile& tile,
-            uint32_t lodLevel,
-            const TileLookup& getTile
+            uint32_t vertCount
         ) const;
 
         void calculateBounds(TileLODData& lodData) const;
