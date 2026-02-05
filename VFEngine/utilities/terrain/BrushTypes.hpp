@@ -32,7 +32,7 @@ namespace terrain
     struct BrushParams
     {
         float radius = 5.0f;
-        float strength = 0.5f;
+        float strength = 10.0f;
         BrushFalloff falloff = BrushFalloff::Smooth;
         BrushShape shape = BrushShape::Circle;
 
