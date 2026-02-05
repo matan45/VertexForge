@@ -27,9 +27,9 @@ namespace render::gpudriven
         float errorThreshold;    // Screen-space error threshold in pixels
         float terrainTextureScale; // Scale for world-space UV tiling
         float padding;
-        // Brush overlay in screen pixel space
-        glm::vec2 brushScreenPos;  // Screen pixel position (gl_FragCoord space)
-        float brushScreenRadius;   // Screen pixel radius (0.0 = inactive)
+        // Brush overlay in world space
+        glm::vec2 brushWorldPos;   // World XZ position of brush center
+        float brushWorldRadius;    // World-space radius (0.0 = inactive)
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
         float brushShape;          // Shape (0=circle, 1=square)
     };
@@ -100,9 +100,9 @@ namespace render::gpudriven
 
         bool initialized = false;
 
-        // Brush overlay state (screen pixel space)
-        glm::vec2 brushScreenPos_{0.0f};
-        float brushScreenRadius_ = 0.0f;
+        // Brush overlay state (world space)
+        glm::vec2 brushWorldPos_{0.0f};
+        float brushWorldRadius_ = 0.0f;
         float brushFalloff_ = 0.0f;
         float brushShape_ = 0.0f;
 
@@ -159,10 +159,10 @@ namespace render::gpudriven
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
 
-        void setBrushOverlay(const glm::vec2& screenPos, float screenRadius, float falloff, float shape)
+        void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
         {
-            brushScreenPos_ = screenPos;
-            brushScreenRadius_ = screenRadius;
+            brushWorldPos_ = worldPos;
+            brushWorldRadius_ = worldRadius;
             brushFalloff_ = falloff;
             brushShape_ = shape;
         }

@@ -25,6 +25,9 @@ namespace terrain
 
         void generateAllLODs(TerrainTile& tile, ProgressCallback progress = nullptr) const;
 
+        // Regenerate a single LOD from current heightData (for incremental sculpt updates)
+        void regenerateLOD(TerrainTile& tile, uint32_t lodLevel) const;
+
         [[nodiscard]] uint32_t calculateLOD(
             const glm::vec3& cameraPosition,
             const TerrainTile& tile

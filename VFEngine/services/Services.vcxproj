@@ -190,6 +190,7 @@
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
+    <ClInclude Include="providers\ITerrainBrushComputeProvider.hpp" />
     <ClInclude Include="providers\ITerrainRaycastProvider.hpp" />
     <ClInclude Include="providers\ITerrainRenderProvider.hpp" />
     <ClInclude Include="providers\IVFXPreviewProvider.hpp" />

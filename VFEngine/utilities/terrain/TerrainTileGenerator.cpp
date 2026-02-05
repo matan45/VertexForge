@@ -96,7 +96,21 @@ namespace terrain
         // Generate meshlets for GPU mesh shading
         generateMeshlets(lodData);
 
-        tile.isDirty = false;
+        tile.clearLODDirty(lodLevel);
+        if (tile.dirtyLODMask == 0)
+        {
+            tile.isDirty = false;
+        }
+    }
+
+    void TerrainTileGenerator::regenerateLOD(TerrainTile& tile, uint32_t lodLevel) const
+    {
+        if (lodLevel >= TERRAIN_LOD_COUNT)
+            return;
+
+        generateLODGeometry(tile, lodLevel);
+        tile.getLODData(lodLevel).geometricError = computeGeometricError(tile, lodLevel);
+        tile.setLODGPUDirty(lodLevel);
     }
 
     void TerrainTileGenerator::generateAllLODs(TerrainTile& tile, ProgressCallback progress) const

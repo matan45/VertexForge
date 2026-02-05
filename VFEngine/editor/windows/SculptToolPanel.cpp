@@ -128,7 +128,7 @@ namespace windows
         }
 
         // Strength slider
-        if (ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 1.0f, "%.2f"))
+        if (ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 100.0f, "%.2f"))
         {
             events::brush::SetBrushStrengthCommand cmd;
             cmd.strength = brushStrength;

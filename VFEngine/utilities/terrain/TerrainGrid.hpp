@@ -32,6 +32,9 @@ namespace terrain
         // Returns coordinates of tiles whose LOD or stitching state changed
         [[nodiscard]] std::vector<TileCoord> updateLODs(const glm::vec3& cameraPosition);
 
+        // Regenerate meshlets for dirty tiles (active LOD + fallback LOD 3)
+        void regenerateDirtyTiles(const glm::vec3& cameraPosition);
+
         [[nodiscard]] std::vector<TerrainTile*> getAllTiles();
         [[nodiscard]] std::vector<const TerrainTile*> getAllTiles() const;
         [[nodiscard]] size_t getTileCount() const { return tiles.size(); }

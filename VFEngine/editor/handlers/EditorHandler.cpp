@@ -210,6 +210,9 @@ namespace handlers
             terrainAdapter->setTerrainService(terrainServiceImpl.get());
         }
 
+        // Wire GPU brush compute provider to TerrainService
+        terrainServiceImpl->setBrushComputeProvider(bootstrap->getTerrainBrushComputeProvider());
+
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();

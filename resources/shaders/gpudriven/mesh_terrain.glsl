@@ -66,10 +66,10 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;
     float terrainTextureScale;  // Scale for world-space UV tiling
     float padding;
-    // Brush overlay (screen pixel space)
-    float brushScreenX;
-    float brushScreenY;
-    float brushScreenRadius;
+    // Brush overlay (world space)
+    float brushWorldX;
+    float brushWorldZ;
+    float brushWorldRadius;
     float brushFalloff;
     float brushShape;
 } pc;
@@ -216,10 +216,10 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;
     float terrainTextureScale;
     float padding;
-    // Brush overlay (screen pixel space)
-    float brushScreenX;
-    float brushScreenY;
-    float brushScreenRadius;
+    // Brush overlay (world space)
+    float brushWorldX;
+    float brushWorldZ;
+    float brushWorldRadius;
     float brushFalloff;
     float brushShape;
 } pc;
@@ -710,42 +710,40 @@ void main() {
         }
     }
 
-    // Brush overlay visualization
-    // Uses screen pixel coordinates computed on the CPU to avoid
-    // camera projection mismatches between render target and viewport.
-    if (pc.brushScreenRadius > 0.0) {
-        vec2 brushPos = vec2(pc.brushScreenX, pc.brushScreenY);
-        vec2 delta = gl_FragCoord.xy - brushPos;
+    // Brush overlay visualization (world space)
+    // Computes distance in world XZ plane so the brush conforms to terrain geometry.
+    if (pc.brushWorldRadius > 0.0) {
+        vec2 brushPos = vec2(pc.brushWorldX, pc.brushWorldZ);
+        vec2 delta = fragWorldPos.xz - brushPos;
         uint shapeType = uint(pc.brushShape);
 
         // Compute normalized distance based on shape
         float dist;
         if (shapeType == 1u) {
             // Square: use Chebyshev distance (max of abs components)
-            dist = max(abs(delta.x), abs(delta.y));
+            dist = max(abs(delta.x), abs(delta.y)) / pc.brushWorldRadius;
         } else {
             // Circle: use Euclidean distance
-            dist = length(delta);
+            dist = length(delta) / pc.brushWorldRadius;
         }
 
         // Falloff fill
-        if (dist <= pc.brushScreenRadius) {
-            float t = dist / pc.brushScreenRadius;
+        if (dist <= 1.0) {
             float falloffValue;
             uint falloffType = uint(pc.brushFalloff);
 
             if (falloffType == 0u) { falloffValue = 1.0; }
-            else if (falloffType == 1u) { falloffValue = 1.0 - t; }
-            else if (falloffType == 2u) { falloffValue = 1.0 - t*t*(3.0-2.0*t); }
-            else { falloffValue = pow(1.0 - t, 3.0); }
+            else if (falloffType == 1u) { falloffValue = 1.0 - dist; }
+            else if (falloffType == 2u) { falloffValue = 1.0 - dist*dist*(3.0-2.0*dist); }
+            else { falloffValue = pow(1.0 - dist, 3.0); }
 
             vec3 brushColor = vec3(0.2, 0.6, 1.0);
             color = mix(color, brushColor, falloffValue * 0.3);
         }
 
         // Edge ring/border
-        float edgeWidth = max(pc.brushScreenRadius * 0.02, 1.5);
-        float edgeDist = abs(dist - pc.brushScreenRadius);
+        float edgeWidth = 0.02;
+        float edgeDist = abs(dist - 1.0);
         if (edgeDist < edgeWidth) {
             float edgeAlpha = 1.0 - (edgeDist / edgeWidth);
             vec3 brushColor = vec3(0.2, 0.6, 1.0);

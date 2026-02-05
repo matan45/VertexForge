@@ -1,7 +1,10 @@
 #include "BrushComputePipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "print/Logger.hpp"
+
+#include <cstring>
 
 namespace render::gpudriven
 {
@@ -27,6 +30,7 @@ namespace render::gpudriven
         createComputePipeline();
         createDescriptorPool();
         allocateDescriptorSet();
+        createCommandPool();
 
         initialized = true;
         loggerInfo("BrushComputePipeline initialized");
@@ -65,6 +69,14 @@ namespace render::gpudriven
             descriptorSetLayout = nullptr;
         }
 
+        if (computeCommandPool)
+        {
+            vkDevice.destroyCommandPool(computeCommandPool);
+            computeCommandPool = nullptr;
+        }
+
+        destroyHeightBuffers();
+
         shader.reset();
 
         initialized = false;
@@ -77,11 +89,13 @@ namespace render::gpudriven
 
         std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
 
+        // Binding 0: Input heightmap (readonly)
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
         bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
+        // Binding 1: Output heightmap (writeonly)
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[1].descriptorCount = 1;
@@ -101,7 +115,7 @@ namespace render::gpudriven
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eCompute;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(BrushPushConstants);
+        pushConstantRange.size = sizeof(BrushComputePushConstants);
 
         vk::PipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.setLayoutCount = 1;
@@ -117,7 +131,7 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
 
         shader = std::make_unique<core::Shader>(device);
-        shader->readShader("../../resources/shaders/terrain/brush_influence.glsl");
+        shader->readShader("../../resources/shaders/terrain/brush_compute.glsl");
 
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
@@ -170,37 +184,80 @@ namespace render::gpudriven
         descriptorSet = result[0];
     }
 
-    void BrushComputePipeline::updateDescriptors(
-        vk::Buffer heightmapBuffer,
-        vk::Buffer influenceBuffer)
+    void BrushComputePipeline::createCommandPool()
     {
-        if (heightmapBuffer != cachedHeightmapBuffer ||
-            influenceBuffer != cachedInfluenceBuffer)
-        {
-            cachedHeightmapBuffer = heightmapBuffer;
-            cachedInfluenceBuffer = influenceBuffer;
-            descriptorsNeedUpdate = true;
-        }
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        vk::CommandPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+        poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
+
+        computeCommandPool = vkDevice.createCommandPool(poolInfo);
     }
 
-    void BrushComputePipeline::writeDescriptors()
+    void BrushComputePipeline::ensureBufferCapacity(vk::DeviceSize requiredSize)
     {
-        if (!descriptorsNeedUpdate)
+        if (currentBufferSize >= requiredSize)
         {
             return;
         }
 
+        destroyHeightBuffers();
+
+        // Device-local input buffer (compute reads from this)
+        core::BufferInfoRequest inputRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            requiredSize,
+            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+        core::BufferUtilities::createBuffer(inputRequest, heightInputBuffer, heightInputMemory);
+
+        // Device-local output buffer (compute writes to this)
+        core::BufferInfoRequest outputRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            requiredSize,
+            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+        core::BufferUtilities::createBuffer(outputRequest, heightOutputBuffer, heightOutputMemory);
+
+        // Host-visible staging buffer for uploading height data to GPU
+        core::BufferInfoRequest uploadRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            requiredSize,
+            vk::BufferUsageFlagBits::eTransferSrc,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+        core::BufferUtilities::createBuffer(uploadRequest, stagingUploadBuffer, stagingUploadMemory);
+
+        // Host-visible staging buffer for reading back modified heights
+        core::BufferInfoRequest readbackRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            requiredSize,
+            vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+        core::BufferUtilities::createBuffer(readbackRequest, stagingReadbackBuffer, stagingReadbackMemory);
+
+        currentBufferSize = requiredSize;
+
+        // Update descriptor set to point to new buffers
         vk::Device vkDevice = device.getLogicalDevice();
 
-        vk::DescriptorBufferInfo heightmapInfo{};
-        heightmapInfo.buffer = cachedHeightmapBuffer;
-        heightmapInfo.offset = 0;
-        heightmapInfo.range = VK_WHOLE_SIZE;
+        vk::DescriptorBufferInfo inputInfo{};
+        inputInfo.buffer = heightInputBuffer;
+        inputInfo.offset = 0;
+        inputInfo.range = requiredSize;
 
-        vk::DescriptorBufferInfo influenceInfo{};
-        influenceInfo.buffer = cachedInfluenceBuffer;
-        influenceInfo.offset = 0;
-        influenceInfo.range = VK_WHOLE_SIZE;
+        vk::DescriptorBufferInfo outputInfo{};
+        outputInfo.buffer = heightOutputBuffer;
+        outputInfo.offset = 0;
+        outputInfo.range = requiredSize;
 
         std::array<vk::WriteDescriptorSet, 2> writes{};
 
@@ -208,90 +265,173 @@ namespace render::gpudriven
         writes[0].dstBinding = 0;
         writes[0].descriptorCount = 1;
         writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[0].pBufferInfo = &heightmapInfo;
+        writes[0].pBufferInfo = &inputInfo;
 
         writes[1].dstSet = descriptorSet;
         writes[1].dstBinding = 1;
         writes[1].descriptorCount = 1;
         writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[1].pBufferInfo = &influenceInfo;
+        writes[1].pBufferInfo = &outputInfo;
 
         vkDevice.updateDescriptorSets(writes, {});
-
-        descriptorsNeedUpdate = false;
     }
 
-    void BrushComputePipeline::dispatch(
-        vk::CommandBuffer cmd,
-        const BrushPushConstants& constants)
+    void BrushComputePipeline::destroyHeightBuffers()
     {
-        if (!initialized || constants.verticesPerSide == 0)
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        core::BufferUtilities::destroyBuffer(vkDevice, heightInputBuffer, heightInputMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, heightOutputBuffer, heightOutputMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, stagingUploadBuffer, stagingUploadMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, stagingReadbackBuffer, stagingReadbackMemory);
+
+        currentBufferSize = 0;
+    }
+
+    bool BrushComputePipeline::applyBrush(std::vector<float>& heightData,
+                                          const BrushComputePushConstants& constants)
+    {
+        if (!initialized || !computePipeline || constants.verticesPerSide == 0)
         {
-            return;
+            return false;
         }
 
-        writeDescriptors();
+        vk::Device vkDevice = device.getLogicalDevice();
+        vk::DeviceSize dataSize = heightData.size() * sizeof(float);
 
+        // Ensure GPU buffers are large enough
+        ensureBufferCapacity(dataSize);
+
+        // Upload height data to staging buffer
+        {
+            void* mapped = vkDevice.mapMemory(stagingUploadMemory, 0, dataSize);
+            std::memcpy(mapped, heightData.data(), dataSize);
+            vkDevice.unmapMemory(stagingUploadMemory);
+        }
+
+        // Allocate command buffer
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.commandPool = computeCommandPool;
+        allocInfo.level = vk::CommandBufferLevel::ePrimary;
+        allocInfo.commandBufferCount = 1;
+
+        auto cmdBuffers = vkDevice.allocateCommandBuffers(allocInfo);
+        vk::CommandBuffer cmd = cmdBuffers[0];
+
+        // Record commands
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        cmd.begin(beginInfo);
+
+        // Copy staging → input buffer
+        vk::BufferCopy copyRegion{0, 0, dataSize};
+        cmd.copyBuffer(stagingUploadBuffer, heightInputBuffer, copyRegion);
+
+        // Barrier: transfer write → compute shader read
+        {
+            std::array<vk::BufferMemoryBarrier, 2> barriers{};
+
+            barriers[0].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[0].buffer = heightInputBuffer;
+            barriers[0].offset = 0;
+            barriers[0].size = dataSize;
+
+            barriers[1].srcAccessMask = {};
+            barriers[1].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+            barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[1].buffer = heightOutputBuffer;
+            barriers[1].offset = 0;
+            barriers[1].size = dataSize;
+
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eTransfer,
+                vk::PipelineStageFlagBits::eComputeShader,
+                {}, {}, barriers, {}
+            );
+        }
+
+        // Bind and dispatch compute shader
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
                                0, descriptorSet, {});
 
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute,
-                          0, sizeof(BrushPushConstants), &constants);
+                          0, sizeof(BrushComputePushConstants), &constants);
 
         uint32_t groupsX = (constants.verticesPerSide + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
         uint32_t groupsY = (constants.verticesPerSide + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
-
         cmd.dispatch(groupsX, groupsY, 1);
-    }
 
-    void BrushComputePipeline::insertBarriersBeforeCompute(
-        vk::CommandBuffer cmd,
-        vk::Buffer heightmapBuffer,
-        vk::Buffer influenceBuffer)
-    {
-        std::array<vk::BufferMemoryBarrier, 2> barriers{};
+        // Barrier: compute shader write → transfer read
+        {
+            vk::BufferMemoryBarrier barrier{};
+            barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+            barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.buffer = heightOutputBuffer;
+            barrier.offset = 0;
+            barrier.size = dataSize;
 
-        barriers[0].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderRead;
-        barriers[0].buffer = heightmapBuffer;
-        barriers[0].offset = 0;
-        barriers[0].size = VK_WHOLE_SIZE;
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eComputeShader,
+                vk::PipelineStageFlagBits::eTransfer,
+                {}, {}, {barrier}, {}
+            );
+        }
 
-        barriers[1].srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barriers[1].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
-        barriers[1].buffer = influenceBuffer;
-        barriers[1].offset = 0;
-        barriers[1].size = VK_WHOLE_SIZE;
+        // Copy output buffer → readback staging
+        cmd.copyBuffer(heightOutputBuffer, stagingReadbackBuffer, copyRegion);
 
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eTransfer,
-            vk::PipelineStageFlagBits::eComputeShader,
-            {},
-            {},
-            barriers,
-            {}
-        );
-    }
+        // Barrier: transfer write → host read
+        {
+            vk::BufferMemoryBarrier barrier{};
+            barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            barrier.dstAccessMask = vk::AccessFlagBits::eHostRead;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.buffer = stagingReadbackBuffer;
+            barrier.offset = 0;
+            barrier.size = dataSize;
 
-    void BrushComputePipeline::insertBarriersAfterCompute(
-        vk::CommandBuffer cmd,
-        vk::Buffer influenceBuffer)
-    {
-        vk::BufferMemoryBarrier barrier{};
-        barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eShaderRead;
-        barrier.buffer = influenceBuffer;
-        barrier.offset = 0;
-        barrier.size = VK_WHOLE_SIZE;
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eTransfer,
+                vk::PipelineStageFlagBits::eHost,
+                {}, {}, {barrier}, {}
+            );
+        }
 
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eComputeShader,
-            vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eVertexShader,
-            {},
-            {},
-            {barrier},
-            {}
-        );
+        cmd.end();
+
+        // Submit and wait
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+
+        vk::Fence fence = vkDevice.createFence({});
+        device.getGraphicsQueue().submit(submitInfo, fence);
+
+        auto waitResult = vkDevice.waitForFences(fence, VK_TRUE, UINT64_MAX);
+        vkDevice.destroyFence(fence);
+        vkDevice.freeCommandBuffers(computeCommandPool, cmd);
+
+        if (waitResult != vk::Result::eSuccess)
+        {
+            loggerError("BrushComputePipeline: Failed to wait for compute fence");
+            return false;
+        }
+
+        // Read back modified heights
+        {
+            void* mapped = vkDevice.mapMemory(stagingReadbackMemory, 0, dataSize);
+            std::memcpy(heightData.data(), mapped, dataSize);
+            vkDevice.unmapMemory(stagingReadbackMemory);
+        }
+
+        return true;
     }
 }

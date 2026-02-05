@@ -1311,11 +1311,11 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::setBrushOverlay(const glm::vec2& screenPos, float screenRadius, float falloff, float shape)
+    void GPUDrivenRenderer::setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
     {
         if (terrainPipeline)
         {
-            terrainPipeline->setBrushOverlay(screenPos, screenRadius, falloff, shape);
+            terrainPipeline->setBrushOverlay(worldPos, worldRadius, falloff, shape);
         }
     }
 

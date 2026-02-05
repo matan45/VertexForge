@@ -118,6 +118,21 @@ namespace terrain
         bool isWeightMapDirty = true;
         bool isVisible = true;
 
+        // Per-LOD dirty tracking for incremental sculpt updates
+        // Bit N = LOD N needs CPU meshlet regeneration from heightData
+        uint8_t dirtyLODMask = 0;
+        // Bit N = LOD N was regenerated on CPU but not yet re-uploaded to GPU
+        uint8_t gpuDirtyLODMask = 0;
+
+        bool isLODDirty(uint32_t lod) const { return (dirtyLODMask & (1 << lod)) != 0; }
+        void clearLODDirty(uint32_t lod) { dirtyLODMask &= ~(1 << lod); }
+        void setAllLODsDirty() { dirtyLODMask = 0x0F; isDirty = true; }
+
+        bool isLODGPUDirty(uint32_t lod) const { return (gpuDirtyLODMask & (1 << lod)) != 0; }
+        void setLODGPUDirty(uint32_t lod) { gpuDirtyLODMask |= (1 << lod); }
+        void clearLODGPUDirty(uint32_t lod) { gpuDirtyLODMask &= ~(1 << lod); }
+        bool hasAnyGPUDirtyLOD() const { return gpuDirtyLODMask != 0; }
+
     public:
         TerrainTile() = default;
         TerrainTile(const TileCoord& coord, const TerrainTileConfig& config);
@@ -139,9 +154,10 @@ namespace terrain
         [[nodiscard]] TileLODData& getLODData(uint32_t level);
         [[nodiscard]] const TileLODData& getLODData(uint32_t level) const;
 
+        void updateWorldBounds();
+
     private:
         void initializeFlat(float height = 0.0f);
-        void updateWorldBounds();
 
         [[nodiscard]] float sampleHeight(float u, float v) const;
         [[nodiscard]] bool containsWorldPosition(float worldX, float worldZ) const;
