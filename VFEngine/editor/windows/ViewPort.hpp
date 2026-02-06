@@ -34,6 +34,9 @@ namespace windows
         // Sculpt brush dragging state
         bool sculptDragging = false;
 
+        // Paint brush dragging state
+        bool paintDragging = false;
+
     public:
         explicit ViewPort();
         ~ViewPort() override = default;
@@ -50,5 +53,7 @@ namespace windows
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
         void updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handleSculptBrush();
+        void updatePaintCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handlePaintBrush();
     };
 }

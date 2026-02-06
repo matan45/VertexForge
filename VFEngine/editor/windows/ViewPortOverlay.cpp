@@ -3,6 +3,7 @@
 #include "events/RenderEvents.hpp"
 #include "events/EditorModeEvents.hpp"
 #include "events/SculptModeEvents.hpp"
+#include "events/PaintModeEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/TerrainEvents.hpp"
 #include <imgui.h>
@@ -76,8 +77,9 @@ namespace windows
                 ImGui::SameLine();
 
                 bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+                bool isPaintMode = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
 
-                ImGui::BeginDisabled(isSculptMode);
+                ImGui::BeginDisabled(isSculptMode || isPaintMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -127,6 +129,37 @@ namespace windows
                 {
                     events::sculpt::SetSculptModeActiveCommand cmd;
                     cmd.active = !isSculptMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                // Paint mode toggle - enabled when terrain is selected or already painting
+                bool canPaint = isPaintMode;
+                if (!canPaint)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery2;
+                        terrainQuery2.entity = *selectedEntity;
+                        canPaint = dispatcher.query(terrainQuery2);
+
+                        if (!canPaint)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery2;
+                            tileQuery2.entity = *selectedEntity;
+                            canPaint = dispatcher.query(tileQuery2);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canPaint);
+                if (iconButton(ViewportIcon::Paint, isPaintMode, isPaintMode ? "Exit Paint Mode" : "Enter Paint Mode"))
+                {
+                    events::paint::SetPaintModeActiveCommand cmd;
+                    cmd.active = !isPaintMode;
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();

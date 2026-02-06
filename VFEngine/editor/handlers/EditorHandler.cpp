@@ -19,6 +19,8 @@
 #include "impl/scene/TerrainService.hpp"
 #include "impl/SculptModeServiceImpl.hpp"
 #include "impl/BrushServiceImpl.hpp"
+#include "impl/PaintModeServiceImpl.hpp"
+#include "impl/PaintBrushServiceImpl.hpp"
 #include "impl/TerrainRaycastServiceImpl.hpp"
 #include "../adapters/TerrainRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -128,6 +130,8 @@ namespace handlers
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();
+        paintBrushService.reset();
+        paintModeService.reset();
         brushService.reset();
         sculptModeService.reset();
         editorModeService.reset();
@@ -232,6 +236,12 @@ namespace handlers
 
         brushService = std::make_shared<services::BrushServiceImpl>();
         brushService->registerEventHandlers();
+
+        paintModeService = std::make_shared<services::PaintModeServiceImpl>();
+        paintModeService->registerEventHandlers();
+
+        paintBrushService = std::make_shared<services::PaintBrushServiceImpl>();
+        paintBrushService->registerEventHandlers();
 
         terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
             bootstrap->getTerrainRaycastProvider());

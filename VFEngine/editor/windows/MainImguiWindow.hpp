@@ -10,6 +10,7 @@
 #include "ProjectSettingsWindow.hpp"
 #include "TerrainCreationWindow.hpp"
 #include "SculptToolPanel.hpp"
+#include "PaintToolPanel.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 
@@ -35,6 +36,7 @@ namespace windows
         ProjectSettingsWindow projectSettingsWindow;
         TerrainCreationWindow terrainCreationWindow;
         SculptToolPanel sculptToolPanel;
+        PaintToolPanel paintToolPanel;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;

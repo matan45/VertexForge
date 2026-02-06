@@ -73,6 +73,7 @@ namespace windows
             projectSettingsWindow.draw();
             terrainCreationWindow.draw();
             sculptToolPanel.draw();
+            paintToolPanel.draw();
         }
         ImGui::End();
     }
