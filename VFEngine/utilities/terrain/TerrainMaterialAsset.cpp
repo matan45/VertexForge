@@ -98,8 +98,9 @@ namespace terrain
                 logWarningLimited("Terrain material has empty name, using default");
             }
 
+            int rawLayerCount = j.value("activeLayerCount", 1);
             material.activeLayerCount = static_cast<uint8_t>(
-                std::clamp(j.value("activeLayerCount", 1), 1, MAX_TERRAIN_LAYERS));
+                std::clamp(rawLayerCount, 1, static_cast<int>(MAX_TERRAIN_LAYERS)));
 
             if (j.contains("layers"))
             {
