@@ -15,7 +15,6 @@
 #include "../../events/SculptModeEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
-#include <unordered_set>
 
 namespace services
 {
@@ -236,7 +235,6 @@ namespace services
             tileComp.currentLOD = tile->currentLOD;
             tileComp.isVisible = tile->isVisible;
             tileComp.isDirty = tile->isDirty;
-            tileComp.isWeightMapDirty = tile->isWeightMapDirty;
             tileComp.isGPUResident = false;
             tileComp.boundingMinY = tile->worldBounds.min.y;
             tileComp.boundingMaxY = tile->worldBounds.max.y;
@@ -359,7 +357,6 @@ namespace services
         data.currentLOD = comp.currentLOD;
         data.isVisible = comp.isVisible;
         data.isDirty = comp.isDirty;
-        data.isWeightMapDirty = comp.isWeightMapDirty;
         data.isGPUResident = comp.isGPUResident;
         data.boundingMinY = comp.boundingMinY;
         data.boundingMaxY = comp.boundingMaxY;
@@ -460,14 +457,12 @@ namespace services
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Get the sculpt target terrain entity
         auto targetEntity = dispatcher.query(events::sculpt::GetSculptTargetEntityQuery{});
         if (!targetEntity.has_value())
         {
             return;
         }
 
-        // Look up the terrain grid
         auto gridIt = terrainGrids.find(targetEntity->id);
         if (gridIt == terrainGrids.end())
         {
@@ -476,7 +471,6 @@ namespace services
 
         terrain::TerrainGrid* grid = gridIt->second.get();
 
-        // Get brush type and params
         auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
         auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
 
@@ -498,7 +492,6 @@ namespace services
             flattenTargetCaptured = false;
         }
 
-        // Find affected tiles
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();
@@ -509,7 +502,6 @@ namespace services
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
 
-        // Apply brush to each affected tile
         std::vector<terrain::TileCoord> modifiedTiles;
         for (const auto& coord : affectedTiles)
         {
@@ -555,191 +547,9 @@ namespace services
 
         }
 
-        // Publish notification
         events::brush::BrushAppliedNotification notification;
         notification.position = worldPosition;
         notification.type = brushType;
         dispatcher.publish(notification);
-    }
-
-    std::vector<terrain::TerrainTile*> TerrainService::syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid)
-    {
-        if (modifiedTiles.empty())
-        {
-            return {};
-        }
-
-        auto* sampleTile = grid.getTile(modifiedTiles[0]);
-        if (!sampleTile)
-        {
-            return {};
-        }
-
-        uint32_t vertexCount = sampleTile->config.getVertexCount();
-        uint32_t lastVertex = vertexCount - 1;
-
-        // World-space vertex coordinate: for tile at grid coord (tx,tz),
-        // local vertex (lx,lz) maps to (tx * lastVertex + lx, tz * lastVertex + lz).
-        // This gives a unique key per shared vertex position, so corners
-        // shared by up to 4 tiles naturally group together.
-        struct WorldVertex
-        {
-            int64_t x, z;
-            bool operator==(const WorldVertex& o) const { return x == o.x && z == o.z; }
-        };
-
-        struct WorldVertexHash
-        {
-            size_t operator()(const WorldVertex& v) const
-            {
-                return std::hash<int64_t>{}(v.x) ^ (std::hash<int64_t>{}(v.z) * 2654435761ULL);
-            }
-        };
-
-        struct TileVertexRef
-        {
-            terrain::TerrainTile* tile;
-            size_t bufferIndex;
-        };
-
-        std::unordered_map<WorldVertex, std::vector<TileVertexRef>, WorldVertexHash> sharedVertices;
-        std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> modifiedSet(
-            modifiedTiles.begin(), modifiedTiles.end());
-        std::unordered_set<terrain::TerrainTile*> neighborTilesToDirty;
-
-        // Phase 1: Collect all shared boundary vertices without modifying any height data.
-        // Each edge vertex is mapped to its world-space position, deduplicating
-        // so that corner vertices shared by multiple edges are grouped correctly.
-        for (const auto& coord : modifiedTiles)
-        {
-            terrain::TerrainTile* tile = grid.getTile(coord);
-            if (!tile)
-            {
-                continue;
-            }
-
-            for (uint8_t edgeIdx = 0; edgeIdx < 4; ++edgeIdx)
-            {
-                terrain::TileEdge edge = static_cast<terrain::TileEdge>(edgeIdx);
-                terrain::TileCoord neighborCoord = coord + terrain::TileCoord::getNeighborOffset(edge);
-                terrain::TerrainTile* neighbor = grid.getTile(neighborCoord);
-                if (!neighbor)
-                {
-                    continue;
-                }
-
-                if (!modifiedSet.count(neighborCoord))
-                {
-                    neighborTilesToDirty.insert(neighbor);
-                }
-
-                for (uint32_t i = 0; i < vertexCount; ++i)
-                {
-                    uint32_t tileLocalX = 0, tileLocalZ = 0;
-                    uint32_t neighborLocalX = 0, neighborLocalZ = 0;
-
-                    switch (edge)
-                    {
-                    case terrain::TileEdge::North: // +Z: tile z=max, neighbor z=0
-                        tileLocalX = i; tileLocalZ = lastVertex;
-                        neighborLocalX = i; neighborLocalZ = 0;
-                        break;
-                    case terrain::TileEdge::East: // +X: tile x=max, neighbor x=0
-                        tileLocalX = lastVertex; tileLocalZ = i;
-                        neighborLocalX = 0; neighborLocalZ = i;
-                        break;
-                    case terrain::TileEdge::South: // -Z: tile z=0, neighbor z=max
-                        tileLocalX = i; tileLocalZ = 0;
-                        neighborLocalX = i; neighborLocalZ = lastVertex;
-                        break;
-                    case terrain::TileEdge::West: // -X: tile x=0, neighbor x=max
-                        tileLocalX = 0; tileLocalZ = i;
-                        neighborLocalX = lastVertex; neighborLocalZ = i;
-                        break;
-                    }
-
-                    WorldVertex wv{
-                        static_cast<int64_t>(coord.x) * lastVertex + tileLocalX,
-                        static_cast<int64_t>(coord.z) * lastVertex + tileLocalZ
-                    };
-
-                    size_t tileIdx = static_cast<size_t>(tileLocalZ) * vertexCount + tileLocalX;
-                    size_t neighborIdx = static_cast<size_t>(neighborLocalZ) * vertexCount + neighborLocalX;
-
-                    auto& refs = sharedVertices[wv];
-
-                    // Add refs with deduplication (refs is small: 2 for edges, up to 4 for corners)
-                    auto addRef = [&refs](terrain::TerrainTile* t, size_t idx)
-                    {
-                        for (const auto& r : refs)
-                        {
-                            if (r.tile == t && r.bufferIndex == idx)
-                            {
-                                return;
-                            }
-                        }
-                        refs.push_back({t, idx});
-                    };
-
-                    addRef(tile, tileIdx);
-                    addRef(neighbor, neighborIdx);
-                }
-            }
-        }
-
-        // Phase 2: Synchronize boundary heights.
-        // Average only among MODIFIED tiles' heights, then propagate to all refs.
-        // This prevents creases at boundaries when the brush doesn't cross into the neighbor:
-        // the modified tile's boundary height is preserved (not pulled toward the unmodified neighbor).
-        for (const auto& [wv, refs] : sharedVertices)
-        {
-            if (refs.size() <= 1)
-            {
-                continue;
-            }
-
-            float modifiedSum = 0.0f;
-            uint32_t modifiedCount = 0;
-            for (const auto& ref : refs)
-            {
-                if (modifiedSet.count(ref.tile->coord))
-                {
-                    modifiedSum += ref.tile->heightData[ref.bufferIndex];
-                    ++modifiedCount;
-                }
-            }
-
-            float targetHeight;
-            if (modifiedCount > 0)
-            {
-                // Use average of modified tiles' heights only (preserves brush curve at boundary)
-                targetHeight = modifiedSum / static_cast<float>(modifiedCount);
-            }
-            else
-            {
-                // Fallback: average all
-                float sum = 0.0f;
-                for (const auto& ref : refs)
-                {
-                    sum += ref.tile->heightData[ref.bufferIndex];
-                }
-                targetHeight = sum / static_cast<float>(refs.size());
-            }
-
-            for (const auto& ref : refs)
-            {
-                ref.tile->heightData[ref.bufferIndex] = targetHeight;
-            }
-        }
-
-        // Mark non-modified neighbor tiles as dirty since their edge data changed
-        // Dirty all LODs so that LOD switches don't render stale heights
-        for (auto* neighbor : neighborTilesToDirty)
-        {
-            neighbor->setAllLODsDirty();
-            neighbor->edgeSyncDirty = true;
-        }
-
-        return {neighborTilesToDirty.begin(), neighborTilesToDirty.end()};
     }
 }

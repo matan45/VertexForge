@@ -26,31 +26,4 @@ namespace terrain
 
         return result;
     }
-
-    float BrushSampler::applyFalloff(float t, BrushFalloff falloff)
-    {
-        if (t >= 1.0f)
-        {
-            return 0.0f;
-        }
-
-        if (t <= 0.0f)
-        {
-            return 1.0f;
-        }
-
-        switch (falloff)
-        {
-        case BrushFalloff::Constant:
-            return 1.0f;
-        case BrushFalloff::Linear:
-            return 1.0f - t;
-        case BrushFalloff::Smooth:
-            return 1.0f - t * t * (3.0f - 2.0f * t);
-        case BrushFalloff::Sharp:
-            return 1.0f - t * t;
-        default:
-            return 0.0f;
-        }
-    }
 }

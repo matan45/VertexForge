@@ -15,9 +15,6 @@ namespace terrain
         std::unique_ptr<TerrainTileGenerator> generator;
         std::unordered_map<TileCoord, std::unique_ptr<TerrainTile>, TileCoordHash> tiles;
 
-        mutable math::AABB cachedWorldBounds;
-        mutable bool boundsDirty = true;
-
     public:
         explicit TerrainGrid(const TerrainTileConfig& config);
         ~TerrainGrid() = default;
@@ -44,11 +41,9 @@ namespace terrain
 
     private:
         [[nodiscard]] TerrainTile* getOrCreateTile(const TileCoord& coord);
-        [[nodiscard]] TileCoord worldToTileCoord(float worldX, float worldZ) const;
 
         void updateNeighborReferences(TerrainTile& tile);
         void updateAllNeighborReferences();
-        void invalidateBoundsCache();
     };
 
 } // namespace terrain

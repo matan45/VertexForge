@@ -64,30 +64,6 @@ namespace terrain
         }
     };
 
-    // Weight map for texture painting (prepared for VK-178)
-    struct TileWeightMap
-    {
-        uint32_t width = 0;
-        uint32_t height = 0;
-        uint32_t layerCount = 0;
-
-        // Weights per pixel, indexed by [y * width + x][layer]
-        // Values 0-255, should sum to 255 per pixel for proper blending
-        std::vector<std::array<uint8_t, MAX_TERRAIN_LAYERS>> weights;
-
-        std::array<uint32_t, MAX_TERRAIN_LAYERS> layerMaterialIndices{};
-
-        TileWeightMap() = default;
-
-        void resize(uint32_t w, uint32_t h, uint32_t layers);
-        void setWeight(uint32_t x, uint32_t y, uint32_t layer, uint8_t value);
-        [[nodiscard]] uint8_t getWeight(uint32_t x, uint32_t y, uint32_t layer) const;
-        void normalize(uint32_t x, uint32_t y);
-        void clear();
-
-        [[nodiscard]] bool isEmpty() const { return weights.empty(); }
-    };
-
     class TerrainTile
     {
     public:
@@ -110,10 +86,7 @@ namespace terrain
 
         std::vector<float> heightData;
 
-        TileWeightMap weightMap;
-
         bool isDirty = true;
-        bool isWeightMapDirty = true;
         bool isVisible = true;
 
         // Set when only edge heights changed (neighbor of a sculpted tile).
@@ -142,7 +115,6 @@ namespace terrain
         void initializeFromHeights(const std::vector<float>& heights);
 
         [[nodiscard]] glm::vec3 computeWorldOrigin() const;
-        [[nodiscard]] float sampleHeightWorld(float worldX, float worldZ) const;
         [[nodiscard]] float getHeight(uint32_t x, uint32_t z) const;
 
         void setNeighbor(TileEdge edge, const TileCoord& neighborCoord, uint8_t lod);
@@ -160,9 +132,6 @@ namespace terrain
 
     private:
         void initializeFlat(float height = 0.0f);
-
-        [[nodiscard]] float sampleHeight(float u, float v) const;
-        [[nodiscard]] bool containsWorldPosition(float worldX, float worldZ) const;
 
         [[nodiscard]] bool isValidHeightIndex(uint32_t x, uint32_t z) const;
         [[nodiscard]] size_t getHeightIndex(uint32_t x, uint32_t z) const;

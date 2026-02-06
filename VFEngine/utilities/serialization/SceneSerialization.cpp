@@ -1188,7 +1188,6 @@ namespace serialization
         j["isVisible"] = tile.isVisible;
         // State flags
         j["isDirty"] = tile.isDirty;
-        j["isWeightMapDirty"] = tile.isWeightMapDirty;
         j["isGPUResident"] = tile.isGPUResident;
         // Cached bounds
         j["boundingMinY"] = tile.boundingMinY;
@@ -1209,8 +1208,6 @@ namespace serialization
         // State flags (with backward-compatible defaults)
         if (auto it = j.find("isDirty"); it != j.end() && it->is_boolean())
             tile.isDirty = it->get<bool>();
-        if (auto it = j.find("isWeightMapDirty"); it != j.end() && it->is_boolean())
-            tile.isWeightMapDirty = it->get<bool>();
         if (auto it = j.find("isGPUResident"); it != j.end() && it->is_boolean())
             tile.isGPUResident = it->get<bool>();
         // Cached bounds

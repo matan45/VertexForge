@@ -68,6 +68,5 @@ namespace services
         void remapTerrainEntities();
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
-        std::vector<terrain::TerrainTile*> syncTileEdges(const std::vector<terrain::TileCoord>& modifiedTiles, terrain::TerrainGrid& grid);
     };
 }

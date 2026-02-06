@@ -1,7 +1,5 @@
 #pragma once
 
-#include "terrain/TerrainHitResult.hpp"
-
 namespace services
 {
     class ITerrainRaycastService

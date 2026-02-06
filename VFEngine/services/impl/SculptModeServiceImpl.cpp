@@ -94,7 +94,6 @@ namespace services
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Get currently selected entity
         auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
         if (!selectedEntity.has_value())
         {
@@ -146,7 +145,6 @@ namespace services
         selectCmd.entity = terrainEntity;
         dispatcher.execute(selectCmd);
 
-        // Publish notification
         events::sculpt::SculptModeChangedNotification notification;
         notification.isActive = true;
         notification.terrainEntity = terrainEntity;

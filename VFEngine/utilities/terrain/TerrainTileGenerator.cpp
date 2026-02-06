@@ -55,7 +55,6 @@ namespace terrain
         if (progress)
             progress(0.2f, "Generating LODs");
 
-        // Generate all LOD levels
         generateAllLODs(*tile, progress);
 
         if (progress)
@@ -73,10 +72,7 @@ namespace terrain
         TileLODData& lodData = tile.getLODData(lodLevel);
         lodData.clear();
 
-        // Generate vertices
         generateVertices(lodData.vertices, tile, lodLevel);
-
-        // Generate indices
         generateIndices(lodData.indices, lodLevel);
 
         // Calculate normals: face-weighted for interior, analytical for boundary
@@ -90,7 +86,6 @@ namespace terrain
             generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth);
         }
 
-        // Calculate bounds
         calculateBounds(lodData);
 
         // Extract edge vertices for stitching
@@ -426,12 +421,11 @@ namespace terrain
                 uint32_t bottomLeft = (z + 1) * vertCount + x;
                 uint32_t bottomRight = bottomLeft + 1;
 
-                // First triangle (CCW winding for Vulkan front-face)
+                // CCW winding for Vulkan front-face
                 indices.push_back(topLeft);
                 indices.push_back(bottomLeft);
                 indices.push_back(topRight);
 
-                // Second triangle
                 indices.push_back(topRight);
                 indices.push_back(bottomLeft);
                 indices.push_back(bottomRight);
@@ -447,7 +441,6 @@ namespace terrain
         if (vertices.empty() || indices.empty())
             return;
 
-        // Reset all normals
         for (auto& v : vertices)
         {
             v.normal = glm::vec3(0.0f);
@@ -478,7 +471,6 @@ namespace terrain
         // using analytical central differences from full-resolution heightData,
         // guaranteeing matching normals across tiles regardless of LOD.
 
-        // Normalize all normals
         for (auto& v : vertices)
         {
             float length = glm::length(v.normal);
@@ -597,7 +589,6 @@ namespace terrain
             return;
         }
 
-        // Calculate AABB
         glm::vec3 minPos = lodData.vertices[0].position;
         glm::vec3 maxPos = lodData.vertices[0].position;
 
@@ -629,10 +620,8 @@ namespace terrain
         uint32_t lodLevel,
         float skirtDepth) const
     {
-        // Store the original vertex count before adding skirt vertices
         std::vector<resource::Vertex> mainVertices = vertices;
 
-        // Add skirts for all four edges
         addSkirtEdge(vertices, indices, mainVertices, TileEdge::North, lodLevel, skirtDepth);
         addSkirtEdge(vertices, indices, mainVertices, TileEdge::East, lodLevel, skirtDepth);
         addSkirtEdge(vertices, indices, mainVertices, TileEdge::South, lodLevel, skirtDepth);
@@ -732,7 +721,6 @@ namespace terrain
 
         uint32_t vertCount = getLODVertexCount(lodLevel);
 
-        // Extract vertices for each edge
         for (uint8_t edgeIdx = 0; edgeIdx < 4; ++edgeIdx)
         {
             TileEdge edge = static_cast<TileEdge>(edgeIdx);
@@ -773,7 +761,6 @@ namespace terrain
         const glm::vec3& cameraPosition,
         const TerrainTile& tile) const
     {
-        // Calculate distance from camera to tile center
         glm::vec3 tileCenter = tile.worldBounds.getCenter();
         float distance = glm::length(cameraPosition - tileCenter);
 
@@ -946,7 +933,6 @@ namespace terrain
         uint32_t vertCount,
         uint32_t lodLevel) const
     {
-        // Get original height from heightData (always current after syncTileEdges)
         uint32_t skipFactor = getLODSkipFactor(lodLevel);
         uint32_t heightX = x * skipFactor;
         uint32_t heightZ = z * skipFactor;
@@ -961,8 +947,6 @@ namespace terrain
 
         // Compute snapped height for one edge by sampling this tile's own heightData
         // at the neighbor's coarser LOD grid positions along the shared boundary.
-        // Since syncTileEdges() ensures identical boundary heights between tiles,
-        // we can sample from our own heightData instead of the neighbor's.
         auto snapForEdge = [&](TileEdge edge, uint32_t edgeIdx) -> std::pair<bool, float>
         {
             const NeighborInfo& ni = tile.neighbors[static_cast<uint8_t>(edge)];

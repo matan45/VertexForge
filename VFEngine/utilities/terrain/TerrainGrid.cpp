@@ -1,6 +1,5 @@
 #include "TerrainGrid.hpp"
 #include <algorithm>
-#include <cmath>
 
 namespace terrain
 {
@@ -41,16 +40,7 @@ namespace terrain
 
         updateNeighborReferences(*tilePtr);
 
-        invalidateBoundsCache();
         return tilePtr;
-    }
-
-    TileCoord TerrainGrid::worldToTileCoord(float worldX, float worldZ) const
-    {
-        return TileCoord(
-            static_cast<int32_t>(std::floor(worldX / config.worldTileSize)),
-            static_cast<int32_t>(std::floor(worldZ / config.worldTileSize))
-        );
     }
 
     void TerrainGrid::regenerateDirtyTiles(const glm::vec3& cameraPosition)
@@ -63,8 +53,8 @@ namespace terrain
         };
 
         // Pass 0: Force-regenerate edge-synced neighbor tiles (unbounded).
-        // These tiles had their boundary heights changed by syncTileEdges() and must
-        // regenerate this frame to prevent cracks. Count is naturally bounded (typically 2-6).
+        // These tiles had their boundary heights changed and must regenerate this frame
+        // to prevent cracks. Count is naturally bounded (typically 2-6).
         // Regenerate ALL dirty LODs so the GPU task shader can safely select any LOD.
         for (auto& [coord, tile] : tiles)
         {
@@ -245,10 +235,5 @@ namespace terrain
         {
             progress(1.0f, "Complete");
         }
-    }
-
-    void TerrainGrid::invalidateBoundsCache()
-    {
-        boundsDirty = true;
     }
 }

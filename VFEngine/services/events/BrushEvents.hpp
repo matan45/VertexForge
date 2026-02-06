@@ -5,10 +5,6 @@
 
 namespace events::brush
 {
-    // ============================================
-    // COMMANDS - Operations that modify brush state
-    // ============================================
-
     struct SetBrushParamsCommand : ICommand<>
     {
         ::terrain::BrushParams params;
@@ -61,10 +57,6 @@ namespace events::brush
         std::string_view getName() const override { return "ApplyBrush"; }
     };
 
-    // ============================================
-    // QUERIES - Read-only operations
-    // ============================================
-
     struct GetBrushParamsQuery : IQuery<::terrain::BrushParams>
     {
         std::string_view getName() const override { return "GetBrushParams"; }
@@ -74,10 +66,6 @@ namespace events::brush
     {
         std::string_view getName() const override { return "GetBrushType"; }
     };
-
-    // ============================================
-    // NOTIFICATIONS - State change broadcasts
-    // ============================================
 
     struct BrushParamsChangedNotification : INotification
     {

@@ -11,8 +11,7 @@ namespace terrain
         Raise = 0,
         Lower = 1,
         Smooth = 2,
-        Flatten = 3,
-        Noise = 4
+        Flatten = 3
     };
 
     enum class BrushFalloff : uint8_t
@@ -25,8 +24,7 @@ namespace terrain
 
     enum class BrushShape : uint8_t
     {
-        Circle = 0,
-        Square = 1
+        Circle = 0
     };
 
     struct BrushParams
