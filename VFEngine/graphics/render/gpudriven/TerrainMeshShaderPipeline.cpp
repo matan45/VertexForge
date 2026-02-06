@@ -387,13 +387,6 @@ namespace render::gpudriven
         }
 
         currentTileCount = static_cast<uint32_t>(std::min(tiles.size(), static_cast<size_t>(maxTileCount)));
-
-        static bool loggedOnce = false;
-        if (!loggedOnce)
-        {
-            loggerInfo("TerrainMeshShaderPipeline::updateTileData: Setting currentTileCount={}", currentTileCount);
-            loggedOnce = true;
-        }
         vk::DeviceSize dataSize = currentTileCount * sizeof(TerrainTileGPUData);
 
         vk::Device vkDevice = device.getLogicalDevice();
@@ -562,27 +555,11 @@ namespace render::gpudriven
     {
         if (!initialized || !graphicsPipeline || currentTileCount == 0)
         {
-            static bool warnedOnce = false;
-            if (!warnedOnce)
-            {
-                loggerWarning("TerrainMeshShaderPipeline::dispatch: Early exit - initialized={}, hasPipeline={}, tileCount={}",
-                              initialized, (bool)graphicsPipeline, currentTileCount);
-                warnedOnce = true;
-            }
             return;
-        }
-
-        static bool loggedOnce = false;
-        if (!loggedOnce)
-        {
-            loggerInfo("TerrainMeshShaderPipeline::dispatch: {} tiles, viewMode={}, screen={}x{}",
-                       currentTileCount, viewMode, screenWidth, screenHeight);
-            loggedOnce = true;
         }
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Build current descriptor set array
         std::array<vk::DescriptorSet, 12> currentSets = {
             iblDescriptorSet,              // Set 0: IBL/Camera
             emptyDescriptorSet1,           // Set 1: Empty

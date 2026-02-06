@@ -665,7 +665,6 @@ void main() {
         vec2 delta = fragWorldPos.xz - brushPos;
         uint shapeType = uint(pc.brushShape);
 
-        // Compute normalized distance based on shape
         float dist;
         if (shapeType == 1u) {
             dist = max(abs(delta.x), abs(delta.y)) / pc.brushWorldRadius;

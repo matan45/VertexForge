@@ -299,17 +299,14 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vk::DeviceSize dataSize = heightData.size() * sizeof(float);
 
-        // Ensure GPU buffers are large enough
         ensureBufferCapacity(dataSize);
 
-        // Upload height data to staging buffer
         {
             void* mapped = vkDevice.mapMemory(stagingUploadMemory, 0, dataSize);
             std::memcpy(mapped, heightData.data(), dataSize);
             vkDevice.unmapMemory(stagingUploadMemory);
         }
 
-        // Allocate command buffer
         vk::CommandBufferAllocateInfo allocInfo{};
         allocInfo.commandPool = computeCommandPool;
         allocInfo.level = vk::CommandBufferLevel::ePrimary;
@@ -318,7 +315,6 @@ namespace render::gpudriven
         auto cmdBuffers = vkDevice.allocateCommandBuffers(allocInfo);
         vk::CommandBuffer cmd = cmdBuffers[0];
 
-        // Record commands
         vk::CommandBufferBeginInfo beginInfo{};
         beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
         cmd.begin(beginInfo);
@@ -354,7 +350,6 @@ namespace render::gpudriven
             );
         }
 
-        // Bind and dispatch compute shader
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
                                0, descriptorSet, {});
@@ -407,7 +402,6 @@ namespace render::gpudriven
 
         cmd.end();
 
-        // Submit and wait
         vk::SubmitInfo submitInfo{};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmd;
@@ -425,7 +419,6 @@ namespace render::gpudriven
             return false;
         }
 
-        // Read back modified heights
         {
             void* mapped = vkDevice.mapMemory(stagingReadbackMemory, 0, dataSize);
             std::memcpy(heightData.data(), mapped, dataSize);

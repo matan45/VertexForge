@@ -336,7 +336,6 @@ namespace render::gpudriven
                 }
             }
 
-            // Update state
             if (info.currentLoadedLOD == 3)
             {
                 info.state = TerrainTileStreamState::FallbackOnly;
@@ -357,7 +356,6 @@ namespace render::gpudriven
         if (lodData.isEmpty())
             return 0;
 
-        // Calculate actual memory based on geometry
         size_t vertexMemory = lodData.vertices.size() * sizeof(resource::Vertex);
         size_t indexMemory = lodData.indices.size() * sizeof(uint32_t);
         size_t meshletMemory = lodData.meshlets.size() * sizeof(GPUMeshlet);
@@ -369,7 +367,6 @@ namespace render::gpudriven
 
     void TerrainStreamManager::clear()
     {
-        // Clear all tiles via adapter
         adapter.clear();
 
         tileInfos.clear();

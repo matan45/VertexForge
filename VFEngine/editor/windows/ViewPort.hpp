@@ -50,6 +50,5 @@ namespace windows
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
         void updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handleSculptBrush();
-        void drawSculptDebugOverlay(glm::vec2 viewportPos, glm::vec2 viewportSize);
     };
 }

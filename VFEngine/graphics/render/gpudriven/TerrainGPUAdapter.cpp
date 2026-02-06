@@ -278,8 +278,6 @@ namespace render::gpudriven
                 GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
 
                 // Bounding sphere stays in local space; task shader transforms via modelMatrix
-
-                // Update offsets to use allocated positions
                 meshlet.vertexOffset += meshletVertexOffset;
                 meshlet.primitiveOffset += meshletPrimitiveOffset;
 

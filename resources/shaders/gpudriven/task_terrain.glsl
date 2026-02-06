@@ -193,7 +193,6 @@ void main() {
             // Find the best available LOD (handles streaming where only one LOD is loaded)
             selectedLOD = findBestAvailableLOD(tile, idealLOD);
 
-            // Track LOD distribution
             if (selectedLOD == 0) atomicAdd(stats.lodCount0, 1);
             else if (selectedLOD == 1) atomicAdd(stats.lodCount1, 1);
             else if (selectedLOD == 2) atomicAdd(stats.lodCount2, 1);
@@ -255,7 +254,6 @@ void main() {
 
             bool meshletVisible = true;
 
-            // Frustum culling for meshlet
             if ((pc.viewMode & TERRAIN_CULL_FRUSTUM_BIT) != 0u) {
                 if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
                     meshletVisible = false;

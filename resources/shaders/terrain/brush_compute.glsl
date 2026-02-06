@@ -86,7 +86,6 @@ void main()
         dist = max(abs(delta.x), abs(delta.y)) / pc.brushRadius;
     }
 
-    // Outside brush radius: pass through
     if (dist >= 1.0)
     {
         heightsOut[idx] = currentHeight;
@@ -114,7 +113,6 @@ void main()
 
         case 2: // Smooth
         {
-            // Average neighboring heights from input buffer
             float sum = 0.0;
             float count = 0.0;
 

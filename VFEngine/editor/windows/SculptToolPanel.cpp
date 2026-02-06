@@ -89,7 +89,6 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Brush type selector
         ImGui::Text("Brush Type");
         ImGui::Separator();
 
@@ -119,7 +118,6 @@ namespace windows
         ImGui::Text("Brush Parameters");
         ImGui::Separator();
 
-        // Radius slider
         if (ImGui::SliderFloat("Radius", &brushRadius, 0.1f, 100.0f, "%.1f"))
         {
             events::brush::SetBrushRadiusCommand cmd;
@@ -127,7 +125,6 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
-        // Strength slider
         if (ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 100.0f, "%.2f"))
         {
             events::brush::SetBrushStrengthCommand cmd;
@@ -135,7 +132,6 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
-        // Falloff dropdown
         const char* falloffLabels[] = {"Constant", "Linear", "Smooth", "Sharp"};
         if (ImGui::Combo("Falloff", &falloffIndex, falloffLabels, 4))
         {
@@ -144,7 +140,6 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
-        // Shape dropdown
         const char* shapeLabels[] = {"Circle", "Square"};
         if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 2))
         {

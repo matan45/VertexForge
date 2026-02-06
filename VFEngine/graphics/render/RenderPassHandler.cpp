@@ -829,12 +829,6 @@ namespace render
             if (terrainRenderProvider && terrainRenderProvider->hasActiveTerrain() && currentFrustum)
             {
                 auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
-                static bool loggedTerrainOnce = false;
-                if (!visibleTiles.empty() && !loggedTerrainOnce)
-                {
-                    loggerInfo("RenderPassHandler: Got {} visible terrain tiles from provider", visibleTiles.size());
-                    loggedTerrainOnce = true;
-                }
                 gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition);
             }
         }

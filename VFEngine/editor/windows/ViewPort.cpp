@@ -77,7 +77,6 @@ namespace windows
 
             handleEntityPicking(isPlayMode, vp, vs);
             handleSculptBrush();
-            drawSculptDebugOverlay(vp, vs);
         }
         ImGui::End();
     }
@@ -177,7 +176,6 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Accept drops from content browser
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
         {
             const auto& dragPaths = DragDropManager::instance().getDragPaths();
@@ -186,7 +184,6 @@ namespace windows
             {
                 std::filesystem::path fsPath(path);
 
-                // Only handle prefab files
                 if (fsPath.extension() != ".vfPrefab")
                 {
                     continue;
@@ -360,9 +357,5 @@ namespace windows
         {
             sculptDragging = false;
         }
-    }
-
-    void ViewPort::drawSculptDebugOverlay(glm::vec2 viewportPos, glm::vec2 viewportSize)
-    {
     }
 }

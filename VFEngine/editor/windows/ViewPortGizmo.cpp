@@ -26,7 +26,6 @@ namespace windows
         auto transformOpt = dispatcher.query(transformQuery);
         if (!transformOpt.has_value()) return;
 
-        // Setup viewport rect
         ImVec2 windowPos = ImGui::GetWindowPos();
         ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
         ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
@@ -39,13 +38,12 @@ namespace windows
         ImGuizmo::SetDrawlist();
         ImGuizmo::SetRect(vpX, vpY, vpW, vpH);
 
-        // Get matrices - undo Vulkan Y-flip for ImGuizmo (it expects OpenGL-style projection)
+        // Undo Vulkan Y-flip for ImGuizmo (it expects OpenGL-style projection)
         glm::mat4 view = camera.getViewMatrix();
         glm::mat4 proj = camera.getProjectionMatrix();
-        proj[1][1] *= -1.0f;  // Undo Vulkan Y-flip for ImGuizmo
+        proj[1][1] *= -1.0f;
         glm::mat4 objectMatrix = buildTransformMatrix(*transformOpt);
 
-        // Map operation
         ImGuizmo::OPERATION op;
         switch (currentGizmoOp)
         {
@@ -58,7 +56,6 @@ namespace windows
         default: return;
         }
 
-        // Manipulate and update if changed
         if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
                                  op, currentGizmoMode, glm::value_ptr(objectMatrix)))
         {
