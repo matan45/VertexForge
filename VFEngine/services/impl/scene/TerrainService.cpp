@@ -542,47 +542,17 @@ namespace services
             gpuParams.maxHeight = tile->config.maxHeight;
             gpuParams.invert = effectiveInvert;
 
-            brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams);
-
-            tile->isDirty = true;
-            tile->setAllLODsDirty();
-            modifiedTiles.push_back(coord);
-        }
-
-        // Sync shared edge vertices between modified tiles and their neighbors
-        std::vector<terrain::TerrainTile*> edgeSyncedNeighbors;
-        if (!modifiedTiles.empty())
-        {
-            edgeSyncedNeighbors = syncTileEdges(modifiedTiles, *grid);
-        }
-
-        // Mark directly modified tiles for priority regeneration (Pass 0, unbounded)
-        // so they regenerate in the same frame as their edge-synced neighbors.
-        // Without this, modified tiles go through the budgeted Pass 1 and may lag
-        // behind already-regenerated neighbors, causing boundary cracks.
-        for (const auto& coord : modifiedTiles)
-        {
-            terrain::TerrainTile* tile = grid->getTile(coord);
-            if (tile)
+            if (brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams))
             {
-                tile->edgeSyncDirty = true;
+                tile->isDirty = true;
+                tile->setAllLODsDirty();
+                modifiedTiles.push_back(coord);
             }
-        }
-
-        // Update world bounds for modified tiles (heights may have changed AABB)
-        for (const auto& coord : modifiedTiles)
-        {
-            terrain::TerrainTile* tile = grid->getTile(coord);
-            if (tile)
+            else
             {
-                tile->updateWorldBounds();
+                vfLogError("GPU brush application failed for tile ({}, {})", coord.x, coord.z);
             }
-        }
 
-        // Update world bounds for edge-synced neighbors too
-        for (auto* neighbor : edgeSyncedNeighbors)
-        {
-            neighbor->updateWorldBounds();
         }
 
         // Publish notification
