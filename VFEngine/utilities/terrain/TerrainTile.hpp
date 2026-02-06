@@ -56,38 +56,12 @@ namespace terrain
     {
         bool needsSnapping = false;
         uint8_t neighborLOD = 0;
-        std::vector<float> snappedHeights;
 
         void clear()
         {
             needsSnapping = false;
             neighborLOD = 0;
-            snappedHeights.clear();
         }
-    };
-
-    // Weight map for texture painting (prepared for VK-178)
-    struct TileWeightMap
-    {
-        uint32_t width = 0;
-        uint32_t height = 0;
-        uint32_t layerCount = 0;
-
-        // Weights per pixel, indexed by [y * width + x][layer]
-        // Values 0-255, should sum to 255 per pixel for proper blending
-        std::vector<std::array<uint8_t, MAX_TERRAIN_LAYERS>> weights;
-
-        std::array<uint32_t, MAX_TERRAIN_LAYERS> layerMaterialIndices{};
-
-        TileWeightMap() = default;
-
-        void resize(uint32_t w, uint32_t h, uint32_t layers);
-        void setWeight(uint32_t x, uint32_t y, uint32_t layer, uint8_t value);
-        [[nodiscard]] uint8_t getWeight(uint32_t x, uint32_t y, uint32_t layer) const;
-        void normalize(uint32_t x, uint32_t y);
-        void clear();
-
-        [[nodiscard]] bool isEmpty() const { return weights.empty(); }
     };
 
     class TerrainTile
@@ -112,11 +86,27 @@ namespace terrain
 
         std::vector<float> heightData;
 
-        TileWeightMap weightMap;
-
         bool isDirty = true;
-        bool isWeightMapDirty = true;
         bool isVisible = true;
+
+        // Set when only edge heights changed (neighbor of a sculpted tile).
+        // These tiles get priority regeneration to prevent frame-lag cracks.
+        bool edgeSyncDirty = false;
+
+        // Per-LOD dirty tracking for incremental sculpt updates
+        // Bit N = LOD N needs CPU meshlet regeneration from heightData
+        uint8_t dirtyLODMask = 0;
+        // Bit N = LOD N was regenerated on CPU but not yet re-uploaded to GPU
+        uint8_t gpuDirtyLODMask = 0;
+
+        bool isLODDirty(uint32_t lod) const { return (dirtyLODMask & (1 << lod)) != 0; }
+        void clearLODDirty(uint32_t lod) { dirtyLODMask &= ~(1 << lod); }
+        void setAllLODsDirty() { dirtyLODMask = 0x0F; isDirty = true; }
+
+        bool isLODGPUDirty(uint32_t lod) const { return (gpuDirtyLODMask & (1 << lod)) != 0; }
+        void setLODGPUDirty(uint32_t lod) { gpuDirtyLODMask |= (1 << lod); }
+        void clearLODGPUDirty(uint32_t lod) { gpuDirtyLODMask &= ~(1 << lod); }
+        bool hasAnyGPUDirtyLOD() const { return gpuDirtyLODMask != 0; }
 
     public:
         TerrainTile() = default;
@@ -125,7 +115,6 @@ namespace terrain
         void initializeFromHeights(const std::vector<float>& heights);
 
         [[nodiscard]] glm::vec3 computeWorldOrigin() const;
-        [[nodiscard]] float sampleHeightWorld(float worldX, float worldZ) const;
         [[nodiscard]] float getHeight(uint32_t x, uint32_t z) const;
 
         void setNeighbor(TileEdge edge, const TileCoord& neighborCoord, uint8_t lod);
@@ -139,12 +128,10 @@ namespace terrain
         [[nodiscard]] TileLODData& getLODData(uint32_t level);
         [[nodiscard]] const TileLODData& getLODData(uint32_t level) const;
 
-    private:
-        void initializeFlat(float height = 0.0f);
         void updateWorldBounds();
 
-        [[nodiscard]] float sampleHeight(float u, float v) const;
-        [[nodiscard]] bool containsWorldPosition(float worldX, float worldZ) const;
+    private:
+        void initializeFlat(float height = 0.0f);
 
         [[nodiscard]] bool isValidHeightIndex(uint32_t x, uint32_t z) const;
         [[nodiscard]] size_t getHeightIndex(uint32_t x, uint32_t z) const;

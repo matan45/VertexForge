@@ -7,9 +7,12 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/HeightmapLoader.hpp"
+#include "terrain/BrushSampler.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
+#include "../../events/BrushEvents.hpp"
+#include "../../events/SculptModeEvents.hpp"
 #include "../../events/SceneEvents.hpp"
 #include "print/EditorLogger.hpp"
 
@@ -26,6 +29,7 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::CreateTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::DeleteTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::RemapTerrainEntitiesCommand>();
+        dispatcher.unregisterCommandHandler<events::brush::ApplyBrushCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
@@ -88,6 +92,12 @@ namespace services
             [this](const events::terrain::GetTerrainTileDataQuery& query)
             {
                 return getTerrainTileData(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::brush::ApplyBrushCommand>(
+            [this](const events::brush::ApplyBrushCommand& cmd)
+            {
+                applyBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
             });
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
@@ -225,7 +235,6 @@ namespace services
             tileComp.currentLOD = tile->currentLOD;
             tileComp.isVisible = tile->isVisible;
             tileComp.isDirty = tile->isDirty;
-            tileComp.isWeightMapDirty = tile->isWeightMapDirty;
             tileComp.isGPUResident = false;
             tileComp.boundingMinY = tile->worldBounds.min.y;
             tileComp.boundingMaxY = tile->worldBounds.max.y;
@@ -348,7 +357,6 @@ namespace services
         data.currentLOD = comp.currentLOD;
         data.isVisible = comp.isVisible;
         data.isDirty = comp.isDirty;
-        data.isWeightMapDirty = comp.isWeightMapDirty;
         data.isGPUResident = comp.isGPUResident;
         data.boundingMinY = comp.boundingMinY;
         data.boundingMaxY = comp.boundingMaxY;
@@ -365,6 +373,9 @@ namespace services
         for (auto& [entityId, grid] : terrainGrids)
         {
             (void)grid->updateLODs(cameraPosition);
+
+            // Regenerate meshlets for tiles modified by brush sculpting
+            grid->regenerateDirtyTiles(cameraPosition);
 
             auto visibleTiles = grid->getVisibleTiles(frustum);
 
@@ -440,5 +451,105 @@ namespace services
         terrainGrids.clear();
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
+    }
+
+    void TerrainService::applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto targetEntity = dispatcher.query(events::sculpt::GetSculptTargetEntityQuery{});
+        if (!targetEntity.has_value())
+        {
+            return;
+        }
+
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end())
+        {
+            return;
+        }
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+
+        auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
+        auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
+
+        // The GPU compute shader handles direction per brush type,
+        // Shift-invert is passed through directly.
+        bool effectiveInvert = invert;
+
+        // For Flatten: capture target height on first click
+        if (brushType == terrain::BrushType::Flatten)
+        {
+            if (isFirstApplication)
+            {
+                flattenTargetCaptured = true;
+                flattenTargetHeight = worldPosition.y;
+            }
+        }
+        else
+        {
+            flattenTargetCaptured = false;
+        }
+
+        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
+        float worldTileSize = 32.0f;
+        const auto& allTiles = grid->getAllTiles();
+        if (!allTiles.empty())
+        {
+            worldTileSize = allTiles[0]->config.worldTileSize;
+        }
+        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
+            brushCenter, brushParams.radius, worldTileSize);
+
+        std::vector<terrain::TileCoord> modifiedTiles;
+        for (const auto& coord : affectedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
+            {
+                continue;
+            }
+
+            if (!brushComputeProvider)
+            {
+                continue;
+            }
+
+            terrain::BrushGPUParams gpuParams;
+            gpuParams.brushCenter = brushCenter;
+            gpuParams.tileWorldOrigin = glm::vec2(
+                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+            gpuParams.brushRadius = brushParams.radius;
+            gpuParams.brushStrength = brushParams.strength;
+            gpuParams.vertexSpacing = tile->config.getVertexSpacing();
+            gpuParams.verticesPerSide = tile->config.getVertexCount();
+            gpuParams.falloff = brushParams.falloff;
+            gpuParams.shape = brushParams.shape;
+            gpuParams.brushType = brushType;
+            gpuParams.deltaTime = deltaTime;
+            gpuParams.targetHeight = flattenTargetHeight;
+            gpuParams.minHeight = tile->config.minHeight;
+            gpuParams.maxHeight = tile->config.maxHeight;
+            gpuParams.invert = effectiveInvert;
+
+            if (brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams))
+            {
+                tile->isDirty = true;
+                tile->setAllLODsDirty();
+                modifiedTiles.push_back(coord);
+            }
+            else
+            {
+                vfLogError("GPU brush application failed for tile ({}, {})", coord.x, coord.z);
+            }
+
+        }
+
+        events::brush::BrushAppliedNotification notification;
+        notification.position = worldPosition;
+        notification.type = brushType;
+        dispatcher.publish(notification);
     }
 }

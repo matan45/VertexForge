@@ -15,9 +15,6 @@ namespace terrain
         std::unique_ptr<TerrainTileGenerator> generator;
         std::unordered_map<TileCoord, std::unique_ptr<TerrainTile>, TileCoordHash> tiles;
 
-        mutable math::AABB cachedWorldBounds;
-        mutable bool boundsDirty = true;
-
     public:
         explicit TerrainGrid(const TerrainTileConfig& config);
         ~TerrainGrid() = default;
@@ -32,6 +29,9 @@ namespace terrain
         // Returns coordinates of tiles whose LOD or stitching state changed
         [[nodiscard]] std::vector<TileCoord> updateLODs(const glm::vec3& cameraPosition);
 
+        // Regenerate meshlets for dirty tiles (active LOD + one additional per frame)
+        void regenerateDirtyTiles(const glm::vec3& cameraPosition);
+
         [[nodiscard]] std::vector<TerrainTile*> getAllTiles();
         [[nodiscard]] std::vector<const TerrainTile*> getAllTiles() const;
         [[nodiscard]] size_t getTileCount() const { return tiles.size(); }
@@ -41,11 +41,9 @@ namespace terrain
 
     private:
         [[nodiscard]] TerrainTile* getOrCreateTile(const TileCoord& coord);
-        [[nodiscard]] TileCoord worldToTileCoord(float worldX, float worldZ) const;
 
         void updateNeighborReferences(TerrainTile& tile);
         void updateAllNeighborReferences();
-        void invalidateBoundsCache();
     };
 
 } // namespace terrain

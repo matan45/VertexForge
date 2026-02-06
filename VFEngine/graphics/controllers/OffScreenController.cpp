@@ -1,4 +1,5 @@
 #include "OffScreenController.hpp"
+#include "../render/gpudriven/BrushComputePipeline.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
@@ -82,8 +83,14 @@ namespace controllers
         offScreen->recreate();
     }
 
-    void OffScreenController::cleanUp() const
+    void OffScreenController::cleanUp()
     {
+        if (brushComputePipeline)
+        {
+            brushComputePipeline->cleanup();
+            brushComputePipeline.reset();
+        }
+
         offScreen->cleanUp();
     }
 
@@ -641,5 +648,54 @@ namespace controllers
         {
             renderHandler->setTerrainRenderProvider(provider);
         }
+    }
+
+    void OffScreenController::setRaycastCursorUV(const glm::vec2& uv)
+    {
+        offScreen->setRaycastCursorUV(uv);
+    }
+
+    void OffScreenController::clearRaycastCursor()
+    {
+        offScreen->clearRaycastCursor();
+    }
+
+    terrain::TerrainHitResult OffScreenController::getTerrainHitResult() const
+    {
+        return offScreen->getTerrainHitResult();
+    }
+
+    void OffScreenController::setBrushOverlayParams(float radius, float falloff, float shape)
+    {
+        offScreen->setBrushOverlayParams(radius, falloff, shape);
+    }
+
+    bool OffScreenController::applyBrushGPU(
+        std::vector<float>& heightData,
+        const terrain::BrushGPUParams& params)
+    {
+        if (!brushComputePipeline)
+        {
+            brushComputePipeline = std::make_unique<render::gpudriven::BrushComputePipeline>(device);
+            brushComputePipeline->init();
+        }
+
+        render::gpudriven::BrushComputePushConstants constants{};
+        constants.brushCenter = params.brushCenter;
+        constants.tileWorldOrigin = params.tileWorldOrigin;
+        constants.brushRadius = params.brushRadius;
+        constants.brushStrength = params.brushStrength;
+        constants.vertexSpacing = params.vertexSpacing;
+        constants.verticesPerSide = params.verticesPerSide;
+        constants.falloffType = static_cast<uint32_t>(params.falloff);
+        constants.shapeType = static_cast<uint32_t>(params.shape);
+        constants.brushType = static_cast<uint32_t>(params.brushType);
+        constants.deltaTime = params.deltaTime;
+        constants.targetHeight = params.targetHeight;
+        constants.minHeight = params.minHeight;
+        constants.maxHeight = params.maxHeight;
+        constants.invertFlag = params.invert ? 1u : 0u;
+
+        return brushComputePipeline->applyBrush(heightData, constants);
     }
 }

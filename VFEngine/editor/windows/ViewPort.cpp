@@ -3,6 +3,9 @@
 #include "events/RenderEvents.hpp"
 #include "events/SceneEvents.hpp"
 #include "events/EditorModeEvents.hpp"
+#include "events/SculptModeEvents.hpp"
+#include "events/TerrainRaycastEvents.hpp"
+#include "events/BrushEvents.hpp"
 #include "events/AudioEvents.hpp"
 #include "time/Timer.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -49,6 +52,12 @@ namespace windows
 
             ImVec2 viewportPos = ImGui::GetCursorScreenPos();
 
+            glm::vec2 vp(viewportPos.x, viewportPos.y);
+            glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
+
+            // Update sculpt cursor UV BEFORE render so raycast uses current mouse position
+            updateSculptCursorUV(vp, vs);
+
             events::render::GetViewportTextureQuery query;
             auto texture = dispatcher.query(query);
             if (texture.isValid())
@@ -60,9 +69,6 @@ namespace windows
             overlay.draw(gizmo);
             gizmo.draw(*editorCamera);
 
-            glm::vec2 vp(viewportPos.x, viewportPos.y);
-            glm::vec2 vs(viewportPanelSize.x, viewportPanelSize.y);
-
             if (!isPlayMode)
             {
                 picker.updateBillboardScreenPositions(*editorCamera, vp, vs);
@@ -70,6 +76,7 @@ namespace windows
             }
 
             handleEntityPicking(isPlayMode, vp, vs);
+            handleSculptBrush();
         }
         ImGui::End();
     }
@@ -169,7 +176,6 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Accept drops from content browser
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
         {
             const auto& dragPaths = DragDropManager::instance().getDragPaths();
@@ -178,7 +184,6 @@ namespace windows
             {
                 std::filesystem::path fsPath(path);
 
-                // Only handle prefab files
                 if (fsPath.extension() != ".vfPrefab")
                 {
                     continue;
@@ -224,6 +229,10 @@ namespace windows
     void ViewPort::handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
         if (isPlayMode) return;
+
+        auto& sculptDispatcher = events::EventDispatcher::instance();
+        if (sculptDispatcher.query(events::sculpt::IsSculptModeActiveQuery{})) return;
+
         if (!ImGui::IsWindowHovered()) return;
         if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
         if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) return;
@@ -289,6 +298,64 @@ namespace windows
         else
         {
             isFirstMouseInput = true;
+        }
+    }
+
+    void ViewPort::updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+
+        if (!sculptActive || !ImGui::IsWindowHovered())
+        {
+            dispatcher.execute(events::terrainRaycast::ClearCursorCommand{});
+            return;
+        }
+
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+
+        ImVec2 mousePos = ImGui::GetMousePos();
+        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
+        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
+
+        events::terrainRaycast::SetCursorPositionCommand cmd;
+        cmd.cursorUV = uv;
+        dispatcher.execute(cmd);
+    }
+
+    void ViewPort::handleSculptBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+
+        if (!sculptActive || !ImGui::IsWindowHovered())
+        {
+            sculptDragging = false;
+            return;
+        }
+
+        // Apply brush on left-click/drag
+        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        bool shiftHeld = ImGui::GetIO().KeyShift;
+
+        if (leftDown)
+        {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                events::brush::ApplyBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                applyCmd.invert = shiftHeld;
+                applyCmd.isFirstApplication = !sculptDragging;
+                dispatcher.execute(applyCmd);
+
+                sculptDragging = true;
+            }
+        }
+        else
+        {
+            sculptDragging = false;
         }
     }
 }

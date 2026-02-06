@@ -84,6 +84,43 @@ namespace render::gpudriven
             }
         }
 
+        // Handle dirty tiles (brush sculpting) - re-upload regenerated LODs
+        for (terrain::TerrainTile* tile : visibleTiles)
+        {
+            if (!tile || !tile->hasAnyGPUDirtyLOD())
+                continue;
+
+            TerrainTileKey key{tile->coord.x, tile->coord.z};
+            auto infoIt = tileInfos.find(key);
+
+            for (uint8_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+            {
+                if (!tile->isLODGPUDirty(lod))
+                    continue;
+
+                // Only re-upload if this LOD was previously loaded on GPU
+                if (infoIt != tileInfos.end() && infoIt->second.hasLODLoaded(lod))
+                {
+                    // Evict stale GPU data
+                    evictTileLOD(key, lod);
+
+                    // Re-upload with regenerated meshlet data
+                    if (adapter.uploadTileAddLOD(*tile, lod))
+                    {
+                        auto& info = tileInfos[key];
+                        info.setLODLoaded(lod);
+                        size_t mem = estimateLODMemory(*tile, lod);
+                        info.gpuMemoryUsage += mem;
+                        currentMemoryUsage += mem;
+                        stats.uploadsThisFrame++;
+                        stats.bytesUploadedThisFrame += mem;
+                    }
+                }
+
+                tile->clearLODGPUDirty(lod);
+            }
+        }
+
         while (!uploadQueue.empty())
         {
             uploadQueue.pop();
@@ -299,7 +336,6 @@ namespace render::gpudriven
                 }
             }
 
-            // Update state
             if (info.currentLoadedLOD == 3)
             {
                 info.state = TerrainTileStreamState::FallbackOnly;
@@ -320,7 +356,6 @@ namespace render::gpudriven
         if (lodData.isEmpty())
             return 0;
 
-        // Calculate actual memory based on geometry
         size_t vertexMemory = lodData.vertices.size() * sizeof(resource::Vertex);
         size_t indexMemory = lodData.indices.size() * sizeof(uint32_t);
         size_t meshletMemory = lodData.meshlets.size() * sizeof(GPUMeshlet);
@@ -332,7 +367,6 @@ namespace render::gpudriven
 
     void TerrainStreamManager::clear()
     {
-        // Clear all tiles via adapter
         adapter.clear();
 
         tileInfos.clear();

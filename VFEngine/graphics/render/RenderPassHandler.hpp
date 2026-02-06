@@ -3,6 +3,7 @@
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "material/MaterialManager.hpp"
 #include "math/Frustum.hpp"
+#include "terrain/TerrainHitResult.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -24,6 +25,7 @@ namespace core
 namespace render::gpudriven
 {
     class GPUDrivenRenderer;
+    class TerrainRaycastPipeline;
 }
 
 namespace render
@@ -67,6 +69,7 @@ namespace render
         std::unique_ptr<DebugRenderer> debugRenderer;
         std::unique_ptr<occlusion::CameraOcclusionManager> cameraOcclusionManager;
         std::unique_ptr<gpudriven::GPUDrivenRenderer> gpuDrivenRenderer;
+        std::unique_ptr<gpudriven::TerrainRaycastPipeline> terrainRaycastPipeline;
 
         core::OffscreenResources& offscreenResources;
 
@@ -95,6 +98,10 @@ namespace render
         mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
         material::CallbackId materialChangeCallbackId{};
         mutable bool lightOcclusionInitialized = false;
+
+        float brushOverlayRadius_ = 0.0f;
+        float brushOverlayFalloff_ = 0.0f;
+        float brushOverlayShape_ = 0.0f;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -147,6 +154,14 @@ namespace render
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();
         void readBackLightOcclusionResults();
+        void readBackTerrainRaycastResults();
+
+        void setRaycastCursorUV(const glm::vec2& uv);
+        void clearRaycastCursor();
+        terrain::TerrainHitResult getTerrainHitResult() const;
+
+        void setBrushOverlayParams(float radius, float falloff, float shape);
+        void updateBrushOverlayFromHitResult();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         services::IVFXRuntimeProvider* getVFXRuntimeProvider() const { return vfxRuntimeProvider; }

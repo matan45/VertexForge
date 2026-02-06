@@ -55,7 +55,6 @@ namespace terrain
         if (progress)
             progress(0.2f, "Generating LODs");
 
-        // Generate all LOD levels
         generateAllLODs(*tile, progress);
 
         if (progress)
@@ -64,7 +63,8 @@ namespace terrain
         return tile;
     }
 
-    void TerrainTileGenerator::generateLODGeometry(TerrainTile& tile, uint32_t lodLevel) const
+    void TerrainTileGenerator::generateLODGeometry(TerrainTile& tile, uint32_t lodLevel,
+                                                    const TileLookup& getTile) const
     {
         if (lodLevel >= TERRAIN_LOD_COUNT)
             return;
@@ -72,14 +72,13 @@ namespace terrain
         TileLODData& lodData = tile.getLODData(lodLevel);
         lodData.clear();
 
-        // Generate vertices
         generateVertices(lodData.vertices, tile, lodLevel);
-
-        // Generate indices
         generateIndices(lodData.indices, lodLevel);
 
-        // Calculate normals
-        calculateNormals(lodData.vertices, lodData.indices);
+        // Calculate normals: face-weighted for interior, analytical for boundary
+        uint32_t vertCount = getLODVertexCount(lodLevel);
+        calculateNormals(lodData.vertices, lodData.indices, vertCount);
+        overrideBoundaryNormals(lodData.vertices, tile, lodLevel, vertCount, getTile);
 
         // Generate skirts for LOD crack prevention
         if (config.skirtDepth > 0.0f)
@@ -87,7 +86,6 @@ namespace terrain
             generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth);
         }
 
-        // Calculate bounds
         calculateBounds(lodData);
 
         // Extract edge vertices for stitching
@@ -96,10 +94,127 @@ namespace terrain
         // Generate meshlets for GPU mesh shading
         generateMeshlets(lodData);
 
-        tile.isDirty = false;
+        tile.clearLODDirty(lodLevel);
+        if (tile.dirtyLODMask == 0)
+        {
+            tile.isDirty = false;
+        }
     }
 
-    void TerrainTileGenerator::generateAllLODs(TerrainTile& tile, ProgressCallback progress) const
+    void TerrainTileGenerator::generateLODGeometryFast(TerrainTile& tile, uint32_t lodLevel,
+                                                        const TileLookup& getTile) const
+    {
+        if (lodLevel >= TERRAIN_LOD_COUNT)
+            return;
+
+        TileLODData& lodData = tile.getLODData(lodLevel);
+
+        // Save meshlet topology (clustering doesn't change when only heights change)
+        auto meshlets = std::move(lodData.meshlets);
+        auto meshletVertices = std::move(lodData.meshletVertices);
+        auto meshletPrimitives = std::move(lodData.meshletPrimitives);
+
+        lodData.clear();
+
+        // Regenerate geometry with updated heights
+        generateVertices(lodData.vertices, tile, lodLevel);
+        generateIndices(lodData.indices, lodLevel);
+
+        uint32_t vertCount = getLODVertexCount(lodLevel);
+        calculateNormals(lodData.vertices, lodData.indices, vertCount);
+        overrideBoundaryNormals(lodData.vertices, tile, lodLevel, vertCount, getTile);
+
+        if (config.skirtDepth > 0.0f)
+        {
+            generateSkirts(lodData.vertices, lodData.indices, lodLevel, config.skirtDepth);
+        }
+
+        calculateBounds(lodData);
+        extractEdgeVertices(tile, lodLevel);
+
+        // Restore meshlet topology and update only the bounds
+        lodData.meshlets = std::move(meshlets);
+        lodData.meshletVertices = std::move(meshletVertices);
+        lodData.meshletPrimitives = std::move(meshletPrimitives);
+
+        updateMeshletBounds(lodData);
+
+        tile.clearLODDirty(lodLevel);
+        if (tile.dirtyLODMask == 0)
+        {
+            tile.isDirty = false;
+        }
+    }
+
+    void TerrainTileGenerator::updateMeshletBounds(TileLODData& lodData) const
+    {
+        if (lodData.meshlets.empty() || lodData.vertices.empty())
+            return;
+
+        // Temporary buffer for unpacking triangle indices
+        std::vector<unsigned char> triangleIndices;
+        triangleIndices.reserve(resource::MAX_MESHLET_PRIMITIVES * 3);
+
+        for (auto& meshlet : lodData.meshlets)
+        {
+            uint32_t vertexOffset = meshlet.descriptor.vertexOffset;
+            uint32_t primitiveOffset = meshlet.descriptor.primitiveOffset;
+            uint32_t primitiveCount = meshlet.descriptor.primitiveCount;
+
+            // Unpack triangle indices from packed uint32_t format
+            triangleIndices.clear();
+            for (uint32_t t = 0; t < primitiveCount; ++t)
+            {
+                uint32_t packed = lodData.meshletPrimitives[primitiveOffset + t];
+                triangleIndices.push_back(static_cast<unsigned char>(packed & 0xFF));
+                triangleIndices.push_back(static_cast<unsigned char>((packed >> 8) & 0xFF));
+                triangleIndices.push_back(static_cast<unsigned char>((packed >> 16) & 0xFF));
+            }
+
+            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                &lodData.meshletVertices[vertexOffset],
+                triangleIndices.data(),
+                primitiveCount,
+                reinterpret_cast<const float*>(lodData.vertices.data()),
+                lodData.vertices.size(),
+                sizeof(resource::Vertex)
+            );
+
+            meshlet.bounds.boundingSphere = glm::vec4(
+                bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius
+            );
+            meshlet.bounds.cone = glm::vec4(
+                bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2],
+                bounds.cone_cutoff
+            );
+        }
+    }
+
+    void TerrainTileGenerator::regenerateLOD(TerrainTile& tile, uint32_t lodLevel,
+                                              const TileLookup& getTile) const
+    {
+        if (lodLevel >= TERRAIN_LOD_COUNT)
+            return;
+
+        TileLODData& lodData = tile.getLODData(lodLevel);
+
+        if (lodData.hasMeshlets())
+        {
+            // Fast path: meshlet topology unchanged, only heights changed
+            generateLODGeometryFast(tile, lodLevel, getTile);
+        }
+        else
+        {
+            // Full path: first generation or topology change
+            generateLODGeometry(tile, lodLevel, getTile);
+        }
+
+        lodData.geometricError = computeGeometricError(tile, lodLevel);
+        tile.setLODGPUDirty(lodLevel);
+    }
+
+    void TerrainTileGenerator::generateAllLODs(TerrainTile& tile, ProgressCallback progress,
+                                                const TileLookup& getTile) const
     {
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
@@ -109,7 +224,7 @@ namespace terrain
                 progress(lodProgress, "Generating LOD " + std::to_string(lod));
             }
 
-            generateLODGeometry(tile, lod);
+            generateLODGeometry(tile, lod, getTile);
         }
 
         // Compute geometric error metrics for each LOD level
@@ -306,12 +421,11 @@ namespace terrain
                 uint32_t bottomLeft = (z + 1) * vertCount + x;
                 uint32_t bottomRight = bottomLeft + 1;
 
-                // First triangle (CCW winding for Vulkan front-face)
+                // CCW winding for Vulkan front-face
                 indices.push_back(topLeft);
                 indices.push_back(bottomLeft);
                 indices.push_back(topRight);
 
-                // Second triangle
                 indices.push_back(topRight);
                 indices.push_back(bottomLeft);
                 indices.push_back(bottomRight);
@@ -321,18 +435,18 @@ namespace terrain
 
     void TerrainTileGenerator::calculateNormals(
         std::vector<resource::Vertex>& vertices,
-        const std::vector<uint32_t>& indices) const
+        const std::vector<uint32_t>& indices,
+        uint32_t vertCount) const
     {
         if (vertices.empty() || indices.empty())
             return;
 
-        // Reset all normals
         for (auto& v : vertices)
         {
             v.normal = glm::vec3(0.0f);
         }
 
-        // Accumulate face normals
+        // Accumulate face normals from tile's own triangles
         for (size_t i = 0; i < indices.size(); i += 3)
         {
             uint32_t i0 = indices[i];
@@ -353,7 +467,10 @@ namespace terrain
             vertices[i2].normal += faceNormal;
         }
 
-        // Normalize all normals
+        // Boundary vertex normals are overridden by overrideBoundaryNormals()
+        // using analytical central differences from full-resolution heightData,
+        // guaranteeing matching normals across tiles regardless of LOD.
+
         for (auto& v : vertices)
         {
             float length = glm::length(v.normal);
@@ -368,6 +485,101 @@ namespace terrain
         }
     }
 
+    void TerrainTileGenerator::overrideBoundaryNormals(
+        std::vector<resource::Vertex>& vertices,
+        const TerrainTile& tile,
+        uint32_t lodLevel,
+        uint32_t vertCount,
+        const TileLookup& getTile) const
+    {
+        if (!getTile || vertices.empty())
+            return;
+
+        uint32_t skipFactor = getLODSkipFactor(lodLevel);
+        uint32_t baseVertCount = config.getVertexCount();
+        float gridSpacing = config.getVertexSpacing();
+
+        // Sample height from full-resolution heightData, crossing into neighbors for out-of-bounds
+        auto sampleHeight = [&](int32_t hx, int32_t hz) -> float
+        {
+            if (hx >= 0 && hx < static_cast<int32_t>(baseVertCount) &&
+                hz >= 0 && hz < static_cast<int32_t>(baseVertCount))
+            {
+                return tile.getHeight(static_cast<uint32_t>(hx), static_cast<uint32_t>(hz));
+            }
+
+            if (hz >= static_cast<int32_t>(baseVertCount))
+            {
+                TileCoord nc = tile.coord + TileCoord::getNeighborOffset(TileEdge::North);
+                const TerrainTile* n = getTile(nc);
+                uint32_t clampedX = static_cast<uint32_t>(std::clamp(hx, 0, static_cast<int32_t>(baseVertCount) - 1));
+                uint32_t neighborHz = static_cast<uint32_t>(hz - static_cast<int32_t>(baseVertCount) + 1);
+                return n ? n->getHeight(clampedX, std::min(neighborHz, baseVertCount - 1))
+                         : tile.getHeight(clampedX, baseVertCount - 1);
+            }
+
+            if (hz < 0)
+            {
+                TileCoord nc = tile.coord + TileCoord::getNeighborOffset(TileEdge::South);
+                const TerrainTile* n = getTile(nc);
+                uint32_t clampedX = static_cast<uint32_t>(std::clamp(hx, 0, static_cast<int32_t>(baseVertCount) - 1));
+                uint32_t neighborHz = static_cast<uint32_t>(static_cast<int32_t>(baseVertCount) - 1 + hz);
+                return n ? n->getHeight(clampedX, std::min(neighborHz, baseVertCount - 1))
+                         : tile.getHeight(clampedX, 0);
+            }
+
+            if (hx >= static_cast<int32_t>(baseVertCount))
+            {
+                TileCoord nc = tile.coord + TileCoord::getNeighborOffset(TileEdge::East);
+                const TerrainTile* n = getTile(nc);
+                uint32_t clampedZ = static_cast<uint32_t>(std::clamp(hz, 0, static_cast<int32_t>(baseVertCount) - 1));
+                uint32_t neighborHx = static_cast<uint32_t>(hx - static_cast<int32_t>(baseVertCount) + 1);
+                return n ? n->getHeight(std::min(neighborHx, baseVertCount - 1), clampedZ)
+                         : tile.getHeight(baseVertCount - 1, clampedZ);
+            }
+
+            if (hx < 0)
+            {
+                TileCoord nc = tile.coord + TileCoord::getNeighborOffset(TileEdge::West);
+                const TerrainTile* n = getTile(nc);
+                uint32_t clampedZ = static_cast<uint32_t>(std::clamp(hz, 0, static_cast<int32_t>(baseVertCount) - 1));
+                uint32_t neighborHx = static_cast<uint32_t>(static_cast<int32_t>(baseVertCount) - 1 + hx);
+                return n ? n->getHeight(std::min(neighborHx, baseVertCount - 1), clampedZ)
+                         : tile.getHeight(0, clampedZ);
+            }
+
+            return 0.0f;
+        };
+
+        for (uint32_t z = 0; z < vertCount; ++z)
+        {
+            for (uint32_t x = 0; x < vertCount; ++x)
+            {
+                if (!isEdgeVertex(x, z, vertCount))
+                    continue;
+
+                uint32_t idx = z * vertCount + x;
+                int32_t hx = static_cast<int32_t>(x * skipFactor);
+                int32_t hz = static_cast<int32_t>(z * skipFactor);
+
+                float hL = sampleHeight(hx - 1, hz);
+                float hR = sampleHeight(hx + 1, hz);
+                float hD = sampleHeight(hx, hz - 1);
+                float hU = sampleHeight(hx, hz + 1);
+
+                glm::vec3 normal(hL - hR, 2.0f * gridSpacing, hD - hU);
+
+                float len = glm::length(normal);
+                if (len > 1e-6f)
+                    normal /= len;
+                else
+                    normal = glm::vec3(0.0f, 1.0f, 0.0f);
+
+                vertices[idx].normal = normal;
+            }
+        }
+    }
+
     void TerrainTileGenerator::calculateBounds(TileLODData& lodData) const
     {
         if (lodData.vertices.empty())
@@ -377,7 +589,6 @@ namespace terrain
             return;
         }
 
-        // Calculate AABB
         glm::vec3 minPos = lodData.vertices[0].position;
         glm::vec3 maxPos = lodData.vertices[0].position;
 
@@ -409,10 +620,8 @@ namespace terrain
         uint32_t lodLevel,
         float skirtDepth) const
     {
-        // Store the original vertex count before adding skirt vertices
         std::vector<resource::Vertex> mainVertices = vertices;
 
-        // Add skirts for all four edges
         addSkirtEdge(vertices, indices, mainVertices, TileEdge::North, lodLevel, skirtDepth);
         addSkirtEdge(vertices, indices, mainVertices, TileEdge::East, lodLevel, skirtDepth);
         addSkirtEdge(vertices, indices, mainVertices, TileEdge::South, lodLevel, skirtDepth);
@@ -512,7 +721,6 @@ namespace terrain
 
         uint32_t vertCount = getLODVertexCount(lodLevel);
 
-        // Extract vertices for each edge
         for (uint8_t edgeIdx = 0; edgeIdx < 4; ++edgeIdx)
         {
             TileEdge edge = static_cast<TileEdge>(edgeIdx);
@@ -553,7 +761,6 @@ namespace terrain
         const glm::vec3& cameraPosition,
         const TerrainTile& tile) const
     {
-        // Calculate distance from camera to tile center
         glm::vec3 tileCenter = tile.worldBounds.getCenter();
         float distance = glm::length(cameraPosition - tileCenter);
 
@@ -664,39 +871,10 @@ namespace terrain
             return;
         }
 
+        // Store metadata only - actual snapped heights are computed inline
+        // in getStitchedHeight() from tile.heightData for per-LOD correctness
         info.needsSnapping = true;
         info.neighborLOD = neighborLOD;
-
-        // Get edge vertices for current and neighbor LOD levels
-        const EdgeVertices& currentEdge = tile.edgeVertices[currentLOD][edgeIndex];
-        const EdgeVertices& neighborEdge = tile.edgeVertices[neighborLOD][edgeIndex];
-
-        if (currentEdge.positions.empty() || neighborEdge.positions.empty())
-        {
-            info.clear();
-            return;
-        }
-
-        uint32_t currentCount = static_cast<uint32_t>(currentEdge.positions.size());
-        uint32_t neighborCount = static_cast<uint32_t>(neighborEdge.positions.size());
-
-        info.snappedHeights.resize(currentCount);
-
-        // Map current edge vertices to interpolated positions on neighbor's coarser edge
-        float ratio = static_cast<float>(neighborCount - 1) / static_cast<float>(currentCount - 1);
-
-        for (uint32_t i = 0; i < currentCount; ++i)
-        {
-            float neighborIdx = static_cast<float>(i) * ratio;
-            uint32_t idx0 = static_cast<uint32_t>(neighborIdx);
-            uint32_t idx1 = std::min(idx0 + 1, neighborCount - 1);
-            float t = neighborIdx - static_cast<float>(idx0);
-
-            // Interpolate Y (height) from neighbor's edge
-            float y0 = neighborEdge.positions[idx0].y;
-            float y1 = neighborEdge.positions[idx1].y;
-            info.snappedHeights[i] = glm::mix(y0, y1, t);
-        }
     }
 
     void TerrainTileGenerator::updateEdgeStitching(TerrainTile& tile) const
@@ -755,22 +933,77 @@ namespace terrain
         uint32_t vertCount,
         uint32_t lodLevel) const
     {
-        // Get original height first
         uint32_t skipFactor = getLODSkipFactor(lodLevel);
         uint32_t heightX = x * skipFactor;
         uint32_t heightZ = z * skipFactor;
         float originalHeight = tile.getHeight(heightX, heightZ);
 
-        // Check if this is an edge vertex that needs stitching
         if (!isEdgeVertex(x, z, vertCount))
         {
             return originalHeight;
         }
 
-        // Handle corner vertices - check both edges
+        uint32_t baseVertCount = config.getVertexCount();
+
+        // Compute snapped height for one edge by sampling this tile's own heightData
+        // at the neighbor's coarser LOD grid positions along the shared boundary.
+        auto snapForEdge = [&](TileEdge edge, uint32_t edgeIdx) -> std::pair<bool, float>
+        {
+            const NeighborInfo& ni = tile.neighbors[static_cast<uint8_t>(edge)];
+            if (!ni.exists)
+                return {false, 0.0f};
+
+            // Per-LOD check: only snap if neighbor is coarser than the LOD being generated
+            if (ni.lodLevel <= lodLevel)
+                return {false, 0.0f};
+
+            uint32_t neighborSkip = getLODSkipFactor(ni.lodLevel);
+            uint32_t neighborVertCount = getLODVertexCount(ni.lodLevel);
+
+            if (neighborVertCount < 2)
+                return {false, 0.0f};
+
+            // Map this LOD's edge vertex to the neighbor's coarser grid
+            float ratio = static_cast<float>(neighborVertCount - 1)
+                        / static_cast<float>(vertCount - 1);
+            float nIdx = static_cast<float>(edgeIdx) * ratio;
+            uint32_t j0 = static_cast<uint32_t>(nIdx);
+            uint32_t j1 = std::min(j0 + 1, neighborVertCount - 1);
+            float t = nIdx - static_cast<float>(j0);
+
+            // Sample heights along the shared boundary at the coarser grid positions
+            uint32_t pos0 = std::min(j0 * neighborSkip, baseVertCount - 1);
+            uint32_t pos1 = std::min(j1 * neighborSkip, baseVertCount - 1);
+
+            float h0, h1;
+            switch (edge)
+            {
+            case TileEdge::North: // z = max, boundary row
+                h0 = tile.getHeight(pos0, baseVertCount - 1);
+                h1 = tile.getHeight(pos1, baseVertCount - 1);
+                break;
+            case TileEdge::South: // z = 0, boundary row
+                h0 = tile.getHeight(pos0, 0);
+                h1 = tile.getHeight(pos1, 0);
+                break;
+            case TileEdge::East: // x = max, boundary column
+                h0 = tile.getHeight(baseVertCount - 1, pos0);
+                h1 = tile.getHeight(baseVertCount - 1, pos1);
+                break;
+            case TileEdge::West: // x = 0, boundary column
+                h0 = tile.getHeight(0, pos0);
+                h1 = tile.getHeight(0, pos1);
+                break;
+            default:
+                return {false, 0.0f};
+            }
+
+            return {true, glm::mix(h0, h1, t)};
+        };
+
+        // Handle corner vertices (lie on two edges)
         if (isCornerVertex(x, z, vertCount))
         {
-            // Determine which two edges this corner touches
             TileEdge edge1, edge2;
             uint32_t idx1, idx2;
 
@@ -779,48 +1012,34 @@ namespace terrain
                 edge1 = TileEdge::South;
                 idx1 = x;
                 edge2 = (x == 0) ? TileEdge::West : TileEdge::East;
-                idx2 = 0; // Corner is at index 0 for the perpendicular edge
+                idx2 = 0;
             }
             else // North edge (z == vertCount - 1)
             {
                 edge1 = TileEdge::North;
                 idx1 = x;
                 edge2 = (x == 0) ? TileEdge::West : TileEdge::East;
-                idx2 = vertCount - 1; // Corner is at last index for the perpendicular edge
+                idx2 = vertCount - 1;
             }
 
-            const auto& stitch1 = tile.edgeStitchInfo[static_cast<uint8_t>(edge1)];
-            const auto& stitch2 = tile.edgeStitchInfo[static_cast<uint8_t>(edge2)];
-
-            bool needs1 = stitch1.needsSnapping && idx1 < stitch1.snappedHeights.size();
-            bool needs2 = stitch2.needsSnapping && idx2 < stitch2.snappedHeights.size();
+            auto [needs1, snap1] = snapForEdge(edge1, idx1);
+            auto [needs2, snap2] = snapForEdge(edge2, idx2);
 
             if (needs1 && needs2)
-            {
-                // Both edges need snapping - average the two snapped heights
-                return (stitch1.snappedHeights[idx1] + stitch2.snappedHeights[idx2]) * 0.5f;
-            }
-            else if (needs1)
-            {
-                return stitch1.snappedHeights[idx1];
-            }
-            else if (needs2)
-            {
-                return stitch2.snappedHeights[idx2];
-            }
+                return (snap1 + snap2) * 0.5f;
+            if (needs1)
+                return snap1;
+            if (needs2)
+                return snap2;
+
             return originalHeight;
         }
 
         // Regular edge vertex (not a corner)
         TileEdge edge = getEdgeForVertex(x, z, vertCount);
         uint32_t edgeIdx = getEdgeVertexIndex(x, z, vertCount, edge);
-        const auto& stitchInfo = tile.edgeStitchInfo[static_cast<uint8_t>(edge)];
+        auto [needs, snapped] = snapForEdge(edge, edgeIdx);
 
-        if (stitchInfo.needsSnapping && edgeIdx < stitchInfo.snappedHeights.size())
-        {
-            return stitchInfo.snappedHeights[edgeIdx];
-        }
-
-        return originalHeight;
+        return needs ? snapped : originalHeight;
     }
 }

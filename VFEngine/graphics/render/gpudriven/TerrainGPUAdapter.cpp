@@ -144,20 +144,22 @@ namespace render::gpudriven
         {
             TerrainTileAllocation alloc;
             alloc.key = key;
-            alloc.aabbMin = tile.worldBounds.min;
-            alloc.aabbMax = tile.worldBounds.max;
-
-            glm::vec3 center = (alloc.aabbMin + alloc.aabbMax) * 0.5f;
-            float radius = glm::length(alloc.aabbMax - center);
-            alloc.boundingSphere = glm::vec4(center, radius);
-
-            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
-            {
-                alloc.geometricErrors[lod] = tile.lodLevels[lod].geometricError;
-            }
 
             auto [insertIt, success] = allocations_.emplace(key, std::move(alloc));
             it = insertIt;
+        }
+
+        // Always refresh bounds and geometric errors from tile (may have changed due to sculpting)
+        it->second.aabbMin = tile.worldBounds.min;
+        it->second.aabbMax = tile.worldBounds.max;
+
+        glm::vec3 center = (it->second.aabbMin + it->second.aabbMax) * 0.5f;
+        float radius = glm::length(it->second.aabbMax - center);
+        it->second.boundingSphere = glm::vec4(center, radius);
+
+        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        {
+            it->second.geometricErrors[lod] = tile.lodLevels[lod].geometricError;
         }
 
         if (!uploadLODData(it->second, lodData, lodLevel, tile.worldOrigin))
@@ -241,18 +243,10 @@ namespace render::gpudriven
 
         std::string tileKey = alloc.getMeshPath();
 
-        // Transform vertices from tile-local space to world space
-        std::vector<resource::Vertex> worldSpaceVertices = lodData.vertices;
-        for (auto& vertex : worldSpaceVertices)
-        {
-            vertex.position.x += worldOrigin.x;
-            // vertex.position.y is already the absolute height - leave as-is
-            vertex.position.z += worldOrigin.z;
-        }
-
+        // Upload vertices in tile-local space (model matrix handles world transform)
         if (!terrainBuffer_.uploadLODVertices(tileKey, lodLevel,
-                                               worldSpaceVertices.data(),
-                                               static_cast<uint32_t>(worldSpaceVertices.size())))
+                                               lodData.vertices.data(),
+                                               static_cast<uint32_t>(lodData.vertices.size())))
         {
             return false;
         }
@@ -283,11 +277,7 @@ namespace render::gpudriven
             {
                 GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
 
-                // Transform bounding sphere center from local space to world space
-                meshlet.boundingSphere.x += worldOrigin.x;
-                meshlet.boundingSphere.z += worldOrigin.z;
-
-                // Update offsets to use allocated positions
+                // Bounding sphere stays in local space; task shader transforms via modelMatrix
                 meshlet.vertexOffset += meshletVertexOffset;
                 meshlet.primitiveOffset += meshletPrimitiveOffset;
 
@@ -349,12 +339,16 @@ namespace render::gpudriven
 
             TerrainTileGPUData gpuTile{};
 
-            // Model matrix - identity for world-space terrain
-            gpuTile.modelMatrix = glm::mat4(1.0f);
+            // Model matrix translates tile-local vertices to world space
+            gpuTile.modelMatrix = glm::translate(glm::mat4(1.0f),
+                glm::vec3(tile->worldOrigin.x, 0.0f, tile->worldOrigin.z));
 
-            gpuTile.boundingSphere = alloc.boundingSphere;
-            gpuTile.aabbMin = glm::vec4(alloc.aabbMin, 0.0f);
-            gpuTile.aabbMax = glm::vec4(alloc.aabbMax, 0.0f);
+            // Use current tile bounds (not stale allocation data) so sculpting updates are reflected
+            glm::vec3 currentCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
+            float currentRadius = glm::length(tile->worldBounds.max - currentCenter);
+            gpuTile.boundingSphere = glm::vec4(currentCenter, currentRadius);
+            gpuTile.aabbMin = glm::vec4(tile->worldBounds.min, 0.0f);
+            gpuTile.aabbMax = glm::vec4(tile->worldBounds.max, 0.0f);
 
             // LOD meshlet data for each level
             // Format: x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
@@ -383,11 +377,12 @@ namespace render::gpudriven
                 0
             );
 
+            // Use current geometric errors from tile (not stale allocation) for correct GPU LOD selection
             gpuTile.lodGeometricErrors = glm::vec4(
-                alloc.geometricErrors[0],
-                alloc.geometricErrors[1],
-                alloc.geometricErrors[2],
-                alloc.geometricErrors[3]
+                tile->lodLevels[0].geometricError,
+                tile->lodLevels[1].geometricError,
+                tile->lodLevels[2].geometricError,
+                tile->lodLevels[3].geometricError
             );
 
             gpuTile.coordX = key.coordX;

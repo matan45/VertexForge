@@ -19,9 +19,6 @@ namespace terrain
     constexpr std::array<uint32_t, 3> TILE_VERTEX_COUNTS = {33, 65, 129};
     constexpr std::array<uint32_t, 3> TILE_QUAD_COUNTS = {32, 64, 128};
 
-    // RGBA8 = 4 channels, can use multiple textures
-    constexpr uint32_t MAX_TERRAIN_LAYERS = 8;
-
     constexpr uint32_t TERRAIN_LOD_COUNT = 4;
 
     enum class TileEdge : uint8_t
@@ -104,7 +101,6 @@ namespace terrain
         float worldTileSize = 32.0f;
         float maxHeight = 100.0f;
         float minHeight = -10.0f;
-        uint32_t weightMapResolution = 64;
         std::array<float, TERRAIN_LOD_COUNT> lodDistances = {100.0f, 300.0f, 600.0f, 1200.0f};
 
         // Vertical skirt depth for LOD crack prevention

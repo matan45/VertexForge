@@ -1,6 +1,5 @@
 #include "TerrainGrid.hpp"
 #include <algorithm>
-#include <cmath>
 
 namespace terrain
 {
@@ -41,16 +40,62 @@ namespace terrain
 
         updateNeighborReferences(*tilePtr);
 
-        invalidateBoundsCache();
         return tilePtr;
     }
 
-    TileCoord TerrainGrid::worldToTileCoord(float worldX, float worldZ) const
+    void TerrainGrid::regenerateDirtyTiles(const glm::vec3& cameraPosition)
     {
-        return TileCoord(
-            static_cast<int32_t>(std::floor(worldX / config.worldTileSize)),
-            static_cast<int32_t>(std::floor(worldZ / config.worldTileSize))
-        );
+        constexpr uint32_t MAX_TILE_REGEN = 8;
+        uint32_t tileRegenCount = 0;
+
+        auto getTile = [this](const TileCoord& coord) -> const TerrainTile* {
+            return this->getTile(coord);
+        };
+
+        // Pass 0: Force-regenerate edge-synced neighbor tiles (unbounded).
+        // These tiles had their boundary heights changed and must regenerate this frame
+        // to prevent cracks. Count is naturally bounded (typically 2-6).
+        // Regenerate ALL dirty LODs so the GPU task shader can safely select any LOD.
+        for (auto& [coord, tile] : tiles)
+        {
+            if (!tile->edgeSyncDirty)
+                continue;
+
+            for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+            {
+                if (tile->isLODDirty(lod))
+                {
+                    generator->regenerateLOD(*tile, lod, getTile);
+                }
+            }
+
+            tile->edgeSyncDirty = false;
+        }
+
+        // Pass 1: regenerate dirty tiles (budgeted per-tile).
+        // Regenerate ALL dirty LODs per tile so the GPU task shader can select any LOD
+        // without encountering stale pre-sculpt geometry.
+        for (auto& [coord, tile] : tiles)
+        {
+            if (!tile->isDirty)
+                continue;
+
+            if (tileRegenCount >= MAX_TILE_REGEN)
+                continue;
+
+            bool anyRegenerated = false;
+            for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+            {
+                if (tile->isLODDirty(lod))
+                {
+                    generator->regenerateLOD(*tile, lod, getTile);
+                    anyRegenerated = true;
+                }
+            }
+
+            if (anyRegenerated)
+                ++tileRegenCount;
+        }
     }
 
     std::vector<TerrainTile*> TerrainGrid::getVisibleTiles(const math::Frustum& frustum)
@@ -190,10 +235,5 @@ namespace terrain
         {
             progress(1.0f, "Complete");
         }
-    }
-
-    void TerrainGrid::invalidateBoundsCache()
-    {
-        boundsDirty = true;
     }
 }

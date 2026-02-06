@@ -16,6 +16,9 @@
 #include "interfaces/IPhysicsService.hpp"
 #include "interfaces/IProjectService.hpp"
 #include "interfaces/ITerrainService.hpp"
+#include "interfaces/ISculptModeService.hpp"
+#include "interfaces/IBrushService.hpp"
+#include "interfaces/ITerrainRaycastService.hpp"
 #include "events/EventTypes.hpp"
 
 namespace core {
@@ -55,6 +58,9 @@ namespace handlers {
 		std::shared_ptr<services::IPhysicsService> physicsService;
 		std::shared_ptr<services::IProjectService> projectService;
 		std::shared_ptr<services::ITerrainService> terrainService;
+		std::shared_ptr<services::ISculptModeService> sculptModeService;
+		std::shared_ptr<services::IBrushService> brushService;
+	std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
 		std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;

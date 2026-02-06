@@ -16,6 +16,8 @@ namespace services
     class IPhysicsProvider;
     class IAnimatorProvider;
     class ITerrainRenderProvider;
+    class ITerrainRaycastProvider;
+    class ITerrainBrushComputeProvider;
 }
 
 namespace window
@@ -48,6 +50,8 @@ namespace core
     class PhysicsAdapter;
     class AnimatorAdapter;
     class TerrainRenderAdapter;
+    class TerrainRaycastAdapter;
+    class TerrainBrushComputeAdapter;
 
     class EditorBootstrap
     {
@@ -67,6 +71,8 @@ namespace core
         std::unique_ptr<PhysicsAdapter> physicsAdapter;
         std::unique_ptr<AnimatorAdapter> animatorAdapter;
         std::unique_ptr<TerrainRenderAdapter> terrainRenderAdapter;
+        std::unique_ptr<TerrainRaycastAdapter> terrainRaycastAdapter;
+        std::unique_ptr<TerrainBrushComputeAdapter> terrainBrushComputeAdapter;
     public:
         explicit EditorBootstrap();
         ~EditorBootstrap();
@@ -106,6 +112,10 @@ namespace core
 
         // For late binding - allows EditorHandler to connect TerrainService
         TerrainRenderAdapter* getTerrainRenderAdapterInternal();
+
+        services::ITerrainRaycastProvider* getTerrainRaycastProvider();
+
+        services::ITerrainBrushComputeProvider* getTerrainBrushComputeProvider();
 
         // === Other Accessors ===
 

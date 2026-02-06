@@ -136,8 +136,11 @@
     <ClInclude Include="serialization\ProjectSerialization.hpp" />
     <ClInclude Include="serialization\SceneSerialization.hpp" />
     <ClInclude Include="string\StringUtil.hpp" />
+    <ClInclude Include="terrain\BrushSampler.hpp" />
+    <ClInclude Include="terrain\BrushTypes.hpp" />
     <ClInclude Include="terrain\HeightmapLoader.hpp" />
     <ClInclude Include="terrain\TerrainGrid.hpp" />
+    <ClInclude Include="terrain\TerrainHitResult.hpp" />
     <ClInclude Include="terrain\TerrainTile.hpp" />
     <ClInclude Include="terrain\TerrainTileGenerator.hpp" />
     <ClInclude Include="terrain\TerrainTypes.hpp" />
@@ -186,6 +189,7 @@
     <ClCompile Include="serialization\ProjectSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="string\StringUtil.cpp" />
+    <ClCompile Include="terrain\BrushSampler.cpp" />
     <ClCompile Include="terrain\HeightmapLoader.cpp" />
     <ClCompile Include="terrain\TerrainGrid.cpp" />
     <ClCompile Include="terrain\TerrainTile.cpp" />

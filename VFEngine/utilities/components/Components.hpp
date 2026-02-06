@@ -446,7 +446,6 @@ namespace components
         bool isVisible = true;
 
         bool isDirty = false;           // Needs geometry regeneration
-        bool isWeightMapDirty = false;  // Needs weight map GPU update
         bool isGPUResident = false;     // Currently uploaded to GPU
 
         // Cached bounds for inspector display

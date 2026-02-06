@@ -14,6 +14,7 @@
 #include "events/ApplicationEvents.hpp"
 #include "events/EditorModeEvents.hpp"
 #include "events/ScriptingEvents.hpp"
+#include "events/SculptModeEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -247,6 +248,9 @@ namespace windows
 
         if (currentMode == services::EditorMode::Edit)
         {
+            bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            ImGui::BeginDisabled(isSculptMode);
+
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
@@ -257,6 +261,13 @@ namespace windows
                 dispatcher.execute(cmd);
             }
             ImGui::PopStyleColor(3);
+
+            ImGui::EndDisabled();
+
+            if (isSculptMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip("Exit Sculpt Mode before entering Play Mode");
+            }
         }
         else
         {

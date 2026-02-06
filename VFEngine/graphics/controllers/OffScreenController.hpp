@@ -2,6 +2,8 @@
 #include <glm/glm.hpp>
 #include "../../services/providers/IOffScreenProvider.hpp"
 #include "../render/occlusion/CameraOcclusionManager.hpp"
+#include "terrain/TerrainHitResult.hpp"
+#include "terrain/BrushTypes.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
@@ -22,6 +24,11 @@ namespace core
 namespace render
 {
     class OffScreenViewPort;
+}
+
+namespace render::gpudriven
+{
+    class BrushComputePipeline;
 }
 
 namespace services
@@ -75,7 +82,7 @@ namespace controllers
 
         void init();
         void recreate();
-        void cleanUp() const;
+        void cleanUp();
 
         void iblSet(std::string_view iblPath);
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
@@ -150,5 +157,18 @@ namespace controllers
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+
+        void setRaycastCursorUV(const glm::vec2& uv);
+        void clearRaycastCursor();
+        terrain::TerrainHitResult getTerrainHitResult() const;
+
+        void setBrushOverlayParams(float radius, float falloff, float shape);
+
+        bool applyBrushGPU(
+            std::vector<float>& heightData,
+            const terrain::BrushGPUParams& params);
+
+    private:
+        std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
     };
 }

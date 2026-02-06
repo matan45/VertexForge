@@ -31,6 +31,9 @@ namespace windows
         float lastMouseX = 0.0f;
         float lastMouseY = 0.0f;
 
+        // Sculpt brush dragging state
+        bool sculptDragging = false;
+
     public:
         explicit ViewPort();
         ~ViewPort() override = default;
@@ -45,5 +48,7 @@ namespace windows
         void updateRendererCameras(const CameraState& camera);
         void handlePrefabDrop();
         void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleSculptBrush();
     };
 }

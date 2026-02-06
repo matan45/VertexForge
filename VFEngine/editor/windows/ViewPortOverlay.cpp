@@ -2,6 +2,9 @@
 #include "events/EventDispatcher.hpp"
 #include "events/RenderEvents.hpp"
 #include "events/EditorModeEvents.hpp"
+#include "events/SculptModeEvents.hpp"
+#include "events/SceneEvents.hpp"
+#include "events/TerrainEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -72,6 +75,10 @@ namespace windows
 
                 ImGui::SameLine();
 
+                bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+
+                ImGui::BeginDisabled(isSculptMode);
+
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
                     gizmo.toggleOperation(GizmoOperation::Rotate);
@@ -90,6 +97,39 @@ namespace windows
                 {
                     gizmo.toggleOperation(GizmoOperation::Translate);
                 }
+
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                // Sculpt mode toggle - enabled when terrain is selected or already sculpting
+                bool canSculpt = isSculptMode;
+                if (!canSculpt)
+                {
+                    auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
+                    if (selectedEntity.has_value())
+                    {
+                        events::terrain::HasTerrainComponentQuery terrainQuery;
+                        terrainQuery.entity = *selectedEntity;
+                        canSculpt = dispatcher.query(terrainQuery);
+
+                        if (!canSculpt)
+                        {
+                            events::terrain::HasTerrainTileComponentQuery tileQuery;
+                            tileQuery.entity = *selectedEntity;
+                            canSculpt = dispatcher.query(tileQuery);
+                        }
+                    }
+                }
+
+                ImGui::BeginDisabled(!canSculpt);
+                if (iconButton(ViewportIcon::Sculpt, isSculptMode, isSculptMode ? "Exit Sculpt Mode" : "Enter Sculpt Mode"))
+                {
+                    events::sculpt::SetSculptModeActiveCommand cmd;
+                    cmd.active = !isSculptMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
             }
         }
         ImGui::End();

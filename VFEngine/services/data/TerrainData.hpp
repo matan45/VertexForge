@@ -47,7 +47,6 @@ namespace services
         uint8_t currentLOD = 0;
         bool isVisible = true;
         bool isDirty = false;
-        bool isWeightMapDirty = false;
         bool isGPUResident = false;
         float boundingMinY = 0.0f;
         float boundingMaxY = 0.0f;

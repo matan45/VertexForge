@@ -48,7 +48,6 @@ namespace windows::details {
             ImGui::Separator();
 
             ImGui::Text("Dirty: %s", tile.isDirty ? "Yes" : "No");
-            ImGui::Text("WeightMap Dirty: %s", tile.isWeightMapDirty ? "Yes" : "No");
             ImGui::Text("GPU Resident: %s", tile.isGPUResident ? "Yes" : "No");
 
             ImGui::Separator();

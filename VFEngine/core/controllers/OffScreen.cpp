@@ -294,4 +294,31 @@ namespace controllers {
 	{
 		offScreenController->setTerrainRenderProvider(provider);
 	}
+
+	void OffScreen::setRaycastCursorUV(const glm::vec2& uv)
+	{
+		offScreenController->setRaycastCursorUV(uv);
+	}
+
+	void OffScreen::clearRaycastCursor()
+	{
+		offScreenController->clearRaycastCursor();
+	}
+
+	terrain::TerrainHitResult OffScreen::getTerrainHitResult() const
+	{
+		return offScreenController->getTerrainHitResult();
+	}
+
+	void OffScreen::setBrushOverlayParams(float radius, float falloff, float shape)
+	{
+		offScreenController->setBrushOverlayParams(radius, falloff, shape);
+	}
+
+	bool OffScreen::applyBrushGPU(
+		std::vector<float>& heightData,
+		const terrain::BrushGPUParams& params)
+	{
+		return offScreenController->applyBrushGPU(heightData, params);
+	}
 }

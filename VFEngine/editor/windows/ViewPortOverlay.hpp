@@ -12,7 +12,8 @@ namespace windows
         World = 1,
         Rotate = 2,
         Scale = 3,
-        Translate = 4
+        Translate = 4,
+        Sculpt = 5
     };
 
     class ViewPortOverlay

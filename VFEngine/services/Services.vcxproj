@@ -106,6 +106,7 @@
     <ClInclude Include="events\ApplicationEvents.hpp" />
     <ClInclude Include="events\AudioEvents.hpp" />
     <ClInclude Include="events\AudioSettingsEvents.hpp" />
+    <ClInclude Include="events\BrushEvents.hpp" />
     <ClInclude Include="events\EditorModeEvents.hpp" />
     <ClInclude Include="events\EventDispatcher.hpp" />
     <ClInclude Include="events\EventTypes.hpp" />
@@ -121,11 +122,14 @@
     <ClInclude Include="events\ResourceEvents.hpp" />
     <ClInclude Include="events\SceneEvents.hpp" />
     <ClInclude Include="events\ScriptingEvents.hpp" />
+    <ClInclude Include="events\SculptModeEvents.hpp" />
     <ClInclude Include="events\TerrainEvents.hpp" />
+    <ClInclude Include="events\TerrainRaycastEvents.hpp" />
     <ClInclude Include="events\UndoRedoEvents.hpp" />
     <ClInclude Include="events\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\VFXRuntimeEvents.hpp" />
     <ClInclude Include="impl\AudioServiceImpl.hpp" />
+    <ClInclude Include="impl\BrushServiceImpl.hpp" />
     <ClInclude Include="impl\EditorModeServiceImpl.hpp" />
     <ClInclude Include="impl\EditorRenderServiceImpl.hpp" />
     <ClInclude Include="impl\FileOperationsServiceImpl.hpp" />
@@ -137,6 +141,8 @@
     <ClInclude Include="impl\RuntimeRenderServiceImpl.hpp" />
     <ClInclude Include="impl\SceneServiceImpl.hpp" />
     <ClInclude Include="impl\ScriptingServiceImpl.hpp" />
+    <ClInclude Include="impl\SculptModeServiceImpl.hpp" />
+    <ClInclude Include="impl\TerrainRaycastServiceImpl.hpp" />
     <ClInclude Include="impl\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\VFXRuntimeServiceImpl.hpp" />
@@ -158,6 +164,7 @@
     <ClInclude Include="impl\scene\TransformComponentService.hpp" />
     <ClInclude Include="interfaces\IAnimationService.hpp" />
     <ClInclude Include="interfaces\IAudioService.hpp" />
+    <ClInclude Include="interfaces\IBrushService.hpp" />
     <ClInclude Include="interfaces\IEditorModeService.hpp" />
     <ClInclude Include="interfaces\IEditorRenderService.hpp" />
     <ClInclude Include="interfaces\IFileOperationsService.hpp" />
@@ -168,6 +175,8 @@
     <ClInclude Include="interfaces\IRenderService.hpp" />
     <ClInclude Include="interfaces\ISceneService.hpp" />
     <ClInclude Include="interfaces\IScriptingService.hpp" />
+    <ClInclude Include="interfaces\ISculptModeService.hpp" />
+    <ClInclude Include="interfaces\ITerrainRaycastService.hpp" />
     <ClInclude Include="interfaces\ITerrainService.hpp" />
     <ClInclude Include="interfaces\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\IWindowStateService.hpp" />
@@ -181,6 +190,8 @@
     <ClInclude Include="providers\IPhysicsProvider.hpp" />
     <ClInclude Include="providers\IPreviewProvider.hpp" />
     <ClInclude Include="providers\IScriptingProvider.hpp" />
+    <ClInclude Include="providers\ITerrainBrushComputeProvider.hpp" />
+    <ClInclude Include="providers\ITerrainRaycastProvider.hpp" />
     <ClInclude Include="providers\ITerrainRenderProvider.hpp" />
     <ClInclude Include="providers\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\IVFXRuntimeProvider.hpp" />
@@ -189,6 +200,7 @@
   <ItemGroup>
     <ClCompile Include="events\EventDispatcher.cpp" />
     <ClCompile Include="impl\AudioServiceImpl.cpp" />
+    <ClCompile Include="impl\BrushServiceImpl.cpp" />
     <ClCompile Include="impl\EditorModeServiceImpl.cpp" />
     <ClCompile Include="impl\EditorRenderServiceImpl.cpp" />
     <ClCompile Include="impl\FileOperationsServiceImpl.cpp" />
@@ -200,6 +212,8 @@
     <ClCompile Include="impl\RuntimeRenderServiceImpl.cpp" />
     <ClCompile Include="impl\SceneServiceImpl.cpp" />
     <ClCompile Include="impl\ScriptingServiceImpl.cpp" />
+    <ClCompile Include="impl\SculptModeServiceImpl.cpp" />
+    <ClCompile Include="impl\TerrainRaycastServiceImpl.cpp" />
     <ClCompile Include="impl\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\VFXRuntimeServiceImpl.cpp" />

@@ -8,6 +8,8 @@
 #include <optional>
 #include "providers/IOffScreenProvider.hpp"
 #include "types/CameraTypes.hpp"
+#include "terrain/TerrainHitResult.hpp"
+#include "terrain/BrushTypes.hpp"
 
 namespace services
 {
@@ -106,5 +108,15 @@ namespace controllers {
 
 		void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 		void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
+
+		void setRaycastCursorUV(const glm::vec2& uv);
+		void clearRaycastCursor();
+		terrain::TerrainHitResult getTerrainHitResult() const;
+
+		void setBrushOverlayParams(float radius, float falloff, float shape);
+
+		bool applyBrushGPU(
+			std::vector<float>& heightData,
+			const terrain::BrushGPUParams& params);
 	};
 }

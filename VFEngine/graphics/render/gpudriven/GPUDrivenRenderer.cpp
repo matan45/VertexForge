@@ -330,6 +330,11 @@ namespace render::gpudriven
         cachedCameraNear = nearPlane;
         cachedCameraFar = farPlane;
 
+        if (terrainPipeline)
+        {
+            terrainPipeline->setViewProjection(projection * view);
+        }
+
         updateClusterGrid(projection, nearPlane, farPlane);
         updatePipelineDescriptors();
 
@@ -1308,6 +1313,14 @@ namespace render::gpudriven
         if (terrainMeshBuffer)
         {
             terrainMeshBuffer->clear();
+        }
+    }
+
+    void GPUDrivenRenderer::setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
+    {
+        if (terrainPipeline)
+        {
+            terrainPipeline->setBrushOverlay(worldPos, worldRadius, falloff, shape);
         }
     }
 
