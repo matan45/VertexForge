@@ -428,6 +428,9 @@ namespace components
         // Heightmap source path (for regeneration/serialization)
         std::string heightmapPath;
 
+        // Terrain material asset path (.vfTerrainMat)
+        std::string terrainMaterialPath;
+
         bool isActive = true;       // Global terrain enable/disable
         bool isDirty = false;       // Config changed, needs regeneration
 

@@ -19,6 +19,7 @@ namespace services
         std::array<float, 4> lodDistances = { 100.0f, 300.0f, 600.0f, 1200.0f };
 
         std::string heightmapPath;  // empty = flat terrain
+        std::string terrainMaterialPath;  // .vfTerrainMat path
     };
 
     struct TerrainData
@@ -32,6 +33,7 @@ namespace services
         int32_t gridMaxX = 0;
         int32_t gridMaxZ = 0;
         std::string heightmapPath;
+        std::string terrainMaterialPath;
         uint32_t tileCount = 0;
 
         bool isActive = true;
