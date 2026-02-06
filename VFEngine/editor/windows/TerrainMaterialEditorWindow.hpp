@@ -39,9 +39,16 @@ namespace windows
         void loadMaterial();
         void saveMaterial();
         void compileMaterial();
+        void syncLayersFromGraph();
 
         void drawToolbar();
         void drawGraphPanel();
+        void drawPropertiesPanel();
+
+        // Layer Stack specific UI - per-layer texture pickers
+        bool drawLayerStackProperties(material::ShaderNode& node);
+        // Generic property editing for other node types
+        bool drawGenericProperties(material::ShaderNode& node);
 
         void onGraphChanged();
     };

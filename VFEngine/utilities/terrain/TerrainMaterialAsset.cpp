@@ -389,13 +389,27 @@ namespace terrain
         material.activeLayerCount = 1;
         material.needsRecompile = true;
 
+        // Create default Layer Stack node
+        material::ShaderNode layerStackNode;
+        layerStackNode.id = material.graph.nextNodeId++;
+        layerStackNode.type = material::NodeType::TerrainLayerStack;
+        layerStackNode.name = "Layer Stack";
+        layerStackNode.position = glm::vec2(0.0f, 200.0f);
+        layerStackNode.properties["layerCount"] = material::NodeProperty(1.0f);
+        uint32_t layerStackId = layerStackNode.id;
+        material.graph.nodes.push_back(std::move(layerStackNode));
+
         // Create default TerrainPBROutput node
         material::ShaderNode outputNode;
         outputNode.id = material.graph.nextNodeId++;
         outputNode.type = material::NodeType::TerrainPBROutput;
         outputNode.name = "Terrain PBR Output";
-        outputNode.position = glm::vec2(300.0f, 200.0f);
+        outputNode.position = glm::vec2(400.0f, 200.0f);
+        uint32_t outputId = outputNode.id;
         material.graph.nodes.push_back(std::move(outputNode));
+
+        // Links will be created after pins are initialized in the editor
+        // (pins don't exist yet at this point - they get created by ShaderNodeFactory::initializeNode)
 
         return material;
     }

@@ -319,6 +319,10 @@ namespace editor::graph {
                     createNode(material::NodeType::TerrainTextureSample, newNodePosition);
                     ImGui::CloseCurrentPopup();
                 }
+                if (ImGui::MenuItem("Layer Stack")) {
+                    createNode(material::NodeType::TerrainLayerStack, newNodePosition);
+                    ImGui::CloseCurrentPopup();
+                }
                 ImGui::EndMenu();
             }
 

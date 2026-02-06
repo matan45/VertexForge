@@ -209,7 +209,8 @@ namespace material
         TerrainSlopeSample,       // Terrain slope derived from normal
         TerrainWeightSample,      // Weight map sample for a layer index
         TerrainLayerBlend,        // Blend multiple terrain layers by weights
-        TerrainTextureSample      // Sample terrain layer texture
+        TerrainTextureSample,     // Sample terrain layer texture
+        TerrainLayerStack         // Auto-blend all active layers by weight maps
     };
 
     inline std::string nodeTypeToString(NodeType type)
@@ -274,6 +275,7 @@ namespace material
         case NodeType::TerrainWeightSample: return "TerrainWeightSample";
         case NodeType::TerrainLayerBlend: return "TerrainLayerBlend";
         case NodeType::TerrainTextureSample: return "TerrainTextureSample";
+        case NodeType::TerrainLayerStack: return "TerrainLayerStack";
         default: return "Unknown";
         }
     }
@@ -338,6 +340,7 @@ namespace material
         if (str == "TerrainWeightSample") return NodeType::TerrainWeightSample;
         if (str == "TerrainLayerBlend") return NodeType::TerrainLayerBlend;
         if (str == "TerrainTextureSample") return NodeType::TerrainTextureSample;
+        if (str == "TerrainLayerStack") return NodeType::TerrainLayerStack;
         return NodeType::ConstantScalar;
     }
 

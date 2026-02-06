@@ -130,6 +130,8 @@ namespace editor::graph {
                 return std::make_unique<TerrainLayerBlendNode>();
             case material::NodeType::TerrainTextureSample:
                 return std::make_unique<TerrainTextureSampleNode>();
+            case material::NodeType::TerrainLayerStack:
+                return std::make_unique<TerrainLayerStackNode>();
 
             default:
                 return std::make_unique<ConstantScalarNode>();  // Default fallback

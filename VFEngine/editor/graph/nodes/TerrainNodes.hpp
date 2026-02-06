@@ -1,6 +1,7 @@
 #pragma once
 #include "ShaderNode.hpp"
 #include <algorithm>
+#include <format>
 
 namespace editor::graph {
 
@@ -15,26 +16,20 @@ namespace editor::graph {
 
             addInputPin("Albedo", material::PinType::Vec3, glm::vec3(0.4f, 0.35f, 0.3f));
             addInputPin("Normal", material::PinType::Vec3, glm::vec3(0.5f, 0.5f, 1.0f));
-            addInputPin("Metallic", material::PinType::Float, 0.0f);
-            addInputPin("Roughness", material::PinType::Float, 0.9f);
-            addInputPin("AO", material::PinType::Float, 1.0f);
         }
 
         std::string generateCode(const std::string& /*outputVarPrefix*/,
                                 const std::map<std::string, std::string>& inputVarNames) const override {
             std::string albedo = inputVarNames.count("Albedo") ? inputVarNames.at("Albedo") : "vec3(0.400000, 0.350000, 0.300000)";
             std::string normal = inputVarNames.count("Normal") ? inputVarNames.at("Normal") : "vec3(0.500000, 0.500000, 1.000000)";
-            std::string metallic = inputVarNames.count("Metallic") ? inputVarNames.at("Metallic") : "0.0";
-            std::string roughness = inputVarNames.count("Roughness") ? inputVarNames.at("Roughness") : "0.9";
-            std::string ao = inputVarNames.count("AO") ? inputVarNames.at("AO") : "1.0";
 
             std::string code;
             code += "// Terrain material properties from shader graph\n";
             code += "vec3 mat_albedo = " + albedo + ";\n";
             code += "vec3 mat_normalTS = " + normal + ";\n";
-            code += "float mat_metallic = clamp(" + metallic + ", 0.0, 1.0);\n";
-            code += "float mat_roughness = clamp(" + roughness + ", 0.04, 1.0);\n";
-            code += "float mat_ao = clamp(" + ao + ", 0.0, 1.0);\n";
+            code += "float mat_metallic = 0.0;\n";
+            code += "float mat_roughness = 0.9;\n";
+            code += "float mat_ao = 1.0;\n";
             return code;
         }
 
@@ -328,6 +323,120 @@ namespace editor::graph {
             if (pinName == "R" || pinName == "G" || pinName == "B" || pinName == "A") return "float";
             if (pinName == "RGB") return "vec3";
             return "vec4";
+        }
+    };
+
+    // Terrain Layer Stack - defines terrain layers and auto-blends them by weight maps.
+    //
+    // Each layer has: albedo texture path, normal texture path, tiling scale.
+    // Properties:
+    //   layerCount (1-16)
+    //   layer{i}_albedo  (string) - albedo texture file path
+    //   layer{i}_normal  (string) - normal texture file path
+    //   layer{i}_tiling  (float)  - UV tiling scale
+    //
+    // The paint brush system reads these layer definitions to let the user
+    // pick which layer to paint. Weight maps control per-pixel blending.
+    //
+    // Outputs blended Albedo + Normal to connect to TerrainPBROutput.
+    //
+    // Current state (pre VK-214/215):
+    //   - Texture paths are stored but not sampled (no GPU bindings yet)
+    //   - Layer 0 weight = 1.0, others = 0.0 (no weight maps yet)
+    //   - Falls back to default color
+    // After VK-214: textures loaded to GPU, sampling works
+    // After VK-215: weight maps from painting, blending works
+    class TerrainLayerStackNode : public ShaderNodeBase {
+    public:
+        TerrainLayerStackNode() {
+            type = material::NodeType::TerrainLayerStack;
+            name = "Layer Stack";
+            properties["layerCount"] = 1.0f;
+
+            // Initialize default layer 0
+            properties["layer0_albedo"] = std::string("");
+            properties["layer0_normal"] = std::string("");
+            properties["layer0_tiling"] = 1.0f;
+
+            addOutputPin("Albedo", material::PinType::Vec3);
+            addOutputPin("Normal", material::PinType::Vec3);
+        }
+
+        // Ensure properties exist for all active layers
+        void ensureLayerProperties(int layerCount) {
+            for (int i = 0; i < layerCount; ++i) {
+                std::string prefix = "layer" + std::to_string(i) + "_";
+                if (properties.find(prefix + "albedo") == properties.end())
+                    properties[prefix + "albedo"] = std::string("");
+                if (properties.find(prefix + "normal") == properties.end())
+                    properties[prefix + "normal"] = std::string("");
+                if (properties.find(prefix + "tiling") == properties.end())
+                    properties[prefix + "tiling"] = 1.0f;
+            }
+        }
+
+        std::string generateCode(const std::string& outputVarPrefix,
+                                const std::map<std::string, std::string>& /*inputVarNames*/) const override {
+            int layerCount = static_cast<int>(getPropertyValue<float>("layerCount", 1.0f));
+            layerCount = std::clamp(layerCount, 1, 16);
+
+            std::string code;
+            code += "// Terrain Layer Stack - blending " + std::to_string(layerCount) + " layer(s)\n";
+            code += "vec3 " + outputVarPrefix + "Albedo = vec3(0.0);\n";
+            code += "vec3 " + outputVarPrefix + "Normal = vec3(0.0);\n";
+            code += "float " + outputVarPrefix + "TotalW = 0.0;\n";
+
+            for (int i = 0; i < layerCount; ++i) {
+                std::string prefix = "layer" + std::to_string(i) + "_";
+                std::string albedoPath = getPropertyValue<std::string>(prefix + "albedo", "");
+                std::string normalPath = getPropertyValue<std::string>(prefix + "normal", "");
+                float tiling = getPropertyValue<float>(prefix + "tiling", 1.0f);
+
+                code += "{\n";
+
+                // Weight: fallback until VK-215 provides real weight maps
+                // TODO (VK-215): float w = texture(terrainWeightMaps[i/4], fragWorldUV)[i%4];
+                std::string weight = (i == 0) ? "1.0" : "0.0";
+                code += std::format("    float w = {}; // layer {} weight\n", weight, i);
+
+                // Texture sampling
+                // TODO (VK-214): when textures are GPU-bound, replace fallbacks with:
+                //   vec2 layerUV = fragWorldUV * {tiling};
+                //   vec3 layerAlbedo = texture(terrainLayerTextures[{i*2}], layerUV).rgb;
+                //   vec3 layerNormal = texture(terrainLayerTextures[{i*2+1}], layerUV).rgb * 2.0 - 1.0;
+                if (!albedoPath.empty()) {
+                    // Texture path defined - generate tiled UV + sampling placeholder
+                    code += std::format("    vec2 layerUV = fragWorldUV * {:.6f};\n", tiling);
+                    code += "    // albedo: " + albedoPath + "\n";
+                    code += "    // normal: " + normalPath + "\n";
+                    code += "    vec3 layerAlbedo = vec3(0.400000, 0.350000, 0.300000); // placeholder until GPU textures bound\n";
+                    code += "    vec3 layerNormal = vec3(0.0, 0.0, 1.0); // placeholder\n";
+                } else {
+                    code += "    vec3 layerAlbedo = vec3(0.400000, 0.350000, 0.300000);\n";
+                    code += "    vec3 layerNormal = vec3(0.0, 0.0, 1.0);\n";
+                }
+
+                code += "    " + outputVarPrefix + "Albedo += layerAlbedo * w;\n";
+                code += "    " + outputVarPrefix + "Normal += layerNormal * w;\n";
+                code += "    " + outputVarPrefix + "TotalW += w;\n";
+                code += "}\n";
+            }
+
+            // Normalize
+            code += "float " + outputVarPrefix + "InvW = 1.0 / max(" + outputVarPrefix + "TotalW, 0.001);\n";
+            code += outputVarPrefix + "Albedo *= " + outputVarPrefix + "InvW;\n";
+            code += outputVarPrefix + "Normal = normalize(" + outputVarPrefix + "Normal);\n";
+
+            return code;
+        }
+
+        std::string getOutputVarName(const std::string& outputVarPrefix,
+                                    const std::string& pinName) const override {
+            return outputVarPrefix + pinName;
+        }
+
+        std::string getOutputType(const std::string& /*pinName*/) const override {
+            return "vec3";
         }
     };
 

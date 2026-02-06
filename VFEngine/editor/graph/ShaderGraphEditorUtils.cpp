@@ -151,6 +151,7 @@ namespace editor::graph {
             case material::NodeType::TerrainWeightSample:
             case material::NodeType::TerrainLayerBlend:
             case material::NodeType::TerrainTextureSample:
+            case material::NodeType::TerrainLayerStack:
                 return IM_COL32(140, 110, 60, 255);
             // Type Conversions (VK-56) - Cyan/Teal
             case material::NodeType::FloatToVec2:
@@ -220,6 +221,7 @@ namespace editor::graph {
             case material::NodeType::TerrainWeightSample:   return "Weight Sample";
             case material::NodeType::TerrainLayerBlend:     return "Layer Blend";
             case material::NodeType::TerrainTextureSample:  return "Terrain Texture";
+            case material::NodeType::TerrainLayerStack:     return "Layer Stack";
             // Type Conversions (VK-56)
             case material::NodeType::FloatToVec2:    return "Float To Vec2";
             case material::NodeType::FloatToVec3:    return "Float To Vec3";
