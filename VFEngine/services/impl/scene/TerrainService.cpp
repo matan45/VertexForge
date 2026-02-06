@@ -198,6 +198,7 @@ namespace services
         terrainComp.gridMaxZ = maxZ;
         terrainComp.lodDistances = config.lodDistances;
         terrainComp.heightmapPath = config.heightmapPath;
+        terrainComp.terrainMaterialPath = config.terrainMaterialPath;
         terrainComp.isActive = true;
         terrainComp.isDirty = false;
         terrainComp.activeTileCount = static_cast<uint32_t>(config.tilesX * config.tilesZ);
@@ -297,6 +298,7 @@ namespace services
         data.gridMaxX = comp.gridMaxX;
         data.gridMaxZ = comp.gridMaxZ;
         data.heightmapPath = comp.heightmapPath;
+        data.terrainMaterialPath = comp.terrainMaterialPath;
         data.tileCount = static_cast<uint32_t>((comp.gridMaxX - comp.gridMinX + 1) *
                                                 (comp.gridMaxZ - comp.gridMinZ + 1));
         data.isActive = comp.isActive;

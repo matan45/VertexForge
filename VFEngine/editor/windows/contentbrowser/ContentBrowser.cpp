@@ -428,6 +428,10 @@ namespace windows
                     {
                         asset.type = Prefab;
                     }
+                    else if (extension == ".vfTerrainMat")
+                    {
+                        asset.type = TerrainMaterial;
+                    }
                     else if (extension == ".mt")
                     {
                         asset.type = Script;

@@ -1142,6 +1142,12 @@ namespace serialization
         std::string cleanPath = terrain.heightmapPath;
         cleanNullTerminators(cleanPath);
         j["heightmapPath"] = cleanPath;
+        if (!terrain.terrainMaterialPath.empty())
+        {
+            std::string cleanMatPath = terrain.terrainMaterialPath;
+            cleanNullTerminators(cleanMatPath);
+            j["terrainMaterialPath"] = cleanMatPath;
+        }
         // State flags
         j["isActive"] = terrain.isActive;
         return j;
@@ -1174,6 +1180,8 @@ namespace serialization
         }
         if (auto it = j.find("heightmapPath"); it != j.end() && it->is_string())
             terrain.heightmapPath = it->get<std::string>();
+        if (auto it = j.find("terrainMaterialPath"); it != j.end() && it->is_string())
+            terrain.terrainMaterialPath = it->get<std::string>();
         // State flags (with backward-compatible defaults)
         if (auto it = j.find("isActive"); it != j.end() && it->is_boolean())
             terrain.isActive = it->get<bool>();

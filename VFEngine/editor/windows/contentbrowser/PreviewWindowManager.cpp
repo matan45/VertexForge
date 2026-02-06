@@ -53,6 +53,9 @@ namespace windows
         case AssetType::VFX:
             openVFXEditor(path);
             return true;
+        case AssetType::TerrainMaterial:
+            // TODO: Open TerrainMaterialEditorWindow
+            return false;
         default:
             return false;
         }
