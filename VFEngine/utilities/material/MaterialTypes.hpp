@@ -198,7 +198,18 @@ namespace material
         Vec3ToVec2,
         Vec3ToVec4,
         Vec4ToVec2,
-        Vec4ToVec3
+        Vec4ToVec3,
+
+        // Terrain-specific nodes
+        TerrainPBROutput,         // Terminal output node for terrain materials
+        TerrainWorldPosition,     // World position input (fragWorldPos)
+        TerrainWorldNormal,       // World normal input (fragNormal)
+        TerrainWorldUV,           // World-space tiled UV input (fragWorldUV)
+        TerrainHeightSample,      // Terrain height from world position Y
+        TerrainSlopeSample,       // Terrain slope derived from normal
+        TerrainWeightSample,      // Weight map sample for a layer index
+        TerrainLayerBlend,        // Blend multiple terrain layers by weights
+        TerrainTextureSample      // Sample terrain layer texture
     };
 
     inline std::string nodeTypeToString(NodeType type)
@@ -254,6 +265,15 @@ namespace material
         case NodeType::Vec3ToVec4: return "Vec3ToVec4";
         case NodeType::Vec4ToVec2: return "Vec4ToVec2";
         case NodeType::Vec4ToVec3: return "Vec4ToVec3";
+        case NodeType::TerrainPBROutput: return "TerrainPBROutput";
+        case NodeType::TerrainWorldPosition: return "TerrainWorldPosition";
+        case NodeType::TerrainWorldNormal: return "TerrainWorldNormal";
+        case NodeType::TerrainWorldUV: return "TerrainWorldUV";
+        case NodeType::TerrainHeightSample: return "TerrainHeightSample";
+        case NodeType::TerrainSlopeSample: return "TerrainSlopeSample";
+        case NodeType::TerrainWeightSample: return "TerrainWeightSample";
+        case NodeType::TerrainLayerBlend: return "TerrainLayerBlend";
+        case NodeType::TerrainTextureSample: return "TerrainTextureSample";
         default: return "Unknown";
         }
     }
@@ -309,6 +329,15 @@ namespace material
         if (str == "Vec3ToVec4") return NodeType::Vec3ToVec4;
         if (str == "Vec4ToVec2") return NodeType::Vec4ToVec2;
         if (str == "Vec4ToVec3") return NodeType::Vec4ToVec3;
+        if (str == "TerrainPBROutput") return NodeType::TerrainPBROutput;
+        if (str == "TerrainWorldPosition") return NodeType::TerrainWorldPosition;
+        if (str == "TerrainWorldNormal") return NodeType::TerrainWorldNormal;
+        if (str == "TerrainWorldUV") return NodeType::TerrainWorldUV;
+        if (str == "TerrainHeightSample") return NodeType::TerrainHeightSample;
+        if (str == "TerrainSlopeSample") return NodeType::TerrainSlopeSample;
+        if (str == "TerrainWeightSample") return NodeType::TerrainWeightSample;
+        if (str == "TerrainLayerBlend") return NodeType::TerrainLayerBlend;
+        if (str == "TerrainTextureSample") return NodeType::TerrainTextureSample;
         return NodeType::ConstantScalar;
     }
 
@@ -349,6 +378,18 @@ namespace material
             for (const auto& node : nodes)
             {
                 if (node.type == NodeType::PBROutput)
+                {
+                    return &node;
+                }
+            }
+            return nullptr;
+        }
+
+        const ShaderNode* findTerrainOutputNode() const
+        {
+            for (const auto& node : nodes)
+            {
+                if (node.type == NodeType::TerrainPBROutput)
                 {
                     return &node;
                 }

@@ -3,6 +3,7 @@
 #include "MathNodes.hpp"
 #include "PBROutputNode.hpp"
 #include "ConversionNodes.hpp"
+#include "TerrainNodes.hpp"
 
 namespace editor::graph {
 
@@ -109,6 +110,26 @@ namespace editor::graph {
                 return std::make_unique<Vec4ToVec2Node>();
             case material::NodeType::Vec4ToVec3:
                 return std::make_unique<Vec4ToVec3Node>();
+
+            // Terrain nodes
+            case material::NodeType::TerrainPBROutput:
+                return std::make_unique<TerrainPBROutputNode>();
+            case material::NodeType::TerrainWorldPosition:
+                return std::make_unique<TerrainWorldPositionNode>();
+            case material::NodeType::TerrainWorldNormal:
+                return std::make_unique<TerrainWorldNormalNode>();
+            case material::NodeType::TerrainWorldUV:
+                return std::make_unique<TerrainWorldUVNode>();
+            case material::NodeType::TerrainHeightSample:
+                return std::make_unique<TerrainHeightSampleNode>();
+            case material::NodeType::TerrainSlopeSample:
+                return std::make_unique<TerrainSlopeSampleNode>();
+            case material::NodeType::TerrainWeightSample:
+                return std::make_unique<TerrainWeightSampleNode>();
+            case material::NodeType::TerrainLayerBlend:
+                return std::make_unique<TerrainLayerBlendNode>();
+            case material::NodeType::TerrainTextureSample:
+                return std::make_unique<TerrainTextureSampleNode>();
 
             default:
                 return std::make_unique<ConstantScalarNode>();  // Default fallback

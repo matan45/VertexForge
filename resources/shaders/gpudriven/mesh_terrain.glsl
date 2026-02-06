@@ -207,6 +207,10 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
+// Terrain material layer textures: 16 layers * 2 (albedo + normal) = 32 slots
+// TODO (VK-215): Enable when terrain texture painting pipeline is ready
+// layout(set = 1, binding = 0) uniform sampler2D terrainLayerTextures[32];
+
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
 layout(push_constant) uniform PushConstants {
@@ -459,12 +463,12 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
-    // Default terrain material properties
-    // TODO: In future, these will come from terrain material system (VK-178)
-    vec3 albedo = vec3(0.4, 0.35, 0.3);  // Brownish terrain color
-    float metallic = 0.0;
-    float roughness = 0.9;
-    float ao = 1.0;
+    // Terrain material from shader graph (VK-213)
+#include "../material/terrain_material_generated.glsl"
+    vec3 albedo = mat_albedo;
+    float metallic = mat_metallic;
+    float roughness = mat_roughness;
+    float ao = mat_ao;
 
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);

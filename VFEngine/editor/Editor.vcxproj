@@ -113,6 +113,7 @@
     <ClInclude Include="graph\nodes\MathNodes.hpp" />
     <ClInclude Include="graph\nodes\PBROutputNode.hpp" />
     <ClInclude Include="graph\nodes\ShaderNode.hpp" />
+    <ClInclude Include="graph\nodes\TerrainNodes.hpp" />
     <ClInclude Include="handlers\EditorHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="splash\SplashScreen.hpp" />
@@ -141,6 +142,7 @@
     <ClInclude Include="windows\SceneHierarchyPanel.hpp" />
     <ClInclude Include="windows\SculptToolPanel.hpp" />
     <ClInclude Include="windows\TerrainCreationWindow.hpp" />
+    <ClInclude Include="windows\TerrainMaterialEditorWindow.hpp" />
     <ClInclude Include="windows\ViewPort.hpp" />
     <ClInclude Include="windows\ViewPortGizmo.hpp" />
     <ClInclude Include="windows\ViewPortOverlay.hpp" />
@@ -225,6 +227,7 @@
     <ClCompile Include="windows\SceneHierarchyPanel.cpp" />
     <ClCompile Include="windows\SculptToolPanel.cpp" />
     <ClCompile Include="windows\TerrainCreationWindow.cpp" />
+    <ClCompile Include="windows\TerrainMaterialEditorWindow.cpp" />
     <ClCompile Include="windows\ViewPort.cpp" />
     <ClCompile Include="windows\ViewPortGizmo.cpp" />
     <ClCompile Include="windows\ViewPortOverlay.cpp" />

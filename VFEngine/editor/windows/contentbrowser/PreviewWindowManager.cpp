@@ -9,6 +9,7 @@
 #include "../animation/AnimationPreviewWindow.hpp"
 #include "../animation/AnimatorEditorWindow.hpp"
 #include "../vfx/VFXEditorWindow.hpp"
+#include "../TerrainMaterialEditorWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
 
@@ -54,8 +55,8 @@ namespace windows
             openVFXEditor(path);
             return true;
         case AssetType::TerrainMaterial:
-            // TODO: Open TerrainMaterialEditorWindow
-            return false;
+            openTerrainMaterialEditor(path);
+            return true;
         default:
             return false;
         }
@@ -101,6 +102,10 @@ namespace windows
 
         auto vfxIt = openVFXEditors.find(path);
         if (vfxIt != openVFXEditors.end() && !vfxIt->second.expired())
+            return true;
+
+        auto terrainMatIt = openTerrainMaterialEditors.find(path);
+        if (terrainMatIt != openTerrainMaterialEditors.end() && !terrainMatIt->second.expired())
             return true;
 
         return false;
@@ -213,6 +218,17 @@ namespace windows
             auto editorWindow = std::make_shared<VFXEditorWindow>(path);
             controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
             openVFXEditors[path] = editorWindow;
+        }
+    }
+
+    void PreviewWindowManager::openTerrainMaterialEditor(const std::string& path)
+    {
+        auto it = openTerrainMaterialEditors.find(path);
+        if (it == openTerrainMaterialEditors.end() || it->second.expired())
+        {
+            auto editorWindow = std::make_shared<TerrainMaterialEditorWindow>(path);
+            controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
+            openTerrainMaterialEditors[path] = editorWindow;
         }
     }
 }
