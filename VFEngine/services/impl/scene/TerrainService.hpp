@@ -58,6 +58,7 @@ namespace services
             const glm::vec3& cameraPosition);
 
         bool hasActiveTerrain() const { return !terrainGrids.empty(); }
+        std::string getTerrainMaterialPath() const;
 
         void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
@@ -72,5 +73,6 @@ namespace services
         void remapTerrainEntities();
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+        void syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath);
     };
 }

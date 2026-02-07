@@ -188,6 +188,7 @@ namespace render::gpudriven
         }
 
         it->second.isUploaded = it->second.hasAnyAllocation();
+        gpuTileDataDirty_ = true;
 
         return true;
     }
@@ -203,6 +204,7 @@ namespace render::gpudriven
 
         terrainBuffer_.freeTileLOD(tileKeyStr, lodLevel);
         it->second.lodAllocs[lodLevel] = TerrainLODAllocation{};
+        gpuTileDataDirty_ = true;
 
         // If no LODs remain, remove the allocation
         if (!it->second.hasAnyAllocation())
@@ -228,6 +230,8 @@ namespace render::gpudriven
             terrainBuffer_.freeTile(tileKey);
         }
         allocations_.clear();
+        cachedGPUTileData_.clear();
+        gpuTileDataDirty_ = true;
     }
 
     bool TerrainGPUAdapter::uploadLODData(
@@ -315,11 +319,88 @@ namespace render::gpudriven
         return dst;
     }
 
-    std::vector<TerrainTileGPUData> TerrainGPUAdapter::buildGPUTileData(
-        const std::vector<terrain::TerrainTile*>& tiles) const
+    bool TerrainGPUAdapter::uploadWeightMap(const terrain::TerrainTile& tile)
     {
-        std::vector<TerrainTileGPUData> result;
-        result.reserve(tiles.size());
+        if (!tile.hasWeightMap())
+        {
+            return false;
+        }
+
+        TerrainTileKey key{tile.coord.x, tile.coord.z};
+        auto it = allocations_.find(key);
+        if (it == allocations_.end())
+        {
+            return false;
+        }
+
+        auto& alloc = it->second;
+        const auto& wm = tile.weightMap;
+
+        // numWeightTextures = ceil(activeLayerCount / 4)
+        uint32_t numWeightTextures = (wm.activeLayerCount + 3) / 4;
+        // Each weight texture: resolution * resolution * 4 bytes (RGBA uint8)
+        uint32_t texSize = wm.resolution * wm.resolution * 4;
+        uint32_t totalBytes = numWeightTextures * texSize;
+
+        // Allocate if needed
+        std::string tileKey = alloc.getMeshPath();
+        uint32_t offsetElements = terrainBuffer_.allocateWeightMap(tileKey, totalBytes);
+        if (offsetElements == FreeListAllocator::ALLOCATION_FAILED)
+        {
+            vfLogError("TerrainGPUAdapter: Failed to allocate weight map for tile ({}, {})",
+                       key.coordX, key.coordZ);
+            return false;
+        }
+
+        // Pack weight data: iterate weight textures, convert float -> uint8 RGBA
+        std::vector<uint8_t> packedData(totalBytes);
+
+        for (uint32_t texIdx = 0; texIdx < numWeightTextures; ++texIdx)
+        {
+            uint32_t texOffset = texIdx * texSize;
+            for (uint32_t z = 0; z < wm.resolution; ++z)
+            {
+                for (uint32_t x = 0; x < wm.resolution; ++x)
+                {
+                    float r, g, b, a;
+                    wm.packRGBA(texIdx, x, z, r, g, b, a);
+
+                    uint32_t pixelOffset = texOffset + (z * wm.resolution + x) * 4;
+                    packedData[pixelOffset + 0] = static_cast<uint8_t>(r * 255.0f + 0.5f);
+                    packedData[pixelOffset + 1] = static_cast<uint8_t>(g * 255.0f + 0.5f);
+                    packedData[pixelOffset + 2] = static_cast<uint8_t>(b * 255.0f + 0.5f);
+                    packedData[pixelOffset + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
+                }
+            }
+        }
+
+        // Upload to GPU
+        if (!terrainBuffer_.uploadWeightMapData(tileKey, packedData.data(), totalBytes))
+        {
+            vfLogError("TerrainGPUAdapter: Failed to upload weight map for tile ({}, {})",
+                       key.coordX, key.coordZ);
+            return false;
+        }
+
+        // Store byte offset (elements * 4) for shader access
+        alloc.weightMapOffset = offsetElements * 4;
+        alloc.weightMapSize = totalBytes;
+        alloc.weightMapUploaded = true;
+        gpuTileDataDirty_ = true;
+
+        return true;
+    }
+
+    const std::vector<TerrainTileGPUData>& TerrainGPUAdapter::buildGPUTileData(
+        const std::vector<terrain::TerrainTile*>& tiles)
+    {
+        if (!gpuTileDataDirty_)
+        {
+            return cachedGPUTileData_;
+        }
+
+        cachedGPUTileData_.clear();
+        cachedGPUTileData_.reserve(tiles.size());
 
         for (const terrain::TerrainTile* tile : tiles)
         {
@@ -347,8 +428,10 @@ namespace render::gpudriven
             glm::vec3 currentCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
             float currentRadius = glm::length(tile->worldBounds.max - currentCenter);
             gpuTile.boundingSphere = glm::vec4(currentCenter, currentRadius);
-            gpuTile.aabbMin = glm::vec4(tile->worldBounds.min, 0.0f);
-            gpuTile.aabbMax = glm::vec4(tile->worldBounds.max, 0.0f);
+            gpuTile.aabbMin = glm::vec4(tile->worldBounds.min,
+                static_cast<float>(tile->weightMap.resolution));
+            gpuTile.aabbMax = glm::vec4(tile->worldBounds.max,
+                static_cast<float>(tile->weightMap.activeLayerCount));
 
             // LOD meshlet data for each level
             // Format: x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
@@ -388,11 +471,12 @@ namespace render::gpudriven
             gpuTile.coordX = key.coordX;
             gpuTile.coordZ = key.coordZ;
             gpuTile.flags = ObjectFlags::TerrainTile;
-            gpuTile.materialIndex = 0;
+            gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
 
-            result.push_back(gpuTile);
+            cachedGPUTileData_.push_back(gpuTile);
         }
 
-        return result;
+        gpuTileDataDirty_ = false;
+        return cachedGPUTileData_;
     }
 }

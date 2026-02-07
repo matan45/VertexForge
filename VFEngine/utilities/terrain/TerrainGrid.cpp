@@ -256,6 +256,7 @@ namespace terrain
             {
                 tile->weightMap.setLayerCount(newLayerCount);
                 tile->weightMapDirty = true;
+                tile->weightMapGPUDirty = true;
             }
             else
             {

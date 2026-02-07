@@ -10,6 +10,8 @@
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainWeightMapAsset.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
+#include "terrain/TerrainMaterialTypes.hpp"
+#include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/TerrainEvents.hpp"
@@ -122,6 +124,9 @@ namespace services
                 if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
                 {
                     registry.get<components::TerrainComponent>(ent).terrainMaterialPath = cmd.materialPath;
+
+                    // Sync weight map layer count from the material
+                    syncWeightMapLayerCount(cmd.terrainEntity.id, cmd.materialPath);
                 }
             });
 
@@ -254,6 +259,12 @@ namespace services
             loadWeightMaps(parentHandle.id, config.weightMapPath);
         }
 
+        // Sync weight map layer count from the assigned material
+        if (!config.terrainMaterialPath.empty())
+        {
+            syncWeightMapLayerCount(parentHandle.id, config.terrainMaterialPath);
+        }
+
         events::terrain::TerrainCreatedNotification notification;
         notification.terrainEntity = parentHandle;
         notification.config = config;
@@ -366,6 +377,21 @@ namespace services
             return false;
 
         return registry.all_of<components::TerrainComponent>(ent);
+    }
+
+    std::string TerrainService::getTerrainMaterialPath() const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::TerrainComponent>();
+        for (auto entity : view)
+        {
+            const auto& comp = view.get<components::TerrainComponent>(entity);
+            if (!comp.terrainMaterialPath.empty())
+            {
+                return comp.terrainMaterialPath;
+            }
+        }
+        return {};
     }
 
     bool TerrainService::hasTerrainTileComponent(EntityHandle entity) const
@@ -645,6 +671,19 @@ namespace services
                 continue;
             }
 
+            // Validate layer index against shader/material limit
+            if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
+            {
+                continue;
+            }
+
+            // Expand weight map if the active layer exceeds current layer count
+            if (brushParams.activeLayer >= tile->weightMap.layerWeights.size())
+            {
+                tile->weightMap.setLayerCount(static_cast<uint8_t>(brushParams.activeLayer + 1));
+                tile->weightMapGPUDirty = true;
+            }
+
             terrain::WeightBrushApplicator::ApplyParams applyParams;
             applyParams.brushCenter = brushCenter;
             applyParams.tileWorldOrigin = glm::vec2(
@@ -747,5 +786,34 @@ namespace services
 
         vfLogInfo("TerrainService: Loaded weight maps for {} of {} tiles", loadedCount, allTiles.size());
         return true;
+    }
+
+    void TerrainService::syncWeightMapLayerCount(uint64_t terrainEntityId, const std::string& materialPath)
+    {
+        if (materialPath.empty())
+        {
+            return;
+        }
+
+        auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+        if (!materialData)
+        {
+            return;
+        }
+
+        uint8_t layerCount = materialData->activeLayerCount;
+        if (layerCount == 0)
+        {
+            layerCount = 1;
+        }
+
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+        {
+            return;
+        }
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+        grid->updateWeightMapLayerCount(layerCount);
     }
 }

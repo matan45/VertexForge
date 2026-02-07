@@ -43,11 +43,6 @@ namespace render::gpudriven
         cachedShadowDataLayout = shadowDataLayout;
         cachedShadowTextureLayout = shadowTextureLayout;
 
-        vk::CommandPoolCreateInfo poolInfo{};
-        poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-        transferCommandPool = device.getLogicalDevice().createCommandPool(poolInfo);
-
         vk::Device vkDevice = device.getLogicalDevice();
         vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
         emptyLayoutInfo.bindingCount = 0;
@@ -60,24 +55,89 @@ namespace render::gpudriven
         dummyPoolSize.descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo emptyPoolInfo{};
-        emptyPoolInfo.maxSets = 2;
+        emptyPoolInfo.maxSets = 1;
         emptyPoolInfo.poolSizeCount = 1;
         emptyPoolInfo.pPoolSizes = &dummyPoolSize;
         emptyPoolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
         emptyDescriptorPool = vkDevice.createDescriptorPool(emptyPoolInfo);
 
-        std::array<vk::DescriptorSetLayout, 2> emptyLayouts = {emptyLayout, emptyLayout};
         vk::DescriptorSetAllocateInfo emptyAllocInfo{};
         emptyAllocInfo.descriptorPool = emptyDescriptorPool;
-        emptyAllocInfo.descriptorSetCount = 2;
-        emptyAllocInfo.pSetLayouts = emptyLayouts.data();
+        emptyAllocInfo.descriptorSetCount = 1;
+        emptyAllocInfo.pSetLayouts = &emptyLayout;
         auto emptySets = vkDevice.allocateDescriptorSets(emptyAllocInfo);
-        emptyDescriptorSet1 = emptySets[0];
-        emptyDescriptorSet5 = emptySets[1];
+        emptyDescriptorSet5 = emptySets[0];
 
-        if (!emptyDescriptorSet1 || !emptyDescriptorSet5)
+        if (!emptyDescriptorSet5)
         {
-            loggerError("TerrainMeshShaderPipeline: Failed to allocate empty descriptor sets!");
+            loggerError("TerrainMeshShaderPipeline: Failed to allocate empty descriptor set!");
+        }
+
+        // Create weight map + layer info descriptor (Set 1: 2 SSBOs, fragment stage)
+        {
+            std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+            bindings[0].binding = 0;
+            bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+            bindings[0].descriptorCount = 1;
+            bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+            bindings[1].binding = 1;
+            bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+            bindings[1].descriptorCount = 1;
+            bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+            layoutInfo.pBindings = bindings.data();
+            weightMapLayout_ = vkDevice.createDescriptorSetLayout(layoutInfo);
+
+            vk::DescriptorPoolSize poolSize{};
+            poolSize.type = vk::DescriptorType::eStorageBuffer;
+            poolSize.descriptorCount = 2;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.maxSets = 1;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            weightMapPool_ = vkDevice.createDescriptorPool(poolInfo);
+
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = weightMapPool_;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &weightMapLayout_;
+            auto sets = vkDevice.allocateDescriptorSets(allocInfo);
+            weightMapDescriptorSet_ = sets[0];
+        }
+
+        // Create host-visible terrain layer info buffer (16 layers x 16 bytes = 256 bytes)
+        {
+            constexpr vk::DeviceSize layerBufferSize = 16 * sizeof(TerrainLayerGPUData);
+
+            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+            request.size = layerBufferSize;
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                 vk::MemoryPropertyFlagBits::eHostCoherent;
+
+            core::BufferUtilities::createBuffer(request, terrainLayerBuffer_, terrainLayerBufferMemory_);
+
+            terrainLayerBufferMapped_ = vkDevice.mapMemory(terrainLayerBufferMemory_, 0, layerBufferSize);
+            std::memset(terrainLayerBufferMapped_, 0, layerBufferSize);
+
+            // Write initial descriptor for binding 1
+            vk::DescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = terrainLayerBuffer_;
+            bufferInfo.offset = 0;
+            bufferInfo.range = layerBufferSize;
+
+            vk::WriteDescriptorSet write{};
+            write.dstSet = weightMapDescriptorSet_;
+            write.dstBinding = 1;
+            write.descriptorCount = 1;
+            write.descriptorType = vk::DescriptorType::eStorageBuffer;
+            write.pBufferInfo = &bufferInfo;
+
+            vkDevice.updateDescriptorSets(write, {});
         }
 
         createTileDataBuffer();
@@ -114,6 +174,11 @@ namespace render::gpudriven
             pipelineLayout = nullptr;
         }
 
+        if (tileDataBufferMapped_)
+        {
+            vkDevice.unmapMemory(tileDataBufferMemory);
+            tileDataBufferMapped_ = nullptr;
+        }
         core::BufferUtilities::destroyBuffer(vkDevice, tileDataBuffer, tileDataBufferMemory);
         core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
 
@@ -121,6 +186,25 @@ namespace render::gpudriven
         {
             vkDevice.destroyDescriptorPool(terrainBufferPool);
             terrainBufferPool = nullptr;
+        }
+
+        if (terrainLayerBufferMapped_)
+        {
+            vkDevice.unmapMemory(terrainLayerBufferMemory_);
+            terrainLayerBufferMapped_ = nullptr;
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer_, terrainLayerBufferMemory_);
+
+        if (weightMapPool_)
+        {
+            vkDevice.destroyDescriptorPool(weightMapPool_);
+            weightMapPool_ = nullptr;
+        }
+
+        if (weightMapLayout_)
+        {
+            vkDevice.destroyDescriptorSetLayout(weightMapLayout_);
+            weightMapLayout_ = nullptr;
         }
 
         if (emptyDescriptorPool)
@@ -146,12 +230,6 @@ namespace render::gpudriven
             terrainDataLayout = nullptr;
         }
 
-        if (transferCommandPool)
-        {
-            vkDevice.destroyCommandPool(transferCommandPool);
-            transferCommandPool = nullptr;
-        }
-
         initialized = false;
     }
 
@@ -163,10 +241,14 @@ namespace render::gpudriven
 
         core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
         request.size = bufferSize;
-        request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
-        request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                             vk::MemoryPropertyFlagBits::eHostCoherent;
 
         core::BufferUtilities::createBuffer(request, tileDataBuffer, tileDataBufferMemory);
+
+        tileDataBufferMapped_ = vkDevice.mapMemory(tileDataBufferMemory, 0, bufferSize);
+        std::memset(tileDataBufferMapped_, 0, bufferSize);
 
         loggerInfo("TerrainMeshShaderPipeline: Created tile data buffer for {} tiles ({} bytes)",
                    maxTileCount, bufferSize);
@@ -201,7 +283,7 @@ namespace render::gpudriven
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment;
 
         bindings[1].binding = 1;
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -307,7 +389,7 @@ namespace render::gpudriven
 
         // Layout order (matching mesh_shader_gpudriven.glsl for sets 0-10):
         // Set 0: IBL/Camera
-        // Set 1: (unused - reserved for per-draw)
+        // Set 1: Weight map SSBO
         // Set 2: Bindless textures
         // Set 3: Meshlet data
         // Set 4: Vertex data
@@ -321,7 +403,7 @@ namespace render::gpudriven
 
         std::array<vk::DescriptorSetLayout, 12> setLayouts = {
             iblLayout,              // Set 0: IBL/Camera
-            emptyLayout,            // Set 1: (unused) - member variable
+            weightMapLayout_,       // Set 1: Weight map SSBO
             bindlessTextureLayout,  // Set 2: Bindless textures
             meshletDataLayout,      // Set 3: Meshlet data
             vertexDataLayout,       // Set 4: Vertex data
@@ -389,52 +471,7 @@ namespace render::gpudriven
         currentTileCount = static_cast<uint32_t>(std::min(tiles.size(), static_cast<size_t>(maxTileCount)));
         vk::DeviceSize dataSize = currentTileCount * sizeof(TerrainTileGPUData);
 
-        vk::Device vkDevice = device.getLogicalDevice();
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-
-        core::BufferInfoRequest stagingRequest(vkDevice, device.getPhysicalDevice());
-        stagingRequest.size = dataSize;
-        stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                                   vk::MemoryPropertyFlagBits::eHostCoherent;
-
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
-
-        void* data = vkDevice.mapMemory(stagingMemory, 0, dataSize);
-        std::memcpy(data, tiles.data(), dataSize);
-        vkDevice.unmapMemory(stagingMemory);
-
-        vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.commandPool = transferCommandPool;
-        allocInfo.level = vk::CommandBufferLevel::ePrimary;
-        allocInfo.commandBufferCount = 1;
-
-        auto cmdBuffers = vkDevice.allocateCommandBuffers(allocInfo);
-        vk::CommandBuffer cmd = cmdBuffers[0];
-
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd.begin(beginInfo);
-
-        vk::BufferCopy copyRegion{};
-        copyRegion.srcOffset = 0;
-        copyRegion.dstOffset = 0;
-        copyRegion.size = dataSize;
-        cmd.copyBuffer(stagingBuffer, tileDataBuffer, copyRegion);
-
-        cmd.end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-
-        device.getGraphicsQueue().submit(submitInfo, nullptr);
-        device.getGraphicsQueue().waitIdle();
-
-        vkDevice.freeCommandBuffers(transferCommandPool, cmd);
-
-        core::BufferUtilities::destroyBuffer(vkDevice, stagingBuffer, stagingMemory);
+        std::memcpy(tileDataBufferMapped_, tiles.data(), dataSize);
     }
 
     void TerrainMeshShaderPipeline::updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer)
@@ -528,6 +565,36 @@ namespace render::gpudriven
         }
     }
 
+    void TerrainMeshShaderPipeline::updateWeightMapDescriptor(vk::Buffer weightMapBuffer)
+    {
+        if (!initialized || !weightMapDescriptorSet_ || !weightMapBuffer) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        vk::DescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = weightMapBuffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = VK_WHOLE_SIZE;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = weightMapDescriptorSet_;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eStorageBuffer;
+        write.pBufferInfo = &bufferInfo;
+
+        vkDevice.updateDescriptorSets(write, {});
+    }
+
+    void TerrainMeshShaderPipeline::updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers)
+    {
+        if (!terrainLayerBufferMapped_ || layers.empty()) return;
+
+        constexpr uint32_t maxLayers = 16;
+        uint32_t count = static_cast<uint32_t>(std::min(layers.size(), static_cast<size_t>(maxLayers)));
+        std::memcpy(terrainLayerBufferMapped_, layers.data(), count * sizeof(TerrainLayerGPUData));
+    }
+
     void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                                             vk::DescriptorSet bindlessDescSet,
                                                             vk::DescriptorSet lightDataDescSet,
@@ -562,7 +629,7 @@ namespace render::gpudriven
 
         std::array<vk::DescriptorSet, 12> currentSets = {
             iblDescriptorSet,              // Set 0: IBL/Camera
-            emptyDescriptorSet1,           // Set 1: Empty
+            weightMapDescriptorSet_,       // Set 1: Weight map SSBO
             bindlessDescriptorSet,         // Set 2: Bindless textures
             terrainMeshletDescriptorSet,   // Set 3: Meshlet data
             terrainVertexDescriptorSet,    // Set 4: Vertex data
@@ -586,7 +653,7 @@ namespace render::gpudriven
         if (!bindlessDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: bindlessDescriptorSet (set 2) is NULL!"); }
         if (!terrainMeshletDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: terrainMeshletDescriptorSet (set 3) is NULL!"); }
         if (!terrainVertexDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: terrainVertexDescriptorSet (set 4) is NULL!"); }
-        if (!emptyDescriptorSet1) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: emptyDescriptorSet1 (set 1) is NULL!"); }
+        if (!weightMapDescriptorSet_) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: weightMapDescriptorSet_ (set 1) is NULL!"); }
         if (!emptyDescriptorSet5) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: emptyDescriptorSet5 (set 5) is NULL!"); }
         if (!clusterGridDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: clusterGridDescriptorSet (set 7) is NULL!"); }
         if (!cullingOutputDescriptorSet) { hasCriticalMissing = true; if (!warnedMissing) loggerWarning("TerrainMeshShaderPipeline: cullingOutputDescriptorSet (set 8) is NULL!"); }

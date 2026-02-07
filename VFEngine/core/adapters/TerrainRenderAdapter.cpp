@@ -19,4 +19,10 @@ namespace core
     {
         return terrainService && terrainService->hasActiveTerrain();
     }
+
+    std::string TerrainRenderAdapter::getTerrainMaterialPath() const
+    {
+        if (!terrainService) return {};
+        return terrainService->getTerrainMaterialPath();
+    }
 }

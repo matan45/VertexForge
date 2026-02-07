@@ -64,7 +64,7 @@ namespace render::gpudriven
         vk::DeviceMemory statsBufferMemory;
         TerrainCullingStats cachedStats{};
 
-        vk::CommandPool transferCommandPool;
+        void* tileDataBufferMapped_ = nullptr;
 
         vk::DescriptorSetLayout cachedIBLLayout;
         vk::DescriptorSetLayout cachedBindlessLayout;
@@ -76,11 +76,20 @@ namespace render::gpudriven
         vk::DescriptorSetLayout cachedShadowDataLayout;
         vk::DescriptorSetLayout cachedShadowTextureLayout;
 
-        // Empty descriptor set layout and sets for unused sets (1 and 5)
+        // Empty descriptor set layout and sets for unused sets (5)
         vk::DescriptorSetLayout emptyLayout;
         vk::DescriptorPool emptyDescriptorPool;
-        vk::DescriptorSet emptyDescriptorSet1;  // For Set 1
         vk::DescriptorSet emptyDescriptorSet5;  // For Set 5
+
+        // Weight map + layer info descriptor (Set 1)
+        vk::DescriptorSetLayout weightMapLayout_;
+        vk::DescriptorPool weightMapPool_;
+        vk::DescriptorSet weightMapDescriptorSet_;
+
+        // Terrain layer info buffer (Set 1, binding 1) - host-visible for easy updates
+        vk::Buffer terrainLayerBuffer_;
+        vk::DeviceMemory terrainLayerBufferMemory_;
+        void* terrainLayerBufferMapped_ = nullptr;
 
         // Shared descriptor sets (owned elsewhere)
         vk::DescriptorSet iblDescriptorSet;
@@ -133,6 +142,10 @@ namespace render::gpudriven
         void updateTileData(const std::vector<TerrainTileGPUData>& tiles);
 
         void updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer);
+
+        void updateWeightMapDescriptor(vk::Buffer weightMapBuffer);
+
+        void updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers);
 
         void updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                      vk::DescriptorSet bindlessDescSet,

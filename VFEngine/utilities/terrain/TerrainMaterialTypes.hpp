@@ -12,8 +12,7 @@ namespace terrain
     enum class TerrainLayerBlendMode : uint8_t
     {
         Linear = 0,      // Standard weighted linear blend
-        HeightBased = 1,  // Height-aware sharp transitions
-        Overlay = 2       // Detail overlay
+        Overlay = 1       // Detail overlay
     };
 
     inline std::string blendModeToString(TerrainLayerBlendMode mode)
@@ -21,7 +20,6 @@ namespace terrain
         switch (mode)
         {
         case TerrainLayerBlendMode::Linear: return "Linear";
-        case TerrainLayerBlendMode::HeightBased: return "HeightBased";
         case TerrainLayerBlendMode::Overlay: return "Overlay";
         default: return "Linear";
         }
@@ -29,7 +27,6 @@ namespace terrain
 
     inline TerrainLayerBlendMode stringToLayerBlendMode(const std::string& str)
     {
-        if (str == "HeightBased") return TerrainLayerBlendMode::HeightBased;
         if (str == "Overlay") return TerrainLayerBlendMode::Overlay;
         return TerrainLayerBlendMode::Linear;
     }

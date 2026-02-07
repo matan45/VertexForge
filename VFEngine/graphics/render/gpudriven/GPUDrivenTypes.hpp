@@ -81,8 +81,8 @@ namespace render::gpudriven
     {
         glm::mat4 modelMatrix;          // Usually identity for world-space terrain
         glm::vec4 boundingSphere;       // xyz = world center, w = radius
-        glm::vec4 aabbMin;              // xyz = world AABB min, w = unused
-        glm::vec4 aabbMax;              // xyz = world AABB max, w = unused
+        glm::vec4 aabbMin;              // xyz = world AABB min, w = weightMapResolution (33/65/129)
+        glm::vec4 aabbMax;              // xyz = world AABB max, w = activeLayerCount (1-16)
         glm::uvec4 lod0MeshletData;     // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = unused
         glm::uvec4 lod1MeshletData;     // Same layout
         glm::uvec4 lod2MeshletData;     // Same layout
@@ -91,9 +91,19 @@ namespace render::gpudriven
         int32_t coordX;
         int32_t coordZ;
         uint32_t flags;
-        uint32_t materialIndex;
+        uint32_t weightMapOffset;       // Byte offset into weight map SSBO
     };
     static_assert(sizeof(TerrainTileGPUData) == 208);
+
+    // Per-layer texture indices for terrain material layers (16 bytes per layer)
+    struct TerrainLayerGPUData
+    {
+        uint32_t albedoTextureIndex;   // Bindless index (0 = default white)
+        uint32_t normalTextureIndex;   // Bindless index (0 = default)
+        float tilingScale;             // UV tiling multiplier
+        uint32_t padding;
+    };
+    static_assert(sizeof(TerrainLayerGPUData) == 16);
 
     struct alignas(16) TerrainCullingStats
     {

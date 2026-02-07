@@ -46,6 +46,8 @@ namespace render::gpudriven
         size_t memoryBudgetBytes = 512 * 1024 * 1024;
         size_t maxBytesPerFrame = 4 * 1024 * 1024;
         uint32_t maxUploadsPerFrame = 8;
+        uint32_t maxFallbackUploadsPerFrame = 16;
+        size_t maxFallbackBytesPerFrame = 2 * 1024 * 1024;
         bool keepFallbackLoaded = true;
         float evictionThreshold = 0.9f;
     };

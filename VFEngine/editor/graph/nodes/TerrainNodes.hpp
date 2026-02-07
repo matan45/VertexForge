@@ -208,10 +208,9 @@ namespace editor::graph {
             int layerIndex = static_cast<int>(getPropertyValue<float>("layerIndex", 0.0f));
             layerIndex = std::clamp(layerIndex, 0, 15);
 
-            // Fallback: layer 0 gets weight 1.0, all others 0.0
-            // When VK-215 adds weight maps, this will sample terrainWeightMaps[layerIndex]
-            std::string weight = (layerIndex == 0) ? "1.0" : "0.0";
-            return "float " + outputVarPrefix + "Weight = " + weight + "; // layer " + std::to_string(layerIndex) + "\n";
+            return std::format("float {}Weight = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n",
+                outputVarPrefix, layerIndex);
         }
 
         std::string getOutputVarName(const std::string& outputVarPrefix,
@@ -329,14 +328,14 @@ namespace editor::graph {
     // Terrain Layer Stack - defines terrain layers and auto-blends them by weight maps.
     //
     // Each layer has: name, albedo texture path, normal texture path, tiling scale,
-    // blend mode (Linear/HeightBased/Overlay), and enabled flag.
+    // blend mode (Linear/Overlay), and enabled flag.
     // Properties:
     //   layerCount (1-16)
     //   layer{i}_name      (string) - user-facing layer name
     //   layer{i}_albedo    (string) - albedo texture file path
     //   layer{i}_normal    (string) - normal texture file path
     //   layer{i}_tiling    (float)  - UV tiling scale
-    //   layer{i}_blendMode (string) - blend mode (Linear/HeightBased/Overlay)
+    //   layer{i}_blendMode (string) - blend mode (Linear/Overlay)
     //   layer{i}_enabled   (float)  - 1.0 = enabled, 0.0 = disabled
     //
     // The paint brush system reads these layer definitions to let the user
@@ -392,51 +391,59 @@ namespace editor::graph {
             int layerCount = static_cast<int>(getPropertyValue<float>("layerCount", 1.0f));
             layerCount = std::clamp(layerCount, 1, 16);
 
+            // Collect layer info to separate Linear from Overlay
+            struct LayerInfo {
+                int index;
+                std::string blendMode;
+                std::string name;
+                bool enabled;
+            };
+            std::vector<LayerInfo> baseLayers;    // Linear
+            std::vector<LayerInfo> overlayLayers;  // Overlay
+
+            for (int i = 0; i < layerCount; ++i) {
+                std::string prefix = "layer" + std::to_string(i) + "_";
+                float enabledVal = getPropertyValue<float>(prefix + "enabled", 1.0f);
+                std::string blend = getPropertyValue<std::string>(prefix + "blendMode", "Linear");
+                std::string name = getPropertyValue<std::string>(prefix + "name", "Layer " + std::to_string(i));
+
+                LayerInfo info{i, blend, name, enabledVal >= 0.5f};
+                if (blend == "Overlay" && i > 0)
+                    overlayLayers.push_back(info);
+                else
+                    baseLayers.push_back(info);
+            }
+
             std::string code;
             code += "// Terrain Layer Stack - blending " + std::to_string(layerCount) + " layer(s)\n";
             code += "vec3 " + outputVarPrefix + "Albedo = vec3(0.0);\n";
             code += "vec3 " + outputVarPrefix + "Normal = vec3(0.0);\n";
             code += "float " + outputVarPrefix + "TotalW = 0.0;\n";
 
-            for (int i = 0; i < layerCount; ++i) {
+            // --- Pass 1: Linear layers ---
+            for (const auto& layer : baseLayers) {
+                int i = layer.index;
                 std::string prefix = "layer" + std::to_string(i) + "_";
 
-                // Skip disabled layers
-                float enabledVal = getPropertyValue<float>(prefix + "enabled", 1.0f);
-                if (enabledVal < 0.5f) {
-                    std::string layerName = getPropertyValue<std::string>(prefix + "name", "Layer " + std::to_string(i));
-                    code += "// Layer " + std::to_string(i) + " (" + layerName + ") - disabled\n";
+                if (!layer.enabled) {
+                    code += "// Layer " + std::to_string(i) + " (" + layer.name + ") - disabled\n";
                     continue;
                 }
 
-                std::string albedoPath = getPropertyValue<std::string>(prefix + "albedo", "");
-                std::string normalPath = getPropertyValue<std::string>(prefix + "normal", "");
-                float tiling = getPropertyValue<float>(prefix + "tiling", 1.0f);
-                std::string blendMode = getPropertyValue<std::string>(prefix + "blendMode", "Linear");
-                std::string layerName = getPropertyValue<std::string>(prefix + "name", "Layer " + std::to_string(i));
+                code += "{ // Layer " + std::to_string(i) + " (" + layer.name + ") - blend: " + layer.blendMode + "\n";
 
-                code += "{ // Layer " + std::to_string(i) + " (" + layerName + ") - blend: " + blendMode + "\n";
+                // Sample weight from weight map SSBO
+                code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                    "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
 
-                // Weight: fallback until VK-215 provides real weight maps
-                // TODO (VK-215): float w = texture(terrainWeightMaps[i/4], fragWorldUV)[i%4];
-                std::string weight = (i == 0) ? "1.0" : "0.0";
-                code += std::format("    float w = {}; // layer {} weight\n", weight, i);
-
-                // Texture sampling
-                // TODO: when textures are GPU-bound, replace fallbacks with:
-                //   vec2 layerUV = fragWorldUV * {tiling};
-                //   vec3 layerAlbedo = texture(terrainLayerTextures[{i*2}], layerUV).rgb;
-                //   vec3 layerNormal = texture(terrainLayerTextures[{i*2+1}], layerUV).rgb * 2.0 - 1.0;
-                if (!albedoPath.empty()) {
-                    code += std::format("    vec2 layerUV = fragWorldUV * {:.6f};\n", tiling);
-                    code += "    // albedo: " + albedoPath + "\n";
-                    code += "    // normal: " + normalPath + "\n";
-                    code += "    vec3 layerAlbedo = vec3(0.400000, 0.350000, 0.300000); // placeholder until GPU textures bound\n";
-                    code += "    vec3 layerNormal = vec3(0.0, 0.0, 1.0); // placeholder\n";
-                } else {
-                    code += "    vec3 layerAlbedo = vec3(0.400000, 0.350000, 0.300000);\n";
-                    code += "    vec3 layerNormal = vec3(0.0, 0.0, 1.0);\n";
-                }
+                // Sample layer textures from bindless system via terrainLayers SSBO
+                code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", i);
+                code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", i);
+                code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
+                    "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", i);
+                code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", i);
+                code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
+                    "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", i);
 
                 code += "    " + outputVarPrefix + "Albedo += layerAlbedo * w;\n";
                 code += "    " + outputVarPrefix + "Normal += layerNormal * w;\n";
@@ -444,10 +451,44 @@ namespace editor::graph {
                 code += "}\n";
             }
 
-            // Normalize
+            // Normalize base layers
             code += "float " + outputVarPrefix + "InvW = 1.0 / max(" + outputVarPrefix + "TotalW, 0.001);\n";
             code += outputVarPrefix + "Albedo *= " + outputVarPrefix + "InvW;\n";
             code += outputVarPrefix + "Normal = normalize(" + outputVarPrefix + "Normal);\n";
+
+            // --- Pass 2: Overlay layers (applied on top of the normalized base) ---
+            for (const auto& layer : overlayLayers) {
+                int i = layer.index;
+
+                if (!layer.enabled) {
+                    code += "// Layer " + std::to_string(i) + " (" + layer.name + ") - disabled\n";
+                    continue;
+                }
+
+                code += "{ // Layer " + std::to_string(i) + " (" + layer.name + ") - blend: Overlay\n";
+
+                code += std::format("    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
+                    "uint(tiles[fragTileIndex].aabbMin.w), {}u, fragTexCoord);\n", i);
+
+                code += std::format("    vec2 layerUV = fragWorldUV * terrainLayers[{}].tilingScale;\n", i);
+                code += std::format("    uint albedoIdx_{0} = terrainLayers[{0}].albedoTextureIndex;\n", i);
+                code += std::format("    vec3 layerAlbedo = (albedoIdx_{0} > 0u) ? "
+                    "texture(bindlessTextures[nonuniformEXT(albedoIdx_{0})], layerUV).rgb : vec3(0.5);\n", i);
+                code += std::format("    uint normalIdx_{0} = terrainLayers[{0}].normalTextureIndex;\n", i);
+                code += std::format("    vec3 layerNormal = (normalIdx_{0} > 0u) ? "
+                    "texture(bindlessTextures[nonuniformEXT(normalIdx_{0})], layerUV).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n", i);
+
+                // Photoshop-style overlay: 2*base*blend where base<0.5, else 1-2*(1-base)*(1-blend)
+                code += "    vec3 ovBase = " + outputVarPrefix + "Albedo;\n";
+                code += "    vec3 ovBlend = layerAlbedo;\n";
+                code += "    vec3 ovResult = mix(\n";
+                code += "        1.0 - 2.0 * (1.0 - ovBase) * (1.0 - ovBlend),\n";
+                code += "        2.0 * ovBase * ovBlend,\n";
+                code += "        step(ovBase, vec3(0.5)));\n";
+                code += "    " + outputVarPrefix + "Albedo = mix(" + outputVarPrefix + "Albedo, ovResult, w);\n";
+                code += "    " + outputVarPrefix + "Normal = normalize(mix(" + outputVarPrefix + "Normal, layerNormal, w));\n";
+                code += "}\n";
+            }
 
             return code;
         }
